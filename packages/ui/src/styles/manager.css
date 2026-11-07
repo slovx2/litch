@@ -1596,3 +1596,17 @@
   border-radius: 50%;
   background: var(--wait);
 }
+
+/* 草稿是独立导航按钮，不能嵌套进会话行的按钮。 */
+.mg-sidebar-drafts {
+  flex: none;
+  border: 0;
+  background: transparent;
+  padding: 0 6px;
+  font: inherit;
+  font-size: calc(11px * var(--fs));
+  cursor: pointer;
+}
+.mg-sidebar-drafts:hover {
+  text-decoration: underline;
+}

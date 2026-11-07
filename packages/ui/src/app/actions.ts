@@ -128,3 +128,18 @@ export function onAssistantRequest(listener: () => void): () => void {
     assistantListeners.delete(listener)
   }
 }
+
+/** 草稿入口由应用层导航，经理页尚未挂载时也不会丢掉定位请求。 */
+export interface ManagerDraftRoute extends SessionRef {
+  managerId: string
+}
+const managerDraftListeners = new Set<(route: ManagerDraftRoute) => void>()
+export function requestManagerDrafts(route: ManagerDraftRoute): void {
+  for (const listener of managerDraftListeners) listener(route)
+}
+export function onManagerDraftsRequest(listener: (route: ManagerDraftRoute) => void): () => void {
+  managerDraftListeners.add(listener)
+  return () => {
+    managerDraftListeners.delete(listener)
+  }
+}

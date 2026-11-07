@@ -6,7 +6,15 @@ import {
   type SuggestionView,
   suggestionCount,
 } from '@litch/core'
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { managerBoardMemory } from '../../../core/src/manager-board-memory.mts'
 import type {
   ManagerDecisionId,
@@ -52,6 +60,7 @@ export interface ManagerPageLocation {
     | 'inbox'
   narrow: 'chat' | 'board'
   settings: boolean
+  draftFocus?: number
 }
 const defaultLocation: ManagerPageLocation = { tab: 'inbox', narrow: 'board', settings: false }
 
@@ -237,6 +246,24 @@ export function ManagerPage({
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState('')
   const board = view?.board
+  const focusedDraft = useRef<number | undefined>(undefined)
+  useLayoutEffect(() => {
+    if (!location.draftFocus || location.draftFocus === focusedDraft.current || tab !== 'decisions')
+      return
+    if (!layout.open) {
+      setBoardLayout({ open: true })
+      return
+    }
+    if (!view?.board) return
+    const bar = page.current?.querySelector<HTMLElement>('.mg-send:not([data-sent])')
+    if (!bar) return
+    bar.scrollIntoView({ block: 'end' })
+    bar
+      .querySelector<HTMLElement>('[data-act="manager-locate-draft"]')
+      ?.focus({ preventScroll: true })
+    focusedDraft.current = location.draftFocus
+  }, [location.draftFocus, tab, view, layout.open])
+
   const attention = managerAttentionCount(manager)
   const attentionTitle = t('manager.pendingDetail', {
     decisions: manager.pendingDecisions,

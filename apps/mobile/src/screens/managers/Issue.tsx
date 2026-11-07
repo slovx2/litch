@@ -61,7 +61,14 @@ import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutc
 import { DiscussionDrawer } from './DiscussionDrawer'
 import { DiscussionHistory } from './DiscussionHistory'
 import { DraftEndedNote } from './DraftEndedNote'
-import { baseFile, clearDrafts, questionFile as draftFile, replyFile } from './draft-files'
+import {
+  baseFile,
+  choiceFile,
+  clearDrafts,
+  questionFile as draftFile,
+  editFile,
+  replyFile,
+} from './draft-files'
 import { Markdown } from './IssueMarkdown'
 import { IssueContext, IssueRelations } from './IssueRelations'
 import { setIssueOrder, useIssueOrder } from './issue-order'
@@ -191,8 +198,12 @@ export function Issue({
         found &&
         found.status !== 'open' &&
         (readChoice(draftKey, found.options) || replyFile.read()?.[draftKey]?.trim()) &&
-        decisionDraftState(board, found.id, baseFile.read()?.[draftKey] ?? found.revision).state !==
-          'ended',
+        decisionDraftState(
+          board,
+          found.id,
+          baseFile.read()?.[draftKey] ?? found.revision,
+          editFile.read()?.[draftKey],
+        ).state !== 'ended',
     )
   })
   const [unreviewed, setUnreviewed] = useState(false)
@@ -290,7 +301,7 @@ export function Issue({
       resetDecisionSelection(board, {
         decisionId: decision.id,
         revision: base,
-        optionId: choice,
+        optionId: choiceFile.read()?.[draftKey] ?? choice,
         text: reply,
         question,
       }),
@@ -310,7 +321,7 @@ export function Issue({
   const answerState = !board
     ? null
     : decision
-      ? decisionDraftState(board, decision.id, base).state
+      ? decisionDraftState(board, decision.id, base, editFile.read()?.[draftKey]).state
       : request
         ? requestDraftState(board, request.id, base).state
         : null
@@ -1095,6 +1106,7 @@ export function Issue({
                       label={t('manager.editAnswer')}
                       onPress={() => {
                         // 对着当前这一版改：留着的旧草稿版本不算数
+                        editFile.write({ ...editFile.read(), [draftKey]: decision.revision })
                         baseFile.write({ ...baseFile.read(), [draftKey]: decision.revision })
                         writeReply(decision.answer?.text ?? '')
                         setChoice(decision.answer?.optionId ?? null)

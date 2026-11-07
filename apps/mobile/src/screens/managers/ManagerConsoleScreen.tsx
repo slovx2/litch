@@ -674,6 +674,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
           {/* 批量提交条在滚动区下面，不随卡片滚动，也不挡住最后一张卡 */}
           {tab === 'console' && board && view ? (
             <DraftSubmitBar
+              paged={Boolean(view.paging)}
               manager={manager}
               board={board}
               draftBoard={

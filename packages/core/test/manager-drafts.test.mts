@@ -20,7 +20,7 @@ test('决策草稿：在别处答复后是 ended，重开后只经过状态变�
   }
   assert.deepEqual(decisionDraftState(answered, 'D-1', 2), { state: 'ended', revision: 2 })
   // 草稿是对着已答复的那一版写的（修改答案）：照常
-  assert.deepEqual(decisionDraftState(answered, 'D-1', 3), { state: 'live', revision: 3 })
+  assert.deepEqual(decisionDraftState(answered, 'D-1', 3, 3), { state: 'live', revision: 3 })
   const reopened = {
     decisions: [{ id: 'D-1', status: 'open' as const, revision: 4 }],
     changes: [change(4, 'open', ['status', 'answer', 'revision']), ...answered.changes],
@@ -131,7 +131,7 @@ test('草稿计数：决策在别处答复后计数归零、不随提交发出�
   assert.deepEqual([...other.ended.posts], ['S-a'])
 })
 
-test('新版本只选项的草稿不计数、不阻塞，文字草稿仍要求确认，已结束仍可查看', () => {
+test('新版本选项和文字草稿都保留并要求确认，已结束仍可查看', () => {
   const draft = { decisionId: 'D-1', revision: 1, optionId: 'a', text: '' }
   const board = { decisions: [{ id: 'D-1', revision: 2, status: 'open' as const }], changes: [] }
   const project = (patch = {}) =>
@@ -140,8 +140,8 @@ test('新版本只选项的草稿不计数、不阻塞，文字草稿仍要求�
       requests: [],
       posts: [],
     })
-  assert.equal(project().count, 0)
-  assert.equal(project().conflict, false)
+  assert.equal(project().count, 1)
+  assert.equal(project().conflict, true)
   assert.equal(project({ optionId: null }).count, 0)
   assert.equal(project({ text: '保留说明' }).count, 1)
   assert.equal(project({ text: '保留说明' }).conflict, true)
@@ -156,4 +156,43 @@ test('新版本只选项的草稿不计数、不阻塞，文字草稿仍要求�
   )
   assert.equal(ended.count, 0)
   assert.equal(ended.ended.decisions.has('D-1'), true)
+})
+
+test('非待定或已删除的决策不计草稿，同版也不能冒充主动修改答复', () => {
+  const draft = { decisionId: 'D-1', revision: 1, optionId: 'a', text: '保留' }
+  for (const status of ['answered', 'expired', 'withdrawn', 'ignored'] as const) {
+    const board = { decisions: [{ id: 'D-1', status, revision: 1 }], changes: [] }
+    const result = liveManagerDrafts(board, { decisions: [draft], requests: [], posts: [] })
+    assert.equal(result.count, 0, status)
+    assert.equal(result.conflict, false, status)
+    assert.deepEqual(result.answers, [])
+    assert.equal(result.ended.decisions.has('D-1'), true)
+  }
+  assert.equal(
+    liveManagerDrafts(
+      { decisions: [], changes: [] },
+      { decisions: [draft], requests: [], posts: [] },
+    ).count,
+    0,
+  )
+  assert.equal(draft.text, '保留', '不删除本地内容')
+})
+
+test('已答复后仍可主动追问，追问不会恢复同一份草稿里的遗留答案', () => {
+  const board = {
+    decisions: [{ id: 'D-1', status: 'answered' as const, revision: 2 }],
+    changes: [],
+  }
+  const draft = {
+    decisionId: 'D-1',
+    revision: 2,
+    optionId: 'a',
+    text: '旧答案',
+    question: '新追问',
+  }
+  const live = liveManagerDrafts(board, { decisions: [draft], requests: [], posts: [] })
+  assert.deepEqual(live.answers, [])
+  assert.equal(live.questions.length, 1)
+  assert.equal(live.count, 1)
+  assert.equal(live.ended.decisions.size, 0)
 })

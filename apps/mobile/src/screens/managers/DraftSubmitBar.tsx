@@ -1,7 +1,7 @@
 // 控制台底部的批量提交条（与桌面同一套规则）：这个经理名下各卡的草稿一起交，固定在列表下面，不随卡片滚动。
 // 有草稿才出现；交完留一会儿报“已提交”。草稿判断用 core 的 liveManagerDrafts，失效的不计、不交。
 import type { ManagerBoardTopicView, ManagerView } from '@litch/core'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import {
   liveManagerDrafts,
@@ -14,7 +14,7 @@ import { Button } from '../../ui/kit/controls'
 import { Icon, IconButton } from '../../ui/kit/Icon'
 import { Sheet } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
-import { baseFile, choiceFile, clearDrafts, questionFile, replyFile } from './draft-files'
+import { baseFile, choiceFile, clearDrafts, editFile, questionFile, replyFile } from './draft-files'
 import { useDraftVersion } from './use-draft-files'
 
 type Board = NonNullable<ManagerBoardTopicView['board']>
@@ -22,7 +22,7 @@ type DecisionId = `D-${number}`
 type RequestId = `R-${number}`
 
 /** 从几份草稿文件里收出这个经理的草稿，按 core 的草稿形状排好 */
-function collect(board: ManagerDraftBoard, full: Board, manager: ManagerView) {
+function collect(board: ManagerDraftBoard, manager: ManagerView) {
   const choices = choiceFile.read() ?? {}
   const replies = replyFile.read() ?? {}
   const questions = questionFile.read() ?? {}
@@ -45,7 +45,6 @@ function collect(board: ManagerDraftBoard, full: Board, manager: ManagerView) {
   const posts = []
   for (const [id, key] of keys) {
     const decision = board.decisions.find((one) => one.id === id)
-    const options = full.decisions.find((one) => one.id === id)?.options
     const revision =
       bases[key] ??
       decision?.revision ??
@@ -55,13 +54,13 @@ function collect(board: ManagerDraftBoard, full: Board, manager: ManagerView) {
     const text = replies[key] ?? ''
     const question = questions[key] ?? ''
     if (id.startsWith('D-')) {
-      // 经理改掉了那个选项就当没选（与卡片上的 readChoice 一致）
+      // 旧选项也保留为冲突草稿，用户确认新版时再校验选项。
       const optionId = choices[key] ?? null
-      const valid = !optionId || !options || options.some((one) => one.id === optionId)
       decisions.push({
         decisionId: id as DecisionId,
+        editingRevision: editFile.read()?.[key],
         revision,
-        optionId: valid ? optionId : null,
+        optionId,
         text,
         question,
       })
@@ -84,6 +83,7 @@ export function DraftSubmitBar({
   manager,
   board,
   draftBoard,
+  paged,
   features,
   disabled,
   onLocate,
@@ -93,6 +93,7 @@ export function DraftSubmitBar({
   board: Board
   /** 分页看板补了卡头的判断面（core 的 pagedDraftBoard）；不分页就是 board */
   draftBoard: ManagerDraftBoard
+  paged?: boolean
   features: { feedback: boolean; posts: boolean }
   disabled: boolean
   /** 点草稿数：滚到下一张有草稿的卡 */
@@ -113,10 +114,32 @@ export function DraftSubmitBar({
     const timer = setTimeout(() => setSent(0), 2500)
     return () => clearTimeout(timer)
   }, [sent])
-  const { keys, drafts } = collect(draftBoard, board, manager)
+  const { keys, drafts } = collect(draftBoard, manager)
+  const fetched = useRef(new Set<string>())
+  useEffect(() => {
+    if (!paged || disabled) return
+    const known = new Set(
+      [...draftBoard.decisions, ...(draftBoard.requests ?? []), ...(draftBoard.posts ?? [])].map(
+        (one) => one.id,
+      ),
+    )
+    for (const id of keys.keys()) {
+      if (known.has(id) || fetched.current.has(id)) continue
+      fetched.current.add(id)
+      void channel
+        .command('managers.board.detail', {
+          deviceId: manager.deviceId,
+          managerId: manager.id,
+          id: id as ManagerPostId,
+        })
+        .catch(() => {})
+    }
+  }, [paged, disabled, draftBoard, keys, channel, manager.deviceId, manager.id])
   const live = liveManagerDrafts(draftBoard, drafts)
   // 比应用旧的设备服务：没宣告 Feedback 只交决策答复，没宣告 Posts 不交议题追问；留着等升级（同桌面）
-  const answers = live.answers.map(({ question: _question, ...answer }) => answer)
+  const answers = live.answers.map(
+    ({ question: _question, editingRevision: _editingRevision, ...answer }) => answer,
+  )
   const questions = features.feedback
     ? live.questions.map((draft) => ({
         decisionId: draft.decisionId,

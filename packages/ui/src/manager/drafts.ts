@@ -7,6 +7,7 @@ import {
 
 export interface DecisionDraft extends ManagerSubmittedAnswer {
   question?: string
+  editingRevision?: number
 }
 export type AnswerDrafts = Record<string, DecisionDraft>
 const cache = new Map<string, AnswerDrafts>()
@@ -64,7 +65,7 @@ export function useAnswerDrafts(deviceId: string, managerId: string) {
 export function answeredDrafts(drafts: AnswerDrafts): ManagerSubmittedAnswer[] {
   return Object.values(drafts)
     .filter((draft) => draft.optionId !== null || draft.text.trim())
-    .map(({ question: _question, ...answer }) => answer)
+    .map(({ question: _question, editingRevision: _editingRevision, ...answer }) => answer)
 }
 
 export function questionDrafts(drafts: AnswerDrafts) {
@@ -86,7 +87,7 @@ export function cancelAnswerEdit(drafts: AnswerDrafts, id: string): AnswerDrafts
   return next
 }
 
-/** 清空仅选项和空的过期草稿，其他对象与文字草稿保持原引用。 */
+/** 只清空白的过期草稿，有内容的草稿保持原引用。 */
 export function refreshAnswerDrafts(board: ManagerDraftBoard, drafts: AnswerDrafts) {
   const next = { ...drafts }
   const cleared: string[] = []
