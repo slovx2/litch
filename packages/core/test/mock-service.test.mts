@@ -280,8 +280,8 @@ test('设备服务比应用旧：经理看板的后加能力全关，相应命�
       },
     )
   await flush()
-  const all = { feedback: true, posts: true, ignore: true }
-  const none = { feedback: false, posts: false, ignore: false }
+  const all = { feedback: true, posts: true, ignore: true, requestIgnore: true }
+  const none = { feedback: false, posts: false, ignore: false, requestIgnore: false }
   assert.deepEqual(views.get('local')?.features, all)
   assert.deepEqual(views.get('build')?.features, all)
 
