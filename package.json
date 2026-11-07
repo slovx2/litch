@@ -145,7 +145,8 @@
     "build:automation-packages": "npm run build --prefix packages/computer-use && npm run build --prefix packages/browser && npm run build --prefix packages/chrome-extension && npm run build --prefix packages/chrome-bridge",
     "test:antigravity-sdk": "npm run test:sdk --prefix packages/antigravity",
     "generate:automation-contracts": "node scripts/generate-automation-contracts.mjs --write",
-    "check:automation-contracts": "node scripts/check-automation-contracts.mjs"
+    "check:automation-contracts": "node scripts/check-automation-contracts.mjs",
+    "update:automation-baseline": "node --import tsx packages/automation-contracts/test/update-schema-baseline.mts"
   },
   "dependencies": {
     "ajv": "8.20.0",

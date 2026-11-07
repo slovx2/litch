@@ -8,6 +8,7 @@
 // （client-tools-specs.mts 的 ClientToolSpecContext.desktopPlatform），认不出的平台按 macOS。
 //
 // 只引用公共工具类型；设备进程和核心消费由它生成的 protocol 自包含投影。
+// 改了定义或说明：先 npm run generate:automation-contracts，再 npm run update:automation-baseline 重录 schema 基线（见本包 README）。
 
 import type { ClientToolNamespaceSpec } from './automation-tool-spec.mjs'
 

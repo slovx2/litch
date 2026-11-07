@@ -32,7 +32,15 @@ npm run check:automation-contracts
 npm run generate:automation-contracts
 ```
 
-只修改源，不手改生成文件。`npm run check` 包含投影漂移、依赖闭包及独立消费者检查。基线哈希固定抽取前的 schema/说明/指令序列化值；后续确需改工具行为时，必须说明原因并同时更新行为测试，不能为了让抽取通过随便重录基线。
+只修改源，不手改生成文件。`npm run check` 包含投影漂移、依赖闭包及独立消费者检查。
+
+`test/litch-schema-baseline.json` 只记各套工具定义（浏览器、三个平台的电脑操作、批量、portable、代填失败码）序列化后的 SHA-256，用来发现模型看到的 schema、说明或指令被无意改动。有意修改工具定义时：
+
+1. 改 `src/litch/` 里的源，运行 `npm run generate:automation-contracts`；
+2. 运行 `npm run update:automation-baseline` 重录基线，它会列出变了哪几套；
+3. 提交说明写清改了哪个工具的什么，需要时同时更新行为测试。
+
+基线测试失败、而你并没打算改工具定义时，不要重录，先找出是什么改动波及了它。
 
 ## 接口约束
 

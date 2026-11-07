@@ -4,6 +4,7 @@
 //
 // 说明文字是写给模型看的，用英文；参数的形状和桌面端的执行器（apps/desktop/src/browser/args.mts）一一对应，
 // 定义在此维护，protocol 同名文件由生成器投影；参数语义仍须与执行器一起验收。
+// 改了定义或说明：先 npm run generate:automation-contracts，再 npm run update:automation-baseline 重录 schema 基线（见本包 README）。
 
 import type { ClientToolFunctionSpec, ClientToolNamespaceSpec } from './automation-tool-spec.mjs'
 
