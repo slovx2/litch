@@ -27,7 +27,6 @@ test('项目收起的未读与展开后的实际子树一致：跨项目孙项�
     children,
     workspaces: [workspace('stoneage'), workspace('wind')],
     sections: [],
-    covered: new Set(),
     hidden: ['middle', 'child'],
     folded: new Set(['parent', 'middle']),
     always: (id) => unread.includes(id),
@@ -80,18 +79,19 @@ const input = (over = {}) => ({
   offline: false,
   organizable: true,
   children: {},
-  covered: new Set(['p1']),
   hidden: [],
   folded: new Set(),
   always: () => false,
   ...over,
 })
 
-test('会话列表的顺序：分区、“项目”（里面的工作区没有会话也有标题）、散的，最后是归档的标题；置顶的在首页置顶区，这里不画', () => {
+test('会话列表的顺序：置顶、分区、“项目”（里面的工作区没有会话也有标题）、散的，最后是归档的标题', () => {
   const items = buildList(input())
   assert.deepEqual(
     items.map((item) => item.key),
     [
+      `g:${PINNED}`,
+      's:p1',
       `g:${groupOfSection('sec')}`,
       's:s1',
       's:s2',
@@ -111,10 +111,9 @@ test('会话列表的顺序：分区、“项目”（里面的工作区没有�
   assert.deepEqual(items.find((item) => item.key === `g:${PROJECTS}`).tally, ['w1', 'w2'])
 })
 
-test('工作区排在它所在的那一组里：进了分区的在分区里，其余的在“项目”里；置顶的项目在首页置顶区', () => {
+test('工作区排在它所在的那一组里：置顶的在置顶里、进了分区的在分区里，其余的在“项目”里', () => {
   const items = buildList(
     input({
-      covered: new Set(['b']),
       groups: { [groupOfSection('sec')]: ['s1'], w1: ['a'], w2: ['b'], w3: [] },
       workspaces: [
         workspace('w1', undefined, { sectionId: 'sec' }),
@@ -125,7 +124,18 @@ test('工作区排在它所在的那一组里：进了分区的在分区里，�
   )
   assert.deepEqual(
     items.map((item) => item.key),
-    [`g:${groupOfSection('sec')}`, 's:s1', 'g:w1', 's:a', `g:${PROJECTS}`, 'g:w3', 'a:head'],
+    [
+      `g:${PINNED}`,
+      'g:w2',
+      's:b',
+      `g:${groupOfSection('sec')}`,
+      's:s1',
+      'g:w1',
+      's:a',
+      `g:${PROJECTS}`,
+      'g:w3',
+      'a:head',
+    ],
   )
 })
 

@@ -7,7 +7,7 @@ export interface LayoutRoute {
   name: string
 }
 export function navigationRoute(name: string): boolean {
-  return ['Devices', 'Sessions', 'Managers', 'LocalGroup'].includes(name)
+  return ['Devices', 'Sessions', 'Managers'].includes(name)
 }
 export function toolRoute(name: string): boolean {
   return ['Terminal', 'Files', 'Diff', 'Background', 'Proposals', 'Agent'].includes(name)

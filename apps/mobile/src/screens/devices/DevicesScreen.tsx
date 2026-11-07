@@ -3,7 +3,7 @@
 // 一行只订阅它自己的两个键（keys.device、keys.activity），不遍历会话。
 // 应用回到前台时，没连着的设备立刻重连一次（手机切到后台时连接常被系统掐掉，不等退避的下一拍）。
 // 设备列表上面是经理的入口（待处理合计）和定时任务的入口（所有设备的任务、没看过的运行合计）；
-// 再往下是全局「置顶」、「本机分组」（Shortcuts）、「最近」「未读」（RecentGroup），然后才是各台设备。
+// 再往下是全局「最近」「未读」（RecentGroup），然后才是各台设备。
 // 顶上有新版本时出更新的横条（UpdateBanner）；定时查更新也挂在这一页（首页一直在栈底）。
 import { type DeviceActivity, type DeviceView, keys } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
@@ -24,14 +24,12 @@ import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { useUpdateSchedule } from '../../update/use-update'
 import { ManagersEntry } from '../managers/ManagersEntry'
-import { titleOf } from '../sessions/rows'
 import { reasonText, type ShownState, shownState } from './failure'
 import { forgetUnusedKey } from './forget'
 import { RecentGroup, SectionHead } from './RecentGroup'
 import { RemoveDevice } from './RemoveDevice'
 import { RestartDevice } from './RestartDevice'
 import { recentRoute } from './recent-route'
-import { LocalGroupsGroup, PinsGroup } from './Shortcuts'
 import { UpdateBanner } from './UpdateBanner'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Devices'>
@@ -169,7 +167,7 @@ export function DevicesScreen({ navigation }: Props) {
   const [removing, setRemoving] = useState<DeviceView | null>(null)
   const [restartingId, setRestartingId] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
-  /** 置顶、本机分组的整理动作：没做成在列表顶上说一句 */
+  /** 设备操作：没做成在列表顶上说一句 */
   const act = useCallback(
     (work: Promise<unknown>) => {
       setFailure(null)
@@ -209,23 +207,6 @@ export function DevicesScreen({ navigation }: Props) {
             <>
               <ManagersEntry onPress={() => navigation.navigate('Managers')} />
               <TasksEntry onPress={() => navigation.navigate('Tasks', {})} />
-              <PinsGroup
-                act={act}
-                onOpen={(summary, deviceId) =>
-                  navigation.navigate('Detail', {
-                    deviceId,
-                    sessionId: summary.id,
-                    title: titleOf(summary, t),
-                  })
-                }
-                onDevice={(deviceId) => navigation.navigate('Sessions', { deviceId })}
-              />
-              <LocalGroupsGroup
-                act={act}
-                onGroup={(group) =>
-                  navigation.navigate('LocalGroup', { groupId: group.id, title: group.name })
-                }
-              />
               <RecentGroup
                 onOpen={(row, title) => navigation.navigate(...recentRoute(row, title))}
               />
@@ -319,7 +300,7 @@ export function DevicesScreen({ navigation }: Props) {
         placeholder={t('devices.nameLabel')}
         submitLabel={t('devices.save')}
         onSubmit={(name) => {
-          if (renaming) void channel.command('device.update', { deviceId: renaming.id, name })
+          if (renaming) act(channel.command('device.update', { deviceId: renaming.id, name }))
         }}
         onClose={() => setRenaming(null)}
       />
