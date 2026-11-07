@@ -15,26 +15,17 @@ Android 不显示 AI 数据同意框，发送不经过此闸门；隐私政策�
 
 Android does not show the AI data consent dialog or gate sending on it. The privacy policy remains available in Settings.
 
-iOS 首次向 AI 服务发起操作前，会说明消息、附件、代理读取的项目文件和会话上下文的数据去向。
-用户可以取消；取消不会发送本次内容。同意按设备与供应商配置保存，换供应商或配置变化后重新确认。
-讨论抽屉打开时，同意框显示在抽屉上方；取消后保留追问草稿，允许后完成发送并清空输入框。
-同意框弹出时主动收起键盘；键盘正在收起或再次打开时，系统返回只收键盘，不取消本次许可。键盘收起后再次返回或点击取消，才取消发送并保留草稿。
-若远端未上报完整供应商信息，界面提示先核实配置，同意仍按设备、harness 和已知配置保存；检测到供应商或配置变化时重新询问。文件附件先上传到选定设备，
-后续发送给模型仍须获得该服务的同意。经理操作同时说明其配置的派发服务。
-设置可“撤回 AI 数据同意”；这只影响手机今后的操作，不删除已经传出的内容，也不停止远端运行的任务。
-手机不控制已经自主运行的远程代理；在电脑上更改服务或要求代理使用其他服务前，应重新核实数据去向。
+iOS 仅首次启动时告知：消息、附件及远程代理读取的项目和会话上下文会交给选定电脑及其配置的第三方 AI 服务（例如 OpenAI、Anthropic、Google 或自行指定的 API 服务）。实际去向请在设备的工具设置中核实。
+同意后一直保存，应用升级、更换设备、工具、供应商或配置均不再询问。0.35.x 已保存的许可沿用。
+不同意时仍可阅读；发起 AI 操作会提示“去同意”，本次不发送、草稿保留。查看并同意后需要自己再次发送，不自动重放之前的操作。
+系统返回、点击遮罩、切后台或切换弹窗不作拒绝处理，也不会把发送变成“已取消”。
+设置可查看告知并“撤回 AI 数据同意”；撤回只影响之后由手机发起的操作，不删除已经传出的内容，也不停止远端运行的任务。手机不控制远程代理自主请求，改变服务前请核实数据去向及隐私政策。
 
-Before the first AI action on iOS, Litch explains where messages, attachments, project files and
-conversation context may be processed. You can cancel. Consent is saved per device and reported
-provider configuration; detected provider or configuration changes require confirmation. Unknown provider
-details are shown explicitly; consent is still saved per device, harness and known configuration. When a discussion drawer is open,
-consent appears above it. Cancelling keeps the draft; agreeing sends the question and clears
-the input after submission succeeds. The consent dialog dismisses the keyboard when it opens.
-Back only dismisses a visible or closing keyboard; once it is hidden, Back or Cancel cancels
-the send and keeps the draft. File attachments are uploaded to the
-selected device first; sending them to a model still requires consent for that service. Manager
-actions also disclose their configured dispatch service. Withdraw consent in Settings to be asked
-again. This does not delete data already sent or stop autonomous work on your remote computer.
+On iOS, disclosure appears only on the first launch: messages, attachments and project and conversation context read by remote agents go to the selected computer and its configured third-party AI services, such as OpenAI, Anthropic, Google or a custom API service. Check the actual recipient in the device’s tool settings.
+Consent remains saved until withdrawn. App upgrades and changes to devices, tools, providers or configuration do not ask again. Saved consent from 0.35.x is retained.
+If you decline, reading remains available. AI actions show “Review and agree”, do not send, and keep the draft. After agreeing, send again yourself; previous actions are never replayed automatically.
+Back, tapping outside the dialog, backgrounding and modal changes do not decline consent or cancel a send.
+Settings provides disclosure and withdrawal. Withdrawal affects future phone-initiated actions only; it does not delete data already shared or stop remote work. The phone does not control autonomous remote-agent requests. Verify recipients and their privacy policies before changing services.
 
 Tailscale 登录前说明控制服务器处理的节点/网络元数据，提供隐私政策链接和继续/取消。
 取消后仍可使用普通 SSH。自定义控制服务器的数据处理由其运营方负责。

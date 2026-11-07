@@ -5,14 +5,6 @@ import { runInNewContext } from 'node:vm'
 import { parseAllDocuments } from 'yaml'
 import { withConsentSteps } from '../scripts/consent-flows.mjs'
 
-const platformSteps = (steps, platform) =>
-  steps.flatMap((step) => {
-    if (!step.runFlow?.when?.platform) return [step]
-    return step.runFlow.when.platform === platform
-      ? platformSteps(step.runFlow.commands, platform)
-      : []
-  })
-
 test('普通 Maestro 等待先允许真实同意卡，原产品断言仍保留', () => {
   const input =
     'appId: dev.litch.app\n---\n- extendedWaitUntil:\n    visible:\n      id: detail\n    timeout: 20000\n'
@@ -78,31 +70,21 @@ test('成功提示确认后即使消失也不重等；同意分支仍验证完�
   }
 })
 
-test('提案首次 Pi 同意在滚动到子会话之前，隐私步骤不被自动批准', () => {
-  for (const flow of ['08-proposals', '12-offer-held']) {
-    const source = readFileSync(new URL(`../e2e/flows/mock/${flow}.yaml`, import.meta.url), 'utf8')
-    const steps = parseAllDocuments(withConsentSteps(source, `${flow}.yaml`))[1].toJS()
-    const consent = steps.findIndex((step) => step.runFlow === '../_shared/allow-pi-consent.yaml')
-    const child = steps.findIndex((step) =>
-      step.scrollUntilVisible?.element?.id?.endsWith(':child'),
-    )
-    assert.ok(consent > 0 && child > consent)
-  }
+test('提案改用其他工具后不重问；启动辅助流程在首页前明确同意', () => {
   const source = readFileSync(
     new URL('../e2e/flows/_shared/allow-pi-consent.yaml', import.meta.url),
     'utf8',
   )
   assert.equal(withConsentSteps(source, 'allow-pi-consent.yaml'), source)
-  const raw = parseAllDocuments(source)[1].toJS()
-  const steps = platformSteps(raw, 'iOS')
-  assert.deepEqual(platformSteps(raw, 'Android'), [
+  assert.deepEqual(parseAllDocuments(source)[1].toJS(), [
     { assertNotVisible: { id: 'ai-consent:title' } },
   ])
-  assert.equal(steps.filter((step) => step.tapOn?.id === 'ai-consent:allow').length, 1)
-  assert.ok(
-    steps.findIndex((step) => step.assertNotVisible?.id === 'proposal:.*:child') <
-      steps.findIndex((step) => step.tapOn?.id === 'ai-consent:allow'),
-  )
+  const fresh = readFileSync(new URL('../e2e/flows/_shared/fresh.yaml', import.meta.url), 'utf8')
+  const steps = parseAllDocuments(fresh)[1].toJS()
+  assert.ok(steps[0].launchApp.clearState)
+  assert.equal(steps[1].runFlow.when.platform, 'iOS')
+  assert.equal(steps[1].runFlow.commands.at(-1).tapOn.id, 'ai-consent:allow')
+  assert.equal(steps[2].extendedWaitUntil.visible.id, 'devices')
 })
 
 test('隐私专项不得自动同意；辅助脚本不改写', () => {
@@ -182,32 +164,17 @@ test('立即的反向断言和嵌套等待也处理同意，但隐私专项仍�
   assert.equal(withConsentSteps(privacy, 'privacy.yaml'), privacy)
 })
 
-test('讨论首次发送只在 iOS 要求同意，Android 断言无同意框，两端都要求草稿清空', () => {
-  const source = readFileSync(
-    new URL('../e2e/flows/mock/25-discussion-keyboard.yaml', import.meta.url),
-    'utf8',
-  )
-  const raw = parseAllDocuments(withConsentSteps(source, '25-discussion-keyboard.yaml'))[1].toJS()
-  const steps = platformSteps(raw, 'iOS')
-  const android = platformSteps(raw, 'Android')
-  assert.equal(
-    android.some((step) => step.extendedWaitUntil?.visible?.id === 'ai-consent:title'),
-    false,
-  )
-  assert.ok(android.some((step) => step.assertNotVisible?.id === 'ai-consent:title'))
-  const send = steps.findIndex((step) => step.tapOn?.id === 'post-question-submit:D-17')
-  const title = steps.findIndex(
-    (step, index) => index > send && step.extendedWaitUntil?.visible?.id === 'ai-consent:title',
-  )
-  const allow = steps.findIndex(
-    (step, index) => index > title && step.tapOn?.id === 'ai-consent:allow',
-  )
-  const clear = steps.findIndex(
-    (step, index) =>
-      index > send && step.extendedWaitUntil?.notVisible?.id === 'post-question:D-17',
-  )
-  assert.ok(send >= 0 && title > send && allow > title && clear > allow)
-  assert.equal(steps.filter((step) => step.tapOn?.id === 'post-question-submit:D-17').length, 1)
+test('讨论与编辑发送不再弹同意，保留成功清空草稿的断言', () => {
+  for (const [flow, button, field] of [
+    ['25-discussion-keyboard', 'post-question-submit:D-17', 'post-question:D-17'],
+    ['22-tools-keyboard', 'edit:send', 'edit:input'],
+  ]) {
+    const source = readFileSync(new URL(`../e2e/flows/mock/${flow}.yaml`, import.meta.url), 'utf8')
+    const steps = parseAllDocuments(source)[1].toJS()
+    const send = steps.findIndex((step) => step.tapOn?.id === button)
+    assert.deepEqual(steps[send + 1], { assertNotVisible: { id: 'ai-consent:title' } })
+    assert.equal(steps[send + 2].extendedWaitUntil.notVisible.id, field)
+  }
 })
 
 test('收键盘辅助流程只在键盘存在时返回一次，不自动批准数据许可', () => {

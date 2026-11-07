@@ -16,6 +16,7 @@ import { MermaidHost } from './detail/mermaid/MermaidHost'
 import { Navigator } from './nav/Navigator'
 import { setBackgroundMinutes } from './platform/background'
 import { fileDeviceStore } from './platform/device-store'
+import { ConsentPresentation } from './privacy/ConsentPresentation'
 import { type Booted, boot, VERSION } from './shell/boot'
 import { devToolsEnabled } from './shell/build-mode'
 import { handleDevLink, navigationRef } from './shell/dev-links'
@@ -165,7 +166,7 @@ export default function App() {
         <ThemeContext.Provider value={theme}>
           <I18nContext.Provider value={t}>
             <StatusBar style={isDark ? 'light' : 'dark'} />
-            {body}
+            <ConsentPresentation>{body}</ConsentPresentation>
             <MermaidHost />
           </I18nContext.Provider>
         </ThemeContext.Provider>

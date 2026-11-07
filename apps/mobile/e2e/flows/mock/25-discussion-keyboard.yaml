@@ -46,27 +46,8 @@ tags:
     id: discussion-drawer:close
 - tapOn:
     id: post-question-submit:D-17
-- runFlow:
-    when:
-      platform: iOS
-    commands:
-      - extendedWaitUntil:
-          visible:
-            id: ai-consent:title
-          timeout: 10000
-      - scrollUntilVisible:
-          element:
-            id: ai-consent:allow
-          direction: DOWN
-          timeout: 5000
-      - tapOn:
-          id: ai-consent:allow
-- runFlow:
-    when:
-      platform: Android
-    commands:
-      - assertNotVisible:
-          id: ai-consent:title
+- assertNotVisible:
+    id: ai-consent:title
 - extendedWaitUntil:
     notVisible:
       id: post-question:D-17

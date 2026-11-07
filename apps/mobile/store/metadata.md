@@ -42,7 +42,7 @@ Litch is a free, open-source SSH and protocol client, not a desktop-screen mirro
 
 Optional Tailscale uses an embedded userspace stack for this app's SSH connections. It does not install a system VPN profile or route other apps' traffic. Before sign-in, the app explains node and network metadata processing, links to the privacy policy and allows cancellation. Direct SSH needs no Tailscale login. Sign-out and local node clearing are available. We have not requested Network Extension or background VPN capabilities.
 
-AI content comes from the model services configured by the user on their remote computer. Before AI actions, Litch requests data-sharing consent for messages, attachments and project context read by the remote agent. Consent is scoped to the device and reported provider configuration; changes require confirmation. Unreported provider details are identified as unknown and permission is not saved. Settings includes “Feedback or report content”, which opens email to admin@datawake.cc, and a consent withdrawal control. Litch has no public feed or user-to-user chat. The intended App Store age rating is 16+. This does not claim that arbitrary remote AI output is globally filtered.
+AI content comes from the model services configured by the user on their remote computer. On first launch, iOS requests explicit consent for messages, attachments and project context to be processed by the user-selected remote computer and its configured third-party AI services. Consent covers future device and provider changes and remains saved until withdrawn; upgrades do not ask again. Previously saved consent is retained. Declining leaves drafts intact and shows a review entry before AI actions; after agreeing the user sends again. Android does not show this dialog. Settings includes “Feedback or report content”, which opens email to admin@datawake.cc, and a consent withdrawal control. Litch has no public feed or user-to-user chat. The intended App Store age rating is 16+. This does not claim that arbitrary remote AI output is globally filtered.
 
 This consent covers actions initiated from the phone. Agents running on the remote computer call services according to the user's configuration there, under the user's control on that computer. The phone does not intercept those autonomous requests. Withdrawing phone consent does not stop existing remote tasks or delete content already sent.
 
@@ -56,7 +56,7 @@ Litch 是免费开源的 SSH 与协议客户端，不是远程桌面镜像服务
 
 内嵌 Tailscale 仅为本 App 的 SSH 提供网络路径，不安装系统 VPN 配置，不转发其他 App 流量。登录前说明节点和网络元数据处理、提供隐私政策链接及取消；普通 SSH 不要求登录 Tailscale。设置支持退出及清除本机节点。
 
-AI 内容来自用户在远程电脑自选的模型服务。AI 操作前说明消息、附件和代理读取的项目上下文去向并征求同意；记录按设备和已上报的供应商配置保存，变更后重新确认。供应商未完整上报时明确提示未知且不保存本次许可。设置提供“反馈或举报内容”（admin@datawake.cc）及撤回同意。无公共内容动态或用户间聊天，商店目标年龄分级为 16+，不宣称对任意远程模型输出已实现全局过滤。
+AI 内容来自用户在远程电脑自选的模型服务。iOS 首次启动时说明消息、附件和代理读取的项目上下文将交给用户选择的远程电脑及其配置的第三方 AI 服务，取得明确同意。许可涵盖之后更换的设备、工具和供应商，一直保存至用户撤回；升级不重问，旧版已保存的许可沿用。不同意时保留草稿，AI 操作前提示去同意，同意后用户再次发送。Android 不弹此框。设置提供“反馈或举报内容”（admin@datawake.cc）及撤回同意。无公共内容动态或用户间聊天，商店目标年龄分级为 16+，不宣称对任意远程模型输出已实现全局过滤。
 
 同意机制只覆盖从手机发起的操作。远程机器上的代理按用户在该机器上的配置调用服务，由用户在远程设备控制；手机不拦截其自主请求。撤回手机同意不会停止已有远程任务或删除已传出的内容。
 

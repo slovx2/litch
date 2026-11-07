@@ -1,5 +1,5 @@
 appId: dev.litch.app
-name: 数据同意取消与允许、撤回及 Tailscale 说明
+name: 启动同意后连续发送、撤回及 Tailscale 说明
 tags:
   - mock
   - privacy
@@ -18,75 +18,36 @@ tags:
 - inputText: consent-e2e
 - tapOn:
     id: new-send
-- runFlow:
-    when:
-      platform: iOS
-    commands:
-      - extendedWaitUntil:
-          visible:
-            id: ai-consent:title
-          timeout: 20000
-      - runFlow: ../_shared/dismiss-keyboard.yaml
-      - assertVisible:
-          id: ai-consent:title
-      - scrollUntilVisible:
-          element:
-            id: ai-consent:cancel
-      - tapOn:
-          id: ai-consent:cancel
-      - assertVisible:
-          id: new-input
-      - assertNotVisible:
-          id: detail
-      - tapOn:
-          id: new-send
-      - extendedWaitUntil:
-          visible:
-            id: ai-consent:title
-          timeout: 20000
-      - scrollUntilVisible:
-          element:
-            id: ai-consent:allow
-      - tapOn:
-          id: ai-consent:allow
-- runFlow:
-    when:
-      platform: Android
-    commands:
-      - assertNotVisible:
-          id: ai-consent:title
+- assertNotVisible:
+    id: ai-consent:title
 - extendedWaitUntil:
     visible:
       id: detail
     timeout: 20000
 - assertVisible:
     id: user-message
-- runFlow:
-    when:
-      platform: Android
-    commands:
-      - tapOn:
-          id: composer-input
-      - inputText: second-consent-message
-      - tapOn:
-          id: composer-send
-      - assertNotVisible:
-          id: ai-consent:title
-      - extendedWaitUntil:
-          notVisible:
-            id: composer-input
-            text: second-consent-message
-          timeout: 15000
-      - runFlow: ../_shared/dismiss-keyboard.yaml
-      - scrollUntilVisible:
-          element:
-            id: user-message
-            text: second-consent-message
-          direction: UP
-          timeout: 15000
-      - assertVisible:
-          id: user-message
-          text: second-consent-message
+- tapOn:
+    id: composer-input
+- inputText: second-consent-message
+- tapOn:
+    id: composer-send
+- assertNotVisible:
+    id: ai-consent:title
+- extendedWaitUntil:
+    notVisible:
+      id: composer-input
+      text: second-consent-message
+    timeout: 15000
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      id: user-message
+      text: second-consent-message
+    direction: UP
+    timeout: 15000
+- assertVisible:
+    id: user-message
+    text: second-consent-message
 - openLink: litch://home
 - extendedWaitUntil:
     visible:
@@ -119,7 +80,7 @@ tags:
       - openLink: litch://new?device=local&prompt=consent-after-withdrawal
       - extendedWaitUntil:
           visible:
-            id: ai-consent:title
+            id: ai-consent:required
           timeout: 20000
       - scrollUntilVisible:
           element:

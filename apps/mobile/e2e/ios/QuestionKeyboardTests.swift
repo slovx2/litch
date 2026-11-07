@@ -10,6 +10,7 @@ final class QuestionKeyboardTests: XCTestCase {
     XCUIDevice.shared.orientation = .portrait
     app.terminate()
     app.launch()
+    app.agreeToLaunchConsentIfNeeded()
     XCTAssertTrue(app.otherElements["devices"].waitForExistence(timeout: 20))
     app.open(URL(string: "litch-dev://boot?mode=mock")!)
     XCTAssertTrue(app.buttons["device:local"].waitForExistence(timeout: 20))
@@ -86,8 +87,7 @@ final class QuestionKeyboardTests: XCTestCase {
     composer.tap()
     app.typeText("ask while working")
     app.buttons["composer-send"].tap()
-    let consent = app.buttons["ai-consent:allow"]
-    if consent.waitForExistence(timeout: 3) { consent.tap() }
+    XCTAssertFalse(app.buttons["ai-consent:allow"].exists)
     let card = app.otherElements["pending-questions"]
     XCTAssertTrue(card.waitForExistence(timeout: 20))
     let field = app.textViews.matching(NSPredicate(format: "identifier BEGINSWITH %@", "pending:")).firstMatch

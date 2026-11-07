@@ -14,9 +14,9 @@ Switching to another conversation does not stop sidebar status updates for the p
 
 ## 手机输入与键盘
 
-评论和消息编辑弹窗在键盘上方滚动；添加评论只保存在草稿中，不请求 AI 数据同意。编辑消息发送等操作若需同意，会在当前弹窗上方展示，取消同意后保留编辑内容。
+评论和消息编辑弹窗在键盘上方滚动；添加评论只保存在草稿中，不请求 AI 数据同意。iOS 未同意数据使用时，发送编辑后的消息会提示去同意并保留编辑内容；同意后由用户再次发送。
 
-Comment and message-edit dialogs scroll above the keyboard. Adding a comment only updates the draft and does not request AI data consent. Actions such as sending an edited message show any required consent above the current dialog; cancelling consent keeps the edited text.
+Comment and message-edit dialogs scroll above the keyboard. Adding a comment only updates the draft and does not request AI data consent. On iOS, sending without data consent shows a review entry and keeps the edited text. After agreeing, send again.
 
 提问卡片与审批说明在键盘弹出后自动滚到完整输入框。空间不足时，按钮随卡片内容滚动，多行文字在输入框内滚动。滚动收起键盘的操作不变。
 

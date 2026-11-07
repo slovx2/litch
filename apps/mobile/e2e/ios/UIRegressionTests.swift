@@ -9,6 +9,7 @@ final class UIRegressionTests: XCTestCase {
     XCUIDevice.shared.orientation = .portrait
     app.terminate()
     app.launch()
+    app.agreeToLaunchConsentIfNeeded()
     XCTAssertTrue(app.otherElements["devices"].waitForExistence(timeout: 15))
     // 相同 mode 不会重新装核心；先切换到 stored，再建立受控的全新 mock。
     app.open(URL(string: "litch-dev://boot?mode=stored")!)

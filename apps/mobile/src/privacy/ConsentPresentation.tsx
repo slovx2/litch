@@ -2,6 +2,7 @@ import {
   createContext,
   type ReactNode,
   useContext,
+  useEffect,
   useId,
   useLayoutEffect,
   useMemo,
@@ -10,28 +11,25 @@ import {
 } from 'react'
 import { Platform } from 'react-native'
 import { ConsentDialog } from './ConsentDialog'
-import type { ConsentRequest } from './consent'
+import type { ConsentView } from './consent-access'
 import { createConsentHosts } from './consent-hosts'
+import { aiConsent } from './storage'
 
 const Context = createContext<{
-  request: ConsentRequest | null
+  view: ConsentView
   hosts: ReturnType<typeof createConsentHosts>
 } | null>(null)
 
-export function ConsentPresentation({
-  request,
-  children,
-}: {
-  request: ConsentRequest | null
-  children: ReactNode
-}) {
+export function ConsentPresentation({ children }: { children: ReactNode }) {
+  const view = useSyncExternalStore(aiConsent.subscribe, aiConsent.current, aiConsent.current)
+  useEffect(() => aiConsent.launch(Platform.OS), [])
   const [hosts] = useState(createConsentHosts)
   const host = useSyncExternalStore(hosts.subscribe, hosts.current, hosts.current)
-  const value = useMemo(() => ({ request, hosts }), [request, hosts])
+  const value = useMemo(() => ({ view, hosts }), [view, hosts])
   return (
     <Context.Provider value={value}>
       {children}
-      {Platform.OS === 'ios' ? <ConsentDialog request={host === null ? request : null} /> : null}
+      {Platform.OS === 'ios' ? <ConsentDialog view={host === null ? view : null} /> : null}
     </Context.Provider>
   )
 }
@@ -40,11 +38,9 @@ export function ConsentPresentation({
 export function ModalConsentHost({ active }: { active: boolean }) {
   const context = useContext(Context)
   if (!context) throw new Error('同意框承载点必须位于 ConsentPresentation 内')
-  const { request, hosts } = context
+  const { view, hosts } = context
   const id = useId()
   const host = useSyncExternalStore(hosts.subscribe, hosts.current, hosts.current)
   useLayoutEffect(() => (active ? hosts.register(id) : undefined), [active, hosts, id])
-  return Platform.OS === 'ios' ? (
-    <ConsentDialog request={active && host === id ? request : null} />
-  ) : null
+  return Platform.OS === 'ios' ? <ConsentDialog view={active && host === id ? view : null} /> : null
 }

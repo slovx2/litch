@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SEND_MODES } from '../../../../../packages/ui/src/composer/send-mode-logic.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { CONTENT_FEEDBACK_EMAIL, feedbackURL, LICENSES_URL } from '../../privacy/config'
-import { aiConsentRecords } from '../../privacy/storage'
+import { aiConsent } from '../../privacy/storage'
 import type { BootMode } from '../../shell/boot'
 import { devToolsEnabled } from '../../shell/build-mode'
 import { type Prefs, useServices } from '../../shell/services'
@@ -228,20 +228,29 @@ export function SettingsScreen({ navigation }: Props) {
           onPress={() => openLink(LICENSES_URL)}
         />
         {linkError ? <Note>{t('app.openLinkFailed')}</Note> : null}
-        <Row
-          title={t('privacy.ai.reset')}
-          trail="none"
-          testID="settings:withdraw-consent"
-          onPress={() => setWithdrawConsent(true)}
-        />
-        <Confirm
-          visible={withdrawConsent}
-          title={t('privacy.ai.reset')}
-          detail={t('privacy.ai.resetDetail')}
-          confirmLabel={t('privacy.continue')}
-          onClose={() => setWithdrawConsent(false)}
-          onConfirm={() => aiConsentRecords.remove()}
-        />
+        {Platform.OS === 'ios' ? (
+          <>
+            <Row
+              title={t('privacy.ai.settings')}
+              testID="settings:ai-consent"
+              onPress={() => aiConsent.open()}
+            />
+            <Row
+              title={t('privacy.ai.reset')}
+              trail="none"
+              testID="settings:withdraw-consent"
+              onPress={() => setWithdrawConsent(true)}
+            />
+            <Confirm
+              visible={withdrawConsent}
+              title={t('privacy.ai.reset')}
+              detail={t('privacy.ai.resetDetail')}
+              confirmLabel={t('privacy.continue')}
+              onClose={() => setWithdrawConsent(false)}
+              onConfirm={() => aiConsent.withdraw()}
+            />
+          </>
+        ) : null}
         {devToolsEnabled() ? (
           <>
             <SectionLabel>{t('sessions.settings.dev')}</SectionLabel>
