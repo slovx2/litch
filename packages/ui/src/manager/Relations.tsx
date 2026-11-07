@@ -29,9 +29,11 @@ export function Relations({
   const root = useRef<HTMLDetailsElement>(null)
   useEffect(() => {
     if (!context || !id) return
-    const parent = root.current?.parentElement
+    // 按卡片的实际宽度判断；关联放在卡片正文里时，正文比卡片窄了内边距
+    const parent =
+      root.current?.closest<HTMLElement>('[data-post-card]') ?? root.current?.parentElement
     if (!parent) return
-    const observer = new ResizeObserver(() => setWide(parent.clientWidth >= 520))
+    const observer = new ResizeObserver(() => setWide(parent.getBoundingClientRect().width >= 520))
     observer.observe(parent)
     return () => observer.disconnect()
   }, [context, id])

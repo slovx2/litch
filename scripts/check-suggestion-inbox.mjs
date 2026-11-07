@@ -141,8 +141,9 @@ try {
     ),
     '侧栏合计待定决策与待做请求',
   )
+  // 悬停提示首行是“待处理 · 状态”，第二行才是分类明细
   assert.equal(
-    await read("document.querySelector('.mg-sidebar-counts [title]').title"),
+    (await read("document.querySelector('.mg-sidebar-counts [title]').title")).split('\n').at(-1),
     '3 个决策 · 1 个请你做',
   )
   assert.equal(
@@ -182,7 +183,7 @@ try {
   )
   assert.equal(await read("document.querySelectorAll('[data-suggestion-manager]').length"), 1)
   await shot('manager-summary')
-  await click('[data-suggestion-manager="m1"] button')
+  await click('[data-suggestion-manager="m1"] .suggestion-manager-open')
   await wait('.mg-board .suggestion-row')
   assert.equal(
     await read(
@@ -251,7 +252,7 @@ try {
     '2 条建议',
   )
   await shot('manager-reviewed-summary')
-  await click('[data-suggestion-manager="m1"] button')
+  await click('[data-suggestion-manager="m1"] .suggestion-manager-open')
 
   // 事项与决策共享正式 Markdown，编号、列表、代码、外链均从真实渲染节点核对。
   await click('[data-board-tab="items"]')
@@ -267,11 +268,15 @@ try {
     ),
   )
   await click('[data-manager-item="I-2"] .mg-item-reason [data-board-reference="D-15"]')
-  assert.ok(await read('!!document.querySelector(\'[data-decision="D-15"] > .mg-markdown li\')'))
+  assert.ok(
+    await read(
+      '!!document.querySelector(\'[data-decision="D-15"] > .mg-post-body > .mg-markdown li\')',
+    ),
+  )
   assert.ok(
     await read('!!document.querySelector(\'[data-decision="D-15"] .mg-option .md strong\')'),
   )
-  await click('[data-decision="D-15"] > .mg-markdown [data-board-reference="I-1"]')
+  await click('[data-decision="D-15"] > .mg-post-body > .mg-markdown [data-board-reference="I-1"]')
   assert.equal(await read("document.activeElement?.getAttribute('data-manager-item')"), 'I-1')
   assert.equal(await read("!!document.querySelector('.mg-foot')"), false)
 
@@ -315,8 +320,15 @@ try {
   await read("document.querySelector('.mg-body').scrollTop=500")
   await click('[data-board-tab="overview"]')
   assert.equal(await read("document.querySelector('.mg-body').scrollTop"), 0)
-  await click('[data-overview="requests"] [data-board-reference="R-1"]')
-  assert.equal(await read("document.activeElement?.getAttribute('data-manager-request')"), 'R-1')
+  // 概览顶上一行是控制台四类计数，点“请你做”切到请求页签
+  await click('[data-overview-count="requests"]')
+  await wait('[data-manager-request="R-1"]')
+  assert.equal(
+    await read(
+      "document.querySelector('[data-board-tab=\"requests\"]').getAttribute('aria-pressed')",
+    ),
+    'true',
+  )
   assert.equal(
     await read('document.querySelector(\'[data-board-tab="requests"] .pill\').textContent'),
     '1',
@@ -423,11 +435,12 @@ try {
       await read(
         `window.__litchLook.set({skin:${JSON.stringify(skin)},lang:${JSON.stringify(lang)}})`,
       )
+      // 底栏保持单行：地方不够时选择器文字截成省略号（悬停看全），但不能溢出
       assert.ok(
         await read(
-          `Array.from(document.querySelectorAll('.mg-chat .cmp-bar .pick-btn .ell')).every(e=>e.scrollWidth<=e.clientWidth+1)`,
+          `(()=>{const bar=document.querySelector('.mg-chat .cmp-bar');return bar.scrollWidth<=bar.clientWidth+1})()`,
         ),
-        '最窄对话的模型、权限按钮保留完整文字',
+        '最窄对话的输入框底栏不溢出',
       )
       await shot(`composer-min-${skin}-${lang}`)
     }
@@ -718,14 +731,18 @@ try {
   )
   assert.ok(
     await read(
-      "document.querySelector('.mg-sidebar-counts').textContent.includes('2 待处理') && document.querySelector('.mg-sidebar-counts [data-manager-draft-count]').textContent==='1 项草稿'",
+      "document.querySelector('.mg-sidebar-counts').textContent.includes('2 待处理') && document.querySelector('.mg-sidebar-drafts[data-manager-draft-count]').textContent==='1 项草稿'",
     ),
   )
   await read("window.__litchLook.set({lang:'en'})")
-  assert.equal(await read("document.querySelector('.mg-send .grow').textContent"), '1 draft')
+  // 草稿数是可点的定位按钮，末尾的箭头只作装饰
+  assert.equal(
+    await read("document.querySelector('.mg-send .mg-send-count').firstChild.textContent"),
+    '1 draft',
+  )
   assert.equal(
     await read(
-      "document.querySelector('.mg-sidebar-counts [data-manager-draft-count]').textContent",
+      "document.querySelector('.mg-sidebar-drafts[data-manager-draft-count]').textContent",
     ),
     '1 draft',
   )

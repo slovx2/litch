@@ -57,6 +57,8 @@ export function PageWindow({
             : 'suggestions.title',
       )}
       onCancel={(event) => {
+        // React 会把内层对话框（编辑后开始等）的 cancel 沿组件树传上来；只管自己这一层，内层取消不能连带关掉窗口
+        if (event.target !== event.currentTarget) return
         event.preventDefault()
         onClose()
       }}
