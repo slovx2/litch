@@ -5,6 +5,14 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 0.35.1（2026-11-07）
+
+### 修复
+
+- 修复手机输入框越来越窄、输入多行时不自动增高的问题。
+- Android 不再弹出 AI 数据去向说明，设置中新增隐私政策入口；iOS 上同一设备和服务同意一次后不再重复询问。
+- 手机暂时移除跨设备的全局置顶和本机分组，设备内原有的置顶和分区照常可用；桌面不受影响。
+
 ## 0.35.0（2026-11-07）
 
 ### 新增功能
