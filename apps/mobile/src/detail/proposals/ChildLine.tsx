@@ -27,7 +27,8 @@ export function ChildLine({
   const { deviceId, openSession } = useTranscript()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const child = useKey<SessionSummary>(keys.summary(deviceId, childId))
-  const nameOf = (id: string) => device?.harnesses.find((entry) => entry.id === id)?.name ?? id
+  const nameOf = (id: string) =>
+    t.harness(id, device?.harnesses.find((entry) => entry.id === id)?.name)
   return (
     <Pressable
       accessibilityRole="button"

@@ -294,9 +294,13 @@ func TestHarnessGroupTitlesComeFromTheSharedIdentity(t *testing.T) {
 			t.Fatalf("%s 没有登记名字或者徽标: %+v", id, identity)
 		}
 		titled := false
+		expected := verbatim(identity.DisplayName)
+		if id == "acp" {
+			expected = both("其他 ACP Agent", identity.DisplayName)
+		}
 		for _, group := range schema.Groups {
 			if group.ID == "harness."+id {
-				titled = group.Title == verbatim(identity.DisplayName)
+				titled = group.Title == expected
 			}
 		}
 		if !titled || harnessNames[id] != identity.DisplayName {

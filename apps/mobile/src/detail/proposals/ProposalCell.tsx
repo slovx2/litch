@@ -92,7 +92,8 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
   const menu = offer
     ? []
     : [...(waiting ? acts.menu : []), ...(cardsOff.action ? [cardsOff.action] : [])]
-  const nameOf = (id: string) => device?.harnesses.find((entry) => entry.id === id)?.name ?? id
+  const nameOf = (id: string) =>
+    t.harness(id, device?.harnesses.find((entry) => entry.id === id)?.name)
   const meta = [
     harness ? nameOf(harness) : null,
     model,

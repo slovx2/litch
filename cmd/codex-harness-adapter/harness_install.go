@@ -45,6 +45,8 @@ type installSpec struct {
 	// 脚本怎么带版本：给出脚本后面跟的参数。
 	scriptArgs func(version string) string
 	docsURL    string
+	// 官方脚本只安装当下最新版，不接受版本参数；不查 npm，不承诺升级已有安装。
+	latestOnly bool
 	// 验证版在 protocol/versions.json 里的键；空串是没有验证记录（界面上只给最新版，标“未验证”）。
 	verifiedKey string
 	// 适配器要求的最低版本；空串是没有要求。
@@ -92,6 +94,12 @@ var (
 		method: installNPM, windowsMethod: installNPM, npmPackage: "@qwen-code/qwen-code",
 		docsURL: "https://github.com/QwenLM/qwen-code", commands: []string{"qwen"},
 	}
+	agyInstall = &installSpec{
+		method: installScript, windowsMethod: installScript, latestOnly: true,
+		docsURL: "https://antigravity.google/docs/getting-started", commands: []string{"agy"},
+		// 官方安装脚本只装当前版本，目标已存在时直接退出，不支持版本参数和升级。
+		script: "https://antigravity.google/cli/install.sh", windowsScript: "https://antigravity.google/cli/install.ps1",
+	}
 	codexInstall = &installSpec{
 		method: installNPM, windowsMethod: installNPM, npmPackage: "@openai/codex",
 		docsURL: "https://developers.openai.com/codex/cli", verifiedKey: "codexVerified", minimum: minimumCodexVersion,
@@ -125,6 +133,12 @@ var exactVersion = regexp.MustCompile(`^\d+\.\d+\.\d+(?:-[0-9A-Za-z][0-9A-Za-z.-
 
 // 给人看、给人复制的那条官方命令。version 为空时装最新版。
 func (s *installSpec) manual(version string) string {
+	if s != nil && s.latestOnly {
+		if installGOOS == "windows" {
+			return fmt.Sprintf("& ([scriptblock]::Create((irm %s)))", s.windowsScript)
+		}
+		return fmt.Sprintf("curl -fsSL %s | bash", s.script)
+	}
 	switch s.methodHere() {
 	case installNPM:
 		if version == "" {
@@ -489,12 +503,15 @@ func (v *versionCache) info(ctx context.Context, source versionSource, id string
 	info.DocsURL = install.docsURL
 	info.Minimum = optional(install.minimum)
 	info.Verified = optional(install.verified())
+	info.Manual = install.manual(install.verified())
 	method := install.methodHere()
 	if method == "" {
 		return info
 	}
 	info.Installable, info.Method = true, &method
-	info.Manual = install.manual(install.verified())
+	if install.latestOnly {
+		return info
+	}
 	outcome := v.latest(ctx, source.registry, install.npmPackage, refresh)
 	info.Latest, info.LatestError = optional(outcome.version), outcome.failure
 	return info

@@ -15,7 +15,6 @@ export function turnOffTaskCards(
   harness: string,
 ): Promise<void> {
   const id = `task-cards:${device.id}:${harness}`
-  const name = nameOf(device, harness)
   const failed = (error: unknown) =>
     showToast({
       id,
@@ -30,7 +29,7 @@ export function turnOffTaskCards(
     () =>
       showToast({
         id,
-        text: (t) => t('proposal.cardsOff.done', { harness: name }),
+        text: (t) => t('proposal.cardsOff.done', { harness: nameOf(device, harness, t) }),
         action: {
           label: (t) => t('proposal.cardsOff.undo'),
           run: () => {

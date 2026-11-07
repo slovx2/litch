@@ -137,7 +137,7 @@ export function RestartDevice({
         title(t('restart.busy.title', { name })),
         line(t('restart.busy.note')),
         ...phase.busy.map((entry) => {
-          const said = busyLine(entry, (id) => nameOf(device, id), t('list.comma'))
+          const said = busyLine(entry, (id) => nameOf(device, id, t), t('list.comma'))
           return line(`· ${t(said.key, said.args)}`, `restart:busy:${entry.reason}`)
         }),
         <View key="buttons" style={styles.buttons}>

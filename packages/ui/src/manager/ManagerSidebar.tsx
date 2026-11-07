@@ -132,7 +132,7 @@ function ManagerRow({
             <span
               className="chip"
               title={[
-                nameOf(device, manager.harness),
+                nameOf(device, manager.harness, t),
                 device ? t.text(device.name) : manager.deviceId,
               ]
                 .filter(Boolean)

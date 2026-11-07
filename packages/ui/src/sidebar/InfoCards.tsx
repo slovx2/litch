@@ -117,7 +117,7 @@ export function SessionInfo({ summary, device, workspace }: SessionInfoProps) {
           <dd>
             <span className={down ? 'harness-entry down' : 'harness-entry'}>
               <span className={down ? 'chip off' : 'chip'}>{badgeOf(device, summary.harness)}</span>
-              {nameOf(device, summary.harness)}
+              {nameOf(device, summary.harness, t)}
               {down ? <HarnessWhy harness={down} brief /> : null}
             </span>
           </dd>

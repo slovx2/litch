@@ -617,7 +617,7 @@ const SessionRow = memo(function SessionRow({
           {summary.task ? <TaskMark kind={summary.task.kind} /> : null}
           <span
             className={down ? 'chip off' : 'chip'}
-            title={down ? downText(down, 'chip', t) : nameOf(device, summary.harness)}
+            title={down ? downText(down, 'chip', t) : nameOf(device, summary.harness, t)}
           >
             {badgeOf(device, summary.harness)}
           </span>

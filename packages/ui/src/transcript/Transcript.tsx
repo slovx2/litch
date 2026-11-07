@@ -441,7 +441,7 @@ const Turn = memo(function Turn({
             aria-hidden={!working && !retry}
           >
             <i className="st run" />
-            <span>{t('turn.working', { name: nameOf(device, meta?.harness ?? '') })}</span>
+            <span>{t('turn.working', { name: nameOf(device, meta?.harness ?? '', t) })}</span>
             <TurnElapsed since={turn.startedAt} />
             {retry ? <span className="running-retry">{retryText(retry, t)}</span> : null}
           </div>

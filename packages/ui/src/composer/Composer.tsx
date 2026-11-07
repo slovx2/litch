@@ -1221,7 +1221,9 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
         onNew={requestNewSession}
         placeholder={
           running
-            ? t(runningPlaceholder(whenRunning), { harness: nameOf(device, meta?.harness ?? '') })
+            ? t(runningPlaceholder(whenRunning), {
+                harness: nameOf(device, meta?.harness ?? '', t),
+              })
             : t('composer.placeholder')
         }
         blocked={blocked}

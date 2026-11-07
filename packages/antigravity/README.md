@@ -7,6 +7,7 @@
 - `GEMINI_API_KEY`：SDK 模型凭据，不传到 ACP 后端。密钥由设备设置保存，不写会话索引。
 - `CHA_ANTIGRAVITY_CLI`：可选 SDK runtime 路径，仍须通过固定摘要验证。
 - `CHA_AGY_CLI`、`CHA_AGY_ARGS`：官方订阅 CLI 路径和参数，由 ACP 引擎解释。
+- 设备设置中的“命令行路径”控制 `CHA_AGY_CLI`。Go 检测 PATH 与官方 CLI 安装目录，并把选择的绝对路径交给 ACP；App/IDE 入口不作为 CLI 候选。
 - 详情设置的 `authenticationMode` 只选新建后端。外部会话号 `agy:sdk:<id>`、`agy:acp:<id>`
   固定来源，列表汇总，不转换历史。声明了 `threadCapabilities` 的连接取得会话实际能力。
 

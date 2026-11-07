@@ -165,7 +165,9 @@ export function useSessionPage({
   // 工作线：副标题前半段是回经理的链接，后半段只留 harness（目录在菜单、工作树里都有）
   const origin = useManagerOrigin(deviceId, sessionId, manager ? undefined : summary)
   const subtitle =
-    [harness?.name ?? meta?.harness, origin ? null : place].filter(Boolean).join(' · ') || undefined
+    [meta?.harness ? t.harness(meta.harness, harness?.name) : undefined, origin ? null : place]
+      .filter(Boolean)
+      .join(' · ') || undefined
   const extra = [...(origin?.menu ?? []), ...own]
   const links = issues ?? origin?.issues ?? null
   // 文件页开在会话所在工作区的根上（会话的工作目录可能是它下面的一层）；不属于工作区的开在工作目录上

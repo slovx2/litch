@@ -60,7 +60,7 @@ export function HarnessSettingsPage({ device, harnessId, onBack, onClose }: Page
   const t = useT()
   const view = useHarnessConfig(device.id, harnessId)
   const harness = device.harnesses.find((entry) => entry.id === harnessId)
-  const name = harness?.name ?? harnessId
+  const name = t.harness(harnessId, harness?.name)
   const [tab, setTab] = useState<Tab>('runtime')
 
   // Esc 回到设备详情。开着对话框的时候 Esc 归对话框

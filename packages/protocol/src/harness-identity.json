@@ -7,5 +7,5 @@
   "gemini": { "displayName": "Gemini CLI", "badge": "GE" },
   "qwen": { "displayName": "Qwen Code", "badge": "QW" },
   "agy": { "displayName": "Antigravity", "badge": "AG" },
-  "acp": { "displayName": "ACP", "badge": "AC" }
+  "acp": { "displayName": "Other ACP agent", "badge": "AC" }
 }

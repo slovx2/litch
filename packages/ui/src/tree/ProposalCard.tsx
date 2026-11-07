@@ -139,11 +139,11 @@ export function ProposalMeta({ deviceId, shape }: { deviceId: string; shape: Pro
       title={shape.actual ? t('proposal.actual') : undefined}
     >
       {harness ? (
-        <span className="chip" title={nameOf(device, harness)}>
+        <span className="chip" title={nameOf(device, harness, t)}>
           {badgeOf(device, harness)}
         </span>
       ) : null}
-      {harness ? <span data-harness={harness}>{nameOf(device, harness)}</span> : null}
+      {harness ? <span data-harness={harness}>{nameOf(device, harness, t)}</span> : null}
       {model ? <span className="mono">{model}</span> : null}
       {effort ? (
         <span className="mono" data-effort={effort}>
@@ -313,7 +313,7 @@ function CardMenu({ deviceId, sessionId }: { deviceId: string; sessionId: string
   if (!device || !harness) return null
   const label = t('proposal.cardsOff', {
     device: t.text(device.name),
-    harness: nameOf(device, harness),
+    harness: nameOf(device, harness, t),
   })
   return (
     <span className="prop-menu" ref={root}>
@@ -387,7 +387,7 @@ export function StartedChild({
         {child ? t.text(child.title) || title : t('tree.child.gone')}
       </span>
       {child ? (
-        <span className="chip" title={nameOf(device, child.harness)}>
+        <span className="chip" title={nameOf(device, child.harness, t)}>
           {badgeOf(device, child.harness)}
         </span>
       ) : null}

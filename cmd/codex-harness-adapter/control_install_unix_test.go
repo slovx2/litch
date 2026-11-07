@@ -108,3 +108,55 @@ func mustJSON(t *testing.T, value any) []byte {
 	}
 	return data
 }
+
+// 桌面/手机连到远程设备时也走此控制通道；下载、安装、探测和启用都发生在设备侧。
+func TestControlInstallsAgyOnSelectedDevice(t *testing.T) {
+	_, _, control, stop := startManaged(t)
+	defer stop()
+	state := control.waitState("agy 初始停用", func(state controlState) bool {
+		return state.harness("pi").State == stateRunning && state.harness("agy").State == stateDisabled
+	})
+	home := t.TempDir()
+	tools := filepath.Join(home, "tools")
+	writeScript(t, filepath.Join(tools, "curl"), `
+cat <<'INSTALL'
+echo 'device-side install fixture'
+mkdir -p "$HOME/.local/bin"
+printf '#!/bin/sh\necho "Antigravity CLI 1.4.12"\n' > "$HOME/.local/bin/agy"
+chmod +x "$HOME/.local/bin/agy"
+INSTALL
+`)
+	control.write(state.Snapshot.Version, edit(envKey("agy"), []map[string]string{
+		{"name": "HOME", "value": home},
+		{"name": "PATH", "value": tools + ":/usr/bin:/bin"},
+	}))
+	var started struct{ Job string }
+	control.must("harness.install", map[string]any{"harness": "agy", "version": "latest"}, &started)
+	var last installJob
+	waitUntil(t, "设备侧 agy 安装任务结束并推送", func() bool {
+		control.mu.Lock()
+		defer control.mu.Unlock()
+		if len(control.installs) == 0 {
+			return false
+		}
+		last = control.installs[len(control.installs)-1]
+		return last.Job == started.Job && last.State != installRunning
+	})
+	if last.State != installSucceeded || last.Installed == nil || *last.Installed != "1.4.12" {
+		t.Fatalf("设备侧安装结果: %+v", last)
+	}
+	if !strings.Contains(strings.Join(last.Log, "\n"), enabledKey("agy")) {
+		t.Fatal("安装后应通过设备设置启用 agy")
+	}
+	var versions struct{ Harnesses []harnessVersionInfo }
+	control.must("harness.versions", map[string]any{}, &versions)
+	for _, info := range versions.Harnesses {
+		if info.Harness == "agy" {
+			if info.Installed == nil || *info.Installed != "1.4.12" || len(info.Candidates) != 1 || info.Candidates[0].Path != filepath.Join(home, ".local", "bin", "agy") {
+				t.Fatalf("检测必须使用所选设备的 HOME: %+v", info)
+			}
+			return
+		}
+	}
+	t.Fatal("缺少 agy 的版本信息")
+}

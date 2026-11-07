@@ -52,7 +52,7 @@ const toastId = (deviceId: string) => `manage-save:${deviceId}`
 /** 几个 harness 的名字连成一串，按当前语言的顿号 */
 export function harnessNames(device: DeviceView, ids: readonly string[], t: Translator): string {
   return ids
-    .map((id) => device.harnesses.find((entry) => entry.id === id)?.name ?? id)
+    .map((id) => t.harness(id, device.harnesses.find((entry) => entry.id === id)?.name))
     .join(t('list.comma'))
 }
 

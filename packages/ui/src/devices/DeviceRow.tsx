@@ -69,7 +69,9 @@ function Harnesses({ device }: { device: DeviceView }) {
         {folded.length > 0 ? (
           <span
             className="devp-more mono"
-            title={folded.map((harness) => harness.name).join(t('list.comma'))}
+            title={folded
+              .map((harness) => t.harness(harness.id, harness.name))
+              .join(t('list.comma'))}
           >
             +{folded.length}
           </span>

@@ -224,12 +224,14 @@ export function NewSessionScreen({ navigation, route }: Props) {
       <Chip
         key={entry.id}
         testID={`new:harness:${entry.id}`}
-        label={entry.name}
+        label={t.harness(entry.id, entry.name)}
         radio
         on={entry.id === harness?.id}
         dim={!usable}
         accessibilityLabel={
-          about ? t('app.valued', { name: entry.name, value: about }) : entry.name
+          about
+            ? t('app.valued', { name: t.harness(entry.id, entry.name), value: about })
+            : t.harness(entry.id, entry.name)
         }
         // 能用的点了就选上；不能用的点了在下面写原因。长按看版本号
         onPress={() => {
@@ -238,7 +240,9 @@ export function NewSessionScreen({ navigation, route }: Props) {
             setHarnessNote(null)
           } else setHarnessNote({ id: entry.id, text: about })
         }}
-        onLongPress={() => setHarnessNote({ id: entry.id, text: `${entry.name} ${about}` })}
+        onLongPress={() =>
+          setHarnessNote({ id: entry.id, text: `${t.harness(entry.id, entry.name)} ${about}` })
+        }
       />
     )
   }
@@ -312,7 +316,7 @@ export function NewSessionScreen({ navigation, route }: Props) {
                 device && harness
                   ? t('newSession.looseNote', {
                       device: t.text(device.name),
-                      harness: harness.name,
+                      harness: t.harness(harness.id, harness.name),
                     })
                   : undefined
               }

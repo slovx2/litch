@@ -314,7 +314,7 @@ function ProcessRow({
               {sessionId ? t('machine.session.gone') : t('machine.session.unknown')}
             </span>
           )}
-          {entry.harness ? <span>{nameOf(device, entry.harness)}</span> : null}
+          {entry.harness ? <span>{nameOf(device, entry.harness, t)}</span> : null}
           <span title={new Date(entry.startedAt).toLocaleString()}>
             {t('machine.pop.started', { time: elapsed(ran, t) })}
           </span>

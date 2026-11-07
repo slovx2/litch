@@ -25,8 +25,8 @@ export function badgeOf(device: DeviceView | undefined, harnessId: string): stri
   return harness?.badge ?? harnessId.slice(0, 2).toUpperCase()
 }
 
-export function nameOf(device: DeviceView | undefined, harnessId: string): string {
-  return device?.harnesses.find((entry) => entry.id === harnessId)?.name ?? harnessId
+export function nameOf(device: DeviceView | undefined, harnessId: string, t: Translator): string {
+  return t.harness(harnessId, device?.harnesses.find((entry) => entry.id === harnessId)?.name)
 }
 
 /**
@@ -56,7 +56,9 @@ const DOWN_TEXT = {
  * 在设置里停用了的不会自己恢复，要说去哪儿把它重新启用
  */
 export function downText(down: HarnessView, where: keyof typeof DOWN_TEXT, t: Translator): string {
-  return t(DOWN_TEXT[where][down.state === 'disabled' ? 1 : 0], { name: down.name })
+  return t(DOWN_TEXT[where][down.state === 'disabled' ? 1 : 0], {
+    name: t.harness(down.id, down.name),
+  })
 }
 
 /** 认识的几种不可用，各自的下一步怎么说。种类是设备服务给的，以后会加新的 */
@@ -90,7 +92,7 @@ export function chipTitle(
   t: Translator,
 ): string {
   const down = downHarness(device, harnessId)
-  return down ? downText(down, 'chip', t) : nameOf(device, harnessId)
+  return down ? downText(down, 'chip', t) : nameOf(device, harnessId, t)
 }
 
 /** 这台设备是怎么连上的，一句话 */

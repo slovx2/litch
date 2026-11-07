@@ -36,7 +36,9 @@ function CheckResult({ result }: { result: Extract<RemoteCheck, { ok: true }> })
       const ready = result.harnesses.filter((harness) => harness.state === 'ready')
       lines.push(
         ready.length > 0
-          ? t('devices.check.harnesses', { names: ready.map((harness) => harness.name).join('、') })
+          ? t('devices.check.harnesses', {
+              names: ready.map((harness) => t.harness(harness.id, harness.name)).join('、'),
+            })
           : t('devices.check.noHarness'),
       )
     }

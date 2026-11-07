@@ -317,7 +317,7 @@ export function TaskDetail({
               ) : null}
               <div>
                 <dt>{t('tasks.detail.harness')}</dt>
-                <dd>{nameOf(device, target.harness)}</dd>
+                <dd>{nameOf(device, target.harness, t)}</dd>
               </div>
               {target.kind === 'newThread' ? (
                 <div>

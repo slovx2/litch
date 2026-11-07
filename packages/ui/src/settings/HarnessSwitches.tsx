@@ -180,7 +180,7 @@ export function HarnessSwitches() {
                   ? rows.map((row) => (
                       <tr key={row.id} className="hsw-harness" data-harness={row.id}>
                         <th scope="row">
-                          <span className="hsw-name">{row.name}</span>
+                          <span className="hsw-name">{t.harness(row.id, row.name)}</span>
                         </th>
                         {columns.map((column) => {
                           const state = harnessCell(row.switches, column)
@@ -189,7 +189,7 @@ export function HarnessSwitches() {
                               <Cell
                                 state={state}
                                 label={t('switches.cell', {
-                                  name: `${name} · ${row.name}`,
+                                  name: `${name} · ${t.harness(row.id, row.name)}`,
                                   column: t(TITLES[column]),
                                 })}
                                 locked={busy.has(device.id) || !editable(device, column, state)}

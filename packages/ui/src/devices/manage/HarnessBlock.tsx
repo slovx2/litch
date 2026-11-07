@@ -61,7 +61,7 @@ export function HarnessBlock(props: HarnessBlockProps) {
   /** 它有回合在跑，设备服务没有照做：问用户要不要仍然重启 */
   const [asking, setAsking] = useState(false)
   const deviceId = device.id
-  const name = harness?.name ?? harnessId
+  const name = t.harness(harnessId, harness?.name)
   const ready = harness?.state === 'ready'
 
   const restart = async (force: boolean) => {

@@ -97,7 +97,7 @@ function DeviceRow({ deviceId }: { deviceId: string }) {
       const state = states[index] ?? 'unknown'
       const reason = lockedFor(state)
       return {
-        label: row.name,
+        label: t.harness(row.id, row.name),
         checked: state === 'on',
         stay: true,
         testID: `task-cards:${deviceId}:${row.id}`,

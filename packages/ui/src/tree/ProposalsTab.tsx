@@ -78,7 +78,7 @@ function ProposalRow({
         </span>
         <span className="prop-row-line dim">
           {harness ? (
-            <span className="chip" title={nameOf(device, harness)}>
+            <span className="chip" title={nameOf(device, harness, t)}>
               {badgeOf(device, harness)}
             </span>
           ) : null}

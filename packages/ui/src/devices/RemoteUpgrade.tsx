@@ -43,7 +43,7 @@ function BusyList({ device, view }: { device: DeviceView; view: RemoteUpgradeVie
   return (
     <ul className="svc-busy">
       {view.phase.busy.map((entry) => {
-        const line = busyLine(entry, (id) => nameOf(device, id), t('list.comma'))
+        const line = busyLine(entry, (id) => nameOf(device, id, t), t('list.comma'))
         return (
           <li key={`${entry.reason}:${entry.harnesses.join(',')}`} data-busy={entry.reason}>
             {t(line.key, line.args)}
@@ -143,7 +143,7 @@ export function ForceConfirm({
         <span>{t('service.remote.force.note', { name: t.text(device.name) })}</span>
         <ul className="svc-busy">
           {busy.map((entry) => {
-            const line = busyLine(entry, (id) => nameOf(device, id), t('list.comma'))
+            const line = busyLine(entry, (id) => nameOf(device, id, t), t('list.comma'))
             return (
               <li key={`${entry.reason}:${entry.harnesses.join(',')}`}>{t(line.key, line.args)}</li>
             )

@@ -67,7 +67,7 @@ export function TitleBar({
             {harness ? (
               <span
                 className={down ? 'chip off' : 'chip'}
-                title={down ? downText(down, 'chip', t) : nameOf(device, harness)}
+                title={down ? downText(down, 'chip', t) : nameOf(device, harness, t)}
               >
                 {badgeOf(device, harness)}
               </span>

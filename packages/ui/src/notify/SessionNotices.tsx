@@ -100,7 +100,7 @@ export function SessionNotices({
           const asking = kind === 'approval'
           notify({
             id: noticeId(deviceId, after.id, slotOf(kind)),
-            title: asking ? project || nameOf(device, after.harness) : title,
+            title: asking ? project || nameOf(device, after.harness, t) : title,
             subtitle: asking
               ? `${title} · ${deviceName}`
               : project
@@ -108,7 +108,7 @@ export function SessionNotices({
                 : deviceName,
             urgent: slotOf(kind) === 'ask',
             body: !body
-              ? t(`notify.session.${kind}`, { harness: nameOf(device, after.harness) })
+              ? t(`notify.session.${kind}`, { harness: nameOf(device, after.harness, t) })
               : body.key === 'plain'
                 ? body.text
                 : t(body.key, { text: body.text }),

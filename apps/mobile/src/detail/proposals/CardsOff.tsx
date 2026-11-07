@@ -39,7 +39,7 @@ export function useCardsOff(deviceId: string, sessionId: string, proposalId: str
     return () => clearTimeout(timer)
   }, [notice])
   if (!device || !harness) return { action: null, notice: null }
-  const name = nameOf(device, harness)
+  const name = nameOf(device, harness, t)
   // 开关存在设备上：设备要连着、有设置接口
   const usable = !busy && device.connection === 'online' && device.manageable
   const write = (on: boolean) => {

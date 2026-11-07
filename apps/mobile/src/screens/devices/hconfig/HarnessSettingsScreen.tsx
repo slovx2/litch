@@ -53,10 +53,10 @@ export function HarnessSettingsScreen({ route, navigation }: Props) {
       }),
     [navigation, unsaved, leaveThen],
   )
-  const name =
-    device?.harnesses.find((entry) => entry.id === harnessId)?.name ??
-    route.params.name ??
-    harnessId
+  const name = t.harness(
+    harnessId,
+    device?.harnesses.find((entry) => entry.id === harnessId)?.name ?? route.params.name,
+  )
   const state = pageState(view)
   const ready = state === 'ready' && view !== undefined && view !== 'error' ? view : null
   const tabs = TABS.filter((one) =>

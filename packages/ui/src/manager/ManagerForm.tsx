@@ -343,7 +343,7 @@ export function ManagerForm({
               [
                 ['manager.device', device ? t.text(device.name) : manager.deviceId],
                 ['manager.cwd', manager.cwd],
-                ['manager.harness', nameOf(device, manager.harness)],
+                ['manager.harness', nameOf(device, manager.harness, t)],
                 ['manager.model', manager.model ?? t('manager.default')],
                 ['manager.effort', manager.effort ?? t('manager.default')],
               ] as const
@@ -443,7 +443,7 @@ export function ManagerForm({
                     .filter((entry) => entry.state === 'ready')
                     .map((entry) => (
                       <option key={entry.id} value={entry.id}>
-                        {entry.name}
+                        {t.harness(entry.id, entry.name)}
                       </option>
                     ))}
                 </select>
@@ -532,7 +532,7 @@ export function ManagerForm({
                   .filter((entry) => entry.state === 'ready')
                   .map((entry) => (
                     <option key={entry.id} value={entry.id}>
-                      {entry.name}
+                      {t.harness(entry.id, entry.name)}
                     </option>
                   ))}
               </select>

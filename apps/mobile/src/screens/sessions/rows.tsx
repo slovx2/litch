@@ -271,9 +271,10 @@ export function ChildLine({
         {titleOf(summary, t)}
       </Text>
       <Text
-        accessibilityLabel={
-          device?.harnesses.find((entry) => entry.id === summary.harness)?.name ?? summary.harness
-        }
+        accessibilityLabel={t.harness(
+          summary.harness,
+          device?.harnesses.find((entry) => entry.id === summary.harness)?.name,
+        )}
         testID={`${testID}:harness`}
         style={[
           styles.badge,

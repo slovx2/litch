@@ -110,7 +110,8 @@ export function TargetFields({
   const sessions = [...(catalog ?? [])].sort((a, b) => b.updatedAt - a.updatedAt)
   const harnesses = device?.harnesses.filter((entry) => entry.state !== 'disabled') ?? []
   const harness = device?.harnesses.find((entry) => entry.id === model.harness)
-  const harnessName = (id: string) => device?.harnesses.find((entry) => entry.id === id)?.name ?? id
+  const harnessName = (id: string) =>
+    t.harness(id, device?.harnesses.find((entry) => entry.id === id)?.name)
   const ownDir = model.workspaceId === null && model.cwd !== ''
   return (
     <View>
@@ -139,7 +140,11 @@ export function TargetFields({
                 ? t('tasks.run.gone')
                 : t('tasks.form.pickSession')
           }
-          detail={[harness?.name, summary?.cwd].filter(Boolean).join(' · ') || undefined}
+          detail={
+            [harness ? t.harness(harness.id, harness.name) : null, summary?.cwd]
+              .filter(Boolean)
+              .join(' · ') || undefined
+          }
           onPress={locked ? undefined : () => setPicking(true)}
         />
       ) : (
@@ -152,7 +157,7 @@ export function TargetFields({
                   <Row
                     key={entry.id}
                     testID={`task:harness:${entry.id}`}
-                    title={`${entry.badge}  ${entry.name}`}
+                    title={`${entry.badge}  ${t.harness(entry.id, entry.name)}`}
                     detail={
                       entry.state === 'ready'
                         ? (entry.version ?? undefined)

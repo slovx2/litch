@@ -344,7 +344,7 @@ export function MachineSessionCard(props: CardProps<ClientAskRequest> & { ask: M
         host: request.device.host,
         remote: request.device.kind === 'ssh',
       }}
-      harness={summary ? nameOf(device, summary.harness) : null}
+      harness={summary ? nameOf(device, summary.harness, t) : null}
       session={ask.enable ? { title: summary ? t.text(summary.title) : sessionId } : 'here'}
       expiresAt={null}
       sessionText="machine.option.session"
@@ -389,7 +389,7 @@ export function MachinePendingCard({ pending }: { pending: MachinePendingView })
       ask={pending.ask}
       options={pending.options}
       from={{ name: t.text(pending.deviceName), host: pending.host, remote: true }}
-      harness={pending.harness ? nameOf(device, pending.harness) : null}
+      harness={pending.harness ? nameOf(device, pending.harness, t) : null}
       session={pending.ask.enable?.sessionId ? { title: pending.ask.enable.sessionId } : null}
       expiresAt={pending.expiresAt}
       sessionText="machine.option.cli"

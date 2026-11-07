@@ -152,7 +152,7 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
               )}
               {ready.map((entry) => (
                 <option key={entry.id} value={entry.id}>
-                  {entry.name}
+                  {t.harness(entry.id, entry.name)}
                 </option>
               ))}
             </select>

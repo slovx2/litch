@@ -19,8 +19,10 @@ export function useTargetLine(deviceId: string, target: TaskTarget | undefined):
     keys.summary(deviceId, target?.kind === 'thread' ? target.threadId : ''),
   )
   if (!target) return ''
-  const harness =
-    device?.harnesses.find((entry) => entry.id === target.harness)?.name ?? target.harness
+  const harness = t.harness(
+    target.harness,
+    device?.harnesses.find((entry) => entry.id === target.harness)?.name,
+  )
   if (target.kind === 'thread')
     return [
       t('tasks.detail.inThread'),

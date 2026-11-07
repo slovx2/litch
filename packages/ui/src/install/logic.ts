@@ -64,6 +64,14 @@ const offer = (
  */
 export function installChoice(info: HarnessVersionView): InstallChoice {
   if (!info.installable) return { primary: null, more: null }
+  // 官方 agy 安装器只安装当下最新版；已有安装不提供升级或版本选择。
+  if (info.harness === 'agy')
+    return {
+      primary: info.installed
+        ? null
+        : { target: 'latest', version: '', update: false, unverified: false },
+      more: null,
+    }
   const { installed, minimum, latest } = info
   const tooOld = installed !== null && minimum !== null && compareVersions(installed, minimum) < 0
   if (installed === null || tooOld) {

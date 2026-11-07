@@ -11,7 +11,7 @@
 | `opencode` | OpenCode | Experimental; uses the user's `opencode` |
 | `gemini` | Gemini CLI | Over ACP; off by default |
 | `qwen` | Qwen Code | Over ACP; off by default |
-| `acp` | ACP | Any agent that speaks the Agent Client Protocol; off by default, needs its command in `harness.acp.cliPath` |
+| `acp` | Other ACP agent / 其他 ACP Agent | ACP-compatible agents without a dedicated integration, such as Gemini, Qwen, or a custom command; off by default, needs its command in `harness.acp.cliPath` |
 | `agy` | Antigravity | Experimental; API key uses the SDK runtime, subscription uses official `agy acp`; off by default |
 
 Litch never bundles a harness. Each device uses what is installed on it. Feature support differs: plan
@@ -192,6 +192,9 @@ OpenCode 启动或重启时重新连接当前 serve 进程，不沿用旧进程�
 
 ## ACP 会话能力与 Antigravity 订阅
 
+“其他 ACP Agent”（英文 Other ACP agent）用于接入没有单独适配的、支持 ACP 协议的 Agent，
+比如 Gemini、Qwen 或自定义命令。它的内部标识仍为 `acp`，显示名调整不改变已有会话或协议字段。
+
 Antigravity 的订阅入口运行用户安装的官方 `agy acp`。在详情设置的“账号”页查看登录状态，点击“登录 Google 账号”或“登录 Gemini Enterprise”，由会话所在设备的 agy 发起登录；可在同页退出登录。
 未打开浏览器、远程设备无法显示浏览器或登录失败时，在该设备运行 `agy acp --login`，完成后点击“刷新状态”。
 登录状态用 agy 的只读会话查询验证；未提供查询能力时显示“登录状态未知”，网络错误显示失败原因，不当作未登录。登录和凭据由 agy 自己管理；Litch
@@ -222,14 +225,38 @@ ACP 的 `allow_always` / `reject_always` 表示让 agent 记住选择，规范�
 
 详情设置的“鉴权方式”选择 Gemini API key 或 Google 订阅（官方 ACP）。切换后按提示重启，
 只改变新建会话的默认后端；打开已有会话仍使用原后端。两边会话汇总显示，但不能互相恢复上下文。
-订阅模式使用用户安装并登录的官方 `agy` CLI，默认参数 `acp`；需要指定路径时使用环境设置
-`CHA_AGY_CLI`，参数覆盖为 `CHA_AGY_ARGS`。Litch 不提取 OAuth，也不把 SDK API key 注入订阅后端。
+订阅模式使用用户安装并登录的官方 `agy` CLI，默认参数 `acp`；设备设置的“命令行路径”指定
+该 CLI（也可用 `CHA_AGY_CLI`），参数覆盖为 `CHA_AGY_ARGS`。Litch 不提取 OAuth，也不把 SDK API key 注入订阅后端。
 会话能力随原后端显示；API key 模式的限制不代表订阅 ACP 的能力限制。
+
+已安装 Antigravity App 或 IDE 不代表已安装订阅所需的 CLI。安装区域单独显示 agy CLI 的版本或
+“未检测到 agy CLI”，并显示停用状态。CLI 按 PATH、官方安装目录发现，显式路径优先；macOS/Linux
+的官方目录是 `~/.local/bin/agy`，Windows 是 `%LOCALAPPDATA%\agy\bin\agy.exe`。
+安装区域提供“安装最新版”，由所选设备的服务执行官方脚本，远程设备同样支持。脚本按官方 manifest
+校验下载包 SHA-512，安装过程和失败日志显示在界面；成功后检测实际版本、启用并重启引擎。
+官方脚本已有 CLI 时直接退出，不支持指定版本或由此脚本升级；已安装时显示当前版本和“重新检测”。
+失败时可复制官方命令，或查看[官方安装说明](https://antigravity.google/docs/getting-started)。
+也可以在会话所在设备的终端运行：
+
+```sh
+# macOS / Linux
+curl -fsSL https://antigravity.google/cli/install.sh | bash
+```
+
+```powershell
+# Windows PowerShell
+irm https://antigravity.google/cli/install.ps1 | iex
+```
+
+手动安装后开启设备设置中的 Antigravity“启用”，选择 Google 订阅（官方 ACP），在账号页登录，或按
+[官方 ACP 说明](https://antigravity.google/docs/ide/extensions/acp/)运行 `agy acp --login`。
+若终端未找到命令，使用上述安装目录的绝对路径。重新检测不自动替用户打开停用的 harness。
 
 设备上的 `agy` 对应 Antigravity，默认关闭。当前 API key 后端使用独立 TypeScript 引擎和
 SDK 0.1.23 的 localharness。第一次创建会话时从官方 PyPI 按需下载；Litch 不捆绑该程序，
 也不要求 Python。程序、wheel 和 schema 均按版本与 SHA-256 固定；损坏或未知版本会明确报错。
 已装 App、IDE 或 `agy` CLI 不代表已装 SDK runtime。
+API key 模式无需安装 agy CLI；自定义 SDK runtime 仍用 `CHA_ANTIGRAVITY_CLI`，不要填到订阅 CLI 的路径项。
 
 在 Devices → Antigravity → Settings → Accounts 配置 `GEMINI_API_KEY`，保存后重启引擎。
 密钥只写不读回。默认模型和 Gemini API 地址在详情设置中修改，新建会话生效；自定义地址会

@@ -177,7 +177,7 @@ function useActions(store: SessionStore) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const cwd = useSyncExternalStore(store.subscribeMeta, () => store.getMeta()?.cwd ?? null)
   const harnessId = useSyncExternalStore(store.subscribeMeta, () => store.getMeta()?.harness ?? '')
-  const harness = nameOf(useKey<DeviceView>(keys.device(deviceId)), harnessId)
+  const harness = nameOf(useKey<DeviceView>(keys.device(deviceId)), harnessId, t)
   const { scope, root } = useFileScope(deviceId, sessionId, cwd)
   const issues = useContext(IssueLinksContext)
   const [menu, setMenu] = useState<string | null>(null)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -125,7 +126,7 @@ func (i *installer) start(id, target string) (string, *controlError) {
 		Job: fmt.Sprintf("install-%d-%d", time.Now().UnixMilli(), i.next), Harness: id, Version: target,
 		Resolved: optional(resolved), State: installRunning, Log: []string{}, StartedAt: time.Now().UnixMilli(),
 	}
-	if resolved != "" {
+	if resolved != "" || install.latestOnly {
 		job.Command = install.manual(resolved)
 	}
 	i.current, i.last[id] = job, job
@@ -206,7 +207,7 @@ func (i *installer) run(job *installJob, install *installSpec, resolved string) 
 	i.mu.Lock()
 	i.publish(job)
 	i.mu.Unlock()
-	if resolved == "" {
+	if resolved == "" && !install.latestOnly {
 		version, err := fetchLatest(ctx, i.hooks.source.registry, install.npmPackage)
 		if err != nil {
 			failure := latestFailure(err)
@@ -270,14 +271,26 @@ func (i *installer) run(job *installJob, install *installSpec, resolved string) 
 		fresh = npmGlobalCLI(ctx, install, lookPath(search, "npm"), env)
 	} else {
 		fresh = fallbackCLI(envHome(env), specOf(id))
+		if install.latestOnly {
+			for _, path := range cliFallbackPaths(specOf(id), env) {
+				if candidate := lookPath(filepath.Dir(path), filepath.Base(path)); candidate != "" {
+					fresh = candidate
+					break
+				}
+			}
+		}
 	}
 	if install.methodHere() == installScript {
 		actual := cachedCLIVersion(ctx, fresh, env)
 		order, valid := compareVersions(actual, resolved)
-		if fresh == "" || !valid || order < 0 {
+		if fresh == "" || actual == "" || (!install.latestOnly && (!valid || order < 0)) {
 			failure := both("官方安装命令已结束，但目标路径 %s 的版本是 %s，未确认安装到 %s；请检查安装日志后重试", "The official installer finished, but %s reports %s; installation of %s could not be confirmed. Check the install log and retry").with(fresh, actual, resolved)
 			i.finish(job, installed, &failure)
 			return
+		}
+		if install.latestOnly {
+			// 由官方脚本下载并校验后才知道实际版本；已有目标文件时报告原有版本。
+			i.update(job, func() { job.Resolved = &actual })
 		}
 	}
 	i.update(job, func() {

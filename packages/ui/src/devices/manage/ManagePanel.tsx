@@ -139,7 +139,7 @@ export function ManagePanel({
   }
 
   const nameOfHarness = (id: string) =>
-    device.harnesses.find((entry) => entry.id === id)?.name ?? id
+    t.harness(id, device.harnesses.find((entry) => entry.id === id)?.name)
   const row = (spec: SettingSpecView) => (
     <SettingRow
       key={spec.key}

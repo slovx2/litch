@@ -123,7 +123,7 @@ export function BoardPanels({
                 : t(`manager.${line.status}`)}
             </span>
             <b className="grow">{line.title}</b>
-            <span className="chip" title={nameOf(device, line.harness)}>
+            <span className="chip" title={nameOf(device, line.harness, t)}>
               {badgeOf(device, line.harness)}
             </span>
             <button
