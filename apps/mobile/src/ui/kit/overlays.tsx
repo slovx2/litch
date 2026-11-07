@@ -1,7 +1,7 @@
 // 浮层：底部动作单（长按一行出来的菜单）、确认框、单行输入框（改名）。都用 RN 自带的 Modal，
 // 系统返回键关掉。系统的 Alert 样式改不了、也不跟主题，所以不用它。
-import { type ReactNode, useEffect, useState } from 'react'
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ModalConsentHost } from '../../privacy/ConsentPresentation'
 import { useT } from '../i18n'
@@ -26,6 +26,8 @@ export interface SheetAction {
   value?: string
   /** 点了不收起（一张单里逐个勾几项时） */
   stay?: boolean
+  /** iOS 原生选择器要等动作单真正关闭后再打开；Sheet 需保持挂载到 onDismiss。 */
+  afterDismiss?: boolean
 }
 
 /** 底部动作单。visible 为 false 时什么都不画 */
@@ -47,8 +49,25 @@ export function Sheet({
   const theme = useTheme()
   const t = useT()
   const { c } = theme
+  const pending = useRef<(() => void) | null>(null)
+  useEffect(
+    () => () => {
+      pending.current = null
+    },
+    [],
+  )
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      onDismiss={() => {
+        const action = pending.current
+        pending.current = null
+        action?.()
+      }}
+    >
       <Pressable style={styles.scrim} onPress={onClose} testID="sheet:scrim" />
       <View
         style={[
@@ -99,6 +118,13 @@ export function Sheet({
             disabled={action.disabled !== undefined}
             testID={action.testID}
             onPress={() => {
+              if (pending.current) return
+              // UIKit 会把即将关闭的 Modal 上新呈现的相册一起关闭；不能只等 JS setState。
+              if (!action.stay && action.afterDismiss && Platform.OS === 'ios') {
+                pending.current = action.onPress
+                onClose()
+                return
+              }
               if (!action.stay) onClose()
               action.onPress()
             }}

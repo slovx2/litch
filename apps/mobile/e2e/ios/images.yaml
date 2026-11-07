@@ -1,0 +1,88 @@
+# 先导入 image-fixtures.swift 生成的三张图片；由 check-tablet.mjs 持有 7001 锁。
+appId: ${APP_ID}
+name: ios-images
+---
+- launchApp:
+    clearState: true
+    stopApp: true
+    # Maestro 默认会授予全部权限；明确拒绝，验证选图不要求整库照片权限。
+    permissions:
+      all: deny
+- extendedWaitUntil:
+    visible:
+      id: ai-consent:allow
+    timeout: 30000
+- tapOn:
+    id: ai-consent:allow
+- extendedWaitUntil:
+    visible:
+      id: devices
+    timeout: 30000
+- openLink: '${SCHEME}://boot?mode=mock&controlled=1'
+- extendedWaitUntil:
+    visible:
+      id: device:local
+    timeout: 30000
+- tapOn:
+    id: device:local
+- tapOn:
+    id: session:s3
+- tapOn:
+    id: composer-more
+- tapOn:
+    id: composer-image
+- extendedWaitUntil:
+    visible: '照片|Photos'
+    timeout: 8000
+# 取消选图不会产生空附件；再次打开仍正常。
+- tapOn:
+    id: Cancel
+- assertNotVisible:
+    id: composer-image-view-0
+- tapOn:
+    id: composer-more
+- tapOn:
+    id: composer-image
+- extendedWaitUntil:
+    visible: '照片|Photos'
+    timeout: 8000
+- tapOn:
+    id: PXGGridLayout-Info
+    index: 0
+- tapOn:
+    id: PXGGridLayout-Info
+    index: 1
+- tapOn:
+    id: PXGGridLayout-Info
+    index: 2
+- tapOn: '完成|Done|Add'
+- extendedWaitUntil:
+    visible:
+      id: composer-image-view-2
+    timeout: 15000
+- takeScreenshot: ${SCREENSHOTS}/ios-images-selected
+# 关闭原生文件选择器也保留已有图片。
+- tapOn:
+    id: composer-more
+- tapOn:
+    id: composer-file
+- extendedWaitUntil:
+    visible: '浏览|Browse'
+    timeout: 8000
+- tapOn: '取消|Cancel'
+- assertVisible:
+    id: composer-image-view-2
+- tapOn:
+    id: composer-input
+- inputText: ios-image-e2e
+- tapOn:
+    id: composer-send
+- extendedWaitUntil:
+    notVisible:
+      id: composer-image-view-0
+    timeout: 15000
+# iOS 把图片按钮与正文合成气泡的无障碍标签，仍限定为实际用户消息。
+- assertVisible:
+    id: user-message
+    text: '(?s).*ios-image-e2e.*'
+- takeScreenshot: ${SCREENSHOTS}/ios-images-sent

@@ -219,6 +219,18 @@ messages arrived while you were away. Other board tabs retain their own scroll p
   effort, speed, permission and Plan mode, each showing its current value; tap one to change it. When
   Plan mode is on, the + button carries an accent dot. The same applies on the New session page.
   手机输入框旁的“+”里是添加图片和对话参数（模型、强度、速度、权限、计划模式），每项写着当前值；计划模式开着时“+”上有强调色圆点。
+
+  “添加图片”打开系统照片选择器；iOS 的 HEIC 照片转为 JPEG 后加入草稿，单张按转换后大小限制为 8 MiB。
+  无法打开相册与无法读取选中图片会分别提示；读取失败时先在系统照片中下载原图，再重新选择。
+  照片选择器只读取用户选中的项目，不要求开放整个照片库。聊天目前没有直接拍照入口。
+  图片随消息发往会话设备；“添加文件”中的普通文件则先上传到该设备。发送失败会保留草稿并显示原因。
+
+  **Add images** opens the system photo picker. iOS HEIC photos are converted to JPEG, with an
+  8 MiB limit per converted image. Separate messages explain picker and image-reading failures;
+  download a cloud-only original in Photos before selecting it again. Full-library access is not
+  required. Chat does not currently offer a camera action. Images travel with the message, while
+  ordinary files selected through **Add file** upload to the session device first. Failed sends
+  retain the draft and show the reason.
 - **Scheduled task**: a session run by a scheduled task (or targeted by one) shows a ⏱ clock in the
   title bar; tap it to open the task. 定时任务跑出的会话在标题栏显示时钟，点开是任务详情。
 - **Background tasks**: while background tasks run, a small pill above the input box shows a breathing

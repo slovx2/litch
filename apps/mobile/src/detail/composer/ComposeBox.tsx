@@ -390,6 +390,7 @@ export function ComposeBox({
           {
             label: t('compose.addFile'),
             testID: `${testID}-file`,
+            afterDismiss: true,
             onPress: () => void addFile(),
             ...(uploading ? { disabled: t('composer.file.uploading') } : {}),
           },
@@ -398,6 +399,7 @@ export function ComposeBox({
     {
       label: t('compose.addImage'),
       testID: `${testID}-image`,
+      afterDismiss: true,
       onPress: () => void addImages(),
       ...(imagesOff ? { disabled: imagesOff } : {}),
     },

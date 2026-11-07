@@ -12,6 +12,7 @@ const here = new URL('./', import.meta.url)
 process.env.EXPO_PUBLIC_LITCH_E2E ??= '1'
 const core = new URL('../../../packages/core/src/index.mts', import.meta.url)
 const stubs = {
+  'expo-image-picker': new URL('stubs/expo-image-picker.mjs', here),
   'expo-document-picker': new URL('stubs/expo-document-picker.mjs', here),
   'expo-clipboard': new URL('stubs/expo-clipboard.mjs', here),
   'expo-file-system': new URL('stubs/expo-file-system.mjs', here),

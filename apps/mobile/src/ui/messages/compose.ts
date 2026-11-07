@@ -9,6 +9,8 @@ export const zhCN = {
   'compose.placeholder.queue': '排队发送…',
   'compose.pendingShort': '含 {n} 条',
   'compose.addImage': '添加图片',
+  'compose.image.open': '无法打开系统相册。请重试，或重启应用后重新选择。',
+  'compose.image.read': '无法读取所选图片。请在系统照片中下载原图后重试，或选择其他图片。',
   'compose.context': '上下文',
   'compose.ring': '上下文已用 {n}%',
   'compose.more': '添加与对话设置',
@@ -34,6 +36,10 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'compose.placeholder.queue': 'Queue a message…',
   'compose.pendingShort': '+{n} pending',
   'compose.addImage': 'Add images',
+  'compose.image.open':
+    'Could not open the photo picker. Try again, or restart the app and select again.',
+  'compose.image.read':
+    'Could not read the selected image. Download the original in Photos and try again, or choose another image.',
   'compose.context': 'Context',
   'compose.ring': 'Context {n}% used',
   'compose.more': 'Add and conversation settings',

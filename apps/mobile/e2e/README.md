@@ -212,6 +212,35 @@ Litch Dev 验收包，保证没有已保存的同意记录；使用模拟核心�
 - `scripts/check-ios-terminal.mjs`：原有字符/中文/粘贴/旋转用例，以及 `testColdStartKeyboard`。
 - `scripts/audit-ios-review.mjs <.app> [--e2e]`：检查包内构建档位与所有原生主程序/framework。
 
+## iOS 图片附件
+
+`ios/images.yaml` 在系统照片选择器中选取 JPEG、HEIC、PNG，验证菜单关闭后相册保持可见、
+取消后可重新打开、三张图进入草稿、原生文件选择器取消后保留图片，以及发送后草稿清空和消息出现。
+它只使用模拟核心，启动时明确拒绝系统权限，防止 Maestro 默认全部授予掩盖照片权限问题。
+`image-fixtures.swift` 生成三张小色块；导入后应为照片库最新的三张。
+没有直接拍照入口，不把模拟器照片选择验收记作真机相机验收。
+
+先以 `LITCH_MOBILE_DEV=1 bash scripts/build-ios.sh` 构建，再用专用 `Litch-iOS-` 模拟器运行：
+
+```sh
+# 在 apps/mobile 执行，IOS_IMAGE_SIM 指向专用模拟器的 UDID。
+(
+  set -e
+  trap 'xcrun simctl shutdown "$IOS_IMAGE_SIM"' EXIT
+  mkdir -p .artifacts/ios-images
+  xcrun swift e2e/ios/image-fixtures.swift .artifacts/ios-images
+  xcrun simctl boot "$IOS_IMAGE_SIM"
+  xcrun simctl bootstatus "$IOS_IMAGE_SIM" -b
+  xcrun simctl install "$IOS_IMAGE_SIM" ios/build/Build/Products/Release-iphonesimulator/LitchDev.app
+  xcrun simctl addmedia "$IOS_IMAGE_SIM" .artifacts/ios-images/fixture.png .artifacts/ios-images/fixture.heic .artifacts/ios-images/fixture.jpg
+  node scripts/check-tablet.mjs "$IOS_IMAGE_SIM" ios/images.yaml
+)
+```
+
+执行器持有共享 `/tmp/litch-maestro-7001.lock`，不会绕过其他验收。可用 `MAESTRO` 指定 CLI；
+`LITCH_TABLET_SCREENSHOTS` 指定保留截图的绝对目录。此流程按 iOS 26 的照片选择器无障碍标识选择图片；
+其他 iOS 版本若标识改变需核对真实界面，不能以点击坐标或删断言让流程通过。
+
 ## 平板与窗口变化
 
 `e2e/ios/QuestionKeyboardTests.swift` 用独立 XCUITest 验提问、多行输入、审批说明和异步提问。

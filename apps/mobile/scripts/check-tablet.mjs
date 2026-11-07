@@ -30,7 +30,7 @@ if (ios) {
   if (!name.startsWith('litch_')) throw new Error('仅允许 litch_ 专用 AVD')
 }
 for (const flow of flows) {
-  if (!/^(tablet|flows\/mock)\/[\w-]+\.yaml$/.test(flow)) throw new Error(`无效流程：${flow}`)
+  if (!/^(tablet|ios|flows\/mock)\/[\w-]+\.yaml$/.test(flow)) throw new Error(`无效流程：${flow}`)
 }
 const artifacts = mkdtempSync(join(tmpdir(), 'litch-tablet-maestro-'))
 let locked = false
