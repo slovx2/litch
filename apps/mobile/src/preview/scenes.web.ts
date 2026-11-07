@@ -31,6 +31,13 @@ const say = (prompt: string) =>
 
 export const SCENES: Scene[] = [
   {
+    id: 'antigravity-quota',
+    group: '会话',
+    name: 'Antigravity 订阅额度',
+    note: '正式用量页显示模型组的 5 小时／每周额度、耗尽与重置时间，数据来自模拟核心',
+    steps: [],
+  },
+  {
     id: 'pair-ts-login',
     group: '设备',
     name: '扫码 · Tailscale 未登录',

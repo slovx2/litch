@@ -85,12 +85,12 @@ export function projectLimits(known: Known | null): AccountLimitRow[] {
   return rows
 }
 
-/** 把稀疏的更新并进去：没给的窗口沿用原来的 */
+/** 保持既有稀疏窗口合并；agy 的具名 bucket 在失效时用两个 null 撤下，不能残留旧账号。 */
 const mergeSnapshot = (
   was: RateLimitSnapshot | null | undefined,
   next: RateLimitSnapshot,
 ): RateLimitSnapshot =>
-  was
+  was && !(next.limitId?.startsWith('agy:') && next.primary === null && next.secondary === null)
     ? {
         ...was,
         ...next,

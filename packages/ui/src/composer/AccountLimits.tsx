@@ -1,4 +1,4 @@
-// 用量环弹层里的“账号额度”：订阅登录的账号（Claude Code 的 Anthropic 订阅、Codex 的 ChatGPT 登录）才有。
+// 用量环弹层里的“账号额度”：由 Claude Code、Codex、Antigravity 等引擎提供订阅额度。
 // 弹层开着才订阅（accountLimits 主题），核心那时才去读。没有额度时什么都不画，弹层和原来一样。
 import type { AccountLimitRow, AccountLimitsOp } from '@litch/core'
 import { useEffect, useState } from 'react'
@@ -39,18 +39,20 @@ export function MeterRow({
   percent,
   detail,
   title,
+  named = false,
 }: {
   label: string
   percent: number | null
   detail: string | null
   /** 补充那句悬停时的说明（重置的具体时刻） */
   title?: string | undefined
+  named?: boolean
 }) {
   const t = useT()
   const level = percent === null ? '' : percent >= 90 ? ' full' : percent >= 70 ? ' high' : ''
   const width = percent === null ? 0 : Math.min(100, percent)
   return (
-    <div className={`meter${level}`}>
+    <div className={`meter${level}${named ? ' meter-named' : ''}`}>
       <div className="meter-head">
         <span className="meter-name">{label}</span>
         {detail ? (
@@ -84,6 +86,7 @@ export function AccountLimits({ rows }: { rows: AccountLimitRow[] }) {
     return (
       <MeterRow
         key={row.id}
+        named={row.name !== null}
         label={row.name ? t('limits.named', { name: row.name, window }) : window}
         percent={row.window.usedPercent}
         detail={resetsIn(resetsAt, now, t)}

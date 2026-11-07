@@ -2,6 +2,7 @@
 // 不带就是预览首页（场景列表和手机屏）。预览的代码都在 src/preview/ 和各处的 *.web.ts 里，手机的包里没有
 import { useEffect } from 'react'
 import App from './App'
+import { AntigravityQuotaPreview } from './preview/AntigravityQuota.web.tsx'
 import { CjkEmphasisPreview } from './preview/CjkEmphasis.web.tsx'
 import { CollapsedTurnPreview } from './preview/CollapsedTurn.web.tsx'
 import { applyPrefs, runScene } from './preview/frame.web.ts'
@@ -39,6 +40,8 @@ function PreviewApp() {
 }
 
 export default function Root() {
+  if (inFrame && params.get('scene') === 'antigravity-quota')
+    return <AntigravityQuotaPreview params={params} />
   if (inFrame && params.get('scene') === 'cjk-emphasis') return <CjkEmphasisPreview />
   if (inFrame && params.get('scene') === 'collapsed-turn')
     return <CollapsedTurnPreview params={params} />

@@ -12,6 +12,7 @@ import {
   platformOs,
 } from '../../shared/src/runtime-version.mjs'
 import type { RpcPeer, WireMessage } from '../../shared/src/types.mjs'
+import { AccountQuota, emptyQuota, queryQuota } from './account-limits.mjs'
 import { type Backend, loadAcp } from './backend-loader.mjs'
 import { declaration } from './declaration.mjs'
 import {
@@ -65,10 +66,21 @@ export class AntigravityRouter implements Backend {
   >()
   private readonly declarations = new Map<BackendId, HarnessDeclaration>([['sdk', declaration]])
   private closed = false
+  private readonly quota: AccountQuota
+  private readonly quotaPeers = new Set<string>()
   constructor(home: string, options: RouterOptions = {}) {
     this.settings = new RouterSettings(home)
     this.options = options
     this.sdk = options.sdk
+    this.quota = new AccountQuota(
+      (signal) => queryQuota(join(home, 'quota'), options.env ?? process.env, signal),
+      (rateLimits) => {
+        for (const id of this.quotaPeers)
+          this.peers
+            .get(id)
+            ?.peer.send({ method: 'account/rateLimits/updated', params: { rateLimits } })
+      },
+    )
   }
   private backend(id: BackendId): Promise<Backend> {
     if (id === 'sdk') {
@@ -102,6 +114,12 @@ export class AntigravityRouter implements Backend {
       else pending.resolve(message.result)
       return
     }
+    if (
+      backend === 'acp' &&
+      message.method === 'turn/completed' &&
+      this.settings.mode() === 'subscription'
+    )
+      this.quota.afterTurn()
     const capable = this.peers.get(peer.id)?.extensions.has('threadCapabilities')
     let params: any = rewriteThreads(
       message.params,
@@ -251,6 +269,10 @@ export class AntigravityRouter implements Backend {
       }
     }
     if (!this.peers.has(peer.id)) throw new ProtocolError(-32002, '请先 initialize')
+    if (method === 'account/rateLimits/read') {
+      this.quotaPeers.add(peer.id)
+      return this.settings.mode() === 'subscription' ? this.quota.read() : emptyQuota()
+    }
     if (method === 'litch/harness/config/read') return this.settings.read(await this.config(peer))
     if (method === 'litch/harness/config/write') {
       const inner = await this.config(peer)
@@ -261,6 +283,7 @@ export class AntigravityRouter implements Backend {
       if (mode.length) {
         if (params.edits.length !== 1) throw new ProtocolError(-32602, '切换鉴权方式需单独保存')
         this.settings.write(mode[0].value)
+        this.quota.invalidate()
         setImmediate(() => {
           for (const connection of this.peers.values())
             if (connection.extensions.has('harnessConfig'))
@@ -281,7 +304,11 @@ export class AntigravityRouter implements Backend {
       })
       return { ...result, version: this.settings.version(result.version) }
     }
-    if (method.startsWith('litch/acp/auth/')) return this.call('acp', peer, method, params)
+    if (method.startsWith('litch/acp/auth/')) {
+      const result = await this.call('acp', peer, method, params)
+      if (method !== 'litch/acp/auth/read') this.quota.invalidate()
+      return result
+    }
     if (method === 'thread/list' || method === 'thread/loaded/list')
       return this.list(peer, method, params)
     const refs = threadReferences(params).map(decodeThread)
@@ -348,6 +375,7 @@ export class AntigravityRouter implements Backend {
     return pageRecords(rows, params, 'agy:combined', (thread) => thread.id)
   }
   closePeer(peer: RpcPeer): void {
+    this.quotaPeers.delete(peer.id)
     this.peers.delete(peer.id)
     for (const backend of ['sdk', 'acp'] as const) {
       const key = `${backend}:${peer.id}`,
@@ -370,6 +398,8 @@ export class AntigravityRouter implements Backend {
   }
   async close(): Promise<void> {
     this.closed = true
+    this.quotaPeers.clear()
+    this.quota.close()
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer)
       pending.reject(new Error('引擎已停止'))

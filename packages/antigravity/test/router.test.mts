@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { cp, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { chmod, cp, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -54,11 +54,11 @@ class FakeBackend implements Backend {
     this.closed = true
   }
 }
-async function setup(declare = true) {
+async function setup(declare = true, env: NodeJS.ProcessEnv = {}) {
   const home = await mkdtemp(join(tmpdir(), 'agy-router-'))
   const sdk = new FakeBackend('sdk'),
     acp = new FakeBackend('acp')
-  const router = new AntigravityRouter(home, { sdk, acp: async () => acp, env: {} })
+  const router = new AntigravityRouter(home, { sdk, acp: async () => acp, env })
   const messages: any[] = []
   const peer: RpcPeer = {
     id: 'p',
@@ -228,5 +228,56 @@ test('ACP 账号请求始终走订阅后端，默认 API key 时不落入 SDK', 
     assert.equal(f.acp.calls.filter((c) => c.method.startsWith('litch/acp/auth/')).length, 3)
   } finally {
     await f.close()
+  }
+})
+
+test('订阅额度按需走独立只读 CLI；API key 不查，退出登录撤下旧值，不加载 SDK', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agy-router-quota-'))
+  const cli = join(directory, 'agy.mjs')
+  await writeFile(
+    cli,
+    `process.stdout.write(${JSON.stringify(
+      JSON.stringify({
+        status: 'SUCCESS',
+        command: {
+          name: 'usage',
+          data: {
+            groups: [
+              {
+                name: 'Gemini Models',
+                buckets: [
+                  {
+                    id: 'gemini-5h',
+                    window: '5h',
+                    remaining_fraction: 0.8,
+                    reset_time: '2026-11-08T00:00:00Z',
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+    )});`,
+  )
+  await chmod(cli, 0o700)
+  const f = await setup(false, { HOME: directory, USERPROFILE: directory, CHA_AGY_CLI: cli })
+  try {
+    const response = await f.call('account/rateLimits/read')
+    assert.equal(response.rateLimitsByLimitId['agy:gemini-5h'].primary.usedPercent, 20)
+    assert.equal(f.sdk.calls.length, 0)
+    assert.equal(f.acp.calls.length, 0, '读取额度不额外启动 ACP 会话')
+    await f.call('litch/acp/auth/logout')
+    const notice = f.messages
+      .filter((message) => message.method === 'account/rateLimits/updated')
+      .at(-1)
+    assert.equal(notice.params.rateLimits.limitId, 'agy:gemini-5h')
+    assert.equal(notice.params.rateLimits.primary, null)
+    f.router.settings.write('apiKey')
+    assert.deepEqual((await f.call('account/rateLimits/read')).rateLimitsByLimitId, {})
+    assert.equal(f.sdk.calls.length, 0)
+  } finally {
+    await f.close()
+    await rm(directory, { recursive: true, force: true })
   }
 })
