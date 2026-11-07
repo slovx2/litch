@@ -115,6 +115,52 @@ async function setup(kind: 'local' | 'ssh' = 'local', extra: Record<string, Hand
   }
 }
 
+test('完全没有 fs/changed：对账更新可见目录与打开文件，焦点补读不用等待下一轮', async (t) => {
+  const w = await setup()
+  t.after(w.close)
+  const stop = w.replica.files.open('device', root)
+  let text = ''
+  const stopFile = observeFileChanges(
+    w.channel,
+    { deviceId: 'device', root, path: `${root}/before.txt` },
+    async () => {
+      const content = await w.channel.command('files.read', {
+        deviceId: 'device',
+        root,
+        path: `${root}/before.txt`,
+      })
+      text = content.kind === 'text' ? content.text : content.kind
+    },
+    true,
+  )
+  await w.flush()
+  w.dirs.set(root, ['renamed.txt'])
+  w.contents.delete(`${root}/before.txt`)
+  w.time.advance(5000)
+  await w.flush()
+  assert.deepEqual(
+    w.rows().map((row) => row.name),
+    ['renamed.txt'],
+  )
+  assert.equal(text, 'missing')
+  w.contents.set(`${root}/before.txt`, 'atomic replacement')
+  w.dirs.set(root, ['before.txt'])
+  await w.channel.command('files.reconcile', { deviceId: 'device', root })
+  await w.flush()
+  assert.equal(text, 'atomic replacement')
+  assert.deepEqual(
+    w.rows().map((row) => row.name),
+    ['before.txt'],
+  )
+  stop()
+  stopFile()
+  await w.flush()
+  const count = w.sent('fs/getMetadata').length
+  w.time.advance(15000)
+  await w.flush()
+  assert.equal(w.sent('fs/getMetadata').length, count)
+})
+
 for (const kind of ['local', 'ssh'] as const) {
   test(`${kind}：目录增删重命名、保留展开与稳定行 ID、收起和退出退订`, async (t) => {
     const w = await setup(kind)

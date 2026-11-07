@@ -417,6 +417,9 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
         Object.fromEntries(Object.entries(counts).map(([path, count]) => [written(path), count]))
       return { lists: out(lists), reads: out(reads) }
     },
+    async 'files.reconcile'({ deviceId, root }) {
+      filesOf(deviceId, root).reconcile(expand(root))
+    },
   }
 
   return {

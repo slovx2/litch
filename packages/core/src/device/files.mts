@@ -101,6 +101,7 @@ export interface Files {
     signal?: AbortSignalLike,
   ): Promise<FileReadChunk>
   watch(root: string, path: string, directory: boolean, sink: HostSink): () => void
+  reconcile(root: string): void
   notification(method: string, params: unknown): boolean
   resolve(
     root: string,
@@ -365,6 +366,9 @@ export function createFiles(host: FilesHost): Files {
   }
 
   const files: Files = {
+    reconcile(root) {
+      watches.reconcile(locate(root, root).root)
+    },
     async image(source, signal) {
       mustBeOnline()
       const remote = /^https?:\/\//i.test(source)

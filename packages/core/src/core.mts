@@ -1291,6 +1291,10 @@ export function createCore(options: CoreOptions): Core {
           const { deviceId } = params as Commands['files.requests']['params']
           return deviceOf(deviceId).files.requests()
         }
+        case 'files.reconcile': {
+          const { deviceId, root } = params as Commands['files.reconcile']['params']
+          return deviceOf(deviceId).files.reconcile(root)
+        }
         // 差异面板。没做成的原因差异那一层已经换成给人看的了，原样过去
         case 'diff.files': {
           const { deviceId, root, scope, sessionId } = params as Commands['diff.files']['params']

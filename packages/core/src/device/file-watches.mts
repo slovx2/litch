@@ -3,6 +3,7 @@ import type { ServerNotifications } from '../../../protocol/src/index.mjs'
 import type { HostSink } from '../channel/server.mjs'
 import { baseName, joinPath, normalizePath, parentPath } from '../text/paths.mjs'
 import { lacksMethod } from './faults.mjs'
+import { createFileReconciler } from './file-reconcile.mjs'
 import type { FilesHost } from './files.mjs'
 
 export const FILE_CHANGE_MS = 250
@@ -32,6 +33,7 @@ export function createFileWatches(host: FilesHost, invalidate: (path: string) =>
       listener.sink.snapshot({ revision: ++listener.revision })
     }, FILE_CHANGE_MS)
   }
+  const reconcile = createFileReconciler(host)
   const arm = async (watch: Watch) => {
     if (!host.online() || unsupported || watch.id || !watch.listeners.size) return
     const id = `litch-files-${++sequence}`
@@ -72,6 +74,7 @@ export function createFileWatches(host: FilesHost, invalidate: (path: string) =>
       const listener: Listener = { path, directory, sink, revision: 0, cancel: null }
       watch.listeners.add(listener)
       sink.snapshot({ revision: 0 })
+      const stopReconcile = reconcile.open(path, () => change(listener))
       // 复用已存在的父目录监视时也作废在途读取，补上订阅之前的变化。
       if (watch.id) change(listener)
       else void arm(watch)
@@ -79,12 +82,16 @@ export function createFileWatches(host: FilesHost, invalidate: (path: string) =>
       return () => {
         if (closed) return
         closed = true
+        stopReconcile()
         listener.cancel?.()
         watch.listeners.delete(listener)
         if (watch.listeners.size) return
         stop(watch)
         watches.delete(watchedPath)
       }
+    },
+    reconcile(root: string) {
+      reconcile.refresh(root)
     },
     notification(method: string, params: unknown): boolean {
       if (method !== 'fs/changed') return false
@@ -112,6 +119,7 @@ export function createFileWatches(host: FilesHost, invalidate: (path: string) =>
       return true
     },
     offline() {
+      reconcile.offline()
       ids.clear()
       for (const watch of watches.values()) {
         watch.id = null
@@ -122,6 +130,7 @@ export function createFileWatches(host: FilesHost, invalidate: (path: string) =>
       }
     },
     resync() {
+      reconcile.resync()
       unsupported = false
       for (const watch of watches.values()) void arm(watch)
     },

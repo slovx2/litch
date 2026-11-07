@@ -1,5 +1,5 @@
 // 真实磁盘 + 现有 PathWatch，验证原子替换后仍能持续收到同一路径的新内容。
-// 手动诊断：npm run client:diagnose:files-refresh。原生事件交付尚有偶发遗漏，不作为发版门禁。
+// 手动诊断：npm run client:diagnose:files-refresh；可丢弃全部事件单独验证对账。
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -10,7 +10,11 @@ import { PathWatch } from '../../shared/src/path-watch.mjs'
 import { RpcError } from '../src/connection/rpc.mjs'
 import { ChannelError, createFiles, type DirectoryView, type FileContent } from '../src/index.mjs'
 
-test('真实磁盘：新建、修改、原子替换、重命名、删除与重建', { timeout: 15000 }, async (t) => {
+test('真实磁盘：新建、修改、原子替换、重命名、删除与重建', { timeout: 120000 }, async (t) => {
+  const silent = process.env.LITCH_DIAG_DROP_FILE_EVENTS === '1'
+  const timings: number[] = []
+  let events = 0
+  let stats = 0
   const root = await mkdtemp(join(tmpdir(), 'litch-files-refresh-'))
   const watchers = new Map<string, PathWatch>()
   t.after(async () => {
@@ -40,9 +44,10 @@ test('真实磁盘：新建、修改、原子替换、重命名、删除与重�
         if (method === 'fs/watch') {
           watchers.set(
             p.watchId,
-            new PathWatch(p.path, (changedPaths) =>
-              files.notification('fs/changed', { watchId: p.watchId, changedPaths }),
-            ),
+            new PathWatch(p.path, (changedPaths) => {
+              events++
+              if (!silent) files.notification('fs/changed', { watchId: p.watchId, changedPaths })
+            }),
           )
           result = { path: p.path }
         } else if (method === 'fs/unwatch') {
@@ -50,8 +55,15 @@ test('真实磁盘：新建、修改、原子替换、重命名、删除与重�
           watchers.delete(p.watchId)
           result = {}
         } else if (method === 'fs/getMetadata') {
+          stats++
           const meta = await stat(p.path)
-          result = { isFile: meta.isFile(), isDirectory: meta.isDirectory() }
+          result = {
+            isFile: meta.isFile(),
+            isDirectory: meta.isDirectory(),
+            isSymlink: false,
+            createdAtMs: Math.trunc(meta.birthtimeMs),
+            modifiedAtMs: Math.trunc(meta.mtimeMs),
+          }
         } else if (method === 'fs/readFile')
           result = { dataBase64: (await readFile(p.path)).toString('base64') }
         else if (method === 'fs/readDirectory')
@@ -80,6 +92,7 @@ test('真实磁盘：新建、修改、原子替换、重命名、删除与重�
     delta() {},
     error() {},
   })
+  t.after(stopFile)
   const stopDir = files.watch(root, root, true, {
     snapshot: () => {
       void files.list(root, root, true).then((value) => {
@@ -89,10 +102,16 @@ test('真实磁盘：新建、修改、原子替换、重命名、删除与重�
     delta() {},
     error() {},
   })
+  t.after(stopDir)
   const until = async (condition: () => boolean) => {
     const start = Date.now()
-    while (!condition() && Date.now() - start < 4000) await sleep(25)
-    assert.ok(condition(), '等待文件变化刷新超时')
+    // 包含 5 秒低频对账及后台进程调度时间；操作本身不重试。
+    while (!condition() && Date.now() - start < 20000) await sleep(25)
+    timings.push(Date.now() - start)
+    assert.ok(
+      condition(),
+      `等待文件变化刷新超时：${JSON.stringify({ silent, events, stats, timings, content, listing })}`,
+    )
   }
   const text = () => (content?.kind === 'text' ? content.text : content?.kind)
   const names = () => listing?.entries.map((entry) => entry.name) ?? []
@@ -120,4 +139,7 @@ test('真实磁盘：新建、修改、原子替换、重命名、删除与重�
   stopFile()
   stopDir()
   assert.equal(watchers.size, 0)
+  t.diagnostic(
+    JSON.stringify({ silent, events, stats, refreshMs: timings, requests: files.requests() }),
+  )
 })

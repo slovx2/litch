@@ -1152,6 +1152,11 @@ export interface Commands {
     params: { deviceId: string }
     result: { lists: Record<string, number>; reads: Record<string, number> }
   }
+  /** 面板重新获得焦点：只补读仍在订阅的路径。 */
+  'files.reconcile': {
+    params: { deviceId: string; root: string }
+    result: undefined
+  }
   // ---------- 差异面板 ----------
   // root 和文件面板的一样；path 是相对于根的路径（概况里给的那种）。核心自己核对路径落在根里面。
   // 数据来自设备上的 git：那里不是仓库、没装 git、对面不会起进程时，订阅的概况里会说明，这几条命令没有东西可给。

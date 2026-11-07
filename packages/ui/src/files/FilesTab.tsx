@@ -32,6 +32,7 @@ import { fileActionLabel, useFileActions } from './FileDestination.tsx'
 import { resultId, SearchResults, useFileSearch } from './FileSearch.tsx'
 import { FileTree, type RowContext } from './FileTree.tsx'
 import { FileViewer } from './FileViewer.tsx'
+import { watchFilePanel } from './lifecycle.ts'
 import {
   clampTreeWidth,
   openFile,
@@ -294,8 +295,28 @@ function Files({ deviceId, root, shown }: { deviceId: string; root: string; show
 
 export function FilesTab({ place, shown }: SideTabProps) {
   const t = useT()
+  const { channel } = useServices()
+  const [pageVisible, setPageVisible] = useState(document.visibilityState === 'visible')
   const roots = useMemo(() => place.roots.map(normalizePath), [place.roots])
   const root = usePickedRoot(place.deviceId, place.workspaceId, roots)
+  useEffect(() => {
+    if (!shown || !root) return
+    return watchFilePanel(
+      {
+        visible: () => document.visibilityState === 'visible',
+        focused: () => document.hasFocus(),
+        listen(event, changed) {
+          const target = event === 'visibilitychange' ? document : window
+          target.addEventListener(event, changed)
+          return () => target.removeEventListener(event, changed)
+        },
+        ...(window.litchShell ? { native: window.litchShell.onForeground } : {}),
+      },
+      setPageVisible,
+      () =>
+        void channel.command('files.reconcile', { deviceId: place.deviceId, root }).catch(() => {}),
+    )
+  }, [channel, place.deviceId, root, shown])
   if (!root) return <div className="side-none dim">{t('files.noRoot')}</div>
   return (
     <>
@@ -316,12 +337,12 @@ export function FilesTab({ place, shown }: SideTabProps) {
         </div>
       ) : null}
       {/* 换一棵树就整个换掉：搜索框里的字、菜单这些不跟过去；各棵树自己的状态记在别处（state.ts），回来还在 */}
-      <FileWatching.Provider value={shown}>
+      <FileWatching.Provider value={shown && pageVisible}>
         <Files
           key={treeKey(place.deviceId, root)}
           deviceId={place.deviceId}
           root={root}
-          shown={shown}
+          shown={shown && pageVisible}
         />
       </FileWatching.Provider>
     </>
