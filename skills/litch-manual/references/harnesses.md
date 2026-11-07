@@ -49,12 +49,14 @@ user. Litch has no command for it. Do it yourself with the user's OK, or give th
 | Pi | `npm install -g @earendil-works/pi-coding-agent@0.99.1` | 0.99.1 | 0.99.1 | https://github.com/earendil-works/pi |
 | DSH | `npm install -g @deepseek-ai/dsh@0.2.0-rc.2` | 0.2.0-rc.2 | 0.2.0-rc.2 | https://www.npmjs.com/package/@deepseek-ai/dsh |
 | OpenCode | `curl -fsSL https://opencode.ai/install \| bash -s -- --version 1.18.33` (Windows: `npm install -g opencode-ai@1.18.33`) | 1.18.33 | 1.18.0 | https://opencode.ai/docs |
-| Gemini CLI | Official instructions; choose an explicit version before installing | none | none | https://github.com/google-gemini/gemini-cli |
+| Gemini CLI | Official instructions; choose an explicit version before installing | 0.66.0（ACP 冒烟） | none | https://github.com/google-gemini/gemini-cli |
 | Qwen Code | Official instructions; choose an explicit version before installing | none | none | https://github.com/QwenLM/qwen-code |
 
 - Prefer the verified version. Newer versions usually work too; Litch only needs the minimum and never
   requires an exact version. To use a newer release, check the official version and pin that exact version in the command.
-  Gemini CLI and Qwen Code have not been verified by Litch.
+  Gemini CLI 0.66.0 已通过隔离的 ACP 握手和工具调用冒烟；Qwen Code 尚未验证。
+- Gemini 的 Litch 工具调用由执行方决定是否审批，不额外显示一次 Gemini 工具审批。
+  普通命令、文件操作和其他 MCP 服务的工具仍按原有审批处理。
 - Never use sudo. If npm's global folder is not writable, tell the user (they can set an npm prefix in
   their home, or use a Node version manager); do not change system folders.
 - 官方脚本与 npm 安装完成后，Litch 都重新检测实际入口，并在安装日志中显示路径和版本。

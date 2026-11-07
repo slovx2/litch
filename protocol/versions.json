@@ -16,5 +16,9 @@
   "opencodeMinimum": "1.18.0",
   "opencodeVerified": ["1.18.33"],
   "acpProtocol": 1,
+  "acpSmoke": {
+    "gemini": "0.66.0",
+    "opencode": "1.18.33"
+  },
   "releaseReady": false
 }

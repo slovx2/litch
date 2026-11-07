@@ -23,6 +23,7 @@ const candidate = (parts: object[]) => ({
 export async function startFakeGemini(
   callTool: (name: string) => boolean,
   callArgs: object,
+  callId?: string,
 ): Promise<FakeGemini> {
   const requests: any[] = []
   const urls: string[] = []
@@ -71,7 +72,11 @@ export async function startFakeGemini(
       const parts = answered
         ? [{ text: '工具调完了' }]
         : declared
-          ? [{ functionCall: { name: declared, args: callArgs } }]
+          ? [
+              {
+                functionCall: { name: declared, args: callArgs, ...(callId ? { id: callId } : {}) },
+              },
+            ]
           : [{ text: '冒烟好了' }]
       response.writeHead(200, { 'content-type': 'text/event-stream' })
       response.end(`data: ${JSON.stringify(candidate(parts))}\n\n`)

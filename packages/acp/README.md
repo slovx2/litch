@@ -52,8 +52,8 @@
 - `session/update`：话和思考转成 `agentMessage`、`reasoning` 的增量；工具调用按种类转成 `commandExecution`、`fileChange`、`mcpToolCall`；`plan` 转成 `turn/plan/updated`；`usage_update` 和 `session/prompt` 应答里的用量转成 `thread/tokenUsage/updated`；`available_commands_update` 当技能报（路径是 `acp://<标识>/commands/<名字>` 这样的假标识，交给 agent 的只有名字）；`current_mode_update`、`config_option_update` 转成 `thread/settings/updated`；`session_info_update` 的标题转成改名通知（用户改过名的不盖）。
 - 会话在 agent 进程换过之后要重新接上：有 `session/resume` 的接回去，只有 `session/load` 的回放一遍（历史以适配器记的为准），都没有的接不上，回合失败并说明原因。
 - 动态工具（`thread/start.dynamicTools`，含 Litch 的客户端工具 `litch_*`）：`runtime/info` 的扩展里报 `clientTools`。带了动态工具的会话，`session/new`、`session/load`、`session/resume`、`session/fork` 的 `mcpServers` 里挂一个 stdio 的 MCP 服务 `litch`（规范要求每个 agent 都收 stdio 的）：命令是当前的 node 跑 `dist/acp/src/mcp-bridge.mjs`，它经本地套接字（放在临时目录下新建的、只有自己能进的目录里；Windows 上是命名管道）接回入口进程，口令在环境变量 `LITCH_ACP_MCP_TOKEN` 里。MCP 由入口答：工具名是命名空间去掉 `litch_` 再接工具名（`browser_navigate`），各命名空间的 `instructions` 放在 `initialize` 应答的 `instructions` 里。模型调用时按 `protocol/extensions/client-tools.json` 挑执行方，发标准的 `item/tool/call`，答复转成 MCP 的结果交回 agent。动态工具记在适配器库里，适配器重启、agent 进程换过之后接回会话时重新挂，分叉出来的会话带着原会话的。
-- 动态工具的条目画成 `dynamicToolCall`，条目号就是 `item/tool/call` 的 `callId`。agent 为这次调用报的 `tool_call` 按标题认（`litch_<工具>`、`mcp_litch_<工具>`、`mcp__litch__<工具>`、`<工具> (litch MCP Server)`），认不出的在调用进来时按参数认领（Gemini CLI 在参数里有字符串 `command` 时拿命令当标题，按它认），都认不到就另起一个条目。agent 为这些工具来问权限的（Gemini CLI 默认会问）认得出就直接“允许这一次”，不转给用户（和别的入口一样，要不要问用户由执行方定）；认不出的照普通审批转给用户。
-- 实测（2026-10-20）：Gemini CLI 0.38.0、OpenCode 1.18.33 的 `acp` 都把 MCP 的 `instructions` 放进了给模型的系统提示，见 `test/smoke.test.mts`。
+- 动态工具的条目画成 `dynamicToolCall`，条目号就是 `item/tool/call` 的 `callId`。Gemini CLI 0.66 的调用 ID 带有真实工具名前缀，入口精确匹配当前会话注册的 MCP 工具；旧 agent 则匹配完整的服务限定标题（如 `litch_<工具>` 或 `<工具> (litch MCP Server)`）。命令文字、参数或 ID 后缀提到工具名不算。确认身份后只允许这一次，不额外转发 agent 的审批，要不要问用户仍由执行方决定；认不出的照普通审批转给用户，调用进来后再尝试认领条目。
+- ACP 冒烟使用的精确版本写在 `protocol/versions.json` 的 `acpSmoke`：Gemini CLI 0.66.0、OpenCode 1.18.33。两者均验证工具调用、无重复审批和 MCP instructions 进入模型上下文，普通命令仍需要审批；见 `test/smoke.test.mts`。
 - 权限模式来自 agent 会话目录（`acp:mode:<id>`）；没有目录时只有 agent 自主管理的一档。适配器不增加 OS 沙箱。
 - 插话、主动压缩、回退仍无通用 v1 方法；删除按 sessionCapabilities.delete 开放，表单提问通过 MCP 征询卡呈现。未宣告 URL 征询、音频输入、v2。`mcpServerStatus/list` 等答 -32004。
 
@@ -66,14 +66,13 @@ npm run build --prefix packages/acp
 npm test --prefix packages/acp
 ```
 
-测试的 agent 是 `test/fake-agent.mts`（照 ACP 第 1 版答的假 agent，收到 `mcpServers` 会把 MCP 服务起起来，回合里按几家 agent 报调用的样子调它的工具）。对着真的 agent 冒烟默认跳过，手动开：
+测试的 agent 是 `test/fake-agent.mts`。真实冒烟使用回环假模型、隔离的 HOME/XDG 和假密钥，不读取个人配置。运行以下命令会按 `protocol/versions.json` 的 `acpSmoke` 安装精确版本到本工作树的 `.artifacts/acp-smoke-*`，构建并运行全部三条真实冒烟（不跳过）。Full 流水线的 OpenCode 作业也运行它：
 
 ```sh
-# opencode acp，模型是回环上的假 OpenAI 兼容模型，HOME 和 XDG 都是临时的
-LITCH_SMOKE_OPENCODE=$(which opencode) node --test packages/acp/dist/acp/test/smoke.test.mjs
-# gemini：一条只握手；一条经 MCP 桥调客户端工具，模型是回环上的假 Gemini API（假的密钥，不发真实请求）
-LITCH_SMOKE_GEMINI=$(which gemini) node --test packages/acp/dist/acp/test/smoke.test.mjs
+npm run smoke:acp
 ```
+
+只调试某一家时，构建后也可用 `LITCH_SMOKE_GEMINI` 或 `LITCH_SMOKE_OPENCODE` 指向隔离安装的 CLI，直接运行 `node --test packages/acp/dist/acp/test/smoke.test.mjs`；未提供的另一家会跳过。
 
 ## 嵌入和扩展
 

@@ -474,6 +474,8 @@ async function prompt(params: any): Promise<object> {
       // tool <报法> <MCP 工具名> <JSON 参数>：调会话挂的 MCP 服务的工具。报法照几家 agent 的样子：
       //   gemini  调之前报 tool_call，标题“<工具> (litch MCP Server)”，不带参数
       //   ask     先问权限（标题同上），允许了才调
+      //   ask-id  Gemini 0.66：ID 带真实工具名，标题只有描述
+      //   ask-foreign  普通工具的 ID/参数提到 Litch 工具，仍需客户端审批
       //   command 标题是参数里的 command（Gemini CLI 的做法），不带参数
       //   raw     标题认不出，带原始参数
       //   late    先调，过一会儿才报 tool_call（标题同 gemini）
@@ -487,13 +489,22 @@ async function prompt(params: any): Promise<object> {
         say(`没有工具 ${name}`)
         break
       }
-      const toolCallId = `call-${name}`
+      const toolCallId =
+        style === 'ask-id'
+          ? `mcp_litch_${name}__model-call-1`
+          : style === 'ask-foreign'
+            ? `run_shell_command__mcp_litch_${name}__model-call-1`
+            : `call-${name}`
       const title =
-        style === 'command'
-          ? String(args.command)
-          : style === 'raw'
-            ? '做一件事'
-            : `${name} (${client.name} MCP Server)`
+        style === 'ask-id'
+          ? '回声'
+          : style === 'ask-foreign'
+            ? `mcp_litch_${name}`
+            : style === 'command'
+              ? String(args.command)
+              : style === 'raw'
+                ? '做一件事'
+                : `${name} (${client.name} MCP Server)`
       const reported = {
         sessionUpdate: 'tool_call',
         toolCallId,
@@ -502,12 +513,13 @@ async function prompt(params: any): Promise<object> {
         status: 'in_progress',
         ...(style === 'raw' ? { rawInput: args } : {}),
       }
-      if (style === 'ask') {
+      if (['ask', 'ask-id', 'ask-foreign'].includes(style ?? '')) {
         const kind = await permit(sessionId, {
           toolCallId,
           title,
-          kind: 'other',
+          kind: style === 'ask-foreign' ? 'execute' : 'other',
           status: 'pending',
+          ...(style === 'ask-foreign' ? { rawInput: { command: `echo mcp_litch_${name}` } } : {}),
         })
         if (!kind.startsWith('allow')) {
           notify(sessionId, { sessionUpdate: 'tool_call_update', toolCallId, status: 'failed' })
