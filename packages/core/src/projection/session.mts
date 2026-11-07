@@ -118,7 +118,10 @@ export function projectTurn(
     if (origin.origin === 'goal' && index === 0 && item.type === 'userMessage') return []
     // 回合还在进行时，只有最后一个条目可能还在往外出字
     const view = projectItem(item, running && index === last, nativePhase)
-    if (view.kind === 'compaction' && manual) view.source = 'manual'
+    if (view.kind === 'compaction' && manual) {
+      view.source = 'manual'
+      if (turn.status === 'failed' || turn.status === 'interrupted') view.status = 'interrupted'
+    }
     return [
       {
         ...view,

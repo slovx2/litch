@@ -14,6 +14,25 @@ import {
   until,
 } from './fixtures/background-scene.mjs'
 
+test('冷启动恢复原生会话后可以完成手动压缩', { timeout: 60_000 }, async () => {
+  const scene = await startScene('compact-cold', { CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS: '0' })
+  try {
+    scene.model.enqueue(say('保留此前的任务和检查结果。'))
+    assert.equal((await runTurn(scene, '记住当前任务，稍后需要压缩。')).status, 'completed')
+    scene.model.enqueue(say('摘要：用户要求保留任务和检查结果。'))
+    await scene.client.request('thread/compact/start', { threadId: scene.threadId })
+    await scene.client.notification('thread/compacted')
+    const turns = await readTurns(scene)
+    assert.equal(turns.at(-1).status, 'completed')
+    assert.deepEqual(
+      turns.at(-1).items.map((item: { type: string }) => item.type),
+      ['contextCompaction'],
+    )
+  } finally {
+    await disposeScene(scene)
+  }
+})
+
 for (const mode of ['full', 'no-idle', 'read-only'] as const)
   test(`压缩后后台续跑恢复会话权限（${mode}）并完整记录工具`, { timeout: 90_000 }, async () => {
     const scene = await startScene(

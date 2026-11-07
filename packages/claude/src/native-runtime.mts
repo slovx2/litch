@@ -991,7 +991,10 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       if (context.wake) this.armWakeTimeout(session, pending)
       else {
         const notice = carriesReminder(context) ? this.takeStopNotice(session.key, session) : null
-        input.send(userMessage(context, null, notice))
+        // 冷启动恢复时，后台任务通知可能先于 /compact 返回；只认本次命令的完成确认。
+        const uuid = context.purpose === 'compact' ? randomUUID() : null
+        pending.awaited = uuid
+        input.send(userMessage(context, uuid, notice))
         this.requestTitle(session, context)
       }
     } catch (error) {
@@ -1265,6 +1268,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     const pending = starting ? await starting.ready : (this.sessionFor(threadId)?.turn ?? null)
     if (!pending || pending.resolved || pending.context.threadId !== threadId)
       throw new ProtocolError(-32009, '原生回合未启动或已结束')
+    if (pending.context.purpose === 'compact')
+      throw new ProtocolError(-32009, '正在压缩上下文，请等待压缩结束后发送')
     if (pending.context.claudeBackend === 'tui')
       throw new ProtocolError(-32004, 'TUI 后端暂不支持运行中插话，请等本回合结束')
     const uuid = messageId ?? randomUUID()
@@ -3520,6 +3525,12 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       numTurns: message.num_turns,
     })
     if (pending.resolved) return
+    if (
+      pending.context.purpose === 'compact' &&
+      (message.origin as { kind?: string } | undefined)?.kind === 'task-notification' &&
+      (!pending.awaited || !resultConfirms(message, pending.awaited))
+    )
+      return
     if (pending.awaited && resultConfirms(message, pending.awaited)) pending.awaitedSeen = true
     const subtype = String(message.subtype ?? '')
     // 多个后台任务同时结束时 CLI 会先发一条空 result，真正的那条随后才到；

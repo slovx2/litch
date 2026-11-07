@@ -1167,7 +1167,7 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
   const settings = useKey<SessionSettings>(keys.settings(deviceId, sessionId)) ?? NO_SETTINGS
   const usage = useKey<ContextUsage | null>(keys.usage(deviceId, sessionId))
   const meta = useKey<SessionMeta>(keys.session(deviceId, sessionId))
-  const switching = useProviderSwitch(channel, deviceId, sessionId, meta?.harness, settings)
+  const switching = useProviderSwitch(channel, deviceId, sessionId, meta?.harness, settings, usage)
   const can = meta?.can
   const able = can?.compact !== false
   // 它声明了不会压缩：不出这个入口。没有声明的照旧留着，对面说不认识了再停掉并写明原因

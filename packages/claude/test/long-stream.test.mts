@@ -106,6 +106,38 @@ function recorder(id: string): Recorder {
 }
 
 const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+test('压缩没有完成边界时不发完成条目，回合明确失败', async () => {
+  await scene(
+    {
+      runTurn: async (_context, handlers) => {
+        await handlers.onEvent({ type: 'completed', success: true })
+      },
+      steer: async () => {},
+      interrupt: async () => {},
+      stop: async () => {},
+    },
+    async ({ first, ok, cwd }) => {
+      const threadId = (await ok(first, 'thread/start', { cwd })).thread.id
+      await ok(first, 'thread/compact/start', { threadId })
+      await until('压缩失败', () => first.messages.some((m) => m.method === 'turn/completed'))
+      assert.equal(
+        first.messages.find((m) => m.method === 'turn/completed').params.turn.status,
+        'failed',
+      )
+      assert.equal(
+        first.messages.some(
+          (m) => m.method === 'item/completed' && m.params.item.type === 'contextCompaction',
+        ),
+        false,
+      )
+      assert.equal(
+        first.messages.some((m) => m.method === 'thread/compacted'),
+        false,
+      )
+    },
+  )
+})
+
 async function until(what: string, reached: () => boolean): Promise<void> {
   for (let waited = 0; waited < 90_000; waited += 5) {
     if (reached()) return

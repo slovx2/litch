@@ -3824,10 +3824,11 @@ export class CodexClaudeAppServer {
         })
         .finally(() => {
           if (this.stopped) return
-          this.notify(peer, {
-            method: 'item/completed',
-            params: { threadId, turnId, item: compactItem, completedAtMs: nowMillis() },
-          })
+          if (!failure)
+            this.notify(peer, {
+              method: 'item/completed',
+              params: { threadId, turnId, item: compactItem, completedAtMs: nowMillis() },
+            })
           const finalAgent = agent.id
             ? this.store.getTurn(turnId)?.items.find((i) => i.id === agent.id)
             : undefined
@@ -6932,12 +6933,12 @@ export class CodexClaudeAppServer {
       if (submitted) return { turnId: submitted.id }
     }
     const activeTurnId = this.activeTurnByThread.get(threadId)
-    if (
-      !activeTurnId ||
-      expectedTurnId !== activeTurnId ||
-      this.store.getTurn(activeTurnId)?.status !== 'inProgress'
-    )
+    const activeTurn = activeTurnId ? this.store.getTurn(activeTurnId) : null
+    if (!activeTurnId || expectedTurnId !== activeTurnId || activeTurn?.status !== 'inProgress')
       throw new ProtocolError(-32009, '指定回合与当前活动回合不一致')
+    // 手动压缩不是模型对话，回报和用户插话都应留到后续普通回合。
+    if (activeTurn.items[0]?.type === 'contextCompaction')
+      throw new ProtocolError(-32009, '正在压缩上下文，请等待压缩结束后发送')
     // 追问回合跑在父会话上，回合内追加的输入只会到主模型而到不了子代理。
     if (this.relayParentByChild.has(threadId))
       throw new ProtocolError(-32009, '子代理正在处理上一条追问，请等它结束后再发送')
@@ -8260,6 +8261,8 @@ export class CodexClaudeAppServer {
     const message = '回合已终止；未确认的工具结果不能重放'
     for (const item of turn.items) {
       if (!active.has(item.id) || this.backgroundCommands.isRunning(turnId, item.id)) continue
+      // 压缩条目没有失败状态；发 completed 会谎报成功，交给失败回合把未完成的压缩收尾。
+      if (item.type === 'contextCompaction') continue
       let completed: ThreadItem = item
       if (item.type === 'dynamicToolCall')
         completed = {

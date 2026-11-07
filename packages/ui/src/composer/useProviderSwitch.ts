@@ -1,4 +1,4 @@
-import type { CoreChannel, SessionSettings } from '@litch/core'
+import type { ContextUsage, CoreChannel, SessionSettings } from '@litch/core'
 import { useRef, useState } from 'react'
 import { needsProviderConfirmation } from './provider-switch.ts'
 
@@ -9,6 +9,7 @@ export function useProviderSwitch(
   sessionId: string,
   harness: string | undefined,
   settings: SessionSettings,
+  usage: ContextUsage | null | undefined,
 ) {
   const key = `${deviceId}:${sessionId}`
   const [selection, setSelection] = useState<{
@@ -23,7 +24,7 @@ export function useProviderSwitch(
     if (!lock.current) setSelection(null)
   }
   const change = (patch: Partial<SessionSettings>) => {
-    if (needsProviderConfirmation(harness, settings.model, patch.model ?? null)) {
+    if (needsProviderConfirmation(harness, settings.model, patch.model ?? null, usage)) {
       setSelection({ key, patch, busy: false })
       return Promise.resolve()
     }

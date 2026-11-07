@@ -126,11 +126,14 @@ harness's own config files on that device (shared with its CLI there):
   again. A session whose provider was removed fails with an error instead of moving to another
   provider. Credentials or a gateway configured in Claude Code's own `settings.json` or environment
   show as a read-only "Claude Code" provider.
-  In an existing Claude Code session, selecting another provider (including the account) asks
-  whether to **Compact and switch**, **Switch directly**, or cancel. Compacting uses the current
-  provider and may reduce the cost of sending history to the new one. Switching waits for successful
+  In an existing Claude Code session with context usage above 50%, selecting another provider
+  (including the account) asks whether to **Compact and switch**, **Switch directly**, or cancel.
+  Compacting uses the current provider and may reduce the cost of sending history to the new one. Switching waits for successful
   compaction; failure, interruption or disconnection keeps the original selection. Stop an active
   turn before confirming either switch. Changing models within the same provider does not prompt.
+  At 50% or less, or when usage is unknown, the selection changes directly.
+  Manual compaction does not accept messages until it finishes. A failed or interrupted compaction
+  is shown as unfinished, including when reopening the conversation.
 - **Models** (Codex only): a custom model list that replaces Codex's built-in catalog in its model
   picker. Each entry either uses a built-in model as is, or is based on one with a new model name,
   display name or context window (everything else is copied from the base). Models not in the list

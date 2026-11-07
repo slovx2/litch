@@ -13,8 +13,15 @@ export function needsProviderConfirmation(
   harness: string | undefined,
   before: string | null,
   after: string | null,
+  usage: { usedTokens: number; windowTokens: number | null } | null | undefined,
 ): boolean {
   return (
+    !!usage &&
+    Number.isFinite(usage.usedTokens) &&
+    !!usage.windowTokens &&
+    Number.isFinite(usage.windowTokens) &&
+    usage.windowTokens > 0 &&
+    usage.usedTokens / usage.windowTokens > 0.5 &&
     (harness === 'claude-code' || harness === 'claude') &&
     !!before &&
     !!after &&

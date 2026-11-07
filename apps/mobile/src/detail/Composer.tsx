@@ -96,6 +96,7 @@ export function Composer({
     sessionId,
     meta?.harness,
     meta?.settings ?? NO_SETTINGS,
+    meta?.usage,
   )
   const running = meta?.running ?? false
   const heldCount = meta?.queued.filter((entry) => entry.delivery === 'held').length ?? 0

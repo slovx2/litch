@@ -225,6 +225,10 @@ test('读历史：没有用户消息的回合里的压缩是手动的，用户�
       item.kind === 'compaction' ? [[item.status, item.source]] : [],
     )
   assert.deepEqual(of(projectTurn(turn('t1', [compaction]))), [['completed', 'manual']])
+  for (const status of ['failed', 'interrupted'] as const)
+    assert.deepEqual(of(projectTurn(turn('failed', [compaction], { status }))), [
+      ['interrupted', 'manual'],
+    ])
   assert.deepEqual(of(projectTurn(turn('t2', [userText('u', '接着做'), compaction]))), [
     ['completed', 'automatic'],
   ])
