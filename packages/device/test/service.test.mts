@@ -303,13 +303,17 @@ test('真的主进程加真的设备进程加假的运行时：一条聚合面�
       )
       assert.ok(env.title['zh-CN'] && env.title.en && env.description.en)
       // 设置里每个 harness 那一组的标题就是 runtime/info 里它的显示名：主进程和设备进程读的是同一个文件。
-      // 这里连着的、没装的、停用的都有，没连上过的那两个用的是登记的名字
+      // 这里连着的、没装的、停用的都有，没连上过的那两个用的是登记的名字。
+      // 通用 ACP 入口的中文标题另起本地化名称，英文仍是显示名
       const named = (await call('runtime/info')).harnesses
       for (const harness of named) {
         const group = read.schema.groups.find((item: any) => item.id === `harness.${harness.id}`)
         assert.deepEqual(
           group.title,
-          { 'zh-CN': harness.displayName, en: harness.displayName },
+          {
+            'zh-CN': harness.id === 'acp' ? '其他 ACP Agent' : harness.displayName,
+            en: harness.displayName,
+          },
           `${harness.id} 那一组的标题和它的显示名一样`,
         )
       }
@@ -322,7 +326,7 @@ test('真的主进程加真的设备进程加假的运行时：一条聚合面�
           ['OpenCode', 'OC'],
           ['Gemini CLI', 'GE'],
           ['Qwen Code', 'QW'],
-          ['ACP', 'AC'],
+          ['Other ACP agent', 'AC'],
           ['Antigravity', 'AG'],
           ['Codex', 'CX'],
         ],
