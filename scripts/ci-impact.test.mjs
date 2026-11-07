@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { affectedDomains, domains, gitImpact, mandatory, versionOnlyChange } from './ci-impact.mjs'
+import { registeredToolingOwners, toolingDomains } from './ci/impact-tooling.mjs'
+import {
+  affectedDomains,
+  domains,
+  gitImpact,
+  mandatory,
+  patchAffectedDomains,
+  releaseImpact,
+  versionOnlyChange,
+} from './ci-impact.mjs'
 
 test('文档改动仍有各包单测与原生首回合', () => {
   assert.deepEqual(new Set(affectedDomains(['docs/guide.md']).domains), new Set(mandatory))
@@ -215,7 +225,7 @@ test('patch按改动选领域，不补无关完整领域；普通模式和未知
   assert.throws(() => patchAffectedDomains([], { trustedBase: false }), /正式祖先基线/)
 })
 
-test('patch仅细化客户端权限记忆模块；设备、协议和其他core仍全域，普通模式不变', async () => {
+test('权限模块的产品豁免仅在patch；归属明确的测试在两种模式共用规则', async () => {
   const { patchAffectedDomains, releaseImpact } = await import('./ci-impact.mjs')
   const paths = [
     'packages/core/src/device/project-permissions.mts',
@@ -230,7 +240,14 @@ test('patch仅细化客户端权限记忆模块；设备、协议和其他core�
       'client-engines',
       'mobile',
     ])
-    assert.deepEqual(affectedDomains([path]).domains, domains)
+    assert.deepEqual(
+      affectedDomains([path]).domains,
+      path.includes('/src/')
+        ? domains
+        : domains.filter((domain) =>
+            [...mandatory, 'client', 'client-engines', 'mobile'].includes(domain),
+          ),
+    )
   }
   for (const path of [
     'packages/core/src/device/thread-start.mts',
@@ -258,3 +275,142 @@ test('patch引擎包纯版本同步不误触发引擎完整领域', async () => 
     [],
   )
 })
+
+const patchOptions = { trustedBase: true }
+const patch = (paths) => patchAffectedDomains(paths, patchOptions).domains
+for (const path of [
+  'packages/core/test/new-projection.test.mts',
+  'packages/core/test/console-cards-fixture.mts',
+  'packages/core/test/fixtures/new-input.json',
+  'packages/ui/test/new-layout.test.mjs',
+  'scripts/check-console-cards.mjs',
+  'scripts/manager-board-mobile-fixture.mjs',
+]) {
+  test(`客户端测试、夹具按所属包或已核验入口选择，不触发适配器/CU：${path}`, () => {
+    assert.deepEqual(patch([path]), ['client', 'client-engines', 'mobile'])
+    assert.deepEqual(affectedDomains([path], { required: [] }).domains, patch([path]))
+    assert.ok(affectedDomains([path]).domains.includes('dsh'), '普通模式仍保留必跑补充领域')
+  })
+}
+
+test('脚本归属来自现有执行清单，同一入口取所有领域并集', () => {
+  assert.deepEqual(patch(['scripts/check-sidebar-projections.mjs']), ['client'])
+  assert.deepEqual(patch(['scripts/check-native-codex.mjs']), ['client', 'real-engines'])
+  assert.deepEqual(patch(['scripts/client-fixture-anthropic.test.mjs']), ['client-engines'])
+  assert.deepEqual(patch(['scripts/check-manager-fixture.mjs']), ['real-engines'])
+  assert.deepEqual(patch(['apps/desktop/scripts/check-engines.mjs']), ['client-engines'])
+  assert.deepEqual(patch(['apps/desktop/scripts/smoke.mjs']), ['client', 'real-engines'])
+})
+
+test('新登记入口自动归属，未知执行集合不能被已知归属遮住', () => {
+  const path = 'scripts/check-new.mjs'
+  const catalog = [{ id: 'new', command: ['node', '--test', path] }]
+  const groups = { 'client-engines': { checks: ['new'] } }
+  const nightly = [['new', path]]
+  assert.deepEqual(registeredToolingOwners(catalog, groups, nightly).get(path), [
+    'client-engines',
+    'client',
+  ])
+  assert.equal(
+    registeredToolingOwners(catalog, { ...groups, unknown: { checks: ['new'] } }, nightly).get(
+      path,
+    ),
+    null,
+  )
+})
+
+test('新增领域测试自动归属，手动手机检查和桌面检查各守边界', () => {
+  assert.deepEqual(patch(['scripts/check-recent-mobile.mjs']), ['mobile'])
+  assert.deepEqual(patch(['scripts/check-manager-session-open.mjs']), ['client'])
+  assert.deepEqual(patch(['apps/mobile/test/new-case.test.mjs']), ['mobile'])
+  assert.deepEqual(patch(['apps/mobile/e2e/new-flow.yaml']), ['mobile'])
+  assert.deepEqual(patch(['apps/desktop/test/new-case.test.mjs']), [
+    'computer-use',
+    'computer-use-windows',
+    'client',
+    'client-engines',
+  ])
+  assert.deepEqual(patch(['packages/dsh/test/new-case.test.mts']), [
+    'adapters',
+    'dsh',
+    'client-engines',
+    'real-engines',
+    'mobile',
+  ])
+  assert.deepEqual(patch(['packages/opencode/test/fixtures/input.json']), [
+    'adapters',
+    'opencode',
+    'client-engines',
+    'real-engines',
+    'mobile',
+  ])
+})
+
+for (const path of [
+  'scripts/check-unknown.mjs',
+  'scripts/check-unknown.test.mjs',
+  'scripts/new-fixture.mjs',
+  'scripts/fixture-environment.mjs',
+  'scripts/chrome-m0/cdp.mjs',
+  'scripts/ci/check-catalog.mjs',
+  'apps/desktop/scripts/nightly-checks.mjs',
+  'packages/core/test/fixtures/package.json',
+  'packages/shared/test/new-case.test.mts',
+  'packages/device/test/new-case.test.mts',
+  'packages/protocol/test/new-case.test.mts',
+  'packages/core/src/replica/replica.mts',
+  'packages/core/src/index.mts',
+]) {
+  test(`共享、依赖、编排与未知工具保持全量：${path}`, () => {
+    assert.deepEqual(patch([path]), domains)
+  })
+}
+
+test('识别出测试也不能豁免不可信基线，移动仍覆盖旧路径和新路径', () => {
+  assert.deepEqual(
+    affectedDomains(['packages/core/test/a.test.mts'], { trustedBase: false }).domains,
+    domains,
+  )
+  assert.deepEqual(patch(['scripts/check-recent-mobile.mjs', 'scripts/renamed-check.mjs']), domains)
+  assert.deepEqual(
+    patch(['scripts/check-manager-session-open.mjs', 'scripts/check-recent-mobile.mjs']),
+    ['client', 'mobile'],
+  )
+  assert.equal(toolingDomains('scripts/not-a-check.mjs'), null)
+})
+
+// 真实 tag diff 与旧规则输出固化，CI 浅克隆也能跑；没有删掉共享产品代码来制造提速。
+const history = JSON.parse(
+  readFileSync(new URL('./ci/impact-history.json', import.meta.url), 'utf8'),
+)
+for (const entry of history.cases) {
+  test(`${entry.baseTag} → ${entry.tag}：完整改动与仅测试/夹具/验收改动的前后对照`, () => {
+    const releaseAll = domains.filter((domain) => domain !== 'mobile')
+    const options = { trustedBase: true, versionOnly: entry.versionOnly }
+    const actual = releaseImpact(patchAffectedDomains(entry.paths, options)).domains
+    assert.deepEqual(
+      { before: entry.before, after: actual },
+      { before: releaseAll, after: releaseAll },
+    )
+    const tooling = entry.paths.filter(
+      (path) => /\/(test|e2e|scripts)\//.test(path) || path.startsWith('scripts/'),
+    )
+    const expected =
+      entry.tag === 'v0.31.1'
+        ? { count: 11, before: releaseAll, after: ['client', 'client-engines'] }
+        : { count: 14, before: [], after: [] }
+    assert.deepEqual(
+      {
+        count: tooling.length,
+        before: entry.toolingBefore,
+        after: releaseImpact(patchAffectedDomains(tooling, options)).domains,
+      },
+      expected,
+    )
+    assert.deepEqual(entry.toolingAfter, expected.after)
+    assert.equal(entry.paths.length, entry.tag === 'v0.31.1' ? 62 : 59)
+    assert.equal(entry.versionOnly.length, entry.tag === 'v0.31.1' ? 23 : 25)
+    assert.match(entry.base, /^[a-f0-9]{40}$/)
+    assert.match(entry.sha, /^[a-f0-9]{40}$/)
+  })
+}
