@@ -26,6 +26,71 @@ interface Recorder extends RpcPeer {
   deltas(method: string): string[]
 }
 
+test('STREAM-CC-006：400 回合的大历史定点回退只解析切口，保留历史不反复读取', {
+  timeout: 60_000,
+}, async () => {
+  await scene(
+    scripted([], async () => {}),
+    async ({ store, first, ok, cwd }) => {
+      for (const cut of [false, true]) {
+        const threadId = (await ok(first, 'thread/start', { cwd })).thread.id
+        for (let index = 0; index < 400; index++) {
+          store.upsertTurn({
+            id: `${threadId}-${index}`,
+            threadId,
+            status: 'completed',
+            startedAt: index,
+            completedAt: index + 1,
+            durationMs: 1,
+            diff: '',
+            error: null,
+            items: [
+              { id: 'u', type: 'userMessage', content: [{ type: 'text', text: '开头' }] },
+              {
+                id: 'a',
+                type: 'agentMessage',
+                text: 'x'.repeat(100000),
+                phase: null,
+                memoryCitation: null,
+              },
+              { id: 's', type: 'userMessage', content: [{ type: 'text', text: '插话' }] },
+            ],
+          })
+        }
+        const parse = JSON.parse
+        let parsed = 0
+        JSON.parse = (text: string, ...args: any[]) => {
+          parsed += typeof text === 'string' ? text.length : 0
+          return parse(text, ...args)
+        }
+        let result: any
+        try {
+          result = await ok(first, 'thread/revert', {
+            threadId,
+            beforeTurnId: `${threadId}-399`,
+            ...(cut ? { beforeItemId: 's' } : {}),
+          })
+        } finally {
+          JSON.parse = parse
+        }
+        assert.ok(parsed < 1_000_000, `40MB 历史只解析切口和头部，实际 ${parsed}`)
+        assert.deepEqual(result.thread.turns, [])
+        const page = await ok(first, 'thread/turns/list', {
+          threadId,
+          cursor: result.turnsBackwardsCursor,
+          limit: 1,
+          sortDirection: 'desc',
+          itemsView: 'full',
+        })
+        assert.equal(page.data[0].id, `${threadId}-${cut ? 399 : 398}`)
+        assert.equal(page.data[0].items.length, cut ? 2 : 3)
+        assert.equal(store.listTurnIds(threadId).length, cut ? 400 : 399)
+        assert.equal(store.getTurn(`${threadId}-0`)!.items.length, 3)
+      }
+    },
+  )
+})
+
 /** 一条连接。和真的传输一样，发出去的每条消息都序列化一遍（数进上面说的第二个量里） */
 function recorder(id: string): Recorder {
   const messages: any[] = []

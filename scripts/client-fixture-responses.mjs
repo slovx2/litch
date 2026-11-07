@@ -18,6 +18,7 @@ import { backgroundResponses } from './client-fixture-background.mjs'
 import { askResponses } from './client-fixture-codex-ask.mjs'
 import { machineResponses } from './client-fixture-machine.mjs'
 import { sessionsResponses } from './client-fixture-sessions.mjs'
+import { stopResponses } from './client-fixture-stop.mjs'
 
 const pause = (ms) => new Promise((done) => setTimeout(done, ms))
 
@@ -176,6 +177,7 @@ export async function serveResponses(harness, path, raw, res, { serial, pace = 1
   // 边做边问（request_user_input_async）的那几句，见 client-fixture-codex-ask.mjs
   // 后台跑一条命令（看后台任务）的那一句，见 client-fixture-background.mjs
   const machine =
+    stopResponses(body, userText(body)) ??
     sessionsResponses(body, userText(body)) ??
     machineResponses(body, userText(body)) ??
     askResponses(body, userText(body)) ??

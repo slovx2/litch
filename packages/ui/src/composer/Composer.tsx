@@ -103,6 +103,7 @@ import { useRunningSend } from './send-mode.ts'
 import { canSend, runningPlaceholder } from './send-mode-logic.ts'
 import { syncMentioned } from './session-hits.ts'
 import { rememberSubmitted, submittedHistory } from './submitted-history.ts'
+import { useInterrupt } from './useInterrupt.ts'
 import { useProviderSwitch } from './useProviderSwitch.ts'
 import { useSuggest } from './useSuggest.tsx'
 
@@ -533,18 +534,26 @@ export function Composer(props: ComposerProps) {
       .finally(() => setBusy(false))
   }, [onSend, failure, draftKey, sessionId, text, images, extras, comments, t, disarm, version])
 
+  const interrupt = useInterrupt(
+    `${draftKey}:${props.turnId ?? ''}`,
+    running,
+    () => onStop?.() ?? Promise.resolve(),
+  )
   const stop = () => {
     setError(null)
-    onStop?.().catch((reason: unknown) => {
-      setError(t('composer.interruptFailed', { reason: reasonOf(reason, t) }))
-    })
+    interrupt.stop()
   }
+  const stopError = interrupt.error
+    ? t('composer.interruptFailed', { reason: reasonOf(interrupt.error, t) })
+    : interrupt.slow
+      ? t('composer.stopTimeout')
+      : null
 
   // 回合在跑时按两下 Esc 停（escape.ts）：第一下上膛、底栏写一句“再按一次”，2 秒内再按才停。
   // 输入框里的字不动，停了焦点回到输入框。回合换了、停了、发了消息，上的膛都作废
   const stopNow = useRef(stop)
   stopNow.current = stop
-  const stoppable = running && Boolean(onStop) && !props.asking
+  const stoppable = running && Boolean(onStop) && !props.asking && !interrupt.busy
   const turnId = props.turnId ?? ''
   useEffect(() => {
     const area = input.current
@@ -1077,11 +1086,19 @@ export function Composer(props: ComposerProps) {
               <button
                 type="button"
                 className={armed ? 'send stop armed' : 'send stop'}
-                title={t('composer.stopKeys')}
-                aria-label={t('composer.stop')}
+                title={t(interrupt.busy ? 'composer.stopping' : 'composer.stopKeys')}
+                aria-label={t(interrupt.busy ? 'composer.stopping' : 'composer.stop')}
+                disabled={interrupt.busy}
+                aria-busy={interrupt.busy}
                 onClick={stop}
               >
-                <Stop />
+                {interrupt.busy ? (
+                  <span className="stop-spinner">
+                    <Icon name="reload" />
+                  </span>
+                ) : (
+                  <Stop />
+                )}
               </button>
             ) : (
               <button
@@ -1099,9 +1116,15 @@ export function Composer(props: ComposerProps) {
         </div>
       </div>
       {props.below}
-      {error || imageStorageError || imagesRefused || blocked ? (
+      {interrupt.busy ? (
+        <div className="composer-stopping" role="status">
+          {t('composer.stopping')}
+        </div>
+      ) : null}
+      {stopError || error || imageStorageError || imagesRefused || blocked ? (
         <div className="cmp-hint err">
-          {error ??
+          {stopError ??
+            error ??
             (imageStorageError ? t('composer.image.draftSave') : null) ??
             (imagesRefused
               ? t(noImages ? 'composer.image.harness' : 'composer.image.unsupported')

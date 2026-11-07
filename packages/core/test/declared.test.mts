@@ -804,7 +804,8 @@ test('切在回合中间只认声明：声明了的发 beforeItemId，切口换�
   assert.deepEqual(sent('thread/revert'), [
     { threadId: 'c1', beforeTurnId: 't1', beforeItemId: 's1' },
   ])
-  assert.ok(sent('thread/resume').length + sent('thread/read').length > reads, '回退后重新载入')
+  assert.equal(sent('thread/resume').length + sent('thread/read').length, reads, '不重载整份历史')
+  assert.equal((sent('thread/turns/list').at(-1) as { limit: number }).limit, 1)
 
   for (const [name, params] of [
     ['session.fork', { sessionId: 'p1', turnId: 't1', itemId: 't1:s1' }],
@@ -851,7 +852,13 @@ test('编辑重发：回退成了才发；切在回合中间的等重新载入�
       .last()
       .seen.map((entry) => entry.method)
       .filter((method) =>
-        ['thread/revert', 'thread/resume', 'thread/read', 'turn/start'].includes(method),
+        [
+          'thread/revert',
+          'thread/turns/list',
+          'thread/resume',
+          'thread/read',
+          'turn/start',
+        ].includes(method),
       )
 
   // 切在插话之前：回退、重新载入、再开新回合，依次
@@ -865,7 +872,7 @@ test('编辑重发：回退成了才发；切在回合中间的等重新载入�
   assert.deepEqual(result, {})
   const steps = order().slice(before)
   assert.equal(steps[0], 'thread/revert')
-  assert.ok(['thread/resume', 'thread/read'].includes(steps[1] ?? ''), steps.join(','))
+  assert.equal(steps[1], 'thread/turns/list', steps.join(','))
   assert.equal(steps.at(-1), 'turn/start')
   assert.deepEqual(sent('thread/revert').at(-1), {
     threadId: 'c1',

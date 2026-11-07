@@ -5,7 +5,7 @@
 // - 回退成了、发送没成：原消息已经撤掉，编辑后的文字、图片、评论放回输入框，提示原因（和以前回退一样）。
 // 评论不在这里改，原样带上；能显示的图片带上；带不上的附件写明（core 的 editableOf / resendOf）。
 import { editableOf, type ItemView, keys, resendOf, type SessionMeta } from '@litch/core'
-import { type KeyboardEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { whyNot } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
@@ -48,6 +48,16 @@ export function MessageEdit({
   const [start] = useState(() => (user ? editableOf(user) : null))
   const [text, setText] = useState(start?.text ?? '')
   const [working, setWorking] = useState(false)
+  const [slow, setSlow] = useState(false)
+  const sending = useRef(false)
+  useEffect(() => {
+    if (!working) {
+      setSlow(false)
+      return
+    }
+    const timer = setTimeout(() => setSlow(true), 30_000)
+    return () => clearTimeout(timer)
+  }, [working])
   const [error, setError] = useState<string | null>(null)
   const area = useRef<HTMLTextAreaElement | null>(null)
   // 提到的会话和输入框里一样画成片
@@ -73,7 +83,7 @@ export function MessageEdit({
       : null
 
   const send = () => {
-    if (working || empty) return
+    if (sending.current || empty) return
     // 回合在跑、harness 不会回退：不发，写明原因
     if (blocked) {
       setError(t('turn.edit.failed', { reason: blocked }))
@@ -92,6 +102,7 @@ export function MessageEdit({
       end: comment.quote.length,
       raw: comment.quote,
     }))
+    sending.current = true
     setWorking(true)
     setError(null)
     channel
@@ -125,8 +136,16 @@ export function MessageEdit({
           onDone()
         },
         (failure: unknown) => {
+          sending.current = false
           setWorking(false)
-          setError(t('turn.edit.failed', { reason: whyNot(failure, t) }))
+          const uncertain = ['timeout', 'offline', 'closed', 'cancelled'].includes(
+            (failure as { code?: string } | null)?.code ?? '',
+          )
+          setError(
+            t(uncertain ? 'turn.edit.unconfirmed' : 'turn.edit.failed', {
+              reason: whyNot(failure, t),
+            }),
+          )
         },
       )
   }
@@ -136,7 +155,7 @@ export function MessageEdit({
     if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()
-      if (!working) onDone()
+      if (!sending.current) onDone()
       return
     }
     if (event.key !== 'Enter' || event.shiftKey) return
@@ -147,7 +166,13 @@ export function MessageEdit({
   }
 
   return (
-    <div className="umsg editing" data-anchor={`u:${itemId}`}>
+    <div className="umsg editing" data-anchor={`u:${itemId}`} aria-busy={working}>
+      {working ? (
+        <div className="umsg-edit-pending" role="status">
+          {t('turn.edit.pending')}
+          <div className="umsg-edit-old">{start.text}</div>
+        </div>
+      ) : null}
       {comments ? (
         <SentComments
           deviceId={deviceId}
@@ -186,7 +211,11 @@ export function MessageEdit({
         </div>
       ) : null}
       <div className="umsg-edit-note">
-        {t(meta?.can.rollbackRestoresFiles ? 'turn.edit.noteRestores' : 'turn.edit.note')}
+        {working ? (
+          <span role="status">{t(slow ? 'turn.edit.timeout' : 'turn.edit.working')}</span>
+        ) : (
+          t(meta?.can.rollbackRestoresFiles ? 'turn.edit.noteRestores' : 'turn.edit.note')
+        )}
       </div>
       {error ? (
         <div className="umsg-edit-error" role="alert">
@@ -200,11 +229,12 @@ export function MessageEdit({
         <button
           type="button"
           className="btn primary"
+          disabled={empty || working}
           aria-disabled={empty || working || blocked !== null}
           title={blocked ?? undefined}
           onClick={send}
         >
-          {t('turn.edit.send')}
+          {t(working ? 'turn.edit.working' : 'turn.edit.send')}
         </button>
       </div>
     </div>

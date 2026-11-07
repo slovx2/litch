@@ -1136,12 +1136,16 @@ export const zhCN = {
   'turn.edit.editing': '正在编辑消息',
   'turn.edit.cancel': '取消',
   'turn.edit.send': '发送',
+  'turn.edit.working': '正在应用编辑…',
+  'turn.edit.pending': '原消息待替换',
+  'turn.edit.timeout': '等待编辑结果超时，尚未确认完成。请勿重复提交；收到结果后会自动更新。',
   'turn.edit.note':
     '发送后，此消息及之后的对话将从会话中移除，且无法恢复，再以编辑后的内容重新发送。已对文件做的改动不会还原。',
   'turn.edit.noteRestores':
     '发送后，此消息及之后的对话将从会话中移除，且无法恢复，再以编辑后的内容重新发送。此后改动过的文件也会一并还原。',
   'turn.edit.dropped': '以下附件无法随编辑后的消息重发：{names}',
   'turn.edit.failed': '未能编辑，对话未作改动：{reason}',
+  'turn.edit.unconfirmed': '尚未确认编辑结果，编辑内容已保留。请重新打开会话核对：{reason}',
   'turn.edit.sendFailed': '原消息已移除，但编辑后的消息未发出，内容已放回输入框：{reason}',
   'context.unknown': '尚未报告上下文用量',
   'context.label': '上下文',
@@ -1426,6 +1430,9 @@ export const zhCN = {
   'composer.send': '发送',
   'composer.queue': '排队',
   'composer.stop': '停止',
+  'composer.stopping': '正在停止…',
+  'composer.stopTimeout':
+    '等待停止确认超时，回合尚未确认结束。请检查设备连接；收到结果后会自动更新。',
   'composer.stopKeys': '停止（连按两下 Esc）',
   'composer.escAgain': '再按一次 Esc 停止',
   'session.switchIncomplete': '压缩未完成，未切换供应商。',

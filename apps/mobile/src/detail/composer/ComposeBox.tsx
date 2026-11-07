@@ -23,7 +23,16 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
-import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { keepMentioned } from '../../../../../packages/ui/src/composer/session-hits.ts'
 import { HardwareKeyboard } from '../../../modules/litch-keyboard/src/HardwareKeyboard'
@@ -218,6 +227,7 @@ export function ComposeBox({
   mentions,
   onSend,
   onStop,
+  stopping = false,
   onError,
   testID = 'composer',
 }: {
@@ -256,6 +266,7 @@ export function ComposeBox({
    */
   onSend(text: string, images: ImageAttachment[], extras: MessageExtra[]): Promise<void>
   onStop?(): void
+  stopping?: boolean
   onError(message: string | null): void
   testID?: string
 }) {
@@ -302,6 +313,7 @@ export function ComposeBox({
 
   const send = () => {
     if (mode === 'stop') {
+      if (stopping) return
       onStop?.()
       return
     }
@@ -440,7 +452,7 @@ export function ComposeBox({
   const note = error ?? (draft.imageStorageError ? t('composer.image.draftSave') : null) ?? blocked
   const sendLabel =
     mode === 'stop'
-      ? t('composer.stop')
+      ? t(stopping ? 'composer.stopping' : 'composer.stop')
       : mode === 'queue'
         ? t('composer.queue')
         : t('composer.send')
@@ -451,6 +463,11 @@ export function ComposeBox({
     >
       {markers ? <View style={styles.mark} /> : null}
       {top}
+      {stopping ? (
+        <Text accessibilityLiveRegion="polite" style={{ color: c.ink3 }}>
+          {t('composer.stopping')}
+        </Text>
+      ) : null}
       {uploading ? <Loading text={t('composer.file.uploading')} /> : null}
       {draft.files.map((file, index) => (
         <FileCard
@@ -600,8 +617,10 @@ export function ComposeBox({
             accessibilityRole="button"
             accessibilityLabel={sendLabel}
             accessibilityState={{
-              disabled: mode !== 'stop' && (!filled || !!blocked || uploading),
+              disabled: mode === 'stop' ? stopping : !filled || !!blocked || uploading,
+              busy: mode === 'stop' && stopping,
             }}
+            disabled={mode === 'stop' && stopping}
             testID={`${testID}-send`}
             // 36 见方，四边放 4：可点 44
             hitSlop={4}
@@ -616,11 +635,15 @@ export function ComposeBox({
               },
             ]}
           >
-            <Icon
-              name={mode === 'stop' ? 'stop' : 'send'}
-              size={18}
-              color={mode === 'stop' ? c.err : c.onAccent}
-            />
+            {mode === 'stop' && stopping ? (
+              <ActivityIndicator size="small" color={c.err} />
+            ) : (
+              <Icon
+                name={mode === 'stop' ? 'stop' : 'send'}
+                size={18}
+                color={mode === 'stop' ? c.err : c.onAccent}
+              />
+            )}
           </Pressable>
         </View>
       </View>

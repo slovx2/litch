@@ -1191,12 +1191,18 @@ export const en: Record<MessageKey, Entry> = {
   'turn.edit.editing': 'Editing message',
   'turn.edit.cancel': 'Cancel',
   'turn.edit.send': 'Send',
+  'turn.edit.working': 'Applying edit…',
+  'turn.edit.pending': 'Original message pending replacement',
+  'turn.edit.timeout':
+    'Edit confirmation timed out. Completion is not yet confirmed. Do not submit again; the result will update automatically.',
   'turn.edit.note':
     'Sending permanently removes this message and everything after it, then sends the edited version. File changes are not undone.',
   'turn.edit.noteRestores':
     'Sending permanently removes this message and everything after it, then sends the edited version. Files changed since then are also restored.',
   'turn.edit.dropped': 'These attachments can’t be resent with the edited message: {names}',
   'turn.edit.failed': 'Couldn’t edit. Nothing was changed: {reason}',
+  'turn.edit.unconfirmed':
+    'The edit result is unconfirmed. Your text has been kept. Reopen the conversation to check: {reason}',
   'turn.edit.sendFailed':
     'The original message was removed, but the edited one wasn’t sent. Its text is back in the input: {reason}',
   'context.unknown': 'Context usage not reported yet',
@@ -1485,6 +1491,9 @@ export const en: Record<MessageKey, Entry> = {
   'composer.send': 'Send',
   'composer.queue': 'Queue',
   'composer.stop': 'Stop',
+  'composer.stopping': 'Stopping…',
+  'composer.stopTimeout':
+    'Stop confirmation timed out. The turn has not been confirmed as ended. Check the device connection; the result will update automatically.',
   'composer.stopKeys': 'Stop (press Esc twice)',
   'composer.escAgain': 'Press Esc again to stop',
   'session.switchIncomplete': 'Compaction did not complete. The provider was not changed.',

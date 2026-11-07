@@ -340,7 +340,7 @@ test('加载旧页时正在运行的回合继续流；新回合与重叠旧页�
   app.core.stop()
 })
 
-test('回退在旧页返回之前完成：迟到页作废，按回退后的历史重新建立游标', async () => {
+test('回退在旧页返回之前完成：迟到页作废，保留未删除的回合与原分页游标', async () => {
   const app = paging()
   app.core.start()
   await settle()
@@ -361,12 +361,12 @@ test('回退在旧页返回之前完成：迟到页作废，按回退后的历�
   await pending
   await settle()
   assert.equal(session.seen.view?.turns.at(-1)?.id, 't22')
-  assert.equal(session.seen.view?.turns.length, 10)
+  assert.equal(session.seen.view?.turns.length, 3)
   assert.ok(!session.seen.view?.items['t29:a29'])
   app.hold(null)
   await app.command('session.loadOlder', where)
   await settle()
-  assert.equal(session.seen.view?.turns.length, 20)
+  assert.equal(session.seen.view?.turns.length, 13)
   session.close()
   app.core.stop()
 })

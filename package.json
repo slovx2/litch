@@ -93,6 +93,8 @@
     "client:check:projections": "node scripts/check-sidebar-projections.mjs",
     "client:check:message-footer": "tsc -p packages/ui/test/tsconfig.footer.json --noEmit && node scripts/check-message-footer.mjs",
     "client:check:user-bubble": "tsc -p packages/ui/test/tsconfig.user-bubble.json --noEmit && node scripts/check-user-bubble.mjs",
+    "client:check:command-feedback": "node scripts/check-command-feedback.mjs",
+    "client:check:stop-latency": "node scripts/check-stop-latency.mjs",
     "client:check:scroll": "npm run build --prefix packages/ui && npm run check:scroll --prefix apps/desktop",
     "client:check:scroll:entry": "npm run build --prefix packages/ui && npm run check:scroll:entry --prefix apps/desktop",
     "client:check:compose": "npm run build --prefix packages/ui && npm run check:compose --prefix apps/desktop",

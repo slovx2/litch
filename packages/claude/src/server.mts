@@ -3041,7 +3041,7 @@ export class CodexClaudeAppServer {
   }
 
   private remapNativeBoundaries(
-    turns: TurnRecord[],
+    turns: Pick<TurnRecord, 'id'>[],
     fork: NativeSessionFork | null,
     cut: SteerCut | null = null,
   ): Map<string, string> {
@@ -3068,7 +3068,10 @@ export class CodexClaudeAppServer {
     return { turnId, messageId }
   }
 
-  private async threadRollback(params: Record<string, unknown>): Promise<unknown> {
+  private async threadRollback(
+    params: Record<string, unknown>,
+    includeTurns = true,
+  ): Promise<unknown> {
     const threadId = stringOr(params.threadId, '')
     const thread = this.store.getThread(threadId)
     if (!thread) throw new Error(`unknown thread: ${threadId}`)
@@ -3084,7 +3087,10 @@ export class CodexClaudeAppServer {
       throw new ProtocolError(-32602, 'numTurns 必须是正整数')
     // 回退会换一份原生历史；留着的进程还握着旧的那份，连同后台命令一起结束。
     await this.runtime.closeSession?.(threadId, '会话已回退')
-    const retained = this.store.listTurns(threadId).slice(0, -numTurns)
+    const retained = this.store
+      .listTurnIds(threadId)
+      .slice(0, -numTurns)
+      .map((id) => ({ id }))
     let nativeFork: NativeSessionFork | null = null
     if (thread.claudeSessionId && retained.length) {
       const boundary = this.store.nativeBoundary(retained.at(-1)!.id)
@@ -3095,31 +3101,33 @@ export class CodexClaudeAppServer {
     const boundaries = this.remapNativeBoundaries(retained, nativeFork)
     const dropped = this.store.commitRollback(thread, numTurns, boundaries)
     debugLog('thread.rollback', { threadId, requested: numTurns, dropped })
-    return { thread: this.toThread(thread, this.store.listTurns(threadId)) }
+    // thread/revert 只需头部应答，不为内部调用构造马上丢弃的整份历史。
+    return { thread: this.toThread(thread, includeTurns ? this.store.listTurns(threadId) : []) }
   }
 
   private async threadRevert(params: Record<string, unknown>): Promise<unknown> {
     const threadId = requiredString(params.threadId, 'threadId')
     const beforeTurnId = requiredString(params.beforeTurnId, 'beforeTurnId')
     if (!this.store.getThread(threadId)) throw new ProtocolError(-32602, '未知会话')
-    const turns = this.store.listTurns(threadId)
-    const index = turns.findIndex((turn) => turn.id === beforeTurnId)
+    const ids = this.store.listTurnIds(threadId)
+    const index = ids.indexOf(beforeTurnId)
     if (index < 0) throw new ProtocolError(-32602, 'beforeTurnId 不属于此会话的当前历史')
     const beforeItemId =
       params.beforeItemId == null ? null : requiredString(params.beforeItemId, 'beforeItemId')
+    const original = beforeItemId === null ? null : this.store.getTurn(beforeTurnId)!
     const retained =
       beforeItemId === null
         ? null
-        : forkRetainedTurns(turns, {
+        : forkRetainedTurns([original!], {
             kind: 'beforeItem',
             turnId: beforeTurnId,
             itemId: beforeItemId,
           })
     // 切在回合中间（留下了被切开的那一回合的前半段）走自己的路；切在回合开头的和按回合退一样
-    if (retained && retained.length > index) await this.revertIntoTurn(threadId, turns, retained)
+    if (retained?.length) await this.revertIntoTurn(threadId, ids, original!, retained[0]!)
     // 两种 historyMode 共用同一持久化历史；保留原模式，不阻断旧会话使用新入口。
     // 原生分叉与 SQLite 提交共用旧入口的事务，文件系统副作用不回退。
-    else await this.threadRollback({ threadId, numTurns: turns.length - index })
+    else await this.threadRollback({ threadId, numTurns: ids.length - index }, false)
     const thread = this.store.getThread(threadId)!
     setImmediate(() =>
       this.notifyThread(threadId, {
@@ -3129,7 +3137,7 @@ export class CodexClaudeAppServer {
     )
     return {
       thread: this.toThread(thread, []),
-      ...historyHeadCursors(threadId, this.store.listTurns(threadId)),
+      ...historyHeadCursors(threadId, this.store.historyHeadTurns(threadId)),
     }
   }
 
@@ -3139,16 +3147,16 @@ export class CodexClaudeAppServer {
    */
   private async revertIntoTurn(
     threadId: string,
-    turns: TurnRecord[],
-    retained: TurnRecord[],
+    ids: string[],
+    original: TurnRecord,
+    kept: TurnRecord,
   ): Promise<void> {
     const thread = this.store.getThread(threadId)
     if (!thread) throw new ProtocolError(-32602, '未知会话')
     if (this.sessionHolder(threadId) || this.interruptingByThread.has(threadId))
       throw new ProtocolError(-32009, '活动会话不能回退')
     this.assertNotOwned(threadId)
-    const kept = retained.at(-1)!
-    const original = turns[retained.length - 1]!
+    const retained = ids.slice(0, ids.indexOf(kept.id) + 1).map((id) => ({ id }))
     const removed = original.items.slice(kept.items.length)
     const cut = this.steerCut(thread, kept.id, removed[0]!.id)
     await this.runtime.closeSession?.(threadId, '会话已回退')
@@ -3158,7 +3166,7 @@ export class CodexClaudeAppServer {
       thread.claudeSessionId = nativeFork.sessionId
     }
     const boundaries = this.remapNativeBoundaries(retained, nativeFork, cut)
-    const dropped = this.store.commitRollback(thread, turns.length - retained.length, boundaries, {
+    const dropped = this.store.commitRollback(thread, ids.length - retained.length, boundaries, {
       turn: kept,
       removed,
     })

@@ -20,6 +20,7 @@ import {
 import { type RefObject, useEffect, useState, useSyncExternalStore } from 'react'
 import { StyleSheet, type TextInput, View } from 'react-native'
 import { whyNot } from '../../../../packages/ui/src/app/errors.ts'
+import { useInterrupt } from '../../../../packages/ui/src/composer/useInterrupt'
 import { useProviderSwitch } from '../../../../packages/ui/src/composer/useProviderSwitch'
 import type { SessionStore } from '../core/session-store'
 import { useKey, useServices } from '../shell/services'
@@ -136,14 +137,19 @@ export function Composer({
   // 输入框里的 /goal 截在这里设目标（harness 会才截），换掉没做完的目标前问的那个对话框也在这里画
   const goal = useGoalSend(deviceId, sessionId, meta, send)
   const goalsAble = meta?.can.goals === true && meta.live
+  const runningTurnId = meta?.lastTurn?.id
+  const interrupt = useInterrupt(`${deviceId}:${sessionId}:${runningTurnId ?? ''}`, running, () =>
+    channel.command('session.interrupt', { deviceId, sessionId }),
+  )
   const stop = () => {
     setError(null)
-    channel
-      .command('session.interrupt', { deviceId, sessionId })
-      .catch((reason: unknown) =>
-        setError(t('composer.interruptFailed', { reason: whyNot(reason, t) })),
-      )
+    interrupt.stop()
   }
+  const stopError = interrupt.error
+    ? t('composer.interruptFailed', { reason: whyNot(interrupt.error, t) })
+    : interrupt.slow
+      ? t('composer.stopTimeout')
+      : null
   const steer = (message: QueuedMessage) => {
     setError(null)
     channel
@@ -210,12 +216,13 @@ export function Composer({
         steerImages={meta?.can.steerImages !== false}
         blocked={blocked}
         imagesOff={imagesOff}
-        error={error}
+        error={stopError ?? error}
         markers={markers}
         inputRef={inputRef}
         mentions={{ deviceId, sessionId }}
         onSend={goal.send}
         onStop={stop}
+        stopping={interrupt.busy}
         onError={setError}
         top={
           meta ? (

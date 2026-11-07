@@ -50,6 +50,16 @@ export function EditMessage({
   const start = target ? editableOf(target.user) : null
   const [text, setText] = useState('')
   const [working, setWorking] = useState(false)
+  const [slow, setSlow] = useState(false)
+  const sending = useRef(false)
+  useEffect(() => {
+    if (!working) {
+      setSlow(false)
+      return
+    }
+    const timer = setTimeout(() => setSlow(true), 30_000)
+    return () => clearTimeout(timer)
+  }, [working])
   const [error, setError] = useState<string | null>(null)
   // 提到的会话和输入框里一样画成片
   const input = useRef<TextInput>(null)
@@ -63,17 +73,18 @@ export function EditMessage({
     setText(start?.text ?? '')
     setError(null)
     setWorking(false)
+    sending.current = false
   }, [start?.text])
 
   if (!target || !start) return null
   const { deviceId, sessionId } = store
   const empty = !text.trim() && start.kept.length === 0 && start.comments === 0
   const close = () => {
-    if (!working) onClose()
+    if (!sending.current) onClose()
   }
 
   const send = () => {
-    if (working || empty) return
+    if (sending.current || empty) return
     // 回合在跑、harness 不会回退：不发，写明原因
     const blocked = meta?.running
       ? t('turn.busy')
@@ -85,6 +96,7 @@ export function EditMessage({
       return
     }
     const message = resendOf(target.user, text)
+    sending.current = true
     setWorking(true)
     setError(null)
     channel
@@ -97,6 +109,7 @@ export function EditMessage({
       })
       .then(
         (result) => {
+          sending.current = false
           setWorking(false)
           onClose()
           if (!result.sendFailure) return
@@ -115,8 +128,16 @@ export function EditMessage({
           say(t('turn.edit.sendFailed', { reason: reasonOf(result.sendFailure) }))
         },
         (failure: unknown) => {
+          sending.current = false
           setWorking(false)
-          setError(t('turn.edit.failed', { reason: reasonOf(failure) }))
+          const uncertain = ['timeout', 'offline', 'closed', 'cancelled'].includes(
+            (failure as { code?: string } | null)?.code ?? '',
+          )
+          setError(
+            t(uncertain ? 'turn.edit.unconfirmed' : 'turn.edit.failed', {
+              reason: reasonOf(failure),
+            }),
+          )
         },
       )
   }
@@ -129,6 +150,15 @@ export function EditMessage({
       <Text style={[styles.title, { color: c.ink, fontFamily: theme.font.ui }]}>
         {t('turn.edit')}
       </Text>
+      {working ? (
+        <View accessibilityLiveRegion="polite">
+          {note(t('turn.edit.pending'))}
+          <Text numberOfLines={3} style={{ color: c.ink3 }}>
+            {start.text}
+          </Text>
+          {note(t(slow ? 'turn.edit.timeout' : 'turn.edit.working'))}
+        </View>
+      ) : null}
       <TextInput
         ref={input}
         autoFocus
@@ -166,11 +196,17 @@ export function EditMessage({
       {note(t(meta?.can.rollbackRestoresFiles ? 'turn.edit.noteRestores' : 'turn.edit.note'))}
       {error ? note(error, c.err) : null}
       <View style={styles.buttons}>
-        <Button kind="plain" label={t('turn.edit.cancel')} onPress={close} testID="edit:cancel" />
         <Button
-          label={t('turn.edit.send')}
+          kind="plain"
+          label={t('turn.edit.cancel')}
+          disabled={working}
+          onPress={close}
+          testID="edit:cancel"
+        />
+        <Button
+          label={t(working ? 'turn.edit.working' : 'turn.edit.send')}
           onPress={send}
-          disabled={empty}
+          disabled={empty || working}
           busy={working}
           testID="edit:send"
         />

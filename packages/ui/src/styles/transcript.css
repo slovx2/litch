@@ -833,3 +833,31 @@ button.smen:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.umsg-edit-pending {
+  color: var(--ink-3);
+  font-size: calc(12px * var(--fs));
+}
+.umsg-edit-old {
+  white-space: pre-wrap;
+  max-height: 5em;
+  overflow: auto;
+  opacity: 0.6;
+}
+.composer-stopping {
+  color: var(--ink-3);
+  font-size: calc(12px * var(--fs));
+}
+.stop-spinner {
+  display: inline-flex;
+  animation: stop-spin 1s linear infinite;
+}
+@keyframes stop-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stop-spinner {
+    animation: none;
+  }
+}

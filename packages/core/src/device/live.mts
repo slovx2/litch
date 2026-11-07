@@ -2813,25 +2813,69 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         : null
       if (!before) throw new ChannelError('rejected', '该回合已不存在')
       const cut = itemId === undefined ? null : cutAt(live, turnId, itemId)
+      const original = live.view
+      const originalLast = original.turns.at(-1)?.id
+      let cursor: string | null = null
       live.reverting = true
       live.revertEchoed = false
       try {
         // 按回合的标识回退，不按“倒数几个”：两边数出来的个数万一不一样，撤错了找不回来
-        await attempt(live, 'rollback', () =>
+        const reverted = await attempt(live, 'rollback', () =>
           host.request(
             'thread/revert',
             { threadId: sessionId, beforeTurnId: before, ...(cut ? { beforeItemId: cut } : {}) },
             { timeoutMs: LOAD_TIMEOUT },
           ),
         )
+        cursor = reverted.turnsBackwardsCursor
       } finally {
         live.reverting = false
       }
       // 对面的“历史被改写了”还没到：等会儿到的那一条说的是这一次
       if (!live.revertEchoed) live.revertEchoUntil = host.clock.now() + REVERT_ECHO_MS
-      // 切在回合中间：这一回合只剩前半段，照对面的重新载入（等载入完再应答，紧接着发的新回合不会被盖掉），
-      // 不在这边一条条拿掉
-      if (cut || live.view.history) {
+      // 插话只重取被截断的一个回合；避免恢复整条会话、重读较早正文后才发编辑后的消息。
+      let retained: ReturnType<typeof projectTurn> | null = null
+      if (cut) {
+        try {
+          const page = await host.request(
+            'thread/turns/list',
+            {
+              threadId: sessionId,
+              cursor,
+              limit: 1,
+              sortDirection: 'desc',
+              itemsView: 'full',
+            },
+            { timeoutMs: LOAD_TIMEOUT },
+          )
+          const last = page.data[0]
+          if (
+            !last ||
+            last.id !== before ||
+            last.itemsView !== 'full' ||
+            sessions.get(live.id) !== live ||
+            live.view !== original ||
+            live.view.turns.at(-1)?.id !== originalLast ||
+            live.loading ||
+            live.stale ||
+            isRunning(live.view)
+          )
+            throw new Error('回退期间会话发生变化，需要重新同步')
+          retained = projectTurn(last, turnId, ownerOf(live) === 'codex')
+        } catch (error) {
+          host.log(`读取回退后的回合失败：${String(error)}`)
+          if (sessions.get(live.id) === live) await load(live)
+          host.touched(live.id)
+          return
+        }
+      }
+      // 删除了当前页的全部回合时，需要补入更早一页；已有保留回合时继续使用原分页游标。
+      if (
+        !cut &&
+        (live.view !== original ||
+          live.view.turns.at(-1)?.id !== originalLast ||
+          (live.view.history?.hasMore && live.view.turns[0]?.id === turnId))
+      ) {
         if (sessions.get(live.id) === live) await load(live)
         host.touched(live.id)
         return
@@ -2852,10 +2896,19 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
           if (key.startsWith(`${viewId}:`)) live.itemAlias.delete(key)
         }
       }
-      emit(
-        live,
-        gone.map((viewId): SessionOp => ({ op: 'turn.remove', turnId: viewId })),
-      )
+      emit(live, [
+        ...gone.map((viewId): SessionOp => ({ op: 'turn.remove', turnId: viewId })),
+        ...(retained
+          ? [
+              { op: 'turn.add', turn: retained.turn } as SessionOp,
+              ...retained.items.map((item): SessionOp => ({ op: 'item.add', turnId, item })),
+            ]
+          : []),
+        ...(live.view.goalReached && gone.includes(live.view.goalReached.turnId)
+          ? [{ op: 'session.goalReached', reached: null } as SessionOp]
+          : []),
+      ])
+      if (retained && before !== turnId) live.alias.set(before, turnId)
       host.touched(live.id)
     },
 

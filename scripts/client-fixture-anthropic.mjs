@@ -47,6 +47,7 @@ import {
 import { FIXTURE_PLAN, PLAN_TRIGGER } from './client-fixture-plan.mjs'
 import { RUN_COMMAND, RUN_COMMAND_PWSH, RUN_TRIGGER } from './client-fixture-run.mjs'
 import { sessionsAnthropic } from './client-fixture-sessions.mjs'
+import { STOP_COMMAND, STOP_TEXT, STOP_TOOL } from './client-fixture-stop.mjs'
 import { subagentAnthropic } from './client-fixture-subagent.mjs'
 
 /** 两家各自的工具名。没有的是 null */
@@ -196,6 +197,14 @@ export function anthropicReply(harness, body, pace) {
     .filter((entry) => entry.at >= 0)
     .sort((a, b) => b.at - a.at)
   const { mark, tool } = marks[0] ?? {}
+  if (STOP_TEXT.test(said))
+    return [{ text: '持续输出用于中断测量。'.repeat(100), pieces: 100, pace: 200 }]
+  if (STOP_TOOL.test(said) && !offered.has(shell) && offered.has('ToolSearch'))
+    return [{ tool: 'ToolSearch', input: { query: `select:${shell}` } }]
+  if (STOP_TOOL.test(said))
+    return step === 0
+      ? [{ tool: shell, input: { command: STOP_COMMAND, description: '中断耗时工具' } }]
+      : say('命令已完成')
   if (mark && step === 0) {
     if (!offered.has(tool)) {
       if (
