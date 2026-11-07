@@ -8,6 +8,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
+import { Platform } from 'react-native'
 import { ConsentDialog } from './ConsentDialog'
 import type { ConsentRequest } from './consent'
 import { createConsentHosts } from './consent-hosts'
@@ -30,7 +31,7 @@ export function ConsentPresentation({
   return (
     <Context.Provider value={value}>
       {children}
-      <ConsentDialog request={host === null ? request : null} />
+      {Platform.OS === 'ios' ? <ConsentDialog request={host === null ? request : null} /> : null}
     </Context.Provider>
   )
 }
@@ -43,5 +44,7 @@ export function ModalConsentHost({ active }: { active: boolean }) {
   const id = useId()
   const host = useSyncExternalStore(hosts.subscribe, hosts.current, hosts.current)
   useLayoutEffect(() => (active ? hosts.register(id) : undefined), [active, hosts, id])
-  return <ConsentDialog request={active && host === id ? request : null} />
+  return Platform.OS === 'ios' ? (
+    <ConsentDialog request={active && host === id ? request : null} />
+  ) : null
 }

@@ -188,6 +188,13 @@ export function SettingsScreen({ navigation }: Props) {
           <UpdateStatus />
         </View>
         <AutoUpdateSwitch />
+        {Platform.OS === 'android' ? (
+          <Row
+            title={t('app.privacy')}
+            onPress={() => openAbout('privacy')}
+            testID="settings:privacy"
+          />
+        ) : null}
         {Platform.OS === 'ios' ? (
           <>
             <Row

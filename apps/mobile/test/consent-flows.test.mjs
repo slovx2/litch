@@ -5,6 +5,14 @@ import { runInNewContext } from 'node:vm'
 import { parseAllDocuments } from 'yaml'
 import { withConsentSteps } from '../scripts/consent-flows.mjs'
 
+const platformSteps = (steps, platform) =>
+  steps.flatMap((step) => {
+    if (!step.runFlow?.when?.platform) return [step]
+    return step.runFlow.when.platform === platform
+      ? platformSteps(step.runFlow.commands, platform)
+      : []
+  })
+
 test('普通 Maestro 等待先允许真实同意卡，原产品断言仍保留', () => {
   const input =
     'appId: dev.litch.app\n---\n- extendedWaitUntil:\n    visible:\n      id: detail\n    timeout: 20000\n'
@@ -85,7 +93,11 @@ test('提案首次 Pi 同意在滚动到子会话之前，隐私步骤不被自�
     'utf8',
   )
   assert.equal(withConsentSteps(source, 'allow-pi-consent.yaml'), source)
-  const steps = parseAllDocuments(source)[1].toJS()
+  const raw = parseAllDocuments(source)[1].toJS()
+  const steps = platformSteps(raw, 'iOS')
+  assert.deepEqual(platformSteps(raw, 'Android'), [
+    { assertNotVisible: { id: 'ai-consent:title' } },
+  ])
   assert.equal(steps.filter((step) => step.tapOn?.id === 'ai-consent:allow').length, 1)
   assert.ok(
     steps.findIndex((step) => step.assertNotVisible?.id === 'proposal:.*:child') <
@@ -170,12 +182,19 @@ test('立即的反向断言和嵌套等待也处理同意，但隐私专项仍�
   assert.equal(withConsentSteps(privacy, 'privacy.yaml'), privacy)
 })
 
-test('讨论首次发送显式要求同意框，在批准后才断言草稿清空', () => {
+test('讨论首次发送只在 iOS 要求同意，Android 断言无同意框，两端都要求草稿清空', () => {
   const source = readFileSync(
     new URL('../e2e/flows/mock/25-discussion-keyboard.yaml', import.meta.url),
     'utf8',
   )
-  const steps = parseAllDocuments(withConsentSteps(source, '25-discussion-keyboard.yaml'))[1].toJS()
+  const raw = parseAllDocuments(withConsentSteps(source, '25-discussion-keyboard.yaml'))[1].toJS()
+  const steps = platformSteps(raw, 'iOS')
+  const android = platformSteps(raw, 'Android')
+  assert.equal(
+    android.some((step) => step.extendedWaitUntil?.visible?.id === 'ai-consent:title'),
+    false,
+  )
+  assert.ok(android.some((step) => step.assertNotVisible?.id === 'ai-consent:title'))
   const send = steps.findIndex((step) => step.tapOn?.id === 'post-question-submit:D-17')
   const title = steps.findIndex(
     (step, index) => index > send && step.extendedWaitUntil?.visible?.id === 'ai-consent:title',

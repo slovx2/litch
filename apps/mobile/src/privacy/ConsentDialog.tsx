@@ -51,9 +51,7 @@ export function ConsentDialog({ request }: { request: ConsentRequest | null }) {
           {target.model ? ` · ${target.model}` : ''}
         </Text>
       ))}
-      {request?.targets.some(
-        (target) => !target.remember && target.provider !== 'attachment-upload',
-      ) ? (
+      {request?.targets.some((target) => target.incomplete) ? (
         <Text style={style}>{t('privacy.ai.unknown')}</Text>
       ) : null}
       {request?.targets.some((target) => target.delegated) ? (

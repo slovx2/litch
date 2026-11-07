@@ -15,10 +15,11 @@ const target = (provider = 'alpha', extra = {}) => ({
   ...extra,
 })
 const tick = () => new Promise((done) => setImmediate(done))
-function fixture(initial = [target()]) {
+function fixture(initial = [target()], platform = 'ios') {
   let saved = null
   let targets = initial
   let prompt = null
+  let resolutions = 0
   const sent = []
   const records = {
     read: () => saved,
@@ -39,16 +40,21 @@ function fixture(initial = [target()]) {
       close() {},
     },
     records,
-    async () => targets,
+    async () => {
+      resolutions++
+      return targets
+    },
     (value) => {
       prompt = value
     },
     () => 'cancelled',
+    platform,
   )
   return {
     ...gate,
     sent,
     records,
+    resolutions: () => resolutions,
     prompt: () => prompt,
     targets: (value) => {
       targets = value
@@ -126,16 +132,43 @@ test('同意按设备和供应商保存；服务版本变化、撤回后再问',
   await afterRevoke
 })
 
-test('未知服务每次明确许可，不沿用上次记录', async () => {
-  const f = fixture([target('unreported', { remember: false })])
-  for (let i = 0; i < 2; i++) {
-    const result = f.channel.command('session.send', {})
+test('iOS 未知供应商同一设备和 harness 连发两条只问一次，切工具或配置后再问', async () => {
+  const unknown = target('unreported', { incomplete: true })
+  const f = fixture([unknown])
+  const first = f.channel.command('session.send', {})
+  await tick()
+  f.prompt().answer(true)
+  await first
+  await f.channel.command('session.send', {})
+  assert.equal(f.prompt(), null)
+  assert.equal(f.sent.length, 2)
+  for (const next of [
+    { ...unknown, harness: 'claude-code' },
+    { ...unknown, revision: 'changed' },
+    target('reported'),
+  ]) {
+    f.targets([next])
+    const sent = f.channel.command('session.send', {})
     await tick()
     assert.ok(f.prompt())
     f.prompt().answer(true)
-    await result
+    await sent
   }
-  assert.deepEqual(f.records.read(), {})
+})
+
+test('Android 不解析目标、不展示同意、不阻塞连续发送或附件上传', async () => {
+  const f = fixture([target('unreported', { remember: false })], 'android')
+  for (const command of [
+    'session.send',
+    'session.send',
+    'files.uploadAttachment',
+    'managers.post.question',
+  ])
+    await f.channel.command(command, {})
+  assert.equal(f.prompt(), null)
+  assert.equal(f.records.read(), null)
+  assert.equal(f.sent.length, 4)
+  assert.equal(f.resolutions(), 0)
 })
 
 test('确认期间供应商改变，旧确认不得授权新目标', async () => {

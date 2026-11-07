@@ -22,7 +22,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
-import { AppState } from 'react-native'
+import { AppState, Platform } from 'react-native'
 import type { SendMode } from '../../../../packages/ui/src/composer/send-mode-logic.ts'
 import { sendModeOf } from '../detail/composer/send-mode'
 import { backgroundMinutes } from '../platform/background'
@@ -133,6 +133,7 @@ export function ServicesProvider({
         ),
         setConsentRequest,
         () => t('privacy.ai.cancelled'),
+        Platform.OS,
       ),
     [activity, replica, t],
   )

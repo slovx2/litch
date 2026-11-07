@@ -11,6 +11,7 @@ export interface ConsentTarget {
   // 不保存令牌或凭据，只存服务配置的非敏感版本指纹。
   revision: string
   remember: boolean
+  incomplete?: boolean
   delegated: boolean
 }
 
@@ -70,7 +71,10 @@ export function consentChannel(
   resolve: (name: string, params: unknown) => Promise<ConsentTarget[]>,
   show: (request: ConsentRequest | null) => void,
   cancelled: () => string,
+  platform: string,
 ): { channel: CoreChannel; dispose(): void } {
+  // AI 数据同意属于 iOS 的发送前告知。Android 不解析目标、不排队，也不触发收键盘浮层。
+  if (platform !== 'ios') return { channel: base, dispose() {} }
   let stopped = false
   let decline: (() => void) | null = null
   let queue = Promise.resolve()
