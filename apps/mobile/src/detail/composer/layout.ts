@@ -15,11 +15,14 @@ export const SEND = 36
 
 export const rowLayout: {
   row: ViewStyle
+  keyboard: ViewStyle
   side: ViewStyle
   input: TextStyle
   send: ViewStyle
   sendDot: ViewStyle
 } = {
+  // 外接键盘容器接管横向剩余空间；子输入框的 flex: 1 仍沿横轴，高度由内容决定。
+  keyboard: { flex: 1, flexDirection: 'row' },
   row: {
     flexDirection: 'row',
     flexWrap: 'nowrap',
