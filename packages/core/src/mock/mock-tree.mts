@@ -48,6 +48,7 @@ import type { WorktreeFrom } from '../model-worktrees.mjs'
 import { phrase } from '../phrase.mjs'
 import { projectQuestions } from '../projection/asks.mjs'
 import { projectItem } from '../projection/items.mjs'
+import { managerMark } from '../projection/manager.mjs'
 import { outgoing } from '../projection/outgoing.mjs'
 import { samplePresets } from './sample-harness.mjs'
 import type { SampleLang } from './sample-text.mjs'
@@ -231,6 +232,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       workspaceId?: string
       cwd?: string
       proposalId?: string
+      lineageParentId?: string
       /** 要不要自己的工作树；不给照缺省（父会话在工作树里就开） */
       worktree?: boolean | null
       /** 等父会话这一回合停下再发第一段话（演示唤醒用） */
@@ -281,7 +283,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       placedAt: null,
       task: null,
       lineage: {
-        parentId: parent.sessionId,
+        parentId: options.lineageParentId ?? parent.sessionId,
         kind: options.kind,
         origin: options.origin,
         title: options.title,
@@ -331,7 +333,12 @@ export function createMockTree(host: MockTreeHost): MockTree {
     host.putView(view)
     if (options.reply) scripted.set(sameKey(deviceId, summary.id), options.reply)
     const background = options.kind === 'fresh' ? (options.background ?? '') : ''
-    const start = () => host.startTurn(view, outgoing(briefOf(parent, options.prompt, background)))
+    const briefParent =
+      options.lineageParentId && options.kind === 'fresh'
+        ? host.view(deviceId, options.lineageParentId)
+        : parent
+    const start = () =>
+      host.startTurn(view, outgoing(briefOf(briefParent, options.prompt, background)))
     if (options.afterParentTurn) {
       const key = sameKey(deviceId, parent.sessionId)
       deferred.set(key, [...(deferred.get(key) ?? []), start])
@@ -853,9 +860,22 @@ export function createMockTree(host: MockTreeHost): MockTree {
     overrides: ProposalOverrides,
   ): string => {
     const reply = scripted.get(`proposal:${proposal.id}`) ?? null
+    const source = host.summary(view.deviceId, view.sessionId)
+    const mark = source ? managerMark(source) : null
+    const manager =
+      !proposal.offer && mark?.role === 'line'
+        ? host.summaries(view.deviceId).find((entry) => {
+            const owner = managerMark(entry)
+            return owner?.role === 'manager' && owner.managerId === mark.managerId
+          })
+        : undefined
+    const sourceNote = manager
+      ? `\n\n[Litch] Suggestion source: "${typeof source?.title === 'string' ? source.title : view.sessionId}" (${view.sessionId}). Report to manager ${manager.id}; this is a sibling workline.`
+      : ''
     const sessionId = startChild(view, {
       title: overrides.title?.trim() || proposal.title,
-      prompt: overrides.prompt?.trim() || proposal.prompt,
+      prompt: (overrides.prompt?.trim() || proposal.prompt) + sourceNote,
+      ...(manager ? { lineageParentId: manager.id } : {}),
       background: overrides.background ?? proposal.background,
       harness: overrides.harness ?? proposal.harness,
       kind: overrides.kind ?? proposal.kind,

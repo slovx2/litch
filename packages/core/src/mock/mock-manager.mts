@@ -14,6 +14,7 @@ import type {
   ManagerView,
 } from '../model-manager.mjs'
 import { phrase } from '../phrase.mjs'
+import { managerMark } from '../projection/manager.mjs'
 import type { MockTasksHost } from './mock-tasks.mjs'
 import {
   type ManagerSessionSummary,
@@ -36,6 +37,7 @@ const POSTS_COMMANDS = new Set([
 
 export interface MockManagerHost
   extends Pick<MockTasksHost, 'clock' | 'lang' | 'devices' | 'device' | 'spawn'> {
+  summaries?(deviceId: string): readonly import('../model.mjs').SessionSummary[]
   suggestions?(deviceId: string): readonly SuggestionView[]
   say(deviceId: string, threadId: string, prompt: string, answer: string): void
   add(deviceId: string, session: ManagerSessionSummary): void
@@ -50,6 +52,7 @@ export function createMockManagers(host: MockManagerHost) {
   const lists = new Map<string, Set<HostSink>>()
   const boards = new Map<string, Set<HostSink>>()
   const endingTurns = new Map<string, string>()
+  const liveLines = new Set<string>()
   let seq = 0
   const t = (zh: string, en: string) => (host.lang === 'zh-CN' ? zh : en)
   const available = (id: string) => {
@@ -104,11 +107,46 @@ export function createMockManagers(host: MockManagerHost) {
   const key = (deviceId: string, managerId: string) => JSON.stringify([deviceId, managerId])
   const boardView = (deviceId: string, managerId: string) => {
     const board = state(deviceId).boards.find((b) => b.managerId === managerId) ?? null
-    if (board)
+    if (board) {
+      // 新派出的工作线来自模拟会话树，不能只保留开场时预置的四条线。
+      for (const summary of host.summaries?.(deviceId) ?? []) {
+        const mark = managerMark(summary)
+        if (mark?.managerId !== managerId || mark.role !== 'line' || !summary.lineage) continue
+        const previous = board.lines.find((line) => line.threadId === summary.id)
+        const lineKey = JSON.stringify([deviceId, summary.id])
+        if (previous && !liveLines.has(lineKey)) continue
+        const status =
+          summary.status === 'running' || summary.status === 'waiting' ? summary.status : 'idle'
+        if (previous) {
+          previous.status = status
+          previous.running = status !== 'idle'
+          continue
+        }
+        liveLines.add(lineKey)
+        board.lines.push({
+          threadId: summary.id,
+          parentThreadId: summary.lineage.parentId,
+          title: typeof summary.title === 'string' ? summary.title : summary.id,
+          harness: summary.harness,
+          cwd: summary.cwd,
+          status:
+            summary.status === 'running' || summary.status === 'waiting' ? summary.status : 'idle',
+          running: summary.status === 'running' || summary.status === 'waiting',
+          startedAt: null,
+          elapsedSeconds: null,
+          branch: summary.worktree?.branch ?? null,
+          ahead: null,
+          merged: null,
+          worktreeExists: null,
+          report: null,
+          unverified: [],
+        })
+      }
       board.posts = mockPosts(
         board,
         host.suggestions?.(deviceId).filter((s) => s.managerId === managerId) ?? [],
       )
+    }
     return {
       deviceId,
       managerId,
@@ -123,10 +161,7 @@ export function createMockManagers(host: MockManagerHost) {
     boardView(deviceId, manager.id)
     manager.pendingReports = board.posts?.filter((p) => p.unread).length ?? 0
     manager.pendingSuggestions =
-      host
-        .suggestions?.(deviceId)
-        .filter((s) => s.managerId === manager.id && s.managerReview?.state === 'endorsed')
-        .length ?? 0
+      host.suggestions?.(deviceId).filter((s) => s.managerId === manager.id).length ?? 0
     manager.latestActivity = board.activities[0] ?? null
     manager.updatedAt = host.clock.now()
     host.mark(deviceId, manager.threadId, manager)
@@ -782,11 +817,9 @@ export function createMockManagers(host: MockManagerHost) {
       for (const manager of state(deviceId).managers) {
         const board = boardView(deviceId, manager.id).board
         if (!board) continue
+        manager.runningLines = board.lines.filter((line) => line.running).length
         manager.pendingSuggestions =
-          host
-            .suggestions?.(deviceId)
-            .filter((s) => s.managerId === manager.id && s.managerReview?.state === 'endorsed')
-            .length ?? 0
+          host.suggestions?.(deviceId).filter((s) => s.managerId === manager.id).length ?? 0
         for (const sink of lists.get(deviceId) ?? [])
           sink.delta([{ op: 'manager.upsert', manager: copy(manager) }])
         for (const sink of boards.get(key(deviceId, manager.id)) ?? [])

@@ -23,6 +23,7 @@ export interface ManagerSeen {
   linesState: boolean
   /** 经理行和普通对话的父子树同一套：默认收起、下面一行“› N 个子会话”，点开展开；行高、记号缩进与工作线行一致 */
   treeShape: boolean
+  lineSuggestions: boolean
   /**
    * 经理一节的组标题照对话一侧的“未读 / 最近”：两组都有折叠记号和 aria-expanded，“进行中”点了真能收起、
    * 再点展开；记号、名字的横坐标与对话一侧的组标题相同。经理行的记号列都带经理框（.st.mgr）
@@ -1377,6 +1378,64 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     '.mg-tree [data-session="manager-k1"]:not(.projection-group *) .ss-row:not(.projection-group *)',
   )
   await until('子会话来源', () => one('.mg-origin'))
+  // 工作线提卡经正式输入、看板和对话按钮开始，两条新线都应在经理下一级。
+  const lineInput = await until('工作线提卡输入框', () =>
+    one<HTMLTextAreaElement>('.main .dock textarea.cmp-text'),
+  )
+  fill(lineInput, '提个子会话')
+  await new Promise((resolve) => setTimeout(resolve, 80))
+  lineInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  const proposalIds = await until('工作线的建议卡', () => {
+    const cards = [
+      ...document.querySelectorAll<HTMLElement>('.main [data-card="proposal"][data-proposal]'),
+    ]
+    return cards.length >= 3 ? [cards[0]?.dataset.proposal] : null
+  })
+  await until('工作线提卡回合结束', () => !one('.main .dock .send.stop'))
+  await click('.mg-origin > button')
+  await until('返回经理看板', () => one('[data-act="manager-board-toggle"]'))
+  if (!one('[data-board-tab="suggestions"]')) await click('[data-act="manager-board-toggle"]')
+  await click('[data-board-tab="suggestions"]')
+  const lineCard = await until('默认看板直接显示工作线建议', () =>
+    one(`.suggestion-row [data-proposal="${proposalIds[0]}"]`),
+  )
+  const reviewGroup = lineCard.closest('details')
+  if (reviewGroup && !reviewGroup.open) reviewGroup.querySelector('summary')?.click()
+  const hasSource = Boolean(lineCard.querySelector('[data-act="open-source"]'))
+  const beforeLines = new Set(
+    lineRows().map((row) => row.closest('[data-session]')?.getAttribute('data-session')),
+  )
+  await click(`.suggestion-row [data-proposal="${proposalIds[0]}"] [data-act="start"]`)
+  await until('看板开始后成为经理直属线', () =>
+    lineRows().some(
+      (row) => !beforeLines.has(row.closest('[data-session]')?.getAttribute('data-session')),
+    ),
+  )
+  const afterBoard = new Set(
+    lineRows().map((row) => row.closest('[data-session]')?.getAttribute('data-session')),
+  )
+  await click('.mg-tree [data-session="manager-k1"] .ss-row')
+  await until('重新打开来源工作线', () => one('.mg-origin'))
+  const secondInput = await until('工作线再次提卡', () =>
+    one<HTMLTextAreaElement>('.main .dock textarea.cmp-text'),
+  )
+  fill(secondInput, '提个子会话')
+  await new Promise((resolve) => setTimeout(resolve, 80))
+  await click('.main .dock button.send:not(.stop)')
+  const secondCard = await until('第二张可开始的建议', () =>
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        '.main [data-card="proposal"][data-state="pending"]',
+      ),
+    ].find((card) => card.querySelector('.prop-title')?.textContent?.includes('CHANGELOG')),
+  )
+  secondCard.querySelector<HTMLButtonElement>('[data-act="start"]')?.click()
+  await until('对话卡开始后成为经理直属线', () =>
+    lineRows().some(
+      (row) => !afterBoard.has(row.closest('[data-session]')?.getAttribute('data-session')),
+    ),
+  )
+  const lineSuggestions = hasSource && lineRows().length === beforeLines.size + 2
   const selectedLine = one('.mg-tree .ss-row:not(.projection-group *).sel')
     ?.closest('[data-session]:not(.projection-group *)')
     ?.getAttribute('data-session')
@@ -2096,6 +2155,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const discussionPaneDetail = JSON.stringify(paneSeen)
   treeShapeDetail = JSON.stringify({ ...treeShapeSeen, managerLeft, chatLeft })
   return {
+    lineSuggestions,
     boardFont,
     boardFontDetail: JSON.stringify(fontMeasurements),
     discussionPane,
@@ -2202,6 +2262,7 @@ export function judgeManager(seen: ManagerSeen): string[] {
     >,
     string
   > = {
+    lineSuggestions: '工作线建议未在默认看板显示来源，或两个入口开始后未成为经理直属线',
     boardFont: `看板字号未跟随对话倍率，或极端字号溢出：${seen.boardFontDetail}`,
     questionEnter: '追问 Enter / Shift+Enter / 输入法组词处理错误',
     discussionPane: `帖子讨论仍内嵌在卡片里，或底部分屏的打开、换帖子、Esc 关闭、草稿保留不对：${seen.discussionPaneDetail}`,

@@ -70,7 +70,7 @@ const pendingStates = (kind: ManagerPageKind): readonly string[] =>
     : kind === 'item'
       ? ['backlog', 'running', 'review', 'blocked']
       : kind === 'suggestion'
-        ? ['pending']
+        ? ['pending', 'review']
         : ['open']
 export const headPending = (kind: ManagerPageKind, status: string): boolean =>
   pendingStates(kind).includes(status)
@@ -210,7 +210,9 @@ export class ManagerPageQueryStore {
     const filtered = all
       .filter(
         ({ head }) =>
-          head.serial <= upper && (query.status === 'all' || head.status === query.status),
+          head.serial <= upper &&
+          (query.status === 'all' ||
+            (query.status === 'pending' ? head.pending : head.status === query.status)),
       )
       .sort(
         (a, b) =>

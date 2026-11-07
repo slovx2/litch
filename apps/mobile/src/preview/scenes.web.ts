@@ -31,6 +31,18 @@ const say = (prompt: string) =>
 
 export const SCENES: Scene[] = [
   {
+    id: 'manager-line-suggestions',
+    group: '经理',
+    name: '工作线建议',
+    note: '工作线提的建议在经理默认页显示；从看板和对话开始后都是经理的直属工作线',
+    steps: [
+      nav('ManagerConsole', { deviceId: 'local', managerId: 'm1' }),
+      link(
+        `litch://test-send?device=local&session=manager-k1&text=${encodeURIComponent('提个子会话')}`,
+      ),
+    ],
+  },
+  {
     id: 'antigravity-quota',
     group: '会话',
     name: 'Antigravity 订阅额度',

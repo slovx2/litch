@@ -84,7 +84,7 @@ export interface SessionProposal {
   /** 发起者是经理会话（不包括工作线）；客户端保留开始新线、编辑后开始和忽略，不提供在这里做。 */
   sourceIsManager?: boolean
   id: string
-  /** 提案挂在哪个会话上（就是将来的父会话） */
+  /** 提案的来源会话；经理工作线的普通建议开始后挂在经理下面，来源不变 */
   threadId: string
   title: string
   /** 起子会话时发给它的任务 */

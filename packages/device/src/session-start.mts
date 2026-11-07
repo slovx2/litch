@@ -48,6 +48,8 @@ import { isObject } from './wire.mjs'
 import { worktreeCwd } from './worktrees.mjs'
 
 export interface ChildSpec {
+  /** 设备解析出的归属父会话；工作线建议保留来源的分叉上下文和权限，但由经理接收回报。 */
+  lineageParentId?: string
   /** 不给是父会话的 harness */
   harness?: string | null
   model?: string | null
@@ -326,13 +328,14 @@ export async function startChild(
   origin: SessionLineageOrigin,
   directTurnId?: string,
 ): Promise<{ threadId: string; harness: string; branch: string | null }> {
+  const lineageParentId = spec.lineageParentId ?? parentId
   const parentOf = sessionParents(tree)
-  if (treePosition(parentId, parentOf).depth >= SESSION_TREE_LIMITS.maxDepth)
+  if (treePosition(lineageParentId, parentOf).depth >= SESSION_TREE_LIMITS.maxDepth)
     throw new StartRefused(
       'forbidden',
       `Cannot start a child beyond depth ${SESSION_TREE_LIMITS.maxDepth}; the root is depth 0.`,
     )
-  const reservation = await reserveSessionWork(tree, parentId, null)
+  const reservation = await reserveSessionWork(tree, lineageParentId, null)
   let directReserved = false
   let createdId: string | null = null
   try {
@@ -355,7 +358,7 @@ export async function startChild(
     const child = await createChild(tree, parentId, spec, origin, (id) => {
       createdId = id
       reservation.bind(id)
-      tree.store.holdChildStart(id, parentId)
+      tree.store.holdChildStart(id, lineageParentId)
     })
     tree.store.dropChildStart(child.threadId)
     return child
@@ -523,7 +526,7 @@ async function createChild(
   if (projectId) workspaces.adoptThread(threadId, projectId)
   store.addLineage({
     threadId,
-    parentThreadId: parentId,
+    parentThreadId: spec.lineageParentId ?? parentId,
     harness,
     kind: spec.kind,
     origin,
@@ -535,18 +538,24 @@ async function createChild(
   })
   tree.host.threadStarted(harness, { ...thread })
   tree.lineageChanged(threadId)
-  const text = briefing(
+  let text = briefing(
     spec.kind,
-    {
-      id: parentId,
-      harness: parentHarness,
-      title: threadTitle(parentThread, store.parentOf(parentId)?.title),
-    },
+    spec.lineageParentId && manager && spec.kind === 'fresh'
+      ? { id: manager.threadId, harness: manager.harness, title: manager.name }
+      : {
+          id: parentId,
+          harness: parentHarness,
+          title: threadTitle(parentThread, store.parentOf(parentId)?.title),
+        },
     title,
     spec.prompt,
     Boolean(spec.handOffBefore),
     spec.background ?? '',
   )
+  if (spec.lineageParentId && manager) {
+    const source = threadTitle(parentThread, store.parentOf(parentId)?.title) || parentId
+    text += `\n\n[Litch] Suggestion source: "${source}" (${parentId}). This suggestion was started as a workline of manager "${manager.name}" (${manager.threadId}), alongside the source line. Report to the manager; the source line is not your parent.`
+  }
   const begun = await link.request(
     'turn/start',
     {
@@ -644,12 +653,16 @@ export async function acceptProposal(
 ): Promise<{ threadId: string; harness: string; branch: string | null }> {
   if (tree.accepting.has(proposalId)) throw new ProtocolError(-32602, `提案 ${proposalId} 正在开始`)
   const proposal = tree.pendingProposal(proposalId, from)
+  const manager = !proposal.offer ? tree.managers?.lines.managerFor(proposal.threadId) : null
   const pick = (value: string | undefined, fallback: string | null) =>
     value === undefined ? fallback : value || null
   const started = startChild(
     tree,
     tree.managers?.store.historical(proposal.threadId)?.threadId ?? proposal.threadId,
     {
+      ...(manager && manager.threadId !== proposal.threadId
+        ? { lineageParentId: manager.threadId }
+        : {}),
       harness: pick(overrides.harness, proposal.harness),
       model: pick(overrides.model, proposal.model),
       effort: pick(overrides.effort, proposal.effort ?? null),

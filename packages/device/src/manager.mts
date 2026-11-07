@@ -127,12 +127,7 @@ export class DeviceManagers {
       pendingReports:
         board.posts?.filter((post) => post.kind === 'report' && post.unread).length ?? 0,
       pendingSuggestions: (board.posts ?? []).filter(
-        (post) =>
-          post.kind === 'suggestion' &&
-          post.fields.status === 'pending' &&
-          (post.sourceThreadId === manager.threadId ||
-            this.store.history(id).includes(post.sourceThreadId ?? '') ||
-            this.store.suggestionReview(id, post.proposalId ?? '')?.state === 'endorsed'),
+        (post) => post.kind === 'suggestion' && post.fields.status === 'pending',
       ).length,
       runningLines: board.lines.filter((line) => line.running).length,
       latestActivity: board.activities[0] ?? null,

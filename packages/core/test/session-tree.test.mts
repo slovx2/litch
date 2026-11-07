@@ -2221,3 +2221,50 @@ test('模拟：归档父会话时已经停下的子会话跟着归档，放回�
   await world.until(() => listed('s6') === true, '父会话放回来了')
   assert.equal(listed(first), false, '放回父会话不带子会话')
 })
+
+test('模拟工作线提卡：归属经理、保留来源，开始后为同级线', async () => {
+  const world = mockWorld()
+  world.channel.subscribe({ kind: 'managers', deviceId: 'local' }, { snapshot() {}, delta() {} })
+  await settle()
+  const line = world.watch('manager-k1')
+  await settle()
+  await world.channel.command('session.send', {
+    deviceId: 'local',
+    sessionId: 'manager-k1',
+    text: '提个子会话',
+  })
+  await world.until(() => line.view?.proposals.length === 3, '工作线提卡')
+  const first = line.view?.proposals[0]
+  assert.ok(first)
+  assert.equal(first.sourceIsManager, false)
+  const { sessionId } = await world.channel.command('session.proposal.accept', {
+    deviceId: 'local',
+    sessionId: 'manager-k1',
+    proposalId: first.id,
+  })
+  await world.until(() => world.children('m1').some((row) => row.id === sessionId), '挂在经理下')
+  assert.equal(
+    world.children('manager-k1').some((row) => row.id === sessionId),
+    false,
+  )
+  const child = world.watch(sessionId)
+  await settle()
+  assert.match(userItems(child.view)[0]?.text ?? '', /Suggestion source:.*manager-k1/)
+  assert.equal(line.view?.proposals[0]?.startedId, sessionId)
+  let board: import('../src/model-manager.mjs').ManagerBoardTopicView | undefined
+  const stop = world.channel.subscribe(
+    { kind: 'managerBoard', deviceId: 'local', managerId: 'm1' },
+    {
+      snapshot: (value) => {
+        board = value
+      },
+      delta() {},
+    },
+  )
+  await settle()
+  assert.equal(
+    board?.board?.lines.find((entry) => entry.threadId === sessionId)?.parentThreadId,
+    'm1',
+  )
+  stop()
+})

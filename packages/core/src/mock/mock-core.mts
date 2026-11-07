@@ -2162,6 +2162,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     },
   })
   const managers = createMockManagers({
+    summaries: (deviceId) => sidebars.get(deviceId)?.sessions ?? [],
     suggestions: (deviceId) => suggestionsView(deviceId).suggestions,
     ...tasksHost,
     say(deviceId, threadId, prompt, answer) {

@@ -56,7 +56,7 @@ export class ManagerPaging {
           title: proposal.title,
           preview: proposal.preview,
           status,
-          pending: status === 'pending',
+          pending: status === 'pending' || status === 'review',
           revision: version?.revision ?? 1,
           createdAt: proposal.createdAt,
           updatedAt: version?.updatedAt ?? proposal.createdAt,

@@ -24,6 +24,10 @@ Proposal notifications queue without starting or interrupting a manager turn. Th
 later report delivery or the next turn and remain readable while queued. Assigned work still
 belongs to the workline and must not be replaced by a suggestion.
 
+工作线建议在经理“建议”页默认显示，待审核卡带有标记，来源会话保留在卡片上。无论从看板还是工作线对话点“开始”，新会话都是经理的直属工作线，与来源线平级，计入经理并发限制；首条简报包含来源。分叉仍使用来源线的上下文和权限。已开始的旧嵌套会话不迁移，普通会话的建议行为不变。
+
+Workline suggestions appear by default in the manager’s Suggestions page, labeled when awaiting review and retaining their source session. Starting from either the board or the source conversation creates a direct workline of the manager, alongside the source line and subject to the manager’s concurrency limit. Its brief identifies the source; forks retain the source context and permissions. Existing nested sessions and ordinary-session suggestions are unchanged.
+
 经理自己提出的建议卡提供“开始”（创建工作线）、“编辑后开始”（修改简报后创建工作线）和“忽略”，不提供“在这里做”。普通会话和工作线提出的建议保持原有操作。旧客户端请求在经理会话执行建议时，设备会拒绝并提示开始工作线或忽略。
 
 Suggestions proposed by a manager offer **Start** (create a workline), **Edit before starting** (revise the brief and create a workline), and **Dismiss**, without **Do it here**. Suggestions from ordinary sessions and worklines keep their usual actions. Requests from older clients to run a manager’s suggestion in place are rejected with guidance to start a workline or dismiss it.
@@ -552,7 +556,7 @@ use the same accessible name and placeholder. Related targets use link color and
 
 ### 排序与已答复决策
 
-控制台所有列表默认最新优先（按议题发起时间），可切换为“最早优先”或“待处理优先”（待定决策、待做请你做、已审核待开始建议、未阅报告排在前面，同组内仍按最新）。桌面的排序在列表头右端：决策在“待定 / 已答复 / 已关闭”那一行，因为已按状态分开，只有最新、最早两项；其他三类在列表上方一行。手机在类别那一行的末尾，点开是单选列表。选择保存在本机，所有经理、所有类别共用；桌面和手机各记各的。
+控制台所有列表默认最新优先（按议题发起时间），可切换为“最早优先”或“待处理优先”（待定决策、待做请你做、待审核及待开始建议、未阅报告排在前面，同组内仍按最新）。桌面的排序在列表头右端：决策在“待定 / 已答复 / 已关闭”那一行，因为已按状态分开，只有最新、最早两项；其他三类在列表上方一行。手机在类别那一行的末尾，点开是单选列表。选择保存在本机，所有经理、所有类别共用；桌面和手机各记各的。
 
 已答复的决策中，问题和答案分开：答案单独一块，写“你的答复”（经理从对话里记下的写“你在对话中的答复”）和时间，内容是选中的选项和答复文字。没选中的选项收在“其他选项 N”里，点开可看。已关闭的决策另有一块“已关闭 · 关闭者”写原因；重新打开的决策照常展开所有选项供作答，上方保留“上次的答复”，再下面是收起的“上次关闭 · 关闭者”，点开可看当初关闭的原因。桌面和手机相同。
 
