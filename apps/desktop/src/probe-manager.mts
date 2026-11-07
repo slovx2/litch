@@ -114,6 +114,12 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const UNSENT_BAR = '.mg-send:not([data-sent])'
   const one = <T extends Element = HTMLElement>(selector: string) =>
     document.querySelector<T>(selector)
+  // 经理设定在概览页末尾的卡片里；不在概览页时先切过去
+  const rulesText = () => {
+    const card = one('[data-manager-rules]')
+    if (!card) one('[data-board-tab="overview"]')?.click()
+    return card?.textContent ?? ''
+  }
   const click = async (selector: string) => {
     const category = selector.match(
       /^\[data-board-tab="(decisions|suggestions|requests|reports)"\]$/,
@@ -1954,7 +1960,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       one(`.mg-sidebar-manager[data-manager-id="${createdId}"] .mg-pick`)?.textContent?.includes(
         '经理设置验收',
       ) &&
-      one('.mg-scope')?.textContent?.includes('修改后的经理设定') &&
+      rulesText().includes('修改后的经理设定') &&
       Boolean(one('[data-event="manager-rules"]')),
   )
   const rulesBody = await eventBody('manager-rules')
@@ -1978,7 +1984,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   fill(editField('经理设定'), '取消的修改不应保存')
   await click('.mg-form-foot button[type="button"]')
   const settingsCancelled = await until('取消不保存', () =>
-    one('.mg-scope')?.textContent?.includes('修改后的经理设定'),
+    rulesText().includes('修改后的经理设定'),
   )
   await click('.sb-top .new')
   await until(

@@ -39,6 +39,7 @@ import { ManagerFeaturesContext, useManagerBoard } from './data.ts'
 import { DiscussionPaneContext } from './discussion-pane.ts'
 import { IssueOrderSelect } from './issue-order.tsx'
 import { ManagerForm } from './ManagerForm.tsx'
+import { ManagerRules } from './ManagerRules.tsx'
 import { Overview, type OverviewCategory, type OverviewCounts } from './Overview.tsx'
 import { PagedBoard } from './PagedBoard.tsx'
 import { RelationsContext } from './Relations.tsx'
@@ -452,14 +453,6 @@ export function ManagerPage({
         className="mg-board"
         aria-label={t('manager.board')}
       >
-        {manager.rules ? (
-          <div className="mg-scope">
-            <span className="dim">{t('manager.prompt')}</span>
-            <span className="ell" title={manager.rules}>
-              {manager.rules}
-            </span>
-          </div>
-        ) : null}
         <div className="side-tabs">
           <div className="side-tablist" role="tablist">
             {(['inbox', 'overview', 'items'] as const).map((key) => (
@@ -681,6 +674,17 @@ export function ManagerPage({
                         />
                       </>
                     )}
+                    {/* 经理设定放在概览末尾，完整显示；顶栏的“设置”和卡上的“编辑”打开同一份表单 */}
+                    {tab === 'overview' ? (
+                      <ManagerRules
+                        manager={manager}
+                        onEdit={
+                          manager.status === 'active' && !disabled
+                            ? () => setSettings(true)
+                            : undefined
+                        }
+                      />
+                    ) : null}
                   </BoardReferencesContext.Provider>
                 </RelationsContext.Provider>
               </ManagerFeaturesContext.Provider>

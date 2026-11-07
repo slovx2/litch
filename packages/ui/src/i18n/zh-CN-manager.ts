@@ -163,6 +163,7 @@ export const zhManager = {
   'manager.empty': '暂无经理',
   'manager.board': '看板',
   'manager.prompt': '经理设定',
+  'manager.rulesEdit': '编辑',
   'manager.overview': '概览',
   'manager.decisions': '决策',
   'manager.items': MANAGER_NAMES.work['zh-CN'],

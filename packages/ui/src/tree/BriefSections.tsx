@@ -4,14 +4,11 @@ import { type ComponentType, useLayoutEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { CardMarkdown } from '../transcript/CardMarkdown.tsx'
 
-function FoldSection({
-  label,
-  part,
+/** 一段 Markdown，长了先折起一截，按需展开全文。经理设定卡也用 */
+export function FoldText({
   text,
   Markdown,
 }: {
-  label: string
-  part: 'background' | 'task'
   text: string
   Markdown: ComponentType<{ text: string }>
 }) {
@@ -31,8 +28,7 @@ function FoldSection({
     return () => observer.disconnect()
   }, [open, text])
   return (
-    <section className="sg-section" data-part={part}>
-      <h4 className="sg-label">{label}</h4>
+    <>
       <div ref={box} className="sg-text" data-md="" data-folded={!open || undefined}>
         <Markdown text={text} />
       </div>
@@ -46,6 +42,25 @@ function FoldSection({
           {t(open ? 'proposal.brief.fold' : 'proposal.brief.unfold')}
         </button>
       ) : null}
+    </>
+  )
+}
+
+function FoldSection({
+  label,
+  part,
+  text,
+  Markdown,
+}: {
+  label: string
+  part: 'background' | 'task'
+  text: string
+  Markdown: ComponentType<{ text: string }>
+}) {
+  return (
+    <section className="sg-section" data-part={part}>
+      <h4 className="sg-label">{label}</h4>
+      <FoldText text={text} Markdown={Markdown} />
     </section>
   )
 }

@@ -73,6 +73,12 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
   }
   const row = () => one(`.mg-sidebar-manager[data-manager-id="${CSS.escape(state.managerId)}"]`)
   const pending = () => Number(text(one('[data-sidebar-mode="manager"] .pill')) || 0)
+  // 经理设定在概览页末尾的卡片里；不在概览页时先切过去
+  const rulesText = () => {
+    const card = one('[data-manager-rules]')
+    if (!card) one('[data-board-tab="overview"]')?.click()
+    return text(card)
+  }
   const reply = async (expected: string, event?: string) => {
     await wait(expected, () =>
       all('.mg-chat .turn > .agent-message > .md').some((entry) => text(entry).includes(expected)),
@@ -271,7 +277,7 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     await click('[data-form-tab="basic"]')
     assert(rules.value === updated, '任务分配选项覆盖了经理设定')
     await click('.mg-form button[type="submit"]')
-    await wait('保存后经理设定更新', () => text(one('.mg-scope')).includes(updated))
+    await wait('保存后经理设定更新', () => rulesText().includes(updated))
     const event = await wait('规则事件卡', () => one('[data-event="manager-rules"]'))
     await wait('规则回合完成', () => {
       const turn = event.closest('.turn')
@@ -295,7 +301,7 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     const card = await wait('返回后规则事件卡', () => one('[data-event="manager-rules"]'))
     card.scrollIntoView({ block: 'center' })
     await frame()
-    return { event: text(card), prompt: text(one('.mg-scope')), maxRunningLines: 2, rules: updated }
+    return { event: text(card), prompt: rulesText(), maxRunningLines: 2, rules: updated }
   }
   if (step === '07-ending') {
     await click('[data-act="manager-end"]')

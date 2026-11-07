@@ -180,6 +180,7 @@ export const enManager = {
   'manager.empty': 'No managers',
   'manager.board': 'Board',
   'manager.prompt': 'Manager settings',
+  'manager.rulesEdit': 'Edit',
   'manager.overview': 'Overview',
   'manager.decisions': 'Decisions',
   'manager.items': MANAGER_NAMES.work.en,

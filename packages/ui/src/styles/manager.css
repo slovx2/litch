@@ -282,15 +282,20 @@
   flex-direction: column;
   background: var(--panel);
 }
-.mg-scope {
-  padding: 12px 16px;
+/* 概览末尾的经理设定卡：完整显示，长了先折起 */
+.mg-rules {
+  margin-top: 16px;
   display: flex;
-  gap: 10px;
-  align-items: center;
-  border-bottom: 1px solid var(--line-1);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
 }
-.mg-scope > .dim {
-  white-space: nowrap;
+.mg-rules > header {
+  align-self: stretch;
+}
+.mg-rules h3 {
+  margin: 0;
+  font-size: calc(13px * var(--fs));
 }
 .mg-body {
   flex: 1;

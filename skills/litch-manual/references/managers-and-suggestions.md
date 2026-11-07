@@ -279,7 +279,9 @@ one switches to that console tab, exactly like choosing the kind inside Console.
 manager's **Current status** card: Markdown written and maintained by the manager, with section
 headings, lists and clickable board references, the update time and a small refresh icon. Overview
 does not show manager items (they have their own tab) or the activity timeline; on paged boards the
-work line list follows the status card. Work lines are managed from the left conversation tree;
+work line list follows the status card. The **Manager settings** card closes the desktop Overview: the full rules with
+line breaks and Markdown, long ones folded behind Show all, and an **Edit** button that opens the same
+settings form as the header's Settings (only for an active manager on an online device). Work lines are managed from the left conversation tree;
 the duplicate board tab is hidden. Opening a work line shows its conversation; **Back to manager** returns. Clicking an item's decision id opens that decision,
 including the appropriate answered or closed group.
 
@@ -501,7 +503,7 @@ Follow-up inputs grow with their content up to a limit, then scroll internally. 
 
 ### 控制台与议题（0.28）
 
-桌面看板页签依次为“控制台 · 概览 · 经理事项”，首次打开默认进入控制台；切换会话后返回仍保留原页签，指定议题的入口仍定位到对应类别。
+桌面看板页签依次为“控制台 · 概览 · 经理事项”，首次打开默认进入控制台；经理设定不再常驻在看板顶上，完整显示在概览末尾的“经理设定”卡里（保留换行和 Markdown，长的点“展开全文”），卡上的“编辑”与顶栏“设置”打开同一份表单；切换会话后返回仍保留原页签，指定议题的入口仍定位到对应类别。
 
 经理看板的“事项”改名为“经理事项 / Manager items”，仍只记录经理与工作线进展。
 需要用户关注的内容统一进入“控制台 / Console”，每一条称为“议题 / issue”，分为决策、建议、请你做和报告。
