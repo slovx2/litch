@@ -38,13 +38,6 @@ export function startBlocked(
   return SANDBOX_CHOICES.indexOf(parent) < SANDBOX_CHOICES.indexOf(wider)
 }
 
-/** 简报长到要折起来：超过这么多字，或者超过这么多行（和桌面卡片同一个门槛） */
-export const LONG_BRIEF = 160
-const LONG_LINES = 3
-
-export const isLongBrief = (prompt: string): boolean =>
-  prompt.length > LONG_BRIEF || prompt.split('\n').length > LONG_LINES
-
 /** litch_sessions 的收尾调用（每回合最后一次，一次可带几条建议，每条成一张提案） */
 export const isWrapUp = (item: ToolCallItem): boolean =>
   item.source === CLIENT_TOOL_NAMESPACE.sessions && item.tool === SESSION_TOOL.wrapUp

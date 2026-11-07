@@ -279,12 +279,34 @@ export async function treeProbe(): Promise<TreeSeen> {
   await until(() => $('.side')?.hidden === false)
   $('.side-tab[data-tab="proposals"]')?.click()
   await say('提个子会话')
-  const proposalShown = await until(
+  const proposalCardsReady = await until(
     () =>
       states().join(',') === 'pending,pending,pending' &&
       badge() === '3' &&
       propCards().every((card) => card.querySelector('[data-act="start"]') !== null),
   )
+  const firstBrief = propCards()[0]
+  const foldedBrief =
+    Boolean(firstBrief?.querySelector('[data-part="summary"]')) &&
+    !firstBrief?.querySelector('[data-part="task"]')
+  firstBrief?.querySelector<HTMLElement>('.prop-more')?.click()
+  const fullBrief = await until(() =>
+    Boolean(
+      firstBrief?.querySelector('[data-part="background"]') &&
+        firstBrief?.querySelector('[data-part="task"]'),
+    ),
+  )
+  firstBrief?.querySelector<HTMLElement>('.prop-more')?.click()
+  const closedBrief = await until(() => !firstBrief?.querySelector('[data-part="task"]'))
+  const sideBrief = $('.props-tab .prop-row')
+  const sideFolded =
+    Boolean(sideBrief?.querySelector('[data-part="summary"]')) &&
+    !sideBrief?.querySelector('[data-part="task"]')
+  sideBrief?.querySelector<HTMLElement>('.prop-more')?.click()
+  const sideOpened = await until(() => Boolean(sideBrief?.querySelector('[data-part="task"]')))
+  sideBrief?.querySelector<HTMLElement>('.prop-more')?.click()
+  const proposalShown =
+    proposalCardsReady && foldedBrief && fullBrief && closedBrief && sideFolded && sideOpened
   seen.proposal = propCards()[2]?.textContent ?? '没有'
   // 第二张八秒后过期
   const proposalExpired = await until(

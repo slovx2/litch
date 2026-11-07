@@ -10,13 +10,13 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { requestReveal, useProposalClock, useProposalList } from '../../detail/proposals/hooks'
 import { arrange, needsUser, STATUS_TEXT } from '../../detail/proposals/logic'
 import { OfferActs, ProposalActs } from '../../detail/proposals/ProposalActs'
+import { ProposalBrief } from '../../detail/proposals/ProposalBrief'
 import type { RootStackParamList } from '../../nav/routes'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Empty, SectionLabel } from '../../ui/kit/controls'
 import { Caret } from '../../ui/kit/Icon'
 import { Screen } from '../../ui/kit/Screen'
-import { plainPreview } from '../../ui/plain-text'
 import { useTheme } from '../../ui/theme'
 import { badgeOf } from '../sessions/rows'
 
@@ -146,11 +146,15 @@ function ProposalRow({
             </Text>
           ) : null}
           <Text numberOfLines={2} style={[styles.brief, { color: c.ink2 }]}>
-            {plainPreview(proposal.prompt) ||
-              (status === 'offered' ? t('proposals.offer.ask') : '')}
+            {status === 'offered' ? t('proposals.offer.ask') : ''}
           </Text>
         </View>
       </Pressable>
+      <ProposalBrief
+        prompt={proposal.prompt}
+        background={proposal.background}
+        testID={`proposals:brief:${proposal.id}`}
+      />
       {status === 'pending' ? (
         <View style={styles.acts}>
           <ProposalActs

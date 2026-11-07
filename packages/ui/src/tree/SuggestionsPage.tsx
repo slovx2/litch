@@ -28,6 +28,7 @@ import { PostDiscussion, PostHistory } from '../manager/PostDiscussion.tsx'
 import { Relations } from '../manager/Relations.tsx'
 import { FileLinksProvider, useSessionFileLinks } from '../transcript/FileLinks.tsx'
 import { Brief, ProposalActs } from './ProposalCard.tsx'
+import { proposalSummary } from './proposal-brief.ts'
 import { SANDBOX_LEVEL } from './sandbox.ts'
 
 const NONE: readonly SuggestionView[] = []
@@ -91,10 +92,11 @@ function SuggestionRow({
       </div>
       {manager ? <Relations id={`S-${proposal.id}`} /> : null}
       {manager ? (
-        <>
-          {proposal.background ? <BoardMarkdown text={proposal.background} /> : null}
-          <BoardMarkdown text={proposal.prompt} />
-        </>
+        <Brief
+          prompt={proposal.prompt}
+          background={proposal.background}
+          renderText={BoardMarkdown}
+        />
       ) : (
         <FileLinksProvider value={fileLinks}>
           <Brief prompt={proposal.prompt} background={proposal.background} />
@@ -128,7 +130,7 @@ function SuggestionRow({
       <PostCard
         manager={manager}
         id={`S-${proposal.id}`}
-        text={post?.body ?? proposal.prompt}
+        text={proposalSummary(proposal.background, proposal.prompt)}
         className="tree-card prop-card"
         data-state={proposal.status}
         data-proposal={proposal.id}
@@ -260,7 +262,7 @@ export function ManagerSuggestions({
               )}
             >
               <Relations id={post.id} />
-              <BoardMarkdown text={post.body} />
+              <Brief prompt={post.body} renderText={BoardMarkdown} />
               <PostHistory post={post} />
             </PostCard>
           ))}
@@ -313,7 +315,7 @@ function ManagerSuggestionCard({
           {latest ? (
             <>
               <strong>{latest.proposal.title}</strong>
-              <p>{latest.proposal.prompt}</p>
+              <Brief prompt={latest.proposal.prompt} background={latest.proposal.background} />
             </>
           ) : null}
           <button

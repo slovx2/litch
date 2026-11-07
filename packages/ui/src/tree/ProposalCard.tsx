@@ -19,7 +19,7 @@ import {
   type ToolCallItem,
   type WrapUpSuggestionView,
 } from '@litch/core'
-import { useState } from 'react'
+import { type ComponentType, useEffect, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { badgeOf, nameOf } from '../app/device.ts'
 import { Icon, More } from '../app/icons.tsx'
@@ -30,14 +30,12 @@ import { CardMarkdown } from '../transcript/CardMarkdown.tsx'
 import type { ItemRef } from '../transcript/messages.tsx'
 import { useToggle } from '../transcript/state.ts'
 import { useWorktreesOn, WorktreeCheck } from '../worktrees/WorktreeCheck.tsx'
+import { proposalSummary } from './proposal-brief.ts'
 import { STATUS_TEXT, useProposalAct, useProposalClock, useProposalList } from './proposals.ts'
 import { SpawnDialog } from './SpawnDialog.tsx'
 import { SANDBOX_LEVEL } from './sandbox.ts'
 import { markOf } from './TreeCards.tsx'
 import { turnOffTaskCards } from './task-cards.ts'
-
-/** 简报长到要折起来：超过这么多字，或者有好几行 */
-const LONG_BRIEF = 160
 
 /**
  * “开始”“在这里做”“改了再开始”“不要”四个按钮，和没做成时的那句话。卡片和侧面板共用。
@@ -162,55 +160,51 @@ export function ProposalMeta({ deviceId, shape }: { deviceId: string; shape: Pro
   )
 }
 
-/**
- * 简报：折着时只写任务、长的折成三行；有背景的展开后分“背景”“任务”两段写全（子会话收到的也是先背景后任务）。
- * offer 卡补上简报之后也用
- */
+/** 默认只显示背景首句，完整背景和任务按需挂载；看板保留其编号链接渲染。 */
 export function Brief({
   prompt,
   background = '',
   expanded = false,
+  renderText: Markdown = CardMarkdown,
 }: {
   prompt: string
   background?: string
   expanded?: boolean
+  renderText?: ComponentType<{ text: string }>
 }) {
   const t = useT()
-  const [unfolded, setUnfolded] = useState(false)
-  const open = unfolded || expanded
+  const [open, setOpen] = useState(expanded)
+  useEffect(() => {
+    if (expanded) setOpen(true)
+  }, [expanded])
   const context = background.trim()
   if (!prompt && !context) return null
-  const long = context !== '' || prompt.length > LONG_BRIEF || prompt.split('\n').length > 3
-  // 写全的按 Markdown 画（同经理看板上的建议）；折成三行的是预览，照原文截
-  const whole = open || !long
   return (
     <>
-      {open && context ? (
-        <div className="prop-brief" data-open="true" data-part="background" data-md="">
-          <span className="prop-brief-label">{t('proposal.brief.background')}</span>
-          <CardMarkdown text={context} />
-        </div>
-      ) : null}
-      <div
-        className="prop-brief"
-        data-open={whole}
-        data-part="task"
-        data-md={whole ? '' : undefined}
+      <p className="prop-brief prop-summary" data-part="summary">
+        {proposalSummary(context, prompt)}
+      </p>
+      <button
+        type="button"
+        className="prop-more"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
       >
-        {open && context ? (
-          <span className="prop-brief-label">{t('proposal.brief.task')}</span>
-        ) : null}
-        {whole ? <CardMarkdown text={prompt} /> : prompt}
-      </div>
-      {long ? (
-        <button
-          type="button"
-          className="prop-more"
-          aria-expanded={open}
-          onClick={() => setUnfolded(!unfolded)}
-        >
-          {t(open ? 'proposal.brief.less' : 'proposal.brief.more')}
-        </button>
+        {t(open ? 'proposal.brief.less' : 'proposal.brief.more')}
+      </button>
+      {open ? (
+        <div className="prop-full-brief">
+          {context ? (
+            <div className="prop-brief" data-open="true" data-part="background" data-md="">
+              <span className="prop-brief-label">{t('proposal.brief.background')}</span>
+              <Markdown text={context} />
+            </div>
+          ) : null}
+          <div className="prop-brief" data-open="true" data-part="task" data-md="">
+            <span className="prop-brief-label">{t('proposal.brief.task')}</span>
+            <Markdown text={prompt} />
+          </div>
+        </div>
       ) : null}
     </>
   )

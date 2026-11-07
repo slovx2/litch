@@ -1188,8 +1188,36 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       document.activeElement?.getAttribute('data-decision') === 'D-15' &&
       !one('[data-decision="D-15"] [data-act="manager-answer"]'),
   )
+  // 当前夹具没有预置建议，先通过经理真实输入入口生成一张，再检查看板摘要。
+  await click('[data-act="manager-board-toggle"]')
+  const proposalInput = await until('经理提卡输入框', () =>
+    one<HTMLTextAreaElement>('.main .dock textarea.cmp-text'),
+  )
+  fill(proposalInput, '提个子会话')
+  await new Promise((resolve) => setTimeout(resolve, 80))
+  proposalInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  await until('经理生成建议卡', () => one('.main [data-card="proposal"]'))
+  await click('[data-act="manager-board-toggle"]')
   await click('[data-board-tab="suggestions"]')
+  const suggestionCard = await until(
+    '看板建议卡',
+    () => one('.suggestion-row [data-proposal]') ?? one('.suggestion-row[data-proposal]'),
+  )
+  const briefSummary = suggestionCard?.querySelector('[data-part="summary"]')?.textContent
+  const briefClosed = Boolean(briefSummary) && !suggestionCard?.querySelector('[data-part="task"]')
+  suggestionCard?.querySelector<HTMLElement>('.prop-more')?.click()
+  const briefOpened = await until('建议完整简报展开', () =>
+    suggestionCard?.querySelector('[data-part="task"]'),
+  )
+  suggestionCard?.querySelector<HTMLElement>('.prop-more')?.click()
+  const briefRefolded = await until(
+    '建议简报收回摘要',
+    () => !suggestionCard?.querySelector('[data-part="task"]'),
+  )
   const panels =
+    briefClosed &&
+    Boolean(briefOpened) &&
+    Boolean(briefRefolded) &&
     !one('[data-board-tab="lines"]') &&
     !one('[data-overview="yours"]') &&
     Boolean(one('[data-board-tab="suggestions"]'))

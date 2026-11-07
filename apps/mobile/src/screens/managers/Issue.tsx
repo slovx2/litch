@@ -40,8 +40,10 @@ import {
   questionMode,
   rememberPostCollapsed,
 } from '../../../../../packages/ui/src/manager/post-presentation.ts'
+import { proposalSummary } from '../../../../../packages/ui/src/tree/proposal-brief.ts'
 import { useGrow } from '../../detail/composer/grow'
 import { ProposalActs } from '../../detail/proposals/ProposalActs'
+import { ProposalBrief } from '../../detail/proposals/ProposalBrief'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -722,7 +724,12 @@ export function Issue({
           onPress={toggle}
         >
           <Text numberOfLines={1} style={{ color: c.ink2, fontSize: font.size.body }}>
-            {postSummary(post.body)}
+            {post.kind === 'suggestion'
+              ? proposalSummary(
+                  suggestion?.proposal.background,
+                  suggestion?.proposal.prompt ?? post.body,
+                )
+              : postSummary(post.body)}
           </Text>
         </Pressable>
       ) : null}
@@ -736,7 +743,16 @@ export function Issue({
       {(!pendingReview || unreviewed) && !collapsed ? (
         <>
           <IssueRelations id={post.id} />
-          <Markdown text={post.body} />
+          {post.kind === 'suggestion' ? (
+            <ProposalBrief
+              prompt={suggestion?.proposal.prompt ?? post.body}
+              background={suggestion?.proposal.background}
+              testID={`proposal:${post.proposalId ?? post.id}:brief`}
+              renderText={Markdown}
+            />
+          ) : (
+            <Markdown text={post.body} />
+          )}
           {post.versions.length ? (
             <>
               <Button

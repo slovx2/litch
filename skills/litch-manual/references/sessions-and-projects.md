@@ -800,3 +800,12 @@ Originals load on demand from the session device: up to 8MiB each, within a 512M
 expiring after 30 days without use. Existing cached data is cleaned periodically. Old history containing
 only a path reads the current file on first view. Deleted files, evicted images and media omitted by the
 harness cannot be recovered; this includes large Codex MCP results already truncated to text.
+
+
+建议卡在桌面和手机的对话、看板及建议列表中默认只展示标题与背景首句摘要；没有背景时取任务首句。点击“展开简报”查看完整背景和任务，点击“收起简报”返回摘要。开始、编辑后开始和忽略仍在原来的操作区，展开不会执行任务。
+
+Suggestion cards in desktop and phone conversations, boards and suggestion lists show the title and the first sentence of the background by default, falling back to the task when there is no background. Show full brief reveals the complete background and task; Show less restores the summary. Start, Edit and start, and Dismiss remain in their existing action area. Expanding never starts work.
+
+提卡时，背景第一句写清问题及值得处理的理由；这是用户看到的卡片摘要。简报只写该任务的背景、目标与约束，不重复通用工作规矩。
+
+When proposing a card, make the first background sentence explain the problem and why it is worth addressing. This is the visible summary. Keep the brief specific to the task’s context, goal and constraints; omit generic working rules.

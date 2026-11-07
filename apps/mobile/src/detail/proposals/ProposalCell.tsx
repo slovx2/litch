@@ -16,22 +16,21 @@ import {
   type SessionSummary,
 } from '@litch/core'
 import { memo, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { SANDBOX_LEVEL } from '../../../../../packages/ui/src/tree/sandbox.ts'
 import { badgeOf } from '../../screens/sessions/rows'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Sheet } from '../../ui/kit/overlays'
-import { plainPreview } from '../../ui/plain-text'
 import { useTheme } from '../../ui/theme'
-import { CardMarkdown } from '../CardMarkdown'
 import type { Props } from '../cells'
 import { useTranscript } from '../context'
 import { useCardsOff } from './CardsOff'
 import { ChildLine } from './ChildLine'
 import { useFlashed, useProposalClock } from './hooks'
-import { isLongBrief, isOfferStatus, needsUser, STATUS_TEXT } from './logic'
+import { isOfferStatus, needsUser, STATUS_TEXT } from './logic'
 import { MoreButton, OfferActs, ProposalActsRow, useBlocked, useProposalActs } from './ProposalActs'
+import { ProposalBrief } from './ProposalBrief'
 
 /** offer 卡上那句说明，按状态（已开始的不写，下面是子会话那一行） */
 const OFFER_NOTE = {
@@ -53,7 +52,6 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
   const childId = proposal?.startedId ?? starts?.[proposalId] ?? ''
   const now = useProposalClock([proposal])
   const lit = useFlashed(proposalId || undefined)
-  const [unfolded, setUnfolded] = useState(false)
   const cardsOff = useCardsOff(deviceId, sessionId, proposalId)
   const acts = useProposalActs(
     deviceId,
@@ -80,7 +78,7 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
   const model = proposal?.model ?? spawned?.model ?? null
   const cwd = proposal?.cwd ?? spawned?.cwd ?? null
   const kind = proposal?.kind ?? spawned?.kind ?? 'fresh'
-  const long = isLongBrief(prompt)
+  const background = proposal?.background ?? spawned?.background ?? ''
   // offer 卡在模型补上简报之前只有标题：不写 harness 那一行
   const shaped = !offer || prompt !== ''
   const waiting = status === 'pending' && proposal !== null
@@ -165,32 +163,11 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
             </Text>
           </View>
         ) : null}
-        {prompt ? (
-          <Pressable
-            disabled={!long}
-            accessibilityRole={long ? 'button' : undefined}
-            accessibilityState={long ? { expanded: unfolded } : undefined}
-            onPress={() => setUnfolded(!unfolded)}
-            testID={`proposal:${proposalId}:brief`}
-          >
-            {/* 简报是模型写的 Markdown：收着时截四行纯文字，展开（或本来就短）按 Markdown 画 */}
-            {long && !unfolded ? (
-              <Text
-                numberOfLines={4}
-                style={[styles.brief, { color: c.ink2, fontSize: font.size.meta }]}
-              >
-                {plainPreview(prompt)}
-              </Text>
-            ) : (
-              <CardMarkdown text={prompt} />
-            )}
-            {long ? (
-              <Text style={[styles.more, { color: c.accent, fontSize: font.size.meta }]}>
-                {t(unfolded ? 'proposal.brief.less' : 'proposal.brief.more')}
-              </Text>
-            ) : null}
-          </Pressable>
-        ) : null}
+        <ProposalBrief
+          prompt={prompt}
+          background={background}
+          testID={`proposal:${proposalId}:brief`}
+        />
         {held ? (
           <Text
             testID={`proposal:${proposalId}:held`}

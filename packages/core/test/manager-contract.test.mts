@@ -19,6 +19,8 @@ import {
   archiveRule,
   FRESH_BRIEF,
   outsideLitch,
+  PROPOSAL_SUMMARY_RULE,
+  sessionProposalRules,
   TITLE_LINE,
   WORKTREE_RULE,
 } from '../../protocol/src/client-tools-sessions.mjs'
@@ -388,4 +390,24 @@ test('Markdown 字段说明与看板渲染对应，标题及按钮文案仍是�
     assert.match(schema.description, /Markdown supported/)
   assert.doesNotMatch(add.request.properties.title.description ?? '', /Markdown supported/)
   assert.doesNotMatch(add.request.properties.buttonLabel.description ?? '', /Markdown supported/)
+})
+
+test('经理、工作线和普通会话共用建议摘要规则；关闭卡片时不注入', () => {
+  for (const rules of [
+    managerSessionRules(10),
+    managerLineRules('经理', MANAGER_DEFAULT_DISPATCH),
+    sessionProposalRules(true),
+    sessionProposalRules(false),
+  ]) {
+    assert.ok(rules.includes(PROPOSAL_SUMMARY_RULE))
+    assert.equal(rules.split(PROPOSAL_SUMMARY_RULE).length, 2)
+  }
+  for (const rules of [
+    managerSessionRules(10, false),
+    managerLineRules('经理', MANAGER_DEFAULT_DISPATCH, false),
+    sessionProposalRules(true, false),
+  ])
+    assert.ok(!rules.includes(PROPOSAL_SUMMARY_RULE))
+  assert.match(PROPOSAL_SUMMARY_RULE, /first sentence of background.*problem.*worth doing/)
+  assert.match(PROPOSAL_SUMMARY_RULE, /Keep generic working rules out of the brief/)
 })

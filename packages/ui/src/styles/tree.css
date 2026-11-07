@@ -343,6 +343,9 @@ button.sev-title {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.prop-summary {
+  margin: 2px 0;
+}
 /* 写全的简报是 Markdown（.card-md），不再照原文保留空白 */
 .prop-brief[data-md] {
   white-space: normal;

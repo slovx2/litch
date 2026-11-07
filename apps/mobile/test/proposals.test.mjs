@@ -13,7 +13,6 @@ import {
   cardsOf,
   eventKind,
   handOffOf,
-  isLongBrief,
   isOfferCall,
   nextExpiry,
   overridesFor,
@@ -459,12 +458,6 @@ test('改了再开始：什么都没改是空的；改了唤醒、标题、简�
     overridesFor({ ...fields, harness: 'pi', model: '', kind: 'fork' }, parent, base),
     { harness: 'pi', model: '' },
   )
-})
-
-test('简报长了才折：超过 160 字或者超过 3 行', () => {
-  assert.equal(isLongBrief('短'), false)
-  assert.equal(isLongBrief('字'.repeat(161)), true)
-  assert.equal(isLongBrief('一\n二\n三\n四'), true)
 })
 
 test('接在模拟核心上：说“提个子会话”出三张卡；点“不要”那张变成不要了，回合不用重开', async () => {

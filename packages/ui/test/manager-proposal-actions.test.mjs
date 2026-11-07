@@ -7,7 +7,8 @@ const compiled = await build({
   stdin: {
     contents: `import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
-import {ProposalActs} from './src/tree/ProposalCard.tsx';
+import {ProposalActs, Brief} from './src/tree/ProposalCard.tsx';
+export const renderBrief=(background,prompt,expanded=false)=>renderToStaticMarkup(React.createElement(Brief,{background,prompt,expanded,renderText:({text})=>React.createElement("div",{"data-md-test":true},text)}));
 export const render=(sourceIsManager,inbox)=>renderToStaticMarkup(React.createElement(ProposalActs,{deviceId:'local',sessionId:'source',proposal:{id:'p',sourceIsManager},inbox}));`,
     resolveDir: new URL('../', import.meta.url).pathname,
   },
@@ -60,5 +61,21 @@ for (const inbox of [false, true]) {
       ].map((match) => match[1])
     assert.deepEqual(actions(true), ['start', 'edit', 'dismiss'])
     assert.deepEqual(actions(false), ['start', 'here', 'edit', 'dismiss'])
+  })
+}
+
+for (const [background, prompt] of [
+  ['背景第一句。背景细节。', '执行任务全文'],
+  ['', '任务理由。任务细节。'],
+  ['', '短任务'],
+]) {
+  test(`建议简报默认不挂载全文，短卡与无背景也可展开：${background || prompt}`, () => {
+    const folded = module.exports.renderBrief(background, prompt)
+    assert.match(folded, /aria-expanded="false"/)
+    assert.doesNotMatch(folded, /data-md-test|data-part="task"|data-part="background"/)
+    const open = module.exports.renderBrief(background, prompt, true)
+    assert.match(open, /aria-expanded="true"/)
+    assert.ok(open.includes(prompt))
+    if (background) assert.ok(open.includes(background))
   })
 }

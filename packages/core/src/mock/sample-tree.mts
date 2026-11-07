@@ -113,7 +113,7 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
       {
         title: '整理 CHANGELOG',
         background:
-          '这一轮给建议任务加了“完成后唤醒主会话”的开关，改了设备进程和桌面端，测试都过了，还没发版。发版前要把用户看得到的变化记进 CHANGELOG。',
+          '建议任务的唤醒开关还没写入 CHANGELOG，需要补齐说明，方便用户了解下一版变化。开关涉及设备进程和桌面端，相关测试已通过，尚未发版。',
         prompt: '把这次的改动整理进 CHANGELOG 的“未发布”一节，中英文各一份。',
         reply: 'CHANGELOG 整理好了：未发布一节加了 5 条，中英文都写了。',
       },
@@ -141,7 +141,7 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
       {
         title: '给解析器补模糊测试',
         background:
-          '刚改完 <litch-session-event> 的解析：标签里多了 kind 字段，坏的整条当正文。现有单测只覆盖了几种写死的坏输入，想再用随机输入确认不会抛错。',
+          '解析器目前只验证几种固定的坏输入，需要随机测试来发现遗漏的崩溃边界。刚给 <litch-session-event> 加了 kind 字段，坏的整条按正文处理。',
         prompt:
           '在 packages/protocol 下给 parseSessionEvent 加一组模糊测试：随机截断、乱插标签、超长 JSON，各跑一千次，确认不抛错、坏的整条当正文；只加测试，不改实现，跑通后报用例数。',
         reply: '模糊测试加好了：三组各一千次，没有抛错，坏的都当正文了。',
@@ -260,7 +260,7 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
       {
         title: 'Tidy the CHANGELOG',
         background:
-          'This round added a "wake the main session when done" switch to suggested tasks, touching the device process and the desktop app; tests pass, nothing is released yet. User-visible changes go into the CHANGELOG before a release.',
+          'The wake-parent switch is missing from the CHANGELOG, so users need release notes explaining the change. It affects the device process and desktop app; tests pass and it is not released yet.',
         prompt:
           'Put this round of changes into the Unreleased section of the CHANGELOG, in both languages.',
         reply: 'CHANGELOG updated: 5 entries under Unreleased, in both languages.',

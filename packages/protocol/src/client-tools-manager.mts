@@ -1,7 +1,13 @@
 // 经理工具与英文规则。只声明契约和拼接文字，不执行看板、会话或文件操作。
 import { CLIENT_TOOL_NAMESPACE, type ClientToolNamespaceSpec } from './client-tools.mjs'
 import { MANAGER_POST_TOOLS, RELATION_INPUTS } from './client-tools-manager-posts.mjs'
-import { FRESH_BRIEF, outsideLitch, TITLE_LINE, WORKTREE_RULE } from './client-tools-sessions.mjs'
+import {
+  FRESH_BRIEF,
+  outsideLitch,
+  PROPOSAL_SUMMARY_RULE,
+  TITLE_LINE,
+  WORKTREE_RULE,
+} from './client-tools-sessions.mjs'
 import type {
   ManagerBoard,
   ManagerChange,
@@ -76,6 +82,7 @@ export function managerSessionRules(maxRunningLines: number, taskCards = true): 
         : 'Task cards are disabled. Record self-discovered work in board decisions or items; put work that needs user approval in a board decision before starting it. ') +
       'Items record progress; questions belong in decisions; actions only the user can perform belong in For you requests (kind=request). When the user asks to move the current task to another session, retain litch_sessions.hand_off.',
     FRESH_BRIEF,
+    ...(taskCards ? [PROPOSAL_SUMMARY_RULE] : []),
     'When a line’s asynchronous or wrap_up question has already been answered elsewhere, you can answer within your delegated authority, or it is obsolete, read pending_questions and use litch_sessions.settle_question with its stable id to answer or withdraw it. This immediately clears the user’s pending list and leaves a manager record. Do not answer decisions reserved for the user, secrets or approvals. Ordinary send does not settle questions. The user may override your answer in the child conversation.',
     WORKTREE_RULE,
     TITLE_LINE,
@@ -122,6 +129,7 @@ export function managerLineRules(
     taskCards
       ? 'For problems or improvements you discover outside this assignment, propose a task directly with litch_sessions.start (initiation "propose") and a full brief, without waiting for the manager. Do not just mention it in your report or do the extra work yourself. The manager can endorse or dismiss the original card; do not duplicate it in wrap_up or send a separate message just to announce it. Follow the session card limits and wrap-up rules. Never substitute cards for already-authorized work or unfinished parts of this assignment.'
       : 'Task cards are disabled. Report findings outside this assignment to the manager; do not do the extra work yourself.',
+    ...(taskCards ? [PROPOSAL_SUMMARY_RULE] : []),
     'At the end of each turn, report using Markdown (supported in Litch; use it for lists and emphasis): what you did; branch, commits and whether you pushed; checks and results; each unverified part on its own line starting exactly with "没验："; decisions needed from the manager.',
     'Do not merge, push or release unless the brief explicitly authorizes it. You do not inherit litch_manager; report board changes to the manager.',
     'Use the folder or worktree assigned in your brief; do not create another worktree on your own. When sharing a folder, respect the brief’s file ownership and preserve other lines’ edits.',
