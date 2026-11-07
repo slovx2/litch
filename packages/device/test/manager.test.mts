@@ -209,7 +209,14 @@ test('经理在 wake 回合自行归档整棵线子树，不能归档别的经�
       tool(env, threadId, 'archive', { thread_id: targetId }, 'litch_sessions')
     const busy = await archive(child.threadId)
     assert.equal(busy.success, false)
-    assert.match(busy.contentItems[0].text, /still working/)
+    // 归档前检查整棵后代树：线和它的子会话都在跑，整次归档被拦下并列出活跃会话
+    assert.match(
+      busy.contentItems[0].text,
+      /^\[litch:blocked\] Stop sub-sessions before archiving: /,
+    )
+    assert.ok(
+      [child.threadId, grandchild.threadId].some((id) => busy.contentItems[0].text.includes(id)),
+    )
     env.pi.end(grandchild.threadId, 'completed', '无改动')
     env.pi.end(foreign.threadId, 'completed', '无改动')
     env.pi.end(child.threadId, 'completed', '改动已落地')
