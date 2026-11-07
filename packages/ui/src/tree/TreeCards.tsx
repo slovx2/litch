@@ -23,7 +23,7 @@ import { badgeOf, nameOf } from '../app/device.ts'
 import { Icon } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import { AskCard, AskedCard } from '../transcript/AskCard.tsx'
-import { useActions } from '../transcript/actions.tsx'
+import { useOpenSession } from '../transcript/actions.tsx'
 import { type ItemRef, useItem } from '../transcript/messages.tsx'
 import { AgentStatus, AgentTime, useAgentStates } from './agent-view.tsx'
 import { openAgent } from './agents.ts'
@@ -41,7 +41,7 @@ const SpawnCard = memo(function SpawnCard(ref: ItemRef) {
   const { deviceId, sessionId } = ref
   const item = useItem<ToolCallItem>(ref)
   const t = useT()
-  const { open } = useActions()
+  const open = useOpenSession()
   const spawned = item?.kind === 'toolCall' ? item.spawned : undefined
   const childId = spawned?.threadId ?? ''
   const child = useKey<SessionSummary>(keys.summary(deviceId, childId))

@@ -7,6 +7,7 @@ export const nightlyChecks = [
   ['scroll:wheel', `${desktop}check-scroll-wheel.mjs`],
   ['compose', `${desktop}smoke.mjs`, '--compose'],
   ['user-bubble', 'scripts/check-user-bubble.mjs'],
+  ['long-command', 'scripts/check-long-command.mjs'],
   ['smoke:entry', `${desktop}smoke.mjs`, '--entry'],
   ['scroll:entry', `${desktop}smoke.mjs`, '--scroll', '--entry'],
   ['compose:entry', `${desktop}smoke.mjs`, '--compose', '--entry'],

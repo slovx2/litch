@@ -25,7 +25,7 @@ import { badgeOf, nameOf } from '../app/device.ts'
 import { Icon, More } from '../app/icons.tsx'
 import { usePopover } from '../app/popover.ts'
 import { useKey, useServices } from '../app/services.tsx'
-import { useActions } from '../transcript/actions.tsx'
+import { useOpenSession } from '../transcript/actions.tsx'
 import { CardMarkdown } from '../transcript/CardMarkdown.tsx'
 import type { ItemRef } from '../transcript/messages.tsx'
 import { useToggle } from '../transcript/state.ts'
@@ -370,7 +370,7 @@ export function StartedChild({
   title: string
 }) {
   const t = useT()
-  const { open } = useActions()
+  const open = useOpenSession()
   const child = useKey<SessionSummary>(keys.summary(deviceId, childId))
   const device = useKey<DeviceView>(keys.device(deviceId))
   return (

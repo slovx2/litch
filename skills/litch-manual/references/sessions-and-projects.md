@@ -433,6 +433,7 @@ explain it:
   part of the turn; harnesses that can't cut inside a turn (only Claude Code can) don't offer them
   there. On the phone, long-press the message.
 - 停止后两端立即显示“正在停止…”，禁止重复点击；引擎受理后仍等待回合终态，不会提前显示已停止。
+  编辑较早消息时，后续历史清理和引擎处理仍可能需要时间；以完成后的界面状态为准。
   确认消息编辑后显示“正在应用编辑…”和待替换的原消息，等待时不可重复提交或取消。
   等待超过 30 秒会提示尚未确认结果；收到结果后更新，失败时保留编辑内容并显示原因。
 - **Composer**: `/` for commands and skills, `@` to mention a file, attach images, files and folders

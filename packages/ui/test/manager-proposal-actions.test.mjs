@@ -29,7 +29,7 @@ export const render=(sourceIsManager,inbox)=>renderToStaticMarkup(React.createEl
         )
         api.onLoad({ filter: /.*/, namespace: 'children' }, () => ({
           contents:
-            'export const SpawnDialog=()=>null; export const CardMarkdown=()=>null; export const markOf=()=>null; export const useActions=()=>({});',
+            'export const SpawnDialog=()=>null; export const CardMarkdown=()=>null; export const markOf=()=>null; export const useOpenSession=()=>undefined;',
         }))
         api.onResolve({ filter: /(?:^|\/)(appearance|services)(?:\.tsx?)?$/ }, (args) => ({
           path: args.path,

@@ -16,7 +16,7 @@ import { useT } from '../app/appearance.ts'
 import { nameOf } from '../app/device.ts'
 import { Icon } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
-import { useActions } from './actions.tsx'
+import { useOpenSession } from './actions.tsx'
 
 interface MentionValue {
   deviceId: string
@@ -54,7 +54,7 @@ export function SessionPill({
   mention: Pick<ParsedSessionMention, 'threadId' | 'title'>
 }) {
   const t = useT()
-  const { open } = useActions()
+  const open = useOpenSession()
   const summary = useKey<SessionSummary>(keys.summary(deviceId, mention.threadId))
   const device = useKey<DeviceView>(keys.device(deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId))

@@ -8,7 +8,7 @@ import { useRef } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Icon } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
-import { useActions } from './actions.tsx'
+import { useOpenSession } from './actions.tsx'
 import { CompactRow } from './CompactRow.tsx'
 import { MessageCopy } from './MessageCopy.tsx'
 import type { ItemRef } from './messages.tsx'
@@ -26,7 +26,7 @@ const ICON = {
 /** 派出它的会话：还在侧栏里的可以点开，不在的只写标题（没有标题写会话号） */
 function Parent({ deviceId, parent }: { deviceId: string; parent: { id: string; title: string } }) {
   const t = useT()
-  const { open } = useActions()
+  const open = useOpenSession()
   const listed = useKey<SessionSummary>(keys.summary(deviceId, parent.id))
   const name = parent.title || (listed ? t.text(listed.title) : parent.id)
   if (!listed || !open) return <span className="sysm-from">{t('sysmsg.from', { name })}</span>

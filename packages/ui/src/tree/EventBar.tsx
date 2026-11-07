@@ -14,7 +14,7 @@ import { Caret, Icon } from '../app/icons.tsx'
 import { usePopover } from '../app/popover.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import type { MessageKey } from '../i18n/index.ts'
-import { useActions } from '../transcript/actions.tsx'
+import { useOpenSession } from '../transcript/actions.tsx'
 import { CardMarkdown } from '../transcript/CardMarkdown.tsx'
 import { CompactRow } from '../transcript/CompactRow.tsx'
 import { FileLinksProvider, useSessionFileLinks } from '../transcript/FileLinks.tsx'
@@ -53,8 +53,8 @@ function Note({
   open?: (selection: { deviceId: string; sessionId: string }) => void
 }) {
   const t = useT()
-  const actions = useActions()
-  const open = given ?? actions.open
+  const provided = useOpenSession()
+  const open = given ?? provided
   const listed = useKey<SessionSummary>(keys.summary(deviceId, note.threadId))
   const mark = NOTE_MARK[note.status]
   // 头一行：状态点、标题、怎么停下的；正文在下面占满整宽（ReportText），不和标题左右分栏

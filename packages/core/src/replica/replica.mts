@@ -1231,14 +1231,6 @@ export function createReplica(
         )
         store.delete(turnKey(op.turnId))
         for (const itemId of turn.itemIds) store.delete(itemKey(itemId))
-        const left = ids
-          .filter((id) => id !== op.turnId)
-          .flatMap((id) =>
-            (store.get<TurnView>(turnKey(id))?.itemIds ?? []).flatMap(
-              (itemId) => store.get<ItemView>(itemKey(itemId)) ?? [],
-            ),
-          )
-        store.set(keys.answers(deviceId, sessionId), gatherAnswers({}, left))
         return
       }
       case 'turn.status': {
@@ -1310,18 +1302,7 @@ export function createReplica(
             itemIds: turn.itemIds.filter((id) => id !== op.itemId),
           })
         }
-        const removed = store.get<ItemView>(itemKey(op.itemId))
         store.delete(itemKey(op.itemId))
-        // 拿掉的是一份答复（插话没插成，退回了队列）：答复表照剩下的条目重算
-        if (removed?.kind === 'userMessage' && parseAskReply(removed.text)) {
-          const turnIds = store.get<string[]>(keys.turnIds(deviceId, sessionId)) ?? []
-          const left = turnIds.flatMap((turnId) =>
-            (store.get<TurnView>(turnKey(turnId))?.itemIds ?? []).flatMap(
-              (id) => store.get<ItemView>(itemKey(id)) ?? [],
-            ),
-          )
-          store.set(keys.answers(deviceId, sessionId), gatherAnswers({}, left))
-        }
         return
       }
       case 'item.status': {
@@ -1561,7 +1542,30 @@ export function createReplica(
                     store.get<ItemView>(keys.item(deviceId, sessionId, id)),
                   ),
                 )
-                for (const op of ops) applySession(deviceId, sessionId, op)
+                let rebuildAnswers = false
+                for (const op of ops) {
+                  // 一次编辑可以删除上千个回合；只在整批完成后重建索引，不能逐回合扫描余下历史。
+                  // 在应用每条之前判断，覆盖同一批先添加答复、再删除它的情况。
+                  if (op.op === 'turn.remove') rebuildAnswers = true
+                  if (op.op === 'item.remove') {
+                    const removed = store.get<ItemView>(keys.item(deviceId, sessionId, op.itemId))
+                    if (removed?.kind === 'userMessage' && parseAskReply(removed.text))
+                      rebuildAnswers = true
+                  }
+                  applySession(deviceId, sessionId, op)
+                }
+                if (rebuildAnswers) {
+                  function* remaining() {
+                    for (const id of store.get<string[]>(keys.turnIds(deviceId, sessionId)) ?? []) {
+                      const turn = store.get<TurnView>(keys.turn(deviceId, sessionId, id))
+                      for (const itemId of turn?.itemIds ?? []) {
+                        const item = store.get<ItemView>(keys.item(deviceId, sessionId, itemId))
+                        if (item) yield item
+                      }
+                    }
+                  }
+                  store.set(keys.answers(deviceId, sessionId), gatherAnswers({}, remaining()))
+                }
                 // 流式文本不改变问题集合，避免每个 token 扫历史。
                 if (changed) refreshQuestions(deviceId, sessionId)
               })
