@@ -4,7 +4,6 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { test } from 'node:test'
-import { parse } from 'yaml'
 import { acceptedStep, uploadStep } from '../../apps/desktop/scripts/macos-checkpoint.mjs'
 import { affectedDomains, releaseDomains, releaseImpact } from '../ci-impact.mjs'
 import { fullJobs, hasReleaseCoverage, isCompleteReleaseFull } from '../full-proof.mjs'
@@ -651,6 +650,38 @@ test('重复 Prepare 复用现有候选提示；原 run 的失败重跑和过期
   )
 })
 
+// gate/impact 不装依赖就跑这些用例，不能引入 YAML 库：按工作流的固定缩进取 job 的 needs、if 和各步 run。
+function workflowJobs(text) {
+  const lines = text.slice(text.indexOf('\njobs:\n') + 7).split('\n')
+  const jobs = {}
+  let job
+  let step
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const name = line.match(/^ {2}([\w-]+):\s*$/)
+    if (name) {
+      job = jobs[name[1]] = { steps: [] }
+      step = undefined
+      continue
+    }
+    if (!job) continue
+    const key = line.match(/^ {4}(needs|if):\s*(.+)$/)
+    if (key) job[key[1]] = key[2].trim()
+    if (/^ {6}- /.test(line)) job.steps.push((step = {}))
+    const run = step && line.match(/^ {6}(?:- | {2})run:\s*(.*)$/)
+    if (!run) continue
+    if (run[1] !== '|') {
+      step.run = run[1]
+      continue
+    }
+    const block = []
+    while (i + 1 < lines.length && (lines[i + 1].trim() === '' || /^ {10}/.test(lines[i + 1])))
+      block.push(lines[++i].slice(10))
+    step.run = block.join('\n').trimEnd()
+  }
+  return jobs
+}
+
 test('桌面晋级不构建/测试，独立商店打包只能在公开后运行，标签不启动第二轮 Prepare', () => {
   const prepare = readFileSync(
     new URL('../../.github/workflows/release.yml', import.meta.url),
@@ -662,7 +693,8 @@ test('桌面晋级不构建/测试，独立商店打包只能在公开后运行�
   )
   assert.doesNotMatch(prepare, /^ {2}push:/m)
   assert.doesNotMatch(promotion, /uses: \.\/\.github\/workflows\/(gate|full|release)\.yml/)
-  const jobs = parse(promotion).jobs
+  const jobs = workflowJobs(promotion)
+  assert.ok(jobs.promote && jobs['chrome-store'], '应解析出晋级与商店作业')
   for (const [name, job] of Object.entries(jobs)) {
     if (name === 'chrome-store') {
       assert.equal(job.needs, 'promote')
