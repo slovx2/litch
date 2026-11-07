@@ -1,4 +1,4 @@
-// 输入框那一块：要带的图片、多行输入框、“+”和发送（排队、停止）两个按钮，有用量时中间一个上下文小圆环。
+// 输入框那一块：要带的图片、多行输入框、“+”和发送（排队、停止）两个按钮；用量与对话参数一起收在“+”菜单。
 // “+”点开是一张单：添加图片，加上对话参数（模型、强度、速度、权限、计划模式，各写着现在的值）。参数不常改，
 // 收在这里不占屏幕高度；计划模式开着时“+”上有个强调色的点，读屏名称也说明。
 // 会话详情和新建会话页共用；发去哪、发成功没有由外面定，这里只管写、清空、没发成时还回来。
@@ -38,6 +38,7 @@ import { CommentChips } from '../comments/CommentChips'
 import { FileCard } from '../FileCard'
 import { colors } from '../theme'
 import { ImageViewer } from '../turn-menu'
+import { contextLine } from '../usage/logic'
 import {
   dropDraft,
   flushDrafts,
@@ -384,6 +385,7 @@ export function ComposeBox({
   const config = useComposeSettings(settings)
   const [moreOpen, setMoreOpen] = useState(false)
   const planOn = config.plan?.on ?? false
+  const usage = contextLine(settings?.usage, t)
   const moreActions: SheetAction[] = [
     ...(mentions
       ? [
@@ -403,6 +405,20 @@ export function ComposeBox({
       onPress: () => void addImages(),
       ...(imagesOff ? { disabled: imagesOff } : {}),
     },
+    ...(settings?.onUsage
+      ? [
+          {
+            label: t('usage.title'),
+            value:
+              config.percent === null
+                ? (usage.detail ?? '')
+                : `${usage.detail} · ${config.percent}%`,
+            leading: config.percent === null ? undefined : <UsageRing percent={config.percent} />,
+            testID: 'settings:usage',
+            onPress: settings.onUsage,
+          },
+        ]
+      : []),
     ...config.entries.map((entry) => ({
       label: entry.title,
       value: entry.value,
@@ -554,12 +570,6 @@ export function ComposeBox({
             {chipped.children}
           </TextInput>
         </HardwareKeyboard>
-        {config.percent !== null ? (
-          <UsageRing
-            percent={config.percent}
-            {...(settings?.onUsage ? { onPress: settings.onUsage } : {})}
-          />
-        ) : null}
         {pending && filled ? (
           <View style={styles.pendingSlot}>
             <Pressable

@@ -14,6 +14,16 @@ class HardwareKeyboardView(context: Context, appContext: AppContext) : ExpoView(
   var submitEnabled = false
   private var submitOnRelease = false
 
+  // 子节点由 React Native/Yoga 指定尺寸与位置。ExpoView 的 LinearLayout 默认测量/布局
+  // 会在原生遍历时按文字重新量子输入框，覆盖单行的 flex 宽度；这里只接受父级给定尺寸。
+  override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec))
+  }
+
+  override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+    // React Native 已逐个布局子节点，不让 LinearLayout 再按内容宽度覆盖。
+  }
+
   override fun dispatchKeyEvent(event: KeyEvent): Boolean {
     if (event.keyCode != KeyEvent.KEYCODE_ENTER) return super.dispatchKeyEvent(event)
     val input = findFocus() as? EditText

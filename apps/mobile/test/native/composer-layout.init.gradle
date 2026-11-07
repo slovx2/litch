@@ -1,0 +1,10 @@
+// 原生重排回归使用 Android 自带测试运行器，不添加测试框架依赖。
+gradle.beforeProject { project ->
+  if (project.name == 'app') project.plugins.withId('com.android.application') {
+    project.android.testBuildType = 'release'
+    project.android.defaultConfig.testInstrumentationRunner = 'android.test.InstrumentationTestRunner'
+    project.android.useLibrary 'android.test.runner'
+    project.android.useLibrary 'android.test.base'
+    project.android.sourceSets.androidTest.java.srcDir(new File(project.projectDir, '../../test/native/composer'))
+  }
+}

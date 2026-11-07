@@ -24,6 +24,8 @@ export interface SheetAction {
   disabled?: string
   /** 这一项现在的值（模型名、档位）：靠右写着，读屏名称里也带上 */
   value?: string
+  /** 菜单名称前的非交互状态图形，读屏名称仍来自 label/value。 */
+  leading?: ReactNode
   /** 点了不收起（一张单里逐个勾几项时） */
   stay?: boolean
   /** iOS 原生选择器要等动作单真正关闭后再打开；Sheet 需保持挂载到 onDismiss。 */
@@ -139,6 +141,7 @@ export function Sheet({
             ]}
           >
             <View style={[styles.sheetLabel, action.value !== undefined ? styles.sheetGrow : null]}>
+              {action.leading}
               {action.selected !== undefined ? (
                 <ChoiceMark kind="radio" state={action.selected ? 'on' : 'off'} />
               ) : action.checked !== undefined ? (

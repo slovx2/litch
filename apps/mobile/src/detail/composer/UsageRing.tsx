@@ -1,8 +1,7 @@
-// 上下文用量的小圆环：按百分比顺时针填满，放在输入框那一行里，不另占高度。点了打开用量页（具体数字）。
+// “+”菜单的上下文用量图形；交互和读屏由外层菜单项统一承担。
 // 没有画矢量图的依赖：用“两个半环各自裁在左右两半里、按进度转过去”的办法画。半环是上、右两条边着色的圆，
 // 转 45° 正好盖住右半边；右半边管 0–50%，左半边管 50–100%。
-import { Pressable, StyleSheet, View } from 'react-native'
-import { useT } from '../../ui/i18n'
+import { StyleSheet, View } from 'react-native'
 import { useTheme } from '../../ui/theme'
 
 const SIZE = 20
@@ -26,28 +25,18 @@ function Half({ side, turn, color }: { side: 'left' | 'right'; turn: number; col
   )
 }
 
-export function UsageRing({ percent, onPress }: { percent: number; onPress?(): void }) {
-  const t = useT()
+export function UsageRing({ percent }: { percent: number }) {
   const theme = useTheme()
   const { c } = theme
   const share = Math.max(0, Math.min(100, percent)) / 100
   // 快满了换成提醒的颜色
   const color = percent >= 80 ? c.wait : c.accent
-  const label = t('compose.ring', { n: percent })
   return (
-    <Pressable
-      accessibilityRole={onPress ? 'button' : 'text'}
-      aria-label={label}
-      disabled={!onPress}
-      testID="settings:usage"
-      // 和“+”一样：40 宽、随输入框那一排拉高（至少 40），四边再放 6，可点的范围 52
-      hitSlop={6}
-      {...(onPress ? { onPress } : {})}
-      style={({ pressed }) => [
-        styles.hit,
-        { borderRadius: theme.radius.m },
-        pressed ? { backgroundColor: c.press } : null,
-      ]}
+    <View
+      accessible={false}
+      importantForAccessibility="no-hide-descendants"
+      pointerEvents="none"
+      testID="usage:menu-ring"
     >
       <View style={styles.ring}>
         <View style={[styles.track, { borderColor: c.line2 }]} />
@@ -55,12 +44,11 @@ export function UsageRing({ percent, onPress }: { percent: number; onPress?(): v
         <Half side="right" turn={-180 + Math.min(share, 0.5) * 360} color={color} />
         <Half side="left" turn={Math.max(share - 0.5, 0) * 360} color={color} />
       </View>
-    </Pressable>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  hit: { width: 40, alignItems: 'center', justifyContent: 'center' },
   ring: { width: SIZE, height: SIZE },
   track: {
     position: 'absolute',

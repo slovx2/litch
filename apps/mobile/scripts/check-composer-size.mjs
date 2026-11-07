@@ -70,18 +70,15 @@ const replace = (text) => {
   if (text) adb('shell', 'input', 'text', text.replaceAll(' ', '%s'))
 }
 const measure = (id = 'composer-input') => {
-  const xml = capture()
+  // 页面或键盘过渡后 Android 无障碍快照可能尚未含输入节点；只等节点，几何失败绝不重试。
+  let xml = capture()
+  const deadline = Date.now() + 15000
+  while (!xml.includes(`resource-id="${id}"`) && Date.now() < deadline) xml = capture()
   const input = box(xml, id)
   if (id === 'composer-input') {
     const more = box(xml, 'composer-more')
-    const end = box(
-      xml,
-      xml.includes('resource-id="settings:usage"')
-        ? 'settings:usage'
-        : xml.includes('resource-id="composer-stop"')
-          ? 'composer-stop'
-          : 'composer-send',
-    )
+    assert.ok(!xml.includes('resource-id="settings:usage"'), '用量入口不再占输入行')
+    const end = box(xml, 'composer-send')
     const gap = input.left - more.right
     assert.ok(gap > 0)
     assert.ok(
@@ -94,18 +91,32 @@ const measure = (id = 'composer-input') => {
 const exercise = (label, id = 'composer-input') => {
   let small = measure(id)
   const emptyHeight = small.height
+  const availableWidth = small.width
   focus(small)
-  replace('one')
+  replace('ab')
   small = measure(id)
-  replace('one two three four five six seven eight nine ten eleven twelve thirteen fourteen')
+  console.log(
+    `${label} 空框/两字宽度：${JSON.stringify({ empty: availableWidth, short: measure(id).width })}`,
+  )
+  assert.equal(small.width, availableWidth, `${label} 空框与短文本同宽`)
+  adb('shell', 'input', 'keycombination', 'KEYCODE_SHIFT_LEFT', 'KEYCODE_ENTER')
+  const explicit = measure(id)
+  assert.equal(explicit.width, small.width, `${label} 显式换行宽度不变`)
+  assert.ok(explicit.height > small.height, `${label} 显式换行后高度增加`)
+  const widthFactor = Math.max(1, Math.ceil(availableWidth / 775))
+  replace(
+    'one two three four five six seven eight nine ten eleven twelve thirteen fourteen '.repeat(
+      widthFactor,
+    ),
+  )
   const multiline = measure(id)
   assert.ok(
     multiline.height > small.height,
     `${label} 多行未增高：${JSON.stringify({ small, multiline })}`,
   )
-  replace('one two three four five six seven eight nine ten '.repeat(4))
+  replace('one two three four five six seven eight nine ten '.repeat(4 * widthFactor))
   const capped = measure(id)
-  replace('one two three four five six seven eight nine ten '.repeat(6))
+  replace('one two three four five six seven eight nine ten '.repeat(6 * widthFactor))
   const longer = measure(id)
   assert.equal(longer.height, capped.height, `${label} 超限后框高不再增长`)
   assert.ok(capped.height >= multiline.height)
@@ -115,7 +126,11 @@ const exercise = (label, id = 'composer-input') => {
   for (let round = 0; round < 3; round++) {
     adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
     focus(measure(id))
-    replace(`round${round}`)
+    replace(round % 2 ? 'ab' : 'short')
+    if (round === 1) {
+      adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+      adb('shell', 'am', 'start', '-n', 'dev.litch.app/.MainActivity')
+    }
     const again = measure(id)
     assert.equal(again.width, small.width, `${label} 第 ${round + 1} 次键盘和文字更新后宽度不变`)
   }
@@ -138,11 +153,15 @@ try {
       `- openLink: litch://open?session=${id}&device=local\n- extendedWaitUntil:\n    visible:\n      id: composer-input\n    timeout: 15000`,
     )
     exercise(label)
+    await run(
+      `- tapOn:\n    id: composer-more\n- assertVisible:\n    id: settings:usage\n    text: ".*%.*"\n- tapOn:\n    id: settings:usage\n- assertVisible:\n    id: usage:sheet\n- back`,
+    )
   }
   await run(
     `- openLink: litch://open?session=m1&device=local\n- extendedWaitUntil:\n    visible:\n      id: manager-tab:console\n    timeout: 15000\n- tapOn:\n    id: manager-tab:console\n- tapOn:\n    id: post-discussion:D-17\n- extendedWaitUntil:\n    visible:\n      id: post-question:D-17\n    timeout: 10000`,
   )
   exercise('讨论追问', 'post-question:D-17')
+  console.log('COMPOSER_SIZE_PASS')
 } finally {
   child?.kill()
   rmSync(work, { recursive: true })

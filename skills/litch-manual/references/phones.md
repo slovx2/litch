@@ -247,8 +247,9 @@ messages arrived while you were away. Other board tabs retain their own scroll p
 - **New session**: harnesses are a row of pills (swipe sideways when they do not fit). A dimmed pill
   cannot be used on this device; tap it to see why. Long-press a pill to see its version.
   新建对话的 harness 是一排胶囊，置灰的点了写原因，长按看版本。
-- **Usage and limits**: tap the small context ring beside the input box (it fills with the share of
-  context in use), or ⋯ → Usage and limits. 输入框旁的小圆环按上下文用量填充，点开看具体数字。It shows the
+- **Usage and limits**: open **+ → Usage**, or ⋯ → Usage and limits. The + menu shows a small ring, token usage and percentage before you open the details.
+  输入框的“+ → 用量”直接显示小环、已用/总词元数和百分比；点击查看详情，用量不再常驻输入行。
+  It shows the
   context in use and, for subscription logins (Claude Code with an Anthropic subscription, Codex with a
   ChatGPT login), each limit window's usage and when it resets; API keys have no limits to show.
 - **Compact context**: ⋯ → Compact context, or the button in the usage sheet. Not offered for harnesses

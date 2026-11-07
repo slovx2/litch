@@ -5,6 +5,11 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 修复 Android 输入框在原生重新布局后按单行文字收窄；空闲发送和运行插话始终撑满可用宽度。
+- 手机用量环移入“+”菜单，直接显示用量与百分比，点击查看详情，为输入框留出空间。
+
 ## 0.36.0（2026-11-07）
 
 ### 新增功能
