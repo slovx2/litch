@@ -25,6 +25,7 @@ const clock: Clock = {
   },
 }
 const scenario = new URLSearchParams(location.search).get('scenario') ?? 'claude'
+const scroll = new URLSearchParams(location.search).has('scroll')
 const message = (id: string, text: string, phase: string | null) => ({
   id,
   type: 'agentMessage',
@@ -54,12 +55,23 @@ const items = [
     scenario === 'mixed' ? null : 'commentary',
   ),
   tool('two'),
-  message('end', '检查完成。', 'final_answer'),
+  message('end', `检查完成。${scroll ? '\n\n后续回答。'.repeat(40) : ''}`, 'final_answer'),
 ] as ThreadItem[]
 const source = {
   id: `message-phase-${scenario}`,
   cwd: '/',
-  turns: [{ id: 't', status: 'inProgress', error: null, durationMs: 9000, items }],
+  turns: [
+    ...(scroll
+      ? [
+          {
+            id: 'history',
+            status: 'completed',
+            items: [message('history', '前面的对话。\n\n'.repeat(30), 'final_answer')],
+          },
+        ]
+      : []),
+    { id: 't', status: 'inProgress', error: null, durationMs: 9000, items },
+  ],
 } as unknown as Thread
 const scope = { deviceId: 'local', harness: scenario === 'claude' ? 'claude' : 'codex' }
 let view = projectThread(source, scope)
@@ -87,7 +99,7 @@ replica.start()
 Object.assign(window, {
   phaseFixture: {
     finish() {
-      const turn = source.turns[0]
+      const turn = source.turns.find((turn) => turn.id === 't')
       if (!turn) throw new Error('验收回合缺失')
       turn.status = 'completed'
       view = projectThread(source, scope)

@@ -16,7 +16,7 @@ export interface ScrollProbe {
   finalizeKeptNode: boolean
   /** 贴在底部时经历同样的过程：底边的距离变了多少 */
   finalizeFollowGapSpread: number
-  /** 这个过程里过程区确实从展开变成了收起 */
+  /** Claude 回合结束：工具组内容收起，正文与工具摘要仍可见 */
   activityCollapsed: boolean
   /** 过程区和最终回答都在视口里（不在底部）时经历自动收起：回答的第一块挪了多少 */
   answerInView: boolean
@@ -80,6 +80,17 @@ export async function scrollProbe(): Promise<ScrollProbe> {
     content().getBoundingClientRect().bottom - scroller().getBoundingClientRect().bottom
   const spread = (values: number[]) => Math.max(...values) - Math.min(...values)
   const live = () => one('.md.live')
+  const toolsCollapsed = () => {
+    const turn = one('.turn:last-child')
+    const groups = [...(turn?.querySelectorAll('.steps-head') ?? [])]
+    return (
+      !!turn?.querySelector('.proc-head[aria-expanded="false"]') &&
+      !!turn.querySelector('[data-anchor^="a:"]') &&
+      groups.length > 0 &&
+      groups.every((head) => head.getAttribute('aria-expanded') === 'false') &&
+      !turn.querySelector('.steps-body')
+    )
+  }
   /**
    * 逐帧取样，只取“会被画到屏幕上”的状态。
    * 内容的高度刚变、应用自己的补偿还没执行的那一瞬间，脚本读得到但不会上屏，不能算数：
@@ -170,7 +181,7 @@ export async function scrollProbe(): Promise<ScrollProbe> {
   // free.values 里前面是第二步的样本，合在一起算：从离开底部一直到定稿之后，这一行都不该动
   const finalizeFreeSpread = spread(free.values)
   const finalizeKeptNode = firstBlock?.isConnected === true
-  const activityCollapsed = wasOpen && !one('.turn:last-child .proc-body')
+  const activityCollapsed = wasOpen && toolsCollapsed()
 
   // ---- 四、不在底部，但过程区和最终回答都在眼前：收起时回答不跳 ----
   await openStreaming()
@@ -196,7 +207,7 @@ export async function scrollProbe(): Promise<ScrollProbe> {
   await frames(500, seen.sample, live)
   seen.stop()
   const answerSpread = spread(seen.values)
-  const answerCollapsed = !one('.turn:last-child .proc-body')
+  const answerCollapsed = toolsCollapsed()
 
   // ---- 五、贴在底部时经历同样的过程 ----
   await openStreaming()
@@ -406,11 +417,11 @@ export function judgeScroll(probe: ScrollProbe): string[] {
   within('定稿和自动收起时底边移动（贴底）', probe.finalizeFollowGapSpread, 0.5)
   within('过程区在眼前自动收起时最终回答移动', probe.answerSpread, 1)
   if (!probe.answerInView) failed.push('量“回答不跳”时，过程区和回答没有同时在视口里')
-  if (!probe.answerCollapsed) failed.push('量“回答不跳”时，过程区没有自动收起')
+  if (!probe.answerCollapsed) failed.push('量“回答不跳”时，Claude 工具未收起或正文未保留')
   within('点开收起条目时被点的行移动', probe.toggleMaxShift, 1)
   within('切回会话后位置偏差', probe.restoreShift, 1)
   if (!probe.finalizeKeptNode) failed.push('定稿时回答的页面元素被整块换掉了')
-  if (!probe.activityCollapsed) failed.push('过程区没有自动收起')
+  if (!probe.activityCollapsed) failed.push('Claude 工具未收起或正文未保留')
   if (probe.toggles < 6) failed.push(`只成功点了 ${probe.toggles} 次条目`)
   if (!probe.toBottomShown) failed.push('离开底部后没有出现“回到底部”')
   if (!probe.toBottomWorks) failed.push('点“回到底部”没有回到底部')

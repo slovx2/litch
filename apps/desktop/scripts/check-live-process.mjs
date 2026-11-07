@@ -60,6 +60,31 @@ if (!process.versions.electron) {
       assert.ok(result.grew > 100, '必须实际产生足够多的新内容')
       assert.ok(result.followGap <= 3, `跟随底部偏移 ${result.followGap}px`)
       console.log('LITCH_LIVE_PROCESS', JSON.stringify(result))
+      for (const scenario of ['claude', 'codex', 'mixed']) {
+        for (const follow of [false, true]) {
+          await win.loadURL(
+            `${process.env.LITCH_PROCESS_URL}test/message-phase-fixture.html?lang=zh-CN&scroll=1&scenario=${scenario}`,
+          )
+          const measured = await win.webContents.executeJavaScript(
+            `(${phaseScrollProbe})(${follow})`,
+          )
+          assert.equal(measured.inView, true, '阅读锚点与过程必须实际在视口内')
+          assert.equal(measured.keptNode, true, '回答节点不能被替换')
+          assert.equal(measured.folded, true, '回合结束必须收起过程')
+          assert.equal(measured.notes, scenario === 'claude' ? 2 : scenario === 'mixed' ? 1 : 0)
+          assert.equal(measured.groups, scenario === 'codex' ? 0 : 2)
+          assert.ok(
+            measured.spread <= (follow ? 0.5 : 1),
+            `${scenario} ${follow ? '贴底' : '离底'}位移 ${measured.spread}px`,
+          )
+          console.log(
+            'LITCH_PHASE_SCROLL',
+            scenario,
+            follow ? 'follow' : 'free',
+            JSON.stringify(measured),
+          )
+        }
+      }
     } catch (error) {
       console.error(error)
       process.exitCode = 1
@@ -68,6 +93,61 @@ if (!process.versions.electron) {
       app.exit(process.exitCode ?? 0)
     }
   })
+}
+
+// 高度改变的帧在应用尺寸补偿之后取样，不把尚未上屏的中间排版算作跳动。
+async function phaseScrollProbe(follow) {
+  const frame = () => new Promise((resolve) => requestAnimationFrame(resolve))
+  for (let i = 0; i < 60 && !document.querySelector('[data-search-item="t:end"]'); i++)
+    await frame()
+  await document.fonts.ready
+  const scroller = document.querySelector('.tr-scroll')
+  const content = document.querySelector('.tr')
+  const answer = document.querySelector('[data-search-item="t:end"] .md > :first-child')
+  if (!answer) throw new Error('缺少最终回答锚点')
+  if (follow) scroller.scrollTop = 0
+  else
+    scroller.scrollTop +=
+      answer.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 320
+  scroller.dispatchEvent(new Event('scroll'))
+  for (let i = 0; i < 4; i++) await frame()
+  const view = scroller.getBoundingClientRect()
+  const body = document.querySelector('.turn:last-child .proc-body')
+  const inView = follow
+    ? Math.abs(scroller.scrollTop) <= 1
+    : scroller.scrollTop < -1 &&
+      answer.getBoundingClientRect().top > view.top &&
+      answer.getBoundingClientRect().bottom < view.bottom &&
+      body.getBoundingClientRect().bottom > view.top
+  const read = () =>
+    follow
+      ? content.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom
+      : answer.getBoundingClientRect().top
+  const values = [read()]
+  let height = content.getBoundingClientRect().height
+  const observer = new ResizeObserver(() => {
+    height = content.getBoundingClientRect().height
+    values.push(read())
+  })
+  observer.observe(content)
+  window.phaseFixture.finish()
+  for (let i = 0; i < 12; i++) {
+    await frame()
+    if (height === content.getBoundingClientRect().height) values.push(read())
+  }
+  observer.disconnect()
+  return {
+    inView,
+    keptNode: answer.isConnected,
+    folded:
+      !!document.querySelector('.turn:last-child .proc-head[aria-expanded="false"]') &&
+      !document.querySelector('.turn:last-child .steps-body'),
+    notes: ['before', 'finding'].filter((id) =>
+      document.querySelector(`[data-search-item="t:${id}"]`),
+    ).length,
+    groups: document.querySelectorAll('.turn:last-child .steps-head[aria-expanded="false"]').length,
+    spread: Math.max(...values) - Math.min(...values),
+  }
 }
 
 async function probe() {
