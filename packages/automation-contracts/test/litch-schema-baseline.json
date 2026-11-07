@@ -1,8 +1,8 @@
 {
   "commit": "f52180dbc96584f414db3f48725b27c375ed85d5",
   "sha256": {
-    "browser": "e6942e62690f3eacda7646663ab7734ce79494a520dbf36b7a791089b558ce4f",
-    "browserBatch": "5f2535e329e0c516e5a86f071554d9b1cf8cbe0e7643eb68c15fe5f1674c8fd1",
+    "browser": "c48c4cb88ccc1754c1e7f61bb7c1a8995765dc6b3268924d1e8b9de23356c649",
+    "browserBatch": "ed094f2f4a87ae7e8705f7daadba6ffac1fc3f44d660d2bb6cab6b51a49dc706",
     "mac": "cf21e7e617e68d7cb5aa95ac5a21d140c720972ac87a581bee08b6e898bc30d2",
     "macBatch": "3c5db2dda758b07e233fc1ed3bfc98bea06e9b4319496c512e43fe26028570bd",
     "windows": "7b478e52c3d54ab38a2ec2577117d5bc2ecad29eee2876d83387658bd21337da",
