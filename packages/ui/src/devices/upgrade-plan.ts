@@ -27,5 +27,15 @@ export function upgradeCandidate(device: DeviceView, version: string): boolean {
   )
 }
 
-export const upgradeChoices = (device: DeviceView): UpgradeChoice[] =>
-  device.kind === 'local' ? ['none', 'idle', 'force'] : ['none', 'idle']
+export function upgradeChoices(device: DeviceView): UpgradeChoice[] {
+  const up = device.remoteUpgrade
+  const force =
+    device.kind === 'local' ||
+    (device.connection === 'online' &&
+      device.mode === 'full' &&
+      up?.capable &&
+      !up.managed &&
+      up.action === 'swap' &&
+      up.phase.step === 'idle')
+  return force ? ['none', 'idle', 'force'] : ['none', 'idle']
+}

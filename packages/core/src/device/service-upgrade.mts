@@ -3,7 +3,7 @@
 //   1. 用户点“升级”、确认之后，经 ssh 在那台机器上装应用的这一版（安装脚本 --version，或者 brew upgrade）；
 //   2. 装好了马上请服务空闲时停下（device-stop --if-idle）。停了就重连，重连时 device-start 起的就是新版；
 //   3. 不闲就留着旧的接着用，记下“装好了、等着换”：之后每次连上、以及连着时每 5 分钟再请一次，换上了就清掉；
-//   4. 不闲时可取消等待；远程升级不提供强制停止。
+//   4. 新版已安装时可在确认中断影响后强制换上，也可取消等待。
 // 服务由前台或者服务管理器管着的（detached 为 false），只替用户装，不替用户换。认不出是怎么装的，不给按钮。
 // “等着换”只记在应用里（这个对象里），不进设备；应用退出就不等了，下次打开时装着的已经不旧，按钮叫“换上新版”。
 // 在那台机器上动手的是外壳（RemoteUpgradePlatform）；用户没确认过，这里不会叫 install 和 stop。
@@ -54,7 +54,7 @@ export interface ServiceUpgradeSeen {
   guide: ConnectGuide | null
 }
 
-/** start 升级；retry 再检查空闲；cancel 取消等待。旧调用的 force 明确拒绝。 */
+/** start 升级；retry 再检查空闲；force 强制换上已安装新版；cancel 取消等待。 */
 export type UpgradeMode = 'start' | 'retry' | 'force' | 'cancel'
 
 export interface ServiceUpgrader {
@@ -328,8 +328,17 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
 
     run(mode) {
       if (!platform) throw new ChannelError('rejected', '这一端不能替用户升级远程设备的服务')
-      if (mode === 'force') throw new ChannelError('rejected', '远程升级只允许空闲时换上')
       if (job) throw new ChannelError('rejected', '上一步还没有做完')
+      if (mode === 'force') {
+        if (!seen.online || !seen.full || !older() || !swapOnly() || managed())
+          throw new ChannelError('rejected', '只有已连接且新版已安装的独立设备服务可以强制升级')
+        if (!['idle', 'waiting', 'failed'].includes(phase.step))
+          throw new ChannelError('rejected', '当前阶段不能强制升级')
+        before = seen.service?.version ?? null
+        stopRetry()
+        begin(() => stop(false, false))
+        return
+      }
       if (mode === 'cancel') {
         stopRetry()
         set({ step: 'idle' })

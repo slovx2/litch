@@ -243,9 +243,11 @@ test('远程设备的一键升级四出：马上换上、等空闲与取消（�
   await flush()
   await until('waiting')
   assert.equal(build().service?.version, '0.6.0', '还在等：旧的接着用')
-  await assert.rejects(run('force'), /远程升级只允许空闲时换上/)
   await run('cancel')
   await until('idle')
+  await run('force')
+  await until('done')
+  assert.equal(build().service?.version, '0.7.0', '取消等待后仍能强制换上已安装版本')
 
   await say('b2', '远程下载失败', 'build')
   await flush()

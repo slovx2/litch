@@ -501,7 +501,8 @@ export const zhCN = {
   'service.batch.force': '强制升级',
   'service.batch.unknown': '忙闲未知；执行前由设备检查。',
   'service.batch.idleState': '空闲',
-  'service.batch.forceNote': '会打断进行中的工作。符合条件的普通回合将在重启后自动恢复。',
+  'service.batch.forceNote':
+    '会打断这台设备上正在运行的回合，并终止已检测到的 {count} 个后台任务。符合条件的回合将在重启后自动继续；后台任务须由模型核对后按需重新启动。',
   'service.batch.failure': '可在设备详情重试。',
   'service.batch.details': '设备详情',
   'service.batch.apply': '应用选择',

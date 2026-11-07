@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { app } from 'electron'
 
-async function restart(upgrade: boolean): Promise<object> {
+async function restart(upgrade: boolean, device = 'local'): Promise<object> {
   const one = (selector: string) => document.querySelector<HTMLElement>(selector)
   const wait = async (selector: string) => {
     const end = Date.now() + 90000
@@ -18,7 +18,7 @@ async function restart(upgrade: boolean): Promise<object> {
   })
   ;(await wait('.sb-settings')).click()
   ;(await wait('.set-go[data-page="devices"]')).click()
-  ;(await wait('.devp-item[data-device="local"] .devp-row')).click()
+  ;(await wait(`.devp-item[data-device="${device}"] .devp-row`)).click()
   const section = await wait('[data-sec="service"]')
   if (section.dataset.open !== 'true') section.querySelector<HTMLButtonElement>('button')?.click()
   const before = (await wait('[data-fact="pid"]')).textContent
@@ -73,7 +73,7 @@ app.on('browser-window-created', (_event, window) => {
       await window.loadURL(url.href)
       assert.equal(window.isVisible(), false)
       const result = await window.webContents.executeJavaScript(
-        `(${restart.toString()})(${process.env.LITCH_RESTART_UPGRADE === 'true'})`,
+        `(${restart.toString()})(${process.env.LITCH_RESTART_UPGRADE === 'true'}, ${JSON.stringify(process.env.LITCH_RESTART_DEVICE ?? 'local')})`,
         true,
       )
       console.log('隐藏窗口重启入口：', JSON.stringify(result))

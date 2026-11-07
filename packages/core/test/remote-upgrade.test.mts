@@ -223,21 +223,63 @@ test('不闲：装好了等着换，每次连上、连着时每 5 分钟再请�
   assert.equal(w.calls.stop.length, 4, '换上了：不再等')
 })
 
-test('远程拒绝强制升级；取消等待后不再停止服务', async () => {
+test('远程未安装新版不能强制；取消等待后不再停止服务', async () => {
   const busy = { result: 'busy' as const, busy: [{ reason: 'clients', harnesses: [], count: 2 }] }
   const w = world({ stops: [busy] })
   w.core.start()
   await flush()
-  await assert.rejects(w.run('force'), /远程升级只允许空闲时换上/)
+  await assert.rejects(w.run('force'), /新版已安装/)
   await w.run('start')
   await flush()
   assert.equal(w.upgradeView()?.phase.step, 'waiting')
-  await assert.rejects(w.run('force'), /远程升级只允许空闲时换上/)
   await w.run('cancel')
   w.time.advance(SWAP_RETRY_MS * 2)
   await flush()
   assert.deepEqual(w.calls.stop, [true])
   assert.equal(w.upgradeView()?.phase.step, 'idle')
+})
+
+test('远程等待中和已安装新版本的空闲状态都能明确强制换上', async () => {
+  for (const cancel of [false, true]) {
+    const w = world({
+      stops: [
+        { result: 'busy', busy: [{ reason: 'backgroundTasks', harnesses: ['codex'], count: 2 }] },
+      ],
+    })
+    w.core.start()
+    await flush()
+    await w.run('start')
+    await flush()
+    if (cancel) await w.run('cancel')
+    await w.run('force')
+    await flush()
+    assert.deepEqual(w.calls.stop, [true, false])
+    assert.equal(w.calls.install.length, 1)
+    assert.equal(w.upgradeView()?.phase.step, 'done')
+    w.time.advance(SWAP_RETRY_MS * 2)
+    await flush()
+    assert.deepEqual(w.calls.stop, [true, false])
+    w.core.stop()
+  }
+})
+
+test('远程强制换上仍拒绝无能力、受托管及离线服务', async () => {
+  for (const options of [
+    { incapable: true },
+    {
+      prepare: (device: FakeDevice) => {
+        device.service = facts('0.15.0', { detached: false })
+      },
+    },
+    { failure: new ConnectError('unreachable', phrase('ssh.unreachable'), true) },
+  ]) {
+    const w = world({ ...options, installed: { version: APP, path: SCRIPT_ROOT(APP) } })
+    w.core.start()
+    await flush()
+    await assert.rejects(w.run('force'))
+    assert.deepEqual(w.calls.stop, [])
+    w.core.stop()
+  }
 })
 
 test('现在再试一次：等空闲时马上再请一次，还忙就接着等', async () => {

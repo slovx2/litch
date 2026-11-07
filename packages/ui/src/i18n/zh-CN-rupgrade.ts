@@ -23,7 +23,7 @@ export const zhRupgrade = {
   'service.remote.waiting.next': '每次连接时以及每 5 分钟会再试一次；退出应用后不再等待。',
   'service.remote.retry': '立即重试',
   'service.remote.checking': '正在检查…',
-  'service.remote.force': '立即换上',
+  'service.remote.force': '强制重启',
   'service.remote.restart': '新版 {to} 已安装。该服务由前台或服务管理器启动，请用原来的方式重启：',
   'service.remote.done': '已换上新版：{from} → {to}。',
   'service.remote.done.plain': '已换上新版 {to}。',

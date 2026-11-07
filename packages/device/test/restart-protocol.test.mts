@@ -54,6 +54,13 @@ for (const harness of ['pi', 'claude-code']) {
         threadId: thread.id,
         input: [{ type: 'text', text: '原任务' }],
       })
+      env.device.background.reportedChanged({
+        threadId: thread.id,
+        tasks: [
+          { id: 'job-1', kind: 'command', title: 'sleep 120', status: 'running' },
+          { id: 'job-2', kind: 'command', title: 'npm run dev', status: 'running' },
+        ],
+      })
       assert.deepEqual(await oldControl.onAsk?.('restart.prepare'), { prepared: 1 })
       assert.equal(engine.turns.get(thread.id)?.[0]?.status, 'interrupted')
       await env.device.close()
@@ -81,6 +88,8 @@ for (const harness of ['pi', 'claude-code']) {
       const input = sent[1]?.params
       assert.deepEqual(Object.keys(input).sort(), ['input', 'threadId'])
       assert.equal(parseSystemMessage(input.input[0].text)?.kind, 'restart')
+      assert.match(input.input[0].text, /sleep 120/)
+      assert.match(input.input[0].text, /npm run dev/)
       await env.device.restart.recover()
       assert.equal(engine.seen.filter((frame) => frame.method === 'turn/start').length, 2)
     } finally {

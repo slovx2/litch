@@ -4,7 +4,7 @@ import type { zhRestart } from './zh-CN-restart.ts'
 
 export const enRestart: Record<keyof typeof zhRestart, Entry> = {
   'restart.settings': 'Settings',
-  'restart.menu': 'Restart device service',
+  'restart.menu': 'Force restart',
   'restart.menu.busy': 'Restarting…',
   'restart.blocked.offline': 'The device isn’t connected',
   'restart.blocked.single': 'Connected to a single harness, not a device service',

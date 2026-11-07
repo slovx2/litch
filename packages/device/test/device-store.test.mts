@@ -29,6 +29,27 @@ const snapshot = (db: DatabaseSync) =>
     preservedTables.map((table) => [table, db.prepare(`SELECT * FROM ${table} ORDER BY 1`).all()]),
   )
 
+test('v5 恢复票迁移保留未发送资格，并给后台摘要空默认值', () => {
+  const dir = tempDir()
+  try {
+    let db = openDeviceStore(dir)
+    db.exec(`ALTER TABLE restart_turns DROP COLUMN background;
+      INSERT INTO restart_turns(thread_id,harness,token,turn_id,state,service,prepared_at)
+      VALUES('held','codex','ticket','turn','ready','old-service',123);
+      PRAGMA user_version=5`)
+    db.close()
+    db = openDeviceStore(dir)
+    const row = db.prepare('SELECT * FROM restart_turns').get()
+    assert.equal(row?.state, 'ready')
+    assert.equal(row?.token, 'ticket')
+    assert.equal(row?.prepared_at, 123)
+    assert.equal(row?.background, '[]')
+    db.close()
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('旧 v4 实库升级只清空跨 harness 权限：防止整库重建丢失项目、归属、分组与置顶', async () => {
   const stateDir = tempDir()
   const path = join(stateDir, 'device.sqlite')
@@ -83,7 +104,7 @@ test('旧 v4 实库升级只清空跨 harness 权限：防止整库重建丢失�
     })
     const check = new DatabaseSync(path, { readOnly: true })
     try {
-      assert.equal(check.prepare('PRAGMA user_version').get()?.user_version, 5)
+      assert.equal(check.prepare('PRAGMA user_version').get()?.user_version, 6)
       assert.deepEqual(allRows(check), before)
       assert.equal(check.prepare('SELECT harness FROM project_permissions').get()?.harness, 'pi')
       assert.deepEqual(readFileSync(other), otherBefore)
@@ -125,7 +146,7 @@ for (const wal of [false, true]) {
       const db = new DatabaseSync(join(stateDir, 'device.sqlite'), { readOnly: true })
       try {
         assert.deepEqual(snapshot(db), before)
-        assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 5)
+        assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 6)
         assert.equal(db.prepare('SELECT count(*) AS n FROM project_permissions').get()?.n, 0)
         assert.equal(db.prepare('SELECT count(*) AS n FROM restart_turns').get()?.n, 0)
       } finally {
@@ -175,7 +196,7 @@ test('设备库 v3：只作废跨 harness 权限，保留已有索引', async ()
   try {
     const db = openDeviceStore(stateDir)
     try {
-      assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 5)
+      assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 6)
       const permissions = new ProjectPermissions(db, () => {})
       permissions.call(PROJECT_PERMISSION.set, {
         harness: 'pi',
@@ -206,7 +227,7 @@ test('设备库 v3：只作废跨 harness 权限，保留已有索引', async ()
     )
     const check = new DatabaseSync(join(stateDir, 'device.sqlite'), { readOnly: true })
     try {
-      assert.equal(check.prepare('PRAGMA user_version').get()?.user_version, 5)
+      assert.equal(check.prepare('PRAGMA user_version').get()?.user_version, 6)
       assert.equal(
         check.prepare("SELECT harness FROM threads WHERE id='preserved'").get()?.harness,
         'pi',
@@ -220,7 +241,7 @@ test('设备库 v3：只作废跨 harness 权限，保留已有索引', async ()
   }
 })
 
-test('设备库高于 v5：拒绝降级打开，文件与权限数据不变', () => {
+test('设备库高于 v6：拒绝降级打开，文件与权限数据不变', () => {
   const stateDir = tempDir()
   const path = join(stateDir, 'device.sqlite')
   try {
@@ -232,16 +253,16 @@ test('设备库高于 v5：拒绝降级打开，文件与权限数据不变', ()
         permission: ':danger-full-access',
         confirmed: true,
       })
-      db.exec('PRAGMA user_version=6')
+      db.exec('PRAGMA user_version=7')
     } finally {
       db.close()
     }
     const before = readFileSync(path)
-    assert.throws(() => openDeviceStore(stateDir), /更新的版本（6）建的.*支持到 5.*拒绝降级/)
+    assert.throws(() => openDeviceStore(stateDir), /更新的版本（7）建的.*支持到 6.*拒绝降级/)
     assert.deepEqual(readFileSync(path), before)
     const check = new DatabaseSync(path, { readOnly: true })
     try {
-      assert.equal(check.prepare('PRAGMA user_version').get()?.user_version, 6)
+      assert.equal(check.prepare('PRAGMA user_version').get()?.user_version, 7)
       assert.equal(
         check.prepare('SELECT permission FROM project_permissions').get()?.permission,
         ':danger-full-access',

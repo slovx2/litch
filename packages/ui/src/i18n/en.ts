@@ -526,7 +526,7 @@ export const en: Record<MessageKey, Entry> = {
   'service.batch.unknown': 'Activity unknown; the device will check before switching. ',
   'service.batch.idleState': 'Idle',
   'service.batch.forceNote':
-    'Interrupts ongoing work. Eligible regular turns resume automatically after restart.',
+    'Interrupts running turns on this device and terminates {count} detected background tasks. Eligible turns resume after restart; the model must verify and restart background tasks only as needed.',
   'service.batch.failure': 'Retry in device details.',
   'service.batch.details': 'Device details',
   'service.batch.apply': 'Apply choices',

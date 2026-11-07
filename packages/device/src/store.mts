@@ -14,7 +14,7 @@ import { ensureParent } from '../../shared/src/util.mjs'
  * v3 增加项目权限，v4 增加重启续跑；v5 仅重建权限表为目录与 harness 复合键，旧权限作废。
  * 升级在原库事务内完成，禁止删库重建；未知版本拒绝打开并保留文件。
  */
-const SCHEMA_VERSION = 5
+const SCHEMA_VERSION = 6
 
 function schemaVersion(path: string): number {
   const db = new DatabaseSync(path, { readOnly: true })
@@ -86,6 +86,9 @@ export function openDeviceStore(stateDir: string): DatabaseSync {
         cwd TEXT NOT NULL, harness TEXT NOT NULL, permission TEXT NOT NULL, confirmed TEXT NOT NULL,
         PRIMARY KEY(cwd,harness)
       ) WITHOUT ROWID;`)
+    // v5 → v6：重启前保存后台任务摘要，恢复时不会从已经消失的进程猜测。
+    if (version < 6)
+      db.exec("ALTER TABLE restart_turns ADD COLUMN background TEXT NOT NULL DEFAULT '[]'")
     db.exec(`PRAGMA user_version=${SCHEMA_VERSION};`)
     db.exec('COMMIT')
   } catch (error) {

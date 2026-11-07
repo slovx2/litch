@@ -60,10 +60,10 @@ const remote = (id: string): DeviceView => ({
   remoteUpgrade: {
     target: '1.0.0',
     running: '0.1.0',
-    installed: '0.1.0',
+    installed: id === 'remote-busy' ? '1.0.0' : '0.1.0',
     method: 'script',
     managed: false,
-    action: 'upgrade',
+    action: id === 'remote-busy' ? 'swap' : 'upgrade',
     capable: true,
     phase: { step: 'idle' },
   },

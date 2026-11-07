@@ -5,6 +5,8 @@ import { isObject } from './wire.mjs'
 
 const TTL = 24 * 60 * 60 * 1000
 const REQUEST_MS = 5000
+// 冷启动的原生会话可能需要读取较大的历史；此时尚未发送继续消息，不能用工具调用级的短时限放弃恢复。
+const RESTORE_HISTORY_MS = 60_000
 
 interface Sending {
   link: EngineLink
@@ -19,6 +21,7 @@ export interface RestartHost {
   service(): string
   open(harness: string): Promise<EngineLink>
   excluded(threadId: string): boolean
+  background?(threadId: string): string[]
   resumed?(harness: string, threadId: string): void
   settled?(): void
   event?(harness: string, method: string, params: Record<string, unknown>): void
@@ -146,11 +149,11 @@ export class RestartResume {
     return link
   }
 
-  private read(link: EngineLink, row: RestartTurn): Promise<any> {
+  private read(link: EngineLink, row: RestartTurn, timeoutMs = REQUEST_MS): Promise<any> {
     return link.request(
       'thread/read',
       { threadId: row.threadId, includeTurns: true },
-      { timeoutMs: REQUEST_MS },
+      { timeoutMs },
     )
   }
 
@@ -235,7 +238,15 @@ export class RestartResume {
         this.host.excluded(row.threadId)
       )
         return false
-      if (!this.host.store.prepare(row, this.host.service(), this.now())) return false
+      if (
+        !this.host.store.prepare(
+          row,
+          this.host.service(),
+          this.now(),
+          this.host.background?.(row.threadId),
+        )
+      )
+        return false
       // 先明确结束旧回合，避免“快照后正常完成”也被重新续一次。未知工具结果由恢复消息提醒核实。
       await link.request(
         'turn/interrupt',
@@ -309,7 +320,7 @@ export class RestartResume {
         return
       }
       link = await this.open(row.harness)
-      let thread = (await this.read(link, row)).thread
+      let thread = (await this.read(link, row, RESTORE_HISTORY_MS)).thread
       if (
         !this.eligible(row, thread) ||
         thread.turns?.at(-1)?.id !== row.turnId ||
@@ -320,9 +331,13 @@ export class RestartResume {
         return
       }
       if (this.host.store.state(row) !== 'ready') return
-      await link.request('thread/resume', { threadId: row.threadId }, { timeoutMs: REQUEST_MS })
+      await link.request(
+        'thread/resume',
+        { threadId: row.threadId },
+        { timeoutMs: RESTORE_HISTORY_MS },
+      )
       // 各引擎的 resume 应答不一定包含回合历史，统一用 read 再核对。
-      thread = (await this.read(link, row)).thread
+      thread = (await this.read(link, row, RESTORE_HISTORY_MS)).thread
       if (
         !this.eligible(row, thread) ||
         thread.turns?.at(-1)?.id !== row.turnId ||
@@ -351,7 +366,7 @@ export class RestartResume {
         'turn/start',
         {
           threadId: row.threadId,
-          input: [{ type: 'text', text: restartMessage(row.token) }],
+          input: [{ type: 'text', text: restartMessage(row.token, row.background) }],
         },
         {
           timeoutMs: REQUEST_MS,
@@ -392,7 +407,8 @@ export class RestartResume {
             (item: any) =>
               item.type === 'userMessage' &&
               item.content?.some(
-                (part: any) => part.type === 'text' && part.text === restartMessage(row.token),
+                (part: any) =>
+                  part.type === 'text' && part.text === restartMessage(row.token, row.background),
               ),
           )
           if (own && current.status === 'inProgress') {

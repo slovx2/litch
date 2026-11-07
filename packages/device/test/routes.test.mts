@@ -305,11 +305,11 @@ test('设备库：v2 升级保留数据，不是我们的库拒绝', () => {
     let db = openDeviceStore(dir)
     new ThreadIndex(db).see({ id: 't1', updatedAt: 1 }, 'pi')
     // 装成上一版结构留下的库
-    db.exec('PRAGMA user_version=2')
+    db.exec('DROP TABLE restart_turns; DROP TABLE project_permissions; PRAGMA user_version=2')
     db.close()
     db = openDeviceStore(dir)
     assert.equal(new ThreadIndex(db).lookup('t1'), 'pi')
-    assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 5)
+    assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 6)
     db.close()
     // 空文件就是还没写过的新库
     rmSync(join(dir, 'device.sqlite'))

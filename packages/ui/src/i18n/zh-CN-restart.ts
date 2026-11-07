@@ -4,7 +4,7 @@ import type { Entry } from './types.ts'
 
 export const zhRestart = {
   'restart.settings': '设置',
-  'restart.menu': '重启设备服务',
+  'restart.menu': '强制重启',
   'restart.menu.busy': '正在重启…',
   'restart.blocked.offline': '设备未连接',
   'restart.blocked.single': '只连接了单个 harness，没有设备服务',

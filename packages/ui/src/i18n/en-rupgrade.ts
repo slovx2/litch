@@ -29,7 +29,7 @@ export const enRupgrade: Record<keyof typeof zhRupgrade, Entry> = {
     'Litch tries again on every connection and every 5 minutes, and stops waiting when you quit the app.',
   'service.remote.retry': 'Try Now',
   'service.remote.checking': 'Checking…',
-  'service.remote.force': 'Switch Now',
+  'service.remote.force': 'Force restart',
   'service.remote.restart':
     '{to} is installed. This service runs in the foreground or under a service manager; restart it the way you started it:',
   'service.remote.done': 'Switched to the new version: {from} → {to}.',

@@ -47,8 +47,18 @@
 }
 .cfail-acts .mini,
 .cfail-cmd .mini {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   align-self: center;
   border: 1px solid var(--line-2);
+}
+.cfail-acts .mini > svg,
+.cfail-cmd .mini > svg {
+  width: 1em;
+  height: 1em;
+  flex: none;
 }
 .cfail-detail {
   margin: 0;

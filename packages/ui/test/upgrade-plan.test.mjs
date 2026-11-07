@@ -23,7 +23,7 @@ const remote = {
   },
 }
 
-test('本机闲时已自动换上不列，忙时三选项；远程只有两项', () => {
+test('本机忙时三选项；远程已安装新版才能强制', () => {
   assert.equal(upgradeCandidate(local, '1.0.0'), true)
   assert.deepEqual(upgradeChoices(local), ['none', 'idle', 'force'])
   assert.equal(
@@ -35,6 +35,14 @@ test('本机闲时已自动换上不列，忙时三选项；远程只有两项',
   )
   assert.equal(upgradeCandidate(remote, '1.0.0'), true)
   assert.deepEqual(upgradeChoices(remote), ['none', 'idle'])
+  const installed = { ...remote, remoteUpgrade: { ...remote.remoteUpgrade, action: 'swap' } }
+  assert.deepEqual(upgradeChoices(installed), ['none', 'idle', 'force'])
+  for (const patch of [{ capable: false }, { managed: true }, { phase: { step: 'installing' } }])
+    assert.deepEqual(
+      upgradeChoices({ ...installed, remoteUpgrade: { ...installed.remoteUpgrade, ...patch } }),
+      ['none', 'idle'],
+    )
+  assert.deepEqual(upgradeChoices({ ...installed, connection: 'error' }), ['none', 'idle'])
 })
 
 test('离线、最新版本、等待中、不能自动管理的设备不列', () => {

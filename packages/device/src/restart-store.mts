@@ -9,6 +9,7 @@ export interface RestartTurn {
   state: string
   service: string
   preparedAt: number | null
+  background: string[]
 }
 
 /** 普通输入的身份与明确重启的票分开：observed 在意外重启后绝不自动执行。 */
@@ -24,7 +25,7 @@ export class RestartStore {
       .prepare(`INSERT INTO restart_turns(thread_id,harness,token,state)
       VALUES(?,?,?,'observed') ON CONFLICT(thread_id) DO UPDATE SET
       harness=excluded.harness,token=excluded.token,turn_id=NULL,state='observed',
-      service='',prepared_at=NULL,resume_turn_id=NULL`)
+      service='',prepared_at=NULL,resume_turn_id=NULL,background='[]'`)
       .run(threadId, harness, token)
     return token
   }
@@ -70,6 +71,7 @@ export class RestartStore {
         state: String(row.state),
         service: String(row.service),
         preparedAt: typeof row.prepared_at === 'number' ? row.prepared_at : null,
+        background: JSON.parse(String(row.background)) as string[],
       }))
   }
 
@@ -106,12 +108,12 @@ export class RestartStore {
     )
   }
 
-  prepare(row: RestartTurn, service: string, now: number): boolean {
+  prepare(row: RestartTurn, service: string, now: number, background: string[] = []): boolean {
     return (
       this.db
-        .prepare(`UPDATE restart_turns SET state='preparing',service=?,prepared_at=?
+        .prepare(`UPDATE restart_turns SET state='preparing',service=?,prepared_at=?,background=?
       WHERE thread_id=? AND token=? AND state='observed'`)
-        .run(service, now, row.threadId, row.token).changes === 1
+        .run(service, now, JSON.stringify(background), row.threadId, row.token).changes === 1
     )
   }
 

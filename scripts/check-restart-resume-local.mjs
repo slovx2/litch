@@ -38,7 +38,17 @@ model.fallback = async (request) => {
   const last = JSON.stringify(request.messages.at(-1))
   if (last.includes('Automatic continuation after a planned service restart'))
     return [{ type: 'text', text: 'CLAUDE_RESTORED' }]
-  if (last.includes('RR_HOLD')) {
+  if (last.includes('RR_HOLD_WITH_BG')) {
+    return [
+      {
+        type: 'tool_use',
+        id: 'bg-claude',
+        name: 'Bash',
+        input: { command: 'sleep 600', run_in_background: true, description: '重启验收后台任务' },
+      },
+    ]
+  }
+  if (last.includes('RR_HOLD') || last.includes('bg-claude')) {
     heldClaude++
     await new Promise((resolve) => gates.push(resolve))
   }
@@ -51,9 +61,23 @@ const codex = await startResponsesModel((body) => {
     return { text: JSON.stringify({ title: '重启验收' }) }
   if (last.includes('Automatic continuation after a planned service restart'))
     return { text: 'CODEX_RESTORED' }
+  if (last.includes('RR_BACKGROUND')) {
+    if (!body.input.some((item) => item.type === 'function_call_output'))
+      return {
+        call: {
+          namespace: 'functions',
+          name: 'exec_command',
+          arguments: JSON.stringify({
+            cmd: 'sleep 600',
+            yield_time_ms: 1000,
+          }),
+        },
+      }
+    return { text: 'CODEX_BACKGROUND_STARTED' }
+  }
   if (last.includes('RR_HOLD')) {
     heldCodex++
-    return { text: 'CODEX_OLD', delay: 60000 }
+    return { text: 'CODEX_OLD', delay: 600000 }
   }
   return { text: 'CODEX_DONE' }
 })
@@ -170,6 +194,19 @@ try {
       sandbox: 'danger-full-access',
     })
     ids.push({ id: thread.id, harness, kind: 'top' })
+    if (harness !== 'codex') continue
+    await c.call('turn/start', {
+      threadId: thread.id,
+      input: [{ type: 'text', text: 'RR_BACKGROUND' }],
+    })
+    await until(async () => {
+      const current = (await c.call('thread/read', { threadId: thread.id, includeTurns: true }))
+        .thread
+      return (
+        current.turns.at(-1)?.status === 'completed' &&
+        current.litchBackground?.tasks?.some((t) => t.status === 'running')
+      )
+    }, `${harness} 后台任务已启动`)
   }
   const { threadId: parent } = await c.call('litch/manager/create', {
     cwd: root,
@@ -190,10 +227,18 @@ try {
     return thread.turns?.at(-1)?.status === 'completed'
   }, '经理开场完成')
   ids.push({ id: parent, harness: 'claude-code', kind: 'manager' })
-  for (const { id } of ids)
+  for (const { id, harness, kind } of ids)
     await c.call('turn/start', {
       threadId: id,
-      input: [{ type: 'text', text: 'RR_HOLD 请继续原任务' }],
+      input: [
+        {
+          type: 'text',
+          text:
+            harness === 'claude-code' && kind === 'top'
+              ? 'RR_HOLD_WITH_BG 请继续原任务'
+              : 'RR_HOLD 请继续原任务',
+        },
+      ],
     })
   const { threadId: child } = await c.call('litch/session/start', {
     parentThreadId: parent,
@@ -206,6 +251,16 @@ try {
   })
   ids.push({ id: child, harness: 'codex', kind: 'child' })
   await until(() => heldClaude === 2 && heldCodex === 2, '四个真实模型回合进入等待')
+  await until(async () => {
+    const threads = await Promise.all(
+      ids
+        .filter((row) => row.kind === 'top')
+        .map(({ id }) => c.call('thread/read', { threadId: id, includeTurns: true })),
+    )
+    return threads.every(({ thread }) =>
+      thread.litchBackground?.tasks?.some((t) => t.status === 'running'),
+    )
+  }, '两个顶层会话的后台任务仍在运行')
   console.log('四个回合已运行：', ids)
   if (process.argv.includes('--harness')) {
     for (const harness of ['codex', 'claude-code'])
@@ -213,6 +268,35 @@ try {
   } else if (process.argv.includes('--protocol')) {
     await cli('device-stop', ['--resume-after-restart'])
     await cli('device-start', ['--ssh=off'])
+  } else if (process.env.LITCH_RESTART_EXTERNAL) {
+    // 远程隔离服务由本机隐藏窗口经 SSH 重启；只把假模型环境写给本次测试的强制命令。
+    const external = process.env.LITCH_RESTART_EXTERNAL
+    const quote = (s) => `'${String(s).replaceAll("'", "'\\''")}'`
+    writeFileSync(
+      join(external, 'env.sh'),
+      Object.entries(env)
+        .map(([k, v]) => `export ${k}=${quote(v)}`)
+        .join('\n'),
+    )
+    writeFileSync(
+      join(external, 'adapter'),
+      `#!/bin/sh\n. ${quote(join(external, 'env.sh'))}\nif [ "$1" = version ]; then exec ${quote(binary)} version; fi\nexec ${quote(binary)} "$@" --home ${quote(home)} --root ${quote(repo)} --node ${quote(process.execPath)}\n`,
+      { mode: 0o700 },
+    )
+    writeFileSync(join(external, 'ready.json'), JSON.stringify({ root, home, ids, pid: first.pid }))
+    console.log('EXTERNAL_READY')
+    await until(
+      async () => {
+        try {
+          const state = JSON.parse(readFileSync(join(home, 'device/service.json'), 'utf8'))
+          return state.state === 'ready' && state.pid !== first.pid
+        } catch {
+          return false
+        }
+      },
+      '隐藏远程窗口重启',
+      180000,
+    )
   } else {
     // 暂存只链接本工作树的构建产物，服务独享临时 HOME；不改共享依赖。
     const stage = join(root, 'stage')
@@ -260,6 +344,13 @@ try {
     assert.equal(code, 0, output.slice(-8000))
   }
   c = await connect()
+  // 连接握手早于各引擎握手，不能把 connecting 当成恢复失败。
+  await until(async () => {
+    const r = await c.call('runtime/info')
+    return ['codex', 'claude-code'].every((id) =>
+      r.harnesses.some((h) => h.id === id && h.available),
+    )
+  }, '重连后的引擎就绪')
   const db = new DatabaseSync(join(home, 'device/device.sqlite'), { readOnly: true })
   console.log('恢复票：', db.prepare('SELECT thread_id,state,turn_id FROM restart_turns').all())
   db.close()
@@ -277,6 +368,7 @@ try {
       ).length,
       1,
     )
+    if (row.kind === 'top') assert.match(JSON.stringify(thread.turns.at(-1)), /sleep 600/)
   }
   await until(async () => {
     const { thread } = await c.call('thread/read', { threadId: parent, includeTurns: true })

@@ -135,13 +135,25 @@ export function createMockRemoteUpgrade(host: MockRemoteUpgradeHost): MockRemote
     },
 
     run(deviceId, mode) {
-      if (mode === 'force') throw new ChannelError('rejected', '远程升级只允许空闲时换上')
       if (mode === 'cancel') {
         set(deviceId, { step: 'idle' })
         return
       }
       const view = remote(deviceId)?.remoteUpgrade
       if (!view) throw new ChannelError('rejected', '在跑的服务不比应用旧')
+      if (mode === 'force') {
+        if (
+          remote(deviceId)?.connection !== 'online' ||
+          !view.capable ||
+          view.managed ||
+          view.action !== 'swap' ||
+          !['idle', 'waiting', 'failed'].includes(view.phase.step)
+        )
+          throw new ChannelError('rejected', '只有已连接且新版已安装的独立设备服务可以强制升级')
+        set(deviceId, { step: 'stopping', force: true })
+        later(() => swapIn(deviceId))
+        return
+      }
       const scene = scenes.get(deviceId) ?? 'swap'
       if (mode !== 'start') {
         if (view.phase.step !== 'waiting') throw new ChannelError('rejected', '没有在等服务空闲')

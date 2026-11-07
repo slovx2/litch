@@ -1,6 +1,6 @@
 // 远程设备服务的一键升级，以及本机强制换上共用的确认框。
 // 状态由核心记（DeviceView.remoteUpgrade），点了按钮、确认之后发 device.upgradeService；判断都在 service.ts 里。
-// 远程仅在空闲时换上；本机强制操作由调用方显式确认。
+// 强制换上需明确确认会打断的回合和后台任务。
 import type { DeviceView, RemoteUpgradeView, ServiceUpgradeView } from '@litch/core'
 import { useState } from 'react'
 import { useT } from '../app/appearance.ts'
@@ -20,7 +20,7 @@ import {
 } from './service.ts'
 import { GuideSteps } from './status.tsx'
 
-type Mode = 'start' | 'retry' | 'cancel'
+type Mode = 'start' | 'retry' | 'cancel' | 'force'
 
 /** 发一次 device.upgradeService。被拒（上一步没做完之类）时提示原因 */
 function useUpgrade(deviceId: string): (mode: Mode) => void {
@@ -141,6 +141,13 @@ export function ForceConfirm({
     >
       <div className="svc-confirm" data-confirm="force">
         <span>{t('service.remote.force.note', { name: t.text(device.name) })}</span>
+        <span>
+          {t('service.batch.forceNote', {
+            count: busy
+              .filter((entry) => entry.reason === 'backgroundTasks')
+              .reduce((sum, entry) => sum + (entry.count ?? 0), 0),
+          })}
+        </span>
         <ul className="svc-busy">
           {busy.map((entry) => {
             const line = busyLine(entry, (id) => nameOf(device, id, t), t('list.comma'))
@@ -205,6 +212,7 @@ export function RemoteUpgradeNote({
   const t = useT()
   const upgrade = useUpgrade(device.id)
   /** 远端的原话摆没摆出来：默认收着，点“详情”才摆 */
+  const [forcing, setForcing] = useState(false)
   const [said, setSaid] = useState(false)
   const notice = remoteNoticeOf(view)
   const { phase } = view
@@ -267,6 +275,17 @@ export function RemoteUpgradeNote({
             >
               {t(phase.checking ? 'service.remote.checking' : 'service.remote.retry')}
             </button>
+            {view.capable && !view.managed && view.action === 'swap' ? (
+              <button
+                type="button"
+                className="mini"
+                data-act="remote-force"
+                disabled={phase.checking}
+                onClick={() => setForcing(true)}
+              >
+                {t('service.remote.force')}
+              </button>
+            ) : null}
             <button
               type="button"
               className="mini"
@@ -318,6 +337,17 @@ export function RemoteUpgradeNote({
       ) : null}
       {said && phase.step === 'failed' && phase.detail ? (
         <pre className="cfail-detail mono">{phase.detail}</pre>
+      ) : null}
+      {forcing ? (
+        <ForceConfirm
+          device={device}
+          busy={phase.step === 'waiting' ? phase.busy : []}
+          onClose={() => setForcing(false)}
+          onYes={() => {
+            setForcing(false)
+            upgrade('force')
+          }}
+        />
       ) : null}
     </div>
   )

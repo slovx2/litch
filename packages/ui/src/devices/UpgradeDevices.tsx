@@ -84,7 +84,15 @@ function UpgradeRow({
         </select>
       </label>
 
-      {choice === 'force' ? <span className="set-note">{t('service.batch.forceNote')}</span> : null}
+      {choice === 'force' ? (
+        <span className="set-note">
+          {t('service.batch.forceNote', {
+            count: reasons
+              .filter((reason) => reason.reason === 'backgroundTasks')
+              .reduce((sum, reason) => sum + (reason.count ?? 0), 0),
+          })}
+        </span>
+      ) : null}
     </div>
   )
 }
@@ -233,7 +241,8 @@ export function UpgradeDevices() {
       onYes={() => {
         close()
         for (const device of rows) {
-          const choice = choices[device.id] ?? 'none'
+          const selected = choices[device.id] ?? 'none'
+          const choice = upgradeChoices(device).includes(selected) ? selected : 'none'
           if (choice === 'none') continue
           const command =
             device.kind === 'local'
@@ -241,7 +250,10 @@ export function UpgradeDevices() {
                   deviceId: device.id,
                   mode: choice === 'force' ? 'force' : 'auto',
                 })
-              : channel.command('device.upgradeService', { deviceId: device.id, mode: 'start' })
+              : channel.command('device.upgradeService', {
+                  deviceId: device.id,
+                  mode: choice === 'force' ? 'force' : 'start',
+                })
           void command.catch((error: unknown) =>
             showToast({
               id: `upgrade-${device.id}`,

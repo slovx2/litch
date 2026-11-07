@@ -17,6 +17,7 @@ function fixture() {
   let now = 1000
   let excluded = false
   let unknown = false
+  let historyMs = 0
   let beforeSend: (() => void) | null = null
   let afterSend: (() => void) | null = null
   const thread: any = { id: 'thread', status: { type: 'active', activeFlags: [] }, turns: [] }
@@ -32,6 +33,10 @@ function fixture() {
     closed: false,
     async request(method, params: any, options) {
       reads.push(method)
+      if (['thread/read', 'thread/resume'].includes(method) && historyMs > 0) {
+        const timeout = options?.timeoutMs ?? 0
+        if (timeout < historyMs) throw new Error(`${method} 等了 ${timeout} 毫秒没有应答`)
+      }
       if (method === 'thread/goal/get') return { goal }
       if (method === 'thread/queue/list') return { data: queue }
       if (method === 'turn/interrupt') {
@@ -108,6 +113,9 @@ function fixture() {
     setUnknown() {
       unknown = true
     },
+    setHistoryLatency(ms: number) {
+      historyMs = ms
+    },
     setBeforeSend(action: () => void) {
       beforeSend = action
     },
@@ -127,6 +135,24 @@ function fixture() {
     },
   }
 }
+
+test('冷启动读取历史超过五秒仍恢复；发送结果不明不重试', async () => {
+  const f = fixture()
+  try {
+    f.userTurn()
+    await f.resume.prepare()
+    f.reboot()
+    f.setHistoryLatency(6000)
+    f.setUnknown()
+    await f.resume.recover()
+    assert.equal(f.sent.length, 1)
+    assert.equal(f.store.rows('dispatching').length, 1)
+    await f.resume.recover()
+    assert.equal(f.sent.length, 1)
+  } finally {
+    f.close()
+  }
+})
 
 test('D-16：进行中工具结果未知也准备恢复；原线程只发一次，并告知检查实际副作用', async () => {
   const f = fixture()
