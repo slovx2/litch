@@ -4,7 +4,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { copyDownloadFile, publishDownloadFile } from '../download-files.mjs'
+import {
+  copyDownloadFile,
+  publishDownloadFile,
+} from '../../../../../packages/browser/src/browser/download-files.mjs'
 
 test('发布与跨卷复制均不覆盖目标，保留内容及本平台隔离元数据', async () => {
   const root = mkdtempSync(join(tmpdir(), 'litch-download-files-'))

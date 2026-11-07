@@ -25,17 +25,17 @@ if let flag = arguments.firstIndex(of: "--diagnostics") {
 }
 
 let directory =
-  environment["LITCH_COMPUTER_USE_DIR"]
+  environment[NativeHost.identity.directoryEnvironmentKey]
   ?? (NSHomeDirectory() as NSString).appendingPathComponent(
-    "Library/Application Support/Litch/computer-use")
+    NativeHost.identity.defaultStateSubdirectory)
 try? FileManager.default.createDirectory(
   atPath: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
 chmod(directory, 0o700)
 Log.open(directory: directory)
 
-let launchToken = environment["LITCH_COMPUTER_USE_TOKEN"]
+let launchToken = environment[NativeHost.identity.tokenEnvironmentKey]
 // 令牌只给自己用，不留在环境里
-unsetenv("LITCH_COMPUTER_USE_TOKEN")
+unsetenv(NativeHost.identity.tokenEnvironmentKey)
 let signing = Diagnostics.ownSigning()
 let mode = PeerAuth.mode(ownTeam: signing.teamId, launchToken: launchToken)
 Log.write(

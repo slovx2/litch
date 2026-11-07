@@ -12,6 +12,12 @@ npm run client:check:chrome
 
 输入场景同时跑默认 headless 和 headed CFT 最小化窗口，后者以 `--no-startup-window` 启动，显式创建 `windowState:minimized` 的隔离窗口并在每项检查后核对未恢复显示；新建工具标签仍为 `active:false`。覆盖点击/焦点/字段回读、同源导航、SPA 延迟提交、同值输入、批量中途失败及签名 URL/验证码脱敏。`focus-probe.mjs` 是独立焦点对照：交替关闭/开启焦点模拟，各用全新最小化页面，记录按钮计数及逐次 Tab 焦点，开启模拟时必须生效。它不用用户资料、不激活日用窗口，不保留截图或报告。
 
+M3 抽包验收默认同时组装并加载第二个测试扩展，用独立 ID/host/token/安装目录验证不改 Litch 登记；已经附着的同一 tab 被拒绝，第一扩展继续工作，第二扩展可控制自己的新 tab。测试扩展只进入本次隔离 profile。
+
+`npm run client:check:chrome -- --race-only` 专门执行 5 轮跨扩展并发认领；`--concurrent-claim` 在完整场景之后执行同一组诊断。两个 worker 先查询真实目标身份，再并发发出 claim；两个原生 host 使用同一隔离锁目录。若双方成功，报告完整 before/after 和结果并退出非零。修复前曾用延迟 getTargets 返回的定向夹具复现 4/5 双成功；修复后跨进程锁单测与真实并发一起验证。
+
+`node scripts/chrome-e2e/compare-extension.mjs <f39ec336导出源码目录>` 从源码重新构建前后产物，输出 `.local/chrome-comparison/report.json` 的逐文件字节数与 SHA-256。`node scripts/chrome-e2e/check-packages.mjs` 构建两个 tarball、在仓外安装并检查无 Electron 的独立消费；产物及哈希在 `.local/chrome-packages/`。普通检查依赖 `client:build` 的新产物，先构建再验。
+
 设置页安装引导另跑 `node scripts/chrome-e2e/settings.mjs`：隔离 HOME 中启动隐藏 Electron，加载正式 ChromeSection 和模拟设置通道，点击商店/手动入口，覆盖自动连接、聚焦刷新、失败重试、过期状态回包、版本不兼容及三平台中英文/三皮肤布局。要求根目录、界面和桌面依赖已安装，Electron 二进制已准备好；不接个人 Chrome、不打开真实商店，不保留截图或报告。宿主准备与打开商店的顺序由 `chrome-install.test.mts` 核对；这两项不能代替商店发布后的签名扩展安装验收。
 
 可用 `LITCH_CHROME_GO=/绝对路径/bin/go` 选择本机已安装、满足 go.mod 的 Go 工具链，避免隔离 HOME 再下载工具链；不改变隔离模块缓存和浏览器 profile。

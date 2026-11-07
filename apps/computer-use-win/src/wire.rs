@@ -217,3 +217,21 @@ mod tests {
         assert_eq!(line["error"]["data"]["kind"], json!("elevated"));
     }
 }
+
+#[cfg(test)]
+mod shared_golden_frames {
+    use super::*;
+    #[test]
+    fn shared_ts_swift_rust_frames() {
+        let fixtures: Value = serde_json::from_str(include_str!("../../../packages/computer-use/test/native-frames.json")).unwrap();
+        for fixture in fixtures.as_array().unwrap() {
+            let hex = fixture["hex"].as_str().unwrap();
+            let bytes: Vec<u8> = (0..hex.len()).step_by(2).map(|index| u8::from_str_radix(&hex[index..index + 2], 16).unwrap()).collect();
+            assert_eq!(u32::from_be_bytes(bytes[..4].try_into().unwrap()) as usize, bytes.len() - 4);
+            assert_eq!(serde_json::from_slice::<Value>(&bytes[4..]).unwrap(), fixture["value"]);
+            let mut output = Vec::new();
+            write_frame(&mut output, &fixture["value"]).unwrap();
+            assert_eq!(serde_json::from_slice::<Value>(&output[4..]).unwrap(), fixture["value"]);
+        }
+    }
+}

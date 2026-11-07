@@ -14,7 +14,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import type { DownloadItem } from 'electron'
-import { BrowserDownloads, safeDownloadName } from '../downloads.mjs'
+import {
+  BrowserDownloads,
+  safeDownloadName,
+} from '../../../../../packages/browser/src/browser/downloads.mjs'
 import type { TabInfo } from '../model.mjs'
 
 class Item extends EventEmitter {

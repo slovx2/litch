@@ -164,7 +164,7 @@ impl Engine {
         if self.is_self(app) && p.get("selfAllowed").and_then(Value::as_bool) != Some(true) {
             return Err(fail!(
                 Unauthorized,
-                "Access to Litch itself requires user approval in Litch."
+                "Access to {} itself requires user approval in {}.", env!("CU_HOST_PRODUCT"), env!("CU_HOST_PRODUCT")
             ));
         }
         Ok(())
@@ -252,13 +252,13 @@ impl Engine {
         let (app, win) = apps::resolve(&req_str(p, "appId")?, window_id(p))?;
         self.guard_self(&app, p)?;
         if app.integrity > self.own_integrity {
-            return Err(fail!(Elevated, "{} runs as administrator; Litch cannot control it. Ask the user to do it themselves.", app.name));
+            return Err(fail!(Elevated, "{} runs as administrator; {} cannot control it. Ask the user to do it themselves.", app.name, env!("CU_HOST_PRODUCT")));
         }
         if activity::is_stopped(&session, &app.app_id) {
             return Err(fail!(
                 Stopped,
-                "the user pressed Esc to stop Litch using {} this turn",
-                app.name
+                "the user pressed Esc to stop {} using {} this turn",
+                env!("CU_HOST_PRODUCT"), app.name
             ));
         }
         if let Some(reason) = system::locked_reason() {

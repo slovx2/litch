@@ -1,3 +1,4 @@
+// 由 scripts/generate-automation-contracts.mjs 生成；请修改 automation-contracts/src/litch/chrome-browser.mts。
 // 控制端 Chrome 的本地桥与界面契约，不是 app-server 扩展；M2 沿既有 clientTools。
 /**
  * 扩展与 Litch 之间线协议的兼容规则。扩展由应用商店自动更新、要等审核，不能要求两边版本号相同。

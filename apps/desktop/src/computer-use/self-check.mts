@@ -80,9 +80,7 @@ export async function checkAdhoc(appPath: string, userData: string): Promise<str
         namespace: 'litch_computer',
         tool: 'list_apps',
         arguments: {},
-        device: { id: 'local', name: 'local', kind: 'local', target: null },
-        harness: null,
-        cwd: null,
+        device: { id: 'local' },
       },
       { signal: new AbortController().signal, ask: async () => null },
     )

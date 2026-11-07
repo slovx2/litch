@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import {
+  type InputState,
+  observedInput,
+  receiptUrl,
+} from '../../../../../packages/browser/src/browser/input-receipt.mjs'
 import type { Call, Tool } from '../executor.mjs'
-import { type InputState, observedInput, receiptUrl } from '../input-receipt.mjs'
 import type { BrowserPage } from '../model.mjs'
 import { inputReady } from '../page-ops.mjs'
 import { type as typeTool } from '../tools-act.mjs'

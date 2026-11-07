@@ -1,10 +1,11 @@
+// 由 scripts/generate-automation-contracts.mjs 生成；请修改 automation-contracts/src/litch/client-tools-browser.mts。
 // 内置浏览器的工具定义（命名空间 litch_browser）：Litch 新建会话时放进 `thread/start.dynamicTools`，
 // 模型调用时由连着的 Litch 桌面端执行（apps/desktop/src/browser/）。
 //
 // 说明文字是写给模型看的，用英文；参数的形状和桌面端的执行器（apps/desktop/src/browser/args.mts）一一对应，
-// 改一边要改另一边。这个文件只引用 client-tools.mts 的类型。
+// 定义在此维护，protocol 同名文件由生成器投影；参数语义仍须与执行器一起验收。
 
-import type { ClientToolFunctionSpec, ClientToolNamespaceSpec } from './client-tools.mjs'
+import type { ClientToolFunctionSpec, ClientToolNamespaceSpec } from './automation-tool-spec.mjs'
 
 /** 命名空间的名字，和 CLIENT_TOOL_NAMESPACE.browser 是同一个 */
 export const BROWSER_NAMESPACE = 'litch_browser'

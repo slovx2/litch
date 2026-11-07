@@ -119,10 +119,10 @@ export function affectedDomains(
       all(`共享或未明确归属的脚本，保守全量：${path}`)
       continue
     }
-    // 共享协议/核心产品代码、设备/SSH、构建脚本都跨领域，宁可多跑。
+    // 共享协议/核心产品代码、自动化公共合同、设备/SSH、适配器里的 Chrome 转发库、构建脚本都跨领域，宁可多跑。
     // protocol 的 src 和 test 都在范围内；CI unit 的 npm run check 执行全部协议单测。
     if (
-      /^(packages\/(shared|core|protocol|device)\/|protocol\/|cmd\/|sshserver\/|\.github\/)/.test(
+      /^(packages\/(shared|core|protocol|device|automation-contracts)\/|protocol\/|cmd\/|chromebridge\/|sshserver\/|\.github\/)/.test(
         path,
       )
     ) {
@@ -143,6 +143,20 @@ export function affectedDomains(
       selected.add('computer-use')
       selected.add('client')
       reasons.push(`macOS 原生助手：${path}`)
+    } else if (/^packages\/chrome-(extension|bridge)\//.test(path)) {
+      // Chrome 扩展库与 Node 桥：Litch 的扩展和桌面外壳从源码引用。
+      selected.add('client')
+      selected.add('client-engines')
+      reasons.push(`Chrome 扩展与桥包：${path}`)
+    } else if (/^packages\/browser\//.test(path)) {
+      // 可嵌入的浏览器运行时：桌面外壳与 Chrome 扩展都从源码引用。
+      selected.add('client')
+      selected.add('client-engines')
+      reasons.push(`浏览器运行时包：${path}`)
+    } else if (/^packages\/computer-use\//.test(path)) {
+      // 可嵌入的 CU 执行器：桌面外壳从源码引用，两个平台的原生助手都经它驱动。
+      for (const domain of ['client', 'computer-use', 'computer-use-windows']) selected.add(domain)
+      reasons.push(`Computer Use 执行器包：${path}`)
     } else if (/^apps\/desktop\/(src|test|assets)\//.test(path)) {
       selected.add('client')
       selected.add('client-engines')

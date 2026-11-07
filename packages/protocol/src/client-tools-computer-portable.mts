@@ -1,4 +1,5 @@
-import type { ClientToolNamespaceSpec } from './client-tools.mjs'
+// 由 scripts/generate-automation-contracts.mjs 生成；请修改 automation-contracts/src/litch/client-tools-computer-portable.mts。
+import type { ClientToolNamespaceSpec } from './automation-tool-spec.mjs'
 import { computerToolsSpec } from './client-tools-computer.mjs'
 
 /**

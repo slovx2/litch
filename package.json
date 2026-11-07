@@ -28,10 +28,10 @@
     "setup": "npm ci && npm ci --prefix packages/claude && npm ci --prefix packages/pi && npm ci --prefix packages/dsh && npm ci --prefix packages/opencode && npm ci --prefix packages/acp && npm ci --prefix packages/antigravity && npm run build",
     "dev": "tsx packages/claude/src/adapter.mts",
     "build": "npm run build --prefix packages/claude && npm run build --prefix packages/pi && npm run build --prefix packages/dsh && npm run build --prefix packages/opencode && npm run build --prefix packages/acp && npm run build --prefix packages/antigravity && npm run build --prefix packages/device && node scripts/build-cli.mjs",
-    "typecheck": "npm run typecheck --prefix packages/claude && npm run typecheck --prefix packages/pi && npm run typecheck --prefix packages/dsh && npm run typecheck --prefix packages/opencode && npm run typecheck --prefix packages/acp && npm run typecheck --prefix packages/antigravity && npm run typecheck --prefix packages/device",
+    "typecheck": "npm run typecheck --prefix packages/claude && npm run typecheck --prefix packages/pi && npm run typecheck --prefix packages/dsh && npm run typecheck --prefix packages/opencode && npm run typecheck --prefix packages/acp && npm run typecheck --prefix packages/antigravity && npm run typecheck --prefix packages/device && npm run typecheck --prefix packages/computer-use && npm run typecheck --prefix packages/chrome-extension && npm run typecheck --prefix packages/chrome-bridge",
     "lint": "biome lint packages apps scripts",
     "format": "biome format --write packages apps scripts",
-    "check": "biome check packages apps scripts && node scripts/check-versions.mjs && node scripts/check-manual.mjs && node scripts/check-text-sizes.mjs && npm run test:protocol:unit",
+    "check": "biome check packages apps scripts && node scripts/check-versions.mjs && node scripts/check-manual.mjs && node scripts/check-text-sizes.mjs && npm run test:protocol:unit && npm run check:automation-contracts",
     "check:fix": "biome check --write packages apps scripts",
     "check:rust-protocol-fixtures": "node scripts/check-rust-protocol-fixtures.mjs",
     "docs:dev": "vitepress dev docs",
@@ -77,8 +77,8 @@
     "package:adapter": "node scripts/package-adapter.mjs",
     "check:adapter-package": "node scripts/check-adapter-package.mjs",
     "test:dsh-ssh": "npm run build --prefix packages/dsh && node scripts/dsh-poc-serve.mjs --verify",
-    "client:setup": "npm ci --prefix packages/ui && npm ci --prefix apps/desktop",
-    "client:typecheck": "npm run typecheck --prefix packages/core && npm run typecheck --prefix packages/ui && npm run typecheck --prefix apps/desktop",
+    "client:setup": "npm ci --ignore-scripts --prefix packages/browser && npm ci --prefix packages/ui && npm ci --prefix apps/desktop",
+    "client:typecheck": "npm run typecheck --prefix packages/core && npm run typecheck --prefix packages/browser && npm run typecheck --prefix packages/ui && npm run typecheck --prefix apps/desktop",
     "client:test": "npm run test --prefix packages/core",
     "client:diagnose:files-refresh": "node --import tsx --test packages/core/diagnostics/files-refresh-disk.mts",
     "client:test:ui": "npm run test --prefix packages/ui",
@@ -136,7 +136,13 @@
     "client:installer": "npm run installer --prefix apps/desktop",
     "client:check:packed": "npm run check:packed --prefix apps/desktop",
     "test:antigravity": "npm run test --prefix packages/antigravity",
-    "test:antigravity-sdk": "npm run test:sdk --prefix packages/antigravity"
+    "test:computer-use-sdk": "npm run test --prefix packages/computer-use",
+    "test:browser-package": "npm run test --prefix packages/browser && npm run check:package --prefix packages/browser",
+    "test:chrome-packages": "npm run test --prefix packages/chrome-extension && npm run test --prefix packages/chrome-bridge",
+    "build:automation-packages": "npm run build --prefix packages/computer-use && npm run build --prefix packages/browser && npm run build --prefix packages/chrome-extension && npm run build --prefix packages/chrome-bridge",
+    "test:antigravity-sdk": "npm run test:sdk --prefix packages/antigravity",
+    "generate:automation-contracts": "node scripts/generate-automation-contracts.mjs --write",
+    "check:automation-contracts": "node scripts/check-automation-contracts.mjs"
   },
   "dependencies": {
     "ajv": "8.20.0",
@@ -145,6 +151,7 @@
     "ws": "8.22.0"
   },
   "devDependencies": {
+    "@babel/parser": "7.29.7",
     "@biomejs/biome": "2.5.15",
     "@types/node": "26.6.5",
     "@types/pngjs": "6.0.5",

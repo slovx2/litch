@@ -1,3 +1,4 @@
+// 由 scripts/generate-automation-contracts.mjs 生成；请修改 automation-contracts/src/automation-surface.mts。
 // CU 与浏览器共用的预览坐标、动作阶段和版本。无平台依赖，不注册协议或工具。
 
 export interface AutomationPoint {

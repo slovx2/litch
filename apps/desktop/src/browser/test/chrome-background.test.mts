@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { createBackgroundTab } from '../../../../chrome-extension/src/background-tab.mjs'
-import { execute } from '../../../../chrome-extension/src/requests.mjs'
-import type { ExtensionState } from '../../../../chrome-extension/src/state.mjs'
+import { createBackgroundTab } from '../../../../../packages/chrome-extension/src/background-tab.mjs'
+import { execute } from '../../../../../packages/chrome-extension/src/requests.mjs'
+import type { ExtensionState } from '../../../../../packages/chrome-extension/src/state.mjs'
 
 test('新标签显式指定普通窗口并保持后台，不进入隐私窗口', async () => {
   const calls: unknown[] = []

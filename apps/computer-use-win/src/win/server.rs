@@ -67,7 +67,7 @@ pub fn run(args: Vec<String>) -> i32 {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
     }
     let Some(_instance) = system::single_instance() else {
-        log("已经有一个助手在跑（同一用户的另一个 Litch 起的），这个退出");
+        log("输入互斥量不可用（同一用户会话已有助手或无权取得互斥量），这个退出");
         return 3;
     };
     *OUT.lock().unwrap_or_else(|e| e.into_inner()) = Some(BufWriter::new(io::stdout()));

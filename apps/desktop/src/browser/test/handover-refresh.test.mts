@@ -3,10 +3,10 @@ import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import test from 'node:test'
 import type { WebContents } from 'electron'
+import { refreshHandoverPage } from '../../../../../packages/browser/src/browser/passwords/handover-refresh.mjs'
 import type { HostTab } from '../electron-tab.mjs'
 import { guardedPage } from '../guarded-page.mjs'
 import type { BrowserHost } from '../model.mjs'
-import { refreshHandoverPage } from '../passwords/handover-refresh.mjs'
 
 function fixture(url = 'https://example.test/login') {
   const events = new EventEmitter()

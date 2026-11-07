@@ -25,9 +25,7 @@ extern "system" {
 }
 
 fn installed_exe() -> Option<String> {
-    let key = HSTRING::from(
-        r"Software\Microsoft\Windows\CurrentVersion\Uninstall\{86165537-655A-4F60-847F-94A1A6C622F4}_is1",
-    );
+    let key = HSTRING::from(env!("CU_HOST_REGISTRY_KEY"));
     let mut data = vec![0u16; 32768];
     let mut bytes = (data.len() * 2) as u32;
     unsafe {
@@ -48,8 +46,8 @@ fn installed_exe() -> Option<String> {
         return None;
     }
     Some(format!(
-        "{}\\Litch.exe",
-        directory.trim_end_matches(['\\', '/'])
+        "{}\\{}",
+        directory.trim_end_matches(['\\', '/']), env!("CU_HOST_EXECUTABLE")
     ))
 }
 
@@ -123,8 +121,8 @@ fn isolated(pid: u32) -> Option<bool> {
 
 pub fn protected(exe: &str, pid: u32) -> bool {
     let installed = installed_exe();
-    if !crate::ident::is_litch(exe, installed.as_deref(), false) {
+    if !crate::ident::is_protected_target(exe, installed.as_deref(), false) {
         return false;
     }
-    crate::ident::is_litch(exe, installed.as_deref(), isolated(pid).unwrap_or(false))
+    crate::ident::is_protected_target(exe, installed.as_deref(), isolated(pid).unwrap_or(false))
 }

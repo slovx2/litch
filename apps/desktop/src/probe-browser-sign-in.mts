@@ -142,10 +142,22 @@ export async function checkSignInCard(options: {
     { failed, card: await page("document.querySelector('.bw-signin')?.outerHTML ?? null") },
   )
   await shot('sign-in-closed')
-  await page(`document.querySelector('.bw-signin [data-act="sign-in-dismiss"]').click()`)
+  // 卡片出现不代表上一笔异步答复已经结束；和用户一样等按钮恢复可操作再点。
+  const ready = await until(
+    `!!document.querySelector('.bw-signin[data-state="closed"] [data-act="sign-in-dismiss"]:not(:disabled)')`,
+  )
+  const clicked = await page(
+    `(() => { const button = document.querySelector('.bw-signin [data-act="sign-in-dismiss"]'); const before = button?.outerHTML; button?.click(); return before })()`,
+  )
   check(
     '登录卡片：“标签已关掉”点“知道了”就没了',
-    await until("!document.querySelector('.bw-signin')"),
+    ready && (await until("!document.querySelector('.bw-signin')")),
+    {
+      clicked,
+      after: await page(
+        `(async () => ({ cards: [...document.querySelectorAll('.bw-signin')].map(card => card.outerHTML), main: await window.litchBrowser.signIn.list() }))()`,
+      ),
+    },
   )
 
   for (const tab of browser.host.list()) {

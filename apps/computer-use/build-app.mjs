@@ -23,6 +23,7 @@ import {
 } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { LITCH_HOST_IDENTITY, validateHostIdentity } from './host-identity.mjs'
 
 const here = (path) => fileURLToPath(new URL(path, import.meta.url))
 
@@ -37,15 +38,16 @@ const EXECUTABLE = 'LitchComputerUse'
 const run = (command, args, options = {}) =>
   execFileSync(command, args, { stdio: ['ignore', 'inherit', 'inherit'], ...options })
 
-function infoPlist(version) {
+export function infoPlist(version, identity = LITCH_HOST_IDENTITY, executableName = EXECUTABLE) {
+  validateHostIdentity(identity)
   const entries = {
     CFBundleDevelopmentRegion: 'en',
-    CFBundleDisplayName: 'Litch Computer Use',
-    CFBundleExecutable: EXECUTABLE,
+    CFBundleDisplayName: identity.helperName,
+    CFBundleExecutable: executableName,
     CFBundleIconFile: 'icon',
-    CFBundleIdentifier: HELPER_BUNDLE_ID,
+    CFBundleIdentifier: identity.helperId,
     CFBundleInfoDictionaryVersion: '6.0',
-    CFBundleName: 'Litch Computer Use',
+    CFBundleName: identity.helperName,
     CFBundlePackageType: 'APPL',
     CFBundleShortVersionString: version,
     CFBundleVersion: version,
@@ -53,10 +55,14 @@ function infoPlist(version) {
     LSUIElement: true,
     NSHumanReadableCopyright: 'MIT',
     NSPrincipalClass: 'NSApplication',
+    ComputerUseHostIdentity: JSON.stringify(identity),
   }
   const body = Object.entries(entries)
     .map(([key, value]) => {
-      const node = value === true ? '<true/>' : `<string>${value}</string>`
+      const node =
+        value === true
+          ? '<true/>'
+          : `<string>${String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</string>`
       return `  <key>${key}</key>\n  ${node}`
     })
     .join('\n')
@@ -78,7 +84,17 @@ export function buildHelper({
   out = join(PACKAGE_DIR, 'out'),
   arch = process.arch,
   debug = false,
+  hostIdentity = LITCH_HOST_IDENTITY,
+  appName = HELPER_APP_NAME,
+  executableName = EXECUTABLE,
+  iconPath = here('../desktop/assets/icon.icns'),
+  version = JSON.parse(readFileSync(here('../../package.json'), 'utf8')).version,
 } = {}) {
+  validateHostIdentity(hostIdentity)
+  for (const name of [appName, executableName]) {
+    if (!name || name === '.' || name === '..' || /[/\\\x00-\x1f]/.test(name))
+      throw new Error('组件名称必须是单一文件名')
+  }
   if (process.platform !== 'darwin') throw new Error('Litch Computer Use 只在 macOS 上构建')
   const swiftArch = arch === 'x64' ? 'x86_64' : 'arm64'
   const args = ['build', '--package-path', PACKAGE_DIR, '-c', debug ? 'debug' : 'release']
@@ -88,16 +104,18 @@ export function buildHelper({
   const binary = join(binDir, EXECUTABLE)
   if (!existsSync(binary)) throw new Error(`没有找到构建出来的 ${binary}`)
 
-  const version = JSON.parse(readFileSync(here('../../package.json'), 'utf8')).version
-  const app = join(out, HELPER_APP_NAME)
+  const app = join(out, appName)
   rmSync(app, { recursive: true, force: true })
   mkdirSync(join(app, 'Contents', 'MacOS'), { recursive: true })
   mkdirSync(join(app, 'Contents', 'Resources'), { recursive: true })
-  writeFileSync(join(app, 'Contents', 'Info.plist'), infoPlist(version))
+  writeFileSync(
+    join(app, 'Contents', 'Info.plist'),
+    infoPlist(version, hostIdentity, executableName),
+  )
   writeFileSync(join(app, 'Contents', 'PkgInfo'), 'APPL????')
-  cpSync(binary, join(app, 'Contents', 'MacOS', EXECUTABLE))
-  chmodSync(join(app, 'Contents', 'MacOS', EXECUTABLE), 0o755)
-  cpSync(here('../desktop/assets/icon.icns'), join(app, 'Contents', 'Resources', 'icon.icns'))
+  cpSync(binary, join(app, 'Contents', 'MacOS', executableName))
+  chmodSync(join(app, 'Contents', 'MacOS', executableName), 0o755)
+  if (iconPath) cpSync(iconPath, join(app, 'Contents', 'Resources', 'icon.icns'))
   return app
 }
 
@@ -116,7 +134,11 @@ export function signHelper(app, { identity, keychain } = {}) {
     'runtime',
     ...(real ? ['--timestamp'] : []),
     '--identifier',
-    HELPER_BUNDLE_ID,
+    execFileSync(
+      '/usr/libexec/PlistBuddy',
+      ['-c', 'Print :CFBundleIdentifier', join(app, 'Contents', 'Info.plist')],
+      { encoding: 'utf8' },
+    ).trim(),
     app,
   ])
   run('codesign', ['--verify', '--strict', '--verbose=1', app])
@@ -138,7 +160,10 @@ function option(name) {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   try {
+    const configFile = option('--config')
+    const config = configFile ? JSON.parse(readFileSync(configFile, 'utf8')) : {}
     const app = buildHelper({
+      ...config,
       out: option('--out') ?? join(PACKAGE_DIR, 'out'),
       debug: process.argv.includes('--debug'),
     })

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { execute } from '../../../../../packages/chrome-extension/src/requests.mjs'
+import type { ExtensionState } from '../../../../../packages/chrome-extension/src/state.mjs'
 import type { ChromeListedTab } from '../../../../../packages/protocol/src/chrome-browser.mjs'
-import { execute } from '../../../../chrome-extension/src/requests.mjs'
-import type { ExtensionState } from '../../../../chrome-extension/src/state.mjs'
 
 const tabs = [
   { id: 1, windowId: 10, active: true },
@@ -36,6 +36,11 @@ async function list(lastFocused: object | Error, source = tabs): Promise<ChromeL
       },
       webNavigation: {
         getAllFrames: async () => [{ url: 'https://fixture.test/' }],
+      },
+      // 列举要带 DevTools 目标身份（跨扩展互斥用）；只读，不 attach。
+      debugger: {
+        getTargets: async () =>
+          source.map((tab) => ({ tabId: tab.id, id: tab.id.toString(16).padStart(32, '0') })),
       },
     },
   } as unknown as ExtensionState
