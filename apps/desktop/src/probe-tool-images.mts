@@ -75,11 +75,7 @@ export async function toolImagesProbe(): Promise<string[]> {
     () => query<HTMLImageElement>('.tool-image-stage img')?.style.transform.includes('scale(2)'),
     '点击放大',
   )
-  query('.tool-image-backdrop')!.click()
-  await wait(
-    () => query<HTMLImageElement>('.tool-image-stage img')?.style.transform.includes('scale(1)'),
-    '背景先还原',
-  )
+  // 点遮罩空白处直接关闭，放大时也不再先还原
   query('.tool-image-backdrop')!.click()
   await wait(() => !query('.tool-image-dialog'), '背景关闭')
   const group = strip.closest('.steps')!

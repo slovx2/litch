@@ -613,6 +613,10 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   )
   draftImage.click()
   draftViewer = await until('再次打开草稿大图', () => one<HTMLDialogElement>('dialog.viewer[open]'))
+  // 遮罩只在空白处按下、原地松开时关闭（拖动或缩放不关）：先在遮罩上按下，再点击
+  draftViewer.dispatchEvent(
+    new PointerEvent('pointerdown', { bubbles: true, clientX: 4, clientY: 4, isPrimary: true }),
+  )
   draftViewer.click()
   await until(
     '点外面关闭草稿大图并回到输入框',
