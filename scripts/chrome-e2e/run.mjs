@@ -157,7 +157,7 @@ try {
   second = await secondIdentity({
     root,
     work,
-    output,
+    output: work,
     profile,
     assets,
     nativeBinary: embeddedNativeBinary,
