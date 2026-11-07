@@ -4,6 +4,16 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { ONE_LINE, ROW_MIN, rowLayout } from '../src/detail/composer/layout.ts'
 
+test('外接键盘容器保持横向布局：剩余宽度交给输入框，高度不参与 flex 分配', () => {
+  assert.equal(rowLayout.keyboard.flex, 1)
+  assert.equal(rowLayout.keyboard.flexDirection, 'row')
+  assert.equal(rowLayout.input.flex, 1)
+  for (const name of ['keyboard', 'input']) {
+    assert.equal(rowLayout[name].height, undefined)
+    assert.equal(rowLayout[name].width, undefined)
+  }
+})
+
 test('一排按 stretch 排，两边按钮跟着输入框的实际高度走', () => {
   assert.equal(rowLayout.row.flexDirection, 'row')
   assert.equal(rowLayout.row.flexWrap, 'nowrap', '权限记忆状态不能使输入框按钮折行')

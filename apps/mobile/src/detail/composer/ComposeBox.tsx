@@ -527,7 +527,7 @@ export function ComposeBox({
           ) : null}
         </Pressable>
         <HardwareKeyboard
-          style={{ flex: 1 }}
+          style={styles.keyboard}
           submitEnabled={filled && !blocked && !uploading}
           onSubmit={send}
         >
