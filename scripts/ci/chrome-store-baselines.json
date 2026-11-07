@@ -1,12 +1,12 @@
 {
-  "0.36.0": {
+  "0.33.0": {
     "schema": 1,
     "itemId": "ddnllmibgnhhiiaaidfamlknbnfjpnpo",
-    "version": "0.36.0",
-    "sha": "89bf6a310def0daaecc19115b49dde6a1a1b2172",
-    "contentHash": "6ffb20d08acfc5004a7f64f997d93e72f6e1ab5c9b76edb2ac4680d1ec34b2c1",
-    "zipName": "litch-browser-0.36.0.zip",
-    "zipSha256": "4b23a6e5a4a64f8d1b9a9c27c3031c7eabb8761f29e577a048510e3de42e042a",
-    "provenance": "用户实际手动上传送审的 ZIP；与 v0.36.0 之间扩展输入未改。"
+    "version": "0.33.0",
+    "sha": "9543fad8580953204a23d86d2d3686f6ab58857f",
+    "contentHash": "3dfd4d819bd1afd369e35fe48629e6a02f841be024cc27ec1ef82f88d67f3002",
+    "zipName": "litch-browser-0.33.0.zip",
+    "zipSha256": "ae15eef27f0ed6101487bf785d3bf9b2238834651795aa6f919baea4c28e2189",
+    "provenance": "原上传 ZIP 未留存。内容摘要按商店公开的 0.33.0 签名 CRX 计算：五个文件经 _metadata/verified_contents.json 的 treehash 核实，manifest 去掉商店插入的 update_url；与 v0.33.0 重建结果相比只差 esbuild 源码路径注释前缀 litch-wt/chrome-store/。zipSha256 是该 CRX 内 ZIP 的 SHA-256（CRX 本身 592b545eb9cfae09799ea516e3c1c8c4992c6ac6318a9a2114cc9053dcf6a2a6）。"
   }
 }

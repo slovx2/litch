@@ -77,10 +77,10 @@ test('从商店版本对应 Release 下载摘要并回验 GitHub digest；未知
   )
   const bootstrap = await githubServices(env, () => {
     throw new Error('不应调用 API')
-  }).baseline('0.36.0')
+  }).baseline('0.33.0')
   assert.equal(
-    bootstrap.zipSha256,
-    '4b23a6e5a4a64f8d1b9a9c27c3031c7eabb8761f29e577a048510e3de42e042a',
+    bootstrap.contentHash,
+    '3dfd4d819bd1afd369e35fe48629e6a02f841be024cc27ec1ef82f88d67f3002',
   )
 })
 

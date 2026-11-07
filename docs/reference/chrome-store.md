@@ -22,7 +22,7 @@
 
 内容摘要对每个交付文件的路径及字节计算 SHA-256；仅对 manifest 规范化 JSON 并排除 `version`。ZIP 时间戳、压缩方式、条目顺序不参与比较。运行时代码（包括打入的共享代码）、资源、权限和最低 Chrome 版本的变化都会计入。没有依赖目录 diff 或上次桌面版本推断是否需要上传。
 
-API 的 `fetchStatus` 提供当前公开版本，不提供包下载或内容摘要。比较基准按该版本查找同名 GitHub Release 的 `chrome-store-package.json`，并验证 GitHub 提供的资产 SHA-256；手工历史基准登记在 `scripts/ci/chrome-store-baselines.json`。首次基准为发布者实际上传的 0.36.0 ZIP，不将“正在审核”当成已公开；只有 API 返回它已公开后才采用。
+API 的 `fetchStatus` 提供当前公开版本，不提供包下载或内容摘要。比较基准按该版本查找同名 GitHub Release 的 `chrome-store-package.json`，并验证 GitHub 提供的资产 SHA-256；手工历史基准登记在 `scripts/ci/chrome-store-baselines.json`。首次基准是商店公开的 0.33.0：原上传 ZIP 未留存，内容摘要按商店签名 CRX 的文件计算（经 `verified_contents.json` 核实，manifest 去掉商店插入的 `update_url`）。不将“正在审核”当成已公开；只有 API 返回某版本已公开后才采用它的基准。
 
 有变化时，先在配套的**已公开** GitHub Release 添加商店 ZIP 和摘要、回验资产摘要，再上传商店。留存记录意味着“已准备向商店上传”，不证明商店已收到或审核通过；是否公开始终查询商店状态。后续手工提交必须保存实际上传 ZIP，并登记其摘要，否则自动化停止，不能拿另一个版本作基准。
 
