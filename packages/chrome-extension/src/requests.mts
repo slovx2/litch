@@ -1,8 +1,11 @@
 import type {
   ChromeGrant,
+  ChromeListedTab,
   ChromeRequest,
 } from '../../automation-contracts/src/litch/chrome-browser.mjs'
 import { isAllowedCdp } from '../../browser/src/browser/cdp-allow.mjs'
+import { isInputCommand } from '../../browser/src/browser/input-command.mjs'
+import { createBackgroundTab } from './background-tab.mjs'
 import { chromeOrigin } from './origin.mjs'
 import { disposePointer, planPointer, pointerCommand, withoutPointer } from './pointer.mjs'
 import {
@@ -47,15 +50,22 @@ export async function execute(state: ExtensionState, request: ChromeRequest): Pr
 }
 
 async function executeRequest(state: ExtensionState, request: ChromeRequest): Promise<unknown> {
+  if (state.stopped && !['release', 'stop'].includes(request.op))
+    throw new ChromeFault(
+      'userStopped',
+      `The user stopped Chrome control. Ask the user to click the ${state.productName} extension to resume control.`,
+    )
   if (request.epoch !== state.epoch)
     throw new ChromeFault('staleLease', 'Chrome reconnected. List targets and claim again.')
   const args = request.args
   if (state.paused.size && !['renew', 'release', 'stop', 'unfreeze'].includes(request.op))
     throw new ChromeFault('signingIn', 'The user is signing in. This Chrome instance is paused.')
   if (request.op === 'list') {
+    // Chrome 在后台时仍返回最后获得焦点的窗口；没有窗口时只缺少标记，不妨碍列举。
+    const lastFocused = await state.chrome.windows.getLastFocused().catch(() => null)
     const tabs = await state.chrome.tabs.query({})
     const targets: Array<{ tabId?: number; id: string }> = await state.chrome.debugger.getTargets()
-    const result = await Promise.all(
+    const result: Array<ChromeListedTab & { targetId?: string }> = await Promise.all(
       tabs
         .filter((tab: any) =>
           targets.some((target) => target.tabId === tab.id && /^[a-fA-F0-9]{32}$/.test(target.id)),
@@ -66,6 +76,11 @@ async function executeRequest(state: ExtensionState, request: ChromeRequest): Pr
           targetId: targets.find((target) => target.tabId === tab.id)?.id,
           origins: await inspectOrigins(state, tab.id).catch(() => []),
           busy: [...state.grants.values()].some((grant) => grant.tabId === tab.id),
+          active: tab.active === true,
+          lastFocusedWindow:
+            typeof lastFocused?.id === 'number' &&
+            lastFocused.id >= 0 &&
+            tab.windowId === lastFocused.id,
         })),
     )
     if (state.paused.size)
@@ -73,7 +88,7 @@ async function executeRequest(state: ExtensionState, request: ChromeRequest): Pr
     return result
   }
   if (request.op === 'new') {
-    const tab = await state.chrome.tabs.create({ url: 'about:blank', active: false })
+    const tab = await createBackgroundTab(state.chrome)
     // 等新建空白页的首次提交完成，避免马上 claim 拿到上一代文档。
     for (let attempt = 0; attempt < 50; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 20))
@@ -119,6 +134,8 @@ async function executeRequest(state: ExtensionState, request: ChromeRequest): Pr
       await saveAttached(state)
       await cdp(state, grant.tabId, 'Page.enable')
       await cdp(state, grant.tabId, 'Runtime.enable')
+      // 后台/最小化窗口没有可绘制的焦点；只模拟已租用标签，不激活浏览器窗口。
+      await cdp(state, grant.tabId, 'Emulation.setFocusEmulationEnabled', { enabled: true })
       const current = await tabState(state, grant.tabId)
       await requireGrant(state, grant.leaseId, args.expectedGeneration as number)
       await state.presentation.claim(grant)
@@ -180,10 +197,10 @@ async function executeRequest(state: ExtensionState, request: ChromeRequest): Pr
     if (state.paused.size)
       throw new ChromeFault('signingIn', 'Chrome is already paused for sign-in.')
     state.paused.add(grant.leaseId)
+    await cdp(state, grant.tabId, 'Emulation.setFocusEmulationEnabled', { enabled: false })
     state.console.clear()
     await disposePointer(state, grant)
-    const tab = await state.chrome.tabs.update(grant.tabId, { active: true })
-    await state.chrome.windows.update(tab.windowId, { focused: true })
+    // 登录卡尚未被用户处理：只暂停控制，不擅自切换用户窗口或标签。
     return null
   }
   if (request.op === 'unfreeze') {
@@ -192,6 +209,7 @@ async function executeRequest(state: ExtensionState, request: ChromeRequest): Pr
     return tabState(state, grant.tabId)
   }
   await requireGrant(state, grant.leaseId, request.generation)
+  if (request.op === 'refresh') return tabState(state, grant.tabId)
   if (request.op === 'console') {
     const entries = state.console.get(grant.tabId) ?? []
     if (args.clear === true) state.console.delete(grant.tabId)
@@ -228,6 +246,28 @@ async function executeRequest(state: ExtensionState, request: ChromeRequest): Pr
       method === 'Page.captureScreenshot' || method === 'Accessibility.getFullAXTree'
         ? await withoutPointer(state, grant, dispatch)
         : await pointerCommand(state, grant, method, params, dispatch)
+    if (args.inputReceipt === true && isInputCommand(method, params)) {
+      // CDP 已确认派发后才进入此分支；正常导航不再伪装成派发前过期。
+      // 只回标签元数据，绝不把越过来源边界后的页面内容夹带回去。
+      let documentChanged = false
+      try {
+        await requireGrant(state, grant.leaseId)
+        documentChanged = before !== (await documentStamp(state, grant))
+      } catch (error) {
+        if (
+          !(error instanceof ChromeFault) ||
+          !['staleDocument', 'originNotApproved'].includes(error.code)
+        )
+          throw error
+        documentChanged = true
+      }
+      return {
+        inputReceipt: true,
+        value: result,
+        documentChanged,
+        tab: await tabState(state, grant.tabId),
+      }
+    }
     await requireGrant(state, grant.leaseId)
     if (before !== (await documentStamp(state, grant)))
       throw new ChromeFault(

@@ -23,6 +23,7 @@ import {
   sessionMark,
 } from '../../../../../packages/ui/src/sidebar/session-mark.ts'
 import { markdownStyleOf } from '../../detail/markdownStyle'
+import { plainLine } from '../../ui/plain-text'
 import type { StatusKind, Theme } from '../../ui/theme'
 
 /**
@@ -109,16 +110,6 @@ export function orderedIssues(
     pending: issuePending(post, board, suggestions),
   }))
 }
-/** 列表行里只放一行纯文字：取第一行非空内容，去掉常见 Markdown 记号。 */
-export function plainLine(text: string): string {
-  const line = text.split('\n').find((l) => l.trim()) ?? ''
-  return line
-    .replace(/^\s*(#{1,6}\s+|[-*+]\s+|\d+\.\s+|>\s*)/, '')
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/(\*\*|__|\*|_|~~|`)/g, '')
-    .trim()
-}
-
 /** 收起的长动态只渲染前几行源文字；切在代码块中间时补上结束标记。 */
 export function collapsedMarkdown(text: string, lines: number): string | null {
   const all = text.split('\n')

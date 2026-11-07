@@ -423,3 +423,67 @@ test('模拟执行器保留首次失败，下一 flow 通过也不变绿，不�
     /首次失败：mock\/01-home.yaml（尝试 1）；基础设施重试：0 次；产品断言重试：0/,
   )
 })
+
+for (const buildStatus of [0, 1]) {
+  test(`E2E 构建状态 ${buildStatus}：单次 Gradle 构建，收尾不停止其他 daemon`, (t) => {
+    const directory = temporary(t)
+    const events = join(directory, 'build-events.jsonl')
+    const preload = join(directory, 'build-spawn.mjs')
+    // 运行真实入口和 finally，只替换构建子进程，不能触碰真实 Android 工程或 daemon。
+    writeFileSync(
+      preload,
+      `
+      import childProcess from 'node:child_process';
+      import { appendFileSync } from 'node:fs';
+      import { syncBuiltinESMExports } from 'node:module';
+      childProcess.spawnSync = (command, args, options) => {
+        appendFileSync(process.env.EVENTS, JSON.stringify({ command, args }) + '\\n');
+        if (command === 'npx') return { status: 0 };
+        if (command === 'npm') return { status: Number(process.env.BUILD_STATUS) };
+        throw new Error('不应启动其他同步命令：' + command);
+      };
+      syncBuiltinESMExports();
+    `,
+    )
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--import',
+        pathToFileURL(preload).href,
+        join(repo, 'apps/mobile/scripts/e2e.mjs'),
+        '--build',
+        '--apk',
+        join(directory, 'missing.apk'),
+        '--only',
+        'mock',
+      ],
+      {
+        cwd: repo,
+        env: {
+          ...process.env,
+          HOME: directory,
+          GRADLE_USER_HOME: join(directory, 'shared-gradle'),
+          EVENTS: events,
+          BUILD_STATUS: String(buildStatus),
+          GITHUB_STEP_SUMMARY: '',
+          LITCH_E2E_ARTIFACTS: join(directory, 'artifacts'),
+        },
+        encoding: 'utf8',
+        timeout: 20000,
+      },
+    )
+    assert.equal(result.status, 1, result.stdout + result.stderr)
+    assert.match(result.stdout, buildStatus === 0 ? /没有安装包/ : /android:release.*失败/)
+    const commands = readFileSync(events, 'utf8').trim().split('\n').map(JSON.parse)
+    assert.deepEqual(commands, [
+      {
+        command: 'npx',
+        args: ['expo', 'prebuild', '--platform', 'android', '--clean', '--no-install'],
+      },
+      { command: 'npm', args: ['run', 'android:release', '--', '--max-workers=4', '--no-daemon'] },
+    ])
+    // npm 将 -- 后的参数追加到整个脚本末尾，必须仍落到 Gradle 上。
+    const mobilePackage = JSON.parse(readFileSync(join(repo, 'apps/mobile/package.json'), 'utf8'))
+    assert.match(mobilePackage.scripts['android:release'], /\.\/gradlew assembleRelease$/)
+  })
+}

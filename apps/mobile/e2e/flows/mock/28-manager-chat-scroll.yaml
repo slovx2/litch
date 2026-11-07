@@ -24,6 +24,12 @@ tags: [mock]
 - inputText: long report anchor-original
 - tapOn:
     id: composer-send
+# 先完成首次数据许可并确认发送，再处理键盘；返回键不能代替同意。
+- extendedWaitUntil:
+    notVisible:
+      id: composer-input
+      text: 'long report anchor-original'
+    timeout: 10000
 - runFlow: ../_shared/dismiss-keyboard.yaml
 - extendedWaitUntil:
     visible: '.*(以上是现状|That is the current state).*'

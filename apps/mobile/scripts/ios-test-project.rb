@@ -6,6 +6,8 @@ directory, source, config = ARGV
 project = Xcodeproj::Project.new(File.join(directory, 'TerminalTests.xcodeproj'))
 target = project.new_target(:ui_test_bundle, 'TerminalTests', :ios, '16.4')
 target.source_build_phase.add_file_reference(project.main_group.new_file(source))
+support = File.expand_path('../e2e/ios/ConsentTestSupport.swift', __dir__)
+target.source_build_phase.add_file_reference(project.main_group.new_file(support))
 target.resources_build_phase.add_file_reference(project.main_group.new_file(config))
 target.build_configurations.each do |configuration|
   configuration.build_settings.merge!(

@@ -94,3 +94,30 @@ export function keepMentioned<T extends { kind: string }>(extras: T[], text: str
   )
   return kept.length === extras.length ? extras : kept
 }
+
+/**
+ * 正文里的会话跟着字走：@[标题] 删了的不再带（keepMentioned）；又回来了的（撤销、粘贴）
+ * 从这个输入框记得的会话里找回来，接在后面。没变的返回原来的数组
+ */
+export function syncMentioned<T extends { kind: string }>(
+  extras: T[],
+  text: string,
+  known: readonly (T & { kind: 'session'; threadId: string; title: string })[],
+): T[] {
+  const kept = keepMentioned(extras, text)
+  // 已经带着同一个会话、或者同一个标题的，不再找（同标题的两个会话，找回来的那个说不清是哪个）
+  const have = new Set(
+    kept.flatMap((extra) => {
+      if (extra.kind !== 'session') return []
+      const one = extra as unknown as { threadId: string; title: string }
+      return [one.threadId, `@[${one.title}]`]
+    }),
+  )
+  const back = known.filter((one) => {
+    const token = `@[${one.title}]`
+    if (have.has(one.threadId) || have.has(token) || !text.includes(token)) return false
+    have.add(one.threadId).add(token)
+    return true
+  })
+  return back.length === 0 ? kept : [...kept, ...back]
+}

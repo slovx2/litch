@@ -58,6 +58,7 @@ export interface ClientToolSignInAccount {
 
 /** 执行器请用户点头时出的卡片。文字由界面按语言拼，这里只给结构 */
 export type ClientToolAsk =
+  | { kind: 'browserDownload'; filename: string; origin: string; totalBytes: number | null }
   | { kind: 'computerSelf'; id: string; nonce: string; desktopId: string | null }
   | {
       kind: 'site'

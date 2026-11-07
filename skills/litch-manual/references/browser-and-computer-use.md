@@ -59,8 +59,7 @@ Claude 的新分叉和 hand_off 按当前开关重新整理工具；其余引擎
   once in the panel and agents can use that session.
 - Agents work in their own tabs (marked "Agent"); they can only read the address and title of the
   user's tabs. Agent tabs close at the end of the turn unless the agent left one open for the user. To
-  stop an agent in the browser, interrupt the turn. Downloads are cancelled; `file:` pages cannot be
-  opened.
+  stop an agent in the browser, interrupt the turn. `file:` pages cannot be opened.
 - **Site approval**: local addresses (localhost, 127.0.0.1, `*.localhost`) are always allowed. Any
   other site asks first, once per origin (scheme, host and port), with a card: Allow this turn / Allow
   for this session / Always allow / Trust all sites / Decline.
@@ -73,6 +72,20 @@ Claude 的新分叉和 hand_off 按当前开关重新整理工具；其余引擎
 - **Remote localhost**: when a session on a remote device opens `localhost:<port>`, Litch forwards that
   port over SSH to this computer automatically (loopback only) and rewrites the address. Apps that
   hard-code `localhost:3000` in OAuth callbacks or CORS lists may not match the forwarded port.
+
+### 下载 / Downloads
+
+- 用户自己打开的标签下载自动保存到操作这台浏览器的电脑的系统“下载”目录；浏览器面板显示状态、最终路径和“在文件夹中显示”。同名文件自动编号，绝不覆盖已有文件，不自动打开或执行下载内容。
+- 代理标签的每个下载都要用户单独批准，卡片显示文件名、来源站点及大小（服务器没给大小则显示未知）。网站许可不等于下载许可。为避免混淆人工输入和代理输入，即使用户在保留的代理标签中点击，也仍需批准；用户可以自己新开标签下载。
+- 点击后立即用原始请求接收，不暂停后重试一次性链接。待批准文件临时存在本机私有目录，网页和浏览器工具读不到，临时路径不向 Agent 暴露；它不构成防御拥有完全文件权限 Agent 的操作系统安全边界。批准后才保存到“下载”，拒绝、十分钟超时、关闭待审批标签或应用退出时清理；崩溃残留在下次启动清理。
+- 单文件最多 1 GiB、同时最多 4 个下载、临时数据总量最多 2 GiB；超限或网络失败会明确显示失败，不自动重试。未知大小在传输过程中检查。
+- Agent 点击后使用 `litch_browser.downloads` 查询或处理延迟出现的下载审批；大文件尚未完成时稍后再查，完成结果给出最终本机路径。远程会话的文件也保存到控制端电脑。工具不接受任意保存路径，不会给 Agent 审批权限。不要重新点击一次性下载链接。
+
+Downloads in user-owned tabs save automatically to the controlling computer’s system Downloads folder. The browser panel shows progress, the saved path and **Show in folder**. Existing files are never overwritten; duplicate names receive a number. Files are never opened or executed automatically.
+
+Every download in an agent-owned tab requires individual approval, including manual clicks in a retained agent tab. The card shows the filename, source origin and size, or **Unknown size**. Website access does not authorize downloads. The original request is received once into a private temporary folder to avoid replaying one-time links. Pending paths and content are not exposed to browser tools or webpages. This is not an OS security boundary against an agent with unrestricted filesystem access. Approval publishes the file to Downloads. Rejection, a ten-minute timeout, closing a pending tab, or application exit deletes temporary data; startup cleans crash leftovers.
+
+Limits are 1 GiB per file, four active downloads and 2 GiB of temporary data. Unknown sizes are checked during transfer. Failures never trigger an automatic retry. After clicking, call `litch_browser.downloads` to review pending approvals and progress; call again for delayed or large downloads. Completed results contain the controlling desktop’s local path, even for remote sessions. Agents cannot choose arbitrary save paths or approve downloads themselves. Do not repeat one-time download links.
 
 ### Importing from another browser
 
@@ -160,6 +173,12 @@ that page, the page is reloaded first.
 - Optional: Settings → Built-in browser → Saved passwords → **Require Touch ID before filling**
   (macOS only, off by default).
 
+代理撤回登录请求后，Litch 会继续清理登录页；“代理已收回”提示可点“知道了”关闭。只有页面确实无法安全重新打开时，才关闭标签并显示“标签已关掉”；“知道了”关闭对应提示，不会重新开始登录。
+
+After an agent withdraws a sign-in request, Litch still cleans up the page. Dismiss the withdrawn
+notice with **Got it**. A **Tab closed** notice appears only when the page cannot be safely
+reopened; **Got it** dismisses that notice without starting another sign-in.
+
 If the user asks you (as the agent) to sign in somewhere, use `request_sign_in` rather than asking
 for their password.
 
@@ -186,6 +205,8 @@ Preferences (Settings → Built-in browser):
 
 The model operates apps on this computer: screenshots, clicks, typing. While it works an on-screen
 notice is shown; **Esc** (or Stop) takes control back and ends Computer Use for that app in this turn.
+
+Windows 上，停止、Esc 和回合结束会取消进行中及排队中的动作。逐字输入、拖拽和连续按键在输入步骤之间停止，并释放本次动作已按下的键和鼠标按钮。已经送进应用的输入（包括整段粘贴）不会撤回；取消后应重新观察应用，再继续未完成部分。旧版助手仍只支持停止等待结果，需要更新助手才能中止正在执行的输入。
 
 - **macOS permissions**: the separate helper app "Litch Computer Use" needs **Accessibility** and
   **Screen Recording**. Agents cannot grant these (exception E1). Tell the user: Litch → Settings →
@@ -314,16 +335,46 @@ Platforms: macOS, Windows and Linux desktops. **Prepare extension** registers th
 
 The extension and Litch check a wire protocol range instead of requiring the same version, so a store copy that updates on its own schedule keeps working with adjacent Litch versions. Settings shows connected instances and, when they do not fit, which side to update: **The extension is too old** (store copy: click Update on the extensions page or wait for Chrome; unpacked copy: reload it) or **is newer than this Litch supports** (update Litch). An unpacked copy that still works but is older than the folder shows a reload hint. The toolbar icon shows `!` while incompatible.
 
-Chrome control is off by default. Enable it separately and choose which remote devices may request access to this computer. Browser feature switches for the device and harness still apply. Chrome has its own site permissions, including localhost; it does not inherit the built-in browser's saved site approvals or “trust all” setting. Remote sessions operate Chrome on the controlling computer: localhost refers to that computer. Operating Chrome on the remote execution device is not supported in this version.
+Chrome control is off by default. Enable it and select its remote-device scope: only checked remote devices can use this computer’s Chrome. This is part of the master switch, not an additional approval card. An unchecked device receives an immediate error directing the user to Settings → Chrome. Browser feature switches for the device and harness still apply. Chrome has its own site permissions, including localhost; it does not inherit the built-in browser's saved site approvals or “trust all” setting. Remote sessions operate Chrome on the controlling computer: localhost refers to that computer. Operating Chrome on the remote execution device is not supported in this version.
 
 Chrome 的站点权限在 **设置 → Chrome**：默认关闭“信任所有网站”，黑名单和“一直允许的网站”为空。
 审批可选本回合、本会话、一直允许或拒绝，也可直接开启“信任所有网站”。本回合许可和拒绝在回合结束清除；本会话许可保留到 Litch 退出；一直允许、信任开关和黑名单存在 Litch 的 `chrome/sites.json`，跨回合、Chrome 重连和 Litch 重启保留，对控制端所有已启用的设备会话生效。
 黑名单与内置浏览器一致：只在信任所有网站开启时生效，按主机名匹配并包含子域名。可逐项删除黑名单、逐项或全部删除一直允许的网站。
-Chrome 的 localhost 仍检查站点权限，因为它位于控制端并可能带有登录态；信任所有网站或记住该来源后无需再问。实例授权、逐个用户标签认领、登录及密码和支付安全规则仍独立执行。
+Chrome 的 localhost 仍检查站点权限，因为它位于控制端并可能带有登录态；信任所有网站或记住该来源后无需再问。总开关开启后不再单独审批 Chrome 实例或标签；登录及密码和支付安全规则仍独立执行。
 
-The agent lists targets, asks permission to list tab titles and URLs in one Chrome instance, and then requests individual approval to claim a user tab with a short-lived claim token. Site trust never skips this tab approval. Instance permission and website origin approval are separate; reconnecting requires a new instance permission. User tabs are released when the turn ends and are never closed by the agent. New agent tabs are temporary unless kept. Reconnection, extension reload and ended turns invalidate leases and references; list and claim again. If a debugger cannot attach, close that tab's DevTools or other debugger and retry. Click the extension toolbar action or **Stop all Chrome control** in Litch to revoke control.
+Chrome 总开关包含远程设备范围：只有下方勾选的远程设备可以使用，未勾选时立即返回提示，不会弹卡或等待。开启 Chrome 总开关后，所有获准使用此控制端的会话都可列出已连接 profile 的标签标题和网址，认领用户标签无需另批。页面访问只由 Chrome 的站点许可控制，用户已登录的标签和代理新开的标签遵循相同的站点规则；开启“信任所有网站”后，除黑名单以外的已登录网站都可被操作。网站许可不等于网络防火墙，也不替代发送、购买等具体操作所需的用户指令。
 
-Chrome sign-in is manual. `request_sign_in` brings the tab forward and pauses agent observation and actions in that Chrome instance. Sign in yourself, then choose **Sign-in complete** in Litch. The page reloads and the agent must claim it again. Never provide passwords or one-time codes to the agent. Remote uploads and cross-device downloads are not supported.
+With Chrome control enabled, conversations allowed to use this controller can list titles and URLs across its connected profiles and claim user tabs without a separate instance or tab approval. Chrome site permissions control page access for both signed-in user tabs and agent-created tabs. With **Trust all websites** enabled, signed-in sites outside the blocklist are accessible. Site permission is not a network firewall or authorization to send messages or make purchases without the user's instruction.
+
+网站需要批准时，平台会在发起调用的会话中显示站点卡并继续等待。等待不计入桥请求的 30 秒超时，批准后无需代理重试。侧栏显示等待，父会话的子会话待处理区和经理看板也显示审批；系统通知遵循现有通知设置。手机显示只读提示，须在执行操作的 Litch 桌面会话中处理。
+
+When a site needs approval, Litch displays a card in the calling conversation and waits. Human approval time does not count toward the bridge's 30-second request timeout. The sidebar, parent conversation and manager board show the pending approval; notifications follow your notification preferences. Phones show a read-only notice directing you to that conversation on the controlling desktop.
+
+The agent uses targets → tabs → claim. Claim tokens and leases still prevent stale or concurrent control, but do not create an extra approval. User tabs are released when the turn ends and are never closed by the agent. Agent tabs are temporary unless kept. Reconnection, extension reload and ended turns invalidate leases and references. Listing retries once if the same instance reconnects during the request; otherwise the tool tells the agent to list targets and claim again. Input actions are never replayed automatically because an interrupted action may already have executed.
+
+Chrome 标签列表的 `current: true` 表示该实例最后获得焦点的窗口中的活动标签。用户说“这个页面”或“当前标签”时，代理优先认领这一项。列举只读取状态，不抢焦点、不切换标签；Chrome 在后台时仍按最后获得焦点的窗口判断。没有可用的窗口信息、当前页不支持控制，或扩展尚未更新时，列表可能没有 `current: true`，代理应根据用户指定的网址或标题确认目标。
+
+In Chrome tab lists, `current: true` identifies the active tab in that instance's last-focused window. When you say “this page” or “current tab,” the agent prefers that tab. Listing only reads state and never focuses a window or switches tabs. When Chrome is in the background, the marker still refers to its last-focused window. If window information is unavailable, the active page cannot be controlled, or the extension has not updated yet, no tab may be marked current; the agent should use the URL or title you specified to identify the target.
+
+点击扩展图标会停止此 profile 的控制；图标显示 OFF，停止状态跨 Chrome 和 Litch 重启保留。工具会明确提示用户点击扩展重新打开，代理不能自行恢复。再次点击扩展才重新开启，不会清除网站名单。Litch 设置页也会显示停止提示。“停止所有 Chrome 控制”释放当前租约；关闭总开关可阻止后续调用。
+
+Click the extension icon to stop control of that profile. Its OFF badge and stopped state persist across Chrome and Litch restarts. Tools ask the user to click the extension again to resume; the agent cannot resume control itself. Site permissions remain saved. Litch Settings also shows the stopped state. **Stop all Chrome control** releases current leases; turn off the master switch to prevent further calls.
+
+连接边界：Native Messaging 的扩展 ID 白名单、每次桌面启动生成的宿主令牌，以及用户私有配置和 socket 限制连接来源。它们不能防御同一操作系统用户下可读取配置并执行任意程序的恶意软件；开发者模式扩展的固定 ID 也不证明代码来自官方商店。启用前应信任该操作系统账号下运行的软件和安装的扩展。
+
+The connection boundary uses a Native Messaging extension ID allowlist, a host token generated when the desktop starts, and private per-user configuration and socket access. These do not defend against malicious software running as the same OS user with arbitrary execution and access to the configuration. An unpacked extension's fixed ID does not attest that its code came from the official store. Enable control only when you trust the software and extensions running under that OS account.
+
+Chrome 登录由用户手动完成。`request_sign_in` 显示登录卡并暂停此 Chrome 实例中的代理观察与操作，不自动切换窗口。请自行打开 Chrome 的 `Litch · 会话标题简写` 标签组，完成登录后在 Litch 选择“登录已完成”。页面重新载入后，代理必须重新认领。不要向代理提供密码或验证码。
+
+Chrome sign-in is manual. `request_sign_in` displays a sign-in card and pauses agent observation and actions in that Chrome instance without switching windows. Open the `Litch · session title` tab group yourself, sign in, then choose **Sign-in complete** in Litch. The page reloads and the agent must claim it again. Never provide passwords or one-time codes to the agent. Remote uploads and cross-device downloads are not supported.
+
+Chrome 上传本地文件不需要“允许访问文件网址”。本机会话可用 `upload` 把控制端绝对路径的文件交给文件输入框；拖放区域用 `mode: "drop"` 和区域的 ref。每次最多 32 个文件、总计 512 MiB，内置浏览器仍为单文件 100 MiB。Chrome 上传按 192 KiB 分块，先在隔离上下文组装文件，再向输入框派发 input/change，或向拖放区域派发 dragenter/dragover/drop。分块期间继续检查网站权限、租约和文档；中断不会自动重传。文件名、常见格式 MIME 和修改时间随文件传入页面，本机完整路径不传给页面。
+
+网页可能拒绝合成事件。工具成功仅说明已派发，代理应核对页面上的文件名、进度或成功提示；做不到时请用户自己在页面上选择文件。不要要求用户寻找文件网址开关、修改扩展权限，或启动本地文件服务器绕过限制。上传会发送数据，仍须取得用户授权。
+
+Chrome uploads do not require **Allow access to file URLs**. In a local session, use `upload` with absolute paths on the controlling computer and a file input ref, or `mode: "drop"` with a drop-zone ref. Each call accepts up to 32 files totaling 512 MiB; the built-in browser retains its 100 MiB per-file limit. Chrome transfers 192 KiB chunks into an isolated context, then dispatches input/change or dragenter/dragover/drop. Site permissions, leases and document checks apply throughout; interrupted uploads are not replayed. The page receives file names, MIME types for common formats and modification times, without local absolute paths.
+
+Sites may reject synthetic events. Tool success confirms dispatch only; verify the page's file name, progress or success message. If upload fails or the site rejects it, ask the user to choose the file on the page. Do not ask them to find a file-URL switch, change extension permissions or start a local file server to bypass the failure. Uploading sends data and still requires user authorization.
 
 隐私政策见仓库 `docs/chrome-extension-privacy.md`。获批页面内容会作为工具结果交给当前代理，
 可能发送到用户配置的模型服务商或远程执行设备，并留在代理会话记录中。卸载扩展不会删除这些
@@ -334,6 +385,10 @@ New popups are unclaimed and require source approval before observation or actio
 ### Chrome 标签组与操作标记
 
 代理打开或认领的标签按会话放进 `Litch · 会话标题简写` 标签组。同一会话跨多个 Chrome 窗口时，每个窗口各有一组，不搬动窗口。
+
+新标签默认在现有普通窗口的后台创建，不切换当前标签；没有普通窗口时新建不获取焦点的窗口。认领、导航、点击、输入和批量操作不主动激活 Chrome。可自行点开标签组查看，或在对话里明确要求“显示给我看”，代理才调用 `show` 激活对应窗口与标签。后台输入不需要通过 `show` 才能生效。
+
+New tabs open in the background of an existing normal window without switching its active tab. If none exists, Litch creates an unfocused window. Claiming, navigation, clicks, typing and batches do not activate Chrome. Open the `Litch · session title` group yourself, or explicitly ask the agent to show the page; only then should it call `show` to activate that tab and window. Background input does not require `show`.
 用户标签只临时归组；释放、回合结束、断开或停止控制后，恢复原组、位置和固定状态。原组最后一个标签被临时移走时，恢复会重新创建同名、同色、同折叠状态的组。
 用户控制期间自行移动了窗口或分组时，保留用户的新布局。代理临时标签仍在回合结束关闭；标记保留的标签交还给用户并移出代理组。
 
@@ -343,6 +398,18 @@ New popups are unclaimed and require source approval before observation or actio
 升级开发版扩展：先更新 Litch，在设置的 Chrome 页准备扩展，再到 `chrome://extensions` 重新加载 Litch Browser。新增 `tabGroups` 权限允许管理标签组；Chrome 如提示“查看和管理标签组”，确认后才能继续使用。重载会释放现有认领，代理需要重新列出并认领标签。
 
 ### 浏览器批量动作（内置浏览器和 Chrome）
+
+点击、输入、按键、滚动、上传和对话框操作会返回 `inputReceipt`，区分 `dispatch`（未派发、已派发或不能确认）与 `observation`（观察到变化、未观察到变化或无法观察）。回执提供操作前后的地址、标题、焦点、非敏感字段值及变化种类；密码和验证码遮罩，地址去掉查询、片段及长凭据段，不输出 DOM 正文或哈希。工具的 `success` 只说明这次工具处理是否完成，不代表提交、保存或付款成功，`businessOutcome` 始终为 `unknown`。
+
+已派发输入触发同一已授权来源的跳转时，平台恢复新文档的观察并清理旧引用，不重放输入。跨来源、停止控制、撤销租约和登录接管仍受原有检查保护。输入前页面一秒内未完成绘制准备会明确失败，不继续派发。Chrome 已认领的后台标签启用焦点模拟，不自动显示窗口；释放租约或交还用户登录后不保留模拟焦点。
+
+输入后最多用约 2.5 秒观察 URL、DOM、焦点与字段是否稳定；这不等于业务完成，也不等待可能永不停止的后台网络轮询。SPA 表单应显式调用 `wait` 等待具体 `selector`、`text`、`url` 子串或 `dialog`，再检查确认页或对象。没有变化可能是合法的同值输入或下载，派发状态不确定时不要直接重试写操作。
+
+Click, type, press, scroll, upload and dialog tools return an `inputReceipt`. `dispatch` distinguishes not dispatched, dispatched and unknown; `observation` distinguishes changed, unchanged and unavailable. Receipts compare URLs, titles, focus and non-sensitive field values. Passwords and one-time codes are masked; query strings, fragments and long credential-like path segments are omitted. DOM text and hashes are not exposed. Tool `success` is not proof that a save, submission or purchase succeeded: `businessOutcome` remains `unknown`.
+
+After input navigates within an approved origin, Litch recovers observation of the new document and discards stale references without replaying input. Origin permissions, stopped control, revoked leases and sign-in pauses still apply. A page that cannot become ready to paint within one second receives no further input. Claimed Chrome tabs use focus emulation for background input without showing the window; releasing the lease or handing the tab to the user for sign-in ends it.
+
+Post-input observation is bounded to about 2.5 seconds. It watches URL, DOM, focus and field stability, not endless background polling or business completion. For SPAs, use `wait` with a specific `selector`, `text`, `url` substring or `dialog`, then verify the confirmation or resulting object. Unchanged output may be legitimate; never blindly repeat an input with unknown dispatch status.
 
 `litch_browser.run_actions` 两条路径使用相同参数和执行规则。先观察标签；连续动作及其参数都已知时，优先合成一批：
 
@@ -356,5 +423,9 @@ New popups are unclaimed and require source approval before observation or actio
 一批 1–12 步，支持 `click`、`type`、`press`、`scroll`、`navigate`、`wait`、`dialog`。每步必须给同一种浏览器的现有 `tabId`，参数与单步工具一致；不能创建标签、嵌套批量、执行脚本或登录。需要用户决定、需要读取新界面、跳转后需要新引用时结束当前批次。
 
 动作总预算 60 秒，最终快照另有 10 秒。导航和等待沿用单步上限；每一步仍检查来源审批、租约/会话所有权、文档和取消状态。失败即停，不回滚、不自动重试；结果给出已尝试各步的成功状态和摘要，以及最后尝试标签的快照。若标签被释放或登录冻结，最后观察明确失败，不绕过限制。失败的一步可能已经部分执行，继续时只做尚未完成的部分。
+
+批量回执按步骤给出耗时、派发与观察状态和 `mayHaveExecuted`；`firstFailedStep` 指出首个失败动作。`actionsStatus` 与 `observationStatus` 分开：所有步骤已返回、仅最后快照失败时，动作状态仍为 `completed`、`stopped:false`，并明确提示不要重做已派发的输入。总结果可能仍为 `success:false`，此时应先读取这两个状态。
+
+Batch receipts include each step's duration, dispatch/observation status and `mayHaveExecuted`, plus `firstFailedStep`. `actionsStatus` and `observationStatus` are separate. If only the final snapshot fails, actions remain `completed` with `stopped:false`; do not repeat completed inputs. The overall result can still be `success:false`, so inspect both statuses before deciding what remains to do.
 
 执行桌面必须声明浏览器批量能力。升级后 Claude Code/Pi 会话恢复时可刷新工具；已有 Codex 会话需要新建才能获得新增工具。

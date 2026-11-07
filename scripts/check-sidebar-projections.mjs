@@ -262,22 +262,17 @@ try {
   await click(`${recent} .ss-more .more`)
   await until(async () => (await roots()).length === 15, '增加十个主项')
   checkpoint('主项归并、默认五项、展开子树、更多增加十项')
-  assert.equal(
-    await run(
-      () => document.querySelectorAll('[data-projection=unread] .projection-device').length,
-    ),
-    0,
-    '本机投影不显示设备名',
-  )
+  // 和置顶区、本机分组同一套设备标记：登记了多台设备（模拟核心如此）时，本机的行也写设备名
   assert.ok(
     await run(() =>
-      [...document.querySelectorAll('[data-projection=recent] [data-depth="0"] .ss-row')].every(
-        (row) =>
-          !!row.querySelector('.projection-device') ===
-          (row.closest('[data-device]')?.dataset.device !== 'local'),
-      ),
+      ['unread', 'recent'].every((kind) => {
+        const rows = [
+          ...document.querySelectorAll(`[data-projection=${kind}] [data-depth="0"] .ss-row`),
+        ]
+        return rows.length > 0 && rows.every((row) => !!row.querySelector('.projection-device'))
+      }),
     ),
-    '平铺行只显示远程设备名，本机行省略',
+    '多台设备时平铺行都写设备名，本机行也写',
   )
   assert.equal(
     await run(() => !!document.querySelector('[data-projection=recent] .projection-count')),
@@ -532,24 +527,29 @@ try {
   assert.ok(await run(() => !!document.querySelector('[data-action=project] svg')))
   await click(`${recent} .projection-head .row-more button`)
   const colors = await run(() =>
+    // 设备色画在每行行首的色块上（和置顶区、本机分组同一套），不再挂在整块上
     [...document.querySelectorAll('[data-projection=recent] .projection-block')].map((b) => {
       const d = document.querySelector(`.dev-group[data-device=${b.dataset.device}]`)
+      const tick = b.querySelector('.dev-tick')
       return {
         device: b.dataset.device,
-        color: getComputedStyle(b).getPropertyValue('--wire'),
+        color: tick && getComputedStyle(tick).getPropertyValue('--wire'),
         original: d && getComputedStyle(d).getPropertyValue('--wire'),
       }
     }),
   )
   assert.ok(
-    colors.every((row) => row.color === row.original),
+    colors.length > 0 && colors.every((row) => row.color && row.color === row.original),
     '设备色一致',
   )
   assert.ok(
     await run(
       () =>
-        !!document.querySelector('[data-projection=recent] .projection-block.off[data-device=gpu]'),
+        !!document.querySelector(
+          '[data-projection=recent] .projection-block[data-device=gpu] .dev-tick.off',
+        ),
     ),
+    '离线设备的色块画成虚的',
   )
   checkpoint('查看清未读并更新最近、独立折叠、跨设备项目聚合、离线缓存、设备色一致')
   await click(`${recent} [data-workspace=litch] .row-more button`)
@@ -697,14 +697,39 @@ try {
         ),
         '窄侧栏中的常见设备名完整可读',
       )
+      // 离线不在行上写字：标题不被挤，“离线”留在悬停提示和读屏名称里
+      const narrow = await run(() =>
+        [...document.querySelectorAll('[data-projection=recent] [data-depth="0"] .ss-row')].map(
+          (row) => ({
+            title: row.querySelector('.title')?.getBoundingClientRect().width ?? 0,
+            offline: !!row.querySelector('.dev-tick.off'),
+            name: row.textContent ?? '',
+            hint: row.querySelector('.projection-device')?.getAttribute('title') ?? '',
+            shown: row.querySelector('.projection-device')?.getBoundingClientRect().width ?? 0,
+            label: row.querySelector('.projection-device')?.firstChild?.textContent ?? '',
+          }),
+        ),
+      )
+      assert.ok(
+        narrow.every((row) => row.title >= 40),
+        `窄侧栏标题不被设备名挤压：${JSON.stringify(narrow.map((row) => Math.round(row.title)))}`,
+      )
+      const away = narrow.filter((row) => row.offline)
+      assert.ok(away.length > 0, '有离线设备的行')
+      assert.ok(
+        away.every(
+          (row) =>
+            !row.label.includes('离线') && row.name.includes('离线') && row.hint.includes('离线'),
+        ),
+        `离线行不显示“离线”，读屏名称和悬停提示里有：${JSON.stringify(away)}`,
+      )
       assert.ok(
         await run(() =>
           [...document.querySelectorAll('[data-projection=recent] [data-depth="0"] .ss-row')].every(
-            (row) =>
-              !!row.querySelector('.projection-device') ===
-              (row.closest('[data-device]')?.dataset.device !== 'local'),
+            (row) => !!row.querySelector('.projection-device'),
           ),
         ),
+        '多台设备时平铺行都写设备名',
       )
       assert.equal(
         await run(() =>

@@ -7,6 +7,9 @@
 #![cfg_attr(not(windows), allow(dead_code))]
 
 mod input_conflict;
+mod action;
+mod dispatch;
+mod input_sequence;
 mod shell;
 mod copy;
 mod geometry;

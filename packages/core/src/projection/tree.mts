@@ -46,6 +46,7 @@ export function projectProposal(
   const lapsed = proposal.status === 'pending' && expiresAt <= now
   return {
     id: proposal.id,
+    sourceIsManager: proposal.sourceIsManager === true,
     title: typeof proposal.title === 'string' ? proposal.title : '',
     prompt: typeof proposal.prompt === 'string' ? proposal.prompt : '',
     background: typeof proposal.background === 'string' ? proposal.background : '',

@@ -16,7 +16,7 @@ export class ChromeFault extends Error {
 
 export interface ExtensionState {
   chrome: any
-  keys: { attached: string; stopped: string; pointers: string; instance: string }
+  keys: { attached: string; stopped: string; pointers: string; instance: string; control: string }
   pointerSource: string
   presentation: TabPresentation
   epoch: string
@@ -25,6 +25,10 @@ export interface ExtensionState {
   paused: Set<string>
   generations: Map<number, number>
   stoppedTurns: Set<string>
+  /** 用户在扩展里主动停止控制，须由用户点扩展恢复。 */
+  stopped: boolean
+  /** 给代理看的提示里用的产品名。 */
+  productName: string
   console: Map<number, Array<{ level: string; text: string; source: string; at: number }>>
   send(message: unknown): void
   revoke(leaseId: string, reason: string): Promise<void>
@@ -106,6 +110,11 @@ export async function requireGrant(
   leaseId?: string,
   generation?: number,
 ): Promise<ChromeGrant> {
+  if (state.stopped)
+    throw new ChromeFault(
+      'userStopped',
+      `The user stopped Chrome control. Ask the user to click the ${state.productName} extension to resume control.`,
+    )
   const grant = leaseId ? state.grants.get(leaseId) : null
   if (!grant || grant.expiresAt <= Date.now())
     throw new ChromeFault(

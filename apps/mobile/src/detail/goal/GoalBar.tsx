@@ -16,6 +16,7 @@ import {
 import type { SessionStore } from '../../core/session-store'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { Icon } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 
 export function GoalBar({ store, onError }: { store: SessionStore; onError(text: string): void }) {
@@ -57,7 +58,7 @@ function GoalLine({
       style={[styles.bar, { borderColor: c.line3, borderRadius: theme.radius.m }]}
     >
       <View style={styles.head}>
-        <Text style={[styles.mark, { color: markColor(goal.status, c) }]}>◎</Text>
+        <Icon name="target" size={15} color={markColor(goal.status, c)} />
         <Text
           testID={`goal:status:${goal.status}`}
           numberOfLines={1}
@@ -158,7 +159,6 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   head: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: 8 },
-  mark: { fontSize: 14 },
   state: { fontWeight: '600', flexShrink: 1 },
   use: { flexShrink: 1 },
   acts: { flexDirection: 'row', gap: 14, marginLeft: 'auto' },

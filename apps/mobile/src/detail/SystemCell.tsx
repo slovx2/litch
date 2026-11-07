@@ -12,7 +12,13 @@ import type { Props } from './cells'
 import { useToggleInPlace, useTranscript } from './context'
 import { MessageCopy } from './MessageCopy'
 
-const MARK = { scheduledTask: '◷', briefing: '⑂', here: '↳', recover: '↻', restart: '↻' } as const
+const MARK = {
+  scheduledTask: 'clock',
+  briefing: 'branch',
+  here: 'here',
+  recover: 'reload',
+  restart: 'reload',
+} as const
 
 /** 展开后补一行：启动指令来自哪个会话（还在列表里的点了过去）。没有就不画。手动运行是第一行的小标签 */
 function Detail({ system }: { system: SystemMessageView }) {

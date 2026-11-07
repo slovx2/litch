@@ -62,6 +62,7 @@ import {
   bandsAfter,
   DRAG_TYPE,
   type DragItem,
+  type DragOrigin,
   type DropTarget,
   draggedItem,
   dropCommands,
@@ -75,11 +76,18 @@ import { dropNativeChildren, keepSessions, keptAnyway, workspaceShown } from './
 import { foldsKeep, foldsSettled } from './folds.ts'
 import { HarnessFilter } from './HarnessFilter.tsx'
 import { DeviceInfo, SessionInfo, WorkspaceInfo } from './InfoCards.tsx'
+import { LocalGroupDialog } from './LocalGroupDialog.tsx'
 import { type ProjectedBlock, ProjectionGroups } from './ProjectionGroups.tsx'
 import { type RowAction, RowMenu, type RowMenuHandle } from './RowMenu.tsx'
 import { revealPath, revealRow } from './reveal.ts'
 import { SidebarReveal, useSidebarReveal } from './reveal-context.ts'
 import { SectionDialog } from './SectionDialog.tsx'
+import {
+  type ShortcutPlace,
+  type ShortcutRowProps,
+  Shortcuts,
+  type ShortcutWorkspaceProps,
+} from './Shortcuts.tsx'
 import { SidebarFoot } from './SidebarFoot.tsx'
 import { SidebarFrame } from './SidebarFrame.tsx'
 import { SidebarMore } from './SidebarMore.tsx'
@@ -92,6 +100,7 @@ import {
   sameSession,
 } from './selection.ts'
 import { sessionMark } from './session-mark.ts'
+import { groupOfMember, organize, useOrganizer } from './shortcuts.ts'
 import {
   pruneSidebarFolds,
   setSidebarBands,
@@ -146,6 +155,12 @@ interface RowProps {
   onFold?(): void
   projectionTime?: { kind: 'recent' | 'unread'; at: number } | undefined
   deviceLabel?: string | undefined
+  /** 快捷区（置顶、本机分组）的行：行首一个设备连线色块，设备名常显（离线也写上） */
+  tick?: boolean
+  /** 快捷区里的位置：菜单里多上移、下移 */
+  place?: ShortcutPlace | undefined
+  /** 从快捷区拖出来的：放到哪由来源决定（drop.ts 的 DragOrigin） */
+  dragOrigin?: DragOrigin | undefined
 }
 
 /** 一行会话。只订阅这一个会话的摘要：别的会话变了，这一行不重画 */
@@ -162,6 +177,9 @@ const SessionRow = memo(function SessionRow({
   onFold,
   projectionTime,
   deviceLabel,
+  tick = false,
+  place,
+  dragOrigin,
 }: RowProps) {
   const { channel, replica } = useServices()
   const { fromTree, selected: selectedRow } = useSidebarReveal()
@@ -172,6 +190,7 @@ const SessionRow = memo(function SessionRow({
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
   const sections = useKey<SectionView[]>(keys.sections(deviceId)) ?? NO_SECTIONS
   const schedulable = useKey<boolean | null>(keys.tasksAvailable(deviceId)) === true
+  const organizer = useOrganizer()
   const t = useT()
   const now = useNow()
   // 行上只有标题、徽标、时间；在哪个工作区、哪个目录、是不是置顶了这些在信息卡里
@@ -191,6 +210,8 @@ const SessionRow = memo(function SessionRow({
   const [spawning, setSpawning] = useState(false)
   /** 开着“新建组”的对话框：建好之后把这个会话放进去 */
   const [grouping, setGrouping] = useState(false)
+  /** 开着“新建本机分组”的对话框：建好时这个会话已经在里面 */
+  const [localGrouping, setLocalGrouping] = useState(false)
   const field = useRef<HTMLInputElement>(null)
   const menu = useRef<RowMenuHandle>(null)
   /** 这一次改名已经有了结果（提交或者放弃）。输入框消失时还会再报一次失焦，不能当成又提交一次 */
@@ -206,9 +227,17 @@ const SessionRow = memo(function SessionRow({
 
   const failed = (error: unknown) => setFailure(t('session.failed', { reason: reasonOf(error, t) }))
   /** 置顶、放进一个组，或者从置顶、从它所在的组里拿出来 */
-  const place = (to: 'pinned' | { sectionId: string } | null) => {
+  const placeAt = (to: 'pinned' | { sectionId: string } | null) => {
     setFailure(null)
-    channel.command('session.place', { deviceId, sessionId, place: to }).catch(failed)
+    const unpinning = summary.pinned && to !== 'pinned'
+    channel.command('session.place', { deviceId, sessionId, place: to }).then(() => {
+      // 这一端取消置顶成功：本机记着的位置清掉，再置顶时接在最后
+      if (unpinning)
+        void organize(channel, {
+          type: 'pins.drop',
+          ref: { kind: 'session', deviceId, sessionId },
+        })
+    }, failed)
   }
   const move = (workspaceId: string) => {
     setFailure(null)
@@ -270,6 +299,8 @@ const SessionRow = memo(function SessionRow({
     : undefined
   // 所属的 harness 现在用不了：这一行是上次留下的。行上不加字，徽标换个画法，为什么用不了在提示和设备信息卡里
   const down = downHarness(device, summary.harness)
+  // 带设备色块的行（快捷区、最近、未读）里设备离线
+  const offline = tick && device?.connection !== 'online'
   const classes = ['ss-row', selected ? 'sel' : '', unread ? 'is-unread' : '', down ? 'down' : '']
   // 改名、归档、删除、换工作区都要够得着它所属的 harness：设备没连着、或者那个 harness 用不了，都不出。
   // 它声明了自己不会的那几样也不出（没有声明的照旧都出）
@@ -325,6 +356,28 @@ const SessionRow = memo(function SessionRow({
         },
       })
   }
+  // 本机分组：只记在这台客户端上，设备没连着也能做。已在某个组里的多一项移出
+  if (organizer?.status === 'ok') {
+    const home = groupOfMember(organizer, { deviceId, sessionId })
+    actions.push({
+      id: 'local',
+      title: t('local.join'),
+      choices: {
+        title: t('local.join.title'),
+        back: t('session.move.back'),
+        options: [
+          ...organizer.groups
+            .filter((entry) => entry.id !== home?.id)
+            .map((entry) => ({ id: entry.id, title: entry.name })),
+          { id: NEW_SECTION, title: t('local.join.new') },
+        ],
+      },
+    })
+    if (home) actions.push({ id: 'unlocal', title: t('local.leave', { name: home.name }) })
+  }
+  // 快捷区里的先后（置顶区、本机组）：键盘和菜单排序
+  if (place && place.index > 0) actions.push({ id: 'up', title: t('section.up') })
+  if (place && place.index < place.count - 1) actions.push({ id: 'down', title: t('section.down') })
   // 在眼前的输入框里引用这个会话（写成 @[标题]）：只引用得了同一台设备上的别的会话，输入区自己判断。
   // 它的 harness 用不了时不出：模型读不到它，替它附摘录也取不到
   if (online) actions.push({ id: 'quote', title: t('session.quote') })
@@ -400,11 +453,31 @@ const SessionRow = memo(function SessionRow({
     } else if (id === 'detach') {
       setFailure(null)
       channel.command('session.detach', { deviceId, sessionId }).catch(failed)
-    } else if (id === 'pin') place('pinned')
-    else if (id === 'unpin' || id === 'unsection') place(null)
+    } else if (id === 'pin') placeAt('pinned')
+    else if (id === 'unpin' || id === 'unsection') placeAt(null)
+    else if (id === 'up' || id === 'down') place?.shift(id === 'up' ? -1 : 1)
+    else if (id === 'local') {
+      if (choice === NEW_SECTION) setLocalGrouping(true)
+      else if (choice) {
+        const name = organizer?.groups.find((entry) => entry.id === choice)?.name ?? ''
+        void organize(channel, {
+          type: 'member.add',
+          groupId: choice,
+          member: { deviceId, sessionId },
+        }).then((done) => {
+          if (done && summary.pinned)
+            showToast({
+              id: 'local-pinned',
+              lifeMs: 5000,
+              text: (say) => say('local.stillPinned', { name }),
+            })
+        })
+      }
+    } else if (id === 'unlocal')
+      void organize(channel, { type: 'member.remove', member: { deviceId, sessionId } })
     else if (id === 'group') {
       if (choice === NEW_SECTION) setGrouping(true)
-      else if (choice) place({ sectionId: choice })
+      else if (choice) placeAt({ sectionId: choice })
     } else if (id === 'move') {
       if (choice) move(choice)
     } else if (id === 'worktree-remove') {
@@ -422,8 +495,8 @@ const SessionRow = memo(function SessionRow({
         data-parent={
           nested ? (summary.lineage?.parentId ?? summary.nativeLineage?.parentId ?? '') : undefined
         }
-        // 能整理的设备上可以拖：拖进置顶、组，或者拖回自己的项目（Sidebar 里的落点）
-        draggable={organizable}
+        // 都能拖进本机分组；能整理的设备上还能拖进置顶、设备分组，或者拖回自己的项目（落点自己判断）
+        draggable
         onDragStart={(event) =>
           beginDrag(event, {
             deviceId,
@@ -432,6 +505,8 @@ const SessionRow = memo(function SessionRow({
             workspaceId: summary.workspaceId,
             pinned: summary.pinned,
             sectionId: summary.pinned ? null : (summary.section?.id ?? null),
+            organizable,
+            ...(dragOrigin ? { origin: dragOrigin } : {}),
           })
         }
         onDragEnd={endDrag}
@@ -487,6 +562,13 @@ const SessionRow = memo(function SessionRow({
             }
           }}
         >
+          {tick ? (
+            <i
+              className={device?.connection === 'online' ? 'dev-tick' : 'dev-tick off'}
+              style={wireStyle(device?.wire)}
+              aria-hidden="true"
+            />
+          ) : null}
           <i
             className={['st', mark, manager ? 'mgr' : ''].filter(Boolean).join(' ')}
             {...(mark === 'bg'
@@ -540,8 +622,17 @@ const SessionRow = memo(function SessionRow({
             {badgeOf(device, summary.harness)}
           </span>
           {deviceLabel ? (
-            <span className="projection-device ell dim" title={deviceLabel}>
-              {deviceLabel}
+            <span
+              className="projection-device ell dim"
+              title={offline ? `${deviceLabel} · ${t('sidebar.offline')}` : deviceLabel}
+            >
+              {offline && !projectionTime
+                ? `${deviceLabel} · ${t('sidebar.offline')}`
+                : deviceLabel}
+              {/* 最近、未读的行窄：离线只靠虚线色块和淡色画出来，“离线”留给悬停和读屏，不挤标题 */}
+              {offline && projectionTime ? (
+                <span className="projection-offline">{` · ${t('sidebar.offline')}`}</span>
+              ) : null}
             </span>
           ) : null}
           {nested ? null : (
@@ -593,8 +684,15 @@ const SessionRow = memo(function SessionRow({
         <SectionDialog
           deviceId={deviceId}
           section={null}
-          onCreated={(sectionId) => place({ sectionId })}
+          onCreated={(sectionId) => placeAt({ sectionId })}
           onClose={() => setGrouping(false)}
+        />
+      ) : null}
+      {localGrouping ? (
+        <LocalGroupDialog
+          group={null}
+          members={[{ deviceId, sessionId }]}
+          onClose={() => setLocalGrouping(false)}
         />
       ) : null}
       {spawning ? (
@@ -751,6 +849,10 @@ interface WorkspaceHeadProps {
   /** 拖着的会话放下去就是回到这个项目：整行高亮 */
   drop: boolean
   deviceLabel?: string | undefined
+  /** 全局置顶区里的项目：拖着排的是本机的置顶先后 */
+  dragOrigin?: DragOrigin | undefined
+  /** 行首一个设备连线色块（全局置顶区里） */
+  tick?: boolean
 }
 
 /**
@@ -760,6 +862,7 @@ interface WorkspaceHeadProps {
  */
 function WorkspaceHead(props: WorkspaceHeadProps) {
   const { workspace, device, count, expanded, onToggle, onFocus, add, menu, drop } = props
+  const t = useT()
   const card = useHoverCard(() => (
     <WorkspaceInfo workspace={workspace} device={device} count={count} />
   ))
@@ -772,12 +875,20 @@ function WorkspaceHead(props: WorkspaceHeadProps) {
       workspaceId={workspace.id}
       label={
         <>
+          {props.tick ? (
+            <i
+              className={device.connection === 'online' ? 'dev-tick' : 'dev-tick off'}
+              style={wireStyle(device.wire)}
+              aria-hidden="true"
+            />
+          ) : null}
           {workspace.color ? <i className="ws-dot" style={wireStyle(workspace.color)} /> : null}
           <span className="name ell">{workspace.name}</span>
           {props.deviceLabel ? (
             <span className="projection-device project ell dim" title={props.deviceLabel}>
               {' '}
               · {props.deviceLabel}
+              {props.tick && device.connection !== 'online' ? ` · ${t('sidebar.offline')}` : ''}
             </span>
           ) : null}
         </>
@@ -799,6 +910,8 @@ function WorkspaceHead(props: WorkspaceHeadProps) {
                 workspaceId: workspace.id,
                 pinned: workspace.pinned,
                 sectionId: workspace.sectionId,
+                organizable: true,
+                ...(props.dragOrigin ? { origin: props.dragOrigin } : {}),
               })
           : undefined
       }
@@ -869,7 +982,7 @@ function ProjectedDeviceBlock({
   onCompose(draft: Draft): void
   onFocus(group: string | null): void
 }) {
-  const { kind, block, byProject, showDevice } = projection
+  const { kind, block, byProject } = projection
   const deviceId = block.deviceId
   const projections = useKey<SidebarProjections>(keys.sidebarProjections(deviceId))
   // 这台设备上经理会话的标识：主项是经理的，记号列画经理框（只认身份，不改归并与选中）
@@ -888,6 +1001,8 @@ function ProjectedDeviceBlock({
   const [editing, setEditing] = useState<WorkspaceView | null>(null)
   const [grouping, setGrouping] = useState<{ then(id: string): void } | null>(null)
   const t = useT()
+  // 跨设备的区：和置顶区、本机分组同一套规矩，行首设备色块，多台设备时写设备名（离线带上）
+  const deviceLabel = useShortcutDeviceLabel(deviceId)
   if (!device) return null
   const workspace = workspaces.find((entry) => entry.id === block.workspaceId)
   const projectKey = block.workspaceId ?? LOOSE
@@ -936,7 +1051,8 @@ function ProjectedDeviceBlock({
           folded={shut}
           onFold={fold}
           projectionTime={at === undefined ? undefined : { kind, at }}
-          deviceLabel={!byProject && device.kind !== 'local' ? t.text(device.name) : undefined}
+          tick={depth === 0}
+          deviceLabel={depth === 0 ? deviceLabel : undefined}
         />
         {kids.length > 0 ? (
           <div className="tree-kids">
@@ -960,11 +1076,7 @@ function ProjectedDeviceBlock({
     )
   }
   return (
-    <div
-      className={`projection-block${device.connection !== 'online' ? ' off' : ''}`}
-      data-device={deviceId}
-      style={wireStyle(device.wire)}
-    >
+    <div className="projection-block ticked" data-device={deviceId}>
       {byProject ? (
         workspace ? (
           <WorkspaceHead
@@ -976,7 +1088,8 @@ function ProjectedDeviceBlock({
             onFocus={() => onFocus(workspace.id)}
             add={add}
             drop={false}
-            deviceLabel={showDevice ? t.text(device.name) : undefined}
+            tick
+            deviceLabel={deviceLabel}
             menu={
               <WorkspaceActions
                 device={device}
@@ -996,11 +1109,17 @@ function ProjectedDeviceBlock({
             toggleClass="ws-row"
             label={
               <>
+                <i
+                  className={device.connection === 'online' ? 'dev-tick' : 'dev-tick off'}
+                  style={wireStyle(device.wire)}
+                  aria-hidden="true"
+                />
                 <span className="name ell">{t('workspace.none')}</span>
-                {showDevice ? (
-                  <span className="projection-device project ell dim" title={t.text(device.name)}>
+                {deviceLabel ? (
+                  <span className="projection-device project ell dim" title={deviceLabel}>
                     {' '}
-                    · {t.text(device.name)}
+                    · {deviceLabel}
+                    {device.connection === 'online' ? '' : ` · ${t('sidebar.offline')}`}
                   </span>
                 ) : null}
               </>
@@ -1025,6 +1144,114 @@ function ProjectedDeviceBlock({
         />
       ) : null}
     </div>
+  )
+}
+
+/** 设备不止一台时，快捷区的行写上设备名（只有一台时色块就够了） */
+function useShortcutDeviceLabel(deviceId: string): string | undefined {
+  const t = useT()
+  const device = useKey<DeviceView>(keys.device(deviceId))
+  const many = (useKey<string[]>(keys.devices)?.length ?? 0) > 1
+  return device && many ? t.text(device.name) : undefined
+}
+
+/** 快捷区（全局置顶、本机分组）里的一行会话：和设备树同一种行，多设备色块和设备名 */
+function ShortcutSession({
+  props,
+  onSelect,
+}: {
+  props: ShortcutRowProps
+  onSelect(selection: Selection): void
+}) {
+  const deviceLabel = useShortcutDeviceLabel(props.deviceId)
+  return (
+    <SessionRow
+      deviceId={props.deviceId}
+      sessionId={props.sessionId}
+      source={props.source}
+      onSelect={onSelect}
+      nested={props.nested}
+      kids={props.kids}
+      folded={props.folded}
+      onFold={props.onFold}
+      tick={!props.nested}
+      deviceLabel={props.nested ? undefined : deviceLabel}
+      place={props.place}
+      dragOrigin={props.origin}
+    />
+  )
+}
+
+/** 全局置顶区里一个置顶项目的那一行：和设备目录里同一种，菜单里的上移、下移排的是本机的置顶先后 */
+function PinnedWorkspaceHead({
+  props,
+  draft,
+  onCompose,
+}: {
+  props: ShortcutWorkspaceProps
+  draft: Draft | null
+  onCompose(draft: Draft): void
+}) {
+  const { deviceId, workspaceId } = props
+  const t = useT()
+  const device = useKey<DeviceView>(keys.device(deviceId))
+  const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
+  const sections = useKey<SectionView[]>(keys.sections(deviceId)) ?? NO_SECTIONS
+  const deviceLabel = useShortcutDeviceLabel(deviceId)
+  const [editing, setEditing] = useState<WorkspaceView | null>(null)
+  const [grouping, setGrouping] = useState<{ then(id: string): void } | null>(null)
+  const workspace = workspaces.find((entry) => entry.id === workspaceId)
+  if (!device || !workspace) return null
+  const on = draft?.deviceId === deviceId && draft.workspaceId === workspaceId
+  return (
+    <>
+      <WorkspaceHead
+        workspace={workspace}
+        device={device}
+        count={props.count}
+        expanded={props.expanded}
+        onToggle={props.onToggle}
+        tick
+        deviceLabel={deviceLabel}
+        dragOrigin={{ kind: 'pins' }}
+        drop={false}
+        add={
+          device.connection === 'online' ? (
+            <button
+              type="button"
+              className={on ? 'ibtn row-add on' : 'ibtn row-add'}
+              title={t('newSession.button')}
+              aria-label={t('newSession.button')}
+              onClick={() => onCompose({ deviceId, workspaceId })}
+            >
+              <Plus />
+            </button>
+          ) : null
+        }
+        menu={
+          <WorkspaceActions
+            device={device}
+            workspace={workspace}
+            workspaces={workspaces}
+            sections={sections}
+            onEdit={setEditing}
+            onNewSection={(then) => setGrouping({ then })}
+            place={props.place}
+          />
+        }
+      />
+      {editing ? (
+        <WorkspaceDialog deviceId={deviceId} workspace={editing} onClose={() => setEditing(null)} />
+      ) : null}
+      {grouping ? (
+        <SectionDialog
+          deviceId={deviceId}
+          section={null}
+          onCreated={grouping.then}
+          onClose={() => setGrouping(null)}
+        />
+      ) : null}
+    </>
   )
 }
 
@@ -1070,6 +1297,13 @@ function DeviceGroup(props: GroupProps) {
   const pressing = useKey<string[]>(keys.pressing(deviceId)) ?? NO_IDS
   /** 未读的会话：和 Dock 角标数的是同一份 */
   const unread = useKey<string[]>(keys.unread(deviceId)) ?? NO_IDS
+  /** 画在全局置顶区里的会话：设备目录里不再画（置顶只出现一次） */
+  const coverIds = useKey<string[]>(keys.pinCover(deviceId)) ?? NO_IDS
+  // 经理树照旧画全部后代
+  const covered = useMemo(
+    () => new Set(props.managerRoot ? NO_IDS : coverIds),
+    [coverIds, props.managerRoot],
+  )
   /** 侧栏正只看哪几个 harness 的会话。空的：都看 */
   const chosenHarnesses = useSidebarHarnesses()
   const filter = props.managerRoot ? [] : chosenHarnesses
@@ -1133,13 +1367,10 @@ function DeviceGroup(props: GroupProps) {
   /** 不显示别的应用派出来的会话时，这些藏起来（非露出来不可的照样露） */
   const hidden = showNative ? NO_IDS : nativeChildren
   /** 一组里现在要画的会话：别的应用派出来的藏掉，只看某几个 harness 的时候再筛一遍 */
-  const shown = (groupId: string) =>
-    keepSessions(
-      dropNativeChildren(groups[groupId], hidden, unfolded),
-      filter,
-      harnessOf,
-      unfiltered,
-    )
+  /** 一组里藏掉派出会话、去掉置顶区里的之后剩下的 */
+  const present = (groupId: string) =>
+    dropNativeChildren(groups[groupId], hidden, unfolded).filter((id) => !covered.has(id))
+  const shown = (groupId: string) => keepSessions(present(groupId), filter, harnessOf, unfiltered)
   const unreadCounts = {
     shown: treeUnread(
       Object.fromEntries(Object.keys(groups).map((group) => [group, [...shown(group)]])),
@@ -1150,9 +1381,7 @@ function DeviceGroup(props: GroupProps) {
   }
   /** 一组里被 harness 筛选筛掉的会话有几个（藏起来的派出会话不算） */
   const filteredOut = (groupId: string) =>
-    filter.length === 0
-      ? 0
-      : dropNativeChildren(groups[groupId], hidden, unfolded).length - shown(groupId).length
+    filter.length === 0 ? 0 : present(groupId).length - shown(groupId).length
   /**
    * 一组里的会话全被筛掉了：写一句有几个被筛掉，带“关闭筛选”。
    * 不写的话这一组看着是空的，可里面其实有会话
@@ -1179,7 +1408,12 @@ function DeviceGroup(props: GroupProps) {
     children,
   )
   const kidsOf = (id: string) =>
-    keepSessions(dropNativeChildren(children[id], hidden, unfolded), filter, harnessOf, unfiltered)
+    keepSessions(
+      dropNativeChildren(children[id], hidden, unfolded),
+      filter,
+      harnessOf,
+      unfiltered,
+    ).filter((kid) => !covered.has(kid))
   // 目录可以晚于选中到达。找到并画出目标之前保留请求；成功一次后不干涉用户再折叠或滚动。
   useEffect(() => {
     if (!request || request.deviceId !== deviceId || revealed.current === request) return
@@ -1188,7 +1422,12 @@ function DeviceGroup(props: GroupProps) {
       groups,
       children,
       (ids) =>
-        keepSessions(dropNativeChildren(ids, hidden, unfolded), filter, harnessOf, unfiltered),
+        keepSessions(
+          dropNativeChildren(ids, hidden, unfolded),
+          filter,
+          harnessOf,
+          unfiltered,
+        ).filter((id) => !covered.has(id)),
       props.managerRoot,
     )
     if (!path) return
@@ -1554,15 +1793,11 @@ function DeviceGroup(props: GroupProps) {
     )
   }
 
-  const pinnedWorkspaces = workspaces.filter((entry) => entry.pinned && showsWorkspace(entry))
   const sectionWorkspaces = (sectionId: string) =>
     workspaces.filter((entry) => entry.sectionId === sectionId && showsWorkspace(entry))
   const plainWorkspaces = workspaces.filter(
     (entry) => !entry.pinned && !entry.sectionId && showsWorkspace(entry),
   )
-  /** 拖着这台设备上能整理的东西：这时候空的置顶也露出来当落点 */
-  const draggingHere = dragging?.deviceId === deviceId
-
   /** 菜单里的上移、下移：排在头一个的没有上移，最后一个的没有下移 */
   const bandShifts = (key: string): RowAction[] => {
     const at = bandKeys.indexOf(key)
@@ -1723,11 +1958,6 @@ function DeviceGroup(props: GroupProps) {
   ) : null
 
   const everything = () => {
-    const pinnedShown =
-      shown(PINNED).length > 0 ||
-      filteredOut(PINNED) > 0 ||
-      pinnedWorkspaces.length > 0 ||
-      (draggingHere && filter.length === 0)
     // “项目”能整理的设备上一直在（空的时候也在，好用行尾的加号添加）；整理不了的设备上有项目才出
     const projectsShown = plainWorkspaces.length > 0 || device.organizable === true
     // 用户的组和“项目”照这台电脑上记着的先后排（拖标题行、菜单里的上移下移）
@@ -1760,18 +1990,9 @@ function DeviceGroup(props: GroupProps) {
         ),
       ]
     })
+    // 置顶的会话和项目在侧栏最上面的全局置顶区（Shortcuts.tsx），不在设备下面再画一遍
     return (
       <>
-        {pinnedShown
-          ? band(
-              PINNED,
-              { kind: 'pinned' },
-              t('sidebar.pinned'),
-              pinnedWorkspaces,
-              t('sidebar.pinned.drop'),
-              null,
-            )
-          : null}
         {bands}
         {shown(LOOSE).length > 0 || filteredOut(LOOSE) > 0 ? (
           <div
@@ -1801,21 +2022,19 @@ function DeviceGroup(props: GroupProps) {
   const focused = (key: string) => {
     const section = sections.find((entry) => groupOfSection(entry.id) === key)
     const spec: { band: Band; inside: WorkspaceView[]; empty: string } | null =
-      key === PINNED
-        ? { band: { kind: 'pinned' }, inside: pinnedWorkspaces, empty: t('sidebar.pinned.drop') }
-        : key === PROJECTS
+      key === PROJECTS
+        ? {
+            band: { kind: 'projects' },
+            inside: plainWorkspaces,
+            empty: t('sidebar.projects.empty'),
+          }
+        : section
           ? {
-              band: { kind: 'projects' },
-              inside: plainWorkspaces,
-              empty: t('sidebar.projects.empty'),
+              band: { kind: 'section', sectionId: section.id },
+              inside: sectionWorkspaces(section.id),
+              empty: t('section.empty'),
             }
-          : section
-            ? {
-                band: { kind: 'section', sectionId: section.id },
-                inside: sectionWorkspaces(section.id),
-                empty: t('section.empty'),
-              }
-            : null
+          : null
     if (spec) {
       return (
         <div data-group={key} className="drop-zone band" {...bandZone(key, spec.band)}>
@@ -1832,16 +2051,13 @@ function DeviceGroup(props: GroupProps) {
   }
   /** 单独查看时顶上那一行写的名字 */
   const focusTitle = (key: string): string =>
-    key === PINNED
-      ? t('sidebar.pinned')
-      : key === PROJECTS
-        ? t('sidebar.projects')
-        : (sections.find((entry) => groupOfSection(entry.id) === key)?.name ??
-          workspaces.find((entry) => entry.id === key)?.name ??
-          '')
+    key === PROJECTS
+      ? t('sidebar.projects')
+      : (sections.find((entry) => groupOfSection(entry.id) === key)?.name ??
+        workspaces.find((entry) => entry.id === key)?.name ??
+        '')
   /** 单独查看时顶上那一行行尾的按钮：和照常显示时这一组标题行行尾的一样（新建会话、添加项目、“更多”） */
   const focusTools = (key: string): ReactNode => {
-    if (key === PINNED) return null
     if (key === PROJECTS)
       return (
         <>
@@ -2206,6 +2422,15 @@ export function Sidebar(props: SidebarProps) {
             />
           ) : (
             <>
+              {!focus ? (
+                <Shortcuts
+                  renderSession={(row) => <ShortcutSession props={row} onSelect={onSelect} />}
+                  renderWorkspace={(head) => (
+                    <PinnedWorkspaceHead props={head} draft={draft} onCompose={onCompose} />
+                  )}
+                  onPage={onPage}
+                />
+              ) : null}
               {!focus ? (
                 <ProjectionGroups
                   selection={page ? null : selection}

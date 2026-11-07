@@ -33,6 +33,7 @@ import type {
   Text,
   TodoStep,
   ToolCallItem,
+  ToolImage,
   TurnOrigin,
   TurnRetryView,
   TurnView,
@@ -198,6 +199,7 @@ export type Row =
    */
   | {
       type: 'process'
+      images?: ToolImage[]
       key: string
       turnId: string
       expanded: boolean
@@ -218,6 +220,7 @@ export type Row =
    */
   | {
       type: 'group'
+      images?: ToolImage[]
       key: string
       turnId: string
       count: number
@@ -258,6 +261,7 @@ export type Row =
   /** 展开的一组里的一步。output、tail、exitCode、durationMs 是命令条目上会原地变的几项 */
   | {
       type: 'step'
+      gallery?: ToolImage[]
       key: string
       turnId: string
       item: StepItem
@@ -697,6 +701,16 @@ export class RowBuilder {
     ids: string[],
     divided: boolean,
   ): Row {
+    const images = [
+      ...new Map(
+        ids
+          .flatMap((id) => {
+            const item = view.items[id]
+            return item?.kind === 'toolCall' ? (item.images ?? []) : []
+          })
+          .map((image) => [image.id, image]),
+      ).values(),
+    ]
     const tally = processTally(
       ids.flatMap((id) => {
         const item = view.items[id]
@@ -706,6 +720,7 @@ export class RowBuilder {
     )
     return this.keep({
       type: 'process',
+      ...(images.length ? { images } : {}),
       key,
       turnId: turn.id,
       expanded: open,
@@ -814,6 +829,13 @@ export class RowBuilder {
 
   /** 一组过程：先是摘要，展开时下面是每一步（从旧到新），最后一行“收起”（倒置之后摘要在最上面，照桌面端往下展开） */
   private pushGroup(out: Row[], turn: TurnView, items: GroupItem[]): void {
+    const images = [
+      ...new Map(
+        items
+          .flatMap((item) => (item.kind === 'toolCall' ? (item.images ?? []) : []))
+          .map((image) => [image.id, image]),
+      ).values(),
+    ]
     const key = `${turn.id}:p:${items[0]?.id}`
     const expanded = this.expanded.has(key)
     let count = 0
@@ -844,6 +866,7 @@ export class RowBuilder {
       shown.push(
         this.keep({
           type: 'step',
+          ...(images.length ? { gallery: images } : {}),
           key: stepKey,
           turnId: turn.id,
           item,
@@ -859,6 +882,7 @@ export class RowBuilder {
     // 先不 keep：是不是回合最下面的活动要等整个回合排完才知道，turnRows 末尾定了 working 再 keep（只 keep 一次，行对象照常复用）
     out.push({
       type: 'group',
+      ...(images.length ? { images } : {}),
       key,
       turnId: turn.id,
       count,
@@ -951,7 +975,21 @@ function sameRow(a: Row, b: Row): boolean {
   if (a.type !== b.type) return false
   const left = a as unknown as Record<string, unknown>
   const right = b as unknown as Record<string, unknown>
-  for (const key in left) if (left[key] !== right[key]) return false
+  if (Object.keys(left).length !== Object.keys(right).length) return false
+  for (const key in left)
+    if (left[key] !== right[key]) {
+      const a = left[key],
+        b = right[key]
+      if (
+        (key === 'images' || key === 'gallery') &&
+        Array.isArray(a) &&
+        Array.isArray(b) &&
+        a.length === b.length &&
+        a.every((value, i) => value === b[i])
+      )
+        continue
+      return false
+    }
   return true
 }
 

@@ -4,6 +4,7 @@
 import { useEffect, useRef } from 'react'
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useT } from '../../../ui/i18n'
+import { Icon, type IconName } from '../../../ui/kit/Icon'
 import { useTheme } from '../../../ui/theme'
 
 type Key =
@@ -14,12 +15,13 @@ const KEYS: Key[] = [
   { kind: 'key', label: 'Esc', k: 'esc' },
   { kind: 'key', label: 'Tab', k: 'tab' },
 ]
-const ARROWS: Key[] = [
-  { kind: 'key', label: '←', k: 'left', repeat: true },
-  { kind: 'key', label: '↑', k: 'up', repeat: true },
-  { kind: 'key', label: '↓', k: 'down', repeat: true },
-  { kind: 'key', label: '→', k: 'right', repeat: true },
-]
+/** 方向键画图标，读屏念“左方向键”等；testID 仍按方向（terminal:key:left） */
+const ARROWS = [
+  { kind: 'key', label: 'left', k: 'left', icon: 'left' },
+  { kind: 'key', label: 'up', k: 'up', icon: 'arrowUp' },
+  { kind: 'key', label: 'down', k: 'down', icon: 'arrowDown' },
+  { kind: 'key', label: 'right', k: 'right', icon: 'right' },
+] as const satisfies readonly (Key & { icon: IconName })[]
 const MORE: Key[] = [
   { kind: 'text', label: '^C', d: '\u0003' },
   ...['|', '-', '/', '~', '_', ':', ';', '*', '&', '$', '"', "'", '`', '<', '>'].map(
@@ -72,7 +74,8 @@ export function KeyBar({
       ]}
     >
       <Cap
-        label="⌨"
+        label="keyboard"
+        icon="keyboard"
         on={keyboard}
         accessibilityLabel={t(keyboard ? 'tools.term.hideKeyboard' : 'tools.term.showKeyboard')}
         testID="terminal:key:keyboard"
@@ -80,7 +83,8 @@ export function KeyBar({
       />
       {Platform.OS === 'ios' ? (
         <Cap
-          label="⎘"
+          label="paste"
+          icon="paste"
           accessibilityLabel={t('tools.term.paste')}
           testID="terminal:key:paste"
           disabled={disabled}
@@ -107,6 +111,8 @@ export function KeyBar({
           <Cap
             key={key.label}
             label={key.label}
+            icon={key.icon}
+            accessibilityLabel={t(`tools.term.key.${key.label}`)}
             disabled={disabled}
             repeat
             onPress={() => send(key)}
@@ -122,6 +128,7 @@ export function KeyBar({
 
 function Cap({
   label,
+  icon,
   on,
   disabled,
   repeat,
@@ -130,6 +137,8 @@ function Cap({
   onPress,
 }: {
   label: string
+  /** 给了就画图标（方向键），label 只用在 testID 上 */
+  icon?: IconName
   on?: boolean
   disabled?: boolean
   /** 按住连发 */
@@ -191,18 +200,22 @@ function Cap({
         },
       ]}
     >
-      <Text
-        style={[
-          styles.capText,
-          {
-            color: on ? c.selFg : c.ink,
-            fontFamily: theme.font.mono,
-            fontSize: theme.font.size.meta,
-          },
-        ]}
-      >
-        {label}
-      </Text>
+      {icon ? (
+        <Icon name={icon} size={16} color={on ? c.selFg : c.ink} />
+      ) : (
+        <Text
+          style={[
+            styles.capText,
+            {
+              color: on ? c.selFg : c.ink,
+              fontFamily: theme.font.mono,
+              fontSize: theme.font.size.meta,
+            },
+          ]}
+        >
+          {label}
+        </Text>
+      )}
     </Pressable>
   )
 }

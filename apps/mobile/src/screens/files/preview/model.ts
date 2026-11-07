@@ -1,7 +1,7 @@
 import { type FileContent, type FilePreview, PREVIEW_LIMIT, previewKind } from '@litch/core'
 import { PDF_PAGES } from '../../../../../../packages/ui/src/files/preview/pdf/policy.ts'
 
-export type MobilePreviewFormat = 'image' | 'pdf'
+export type MobilePreviewFormat = 'image' | 'svg' | 'pdf'
 export type PreviewFailure =
   | 'unsupported'
   | 'tooLarge'
@@ -18,11 +18,12 @@ export type PreviewFailure =
   | 'busy'
   | 'failed'
 
-/** SVG 留在源码视图；不因后缀掩盖文件已经消失或读取失败的事实。 */
+/** SVG 也走离线静态子集；不因后缀掩盖文件已经消失或读取失败的事实。 */
 export function mobilePreviewFormat(content: FileContent): MobilePreviewFormat | null {
+  if (content.kind === 'text' && previewKind(content.path) === 'svg') return 'svg'
   if (content.kind !== 'binary' && content.kind !== 'tooLarge') return null
   const format = previewKind(content.path)
-  return format === 'image' || format === 'pdf' ? format : null
+  return format === 'image' || format === 'svg' || format === 'pdf' ? format : null
 }
 
 /** 核心检查后，进入 WebView 前再守一次传输预算，避免错误夹具/设备把超大字符串送给渲染器。 */

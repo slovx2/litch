@@ -7,6 +7,7 @@ final class TerminalInputTests: XCTestCase {
     continueAfterFailure = false
     XCUIDevice.shared.orientation = .portrait
     app.activate()
+    app.agreeToLaunchConsentIfNeeded()
     XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
     // 首次启动先等 JS 监听器挂好，再切换核心，避免冷启动链接竞争。
     if !app.otherElements["terminal"].exists {

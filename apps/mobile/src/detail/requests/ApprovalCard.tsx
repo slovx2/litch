@@ -3,8 +3,9 @@
 // 点开写一句为什么，随拒绝一起交给对面，模型看得到。
 import type { ApprovalOption, ApprovalRequest } from '@litch/core'
 import { Fragment, useState } from 'react'
-import { StyleSheet, Text, TextInput, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { type Key, useT } from '../../ui/i18n'
+import { CardTextInput } from '../../ui/kit/KeyboardCardScrollView'
 import { useTheme } from '../../ui/theme'
 import { Card, CardButton, type CardProps, Meta, useRespond, Well, Why } from './Card'
 
@@ -129,7 +130,7 @@ export function ApprovalCard(props: CardProps<ApprovalRequest>) {
         </View>
       ))}
       {noting ? (
-        <TextInput
+        <CardTextInput
           autoFocus
           value={note ?? ''}
           onChangeText={setNote}

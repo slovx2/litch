@@ -79,7 +79,7 @@ export class BrowserTargets {
       sites: this.sites,
       allowed: (invocation) => this.allowed(invocation),
     })
-    // 已安装时更新宿主本次连接地址；扩展重连后必须重新认领，不恢复旧授权。
+    // 已安装时更新宿主本次连接地址；扩展重连后必须重新认领标签，不恢复旧租约。
     if (await this.installer.prepared()) await this.installer.prepare()
   }
   private allowed(invocation: ClientToolInvocation): boolean {

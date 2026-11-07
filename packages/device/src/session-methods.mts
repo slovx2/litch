@@ -202,10 +202,12 @@ export async function sessionTreeCall(
       return {}
     }
     case SESSION_TREE_METHOD.proposalHere:
+      tree.assertProposalHere(proposalIdOf(tree, fields))
       await restoreProposalSource(tree, proposalIdOf(tree, fields))
       tree.proposalHere(proposalIdOf(tree, fields), optional(fields.lead, 'lead'))
       return {}
     case SESSION_TREE_METHOD.proposalMarkHere:
+      tree.assertProposalHere(proposalIdOf(tree, fields))
       await restoreProposalSource(tree, proposalIdOf(tree, fields))
       return {
         text: tree.proposalHere(proposalIdOf(tree, fields), optional(fields.lead, 'lead'), false),

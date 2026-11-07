@@ -3,19 +3,22 @@
 // 一行只订阅它自己的两个键（keys.device、keys.activity），不遍历会话。
 // 应用回到前台时，没连着的设备立刻重连一次（手机切到后台时连接常被系统掐掉，不等退避的下一拍）。
 // 设备列表上面是经理的入口（待处理合计）和定时任务的入口（所有设备的任务、没看过的运行合计）；
-// 再往下是「最近」组（RecentGroup），然后才是各台设备。
+// 再往下是全局「最近」「未读」（RecentGroup），然后才是各台设备。
 // 顶上有新版本时出更新的横条（UpdateBanner）；定时查更新也挂在这一页（首页一直在栈底）。
 import { type DeviceActivity, type DeviceView, keys } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { useEffect, useState } from 'react'
-import { AppState, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useEffect, useState } from 'react'
+import { AppState, FlatList, Pressable, StyleSheet, View } from 'react-native'
+import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
 import { ago } from '../../../../../packages/ui/src/app/format.ts'
 import { usePane } from '../../nav/pane'
 import type { RootStackParamList } from '../../nav/routes'
 import { useConnectionRoute } from '../../platform/connection-route'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Button, Empty, Row, StatusMark } from '../../ui/kit/controls'
+import { Button, Empty, ErrorBanner, Row } from '../../ui/kit/controls'
+import { Icon } from '../../ui/kit/Icon'
+import { StatusMark } from '../../ui/kit/marks'
 import { Prompt, Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
@@ -130,7 +133,7 @@ function DeviceRow({
           style={styles.more}
           onPress={() => onMenu(device)}
         >
-          <Text style={[styles.moreText, { color: theme.c.ink2 }]}>⋯</Text>
+          <Icon name="more" size={18} color={theme.c.ink2} />
         </Pressable>
       }
       onPress={() => onPress(device)}
@@ -163,6 +166,17 @@ export function DevicesScreen({ navigation }: Props) {
   const [renaming, setRenaming] = useState<DeviceView | null>(null)
   const [removing, setRemoving] = useState<DeviceView | null>(null)
   const [restartingId, setRestartingId] = useState<string | null>(null)
+  const [failure, setFailure] = useState<string | null>(null)
+  /** 设备操作：没做成在列表顶上说一句 */
+  const act = useCallback(
+    (work: Promise<unknown>) => {
+      setFailure(null)
+      work.catch((error: unknown) =>
+        setFailure(t('session.failed', { reason: reasonOf(error, t) })),
+      )
+    },
+    [t],
+  )
   useForegroundReconnect()
   useUpdateSchedule()
   const add = () => navigation.navigate('AddDevice')
@@ -171,12 +185,20 @@ export function DevicesScreen({ navigation }: Props) {
       title="Litch"
       back={false}
       actions={[
-        { label: '＋', testID: 'devices:add', onPress: add },
-        { label: '⚙', testID: 'devices:settings', onPress: () => navigation.navigate('Settings') },
+        { icon: 'plus', label: t('devices.add'), testID: 'devices:add', onPress: add },
+        {
+          icon: 'gear',
+          label: t('settings.title'),
+          testID: 'devices:settings',
+          onPress: () => navigation.navigate('Settings'),
+        },
       ]}
       testID="devices"
     >
       <UpdateBanner />
+      {failure ? (
+        <ErrorBanner text={failure} testID="devices:failure" onClose={() => setFailure(null)} />
+      ) : null}
       <FlatList
         data={ids}
         keyExtractor={(id) => id}
@@ -186,6 +208,10 @@ export function DevicesScreen({ navigation }: Props) {
               <ManagersEntry onPress={() => navigation.navigate('Managers')} />
               <TasksEntry onPress={() => navigation.navigate('Tasks', {})} />
               <RecentGroup
+                onOpen={(row, title) => navigation.navigate(...recentRoute(row, title))}
+              />
+              <RecentGroup
+                kind="unread"
                 onOpen={(row, title) => navigation.navigate(...recentRoute(row, title))}
               />
               <SectionHead label={t('sidebar.devices')} testID="devices:head" />
@@ -274,7 +300,7 @@ export function DevicesScreen({ navigation }: Props) {
         placeholder={t('devices.nameLabel')}
         submitLabel={t('devices.save')}
         onSubmit={(name) => {
-          if (renaming) void channel.command('device.update', { deviceId: renaming.id, name })
+          if (renaming) act(channel.command('device.update', { deviceId: renaming.id, name }))
         }}
         onClose={() => setRenaming(null)}
       />
@@ -295,6 +321,5 @@ export function DevicesScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   left: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 6 },
   wire: { width: 3, alignSelf: 'stretch' },
-  more: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  moreText: { fontSize: 20 },
+  more: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 })

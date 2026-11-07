@@ -11,6 +11,7 @@ final class TailscaleUITests: XCTestCase {
     settings = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: String]
     app.terminate()
     app.launch()
+    app.agreeToLaunchConsentIfNeeded()
     XCTAssertTrue(app.wait(for: .runningForeground, timeout: 15))
     XCTAssertTrue(app.otherElements["devices"].waitForExistence(timeout: 15))
     app.open(URL(string: "litch-dev://boot?mode=fixture")!)

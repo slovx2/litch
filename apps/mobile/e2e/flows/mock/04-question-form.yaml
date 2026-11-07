@@ -24,6 +24,7 @@ tags: [mock]
 - tapOn:
     id: request:other
 - inputText: e2e answer
+- runFlow: ../_shared/dismiss-keyboard.yaml
 - tapOn:
     id: request:next
 # 第三道：等翻到它（标题栏右边写着第几题），选第一个，最后一道选了就交
@@ -31,6 +32,11 @@ tags: [mock]
     visible:
       text: (Question 3 of 3|第 3 题，共 3 题)
     timeout: 5000
+- scrollUntilVisible:
+    element:
+      id: request:pick:0
+    direction: UP
+    centerElement: true
 - tapOn:
     id: request:pick:0
 - extendedWaitUntil:

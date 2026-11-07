@@ -130,7 +130,7 @@ export function useSessionPage({
   const [treeOpen, setTreeOpen] = useState(false)
   const input = useRef<TextInput>(null)
 
-  // 卡片最高多少：屏幕减去状态栏、标题栏、键盘、输入区，再给对话区留一截
+  // 输入时优先给卡片留空间；再留 84 点对话会把短屏上的卡片正文压到不足一行。
   const [composerHeight, setComposerHeight] = useState(0)
   const keyboard = useKeyboardState((state) => (state.isVisible ? state.height : 0))
   const lifted = keyboard > 0 ? keyboard - insets.bottom + accessory : 0
@@ -138,7 +138,13 @@ export function useSessionPage({
     140,
     Math.min(
       height * 0.5,
-      height - insets.top - HEADER - above - lifted - composerHeight - KEEP_TRANSCRIPT,
+      height -
+        insets.top -
+        HEADER -
+        above -
+        lifted -
+        composerHeight -
+        (keyboard > 0 ? 16 : KEEP_TRANSCRIPT),
     ),
   )
 
@@ -298,15 +304,16 @@ export function useSessionPage({
       ...(task
         ? [
             {
-              label: '⏱',
-              accessibilityLabel: task.label,
+              icon: 'clock' as const,
+              label: task.label,
               testID: 'detail:task',
               onPress: task.open,
             },
           ]
         : []),
       {
-        label: '⋯',
+        icon: 'more' as const,
+        label: t('sessions.more'),
         testID: 'detail:menu',
         onPress: () => setMenu(true),
       },

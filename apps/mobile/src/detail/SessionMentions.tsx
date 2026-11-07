@@ -7,7 +7,7 @@ import { useKey } from '../shell/services'
 import { useTheme } from '../ui/theme'
 import { useTranscript } from './context'
 
-function Pill({ mention }: { mention: SessionMentionView }) {
+function Pill({ mention, onLongPress }: { mention: SessionMentionView; onLongPress(): void }) {
   const { c } = useTheme()
   const { deviceId, openSession } = useTranscript()
   const listed = useKey<SessionSummary>(keys.summary(deviceId, mention.threadId))
@@ -16,6 +16,7 @@ function Pill({ mention }: { mention: SessionMentionView }) {
       testID={`mention-${mention.threadId}`}
       accessibilityRole={listed ? 'link' : undefined}
       onPress={listed ? () => openSession(mention.threadId) : undefined}
+      onLongPress={onLongPress}
       style={{ color: listed ? c.accent : c.ink3, fontWeight: '600' }}
     >
       {`＠${mention.title}`}
@@ -27,9 +28,11 @@ function Pill({ mention }: { mention: SessionMentionView }) {
 export function MentionedText({
   text,
   sessions,
+  onLongPress,
 }: {
   text: string
   sessions: readonly SessionMentionView[] | undefined
+  onLongPress(): void
 }) {
   if (!sessions || sessions.length === 0) return <>{text}</>
   return (
@@ -40,7 +43,7 @@ export function MentionedText({
           <Fragment key={index}>{segment.text}</Fragment>
         ) : (
           // biome-ignore lint/suspicious/noArrayIndexKey: 同上
-          <Pill key={index} mention={segment.mention} />
+          <Pill key={index} mention={segment.mention} onLongPress={onLongPress} />
         ),
       )}
     </>

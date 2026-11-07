@@ -207,6 +207,8 @@ export function createLink(options: LinkOptions): Link {
             capabilities: {
               experimentalApi: true,
               requestAttestation: false,
+              // 显示投影只用标准条目；原始响应可能重复携带工具图片，不传到界面。
+              optOutNotificationMethods: ['rawResponseItem/completed'],
               // 我们认识的协议扩展。设备服务的聚合面要求声明了 harness 才让连；
               // 原生 codex 和适配器的单个入口不认识这个键，会忽略它：扩展只增不改，没声明的连接看到的是标准协议
               // deviceSettings：声明了才收得到设置变化的通知、不可用原因的两种语言版本
@@ -215,6 +217,8 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.threadCapabilities,
                 EXTENSION.acpControls,
                 EXTENSION.filePreview,
+                EXTENSION.mediaImages,
+                EXTENSION.toolImages,
                 EXTENSION.fileDownload,
                 EXTENSION.fileAttachments,
                 EXTENSION.harness,

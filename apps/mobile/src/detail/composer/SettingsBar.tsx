@@ -16,6 +16,7 @@ import { type ReactNode, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { Icon } from '../../ui/kit/Icon'
 import { Confirm } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { effortTitle, permissionText } from './labels'
@@ -27,12 +28,24 @@ type Open = 'model' | 'effort' | 'speed' | 'permission' | null
 /** 快速档在原生 codex 里的标识（上游 ServiceTier::Fast 发的是 priority，老写法是 fast）：按界面的语言叫它 */
 const FAST_SPEEDS = new Set(['priority', 'fast'])
 
-function Chip({ label, onPress, testID }: { label: string; onPress?(): void; testID?: string }) {
+function Chip({
+  label,
+  spoken,
+  onPress,
+  testID,
+}: {
+  label: string
+  /** 读屏名称“设置名：值”；片上只写值 */
+  spoken?: string
+  onPress?(): void
+  testID?: string
+}) {
   const theme = useTheme()
   const { c } = theme
   return (
     <Pressable
       accessibilityRole="button"
+      {...(spoken ? { accessibilityLabel: spoken } : {})}
       disabled={!onPress}
       onPress={onPress}
       testID={testID}
@@ -49,6 +62,8 @@ function Chip({ label, onPress, testID }: { label: string; onPress?(): void; tes
       <Text numberOfLines={1} style={[styles.chipText, { color: onPress ? c.ink : c.ink3 }]}>
         {label}
       </Text>
+      {/* 点了出选择单：值后面一个下箭头 */}
+      {onPress ? <Icon name="down" size={12} color={c.ink3} /> : null}
     </Pressable>
   )
 }
@@ -374,7 +389,8 @@ export function SettingsBar(props: SettingsProps) {
           <Chip
             key={entry.id}
             testID={entry.testID}
-            label={`${entry.value} ▾`}
+            label={entry.value}
+            spoken={t('app.valued', { name: entry.title, value: entry.value })}
             onPress={entry.open}
           />
         ))}
@@ -385,11 +401,13 @@ export function SettingsBar(props: SettingsProps) {
             accessibilityRole={onUsage ? 'button' : 'text'}
             testID="settings:usage"
             hitSlop={8}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}
             {...(onUsage ? { onPress: onUsage } : {})}
           >
             <Text style={[styles.usage, { color: theme.c.ink3, fontFamily: theme.font.mono }]}>
-              {t('compose.context')} {percent}%{onUsage ? ' ›' : ''}
+              {t('compose.context')} {percent}%
             </Text>
+            {onUsage ? <Icon name="forward" size={12} color={theme.c.ink3} /> : null}
           </Pressable>
         ) : null}
       </View>
@@ -408,7 +426,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingBottom: 6,
   },
-  chip: { borderWidth: 1, paddingHorizontal: 8, height: 28, justifyContent: 'center' },
+  chip: {
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    height: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
   chipText: { fontSize: 13 },
   mode: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 6 },
   track: { width: 24, height: 14, borderWidth: 1, padding: 2, justifyContent: 'center' },

@@ -45,7 +45,7 @@ export interface DragSeen {
   /** 最后挪回原样：“项目”里的、“稍后看”里的项目 */
   end: string[]
   endSection: string[]
-  /** 拖“项目”的标题行停在“稍后看”那一组的上半截：线在置顶的最后一行和“稍后看”之间 */
+  /** 拖“项目”的标题行停在“稍后看”那一组的上半截：线在设备那一行和“稍后看”之间 */
   bandLine: Hint
   /** 放下去之后本机下面各组的先后、这台电脑上记着的先后 */
   bandsMoved: string[]
@@ -361,8 +361,8 @@ export function judgeDrag(seen: DragSeen): string[] {
     )
 
   must(
-    list(seen.bands) === `:pinned|${SECTION}|:projects|`,
-    `本机下面的组不对（应该是置顶、用户的组、“项目”、无项目）：${seen.bands.join(' ')}`,
+    list(seen.bands) === `${SECTION}|:projects|`,
+    `本机下面的组不对（应该是用户的组、“项目”、无项目；置顶在全局置顶区）：${seen.bands.join(' ')}`,
   )
   must(seen.projectsLabel === '项目', `“项目”那一行写的是：${seen.projectsLabel}`)
   must(seen.addLabel === '添加项目…', `“项目”行尾的加号不对：${seen.addLabel}`)
@@ -419,10 +419,10 @@ export function judgeDrag(seen: DragSeen): string[] {
     list(seen.end) === 'litch|docs-site' && seen.endSection.length === 0,
     `没挪回原样：项目 ${list(seen.end)}，稍后看 ${list(seen.endSection)}`,
   )
-  // 组的先后：线在置顶的最后一行和“稍后看”的标题之间
-  line(seen.bandLine, '文档站的待办汇总', '稍后看', '拖着“项目”的标题行停在“稍后看”上半截')
+  // 组的先后：线在设备那一行和“稍后看”的标题之间（置顶在全局置顶区，不在设备下面）
+  line(seen.bandLine, '本机', '稍后看', '拖着“项目”的标题行停在“稍后看”上半截')
   must(
-    list(seen.bandsMoved) === `:pinned|:projects|${SECTION}|`,
+    list(seen.bandsMoved) === `:projects|${SECTION}|`,
     `“项目”拖到“稍后看”前面之后各组：${seen.bandsMoved.join(' ')}`,
   )
   must(
@@ -434,7 +434,7 @@ export function judgeDrag(seen: DragSeen): string[] {
     `“项目”的菜单不对（只该有添加项目和挪先后，不能改名、删除）：${seen.projectsMenu}`,
   )
   must(
-    list(seen.bandsBack) === `:pinned|${SECTION}|:projects|`,
+    list(seen.bandsBack) === `${SECTION}|:projects|`,
     `点“下移”之后各组：${seen.bandsBack.join(' ')}`,
   )
   must(

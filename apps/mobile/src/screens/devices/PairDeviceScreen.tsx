@@ -7,7 +7,15 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import * as Clipboard from 'expo-clipboard'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Keyboard, Linking, Platform, StyleSheet, Text, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Keyboard,
+  Linking,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
 import { ssh } from '../../../modules/litch-ssh/src'
 import type { RootStackParamList } from '../../nav/routes'
 import { ensureApprovalKey } from '../../platform/approval-key'
@@ -37,7 +45,7 @@ import {
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Field, SectionLabel } from '../../ui/kit/controls'
-import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
+import { KeyboardArea, KeyboardFormFooter, KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { TailscaleChoice } from '../settings/TailscaleChoice'
@@ -242,115 +250,122 @@ export function PairDeviceScreen({ navigation, route }: Props) {
 
   return (
     <Screen title={t('pair.title')} testID="pair-device">
-      <KeyboardFormScrollView keyboardShouldPersistTaps="handled">
-        {phase.kind === 'scan' ? (
-          <>
-            <Scanner onText={take} />
-            <SectionLabel>{t('pair.paste')}</SectionLabel>
-            <View style={styles.form}>
-              <Field
-                label={t('pair.paste')}
-                hint={t('pair.paste.hint')}
-                error={pasteError ?? undefined}
-                value={pasted}
-                onChangeText={(text) => {
-                  setPasted(text)
-                  setPasteError(null)
-                }}
-                multiline
-                testID="pair:paste"
-              />
-              <View style={styles.row}>
-                <Button
-                  kind="plain"
-                  label={t('pair.paste.clipboard')}
-                  onPress={() => {
-                    void Clipboard.getStringAsync().then((text) => setPasted(text.trim()))
+      <KeyboardArea>
+        {/* 切到确认或登记阶段时从首项开始，不能继承粘贴长文本时的滚动位置。 */}
+        <KeyboardFormScrollView key={phase.kind} keyboardShouldPersistTaps="handled">
+          {phase.kind === 'scan' ? (
+            <>
+              <Scanner onText={take} />
+              <SectionLabel>{t('pair.paste')}</SectionLabel>
+              <View style={styles.form}>
+                <Field
+                  label={t('pair.paste')}
+                  hint={t('pair.paste.hint')}
+                  error={pasteError ?? undefined}
+                  value={pasted}
+                  onChangeText={(text) => {
+                    setPasted(text)
+                    setPasteError(null)
                   }}
+                  multiline
+                  testID="pair:paste"
                 />
-                <Button
-                  label={t('pair.paste.go')}
-                  disabled={!pasted.trim()}
-                  testID="pair:paste:go"
-                  onPress={submitPasted}
-                />
+                <View style={styles.row}>
+                  <Button
+                    kind="plain"
+                    label={t('pair.paste.clipboard')}
+                    onPress={() => {
+                      void Clipboard.getStringAsync().then((text) => setPasted(text.trim()))
+                    }}
+                  />
+                </View>
               </View>
+            </>
+          ) : (
+            <Target payload={phase.payload} />
+          )}
+
+          {phase.kind === 'confirm' ? (
+            <View style={styles.form}>
+              <TailscaleChoice
+                value={tailscale}
+                onChange={setTailscale}
+                configure={() => navigation.navigate('Tailscale', { adding: true })}
+              />
+              {phase.payload.m === 'tailscale' ? (
+                <Text style={[styles.note, { color: theme.c.ink2 }]} testID="pair:tailscale">
+                  {t('pair.tailscale')}
+                </Text>
+              ) : null}
+              <Text style={[styles.note, { color: theme.c.ink3 }]}>{t('pair.confirm.fixed')}</Text>
+              {phase.expired ? (
+                <Text style={[styles.note, { color: theme.c.err }]} testID="pair:expired">
+                  {t('pair.expired')}
+                </Text>
+              ) : null}
+              <Button
+                label={t('pair.add')}
+                disabled={phase.expired || checking}
+                testID="pair:add"
+                onPress={() => void inspectNetwork(phase.payload, true)}
+              />
+              <Button kind="plain" label={t('pair.again')} onPress={again} />
             </View>
-          </>
-        ) : (
-          <Target payload={phase.payload} />
-        )}
+          ) : null}
 
-        {phase.kind === 'confirm' ? (
-          <View style={styles.form}>
-            <TailscaleChoice
-              value={tailscale}
-              onChange={setTailscale}
-              configure={() => navigation.navigate('Tailscale', { adding: true })}
-            />
-            {phase.payload.m === 'tailscale' ? (
-              <Text style={[styles.note, { color: theme.c.ink2 }]} testID="pair:tailscale">
-                {t('pair.tailscale')}
+          {phase.kind === 'run' ? <Progress step={phase.step} /> : null}
+
+          {phase.kind === 'failed' ? (
+            <View style={styles.form} testID={`pair:failed:${phase.problem}`}>
+              <Text style={[styles.title, { color: theme.c.err }]}>{t('pair.failed')}</Text>
+              <Text style={[styles.note, { color: theme.c.ink }]}>
+                {t(tailscaleErrorKey(phase.detail) ?? `pair.why.${phase.problem}`, {
+                  host: phase.payload.h,
+                  port: phase.payload.p,
+                })}
               </Text>
-            ) : null}
-            <Text style={[styles.note, { color: theme.c.ink3 }]}>{t('pair.confirm.fixed')}</Text>
-            {phase.expired ? (
-              <Text style={[styles.note, { color: theme.c.err }]} testID="pair:expired">
-                {t('pair.expired')}
-              </Text>
-            ) : null}
+              {phase.problem === 'verify' && phase.detail ? (
+                <>
+                  <Button
+                    label={t('pair.verify.open')}
+                    testID="pair:verify"
+                    onPress={() => {
+                      const url = phase.detail
+                      if (url) void Linking.openURL(url)
+                    }}
+                  />
+                  <Button
+                    kind="plain"
+                    label={t('pair.retry')}
+                    testID="pair:retry"
+                    onPress={() => void add(phase.payload)}
+                  />
+                </>
+              ) : phase.detail ? (
+                <Text selectable style={[styles.detail, { color: theme.c.ink3 }]}>
+                  {t('pair.detail', { detail: phase.detail })}
+                </Text>
+              ) : null}
+              <Button
+                kind={phase.problem === 'verify' ? 'plain' : undefined}
+                label={t('pair.again')}
+                testID="pair:again"
+                onPress={again}
+              />
+            </View>
+          ) : null}
+        </KeyboardFormScrollView>
+        {phase.kind === 'scan' ? (
+          <KeyboardFormFooter>
             <Button
-              label={t('pair.add')}
-              disabled={phase.expired || checking}
-              testID="pair:add"
-              onPress={() => void inspectNetwork(phase.payload, true)}
+              label={t('pair.paste.go')}
+              disabled={!pasted.trim()}
+              testID="pair:paste:go"
+              onPress={submitPasted}
             />
-            <Button kind="plain" label={t('pair.again')} onPress={again} />
-          </View>
+          </KeyboardFormFooter>
         ) : null}
-
-        {phase.kind === 'run' ? <Progress step={phase.step} /> : null}
-
-        {phase.kind === 'failed' ? (
-          <View style={styles.form} testID={`pair:failed:${phase.problem}`}>
-            <Text style={[styles.title, { color: theme.c.err }]}>{t('pair.failed')}</Text>
-            <Text style={[styles.note, { color: theme.c.ink }]}>
-              {t(tailscaleErrorKey(phase.detail) ?? `pair.why.${phase.problem}`, {
-                host: phase.payload.h,
-                port: phase.payload.p,
-              })}
-            </Text>
-            {phase.problem === 'verify' && phase.detail ? (
-              <>
-                <Button
-                  label={t('pair.verify.open')}
-                  testID="pair:verify"
-                  onPress={() => {
-                    const url = phase.detail
-                    if (url) void Linking.openURL(url)
-                  }}
-                />
-                <Button
-                  kind="plain"
-                  label={t('pair.retry')}
-                  testID="pair:retry"
-                  onPress={() => void add(phase.payload)}
-                />
-              </>
-            ) : phase.detail ? (
-              <Text selectable style={[styles.detail, { color: theme.c.ink3 }]}>
-                {t('pair.detail', { detail: phase.detail })}
-              </Text>
-            ) : null}
-            <Button
-              kind={phase.problem === 'verify' ? 'plain' : undefined}
-              label={t('pair.again')}
-              testID="pair:again"
-              onPress={again}
-            />
-          </View>
-        ) : null}
-      </KeyboardFormScrollView>
+      </KeyboardArea>
       <PairNetworkDialog
         prompt={phase.kind === 'confirm' ? network : null}
         identity={identity}
@@ -395,7 +410,10 @@ function Progress({ step }: { step: PairStep }) {
   }[step.step]
   return (
     <View style={styles.form} testID={`pair:step:${step.step}`}>
-      <Text style={[styles.title, { color: theme.c.ink }]}>{label}</Text>
+      <View style={styles.progressHead}>
+        <ActivityIndicator color={theme.c.ink3} />
+        <Text style={[styles.title, styles.progressText, { color: theme.c.ink }]}>{label}</Text>
+      </View>
       {step.step === 'enroll' ? (
         <>
           <Text style={[styles.note, { color: theme.c.ink3 }]}>{t('pair.code')}</Text>
@@ -419,6 +437,8 @@ const styles = StyleSheet.create({
   note: { fontSize: 14, lineHeight: 20 },
   detail: { fontSize: 12, lineHeight: 18 },
   title: { fontSize: 17, fontWeight: '600' },
+  progressHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  progressText: { flexShrink: 1 },
   code: { fontSize: 36, letterSpacing: 4, textAlign: 'center', paddingVertical: 8 },
   cameraPad: { padding: 16 },
   camera: { width: '100%', aspectRatio: 1 },

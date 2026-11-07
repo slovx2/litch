@@ -23,6 +23,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  type TextInputProps,
   useWindowDimensions,
   View,
 } from 'react-native'
@@ -39,14 +40,18 @@ import {
   questionMode,
   rememberPostCollapsed,
 } from '../../../../../packages/ui/src/manager/post-presentation.ts'
+import { useGrow } from '../../detail/composer/grow'
 import { ProposalActs } from '../../detail/proposals/ProposalActs'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Empty } from '../../ui/kit/controls'
+import { Caret, Fold, Icon, IconButton } from '../../ui/kit/Icon'
+import { ChoiceMark } from '../../ui/kit/marks'
 import { Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
+import { Byline } from './Byline'
 import { animateNextLayout } from './card-motion'
 import { readChoice, writeChoice } from './choice-drafts'
 import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutcome'
@@ -78,7 +83,7 @@ function OptionChoice({
   onSelect(): void
 }) {
   const t = useT()
-  const { c, radius, radio, hit } = useTheme()
+  const { c, radius, hit } = useTheme()
   return (
     <Pressable
       role="radio"
@@ -100,7 +105,7 @@ function OptionChoice({
         },
       ]}
     >
-      <Text style={{ color: selected ? c.accent : c.ink3 }}>{selected ? radio.on : radio.off}</Text>
+      <ChoiceMark kind="radio" state={selected ? 'on' : 'off'} />
       <View style={styles.choiceText}>
         <Text style={{ color: c.ink, fontWeight: '600' }}>
           {option.label}
@@ -110,6 +115,13 @@ function OptionChoice({
       </View>
     </Pressable>
   )
+}
+
+// 抽屉打开才挂载输入框；增高钩子随输入框挂载，重开已有草稿也会立即测量。
+function QuestionInput(props: TextInputProps) {
+  const input = useRef<TextInput>(null)
+  const grow = useGrow(input, props.value ?? '')
+  return <TextInput {...props} ref={input} {...grow} />
 }
 
 export function Issue({
@@ -411,7 +423,15 @@ export function Issue({
   const events = post.discussion.messages
     .flatMap((q) => [
       ...(q.question
-        ? [{ id: `${q.id}-q`, at: q.at, who: t('manager.questionYou'), text: q.question }]
+        ? [
+            {
+              id: `${q.id}-q`,
+              at: q.at,
+              who: t('manager.questionYou'),
+              text: q.question,
+              waiting: false,
+            },
+          ]
         : []),
       {
         id: `${q.id}-a`,
@@ -421,15 +441,17 @@ export function Issue({
             ? 'manager.questionManagerSpeaker'
             : 'manager.questionTemporarySpeaker',
         ),
+        // 还在等的回答不写成一段正文，名字后面挂一个“等待回复”的小标签
+        waiting: q.status === 'running' && !q.answer && !q.updatedPost,
         text:
           q.answer ??
-          t(
-            q.updatedPost
-              ? 'manager.postUpdatedReply'
-              : q.status === 'failed'
-                ? 'manager.questionFailed'
-                : 'manager.questionPending',
-          ),
+          (q.updatedPost
+            ? t('manager.postUpdatedReply')
+            : q.status === 'failed'
+              ? t('manager.questionFailed')
+              : q.status === 'running'
+                ? ''
+                : t('manager.questionPending')),
       },
     ])
     .sort((a, b) => a.at - b.at)
@@ -461,14 +483,33 @@ export function Issue({
       disabled={noTalk}
       testID={`post-discussion:${post.id}`}
       onPress={() => onTalk(true)}
+      hitSlop={{ top: 6, bottom: 6 }}
       style={({ pressed }) => [
         styles.entry,
-        { minHeight: hit, backgroundColor: pressed ? c.press : 'transparent' },
+        {
+          borderColor: talking ? c.line3 : c.line2,
+          borderRadius: radius.l,
+          backgroundColor: pressed ? c.press : talking ? c.selBg : 'transparent',
+          opacity: noTalk ? 0.5 : 1,
+        },
       ]}
     >
-      <Text style={{ color: c.ink2, fontSize: font.size.meta }}>
-        ❝{replies ? ` ${replies}` : ''}
+      <Icon name="note" size={16} color={talking ? c.ink : c.ink2} />
+      <Text style={{ color: talking ? c.ink : c.ink2, fontSize: font.size.meta }}>
+        {t('manager.discussion')}
       </Text>
+      {replies ? (
+        <Text
+          style={{
+            color: c.ink2,
+            fontSize: font.size.small + 1,
+            fontWeight: '600',
+            fontVariant: ['tabular-nums'],
+          }}
+        >
+          {replies}
+        </Text>
+      ) : null}
       {/* 设备服务较旧、没有讨论可读：入口禁用，原因写在入口上（看板顶上另有一行说去设备详情升级） */}
       {noTalk ? (
         <Text
@@ -488,22 +529,34 @@ export function Issue({
   )
   const compose = features.posts ? (
     <View style={styles.talkCompose}>
-      <View style={styles.modes}>
-        <Button
-          kind={mode === 'manager' ? 'solid' : 'plain'}
-          label={t('manager.questionManager')}
-          onPress={() => setMode('manager')}
-        />
-        {canTemporary ? (
-          <Button
-            kind={mode === 'temporary' ? 'solid' : 'plain'}
-            label={t('manager.questionTemporary')}
-            onPress={() => setMode('temporary')}
-          />
-        ) : null}
-      </View>
+      {/* 只有能开临时对话时才给两种方式选；只有经理一种就不画切换 */}
+      {canTemporary ? (
+        <View accessibilityLabel={t('manager.questionMode')} style={styles.modes}>
+          {(['manager', 'temporary'] as const).map((one) => (
+            <Pressable
+              key={one}
+              accessibilityRole="button"
+              accessibilityState={{ selected: mode === one }}
+              testID={`post-question-mode:${one}`}
+              hitSlop={{ top: 8, bottom: 8 }}
+              onPress={() => setMode(one)}
+              style={[styles.mode, { borderBottomColor: mode === one ? c.accent : 'transparent' }]}
+            >
+              <Text
+                style={{
+                  color: mode === one ? c.ink : c.ink3,
+                  fontSize: font.size.meta,
+                  fontWeight: mode === one ? '600' : '400',
+                }}
+              >
+                {t(one === 'manager' ? 'manager.questionManager' : 'manager.questionTemporary')}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
       <View style={styles.askRow}>
-        <TextInput
+        <QuestionInput
           testID={`post-question:${post.id}`}
           multiline
           accessibilityLabel={questionPrompt}
@@ -517,11 +570,11 @@ export function Issue({
           value={question}
           onChangeText={writeQuestion}
         />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('manager.postSubmit')}
+        <IconButton
+          icon="send"
+          tone="solid"
+          label={t('manager.postSubmit')}
           testID={`post-question-submit:${post.id}`}
-          style={{ minHeight: hit, minWidth: hit, justifyContent: 'center', alignItems: 'center' }}
           disabled={locked || !question.trim() || (mode === 'manager' && questionEnded)}
           onPress={() =>
             void run(async () => {
@@ -536,9 +589,7 @@ export function Issue({
               writeQuestion('')
             })
           }
-        >
-          <Text style={{ color: c.accent, fontSize: font.size.title }}>↑</Text>
-        </Pressable>
+        />
       </View>
       {mode === 'manager' && answerConflict ? (
         <Text style={{ color: c.ink2 }}>{t('manager.questionUpdated')}</Text>
@@ -567,14 +618,26 @@ export function Issue({
           text={post.discussion.messages.map((q) => `${q.question}\n${q.answer ?? ''}`).join('\n')}
           defaultOpen
         >
-          {events.map((entry) => (
-            <View key={entry.id} style={[styles.discussion, { borderColor: c.line1 }]}>
-              <Text style={{ color: c.ink3 }}>
-                {entry.who} · {stamp(entry.at, Date.now(), t.lang)}
-              </Text>
-              <Markdown text={entry.text} />
-            </View>
-          ))}
+          <View style={styles.timeline}>
+            {events.map((entry) => (
+              <View key={entry.id} style={[styles.discussion, { borderColor: c.line1 }]}>
+                <Byline
+                  who={entry.who}
+                  at={entry.at}
+                  {...(entry.waiting
+                    ? {
+                        tag: {
+                          text: t('manager.discussionWaiting'),
+                          tone: 'wait' as const,
+                          testID: `discussion-waiting:${entry.id}`,
+                        },
+                      }
+                    : {})}
+                />
+                {entry.text ? <Markdown text={entry.text} /> : null}
+              </View>
+            ))}
+          </View>
         </DiscussionHistory>
       ) : null}
     </DiscussionDrawer>
@@ -585,12 +648,13 @@ export function Issue({
         styles.card,
         narrow ? styles.cardNarrow : null,
         bare ? styles.cardBare : null,
+        inline ? styles.cardInline : null,
         { borderColor: talking ? c.accent : c.line1, backgroundColor: c.panel },
       ]}
       testID={`manager-issue:${post.id}`}
       onLayout={(event) => onPosition(event.nativeEvent.layout.y)}
     >
-      <View style={styles.cardHeader}>
+      <View style={[styles.cardHeader, inline ? styles.headerInline : null]}>
         {!inline ? (
           <Pressable
             accessibilityRole="button"
@@ -602,12 +666,15 @@ export function Issue({
               flex: 1,
               flexDirection: 'row',
               gap: 8,
-              alignItems: 'center',
+              alignItems: 'flex-start',
               backgroundColor: pressed ? c.press : 'transparent',
             })}
             onPress={toggle}
           >
-            <Text style={{ color: c.ink2 }}>{collapsed ? '▸' : '▾'}</Text>
+            {/* 箭头和标题第一行对齐（标题可能折成几行） */}
+            <View style={styles.caret}>
+              <Caret open={!collapsed} />
+            </View>
             <Text style={{ color: c.ink, fontSize: font.size.title, fontWeight: '600', flex: 1 }}>
               {post.kind === 'suggestion' ? t('manager.suggestions') : post.id} · {post.title}
             </Text>
@@ -660,17 +727,11 @@ export function Issue({
         </Pressable>
       ) : null}
       {decision?.status === 'ignored' ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ expanded: !collapsed }}
-          testID={`decision-ignored-toggle:${decision.id}`}
-          style={[styles.detailsRow, { minHeight: hit }]}
-          onPress={toggle}
-        >
+        <Fold open={!collapsed} testID={`decision-ignored-toggle:${decision.id}`} onToggle={toggle}>
           <Text style={{ color: c.ink2 }}>
-            {collapsed ? '▸' : '▾'} {t(collapsed ? 'mgr.ignored.show' : 'mgr.ignored.hide')}
+            {t(collapsed ? 'mgr.ignored.show' : 'mgr.ignored.hide')}
           </Text>
-        </Pressable>
+        </Fold>
       ) : null}
       {(!pendingReview || unreviewed) && !collapsed ? (
         <>
@@ -718,6 +779,7 @@ export function Issue({
               deviceId={manager.deviceId}
               sessionId={suggestion.source.threadId}
               proposalId={suggestion.proposal.id}
+              sourceIsManager={suggestion.proposal.sourceIsManager}
               worktree={suggestion.proposal.worktree ?? false}
               wider={suggestion.proposal.widerSandbox}
             />
@@ -803,17 +865,12 @@ export function Issue({
                       <Text style={{ color: c.wait, fontSize: font.size.meta }}>
                         {t('manager.conflict')}
                       </Text>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={t('manager.confirm')}
+                      <IconButton
+                        icon="check"
+                        color={c.accent}
+                        label={t('manager.confirm')}
                         testID={`decision-confirm:${decision.id}`}
                         disabled={locked}
-                        style={{
-                          minHeight: hit,
-                          minWidth: hit,
-                          justifyContent: 'center',
-                          alignItems: 'center',
-                        }}
                         onPress={() => {
                           try {
                             baseFile.write({ ...baseFile.read(), [draftKey]: revision })
@@ -823,9 +880,7 @@ export function Issue({
                             setError(String(e))
                           }
                         }}
-                      >
-                        <Text style={{ color: c.accent }}>✓</Text>
-                      </Pressable>
+                      />
                     </View>
                   ) : null}
                   <DecisionAnswer decision={decision} />
@@ -1004,23 +1059,36 @@ export function Issue({
 }
 const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  caret: { height: 24, justifyContent: 'center' },
   status: { borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2 },
-  detailsRow: { alignSelf: 'stretch', justifyContent: 'center' },
   askComposer: { gap: 10, borderLeftWidth: 2, padding: 12 },
   talkCompose: { gap: 6 },
-  modes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  modes: { flexDirection: 'row', gap: 16, paddingHorizontal: 2 },
+  mode: { paddingVertical: 4, borderBottomWidth: 2 },
   askRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
   askInput: { flex: 1, minHeight: 44, maxHeight: 160 },
-  entry: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6 },
-  dot: { width: 6, height: 6, borderRadius: 3 },
+  entry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    minHeight: 30,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+  },
+  dot: { position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: 4 },
   card: { padding: 16, margin: 12, borderWidth: 1, gap: 12 },
   // 320 一类的小屏：外边距、内边距收窄，正文多出约 16 宽
   cardNarrow: { padding: 12, margin: 8 },
   cardBare: { padding: 0, margin: 0, borderWidth: 0 },
+  // 分页列表里展开的卡：卡头由列表画，这里接着卡头往下排，不再套一层边框
+  cardInline: { margin: 0, borderWidth: 0, paddingTop: 0, paddingHorizontal: 12 },
+  headerInline: { justifyContent: 'flex-end' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 8 },
   input: { borderWidth: 1, minHeight: 80, maxHeight: 160, padding: 10, textAlignVertical: 'top' },
   options: { gap: 8 },
   choice: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 10 },
   choiceText: { flex: 1, gap: 6 },
-  discussion: { borderLeftWidth: 2, paddingLeft: 12, gap: 8 },
+  timeline: { gap: 16 },
+  discussion: { borderLeftWidth: 2, paddingLeft: 12, gap: 6 },
 })

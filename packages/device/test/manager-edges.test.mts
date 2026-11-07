@@ -6,7 +6,7 @@ import {
   MANAGER_METHOD,
 } from '../../protocol/src/manager.mjs'
 import { prepareInstructions } from '../src/codex-instructions.mjs'
-import { managerTools } from '../src/manager-rules.mjs'
+import { lineInstructions, managerTools, refreshManagerRules } from '../src/manager-rules.mjs'
 import { prepareSessionTools } from '../src/session-client-tools.mjs'
 import { startChild } from '../src/session-start.mjs'
 import { intervalTask } from './task-kit.mjs'
@@ -172,6 +172,37 @@ test('D12：任务卡关闭时，经理 start schema 不再暴露 propose/offer�
     assert.deepEqual(start.inputSchema.properties.initiation.enum, ['user_asked'])
     assert.ok(!sessions.tools.some((entry: any) => entry.name === 'wrap_up'))
     assert.doesNotMatch(sessions.instructions, /initiation "propose"/)
+    assert.match(sessions.instructions, /Record self-discovered work in board decisions or items/)
+    assert.match(start.description, /Start user-requested or approved in-scope work/)
+    assert.match(start.description, /Record self-discovered work in board decisions or items/)
+    assert.doesNotMatch(start.description, /initiation propose|card starts/)
+    const child = await startChild(
+      env.device.sessionTree,
+      env.threadId,
+      {
+        kind: 'fresh',
+        title: '关闭任务卡的线',
+        prompt: '检查',
+        worktree: false,
+        wakeParent: false,
+      },
+      'user',
+    )
+    const childSessions = (env.device.sessionTree.store.tools(child.threadId) as any[]).find(
+      (entry) => entry.name === 'litch_sessions',
+    )
+    assert.match(
+      childSessions.instructions,
+      /Report findings outside this assignment to the manager/,
+    )
+    assert.doesNotMatch(childSessions.instructions, /initiation "propose"/)
+    const refreshed = refreshManagerRules(
+      'litch_sessions',
+      `ordinary session rules\n\n${lineInstructions(env.manager)}`,
+      false,
+    )
+    assert.match(refreshed ?? '', /Report findings outside this assignment to the manager/)
+    assert.doesNotMatch(refreshed ?? '', /initiation "propose"/)
     const context = {
       store: env.device.sessionTree.store,
       ask: async () => ({ config: {} }),

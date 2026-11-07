@@ -26,8 +26,8 @@ export async function navigationProbe() {
   }
   const blur = () => (document.activeElement as HTMLElement | null)?.blur()
   const picked = () =>
-    one('.ss-row.sel:not(.projection-group *)')?.closest<HTMLElement>('[data-session]')?.dataset
-      .session ?? null
+    one('.ss-row.sel:not(.projection-group *, .sc-group *)')?.closest<HTMLElement>('[data-session]')
+      ?.dataset.session ?? null
   const key = async (key: string, init: KeyboardEventInit = {}) => {
     ;(document.activeElement ?? document.body).dispatchEvent(
       new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }),
@@ -47,14 +47,16 @@ export async function navigationProbe() {
     const r = one('.window-navigation')!.getBoundingClientRect()
     return [r.x, r.y, r.width, r.height].join(',')
   }
-  await until(() => document.querySelectorAll('.ss-row:not(.projection-group *)').length > 3)
+  await until(
+    () => document.querySelectorAll('.ss-row:not(.projection-group *, .sc-group *)').length > 3,
+  )
   const origin = rect()
   must(
     one<HTMLButtonElement>('[data-navigation="back"]')?.disabled === true,
     '新建页启动时后退未禁用',
   )
   const rows = [
-    ...document.querySelectorAll<HTMLElement>('.ss-row:not(.projection-group *)'),
+    ...document.querySelectorAll<HTMLElement>('.ss-row:not(.projection-group *, .sc-group *)'),
   ].filter((row) => row.closest('[data-session]'))
   const a = rows[0]!
   const b = rows[1]!
@@ -210,7 +212,9 @@ export async function navigationProbe() {
   )
 
   // 关闭定位后从历史打开折叠设备里的对话，不展开、不滚动；打开后立即定位当前对话。
-  const again = one<HTMLElement>(`[data-session="${aId}"]:not(.projection-group *) .ss-row`)!
+  const again = one<HTMLElement>(
+    `[data-session="${aId}"]:not(.projection-group *, .sc-group *) .ss-row`,
+  )!
   again.click()
   await sleep()
   await click('.sb-link.new')
@@ -336,7 +340,7 @@ export async function runNavigationChecks(
         if ((option?.getAttribute('aria-checked') === 'true') !== enabled) option?.click()
         one('.sb-more > button')?.click()
         await sleep()
-        const row = one(`[data-session="${id}"]:not(.projection-group *)`)
+        const row = one(`[data-session="${id}"]:not(.projection-group *, .sc-group *)`)
         const device = row?.closest<HTMLElement>('.dev-group')
         const deviceId = device?.dataset.device
         device
@@ -367,7 +371,7 @@ export async function runNavigationChecks(
             before.scroll === document.querySelector('.sb-scroll')?.scrollTop
           )
         const row = document.querySelector(
-          `[data-session="${id}"]:not(.projection-group *) .ss-row`,
+          `[data-session="${id}"]:not(.projection-group *, .sc-group *) .ss-row`,
         )
         return row?.getAttribute('aria-current') === 'true' && !!row.getClientRects().length
       }})(${enabled}, ${JSON.stringify(result.first)}, ${JSON.stringify(prepare)})`,

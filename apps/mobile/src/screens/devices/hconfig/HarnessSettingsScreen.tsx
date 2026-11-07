@@ -92,6 +92,7 @@ export function HarnessSettingsScreen({ route, navigation }: Props) {
       <Note
         testID={`hc:state:${state}`}
         tone={state === 'loading' ? 'dim' : 'plain'}
+        busy={state === 'loading'}
         text={
           state === 'loading'
             ? t('manage.loading')

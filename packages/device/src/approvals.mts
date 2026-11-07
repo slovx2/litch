@@ -181,6 +181,8 @@ export class DeviceApprovals {
     const held = this.cards.get(params.id)
     if (!held || (held.card.expiresAt !== null && held.card.expiresAt <= this.clock.now()))
       throw new ApprovalError(APPROVAL_ERROR.unknownApproval, `没有卡片 ${params.id}`)
+    if (held.card.kind === 'browserSite')
+      throw new ApprovalError(null, '网站审批必须在执行浏览器操作的 Litch 桌面会话中处理')
     if (held.answers >= APPROVAL_ANSWERS_MAX)
       throw new ApprovalError(APPROVAL_ERROR.tooMany, '这张卡片答的次数太多了')
     const valid =
@@ -228,16 +230,18 @@ export class DeviceApprovals {
 }
 
 const viewOf = (held: Held): ApprovalCardView =>
-  held.card.kind === 'computerSelf'
+  held.card.kind === 'browserSite'
     ? { ...held.card, summary: { ...held.card.summary } }
-    : {
-        ...held.card,
-        summary: {
-          ...held.card.summary,
-          accounts: held.card.summary.accounts.map((account) => ({ ...account })),
-          task: held.card.summary.task ? { ...held.card.summary.task } : null,
-        },
-      }
+    : held.card.kind === 'computerSelf'
+      ? { ...held.card, summary: { ...held.card.summary } }
+      : {
+          ...held.card,
+          summary: {
+            ...held.card.summary,
+            accounts: held.card.summary.accounts.map((account) => ({ ...account })),
+            task: held.card.summary.task ? { ...held.card.summary.task } : null,
+          },
+        }
 
 /** 只留定义里的键：设备进程转交的不多带别的东西 */
 function answerOf(answer: ApprovalAnswer): ApprovalAnswer {
@@ -269,11 +273,34 @@ function cardOf(value: unknown): ApprovalCard | null {
   if (
     typeof threadId !== 'string' ||
     threadId === '' ||
-    (kind !== 'browserSignIn' && kind !== 'computerSelf')
+    (kind !== 'browserSignIn' && kind !== 'computerSelf' && kind !== 'browserSite')
   )
     return null
   if (expiresAt !== null && (typeof expiresAt !== 'number' || !Number.isFinite(expiresAt)))
     return null
+  if (kind === 'browserSite') {
+    if (
+      !isObject(summary) ||
+      typeof summary.origin !== 'string' ||
+      !/^https?:\/\/[^\s/]+$/.test(summary.origin) ||
+      typeof summary.device !== 'string' ||
+      (summary.browser !== 'chrome' && summary.browser !== 'builtin')
+    )
+      return null
+    return {
+      id,
+      threadId,
+      kind,
+      desktopId,
+      nonce,
+      expiresAt,
+      summary: {
+        origin: clean(summary.origin, 2048),
+        device: clean(summary.device, APPROVAL_TEXT_MAX.device),
+        browser: summary.browser,
+      },
+    }
+  }
   if (kind === 'computerSelf') {
     if (
       !isObject(summary) ||

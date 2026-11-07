@@ -297,6 +297,10 @@ type CutBeforeItem<T> = T & { beforeItemId?: string }
 import type { DevicePowerStatus } from './device-power.mjs'
 
 export interface ClientRequests extends AcpControlsRequests {
+  'litch/media/readImage': {
+    params: { source: string }
+    result: import('./media-images.mjs').ImageReadResult
+  }
   'litch/device/recovery/read': {
     params: Record<string, never>
     result: { notices: RecoveryNotice[] }

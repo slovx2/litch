@@ -8,11 +8,17 @@ import { applyPrefs, runScene } from './preview/frame.web.ts'
 import { PreviewIndex } from './preview/Index.web.tsx'
 import { ManagerEventsPreview } from './preview/ManagerEvents.web.tsx'
 import { startScrollNudge } from './preview/nudge.web.ts'
+import { sceneById } from './preview/scenes.web.ts'
+import { seedOrganizer } from './shell/organizer-file.web.ts'
 
 const params = new URLSearchParams(location.search)
 const inFrame = params.has('app')
-// 要在 App 读设置之前写好
-if (inFrame) applyPrefs(params)
+// 要在 App 读设置、读本机分组之前写好
+if (inFrame) {
+  applyPrefs(params)
+  const groups = sceneById(params.get('scene'))?.localGroups
+  if (groups) seedOrganizer('mock', groups)
+}
 
 function PreviewApp() {
   useEffect(() => {

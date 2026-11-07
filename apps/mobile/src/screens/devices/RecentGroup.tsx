@@ -1,13 +1,12 @@
 // 设备列表页上的「最近」组：所有设备合在一起，以主对话为单位、按最后一次主动交互倒序（核心的 keys.sidebarProjections，
-// 口径见 src/shell/activity.ts）。每行左边是设备的线色，跨设备时远程设备的行第二行写设备名（本机不写）；可按项目聚合，默认显示几条、
+// 口径见 src/shell/activity.ts）。行和置顶区、本机分组同一个组件（ShortcutRows）：左边设备的线色，登记了多台设备时第二行写设备名
+// （离线带上）；可按项目聚合，默认显示几条、
 // “显示更多”每次多十条，都照桌面侧栏。快捷设置在组标题的“⋯”里，不放设置页。
 // 子会话的交互算到主项上；子树照桌面投影默认收起，开合单独记在手机上。
 import {
   type DeviceView,
   keys,
   pageSidebarProjection,
-  type SessionChildren,
-  type SessionSummary,
   type SidebarProjectionBlock,
   type SidebarProjectionRow,
   type SidebarProjections,
@@ -17,19 +16,18 @@ import { type ReactNode, useCallback, useRef, useState, useSyncExternalStore } f
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { Caret, Icon } from '../../ui/kit/Icon'
 import { Sheet } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
-import { foldsOf, subscribeFolds, toggleFolded } from '../sessions/folds'
-import { ChildLine, SessionFold, SummaryLine, titleOf } from '../sessions/rows'
-import { recentTree, type TreeRow } from '../sessions/tree'
+import { titleOf } from '../sessions/rows'
 import { FIRST_CHOICES, MORE_STEP } from './recent-settings'
-import { setRecentSettings, useRecentSettings } from './recent-state'
+import { type ProjectionKind, setRecentSettings, useRecentSettings } from './recent-state'
+import { ShortcutSession, useDeviceNote } from './ShortcutRows'
 
 const NONE: string[] = []
-const NO_CHILDREN: SessionChildren = {}
 
-/** 所有设备的「最近」主项合在一起；任何一台的投影没换就还是同一个数组，不让列表白白重画 */
-function useRecentRows(): SidebarProjectionRow[] {
+/** 所有设备的「最近」（或「未读」）主项合在一起；任何一台的投影没换就还是同一个数组，不让列表白白重画 */
+function useRecentRows(kind: ProjectionKind): SidebarProjectionRow[] {
   const { store } = useReplica()
   const devices = useKey<string[]>(keys.devices) ?? NONE
   const joined = devices.join('\n')
@@ -50,10 +48,10 @@ function useRecentRows(): SidebarProjectionRow[] {
     const was = cache.current
     if (was && was.values.length === values.length && was.values.every((v, i) => v === values[i]))
       return was.rows
-    const rows = values.flatMap((value) => value?.recent ?? [])
+    const rows = values.flatMap((value) => value?.[kind] ?? [])
     cache.current = { values, rows }
     return rows
-  }, [store, joined])
+  }, [store, joined, kind])
   return useSyncExternalStore(subscribe, get)
 }
 
@@ -77,9 +75,7 @@ export function SectionHead({
   const { c } = theme
   const text = (
     <>
-      <Text style={[styles.chevron, { color: c.ink3, fontFamily: theme.font.mono }]}>
-        {onToggle ? (collapsed ? '▸' : '▾') : ''}
-      </Text>
+      <View style={styles.chevron}>{onToggle ? <Caret open={!collapsed} size={12} /> : null}</View>
       <Text
         role="heading"
         style={[styles.headName, { color: c.ink2, fontFamily: theme.font.mono }]}
@@ -116,35 +112,41 @@ export function SectionHead({
 }
 
 export function RecentGroup({
+  kind = 'recent',
   onOpen,
 }: {
+  /** 「最近」或「未读」：同一种画法，各记各的设置 */
+  kind?: ProjectionKind
   onOpen(row: SidebarProjectionRow, title: string): void
 }) {
   const t = useT()
   const { c, hit } = useTheme()
-  const settings = useRecentSettings()
-  const rows = useRecentRows()
+  const settings = useRecentSettings(kind)
+  const rows = useRecentRows(kind)
   const [extra, setExtra] = useState(0)
   const [menu, setMenu] = useState(false)
   const page = pageSidebarProjection(rows, settings.byProject, settings.first + extra)
-  const showDevice = new Set(page.blocks.map((block) => block.deviceId)).size > 1
-  const name = t('sidebar.projection.recent')
+  const showDevice = (useKey<string[]>(keys.devices)?.length ?? 0) > 1
+  const name = t(`sidebar.projection.${kind}`)
+  // 没有未读时整节不出，省地方
+  if (kind === 'unread' && rows.length === 0) return null
+  const set = (change: Parameters<typeof setRecentSettings>[0]) => setRecentSettings(change, kind)
   return (
-    <View testID="recent">
+    <View testID={kind}>
       <SectionHead
         label={name}
-        testID="recent:head"
+        testID={`${kind}:head`}
         collapsed={settings.collapsed}
-        onToggle={() => setRecentSettings({ collapsed: !settings.collapsed })}
+        onToggle={() => set({ collapsed: !settings.collapsed })}
         action={
           <Pressable
             accessibilityRole="button"
             aria-label={t('sidebar.projection.settings', { name })}
-            testID="recent:menu"
+            testID={`${kind}:menu`}
             onPress={() => setMenu(true)}
             style={styles.headAction}
           >
-            <Text style={[styles.headActionText, { color: c.ink2 }]}>⋯</Text>
+            <Icon name="more" size={18} color={c.ink2} />
           </Pressable>
         }
       />
@@ -154,14 +156,15 @@ export function RecentGroup({
             <RecentBlock
               key={block.key}
               block={block}
+              kind={kind}
               byProject={settings.byProject}
               showDevice={showDevice}
               onOpen={onOpen}
             />
           ))}
           {rows.length === 0 ? (
-            <Text testID="recent:empty" style={[styles.empty, { color: c.ink3 }]}>
-              {t('sidebar.projection.recentEmpty')}
+            <Text testID={`${kind}:empty`} style={[styles.empty, { color: c.ink3 }]}>
+              {t(`sidebar.projection.${kind}Empty`)}
             </Text>
           ) : null}
           {page.remaining > 0 || extra > 0 ? (
@@ -171,7 +174,7 @@ export function RecentGroup({
                 <Pressable
                   accessibilityRole="button"
                   aria-label={`${t('sidebar.showMore')} · ${t('sidebar.hiddenCount', { count: page.remaining })}`}
-                  testID="recent:more"
+                  testID={`${kind}:more`}
                   onPress={() => setExtra((was) => was + MORE_STEP)}
                   style={({ pressed }) => [
                     styles.moreButton,
@@ -193,7 +196,7 @@ export function RecentGroup({
               {extra > 0 ? (
                 <Pressable
                   accessibilityRole="button"
-                  testID="recent:less"
+                  testID={`${kind}:less`}
                   onPress={() => setExtra(0)}
                   style={({ pressed }) => [
                     styles.moreButton,
@@ -217,16 +220,16 @@ export function RecentGroup({
         actions={[
           {
             label: t('sidebar.projection.project'),
-            testID: 'recent:menu:project',
+            testID: `${kind}:menu:project`,
             checked: settings.byProject,
-            onPress: () => setRecentSettings({ byProject: !settings.byProject }),
+            onPress: () => set({ byProject: !settings.byProject }),
           },
           ...FIRST_CHOICES.map((n) => ({
             label: t('sidebar.projection.first', { n }),
-            testID: `recent:menu:first:${n}`,
+            testID: `${kind}:menu:first:${n}`,
             selected: settings.first === n,
             onPress: () => {
-              setRecentSettings({ first: n })
+              set({ first: n })
               setExtra(0)
             },
           })),
@@ -239,11 +242,13 @@ export function RecentGroup({
 /** 一块：平铺时是一个主对话；按项目聚合时是一个项目（同名项目按设备分开），上面一行项目名 */
 function RecentBlock({
   block,
+  kind,
   byProject,
   showDevice,
   onOpen,
 }: {
   block: SidebarProjectionBlock
+  kind: ProjectionKind
   byProject: boolean
   showDevice: boolean
   onOpen(row: SidebarProjectionRow, title: string): void
@@ -253,10 +258,7 @@ function RecentBlock({
   const { c } = theme
   const device = useKey<DeviceView>(keys.device(block.deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(block.deviceId))
-  const children = useKey<SessionChildren>(keys.children(block.deviceId)) ?? NO_CHILDREN
-  // 和桌面投影一样反向使用 folded：只记主动展开的父项，目录晚到不改变开合。
-  const folds = useSyncExternalStore(subscribeFolds, () => foldsOf(`recent:${block.deviceId}`))
-  const deviceName = showDevice && device ? t.text(device.name) : undefined
+  const deviceName = useDeviceNote(device, showDevice)
   const project = block.workspaceId
     ? (workspaces?.find((entry) => entry.id === block.workspaceId)?.name ?? '')
     : t('workspace.none')
@@ -265,84 +267,25 @@ function RecentBlock({
       {byProject ? (
         <Text
           numberOfLines={1}
-          testID={`recent:project:${block.key}`}
+          testID={`${kind}:project:${block.key}`}
           style={[styles.project, { color: c.ink3, fontFamily: theme.font.mono }]}
         >
           {[project, deviceName].filter(Boolean).join(' · ')}
         </Text>
       ) : null}
-      {block.rows.flatMap((row) =>
-        recentTree(row.sessionId, children, folds.folded).map((node) => (
-          <RecentRow
-            key={node.id}
-            row={{ ...row, sessionId: node.id }}
-            node={node}
-            device={device}
-            where={byProject || device?.kind === 'local' ? undefined : deviceName}
-            onOpen={onOpen}
-          />
-        )),
-      )}
+      {block.rows.map((row) => (
+        <ShortcutSession
+          key={row.sessionId}
+          deviceId={row.deviceId}
+          sessionId={row.sessionId}
+          scope={kind}
+          showDevice={showDevice}
+          testID={kind}
+          at={row.at}
+          onOpen={(summary) => onOpen({ ...row, sessionId: summary.id }, titleOf(summary, t))}
+        />
+      ))}
     </>
-  )
-}
-
-function RecentRow({
-  row,
-  node,
-  device,
-  where,
-  onOpen,
-}: {
-  row: SidebarProjectionRow
-  node: TreeRow
-  device: DeviceView | undefined
-  where: string | undefined
-  onOpen(row: SidebarProjectionRow, title: string): void
-}) {
-  const { c } = useTheme()
-  const t = useT()
-  const summary = useKey<SessionSummary>(keys.summary(row.deviceId, row.sessionId))
-  if (!summary) return null
-  const open = () => onOpen(row, titleOf(summary, t))
-  const testID = `recent:${row.deviceId}:${row.sessionId}`
-  const fold =
-    node.kids > 0 ? (
-      <SessionFold
-        deviceId={row.deviceId}
-        sessionId={row.sessionId}
-        kids={node.kids}
-        folded={node.folded}
-        onPress={() => toggleFolded(`recent:${row.deviceId}`, 'folded', row.sessionId)}
-        testID={`${testID}:fold`}
-      />
-    ) : undefined
-  return (
-    <View style={styles.row}>
-      <View style={[styles.wire, { backgroundColor: device ? c.wire[device.wire] : c.line2 }]} />
-      <View style={styles.grow}>
-        {node.depth > 0 ? (
-          <ChildLine
-            summary={summary}
-            device={device}
-            depth={node.depth}
-            testID={testID}
-            onPress={open}
-            fold={fold}
-          />
-        ) : (
-          <SummaryLine
-            summary={summary}
-            device={device}
-            testID={testID}
-            at={row.at}
-            {...(where ? { where } : {})}
-            onPress={open}
-            fold={fold}
-          />
-        )}
-      </View>
-    </View>
   )
 }
 
@@ -361,13 +304,10 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingLeft: 12,
   },
-  chevron: { width: 14, fontSize: 12 },
+  chevron: { width: 14, alignItems: 'center' },
   headName: { flexShrink: 1, fontSize: 13, fontWeight: '600' },
   headAction: { width: 44, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
-  headActionText: { fontSize: 18, fontWeight: '600' },
   project: { paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 4, fontSize: 11 },
-  row: { flexDirection: 'row' },
-  wire: { width: 3 },
   grow: { flex: 1 },
   empty: { paddingHorizontal: 16, paddingVertical: 14, fontSize: 13 },
   more: {

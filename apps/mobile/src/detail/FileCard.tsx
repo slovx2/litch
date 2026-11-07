@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useKey, useServices } from '../shell/services'
 import { useT } from '../ui/i18n'
+import { Icon } from '../ui/kit/Icon'
 import { useTheme } from '../ui/theme'
 
 export function FileCard({
@@ -63,9 +64,7 @@ export function FileCard({
         accessibilityState={{ disabled: state === 'cleaned' }}
         style={styles.open}
       >
-        <Text style={{ color: c.ink2, fontSize: font.size.body }}>
-          {file.kind === 'folder' ? '▱' : '▤'}
-        </Text>
+        <Icon name={file.kind === 'folder' ? 'folder' : 'file'} size={18} color={c.ink2} />
         <View style={styles.info}>
           <Text
             numberOfLines={1}
@@ -84,9 +83,10 @@ export function FileCard({
           accessibilityRole="button"
           accessibilityLabel={t('composer.extra.remove', { name })}
           onPress={onRemove}
+          hitSlop={4}
           style={styles.remove}
         >
-          <Text style={{ color: c.ink2 }}>✕</Text>
+          <Icon name="close" size={14} color={c.ink2} />
         </Pressable>
       ) : null}
     </View>
@@ -104,5 +104,5 @@ const styles = StyleSheet.create({
   },
   open: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, flex: 1, minWidth: 0 },
   info: { flex: 1, minWidth: 0 },
-  remove: { padding: 10 },
+  remove: { minWidth: 40, minHeight: 40, alignItems: 'center', justifyContent: 'center' },
 })

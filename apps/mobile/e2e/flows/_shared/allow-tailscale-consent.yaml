@@ -1,0 +1,11 @@
+appId: dev.litch.app
+tags: [privacy]
+---
+- assertVisible: '连接 Tailscale 前|Before connecting Tailscale'
+- scrollUntilVisible:
+    element:
+      id: tailscale:consent-allow
+    direction: DOWN
+    timeout: 5000
+- tapOn:
+    id: tailscale:consent-allow

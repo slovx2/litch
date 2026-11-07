@@ -11,7 +11,7 @@ import {
 } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { useKeyboardState } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
@@ -174,7 +174,8 @@ export function TerminalScreen({ route, navigation }: Props) {
       const name = terminalName(one, t)
       const state = one ? stateWord(one, t) : ''
       return {
-        label: t(id === current ? 'tools.term.itemHere' : 'tools.term.item', { name, state }),
+        label: t('tools.term.item', { name, state }),
+        selected: id === current,
         testID: `terminal:pick:${id}`,
         onPress: () => setCurrent(id),
       }
@@ -245,7 +246,12 @@ export function TerminalScreen({ route, navigation }: Props) {
           testID: 'terminal:list',
           onPress: () => setSheet('list'),
         },
-        { label: '⋯', testID: 'terminal:more', onPress: () => setSheet('more') },
+        {
+          icon: 'more',
+          label: t('tools.term.more'),
+          testID: 'terminal:more',
+          onPress: () => setSheet('more'),
+        },
       ]}
     >
       <KeyboardArea>
@@ -338,6 +344,8 @@ function StatusStrip({
   const t = useT()
   const { c } = theme
   let text: string | null = null
+  /** 正在打开、正在启动：字前面一个小转圈 */
+  let busy = false
   let action: { label: string; onPress(): void } | null = null
   if (failure) {
     text = failure
@@ -351,7 +359,9 @@ function StatusStrip({
       )
     }
     text = t('tools.term.opening')
+    busy = true
   } else if (info && info.state !== 'running') {
+    busy = info.state === 'starting'
     text =
       info.state === 'starting'
         ? t('terminal.state.starting')
@@ -372,6 +382,7 @@ function StatusStrip({
       style={[styles.strip, { backgroundColor: c.panel, borderTopColor: c.line2 }]}
       testID="terminal:status"
     >
+      {busy ? <ActivityIndicator size="small" color={c.ink3} /> : null}
       <Text style={[styles.stripText, { color: c.ink2, fontSize: theme.font.size.meta }]}>
         {text}
       </Text>

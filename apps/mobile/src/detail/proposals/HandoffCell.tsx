@@ -4,6 +4,7 @@
 import { memo } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { useT } from '../../ui/i18n'
+import { Icon } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import type { Props } from '../cells'
 import { ChildLine } from './ChildLine'
@@ -20,9 +21,12 @@ export const HandoffCell = memo(function HandoffCell({ row }: Props<'handoff'>) 
       ]}
     >
       <View style={styles.body}>
-        <Text style={[styles.kind, { color: c.ink3, fontFamily: font.mono }]}>
-          ⑂ {t(row.running ? 'proposals.handoff.running' : 'proposals.handoff.kind')}
-        </Text>
+        <View style={styles.kindLine}>
+          <Icon name="branch" size={12} color={c.ink3} />
+          <Text style={[styles.kind, { color: c.ink3, fontFamily: font.mono }]}>
+            {t(row.running ? 'proposals.handoff.running' : 'proposals.handoff.kind')}
+          </Text>
+        </View>
         {row.title ? (
           <Text style={[styles.title, { color: c.ink, fontSize: font.size.body }]}>
             {row.title}
@@ -43,6 +47,7 @@ export const HandoffCell = memo(function HandoffCell({ row }: Props<'handoff'>) 
 const styles = StyleSheet.create({
   card: { marginHorizontal: 16, marginVertical: 6, borderWidth: 1 },
   body: { padding: 12, gap: 6 },
+  kindLine: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   kind: { fontSize: 11 },
   title: { fontWeight: '600', lineHeight: 21 },
 })

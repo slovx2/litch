@@ -111,6 +111,7 @@ export type ApprovalAbility = 'fill' | 'noAccount' | 'blocked' | 'expired'
 
 export function abilityOf(card: ApprovalCard, now: number): ApprovalAbility {
   if (isExpired(card, now)) return 'expired'
+  if (card.kind === 'browserSite') return 'blocked'
   if (card.kind === 'computerSelf') return 'fill'
   if (card.summary.fillBlocked) return 'blocked'
   return card.summary.accounts.length === 0 ? 'noAccount' : 'fill'
@@ -139,6 +140,7 @@ export async function buildAnswer(
   choice: ApprovalChoice,
   signer: Signer,
 ): Promise<ApprovalAnswer> {
+  if (card.kind === 'browserSite') throw new Error('请在执行操作的 Litch 桌面会话中处理网站审批')
   const decision = choice.ref === null ? 'decline' : 'approve'
   const valid =
     card.kind === 'computerSelf'

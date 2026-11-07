@@ -22,7 +22,6 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native'
-import { EnrichedMarkdownText } from 'react-native-enriched-markdown'
 import {
   duration,
   elapsed,
@@ -35,7 +34,9 @@ import { experiment } from '../experiment'
 import { noteWork } from '../probe'
 import { useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
-import { StatusMark } from '../ui/kit/controls'
+import { Caret, Icon } from '../ui/kit/Icon'
+import { StatusMark, TodoMark } from '../ui/kit/marks'
+import { plainLine } from '../ui/plain-text'
 import { type Palette, useTheme } from '../ui/theme'
 import { AskCell, AskReplyText, useAsks } from './asks/AskCell'
 import { CardMarkdown } from './CardMarkdown'
@@ -51,6 +52,7 @@ import { linkIssues } from './issue-links'
 import { fileHref, linkify } from './links'
 import { MessageCopy } from './MessageCopy'
 import { markdownStyleOf } from './markdownStyle'
+import { EnrichedMarkdownText } from './media/MediaMarkdown'
 import { MermaidCard } from './mermaid/MermaidCard'
 import { splitMermaid } from './mermaid/segments'
 import { Recovery } from './Recovery'
@@ -77,7 +79,7 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
     return (
       <CompactRow
         testID="peer-message"
-        mark="✉"
+        mark="mail"
         source={peer.name ? t('peer.from', { name: peer.name }) : t('peer.fromUnnamed')}
         tag={peer.bypass ? { text: t('peer.bypass'), color: c.wait } : undefined}
         summary={row.text}
@@ -144,7 +146,7 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
               { color: c.ink, fontSize: font.size.body, fontFamily: font.ui },
             ]}
           >
-            <MentionedText text={text} sessions={row.sessions} />
+            <MentionedText text={text} sessions={row.sessions} onLongPress={menu} />
           </Text>
         ) : null}
       </Pressable>
@@ -286,7 +288,7 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
   const known = whole ? frozen.get(row) : undefined
   const height = !row.open && known?.width === width ? known.height : null
   const freeze =
-    !whole || row.open || height !== null || !experiment.freeze
+    !whole || markdown.includes('![') || row.open || height !== null || !experiment.freeze
       ? undefined
       : (event: LayoutChangeEvent) => {
           frozen.set(row, { width, height: event.nativeEvent.layout.height })
@@ -302,6 +304,7 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
     <EnrichedMarkdownText
       key={key}
       markdown={text}
+      streaming={row.open}
       flavor="github"
       markdownStyle={markdownStyleOf(theme)}
       selectable={selecting}
@@ -426,20 +429,32 @@ export const ReasoningCell = memo(function ReasoningCell({ row }: Props<'reasoni
   return (
     <Pressable
       onPress={() => toggle(row.key, row.turnId)}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: row.expanded }}
       accessibilityHint={row.expanded ? undefined : t('detail.reasoning.tap')}
-      style={({ pressed: down }) => [styles.reasoning, down ? pressed(c) : null]}
+      style={({ pressed: down }) => [styles.reasoning, styles.caretRow, down ? pressed(c) : null]}
       testID="reasoning-toggle"
     >
+      <View style={styles.caretBox}>
+        <Caret open={row.expanded} size={12} />
+      </View>
       {row.expanded ? (
-        <Text style={[styles.reasoningText, { color: c.ink3, fontSize: font.size.meta }]}>
-          ▾ {row.text}
+        <Text
+          style={[styles.reasoningText, styles.grow, { color: c.ink3, fontSize: font.size.meta }]}
+        >
+          {row.text}
         </Text>
       ) : (
         <Text
-          style={[styles.meta, styles.thought, { color: c.ink3, fontSize: font.size.meta }]}
+          style={[
+            styles.meta,
+            styles.thought,
+            styles.grow,
+            { color: c.ink3, fontSize: font.size.meta },
+          ]}
           numberOfLines={1}
         >
-          ▸ {row.text}
+          {row.text}
         </Text>
       )}
     </Pressable>
@@ -536,7 +551,7 @@ export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
             style={({ pressed: down }) => [styles.more, down ? pressed(c) : null]}
             testID="turn-menu"
           >
-            <Text style={[styles.meta, { color: c.ink3, fontFamily: font.mono }]}>⋯</Text>
+            <Icon name="more" size={16} color={c.ink3} />
           </Pressable>
         )}
       </View>
@@ -666,7 +681,7 @@ export const ForkedCell = memo(function ForkedCell({ row }: Props<'forked'>) {
  * 最近那份另在输入框上方有个小按钮（todo/TodoViews.tsx），对话里不再画整块
  */
 export const TodoCell = memo(function TodoCell({ row }: Props<'todo'>) {
-  const { c, font, todo } = useTheme()
+  const { c, font } = useTheme()
   const t = useT()
   const toggle = useToggleInPlace()
   const { done, total } = todoProgress(row.steps)
@@ -681,16 +696,17 @@ export const TodoCell = memo(function TodoCell({ row }: Props<'todo'>) {
       testID="todo:row"
     >
       <View style={styles.todoStep}>
-        <Text style={[styles.todoMark, { color: c.ink3, fontFamily: font.mono }]}>
-          {row.expanded ? '▾' : done === total ? todo.completed : todo.inProgress}
-        </Text>
+        <View style={styles.todoMark}>
+          <TodoMark state={done === total ? 'completed' : 'inProgress'} />
+        </View>
         <Text
           numberOfLines={1}
           style={[styles.grow, styles.todoLine, { color: c.ink2, fontSize: font.size.meta }]}
         >
           {t('todo.title')} · {t('todo.count', { done, total })}
-          {now && !row.expanded ? ` · ${now.text}` : ''}
+          {now && !row.expanded ? ` · ${plainLine(now.text)}` : ''}
         </Text>
+        <Caret open={row.expanded} size={12} />
       </View>
       {row.expanded ? (
         <View style={styles.todoBody}>
@@ -702,6 +718,9 @@ export const TodoCell = memo(function TodoCell({ row }: Props<'todo'>) {
 })
 
 export const styles = StyleSheet.create({
+  caretRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+  // 箭头和第一行字对齐
+  caretBox: { height: 18, justifyContent: 'center' },
   grow: { flex: 1 },
   meta: { fontSize: 13 },
   userWrap: {
@@ -739,7 +758,7 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  more: { paddingHorizontal: 8, height: 26, justifyContent: 'center' },
+  more: { paddingHorizontal: 8, height: 26, justifyContent: 'center', alignItems: 'center' },
   error: { marginHorizontal: 16, marginVertical: 4, borderWidth: 1, padding: 10 },
   notice: { paddingHorizontal: 16, paddingVertical: 4 },
   compaction: {
@@ -759,8 +778,8 @@ export const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   todo: { paddingHorizontal: 16, paddingVertical: 4, minHeight: 28, justifyContent: 'center' },
-  todoStep: { flexDirection: 'row', gap: 8 },
-  todoMark: { fontSize: 13, lineHeight: 20 },
+  todoStep: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  todoMark: { height: 20, justifyContent: 'center' },
   todoLine: { lineHeight: 20 },
   todoBody: { gap: 4, marginTop: 4, paddingLeft: 4 },
 })

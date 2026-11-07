@@ -1,9 +1,7 @@
-import { decodeBase64 } from '@litch/core'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useT } from '../../../app/appearance.ts'
-import type { MessageKey } from '../../../i18n/index.ts'
 import type { PreviewRendererProps } from '../contract.ts'
-import { imageInfo, svgInfo } from '../image-info.ts'
+import { usePreviewImage } from '../use-image.ts'
 
 export default function ImagePreview({ data, scope, resources }: PreviewRendererProps) {
   const t = useT()
@@ -11,33 +9,10 @@ export default function ImagePreview({ data, scope, resources }: PreviewRenderer
   const [scale, setScale] = useState(1)
   /** 适应宽度时图实际画出来的比例，工具条上写的是它，放大缩小也从它起步 */
   const [fitScale, setFitScale] = useState(1)
-  const [failed, setFailed] = useState<MessageKey | null>(null)
   const image = useRef<HTMLImageElement>(null)
-  const [url, setUrl] = useState('')
-  const parsed = useMemo(() => {
-    const bytes = decodeBase64(data.dataBase64)
-    const info = data.format === 'svg' ? svgInfo(new TextDecoder().decode(bytes)) : imageInfo(bytes)
-    return { bytes, info }
-  }, [data])
-  useEffect(() => {
-    setFailed(null)
-    if (!parsed.info) {
-      setUrl('')
-      setFailed('preview.imageInvalid')
-      return
-    }
-    if (!resources.claimPixels(scope.path, parsed.info.width * parsed.info.height)) {
-      setUrl('')
-      setFailed('preview.imageBudget')
-      return
-    }
-    const made = URL.createObjectURL(
-      new Blob([new Uint8Array(parsed.bytes)], { type: parsed.info.mime }),
-    )
-    setUrl(made)
-    return () => URL.revokeObjectURL(made)
-  }, [parsed, resources, scope.path])
-  const width = parsed.info?.width ?? 0
+  const { image: resource, failure: failed, fail } = usePreviewImage(data, resources, scope.path)
+  const url = resource?.url ?? ''
+  const width = resource?.width ?? 0
   // biome-ignore lint/correctness/useExhaustiveDependencies: 图在有了 url 之后才挂上，那时才量得到
   useEffect(() => {
     const element = image.current
@@ -47,7 +22,7 @@ export default function ImagePreview({ data, scope, resources }: PreviewRenderer
     observer.observe(element)
     return () => observer.disconnect()
   }, [actual, url, width])
-  if (!parsed.info || failed)
+  if (!resource || failed)
     return (
       <div className="fv-hold" data-hold="invalidImage" role="status">
         <b>{t('files.view.group.image')}</b>
@@ -98,7 +73,7 @@ export default function ImagePreview({ data, scope, resources }: PreviewRenderer
         </button>
         <span className="grow" />
         <span>
-          {parsed.info.width} × {parsed.info.height}
+          {resource.width} × {resource.height}
         </span>
       </div>
       <div className="fp-image-stage" data-actual={actual}>
@@ -108,11 +83,11 @@ export default function ImagePreview({ data, scope, resources }: PreviewRenderer
             src={url}
             style={
               actual
-                ? { width: parsed.info.width * scale, height: parsed.info.height * scale }
+                ? { width: resource.width * scale, height: resource.height * scale }
                 : undefined
             }
             alt={scope.path.split('/').pop() ?? ''}
-            onError={() => setFailed('preview.imageInvalid')}
+            onError={fail}
           />
         ) : null}
       </div>

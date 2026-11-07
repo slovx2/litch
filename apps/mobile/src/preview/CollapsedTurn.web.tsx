@@ -7,6 +7,7 @@ import { OriginCell } from '../detail/background/OriginCell'
 import { MarkdownCell, StatusCell, UserCell } from '../detail/cells'
 import { BackgroundContext, TranscriptContext } from '../detail/context'
 import { GroupCell, GroupEndCell, ProcessCell, StepCell } from '../detail/steps'
+import { ConsentPresentation } from '../privacy/ConsentPresentation'
 import { type Booted, boot } from '../shell/boot'
 import { loadPrefs, ServicesProvider } from '../shell/services'
 import { I18nContext, translator } from '../ui/i18n'
@@ -71,47 +72,49 @@ export function CollapsedTurnPreview({ params }: { params: URLSearchParams }) {
     <ServicesProvider booted={booted} prefs={loadPrefs()} setPrefs={noop}>
       <ThemeContext.Provider value={theme}>
         <I18nContext.Provider value={translator(zh ? 'zh-CN' : 'en')}>
-          <TranscriptContext.Provider
-            value={{
-              deviceId: 'local',
-              sessionId: 's3',
-              harness: 'Codex',
-              scope: null,
-              root: null,
-              toggle: (key, turnId) => {
-                builder.toggle(key, turnId)
-                setExpanded((current) => !current)
-              },
-              issues: null,
-              openLink: noop,
-              turnMenu: noop,
-              copyMessage: noop,
-              notify: noop,
-              openDiff: noop,
-              openSession: noop,
-              viewImage: noop,
-              viewMermaid: noop,
-            }}
-          >
-            <BackgroundContext.Provider value={background}>
-              <ScrollView
-                style={{ flex: 1, backgroundColor: theme.c.win }}
-                contentContainerStyle={{ paddingVertical: 40 }}
-              >
-                {rows.map((row) => {
-                  if (row.type === 'origin') return <OriginCell key={row.key} row={row} />
-                  if (row.type === 'process') return <ProcessCell key={row.key} row={row} />
-                  if (row.type === 'group') return <GroupCell key={row.key} row={row} />
-                  if (row.type === 'step') return <StepCell key={row.key} row={row} />
-                  if (row.type === 'groupEnd') return <GroupEndCell key={row.key} row={row} />
-                  if (row.type === 'user') return <UserCell key={row.key} row={row} />
-                  if (row.type === 'md') return <MarkdownCell key={row.key} row={row} />
-                  if (row.type === 'status') return <StatusCell key={row.key} row={row} />
-                  return null
-                })}
-              </ScrollView>
-            </BackgroundContext.Provider>
-          </TranscriptContext.Provider>
+          <ConsentPresentation>
+            <TranscriptContext.Provider
+              value={{
+                deviceId: 'local',
+                sessionId: 's3',
+                harness: 'Codex',
+                scope: null,
+                root: null,
+                toggle: (key, turnId) => {
+                  builder.toggle(key, turnId)
+                  setExpanded((current) => !current)
+                },
+                issues: null,
+                openLink: noop,
+                turnMenu: noop,
+                copyMessage: noop,
+                notify: noop,
+                openDiff: noop,
+                openSession: noop,
+                viewImage: noop,
+                viewMermaid: noop,
+              }}
+            >
+              <BackgroundContext.Provider value={background}>
+                <ScrollView
+                  style={{ flex: 1, backgroundColor: theme.c.win }}
+                  contentContainerStyle={{ paddingVertical: 40 }}
+                >
+                  {rows.map((row) => {
+                    if (row.type === 'origin') return <OriginCell key={row.key} row={row} />
+                    if (row.type === 'process') return <ProcessCell key={row.key} row={row} />
+                    if (row.type === 'group') return <GroupCell key={row.key} row={row} />
+                    if (row.type === 'step') return <StepCell key={row.key} row={row} />
+                    if (row.type === 'groupEnd') return <GroupEndCell key={row.key} row={row} />
+                    if (row.type === 'user') return <UserCell key={row.key} row={row} />
+                    if (row.type === 'md') return <MarkdownCell key={row.key} row={row} />
+                    if (row.type === 'status') return <StatusCell key={row.key} row={row} />
+                    return null
+                  })}
+                </ScrollView>
+              </BackgroundContext.Provider>
+            </TranscriptContext.Provider>
+          </ConsentPresentation>
         </I18nContext.Provider>
       </ThemeContext.Provider>
     </ServicesProvider>

@@ -1,13 +1,16 @@
 // 和桌面共用待答集合；原回合移出屏幕后仍能直接回答。
 import { type DeviceView, keys, type PendingQuestion, pendingReplyText } from '@litch/core'
 import { useState, useSyncExternalStore } from 'react'
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { useQuestionAge } from '../../../../../packages/ui/src/composer/question-age.ts'
 import type { SessionStore } from '../../core/session-store'
 import { useKey, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
+import { Caret } from '../../ui/kit/Icon'
+import { CardTextInput, KeyboardCardScrollView } from '../../ui/kit/KeyboardCardScrollView'
+import { StatusShape } from '../../ui/kit/marks'
+import { plainPreview } from '../../ui/plain-text'
 import { useTheme } from '../../ui/theme'
 import { sendFlags, whenRunning } from '../composer/send-mode'
 import { CardButton } from './Card'
@@ -39,15 +42,14 @@ export function PendingQuestions({ store, maxHeight }: { store: SessionStore; ma
           { opacity: pressed ? 0.7 : 1 },
         ]}
       >
-        <Text style={[styles.mark, { color: c.wait }]}>◆</Text>
+        <StatusShape status="waiting" size={12} />
         <Text style={[styles.count, { color: c.ink2, fontSize: font.size.meta }]}>
           {t('ask.pendingCount', { count: questions.length })}
         </Text>
-        <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{expanded ? '▾' : '▸'}</Text>
+        <Caret open={expanded} />
       </Pressable>
       {expanded ? (
-        <KeyboardFormScrollView
-          keyboardHandled
+        <KeyboardCardScrollView
           style={styles.body}
           keyboardShouldPersistTaps="handled"
           nestedScrollEnabled
@@ -55,7 +57,7 @@ export function PendingQuestions({ store, maxHeight }: { store: SessionStore; ma
           {questions.map((question, index) => (
             <PendingCard key={question.id} question={question} store={store} first={index === 0} />
           ))}
-        </KeyboardFormScrollView>
+        </KeyboardCardScrollView>
       ) : null}
     </View>
   )
@@ -123,7 +125,7 @@ function PendingCard({
       testID={`pending:${question.id}`}
     >
       <Text style={[styles.title, { color: c.ink, fontSize: font.size.body }]}>
-        {question.title}
+        {plainPreview(question.title)}
       </Text>
       <View style={styles.row}>
         <Text style={{ flex: 1, color: c.ink3, fontSize: font.size.small }}>
@@ -160,7 +162,8 @@ function PendingCard({
         </View>
       ) : null}
       <View style={styles.row}>
-        <TextInput
+        <CardTextInput
+          testID={`pending:${question.id}:input`}
           multiline
           submitBehavior="newline"
           accessibilityLabel={t('ask.reply')}
@@ -208,7 +211,6 @@ const styles = StyleSheet.create({
   },
   split: { borderBottomWidth: StyleSheet.hairlineWidth },
   splitTop: { borderTopWidth: StyleSheet.hairlineWidth },
-  mark: { fontSize: 12 },
   count: { flex: 1 },
   body: { flexGrow: 0, flexShrink: 1 },
   question: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },

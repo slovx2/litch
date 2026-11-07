@@ -315,6 +315,8 @@ test('执行器（win32）：列应用、不问用户、取状态、编号换 re
     const sent = (method: string) => calls.filter((call) => call.method === method)
     assert.deepEqual(sent('typeText')[0]?.params, {
       session: 'local/thread-1',
+      actionId: 'call-type_text',
+      turnId: 'turn-1',
       appId: NOTEPAD,
       windowId: 1001,
       text: 'hello',
@@ -328,6 +330,8 @@ test('执行器（win32）：列应用、不问用户、取状态、编号换 re
     assert.equal(clicks[1]?.params.x, 100)
     assert.deepEqual(sent('drag')[0]?.params, {
       session: 'local/thread-1',
+      actionId: 'call-drag',
+      turnId: 'turn-1',
       appId: NOTEPAD,
       windowId: 1001,
       screenshotId: 'shot-4',

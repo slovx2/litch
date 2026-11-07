@@ -306,7 +306,7 @@ export class Projection {
   }
   // 没有记录的用户消息里的图片（见 userMessage）：dsh 的记录里只有附件号，内容要另去取，
   // 取了补进那条消息的内容里（DshServer.restoreImages）。
-  readonly unfetched: { content: any[]; attachmentId: string }[] = []
+  readonly unfetched: { content: any[]; attachmentId: string; item?: any; turnId?: string }[] = []
   // 这个会话自己是子代理时，它是哪种（会话记录开头的 subagent/descriptor）
   subagent: SubagentInfo | null = null
   private readonly hooks: ProjectionHooks
@@ -650,6 +650,23 @@ export class Projection {
     if (!call || call.done || !turn) return
     call.done = true
     finishTool(call.item, call.args, data.message, data.meta)
+    const imageBlocks = (Array.isArray(data.message?.content) ? data.message.content : [])
+      .filter(
+        (block: any) =>
+          block?.type === 'image' && typeof block.attachment?.attachmentId === 'string',
+      )
+      .slice(0, 16)
+    if (call.item.type === 'dynamicToolCall' || call.item.type === 'mcpToolCall') {
+      const content =
+        call.item.type === 'dynamicToolCall' ? call.item.contentItems : call.item.result.content
+      for (const block of imageBlocks)
+        this.unfetched.push({
+          content,
+          attachmentId: block.attachment.attachmentId,
+          item: call.item,
+          turnId: turn.id,
+        })
+    }
     // 时长取调用与结果两个落盘事件的时间差，实时与回放得到同一个值；文件修改、子代理条目没有这个字段。
     if ('durationMs' in call.item)
       call.item.durationMs = Math.max(0, Math.round(time - call.startedMs))

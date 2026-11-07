@@ -8,7 +8,8 @@ import { viewerZone } from '../../../../../packages/ui/src/tasks/describe.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Empty, Row, SectionLabel, StatusMark } from '../../ui/kit/controls'
+import { Empty, Loading, Row, SectionLabel } from '../../ui/kit/controls'
+import { StatusMark } from '../../ui/kit/marks'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { useNow } from '../sessions/clock'
@@ -63,6 +64,11 @@ function DeviceBlock({
   const t = useT()
   if (!device) return null
   const online = device.connection === 'online'
+  const loading =
+    available !== false &&
+    online &&
+    ids.length === 0 &&
+    (available === undefined || available === null)
   const note =
     available === false
       ? t('tasks.unsupported')
@@ -83,7 +89,11 @@ function DeviceBlock({
           </View>
         </View>
       ) : null}
-      {note ? (
+      {loading && note ? (
+        <View style={styles.busy}>
+          <Loading text={note} testID={`tasks:note:${deviceId}`} />
+        </View>
+      ) : note ? (
         <Text testID={`tasks:note:${deviceId}`} style={[styles.note, { color: theme.c.ink3 }]}>
           {note}
         </Text>
@@ -110,7 +120,8 @@ export function TasksScreen({ route, navigation }: Props) {
       wire={only && device ? c.wire[device.wire] : undefined}
       actions={[
         {
-          label: '＋',
+          icon: 'plus',
+          label: t('tasks.new'),
           testID: 'tasks:new',
           disabled: ids.length === 0,
           onPress: () => {
@@ -146,5 +157,6 @@ const styles = StyleSheet.create({
   wire: { width: 3 },
   grow: { flex: 1 },
   note: { fontSize: 14, lineHeight: 20, paddingHorizontal: 16, paddingVertical: 10 },
+  busy: { paddingHorizontal: 16, paddingVertical: 6 },
   foot: { fontSize: 12, lineHeight: 18, padding: 16, paddingBottom: 40 },
 })

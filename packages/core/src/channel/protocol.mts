@@ -242,6 +242,11 @@ export type Topic =
    * 没连上时给上次知道的。连上、重连之后再读一遍
    */
   | { kind: 'worktrees'; deviceId: string }
+  /**
+   * 这台客户端上的本机整理（本机分组、置顶先后、收起），核心是唯一的写入者。数据副本一直订阅着；
+   * 文件坏了、版本更高时 status 不是 ok，照样成立
+   */
+  | { kind: 'organizer' }
 
 export type TopicKind = Topic['kind']
 
@@ -268,6 +273,7 @@ export interface TopicData {
   accountLimits: AccountLimitsView
   config: ConfigTopicView
   worktrees: WorktreesTopicView
+  organizer: import('../organizer/host.mjs').OrganizerView
 }
 
 // ---------- 增量 ----------
@@ -412,11 +418,17 @@ export interface TopicOp {
   accountLimits: AccountLimitsOp
   config: ConfigTopicOp
   worktrees: WorktreesOp
+  organizer: import('../organizer/host.mjs').OrganizerOp
 }
 
 // ---------- 命令 ----------
 
 export interface Commands {
+  /** 本机整理做一个动作（organizer/actions.mts）。新建组时回新组的标识 */
+  'organizer.apply': {
+    params: { action: import('../organizer/actions.mjs').OrganizerAction }
+    result: { revision: number; groupId?: string }
+  }
   'files.localSource': {
     params: import('../model-file-save.mjs').FileSaveSource
     result: import('../model-file-save.mjs').FileSaveSource | null
@@ -1112,6 +1124,11 @@ export interface Commands {
   /** 只对已声明 filePreview 的服务发受限读取；不退回整文件或 shell 读取。 */
   'files.preview': {
     params: { deviceId: string; root: string; path: string; format: PreviewKind }
+    result: FilePreview
+  }
+  /** 显式 Markdown 图片：新设备内容探测/受控公网下载；旧设备只走有界本地预览。 */
+  'media.image': {
+    params: { deviceId: string; source: string }
     result: FilePreview
   }
   /**

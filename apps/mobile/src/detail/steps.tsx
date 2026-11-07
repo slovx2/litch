@@ -15,12 +15,14 @@ import { duration, elapsed } from '../../../../packages/ui/src/app/format.ts'
 import { processSummary, suggestTitles } from '../../../../packages/ui/src/transcript/steps-text.ts'
 import type { Row, StepState } from '../core/rows'
 import { type Translator, useT } from '../ui/i18n'
-import { StatusMark } from '../ui/kit/controls'
+import { Caret, Icon, type IconName } from '../ui/kit/Icon'
+import { StatusMark } from '../ui/kit/marks'
 import { type Palette, useTheme } from '../ui/theme'
 import { styles as cellStyles, type Props, useLasting, useTicking } from './cells'
 import { useBackgroundView, useToggleInPlace, useTranscript } from './context'
 import { keepPlace, rowBelow } from './keep-place'
 import { fileHref, isWebUrl } from './links'
+import { ToolImages } from './media/ToolImages'
 
 /** 命令的输出最多露出末尾多少行 */
 const OUTPUT_LINES = 40
@@ -32,7 +34,13 @@ const TOOL_CHARS = 1500
 const TOOL_PARTS = 16
 const TOOL_SHOTS = 3
 
-const MARK: Record<StepState, string> = { running: '…', done: '✓', failed: '✕', declined: '⊘' }
+/** 一步的结果：在做是三个点，做完一道勾，失败一个叉，被拒是圈里一道斜线 */
+const MARK = {
+  running: 'more',
+  done: 'check',
+  failed: 'close',
+  declined: 'ban',
+} as const satisfies Record<StepState, IconName>
 
 /** 回合里还在后台跑的步骤有几个（ids 是空格隔开的条目标识）：回合结束了才数 */
 function useInBackground(ended: boolean, ids: string): number {
@@ -60,35 +68,40 @@ export const ProcessCell = memo(function ProcessCell({ row }: Props<'process'>) 
   const backgroundText = inBackground > 0 ? t('background.inTurn', { count: inBackground }) : null
   return (
     <View style={styles.group}>
-      <Pressable
-        onPress={() => toggle(row.key, row.turnId)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: row.expanded }}
-        accessibilityLabel={[...plain, ...bad, backgroundText].filter(Boolean).join(' · ')}
-        style={({ pressed }) => [
-          styles.processHeader,
-          { minHeight: hit, borderBottomColor: c.line2 },
-          pressed ? { backgroundColor: c.press } : null,
-        ]}
-        testID="process-head"
-      >
-        <Text style={{ fontSize: font.size.body, color: c.ink2 }}>{row.expanded ? '▾' : '▸'}</Text>
-        <View style={styles.processBody}>
-          {/* 用时和统计写成一行（“已处理 41 秒 · 1 步”），太长就截断统计 */}
-          <Text numberOfLines={1} style={{ color: c.ink2 }}>
-            <Text style={{ fontSize: font.size.body, fontFamily: font.ui }}>{plain[0]}</Text>
-            {plain.length > 1 ? (
-              <Text style={{ fontSize: font.size.meta }}>{` · ${plain.slice(1).join(' · ')}`}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Pressable
+          onPress={() => toggle(row.key, row.turnId)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: row.expanded }}
+          accessibilityLabel={[...plain, ...bad, backgroundText].filter(Boolean).join(' · ')}
+          style={({ pressed }) => [
+            styles.processHeader,
+            { flex: 1, minHeight: hit, borderBottomColor: c.line2 },
+            pressed ? { backgroundColor: c.press } : null,
+          ]}
+          testID="process-head"
+        >
+          <Caret open={row.expanded} size={16} color={c.ink2} />
+          <View style={styles.processBody}>
+            {/* 用时和统计写成一行（“已处理 41 秒 · 1 步”），太长就截断统计 */}
+            <Text numberOfLines={1} style={{ color: c.ink2 }}>
+              <Text style={{ fontSize: font.size.body, fontFamily: font.ui }}>{plain[0]}</Text>
+              {plain.length > 1 ? (
+                <Text
+                  style={{ fontSize: font.size.meta }}
+                >{` · ${plain.slice(1).join(' · ')}`}</Text>
+              ) : null}
+            </Text>
+            {bad.length > 0 ? (
+              <Text style={{ fontSize: font.size.meta, color: c.err }}>{bad.join(' · ')}</Text>
             ) : null}
-          </Text>
-          {bad.length > 0 ? (
-            <Text style={{ fontSize: font.size.meta, color: c.err }}>{bad.join(' · ')}</Text>
-          ) : null}
-          {backgroundText ? (
-            <Text style={{ fontSize: font.size.meta, color: c.accent }}>{backgroundText}</Text>
-          ) : null}
-        </View>
-      </Pressable>
+            {backgroundText ? (
+              <Text style={{ fontSize: font.size.meta, color: c.accent }}>{backgroundText}</Text>
+            ) : null}
+          </View>
+        </Pressable>
+        {!row.expanded && row.images ? <ToolImages images={row.images} /> : null}
+      </View>
     </View>
   )
 })
@@ -128,31 +141,39 @@ export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
         : ''
   return (
     <View style={styles.group}>
-      <Pressable
-        onPress={() => toggle(row.key, row.turnId)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: row.expanded }}
-        style={({ pressed }) => [styles.groupHeader, pressed ? { backgroundColor: c.press } : null]}
-        testID="process-toggle"
-      >
-        {!row.ended && (row.running || working) ? <StatusMark status="running" /> : null}
-        <Text
-          style={{
-            flex: 1,
-            fontSize: font.size.meta,
-            color: c.ink3,
-          }}
-          numberOfLines={1}
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Pressable
+          onPress={() => toggle(row.key, row.turnId)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: row.expanded }}
+          style={({ pressed }) => [
+            styles.groupHeader,
+            { flex: 1 },
+            pressed ? { backgroundColor: c.press } : null,
+          ]}
+          testID="process-toggle"
         >
-          {row.expanded ? '▾' : '▸'} {t('detail.activity')} · {steps}
-          {tail}
-          {inBackground > 0 ? (
-            <Text style={{ color: c.accent }}>
-              {` · ${t('background.inTurn', { count: inBackground })}`}
-            </Text>
-          ) : null}
-        </Text>
-      </Pressable>
+          {!row.ended && (row.running || working) ? <StatusMark status="running" /> : null}
+          <Caret open={row.expanded} size={12} />
+          <Text
+            style={{
+              flex: 1,
+              fontSize: font.size.meta,
+              color: c.ink3,
+            }}
+            numberOfLines={1}
+          >
+            {t('detail.activity')} · {steps}
+            {tail}
+            {inBackground > 0 ? (
+              <Text style={{ color: c.accent }}>
+                {` · ${t('background.inTurn', { count: inBackground })}`}
+              </Text>
+            ) : null}
+          </Text>
+        </Pressable>
+        {!row.expanded && row.images ? <ToolImages images={row.images} /> : null}
+      </View>
     </View>
   )
 })
@@ -180,8 +201,9 @@ export const GroupEndCell = memo(function GroupEndCell({ row }: Props<'groupEnd'
         style={({ pressed }) => [styles.endButton, pressed ? { backgroundColor: c.press } : null]}
         testID="process-collapse"
       >
+        <Icon name="up" size={12} color={c.ink3} />
         <Text style={{ fontSize: font.size.meta, color: c.ink3 }}>
-          ▴ {t('detail.group.collapse')}
+          {t('detail.group.collapse')}
         </Text>
       </Pressable>
     </View>
@@ -260,27 +282,39 @@ export const StepCell = memo(function StepCell({ row }: Props<'step'>) {
   const state = stateText(row, t, spent)
   return (
     <View style={[styles.step, { borderLeftColor: c.line2 }]}>
-      <Pressable
-        onPress={press}
-        disabled={!press}
-        accessibilityState={expandable ? { expanded: row.expanded } : undefined}
-        style={({ pressed }) => [styles.stepHead, pressed ? { backgroundColor: c.press } : null]}
-        testID={`step:${item.kind}`}
-      >
-        <Text style={[styles.mark, { color: stateColor(row.state, c), fontFamily: font.mono }]}>
-          {MARK[row.state]}
-        </Text>
-        <Text
-          style={[cellStyles.grow, styles.stepLabel, { color: c.ink, fontFamily: font.mono }]}
-          numberOfLines={row.expanded ? 6 : 2}
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Pressable
+          onPress={press}
+          disabled={!press}
+          accessibilityState={expandable ? { expanded: row.expanded } : undefined}
+          style={({ pressed }) => [
+            styles.stepHead,
+            { flex: 1 },
+            pressed ? { backgroundColor: c.press } : null,
+          ]}
+          testID={`step:${item.kind}`}
         >
-          {label}
-        </Text>
-        {state ? (
-          <Text style={[styles.stepState, { color: stateColor(row.state, c) }]}>{state}</Text>
+          <View style={styles.mark}>
+            <Icon name={MARK[row.state]} size={13} color={stateColor(row.state, c)} />
+          </View>
+          <Text
+            style={[cellStyles.grow, styles.stepLabel, { color: c.ink, fontFamily: font.mono }]}
+            numberOfLines={row.expanded ? 6 : 2}
+          >
+            {label}
+          </Text>
+          {state ? (
+            <Text style={[styles.stepState, { color: stateColor(row.state, c) }]}>{state}</Text>
+          ) : null}
+        </Pressable>
+        {!row.expanded && item.kind === 'toolCall' && item.images ? (
+          <ToolImages images={item.images} gallery={row.gallery ?? item.images} />
         ) : null}
-      </Pressable>
+      </View>
       {row.expanded ? <StepDetail row={row} /> : null}
+      {row.expanded && item.kind === 'toolCall' && item.images ? (
+        <ToolImages images={item.images} gallery={row.gallery ?? item.images} />
+      ) : null}
     </View>
   )
 })
@@ -544,7 +578,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   processBody: { flex: 1, gap: 4 },
-  groupHeader: { height: 32, flexDirection: 'row', alignItems: 'center' },
+  groupHeader: { height: 32, flexDirection: 'row', alignItems: 'center', gap: 4 },
   step: {
     marginLeft: 16,
     marginRight: 16,
@@ -554,8 +588,16 @@ const styles = StyleSheet.create({
   },
   stepHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingVertical: 4 },
   end: { marginBottom: 4 },
-  endButton: { height: 32, justifyContent: 'center', alignSelf: 'flex-start', paddingRight: 12 },
-  mark: { fontSize: 13, lineHeight: 18, width: 14 },
+  endButton: {
+    height: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    paddingRight: 12,
+  },
+  // 记号和第一行字对齐（字行高 18）
+  mark: { height: 18, width: 14, justifyContent: 'center' },
   stepLabel: { fontSize: 13, lineHeight: 18 },
   stepState: { fontSize: 11, lineHeight: 18 },
   note: { fontSize: 11, lineHeight: 16, marginTop: 2 },

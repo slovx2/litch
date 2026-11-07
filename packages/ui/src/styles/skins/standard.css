@@ -11,6 +11,8 @@
   --raised: var(--L, #ffffff) var(--D, #1d1f26);
   --overlay: var(--L, #ffffff) var(--D, #24262f);
   --sunken: var(--L, #eceef2) var(--D, #0c0d11);
+  --image-viewer-backdrop: rgb(0 0 0 / 80%);
+  --image-viewer-ink: #ffffff;
   /* 墨色三级；描边和交互态一律是墨色乘透明度 */
   --ink: var(--L, #191a21) var(--D, #e7e8ef);
   --ink-2: var(--L, #50535f) var(--D, #a6a9b7);

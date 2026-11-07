@@ -2,20 +2,23 @@
 // 立即插入（插进正在跑的回合，harness 会引导的话）、编辑（拿回输入框）、移除；停止后的待发多一个“发送”。
 // 排着的消息归核心管，这里只发命令、不自己记。“连同待发一起发”是输入框发送键旁的小开关（ComposeBox）。
 import type { QueuedMessage } from '@litch/core'
+import type { ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { mentionRanges } from '../../../../../packages/ui/src/composer/mention-field.ts'
 import { useT } from '../../ui/i18n'
+import { Icon, type IconName } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import { DeliveryMark } from '../DeliveryMark'
 
 /** 行尾的图标按钮：记号 36 见方，四边放 4，可点 44；读屏名称写动作 */
 function Act({
-  glyph,
+  icon,
   label,
   onPress,
   testID,
   muted,
 }: {
-  glyph: string
+  icon: IconName
   label: string
   onPress(): void
   testID: string
@@ -34,7 +37,7 @@ function Act({
         { borderRadius: radius.s, backgroundColor: pressed ? c.press : 'transparent' },
       ]}
     >
-      <Text style={[styles.actText, { color: muted ? c.ink3 : c.ink2 }]}>{glyph}</Text>
+      <Icon name={icon} size={16} color={muted ? c.ink3 : c.ink2} />
     </Pressable>
   )
 }
@@ -70,11 +73,11 @@ export function QueueTray({
   const heldCount = queued.filter((entry) => entry.delivery === 'held').length
   return (
     <View testID="queue" style={[styles.tray, { borderBottomColor: c.line1 }]}>
-      {/* 停止后的待发：一行头“‖ N 条待发 · 全部发送”。只是排队时没有标题行，第一行前面写“◷ N” */}
+      {/* 停止后的待发：一行头“暂停图标 N 条待发 · 全部发送”。只是排队时没有标题行，第一行前面是钟和条数 */}
       {heldCount ? (
         <View style={styles.head}>
+          <Icon name="pause" size={12} color={c.ink2} />
           <Text style={[styles.headText, { color: c.ink2 }]}>
-            <Text style={{ fontFamily: theme.font.mono }}>‖ </Text>
             {t('composer.pendingCount', { n: heldCount })} ·
           </Text>
           <Pressable
@@ -102,26 +105,35 @@ export function QueueTray({
         return (
           <View key={message.id} style={styles.row} testID={`queue:${index}`}>
             {heldCount ? null : (
-              <Text
+              <View
+                accessible={index === 0}
                 accessibilityLabel={
                   index === 0 ? `${t('composer.queued')} ${queued.length}` : undefined
                 }
-                style={[styles.lead, { color: c.ink3, fontFamily: theme.font.mono }]}
+                style={styles.lead}
               >
-                {index === 0 ? `◷ ${queued.length}` : ''}
-              </Text>
+                {index === 0 ? (
+                  <>
+                    <Icon name="clock" size={12} color={c.ink3} />
+                    <Text style={{ color: c.ink3, fontSize: 12, fontFamily: theme.font.mono }}>
+                      {queued.length}
+                    </Text>
+                  </>
+                ) : null}
+              </View>
             )}
             <Text numberOfLines={1} style={[styles.text, { color: c.ink2 }]}>
+              <Mentioned message={message} text={text} />
               {message.images.length > 0 && message.text
-                ? `${text}  [${t('composer.imageCount', { n: message.images.length })}]`
-                : text}
+                ? `  [${t('composer.imageCount', { n: message.images.length })}]`
+                : null}
             </Text>
             {/* 状态只在“说不准”时标一下：排队、停止待发已经写在头上，不每行重复 */}
             {message.delivery === 'unknown' ? <DeliveryMark delivery="unknown" /> : null}
             {message.delivery === 'held' ? (
               <Act
                 testID={`queue:${index}:send`}
-                glyph="↑"
+                icon="send"
                 label={t('composer.send')}
                 onPress={() => onResume(message.id)}
               />
@@ -129,8 +141,8 @@ export function QueueTray({
             {running && canSteer && !message.delivery ? (
               <Act
                 testID={`queue:${index}:steer`}
-                // 插进当前回合：拐角回车，和待发那一行的“发送”（↑）分开（桌面同样）
-                glyph="⏎"
+                // 插进当前回合：拐进去的回车箭头，和待发那一行的“发送”（直箭头）分开（桌面同样）
+                icon="steer"
                 label={t('composer.steer')}
                 muted={stuck}
                 onPress={() => (stuck ? onRefused() : onSteer(message))}
@@ -138,13 +150,13 @@ export function QueueTray({
             ) : null}
             <Act
               testID={`queue:${index}:edit`}
-              glyph="✎"
+              icon="pencil"
               label={t('composer.editQueued')}
               onPress={() => onEdit(message)}
             />
             <Act
               testID={`queue:${index}:remove`}
-              glyph="✕"
+              icon="close"
               label={t('composer.unqueue')}
               onPress={() => onRemove(message)}
             />
@@ -171,8 +183,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 36 },
-  lead: { width: 34, fontSize: 12 },
+  lead: { width: 34, flexDirection: 'row', alignItems: 'center', gap: 3 },
   text: { flex: 1, fontSize: 13, marginRight: 4 },
   act: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  actText: { fontSize: 17 },
 })
+
+/** 排着的那句话：提到的会话（@[标题]）和对话里一样写成强调色的 ＠标题 */
+function Mentioned({ message, text }: { message: QueuedMessage; text: string }) {
+  const { c } = useTheme()
+  const ranges = mentionRanges(
+    text,
+    message.extras.flatMap((extra) => (extra.kind === 'session' ? [extra] : [])),
+  )
+  if (ranges.length === 0) return <>{text}</>
+  const parts: ReactNode[] = []
+  let at = 0
+  for (const range of ranges) {
+    if (range.start > at) parts.push(text.slice(at, range.start))
+    parts.push(
+      <Text key={`m${range.start}`} style={{ color: c.accent, fontWeight: '600' }}>
+        {`＠${range.title}`}
+      </Text>,
+    )
+    at = range.end
+  }
+  if (at < text.length) parts.push(text.slice(at))
+  return <>{parts}</>
+}

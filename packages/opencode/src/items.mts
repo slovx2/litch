@@ -293,7 +293,20 @@ export function finishTool(item: any, part: any, cwd: string, approvalDiff: stri
     item.durationMs = duration(state)
     item.result = failed
       ? null
-      : { content: [{ type: 'text', text: output }], structuredContent: null, _meta: null }
+      : {
+          content: [
+            { type: 'text', text: output },
+            ...(Array.isArray(state.attachments) ? state.attachments : []).flatMap((file: any) => {
+              const match =
+                typeof file?.url === 'string'
+                  ? /^data:(image\/(?:png|jpeg|gif|webp));base64,(.*)$/s.exec(file.url)
+                  : null
+              return match ? [{ type: 'image', mimeType: match[1], data: match[2] }] : []
+            }),
+          ],
+          structuredContent: null,
+          _meta: null,
+        }
     item.error = failed ? { message: output } : null
   }
 }

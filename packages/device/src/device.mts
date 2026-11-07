@@ -7,6 +7,7 @@ import { PATH_PICKER_EXTENSION } from '../../protocol/src/path-picker.mjs'
 import { protectedAttachmentOwners } from './attachment-active.mjs'
 import { AttachmentRetention } from './attachment-retention.mjs'
 import { ResumeTools } from './resume-tools.mjs'
+import { reserveSessionWork } from './session-capacity.mjs'
 import { prepareSessionTools } from './session-client-tools.mjs'
 // 设备进程的主体：一台机器上的多个 harness 运行时收在一个入口（聚合面）后面。
 // 这里只管各条客户端连接共用的东西；一条连接上的事在 session.mts。
@@ -28,6 +29,7 @@ import {
 } from '../../protocol/src/native-background-wake.mjs'
 import { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
 import { SUGGESTION_RETENTION_SETTING } from '../../protocol/src/suggestion-inbox.mjs'
+import { TOOL_IMAGES_SETTING } from '../../protocol/src/tool-images.mjs'
 import { TURN_NOTICE } from '../../protocol/src/turn-notices.mjs'
 import { RECOVERY_CHANGED } from '../../protocol/src/turn-recovery.mjs'
 import { WORKTREE_DEFAULTS, WORKTREE_SETTING } from '../../protocol/src/worktrees.mjs'
@@ -75,6 +77,7 @@ import { DEFAULT_TASK_SETTINGS, type TaskClock, type TaskSettings } from './task
 import { DeviceTasks } from './tasks.mjs'
 import { registerTasksTool } from './tasks-tool.mjs'
 import { ThreadIndex } from './thread-index.mjs'
+import { ToolImages } from './tool-images.mjs'
 import { TurnNotices } from './turn-notices.mjs'
 import { TurnRecoveryObserver } from './turn-recovery.mjs'
 import { type Connector, isObject, type Wire, type WireHandlers } from './wire.mjs'
@@ -327,6 +330,8 @@ export class DeviceServer {
     })
     const info = deviceInfo(this.version)
     info.extensions.push(EXTENSION.filePreview)
+    info.extensions.push(EXTENSION.mediaImages)
+    info.extensions.push(EXTENSION.toolImages)
     info.extensions.push(EXTENSION.fileDownload)
     info.extensions.push(EXTENSION.fileAttachments)
     info.extensions.push(EXTENSION.turnRecovery)
@@ -435,6 +440,13 @@ export class DeviceServer {
       announce: (method, params, extension) => this.announce(method, params, extension),
       log,
     })
+    this.layer.toolImages = new ToolImages(
+      join(options.stateDir, 'media'),
+      () =>
+        (this.control?.state?.snapshot.values ?? options.clientToolSettings)?.[
+          TOOL_IMAGES_SETTING
+        ] !== false,
+    )
     if (this.control) {
       // 已经到了的那一份是现状，之后和它不一样才算变化
       if (this.control.state) {
@@ -471,9 +483,14 @@ export class DeviceServer {
           kind: 'clientApproval',
           createdAt: card.openedAt,
           // 标题只放网站名，可以为空：客户端按 kind 写成本地语言的“登录 某网站”
-          title: card.kind === 'computerSelf' ? 'Litch' : card.summary.site.trim(),
-          summary:
+          title:
             card.kind === 'computerSelf'
+              ? 'Litch'
+              : card.kind === 'browserSite'
+                ? card.summary.origin
+                : card.summary.site.trim(),
+          summary:
+            card.kind === 'computerSelf' || card.kind === 'browserSite'
               ? card.summary.origin
               : [card.summary.origin, card.summary.reason].filter(Boolean).join('\n'),
           canRespond: false,
@@ -1043,8 +1060,8 @@ export class DeviceServer {
               prepareQuestionInput: (method, params) =>
                 this.sessionTree.prepareQuestionInput(method, params),
               reserveTurn: async (threadId) => {
-                const hold = await this.managers?.lines.reserve(threadId, threadId)
-                return () => hold?.release()
+                const hold = await reserveSessionWork(this.sessionTree, threadId, threadId)
+                return () => hold.release()
               },
               turnStarted: (harness, threadId, turn) =>
                 this.sessionTree.turnEvent(harness, 'turn/started', { threadId, turn }),
@@ -1099,6 +1116,12 @@ export class DeviceServer {
     // 设备进程自己的连接上看到的也算：没有客户端连着时跑的定时任务、子会话，回报里也要数得出后台任务
     link.onNotification((method, params) => {
       if (!params || typeof params !== 'object') return
+      if (method === 'item/completed' && this.layer.toolImages?.enabled()) {
+        // 无界面连接的定时任务、子会话也保存当时的图；不能改写交给编排器的原始帧。
+        void this.layer.toolImages
+          .decorate(structuredClone(params), `${link.harness}:`)
+          .catch(() => this.options.log?.('后台工具图片保存失败'))
+      }
       this.resumeTools.observe(method, params)
       this.attachments.observe(link.harness, params)
       this.turnNotices.observe(method, params)

@@ -169,7 +169,17 @@ test('dsh 客户端工具：建会话带的工具模型看得到，调用交给�
     // 图片存进了 dsh 的附件，到模型那里是一张图（dsh 在前面加一句说明，写着附件存在哪）
     assert.equal(result?.[0].includes('图片没能交给模型'), false, String(result?.[0]))
     assert.equal(result?.[2].includes('image'), true)
-    const item = done.turn.items.find((entry: any) => entry.type === 'dynamicToolCall')
+    assert.equal(
+      done.turn.items.some((entry: any) => entry.type === 'dynamicToolCall'),
+      true,
+    )
+    // 结果里的图片另从 dsh 的附件取回，取到后再发一次 item/completed 补进条目
+    const { item } = await desktop.until(
+      'item/completed',
+      (params) =>
+        params.item?.type === 'dynamicToolCall' &&
+        params.item.contentItems.some((entry: any) => entry.type === 'inputImage'),
+    )
     assert.deepEqual(
       { ...item, durationMs: null },
       {
@@ -179,7 +189,10 @@ test('dsh 客户端工具：建会话带的工具模型看得到，调用交给�
         tool: 'echo',
         arguments: { text: 'hi', image: true },
         status: 'completed',
-        contentItems: [{ type: 'inputText', text: 'echo:hi' }],
+        contentItems: [
+          { type: 'inputText', text: 'echo:hi' },
+          { type: 'inputImage', imageUrl: PNG },
+        ],
         success: true,
         durationMs: null,
       },

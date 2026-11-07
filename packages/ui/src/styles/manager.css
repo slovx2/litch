@@ -187,12 +187,11 @@
 .mg-sidebar-group > .projection-head .dev-row {
   padding-inline-end: 6px;
 }
-/* 一位经理一块：左边设备颜色的竖线、行和工作线子树都照普通对话的投影块（projections.css 的 .projection-block）画 */
+/* 一位经理一块：行和工作线子树照普通对话“未读 / 最近”的投影块（projections.css 的 .projection-block.ticked）画，
+   不画整块竖线，经理行行首一个设备色块（.dev-tick），和普通对话的顶层行左边对齐 */
 .mg-sidebar-manager {
   min-width: 0;
   margin: 4px 8px;
-  padding-inline-start: 4px;
-  border-inline-start: 2px solid var(--wire);
 }
 .mg-attention {
   color: var(--wait);
@@ -1577,7 +1576,7 @@
 .mg-post-forward {
   margin-top: 8px;
 }
-/* 分屏矮时让问答多露几行：输入框起始高度收小，仍可往下拉 */
+/* 分屏输入从两行起，随内容增长到主输入框的上限。 */
 .mg-talk-body textarea.mg-post-input {
   min-height: calc(48px * var(--fs));
 }

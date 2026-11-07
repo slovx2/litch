@@ -14,7 +14,9 @@ import type { RootStackParamList } from '../../nav/routes'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Empty, SectionLabel } from '../../ui/kit/controls'
+import { Caret } from '../../ui/kit/Icon'
 import { Screen } from '../../ui/kit/Screen'
+import { plainPreview } from '../../ui/plain-text'
 import { useTheme } from '../../ui/theme'
 import { badgeOf } from '../sessions/rows'
 
@@ -68,7 +70,7 @@ export function ProposalsScreen({ route, navigation }: Props) {
                 onPress={() => setFolded(!folded)}
                 testID="proposals:fold"
               >
-                <SectionLabel right={<Text style={{ color: c.ink3 }}>{folded ? '▸' : '▾'}</Text>}>
+                <SectionLabel right={<Caret open={!folded} />}>
                   {t('proposals.settled', { n: settled.length })}
                 </SectionLabel>
               </Pressable>
@@ -144,7 +146,8 @@ function ProposalRow({
             </Text>
           ) : null}
           <Text numberOfLines={2} style={[styles.brief, { color: c.ink2 }]}>
-            {proposal.prompt || (status === 'offered' ? t('proposals.offer.ask') : '')}
+            {plainPreview(proposal.prompt) ||
+              (status === 'offered' ? t('proposals.offer.ask') : '')}
           </Text>
         </View>
       </Pressable>
@@ -154,6 +157,7 @@ function ProposalRow({
             deviceId={deviceId}
             sessionId={sessionId}
             proposalId={proposal.id}
+            sourceIsManager={proposal.sourceIsManager}
             worktree={proposal.worktree ?? proposal.worktreeDefault}
             wider={proposal.widerSandbox}
           />
@@ -165,6 +169,7 @@ function ProposalRow({
             deviceId={deviceId}
             sessionId={sessionId}
             proposalId={proposal.id}
+            sourceIsManager={proposal.sourceIsManager}
             worktree={proposal.worktree ?? proposal.worktreeDefault}
           />
         </View>

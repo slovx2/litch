@@ -184,6 +184,20 @@ void app.whenReady().then(async () => {
       await click('[data-site] button')
       await wait("window.__chromeFixture.calls.includes('chrome.forget')", 'forget request')
     })
+    await scenario('总开关范围和停止控制的提示', async () => {
+      await load('connected')
+      await check(
+        "document.querySelector('[data-chrome-permissions]').textContent.includes('无需另批实例或标签')",
+        'permissions explanation',
+      )
+      await run(
+        `window.__chromeFixture.patch({instances:[${JSON.stringify({ ...instance, stopped: true })}]});window.dispatchEvent(new Event('focus'))`,
+      )
+      await wait(
+        "document.querySelector('[data-chrome-stopped]')?.textContent.includes('重新打开')",
+        'stopped notice',
+      )
+    })
     assert.equal(window.isVisible(), false, 'window stayed hidden')
     assert.deepEqual(errors, [], 'renderer errors')
     console.log(`Chrome settings: pass ${passed}, fail 0, skipped 0`)

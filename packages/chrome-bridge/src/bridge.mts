@@ -186,6 +186,8 @@ export class ChromeBridge {
                     ? message.source
                     : null,
                 extensionId,
+                stopped: message.stopped === true,
+                inputReceipts: message.inputReceipts === true,
               },
             }
             const welcome: ChromeWelcome = {
@@ -198,7 +200,10 @@ export class ChromeBridge {
             this.peers.set(peer.instance.id, peer)
             this.emit(peer.instance.id, message as ChromeEvent)
           } else if (message.kind === 'result') this.resolve(peer, message)
-          else if (['tab', 'revoked', 'removed', 'dialog'].includes(message.kind))
+          else if (message.kind === 'control' && typeof message.stopped === 'boolean') {
+            peer.instance.stopped = message.stopped
+            this.emit(peer.instance.id, message)
+          } else if (['tab', 'revoked', 'removed', 'dialog'].includes(message.kind))
             this.emit(peer.instance.id, message)
         } catch {
           socket.destroy()

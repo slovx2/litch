@@ -40,9 +40,13 @@ export function judgeFilter(seen: FilterSeen, kept: FilterKept, session: string)
   // ---- 筛之前 ----
   const localBefore = titlesOf(seen.before.local)
   must(
-    [PI_UNREAD, PI_PINNED, CLAUDE_WAITING, CLAUDE_RUNNING, CLAUDE_PINNED, session].every((title) =>
+    [PI_UNREAD, CLAUDE_WAITING, CLAUDE_RUNNING, session].every((title) =>
       localBefore.includes(title),
-    ) && !localBefore.includes(PI_FOLDED),
+    ) &&
+      !localBefore.includes(PI_FOLDED) &&
+      // 置顶的在侧栏最上面的全局置顶区，不在设备下面再画一遍
+      !localBefore.includes(PI_PINNED) &&
+      !localBefore.includes(CLAUDE_PINNED),
     `没筛的时候本机下面的会话不对：${localBefore.join('、')}`,
   )
   must(
@@ -79,7 +83,6 @@ export function judgeFilter(seen: FilterSeen, kept: FilterKept, session: string)
   must(
     localTitles.join('、') ===
       [
-        PI_PINNED,
         CLAUDE_WAITING,
         PI_UNREAD,
         '能力矩阵页改成从声明生成',
@@ -110,7 +113,7 @@ export function judgeFilter(seen: FilterSeen, kept: FilterKept, session: string)
   // 没有项目的那一组的键是空的；内置的“项目”组是 :projects，项目都在它里面
   must(
     JSON.stringify(seen.groupsBefore.local) ===
-      JSON.stringify([':pinned', ':section:sec-later', ':projects', 'litch', 'docs', '']) &&
+      JSON.stringify([':section:sec-later', ':projects', 'litch', 'docs', '']) &&
       seen.groupsBefore.build?.join() === ':projects,litch2,infra' &&
       seen.groupsBefore.nas?.join() === ':projects,bk',
     `没筛的时候各组不对：${JSON.stringify(seen.groupsBefore)}`,

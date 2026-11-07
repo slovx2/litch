@@ -12,6 +12,7 @@ import {
   whenText,
 } from '../../../../../packages/ui/src/tasks/describe.ts'
 import type { Translator } from '../../ui/i18n'
+import { plainPreview } from '../../ui/plain-text'
 
 /** 状态记号：回合停在审批上等人的算 waiting；在跑、排队算 running；最近一次失败标错；有没看过的标未读；暂停、跑完的不显眼 */
 export type TaskMark = 'idle' | 'running' | 'waiting' | 'error' | 'unread' | 'offline'
@@ -86,7 +87,10 @@ export function runLines(run: TaskRunView, now: number, t: Translator): RunLines
           : run.read
             ? 'idle'
             : 'unread'
-  const lines = [run.error ? errorText(run.error, t) : (run.summary ?? '')].filter(Boolean)
+  // 摘要是模型写的 Markdown：只留文字
+  const lines = [run.error ? errorText(run.error, t) : plainPreview(run.summary ?? '')].filter(
+    Boolean,
+  )
   for (const entry of run.approvals)
     lines.push(`${askLine(entry, t)} · ${askStateText(entry, now, t)}`)
   return {

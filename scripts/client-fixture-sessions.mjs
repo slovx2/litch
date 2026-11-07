@@ -53,7 +53,7 @@ const SPACES = {
       start: [
         'Start a sub-session, propose one, or offer a new session.',
         // 经理的 start 说明来自设备的 manager-rules.mts，开线无需提案卡。
-        'Start an in-scope line with initiation user_asked, including on manager event turns.',
+        'Start user-requested or approved in-scope work with initiation user_asked, including on manager event turns.',
       ],
       send: 'Send a message to a session: one of your sub-sessions',
       wait: 'Wait until the given sessions stop',

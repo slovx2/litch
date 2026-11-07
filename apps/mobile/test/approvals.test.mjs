@@ -96,6 +96,21 @@ const card = (over = {}) => ({
   },
 })
 
+test('网站审批只读：手机不能为站点许可生成批准或拒绝签名', async () => {
+  const site = {
+    ...card(),
+    kind: 'browserSite',
+    summary: {
+      origin: 'https://example.com',
+      device: 'Desktop',
+      browser: 'chrome',
+    },
+  }
+  assert.equal(abilityOf(site, 1), 'blocked')
+  for (const ref of ['session', null])
+    await assert.rejects(buildAnswer(site, { ref, remember: false }, signer), /桌面会话/)
+})
+
 test('批准钥匙的向量：公钥、指纹和协议里写的一样', () => {
   assert.equal(rawPublic.toString('base64'), APPROVAL_KEY)
   const hex = createHash('sha256').update(rawPublic).digest('hex').slice(0, 16)

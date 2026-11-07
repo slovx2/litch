@@ -2,6 +2,7 @@
 // 数据全来自模拟核心（packages/core/src/mock/）。每次打开场景都重新载入，模拟数据跟着重置。
 // 示例数据里的标识（设备 local、build、nas、gpu，会话 s2、b1 等）见 packages/core/src/mock/sample-data.mts；
 // “新建会话说一句”的场景靠模拟核心认的触发词（同目录 mock-*.mts 开头的正则）。
+import type { LocalGroup } from '@litch/core'
 import type { RootStackParamList, RouteName } from '../nav/routes'
 
 export type SceneStep =
@@ -14,6 +15,8 @@ export interface Scene {
   name: string
   note: string
   steps: SceneStep[]
+  /** 开场时这台手机上已有的本机分组（模拟核心的设备与会话标识） */
+  localGroups?: LocalGroup[]
 }
 
 const nav = <R extends RouteName>(route: R, params: RootStackParamList[R]): SceneStep =>

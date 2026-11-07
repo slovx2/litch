@@ -55,6 +55,14 @@ import {
 import { composeProbe, judgeCompose } from './probe-compose.mjs'
 import { askProbe, judgeAsk } from './probe-compose-ask.mjs'
 import { type AttachLook, attachLook, attachProbe, judgeAttach } from './probe-compose-attach.mjs'
+import {
+  CHIP_SESSION,
+  CHIP_TARGET,
+  chipDraft,
+  chipProbe,
+  chipReloaded,
+  judgeChip,
+} from './probe-compose-chip.mjs'
 import { runComposeFilesChecks } from './probe-compose-files.mjs'
 import { judgeMention, mentionProbe } from './probe-compose-mention.mjs'
 import {
@@ -113,6 +121,7 @@ import { runSidebarChecks } from './probe-sidebar-run.mjs'
 import { judgeTasks, TASK_NAME, tasksProbe } from './probe-tasks.mjs'
 import { installTerminalKit } from './probe-terminal-kit.mjs'
 import { runTerminalChecks, type TerminalMode } from './probe-terminal-run.mjs'
+import { toolImagesProbe } from './probe-tool-images.mjs'
 import { judgeTools, toolsProbe } from './probe-tools.mjs'
 import { runTreeChecks } from './probe-tree.mjs'
 import { judgeView, viewProbe } from './probe-view.mjs'
@@ -120,6 +129,7 @@ import { judgeWorking, workingProbe } from './probe-working.mjs'
 import type { QuitOutcome } from './quit-terminals.mjs'
 
 type ProbeMode =
+  | 'tool-images'
   | 'scroll'
   | 'scroll-entry'
   | 'compose'
@@ -176,6 +186,7 @@ const DIFF_MODES: readonly string[] = ['diff', 'diff-device', 'diff-entry']
 const SETTINGS_MODES: readonly string[] = ['settings', 'settings-cold']
 
 const PROBE_MODES: readonly string[] = [
+  'tool-images',
   'scroll',
   'scroll-entry',
   'compose',
@@ -207,6 +218,7 @@ const PROBE_MODES: readonly string[] = [
 export const SMOKE_MODES: readonly string[] = ['mock', 'entry', ...PROBE_MODES]
 /** 对着模拟核心跑、不连任何设备的那几种 */
 export const MOCK_MODES: readonly string[] = [
+  'tool-images',
   'mock',
   'scroll',
   'compose',
@@ -313,6 +325,10 @@ async function measure(
     return [result, judgeCritical(result)]
   }
   if (mode === 'sidebar') return runSidebarChecks(window, hooks)
+  if (mode === 'tool-images') {
+    const failed = await runInPage(window, toolImagesProbe)
+    return [{ toolImages: failed.length === 0 }, failed]
+  }
   if (mode === 'manager') {
     return runManagerChecks(window)
   }
@@ -488,6 +504,7 @@ async function measure(
   const activity = real ? null : await runInPage(window, activityProbe)
   // 回合末尾“正在工作”那一行：命令、工具、思考来去时不隐去，只在正文出字时隐去（只对着模拟核心）
   const working = real ? null : await runInPage(window, workingProbe)
+  const toolImagesFailed = real ? [] : await runInPage(window, toolImagesProbe)
   // 请求卡片和输入框并存那一组排最后：平常大小量一遍，窗口缩到允许的最小再让请求出现一次，
   // 模拟核心上再开着终端面板来一次（打开面板会顺手开一个终端，真实入口上不这样做）
   const cards = await runInPage(window, cardsProbe, real)
@@ -526,10 +543,18 @@ async function measure(
   // 选中回答加评论排最后，只对着模拟核心量：要它按评论逐条回应。量完重新加载页面，看留下的草稿还在不在
   let comments: object | null = null
   const commentsFailed: string[] = []
+  // 输入框里提到的会话画成片（只对着模拟核心）：留一句带片的草稿，下面重新加载页面后再看
+  let chip: object | null = null
+  const chipFailed: string[] = []
   if (!real) {
+    const chipped = await runInPage(window, chipProbe, CHIP_SESSION, CHIP_TARGET)
+    await runInPage(window, chipDraft, CHIP_SESSION, CHIP_TARGET)
     const probe = await runInPage(window, commentsProbe, COMMENT_SESSION)
     await runInPage(window, draftImageReloadProbe, 'save')
     await hooks.load({ lang: 'zh-CN' })
+    const chipKept = await runInPage(window, chipReloaded, CHIP_SESSION)
+    chip = { ...chipped, reloaded: chipKept }
+    chipFailed.push(...judgeChip(chipped, chipKept))
     const reloaded = await runInPage(window, commentsReloaded, COMMENT_SESSION)
     await runInPage(window, draftImageReloadProbe, 'restore')
     comments = { probe, reloaded }
@@ -556,6 +581,7 @@ async function measure(
       mentionLooks,
       ask,
       sendMode,
+      chip,
       comments,
     },
     [
@@ -568,11 +594,13 @@ async function measure(
       ...judgeSlash(slash, real, slashLooks),
       ...judgePlan(plan, real),
       ...judgeAttach(attach, real, attachLooks),
+      ...toolImagesFailed,
       ...filesFailed,
       ...judgeMention(mention, real),
       ...judgeAsk(ask),
       ...judgeSendMode(sendMode),
       ...judgeSheetLook('找文件的单子', mentionLooks),
+      ...chipFailed,
       ...commentsFailed,
     ],
   ]

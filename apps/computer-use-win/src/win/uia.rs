@@ -357,6 +357,7 @@ pub fn element_center(el: &IUIAutomationElement) -> RpcResult<(i32, i32)> {
 
 /// 把焦点放到元素上（type_text 带 ref 时）
 pub fn set_focus(el: &IUIAutomationElement) -> RpcResult<()> {
+    crate::action::check()?;
     unsafe { el.SetFocus() }.map_err(|e| sys("focus the element", e))
 }
 
@@ -390,23 +391,28 @@ pub fn focused_element() -> Option<IUIAutomationElement> {
 pub fn activate(el: &IUIAutomationElement) -> RpcResult<bool> {
     unsafe {
         if let Ok(p) = el.GetCurrentPatternAs::<IUIAutomationInvokePattern>(UIA_InvokePatternId) {
+            crate::action::check()?;
             return p.Invoke().map(|_| true).map_err(|e| sys("invoke the element", e));
         }
         if let Ok(p) = el.GetCurrentPatternAs::<IUIAutomationLegacyIAccessiblePattern>(UIA_LegacyIAccessiblePatternId) {
+            crate::action::check()?;
             if p.DoDefaultAction().is_ok() {
                 return Ok(true);
             }
         }
         if let Ok(p) = el.GetCurrentPatternAs::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId) {
+            crate::action::check()?;
             return p.Select().map(|_| true).map_err(|e| sys("select the item", e));
         }
         if let Ok(p) = el.GetCurrentPatternAs::<IUIAutomationExpandCollapsePattern>(UIA_ExpandCollapsePatternId) {
             let state = p.CurrentExpandCollapseState().unwrap_or(ExpandCollapseState_LeafNode);
             let open = state == ExpandCollapseState_Collapsed || state == ExpandCollapseState_PartiallyExpanded;
+            crate::action::check()?;
             let r = if open { p.Expand() } else { p.Collapse() };
             return r.map(|_| true).map_err(|e| sys("expand or collapse the element", e));
         }
         if let Ok(p) = el.GetCurrentPatternAs::<IUIAutomationTogglePattern>(UIA_TogglePatternId) {
+            crate::action::check()?;
             return p.Toggle().map(|_| true).map_err(|e| sys("toggle the element", e));
         }
     }
@@ -421,9 +427,11 @@ pub fn set_value(el: &IUIAutomationElement, value: &str) -> RpcResult<()> {
             if flag(p.CurrentIsReadOnly()) {
                 return Err(fail!(Invalid, "this field is read-only"));
             }
+            crate::action::check()?;
             return p.SetValue(&text).map_err(|e| sys("set the value", e));
         }
         if let Ok(p) = el.GetCurrentPatternAs::<IUIAutomationLegacyIAccessiblePattern>(UIA_LegacyIAccessiblePatternId) {
+            crate::action::check()?;
             return p.SetValue(&text).map_err(|e| sys("set the value", e));
         }
     }
@@ -445,6 +453,7 @@ pub fn scroll(el: &IUIAutomationElement, direction: &str, amount: i32) -> RpcRes
             _ => return Err(fail!(Invalid, "direction must be up, down, left or right")),
         };
         for _ in 0..times {
+            crate::action::check()?;
             if p.Scroll(h, v).is_err() {
                 break;
             }
@@ -462,6 +471,7 @@ pub fn select_text(el: &IUIAutomationElement, text: Option<&str>, start: Option<
         if let Some(needle) = text.map(str::trim).filter(|s| !s.is_empty()) {
             let doc = p.DocumentRange().map_err(|e| sys("read the text", e))?;
             let range = doc.FindText(&BSTR::from(needle), false, true).map_err(|_| fail!(NotFound, "text \"{needle}\" was not found in this element"))?;
+            crate::action::check()?;
             return range.Select().map_err(|e| sys("select the text", e));
         }
         let range = p.DocumentRange().map_err(|e| sys("read the text", e))?.Clone().map_err(|e| sys("read the text", e))?;
@@ -474,6 +484,7 @@ pub fn select_text(el: &IUIAutomationElement, text: Option<&str>, start: Option<
                 range.MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, i32::MAX).ok();
             }
         }
+        crate::action::check()?;
         range.Select().map_err(|e| sys("select the text", e))
     }
 }

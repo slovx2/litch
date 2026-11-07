@@ -57,6 +57,7 @@ function fixture(id = 'a'.repeat(32), productName = 'Example', hostName = 'examp
       },
     },
     management: { getSelf: async () => ({ installType: 'development' }) },
+    i18n: { getUILanguage: () => 'en-US' },
     storage: { local: storage(local), session: storage(session) },
     tabs: { onRemoved: removed, onUpdated: updated },
     webNavigation: { onCommitted: committed },

@@ -6,6 +6,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WebView } from 'react-native-webview'
 import { useT } from '../../ui/i18n'
+import { Icon } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import { VIEWER_HTML } from '../../web/mermaid-html.generated'
 import { SourceText } from './MermaidCard'
@@ -76,7 +77,7 @@ function Viewer({ shown, onClose }: { shown: MermaidShown; onClose(): void }) {
           accessibilityLabel={t('viewer.close')}
           testID="mermaid-viewer:close"
         >
-          <Text style={[styles.close, { color: c.ink }]}>✕</Text>
+          <Icon name="close" size={20} color={c.ink} />
         </Pressable>
         <View style={styles.tabs} accessibilityRole="tablist">
           <Pressable
@@ -145,6 +146,5 @@ const styles = StyleSheet.create({
   },
   tabs: { flexDirection: 'row', gap: 2 },
   button: { paddingHorizontal: 10, paddingVertical: 8, minWidth: 44, alignItems: 'center' },
-  close: { fontSize: 18 },
   hint: { position: 'absolute', left: 16, right: 16, textAlign: 'center' },
 })

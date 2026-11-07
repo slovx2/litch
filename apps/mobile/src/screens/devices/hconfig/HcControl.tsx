@@ -23,6 +23,7 @@ import {
 } from '../../../../../../packages/ui/src/devices/hconfig/logic.ts'
 import { useT } from '../../../ui/i18n'
 import { Chip } from '../../../ui/kit/controls'
+import { Icon } from '../../../ui/kit/Icon'
 import { PathPicker } from '../../../ui/PathPicker'
 import { useTheme } from '../../../ui/theme'
 
@@ -170,6 +171,10 @@ export function HcControl(props: HcControlProps) {
         <>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel={t('app.valued', {
+              name: t.said(spec.title),
+              value: current ? t.said(current.title) : value || t('hc.value.unset'),
+            })}
             testID={testID}
             disabled={off}
             onPress={() => setPicking(true)}
@@ -182,7 +187,7 @@ export function HcControl(props: HcControlProps) {
             <Text numberOfLines={1} style={[styles.grow, { color: c.ink, fontSize: 15 }]}>
               {current ? t.said(current.title) : value || t('hc.value.unset')}
             </Text>
-            <Text style={{ color: c.ink3 }}>▾</Text>
+            <Icon name="down" size={14} color={c.ink3} />
           </Pressable>
           {picker}
         </>

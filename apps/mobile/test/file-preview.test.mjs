@@ -11,22 +11,23 @@ import {
 } from '../src/screens/files/preview/model.ts'
 
 const binary = (path) => ({ kind: 'binary', path, group: 'binary', bytes: null })
-test('手机按共享后缀分流：图片/PDF；SVG 源码和其他格式不进入预览', () => {
+test('手机按共享后缀分流：图片/SVG/PDF；其他格式不进入预览', () => {
   for (const ext of ['png', 'jpg', 'jpeg', 'gif', 'webp', 'PNG', 'JPEG'])
     assert.equal(mobilePreviewFormat(binary(`/work/a.${ext}`)), 'image')
   assert.equal(mobilePreviewFormat(binary('/work/a.PDF')), 'pdf')
-  for (const ext of ['svg', 'docx', 'xlsx', 'mp3', 'mp4', 'zip', 'html', 'bin'])
+  assert.equal(mobilePreviewFormat(binary('/work/a.svg')), 'svg')
+  for (const ext of ['docx', 'xlsx', 'mp3', 'mp4', 'zip', 'html', 'bin'])
     assert.equal(mobilePreviewFormat(binary(`/work/a.${ext}`)), null)
   assert.equal(mobilePreviewFormat({ kind: 'missing', path: '/work/a.pdf' }), null)
   assert.equal(mobilePreviewFormat({ kind: 'directory', path: '/work/a.pdf' }), null)
   assert.equal(
     mobilePreviewFormat({ kind: 'text', path: '/work/a.svg', text: '<svg/>', bytes: 6 }),
-    null,
+    'svg',
   )
 })
 
-test('图片/PDF 分别守 8/20 MiB，不能靠谎报 bytes 绕过 base64 预算', () => {
-  for (const format of ['image', 'pdf']) {
+test('图片/SVG/PDF 分别守 8/1/20 MiB，不能靠谎报 bytes 绕过 base64 预算', () => {
+  for (const format of ['image', 'svg', 'pdf']) {
     const ready = { kind: 'ready', format, bytes: 1, dataBase64: 'YQ==' }
     assert.equal(previewFailure(ready, format), null)
     assert.equal(previewFailure({ ...ready, bytes: PREVIEW_LIMIT[format] + 1 }, format), 'tooLarge')

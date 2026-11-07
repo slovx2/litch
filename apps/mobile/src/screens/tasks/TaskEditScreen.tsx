@@ -22,7 +22,7 @@ import { PickerSheet } from '../../detail/composer/PickerSheet'
 import type { RootStackParamList } from '../../nav/routes'
 import { useBusy, useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Button, Empty, Field, Row, SectionLabel } from '../../ui/kit/controls'
+import { Button, Empty, Field, SectionLabel, ValueRow } from '../../ui/kit/controls'
 import { KeyboardArea, KeyboardFormFooter, KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
@@ -151,10 +151,10 @@ export function TaskEditScreen({ route, navigation }: Props) {
       <KeyboardArea>
         <KeyboardFormScrollView>
           {!editing ? (
-            <Row
+            <ValueRow
               testID="task:device"
-              title={deviceName}
-              detail={t('tasks.form.device')}
+              title={t('tasks.form.device')}
+              value={deviceName}
               onPress={pickDevice}
             />
           ) : null}

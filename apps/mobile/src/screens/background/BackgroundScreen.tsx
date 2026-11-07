@@ -22,6 +22,7 @@ import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Empty, SectionLabel } from '../../ui/kit/controls'
+import { Icon } from '../../ui/kit/Icon'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 
@@ -222,7 +223,7 @@ function EntryRow({
           </Text>
         </Pressable>
       ) : null}
-      {onOpen ? <Text style={{ color: c.ink3 }}>›</Text> : null}
+      {onOpen ? <Icon name="forward" size={14} color={c.ink3} /> : null}
     </Pressable>
   )
 }

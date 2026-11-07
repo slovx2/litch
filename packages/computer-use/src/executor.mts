@@ -212,7 +212,7 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
     },
     async turnEnded(turn) {
       const session = sessionKey({ device: { id: turn.deviceId }, threadId: turn.threadId })
-      win?.turnEnded(session)
+      win?.turnEnded(session, turn.turnId)
       await helper.connected
         ?.request('turnEnded', { session, turnId: turn.turnId }, 5000)
         .catch(() => {})

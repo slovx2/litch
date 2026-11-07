@@ -32,7 +32,7 @@ import { SlashGoal } from '../../detail/goal/SlashGoal'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Chip, Row, SectionLabel } from '../../ui/kit/controls'
+import { Chip, Row, SectionLabel, ValueRow } from '../../ui/kit/controls'
 import { useKeyboardAccessoryHeight } from '../../ui/kit/KeyboardForm'
 import { Prompt } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
@@ -343,10 +343,10 @@ export function NewSessionScreen({ navigation, route }: Props) {
                   onPress={() => choosePlace({ worktree: true })}
                 />
                 {place.worktree ? (
-                  <Row
+                  <ValueRow
                     testID="new:from"
                     title={t('newSession.from')}
-                    detail={froms.find((entry) => entry.id === place.from)?.title}
+                    value={froms.find((entry) => entry.id === place.from)?.title ?? ''}
                     onPress={() => setPickingFrom(true)}
                   />
                 ) : null}

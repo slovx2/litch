@@ -1,7 +1,7 @@
 // 皮肤与明暗。三种皮肤照桌面端（packages/ui/src/styles/skins/）：极客复古（默认）、文艺人文、标准。
-// 配色在 palettes.ts；这里是每种皮肤的形状（圆角、字体、记号）。
+// 配色在 palettes.ts；这里是每种皮肤的形状（圆角、字体）。状态、单选多选、待办的记号是画的，在 kit/marks.tsx。
 // 字体不跟桌面全换：复古和标准正文用系统字体，等宽只给代码、路径、元信息；人文的标题、正文用衬线字。
-// 组件里不写死颜色、圆角、记号，一律从 useTheme() 取。
+// 组件里不写死颜色、圆角，一律从 useTheme() 取；记号用 kit/marks.tsx 的组件。
 
 import { createContext, useContext } from 'react'
 import { Platform } from 'react-native'
@@ -20,13 +20,6 @@ export type StatusKind =
   | 'offline'
   | 'background'
 
-/** 勾选的记号：开、关、部分 */
-export interface CheckMarks {
-  on: string
-  off: string
-  mixed: string
-}
-
 export interface Theme {
   skin: Skin
   dark: boolean
@@ -44,13 +37,6 @@ export interface Theme {
   radius: { s: number; m: number; l: number }
   /** 可点的东西至少这么高（触控目标） */
   hit: number
-  /** 状态记号：用形状区分，不只靠颜色 */
-  marks: Record<StatusKind, string>
-  /** 单选、多选的记号 */
-  radio: CheckMarks
-  check: CheckMarks
-  /** 待办一步的记号：没做、在做、做完 */
-  todo: { pending: string; inProgress: string; completed: string }
 }
 
 const mono = Platform.select({ ios: 'Menlo', default: 'monospace' })
@@ -61,51 +47,13 @@ type Shape = Omit<Theme, 'skin' | 'dark' | 'c' | 'font' | 'space' | 'hit'> & { u
 const SHAPES: Record<Skin, Shape> = {
   retro: {
     radius: { s: 0, m: 0, l: 0 },
-    marks: {
-      idle: '·',
-      running: '▶',
-      waiting: '◆',
-      error: '✕',
-      unread: '●',
-      offline: '○',
-      background: '&',
-    },
-    radio: { on: '(*)', off: '( )', mixed: '(-)' },
-    check: { on: '[x]', off: '[ ]', mixed: '[-]' },
-    todo: { pending: '[ ]', inProgress: '[~]', completed: '[x]' },
   },
   human: {
     ui: serif,
     radius: { s: 6, m: 10, l: 16 },
-    marks: {
-      idle: '·',
-      running: '○',
-      waiting: '◆',
-      error: '✕',
-      unread: '●',
-      offline: '–',
-      // 与运行中的 ○ 形状不同（只差深浅分不开），仍是圆
-      background: '◎',
-    },
-    radio: { on: '●', off: '○', mixed: '◐' },
-    check: { on: '☑', off: '☐', mixed: '▣' },
-    todo: { pending: '○', inProgress: '◐', completed: '✓' },
   },
   standard: {
     radius: { s: 3, m: 6, l: 10 },
-    marks: {
-      idle: '·',
-      running: '■',
-      waiting: '◆',
-      error: '✕',
-      unread: '●',
-      offline: '○',
-      // 空心方块，与运行中的实心方块分开（同桌面）
-      background: '□',
-    },
-    radio: { on: '●', off: '○', mixed: '◐' },
-    check: { on: '☑', off: '☐', mixed: '▣' },
-    todo: { pending: '○', inProgress: '◐', completed: '✓' },
   },
 }
 

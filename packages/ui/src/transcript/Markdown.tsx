@@ -8,13 +8,13 @@ import { memo, type ReactNode, useContext, useRef } from 'react'
 import { CodeBlock } from './CodeBlock.tsx'
 import { CiteText, HAS_CITE } from './comments/Cite.tsx'
 import { ITEM_ATTR } from './comments/text-range.ts'
-import { ExternalLink } from './ExternalLink.tsx'
 import { CodeSpan, Link, Prose } from './FileLinks.tsx'
 import { languageOf } from './highlight.tsx'
 import { TranscriptReferences, TranscriptReferencesContext } from './ManagerReferences.tsx'
 import { MermaidBlock } from './Mermaid.tsx'
 import { lex } from './markdown-lex.ts'
 import { MarkdownPolicyContext } from './markdown-policy.ts'
+import { MessageImages, TranscriptImage } from './media/Images.tsx'
 import { AnswerMentions, HAS_MENTION } from './SessionMentions.tsx'
 
 interface Parsed {
@@ -63,7 +63,7 @@ function inline(tokens: Token[] | undefined): ReactNode {
         )
       }
       case 'image': {
-        // 不加载回答里引用的图片（内容安全策略也不允许），只给出它的说明和地址
+        // 明确的图片语法才进入受控加载；HTML 与普通链接保持原行为。
         const image = token as Tokens.Image
         return <PolicyImage key={key} href={image.href} alt={image.text} />
       }
@@ -112,7 +112,7 @@ function PolicyLink({ href, children }: { href: string; children: ReactNode }) {
 }
 function PolicyImage({ href, alt }: { href: string; alt: string }) {
   const policy = useContext(MarkdownPolicyContext)
-  return policy ? policy.image(href, alt) : <ExternalLink href={href}>{alt || href}</ExternalLink>
+  return policy ? policy.image(href, alt) : <TranscriptImage href={href} alt={alt} />
 }
 function PolicyCode({
   code,
@@ -295,18 +295,20 @@ export const Markdown = memo(function Markdown({ text, streaming, anchor, item }
     streaming && lastToken?.type === 'code' && !fenceClosed(lastToken.raw) ? tail : -1
   return (
     // live：样式据此在最后一块的结尾画一个光标
-    <div className={streaming ? 'md live' : 'md'} {...(item ? { [ITEM_ATTR]: item } : {})}>
-      {parsed.all.map((token, index) =>
-        token.type === 'space' ? null : (
-          // 块只会在末尾增加，序号就是稳定的键
-          <Block
-            key={index}
-            token={token}
-            anchor={anchor ? `${anchor}:${index}` : undefined}
-            open={index === unfinished}
-          />
-        ),
-      )}
-    </div>
+    <MessageImages streaming={streaming}>
+      <div className={streaming ? 'md live' : 'md'} {...(item ? { [ITEM_ATTR]: item } : {})}>
+        {parsed.all.map((token, index) =>
+          token.type === 'space' ? null : (
+            // 块只会在末尾增加，序号就是稳定的键
+            <Block
+              key={index}
+              token={token}
+              anchor={anchor ? `${anchor}:${index}` : undefined}
+              open={index === unfinished}
+            />
+          ),
+        )}
+      </div>
+    </MessageImages>
   )
 })

@@ -16,6 +16,7 @@ export function WorkspaceActions({
   sections,
   onEdit,
   onNewSection,
+  place,
 }: {
   device: DeviceView
   workspace: WorkspaceView
@@ -23,6 +24,8 @@ export function WorkspaceActions({
   sections: readonly SectionView[]
   onEdit(workspace: WorkspaceView): void
   onNewSection(then: (sectionId: string) => void): void
+  /** 在全局置顶区里：上移、下移改的是本机的置顶先后，不是设备上项目的顺序 */
+  place?: { index: number; count: number; shift(step: -1 | 1): void } | undefined
 }) {
   const { channel } = useServices()
   const t = useT()
@@ -70,8 +73,9 @@ export function WorkspaceActions({
       ],
     },
   })
-  if (at > 0) actions.push({ id: 'up', title: t('workspace.up') })
-  if (at < siblings.length - 1) actions.push({ id: 'down', title: t('workspace.down') })
+  const [index, count] = place ? [place.index, place.count] : [at, siblings.length]
+  if (index > 0) actions.push({ id: 'up', title: t('workspace.up') })
+  if (index < count - 1) actions.push({ id: 'down', title: t('workspace.down') })
   actions.push({
     id: 'delete',
     title: t('workspace.delete'),
@@ -102,7 +106,8 @@ export function WorkspaceActions({
             const out = workspace.pinned ? { pinned: false } : { sectionId: null }
             organize(channel.command('workspace.update', { ...target, ...out }))
           } else if (choice) regroup(choice)
-        } else {
+        } else if (place) place.shift(id === 'up' ? -1 : 1)
+        else {
           // 上移：挪到同一处前一个的前面；下移：挪到同一处后面第二个的前面，
           // 后面只剩一个就挪到它在整张表里的下一个前面（没有就是最后）
           const next = siblings[at + 1]

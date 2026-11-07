@@ -73,7 +73,8 @@ export function FilePreview({
       abort.abort()
     }
   }, [channel, focused, deviceId, root, path, format, attempt])
-  if (!focused || loaded.kind === 'loading') return <Empty title={t('mobilePreview.loading')} />
+  if (!focused || loaded.kind === 'loading')
+    return <Empty busy title={t('mobilePreview.loading')} />
   if (loaded.kind === 'failed')
     return (
       <PreviewNotice
@@ -122,10 +123,11 @@ function PreviewWeb({
   const html = useMemo(() => {
     const config = JSON.stringify({
       data: data.dataBase64,
+      format: data.format,
       name: baseName(data.path),
       background: c.sunken,
     }).replaceAll('<', '\\u003c')
-    return (format === 'image' ? IMAGE_HTML : PDF_HTML).replace(
+    return (format === 'pdf' ? PDF_HTML : IMAGE_HTML).replace(
       '<body>',
       `<body><script>window.__litchPreview=${config}</script>`,
     )

@@ -30,6 +30,8 @@ import { HardwareKeyboard } from '../../../modules/litch-keyboard/src/HardwareKe
 import { navigationRef } from '../../shell/dev-links'
 import { useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { Loading } from '../../ui/kit/controls'
+import { Icon } from '../../ui/kit/Icon'
 import { Sheet, type SheetAction } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { CommentChips } from '../comments/CommentChips'
@@ -56,6 +58,7 @@ import { type FileExtra, pickFile } from './files'
 import { useGrow } from './grow'
 import { MAX_IMAGE_MB, MAX_IMAGES, pickImages, REFUSAL_TEXT } from './images'
 import { rowLayout } from './layout'
+import { useMentionInput } from './MentionInput'
 import { MentionList, mentionTrigger } from './MentionList'
 import { type SettingsProps, useComposeSettings } from './SettingsBar'
 import { sendButton, takesSend } from './send-mode'
@@ -276,6 +279,14 @@ export function ComposeBox({
   /** 光标在哪：认 `@` 用。还没动过光标的当在末尾 */
   const [caret, setCaret] = useState<number | null>(null)
   const trigger = mentions ? mentionTrigger(draft.text, caret) : null
+  // 提到的会话在输入框里画成片（MentionInput.tsx）
+  const chipped = useMentionInput({
+    input,
+    text: draft.text,
+    setText: draft.setText,
+    sessions: draft.sessions,
+    onSelect: (selection) => setCaret(selection.end),
+  })
   const filled =
     draft.text.trim().length > 0 ||
     draft.images.length > 0 ||
@@ -422,11 +433,7 @@ export function ComposeBox({
     >
       {markers ? <View style={styles.mark} /> : null}
       {top}
-      {uploading ? (
-        <Text accessibilityRole="text" style={{ color: c.ink3 }}>
-          {t('composer.file.uploading')}
-        </Text>
-      ) : null}
+      {uploading ? <Loading text={t('composer.file.uploading')} /> : null}
       {draft.files.map((file, index) => (
         <FileCard
           key={file.path}
@@ -491,7 +498,7 @@ export function ComposeBox({
                 onPress={() => draft.setImages((list) => list.filter((_, at) => at !== index))}
                 style={[styles.thumbX, { backgroundColor: c.invBg }]}
               >
-                <Text style={{ color: c.invFg, fontSize: 12 }}>✕</Text>
+                <Icon name="close" size={12} color={c.invFg} />
               </Pressable>
             </View>
           ))}
@@ -509,7 +516,7 @@ export function ComposeBox({
             { borderColor: planOn ? c.accent : c.line2, borderRadius: theme.radius.m },
           ]}
         >
-          <Text style={[styles.sideText, { color: c.ink }]}>＋</Text>
+          <Icon name="plus" size={20} color={c.ink} />
           {planOn ? (
             <View
               testID={`${testID}-more-plan`}
@@ -518,15 +525,13 @@ export function ComposeBox({
           ) : null}
         </Pressable>
         <HardwareKeyboard
-          style={{ flex: 1 }}
+          style={styles.keyboard}
           submitEnabled={filled && !blocked && !uploading}
           onSubmit={send}
         >
           <TextInput
             ref={input}
-            value={draft.text}
-            onChangeText={draft.setText}
-            onSelectionChange={(event) => setCaret(event.nativeEvent.selection.end)}
+            {...chipped.props}
             placeholder={placeholder}
             placeholderTextColor={c.ink3}
             multiline
@@ -543,7 +548,9 @@ export function ComposeBox({
                 fontFamily: theme.font.ui,
               },
             ]}
-          />
+          >
+            {chipped.children}
+          </TextInput>
         </HardwareKeyboard>
         {config.percent !== null ? (
           <UsageRing
@@ -575,7 +582,7 @@ export function ComposeBox({
             </Pressable>
           </View>
         ) : null}
-        {/* 发送、排队、停止：36 的圆形图标键（↑、■），读屏名称写是哪一个；这一格随输入框拉高、键贴底 */}
+        {/* 发送、排队、停止：36 的圆形图标键（发送箭头、停止方块），读屏名称写是哪一个；这一格随输入框拉高、键贴底 */}
         <View style={styles.send}>
           <Pressable
             accessibilityRole="button"
@@ -597,14 +604,11 @@ export function ComposeBox({
               },
             ]}
           >
-            <Text
-              style={[
-                mode === 'stop' ? styles.stopGlyph : styles.sendGlyph,
-                { color: mode === 'stop' ? c.err : c.onAccent },
-              ]}
-            >
-              {mode === 'stop' ? '■' : '↑'}
-            </Text>
+            <Icon
+              name={mode === 'stop' ? 'stop' : 'send'}
+              size={18}
+              color={mode === 'stop' ? c.err : c.onAccent}
+            />
           </Pressable>
         </View>
       </View>
@@ -651,7 +655,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   ...rowLayout,
-  sideText: { fontSize: 22, lineHeight: 26 },
   planDot: {
     position: 'absolute',
     top: -4,
@@ -661,8 +664,6 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     borderWidth: 2,
   },
-  sendGlyph: { fontSize: 20, lineHeight: 24, fontWeight: '700' },
-  stopGlyph: { fontSize: 13, lineHeight: 16 },
   pendingSlot: { justifyContent: 'flex-end', paddingBottom: 6 },
   pending: {
     height: 28,

@@ -1,0 +1,61 @@
+# 手机首页不再提供跨设备置顶、本机分组；原设备内置顶及分区仍可见、可操作。
+appId: dev.litch.app
+name: mock-设备内置顶与分组
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- assertNotVisible:
+    id: pins:head
+- assertNotVisible:
+    id: localGroups:head
+- tapOn:
+    id: device:local
+- extendedWaitUntil:
+    visible:
+      id: sessions:list
+    timeout: 15000
+- assertVisible:
+    id: group::pinned
+- assertVisible:
+    id: session:p1
+- longPressOn:
+    id: session:p1
+- assertNotVisible:
+    id: menu:local
+- assertVisible:
+    id: menu:unpin
+- tapOn:
+    id: menu:unpin
+- extendedWaitUntil:
+    notVisible:
+      id: menu:unpin
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: session:p1
+    direction: DOWN
+    centerElement: true
+- longPressOn:
+    id: session:p1
+- assertVisible:
+    id: menu:pin
+- assertNotVisible:
+    id: menu:local
+- tapOn:
+    id: menu:pin
+- scrollUntilVisible:
+    element:
+      id: group::pinned
+    direction: UP
+- assertVisible:
+    id: session:p1
+- scrollUntilVisible:
+    element:
+      id: group::section:sec-later
+    direction: DOWN
+- assertVisible:
+    id: group::section:sec-later

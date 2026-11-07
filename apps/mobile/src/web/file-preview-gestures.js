@@ -1,13 +1,19 @@
 // 图片与 PDF 共用的视口；只变换一张图/画布，不因缩放重新分配大位图。
-export function previewGestures(stage, width, height) {
+export function previewGestures(stage, width, height, thumbnail = false) {
   let view = { x: 0, y: 0, scale: 1 }
   let fitted = 1
   const points = new Map()
   let start = null
   let moved = false
   let lastTap = 0
+  let reported = 0
   const paint = () => {
     stage.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.scale})`
+    const percent = Math.round((view.scale / fitted) * 100)
+    if (!thumbnail && percent !== reported) {
+      reported = percent
+      window.ReactNativeWebView?.postMessage(JSON.stringify({ kind: 'zoom', percent }))
+    }
   }
   const fit = () => {
     fitted = Math.min(1, (innerWidth - 24) / width, (innerHeight - 24) / height)
@@ -66,7 +72,19 @@ export function previewGestures(stage, width, height) {
     restart()
   }
   const events = { pointerdown: down, pointermove: move, pointerup: up, pointercancel: up }
-  for (const [name, handler] of Object.entries(events)) document.addEventListener(name, handler)
+  const zoom = (factor) => {
+    const scale = Math.max(fitted / 2, Math.min(fitted * 8, view.scale * factor))
+    const ratio = scale / view.scale
+    view = {
+      scale,
+      x: innerWidth / 2 - (innerWidth / 2 - view.x) * ratio,
+      y: innerHeight / 2 - (innerHeight / 2 - view.y) * ratio,
+    }
+    paint()
+  }
+  window.__litchImageZoom = zoom
+  if (!thumbnail)
+    for (const [name, handler] of Object.entries(events)) document.addEventListener(name, handler)
   window.addEventListener('resize', fit)
   fit()
   return () => {
@@ -74,5 +92,6 @@ export function previewGestures(stage, width, height) {
       document.removeEventListener(name, handler)
     window.removeEventListener('resize', fit)
     points.clear()
+    if (window.__litchImageZoom === zoom) delete window.__litchImageZoom
   }
 }

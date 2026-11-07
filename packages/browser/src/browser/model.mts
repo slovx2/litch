@@ -1,6 +1,8 @@
 // 内置浏览器里执行器和“页面的宿主”之间的约定。执行器（executor.mts）只认这里的接口，不碰 Electron：
 // 真的宿主是 electron-host.mts（WebContentsView 加 webContents.debugger），单元测试用假的。
 
+import type { BrowserDownloads } from './downloads.mjs'
+
 /** 标签归哪个会话。会话还没建（新建对话页上用户自己开的）时 threadId 是空字符串 */
 export interface TabOwner {
   deviceId: string
@@ -58,6 +60,8 @@ export interface BrowserPage {
   waitForLoad(timeoutMs: number, signal: AbortSignal): Promise<boolean>
   /** 发一条 CDP 命令。只许白名单里的（cdp-allow.mts），名单外的抛 CdpRefused。需要时自动挂上调试器 */
   cdp<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>
+  /** 已派发输入后重建观察基线；只准恢复读操作，不能重放原输入。来源/租约检查照旧。 */
+  prepareObservation?(): Promise<void>
   /** 最近的控制台消息（最多留 200 条） */
   consoleEntries(): ConsoleEntry[]
   clearConsole(): void
@@ -80,6 +84,8 @@ export interface OpenOptions {
 
 /** 管所有标签的宿主 */
 export interface BrowserHost {
+  /** Electron 宿主的受控下载队列；纯页面测试宿主没有文件系统能力。 */
+  downloads?: BrowserDownloads
   pages(): BrowserPage[]
   page(id: string): BrowserPage | undefined
   /** 开一个新标签（先是空白页，url 给了再去加载由调用的人来） */

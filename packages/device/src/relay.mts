@@ -14,6 +14,7 @@ import { DeviceError, type Frame, idKey, isObject, type RpcId, toRpcError } from
 import type { Expectation, Workspaces } from './workspaces.mjs'
 
 export interface RelayHost {
+  prepareMedia?(link: UpstreamLink, frame: Frame, request?: ForwardedRequest): Promise<boolean>
   /** 原生接续来源：只装饰声明过的连接，也处理分页回合。 */
   decorateNative?(
     link: UpstreamLink,
@@ -124,6 +125,8 @@ interface PendingServerRequest {
 }
 
 export class Relay {
+  private readonly mediaQueue = new Map<UpstreamLink, Promise<void>>()
+  private mediaStopped = false
   private readonly host: RelayHost
   /** 还在等客户端答复的服务端请求，键是客户端看到的请求号 */
   private readonly pending = new Map<string, PendingServerRequest>()
@@ -144,6 +147,41 @@ export class Relay {
 
   /** 上游发来的一帧。request：这一帧是哪个转发过去的请求的应答 */
   upstream(link: UpstreamLink, frame: Frame, raw: string, request?: ForwardedRequest): void {
+    if (this.host.prepareMedia && this.host.declares('toolImages')) {
+      const previous = this.mediaQueue.get(link) ?? Promise.resolve()
+      const work = previous
+        .then(async () => {
+          if (this.mediaStopped) return
+          const changed = await this.host.prepareMedia!(link, frame, request)
+          if (!this.mediaStopped)
+            this.deliverFrame(link, frame, changed ? JSON.stringify(frame) : raw, request)
+        })
+        .catch(() => {
+          // 媒体失败不能把未过滤的原图透传给 UI，也不能阻止之后的协议帧。
+          this.host.log('工具图片处理失败')
+          if (!this.mediaStopped && frame.id != null && typeof frame.method !== 'string') {
+            const failure = {
+              id: frame.id,
+              error: { code: -32603, message: 'Tool image processing failed' },
+            }
+            this.deliverFrame(link, failure, JSON.stringify(failure), request)
+          }
+        })
+      this.mediaQueue.set(link, work)
+      void work.finally(() => {
+        if (this.mediaQueue.get(link) === work) this.mediaQueue.delete(link)
+      })
+      return
+    }
+    this.deliverFrame(link, frame, raw, request)
+  }
+
+  private deliverFrame(
+    link: UpstreamLink,
+    frame: Frame,
+    raw: string,
+    request?: ForwardedRequest,
+  ): void {
     if (typeof frame.method !== 'string') this.response(link, frame, raw, request)
     else if (frame.id != null) {
       if (isObject(frame.params)) this.host.observe(link, frame.method, frame.params)
@@ -187,6 +225,7 @@ export class Relay {
 
   /** 客户端这条连接关了：扣着的不用放了，计时也撤掉 */
   close(): void {
+    this.mediaStopped = true
     for (const tracked of this.tracked.values()) this.settle(tracked)
     this.tracked.clear()
     this.afterwards.clear()

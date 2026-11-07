@@ -8,6 +8,9 @@ export const zhChrome = {
     '允许代理列出此 Chrome 实例的标签标题和网址。访问页面内容遵循 Chrome 站点权限设置，用户标签仍需单独认领。',
   'chrome.title': 'Chrome',
   'chrome.note': '在这台电脑的 Chrome 中操作已登录的网站。站点权限单独设置。',
+  'chrome.permissionsNote':
+    '总开关打开后，本机和下方勾选设备的会话可使用这台电脑上已连接的 Chrome，包括已登录的用户标签；无需另批实例或标签。页面访问由下方网站权限控制，登录仍需单独确认。',
+  'chrome.stopped': '用户已停止 Chrome 控制，请点击 Chrome 工具栏中的 Litch 扩展重新打开。',
   'chrome.enable': '允许代理使用 Chrome',
   'chrome.unsupported': '此平台不支持。',
   'chrome.browsers.darwin': '支持 Google Chrome 正式版。',
@@ -38,11 +41,12 @@ export const zhChrome = {
   'chrome.install':
     '在 Chrome 扩展页开启“开发者模式”，选择“加载已解压的扩展程序”，选取以下目录。更新 Litch 后请重新加载扩展。',
   'chrome.version': '扩展目录中的版本 {version}',
-  'chrome.remote': '远程设备',
-  'chrome.remoteNote': '选中的设备可请求操作这台电脑的 Chrome，遵循此处站点权限设置。',
+  'chrome.remote': '允许使用 Chrome 的远程设备',
+  'chrome.remoteNote':
+    '这是 Chrome 总开关的设备范围：只允许勾选的远程设备使用这台电脑的 Chrome，不再弹实例或标签卡。网站权限与本机会话相同。',
   'chrome.signIn': '在 Chrome 中登录',
   'chrome.signInNote':
-    '请在 Chrome 中完成登录。等待期间，代理无法读取或操作此标签。完成后重新载入页面并交还控制。',
+    '请自行打开 Chrome 的 Litch 标签组并完成登录。此卡片不会切换窗口。等待期间，代理无法读取或操作此 Chrome 实例。完成后重新载入页面并交还控制。',
   'chrome.signInDone': '登录已完成',
   'chrome.approve': '允许访问 Chrome 网站',
 } as const

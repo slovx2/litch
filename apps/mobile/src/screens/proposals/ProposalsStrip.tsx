@@ -7,6 +7,7 @@ import { useProposalClock, useProposalList } from '../../detail/proposals/hooks'
 import { pendingCount } from '../../detail/proposals/logic'
 import type { RootStackParamList } from '../../nav/routes'
 import { useT } from '../../ui/i18n'
+import { Icon } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 
 export function ProposalsStrip({
@@ -38,17 +39,26 @@ export function ProposalsStrip({
         },
       ]}
     >
+      <Icon name="suggest" size={14} color={theme.c.wait} />
       <Text
         numberOfLines={1}
         style={[styles.text, { color: theme.c.wait, fontFamily: theme.font.mono }]}
       >
-        ◇ {t('proposals.strip', { n })} ›
+        {t('proposals.strip', { n })}
       </Text>
+      <Icon name="forward" size={14} color={theme.c.ink3} />
     </Pressable>
   )
 }
 
 const styles = StyleSheet.create({
-  strip: { paddingHorizontal: 16, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth },
-  text: { fontSize: 12 },
+  strip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 32,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  text: { flex: 1, fontSize: 12 },
 })

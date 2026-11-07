@@ -25,7 +25,8 @@ import { cliPresentation } from '../../../../../packages/ui/src/devices/cli-pres
 import type { RootStackParamList } from '../../nav/routes'
 import { useBusy, useChannel, useKey, useReplica } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
-import { Button } from '../../ui/kit/controls'
+import { Button, Loading } from '../../ui/kit/controls'
+import { Caret, Fold, Icon } from '../../ui/kit/Icon'
 import { Confirm } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { useLeaveGuard } from './hconfig/leave'
@@ -151,15 +152,14 @@ function Block({
     <View style={[styles.block, { borderBottomColor: theme.c.line1 }]} testID={testID}>
       {header}
       {specs.length > 0 && !detail ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setOpen(!open)}
+        <Fold
+          open={shown}
+          onToggle={() => setOpen(!open)}
           testID={`${testID}:fold`}
+          style={styles.foldRow}
         >
-          <Text style={[styles.fold, { color: theme.c.ink2 }]}>
-            {shown ? '▾' : '▸'} {title}
-          </Text>
-        </Pressable>
+          <Text style={[styles.fold, { color: theme.c.ink2 }]}>{title}</Text>
+        </Fold>
       ) : null}
       {shown
         ? specs.map((spec) => (
@@ -310,9 +310,13 @@ function HarnessHead({
           disabled={on === false || restarting}
           testID={`harness:${harness.id}:restart`}
           onPress={() => void restart(false)}
-          style={{ padding: 8 }}
+          style={styles.iconHit}
         >
-          <Text style={{ color: on === false || restarting ? theme.c.ink3 : theme.c.ink }}>↻</Text>
+          <Icon
+            name="reload"
+            size={18}
+            color={on === false || restarting ? theme.c.ink3 : theme.c.ink2}
+          />
         </Pressable>
         {entry === 'open' ? (
           <Pressable
@@ -326,9 +330,9 @@ function HarnessHead({
                 name: harness.name,
               })
             }
-            style={{ padding: 8 }}
+            style={styles.iconHit}
           >
-            <Text style={{ color: theme.c.ink }}>⚙</Text>
+            <Icon name="gear" size={18} color={theme.c.ink2} />
           </Pressable>
         ) : null}
         {enable && on !== null ? (
@@ -366,8 +370,9 @@ function HarnessHead({
                 accessibilityState={{ expanded: copiesOpen }}
                 onPress={() => setCopiesOpen(!copiesOpen)}
                 hitSlop={8}
+                style={styles.caretHit}
               >
-                <Text style={{ color: theme.c.ink2 }}>{copiesOpen ? '⌃' : '⌄'}</Text>
+                <Caret open={copiesOpen} color={theme.c.ink2} />
               </Pressable>
             ) : null}
           </View>
@@ -460,7 +465,11 @@ export function ManageSection({ device, harnessId }: { device: DeviceView; harne
     )
   }
   if (!schema || !snapshot) {
-    return <Text style={[styles.note, { color: theme.c.ink3 }]}>{t('manage.loading')}</Text>
+    return (
+      <View style={styles.busy}>
+        <Loading text={t('manage.loading')} />
+      </View>
+    )
   }
   const setDraft = (key: string, draft: Draft) =>
     setDrafts((before) => {
@@ -563,6 +572,8 @@ export function ManageSection({ device, harnessId }: { device: DeviceView; harne
 }
 
 const styles = StyleSheet.create({
+  iconHit: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  caretHit: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   block: { borderBottomWidth: 1, paddingBottom: 8 },
   head: {
     flexDirection: 'row',
@@ -580,9 +591,11 @@ const styles = StyleSheet.create({
   /** 标签固定宽度，值排成一列（同桌面的两栏） */
   runtimeLabel: { width: '32%' },
   runtimeValue: { flex: 1 },
-  fold: { fontSize: 13, paddingHorizontal: 16, paddingVertical: 8 },
+  fold: { fontSize: 13 },
+  foldRow: { paddingHorizontal: 16 },
   groupNote: { fontSize: 13, lineHeight: 18, paddingHorizontal: 16 },
   actions: { flexDirection: 'row', gap: 10, paddingHorizontal: 16 },
   save: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, paddingHorizontal: 16 },
   note: { fontSize: 13, lineHeight: 18, paddingHorizontal: 16, paddingVertical: 6 },
+  busy: { paddingHorizontal: 16, paddingVertical: 2 },
 })

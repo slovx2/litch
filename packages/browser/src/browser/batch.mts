@@ -63,7 +63,16 @@ export async function runBrowserActions(
     () => controller.abort(new Error('Browser batch exceeded 60 seconds.')),
     60_000,
   )
-  const results: Array<{ step: number; tool: string; success: boolean; text: string }> = []
+  const results: Array<{
+    step: number
+    tool: string
+    success: boolean
+    text: string
+    elapsedMs: number
+    mayHaveExecuted: boolean
+    dispatch?: string
+    observation?: string
+  }> = []
   let last: Action | undefined
   let snapshot: ClientToolCallResponse | null = null
   const prefix = randomUUID()
@@ -99,13 +108,30 @@ export async function runBrowserActions(
     for (const action of actions) {
       if (controller.signal.aborted) break
       last = action
+      const started = Date.now()
+      const preflight = before?.(action)
       const result =
-        before?.(action) ??
+        preflight ??
         (await invoke(action.tool, action.arguments, controller.signal, String(results.length)))
+      const receipt = result.contentItems.flatMap((item) => {
+        if (item.type !== 'inputText') return []
+        try {
+          const parsed = JSON.parse(item.text)
+          return parsed.inputReceipt ? [parsed.inputReceipt] : []
+        } catch {
+          return []
+        }
+      })[0]
       results.push({
         step: results.length + 1,
         tool: action.tool,
         success: result.success,
+        elapsedMs: Date.now() - started,
+        mayHaveExecuted:
+          receipt?.mayHaveExecuted ??
+          (preflight == null &&
+            ['click', 'type', 'press', 'scroll', 'navigate', 'dialog'].includes(action.tool)),
+        ...(receipt ? { dispatch: receipt.dispatch, observation: receipt.observation } : {}),
         text: result.contentItems
           .filter((item) => item.type === 'inputText')
           .map((item) => item.text)
@@ -136,6 +162,7 @@ export async function runBrowserActions(
     const completed = results.filter((result) => result.success).length
     const success =
       completed === actions.length && !controller.signal.aborted && snapshot?.success === true
+    const actionsCompleted = completed === actions.length && !controller.signal.aborted
     return {
       success,
       contentItems: [
@@ -145,10 +172,25 @@ export async function runBrowserActions(
             steps: results,
             completed,
             total: actions.length,
-            stopped: !success,
+            stopped: !actionsCompleted,
+            actionsStatus: actionsCompleted
+              ? 'completed'
+              : controller.signal.aborted
+                ? 'cancelled'
+                : 'stopped',
+            observationStatus: snapshot
+              ? snapshot.success
+                ? 'completed'
+                : 'failed'
+              : 'notAttempted',
+            firstFailedStep: results.find((step) => !step.success)?.step ?? null,
+            mayHaveExecuted: results.some((step) => step.mayHaveExecuted),
+            businessOutcome: 'unknown',
             cancelled: controller.signal.aborted,
-            note: success
-              ? 'All actions completed.'
+            note: actionsCompleted
+              ? snapshot?.success
+                ? 'All steps returned. Input dispatch and observed changes are reported separately; business outcomes are not verified.'
+                : 'All action steps returned; only the final observation failed. Do not repeat completed inputs. Take a fresh snapshot.'
               : 'Stopped without rollback. A failed action may have partly executed; continue only unfinished work.',
           }),
         },

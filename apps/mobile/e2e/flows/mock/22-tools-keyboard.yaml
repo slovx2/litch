@@ -1,7 +1,7 @@
-# 终端只检查外层避让和补键条；不把 mock 输出当真实终端输入验收。
 appId: dev.litch.app
 name: mock-终端与编辑弹窗键盘
-tags: [mock]
+tags:
+  - mock
 ---
 - runFlow:
     file: ../_shared/fresh.yaml
@@ -46,14 +46,13 @@ tags: [mock]
     id: menu:edit
 - tapOn:
     id: edit:input
-# Android 点击多行原文会把光标放在中间；先全选，避免只删掉光标前的文字。
 - runFlow:
     when:
       platform: Android
     commands:
       - longPressOn:
           id: edit:input
-      - tapOn: '^(Select All|Select all|全选)$'
+      - tapOn: ^(Select All|Select all|全选)$
 - eraseText: 80
 - inputText: Keyboard edited message
 - assertVisible:
@@ -63,6 +62,8 @@ tags: [mock]
     id: edit:send
 - tapOn:
     id: edit:send
+- assertNotVisible:
+    id: ai-consent:title
 - extendedWaitUntil:
     notVisible:
       id: edit:input

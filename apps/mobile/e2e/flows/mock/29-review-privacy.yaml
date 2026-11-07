@@ -1,6 +1,8 @@
 appId: dev.litch.app
-name: 数据同意取消与允许、撤回及 Tailscale 说明
-tags: [mock, privacy]
+name: 启动同意后连续发送、撤回及 Tailscale 说明
+tags:
+  - mock
+  - privacy
 ---
 - runFlow:
     file: ../_shared/fresh.yaml
@@ -16,81 +18,95 @@ tags: [mock, privacy]
 - inputText: consent-e2e
 - tapOn:
     id: new-send
-- extendedWaitUntil:
-    visible:
-      id: ai-consent:title
-    timeout: 20000
-- scrollUntilVisible:
-    element:
-      id: ai-consent:cancel
-- tapOn:
-    id: ai-consent:cancel
-- assertVisible:
-    id: new-input
 - assertNotVisible:
-    id: detail
-- tapOn:
-    id: new-send
-- extendedWaitUntil:
-    visible:
-      id: ai-consent:title
-    timeout: 20000
-- scrollUntilVisible:
-    element:
-      id: ai-consent:allow
-- tapOn:
-    id: ai-consent:allow
+    id: ai-consent:title
 - extendedWaitUntil:
     visible:
       id: detail
     timeout: 20000
 - assertVisible:
     id: user-message
-- openLink: 'litch://home'
-- extendedWaitUntil:
-    visible:
-      id: devices:settings
-    timeout: 10000
 - tapOn:
-    id: devices:settings
-- scrollUntilVisible:
-    element:
-      id: settings:withdraw-consent
-    timeout: 60000
+    id: composer-input
+- inputText: second-consent-message
 - tapOn:
-    id: settings:withdraw-consent
-- tapOn:
-    id: confirm:ok
+    id: composer-send
+- assertNotVisible:
+    id: ai-consent:title
 - extendedWaitUntil:
     notVisible:
-      id: confirm:ok
-    timeout: 10000
-- tapOn:
-    id: header:back
-- extendedWaitUntil:
-    visible:
-      id: devices:settings
-    timeout: 10000
-- openLink: 'litch://new?device=local&prompt=consent-after-withdrawal'
-- extendedWaitUntil:
-    visible:
-      id: ai-consent:title
-    timeout: 20000
+      id: composer-input
+      text: second-consent-message
+    timeout: 15000
+- runFlow: ../_shared/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
-      id: ai-consent:cancel
-- tapOn:
-    id: ai-consent:cancel
+      id: user-message
+      text: second-consent-message
+    direction: UP
+    timeout: 15000
+- assertVisible:
+    id: user-message
+    text: second-consent-message
+- openLink: litch://home
 - extendedWaitUntil:
     visible:
       id: devices:settings
     timeout: 10000
 - tapOn:
     id: devices:settings
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - scrollUntilVisible:
+          element:
+            id: settings:withdraw-consent
+          timeout: 60000
+      - tapOn:
+          id: settings:withdraw-consent
+      - tapOn:
+          id: confirm:ok
+      - extendedWaitUntil:
+          notVisible:
+            id: confirm:ok
+          timeout: 10000
+      - tapOn:
+          id: header:back
+      - extendedWaitUntil:
+          visible:
+            id: devices:settings
+          timeout: 10000
+      - openLink: litch://new?device=local&prompt=consent-after-withdrawal
+      - extendedWaitUntil:
+          visible:
+            id: ai-consent:required
+          timeout: 20000
+      - scrollUntilVisible:
+          element:
+            id: ai-consent:cancel
+      - tapOn:
+          id: ai-consent:cancel
+      - extendedWaitUntil:
+          visible:
+            id: devices:settings
+          timeout: 10000
+      - tapOn:
+          id: devices:settings
+- scrollUntilVisible:
+    element:
+      id: settings:privacy
+    timeout: 60000
+- assertVisible:
+    id: settings:privacy
 - scrollUntilVisible:
     element:
       id: settings:feedback
     timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: settings:licenses
+    direction: DOWN
 - assertVisible:
     id: settings:licenses
 - scrollUntilVisible:
@@ -106,9 +122,10 @@ tags: [mock, privacy]
     timeout: 15000
 - tapOn:
     id: tailscale:login
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       id: tailscale:consent-cancel
+    direction: DOWN
     timeout: 5000
 - tapOn:
     id: tailscale:consent-cancel

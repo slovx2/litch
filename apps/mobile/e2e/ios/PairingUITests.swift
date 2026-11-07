@@ -13,6 +13,7 @@ final class PairingUITests: XCTestCase {
     _ = try request("/biometrics/enroll", post: true, body: Data("1".utf8))
     app.terminate()
     app.launch()
+    app.agreeToLaunchConsentIfNeeded()
     XCTAssertTrue(app.otherElements["devices"].waitForExistence(timeout: 15))
     app.open(URL(string: "litch-dev://boot?mode=stored")!)
     XCTAssertTrue(app.buttons["devices:empty:add"].waitForExistence(timeout: 15))

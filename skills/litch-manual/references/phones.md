@@ -1,5 +1,9 @@
 # Phones (Android and iOS, pairing by QR code)
 
+消息输入框占满添加按钮与右侧操作键之间的空间；空闲、运行中插话与讨论追问都随内容增高，达到上限后在框内滚动，清空后恢复。
+
+The message field fills the space between the add button and the actions on the right. Idle messages, mid-turn input, and discussion questions grow with their content, scroll within the field at the height limit, and shrink when cleared.
+
 iOS 手机设置的“关于”提供“隐私政策”和“支持与反馈”，在系统浏览器打开公开页面。
 iOS 的更新由 App Store 或 TestFlight 管理。隐私查询、删除请求及内容举报发至 admin@datawake.cc。
 设置中的“反馈或举报内容”打开邮件，“第三方许可”打开许可说明；普通问题也可通过公开 GitHub issues 提交，
@@ -7,20 +11,21 @@ iOS 的更新由 App Store 或 TestFlight 管理。隐私查询、删除请求�
 
 ## 数据同意 / Data sharing consent
 
-手机首次向 AI 服务发起操作前，会说明消息、附件、代理读取的项目文件和会话上下文的数据去向。
-用户可以取消；取消不会发送本次内容。同意按设备与供应商配置保存，换供应商或配置变化后重新确认。
-若远端未上报完整供应商信息，界面明确提示先核实配置，本次许可不保存。文件附件先上传到选定设备，
-后续发送给模型仍须获得该服务的同意。经理操作同时说明其配置的派发服务。
-设置可“撤回 AI 数据同意”；这只影响手机今后的操作，不删除已经传出的内容，也不停止远端运行的任务。
-手机不控制已经自主运行的远程代理；在电脑上更改服务或要求代理使用其他服务前，应重新核实数据去向。
+Android 不显示 AI 数据同意框，发送不经过此闸门；隐私政策仍可从设置访问。
 
-Before an AI action from the phone, Litch explains where messages, attachments, project files and
-conversation context may be processed. You can cancel. Consent is saved per device and reported
-provider configuration; provider or configuration changes require confirmation. Unknown provider
-details are shown explicitly and permission is not saved. File attachments are uploaded to the
-selected device first; sending them to a model still requires consent for that service. Manager
-actions also disclose their configured dispatch service. Withdraw consent in Settings to be asked
-again. This does not delete data already sent or stop autonomous work on your remote computer.
+Android does not show the AI data consent dialog or gate sending on it. The privacy policy remains available in Settings.
+
+iOS 仅首次启动时告知：消息、附件及远程代理读取的项目和会话上下文会交给选定电脑及其配置的第三方 AI 服务（例如 OpenAI、Anthropic、Google 或自行指定的 API 服务）。实际去向请在设备的工具设置中核实。
+同意后一直保存，应用升级、更换设备、工具、供应商或配置均不再询问。0.35.x 已保存的许可沿用。
+不同意时仍可阅读；发起 AI 操作会提示“去同意”，本次不发送、草稿保留。查看并同意后需要自己再次发送，不自动重放之前的操作。
+系统返回、点击遮罩、切后台或切换弹窗不作拒绝处理，也不会把发送变成“已取消”。
+设置可查看告知并“撤回 AI 数据同意”；撤回只影响之后由手机发起的操作，不删除已经传出的内容，也不停止远端运行的任务。手机不控制远程代理自主请求，改变服务前请核实数据去向及隐私政策。
+
+On iOS, disclosure appears only on the first launch: messages, attachments and project and conversation context read by remote agents go to the selected computer and its configured third-party AI services, such as OpenAI, Anthropic, Google or a custom API service. Check the actual recipient in the device’s tool settings.
+Consent remains saved until withdrawn. App upgrades and changes to devices, tools, providers or configuration do not ask again. Saved consent from 0.35.x is retained.
+If you decline, reading remains available. AI actions show “Review and agree”, do not send, and keep the draft. After agreeing, send again yourself; previous actions are never replayed automatically.
+Back, tapping outside the dialog, backgrounding and modal changes do not decline consent or cancel a send.
+Settings provides disclosure and withdrawal. Withdrawal affects future phone-initiated actions only; it does not delete data already shared or stop remote work. The phone does not control autonomous remote-agent requests. Verify recipients and their privacy policies before changing services.
 
 Tailscale 登录前说明控制服务器处理的节点/网络元数据，提供隐私政策链接和继续/取消。
 取消后仍可使用普通 SSH。自定义控制服务器的数据处理由其运营方负责。
@@ -49,9 +54,11 @@ later.
 
 ## What the user does (exception E2)
 
+粘贴配对文本时，提交按钮固定在键盘上方，文本区域可以滚动。
+
 You can only open the dialog. Then the user:
 
-1. In the phone app: Add device → Scan to add, and scan the code (or paste "Copy pairing text").
+1. In the phone app: Add device → Scan to add, and scan the code (or paste "Copy pairing text"). The pasted-text submit button stays above the keyboard, while the text area scrolls.
 2. On the computer, Litch shows "Phone '…' wants to pair" with a 6-digit code; if it matches the phone,
    the user clicks Allow.
 
@@ -186,12 +193,14 @@ Pasted text respects the terminal program's bracketed paste mode.
 ## In a session on the phone
 
 手机上的运行记号会缓慢呼吸：会话列表（含首页最近会话、经理与工作线、子会话）、会话中的活动行、
-经理页签、子代理图标和设备的运行状态使用相同节奏。记号的颜色和形状跟随皮肤，不增加行高；活动文字保持稳定。
+子代理图标和设备的运行状态使用相同节奏。记号的颜色和形状跟随皮肤，不增加行高；活动文字保持稳定。
 回合结束即恢复静态；系统开启“减弱动态效果”时保留完整不透明度的状态记号，App 进入后台后停止动画。
+经理页的页签不用皮肤记号：“对话”在经理回合进行中显示小转圈，等人时显示等待色圆点，有新回复时显示未读色圆点；
+“控制台”“工作线”的数字带框，有工作线等人时工作线页签显示等人的条数并改用等待色。
 
 复制收在菜单里，不占消息下方的位置：长按用户消息选“复制消息”，长按回答选“复制回答”（针对按住的那条，
 复制该条完整 Markdown），点回合状态行的 ⋯ 也可复制回合最后一条回答；复制后显示“已复制”。
-用户消息的发送时刻和交付状态记号（排队 ◷、停止待发 ‖、状态待确认 ⓘ）在气泡左边，点记号显示整句说明。用户消息的评论、附件和会话提及规则见 `sessions-and-projects.md`。
+用户消息的发送时刻和交付状态记号（排队是时钟、停止待发是暂停、状态待确认是圆圈里的 i）在气泡左边，点记号显示整句说明。用户消息的评论、附件和会话提及规则见 `sessions-and-projects.md`。
 
 Pending questions are answered above the composer; settled questions leave a combined question/answer
 record in the conversation. Mid-turn messages say “Added to this turn” and divide folded activity into
@@ -260,8 +269,10 @@ messages arrived while you were away. Other board tabs retain their own scroll p
 
 ## Approving the agent's sign-ins on the phone
 
-Chrome requests have their own cards: instance access shows the Chrome instance name, website access
-shows the origin, and sign-in shows the website and reason. For Chrome sign-in, finish signing in on
+Chrome instance and tab access need no separate approval when Chrome control is enabled. Website approval shows the origin; phones show a read-only notice to handle it in the controlling desktop conversation. Sign-in shows the website and reason.
+Chrome 总开关开启后不再逐个审批实例或标签。网站审批在手机上显示只读提示，请在控制端桌面的对应会话中处理。
+
+For Chrome sign-in, finish signing in on
 the computer and then choose **Sign-in complete**; this is separate from the built-in browser's
 saved-account sign-in flow below.
 
@@ -346,3 +357,14 @@ Network failures, key-file write failures and enrollment-command failures have s
 The desktop obtains the server address through the current authenticated SSH connection. The device probes that listener’s public keys, including custom sshd HostKey files, containers, and forwarded ports.
 If the entry key differs, is unknown, or cannot be checked directly, Litch shows the address, fingerprints, and risk before creating a code. The user must explicitly confirm this code; cancelling creates no code.
 Confirmation is not saved, does not change known_hosts, and must be repeated for a new code or changed address or keys. The QR code and login check pin the same entry key. The phone must still reach that address directly; desktop ProxyJump settings are not transferred.
+## 工具图片 / Tool images
+
+手机在工具摘要右侧显示 AI 读取的图片；窄屏保留最后一张，“+N”打开同组图库。点击后全屏查看，
+可前后切换、捏合缩放，关闭返回原位置。原图只在查看时从会话设备读取；单图解码上限为 400 万像素。
+设备隐私开关“在对话里显示 AI 读取的图片”同时适用于手机；关闭会隐藏小图并关闭查看器。
+
+The phone shows images read by AI beside tool summaries. Narrow screens keep the last thumbnail;
+“+N” opens the group gallery. Tap for full-screen viewing, previous/next navigation and pinch zoom.
+Originals load from the session device only when opened, with a four-million-pixel limit per image.
+The device’s **Show images read by AI in conversations** privacy setting also applies to the phone;
+turning it off hides the thumbnails and closes the viewer.

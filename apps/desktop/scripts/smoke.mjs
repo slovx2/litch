@@ -61,6 +61,7 @@ const probe = useRemote
       : [
           'scroll',
           'compose',
+          'tool-images',
           'critical',
           'sidebar',
           'manager',

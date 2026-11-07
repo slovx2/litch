@@ -88,16 +88,14 @@ export function useSheet({
         archive: () => act(channel.command('session.archive', target(summary))),
         delete: () => askDelete(summary),
       }
-      return {
-        title: titleOf(summary, t),
-        actions: entries.map((entry) => ({
-          label: entry.label,
-          danger: entry.danger,
-          disabled: entry.disabled,
-          testID: `menu:${entry.act}`,
-          onPress: run[entry.act],
-        })),
-      }
+      const actions: SheetAction[] = entries.map((entry) => ({
+        label: entry.label,
+        danger: entry.danger,
+        disabled: entry.disabled,
+        testID: `menu:${entry.act}`,
+        onPress: run[entry.act],
+      }))
+      return { title: titleOf(summary, t), actions }
     }
     case 'move': {
       const { summary } = menu

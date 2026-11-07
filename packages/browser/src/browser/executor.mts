@@ -2,7 +2,7 @@
 // 这里管几件和具体工具无关的事：参数校验、挑标签（只许动这个会话里代理自己开的）、按来源审批（context.ask）、
 // 把页面上攒下的提示和开着的对话框带进结果、回合结束时收拾。各个工具怎么做在 tools-*.mts。
 // 不碰 Electron：页面由宿主（model.mts 的 BrowserHost）给，单元测试用假的宿主。
-import { statSync } from 'node:fs'
+import { realpathSync, statSync } from 'node:fs'
 import { BROWSER_NAMESPACE } from '../../../automation-contracts/src/litch/client-tools-browser.mjs'
 import type {
   ClientToolContext,
@@ -67,6 +67,14 @@ export interface Call {
   done(page: BrowserPage | null, text: string, images?: string[]): ClientToolCallResponse
   /** 查一个本机文件（上传用） */
   statFile(path: string): { file: boolean; size: number } | null
+  /** 外部 Chrome 通过有界分块传文件内容，不要求扩展读取 file://。 */
+  uploadFiles?(
+    page: BrowserPage,
+    node: number,
+    paths: string[],
+    mode: 'input' | 'drop',
+  ): Promise<void>
+  uploadMaxBytes?: number
   /** 交给人登录；没装（测试的宿主）是 null */
   handover: BrowserHandover | null
 }
@@ -185,7 +193,18 @@ export interface BrowserExecutor extends ClientToolExecutor {
 
 export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserExecutor {
   const { host, sites } = options
-  const statFile = options.statFile ?? defaultStat
+  const statFile = (path: string) => {
+    try {
+      if (
+        host.downloads &&
+        (host.downloads.blocksPath(path) || host.downloads.blocksPath(realpathSync(path)))
+      )
+        return null
+    } catch {
+      return null
+    }
+    return (options.statFile ?? defaultStat)(path)
+  }
   const tabStates = new Map<string, TabState>()
   /** 会话 → 当前标签 */
   const currents = new Map<string, string>()
@@ -427,6 +446,9 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
     }
 
     let onCancel: (() => void) | undefined
+    const knownDownloads = new Map(
+      host.downloads?.list(owner, true).map((item) => [item.id, item.status]),
+    )
     try {
       callArgs = objectOf(invocation.arguments)
       kit.args = callArgs
@@ -437,6 +459,53 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
         context.signal.addEventListener('abort', onCancel, { once: true })
       })
       const result = await Promise.race([tool(kit), cancelled])
+      if (host.downloads && !context.signal.aborted && ![...used].some((page) => page.dialog())) {
+        // 下载响应可能晚于点击返回；延迟更长的仍留在面板，下一次 downloads 可领取审批。
+        if (['click', 'navigate', 'press', 'type', 'evaluate'].includes(invocation.tool))
+          await new Promise((resolve) => setTimeout(resolve, 150))
+        const visible = (tabId: string) => !options.handover?.hides(tabId)
+        await host.downloads.askPending(owner, context, visible)
+        const downloads = host.downloads.list(owner, true).filter((item) => visible(item.tabId))
+        // 附件响应不会生成页面，Chromium 用 ERR_ABORTED 结束导航；它不代表下载失败。
+        if (
+          ['navigate', 'tabs'].includes(invocation.tool) &&
+          downloads.some(
+            (item) =>
+              !knownDownloads.has(item.id) && [...used].some((page) => page.id === item.tabId),
+          ) &&
+          (result.success ||
+            result.contentItems.some(
+              (item) => item.type === 'inputText' && item.text.includes('ERR_ABORTED'),
+            ))
+        ) {
+          result.success = true
+          result.contentItems = [
+            {
+              type: 'inputText',
+              text: 'The URL returned a download instead of a document. Its status follows; do not navigate to the one-time URL again.',
+            },
+          ]
+        }
+        if (downloads.length)
+          result.contentItems.push({
+            type: 'inputText',
+            text: `Downloads on the controlling desktop (not the remote device): ${JSON.stringify(downloads)}`,
+          })
+        if (
+          downloads.some(
+            (item) =>
+              ['declined', 'failed'].includes(item.status) &&
+              (!knownDownloads.has(item.id) || knownDownloads.get(item.id) === 'pending'),
+          )
+        ) {
+          // 批量动作遇到下载拒绝或失败必须停下，不能继续下一次点击。
+          result.success = false
+          result.contentItems.push({
+            type: 'inputText',
+            text: 'The download was declined or failed. Stop here; do not retry the link or bypass the refusal.',
+          })
+        }
+      }
       if (result.success && ['snapshot', 'screenshot'].includes(invocation.tool))
         for (const [id, wrapped] of guarded) {
           const page = host.page(id)

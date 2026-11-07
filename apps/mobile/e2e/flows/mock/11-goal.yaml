@@ -25,7 +25,13 @@ tags: [mock]
 - inputText: tidy the release notes
 - tapOn:
     id: composer-send
-- hideKeyboard
+# 先完成首次数据许可并确认发送，再处理键盘；返回键不能代替同意。
+- extendedWaitUntil:
+    notVisible:
+      id: composer-input
+      text: '.*tidy the release notes'
+    timeout: 10000
+- runFlow: ../_shared/dismiss-keyboard.yaml
 # 每次只释放一轮；等回答结束（发送键可用）再释放下一轮。
 - extendedWaitUntil:
     visible:
@@ -66,7 +72,7 @@ tags: [mock]
 - inputText: /goal check the links again
 - tapOn:
     id: composer-send
-- hideKeyboard
+- runFlow: ../_shared/dismiss-keyboard.yaml
 - extendedWaitUntil:
     visible:
       id: goal:status:active

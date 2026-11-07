@@ -79,15 +79,17 @@ export function ProposalActs({
         >
           {t('proposal.start')}
         </button>
-        <button
-          type="button"
-          className="btn"
-          data-act="here"
-          disabled={off}
-          onClick={() => act.here()}
-        >
-          {t(inbox ? 'suggestions.here' : 'proposal.here')}
-        </button>
+        {!proposal.sourceIsManager ? (
+          <button
+            type="button"
+            className="btn"
+            data-act="here"
+            disabled={off}
+            onClick={() => act.here()}
+          >
+            {t(inbox ? 'suggestions.here' : 'proposal.here')}
+          </button>
+        ) : null}
         <button
           type="button"
           className="btn"

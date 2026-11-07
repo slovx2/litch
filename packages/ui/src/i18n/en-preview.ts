@@ -1,5 +1,12 @@
 import type { zhPreview } from './zh-CN-preview.ts'
 export const enPreview: Record<keyof typeof zhPreview, string> = {
+  'media.enlarge': 'Enlarge image: {name}',
+  'media.previous': 'Previous image',
+  'media.next': 'Next image',
+  'media.fit': 'Fit',
+  'media.copy': 'Copy image',
+  'media.save': 'Save image',
+  'media.reveal': 'Show in file browser',
   'preview.zoomIn': 'Zoom in',
   'preview.zoomOut': 'Zoom out',
   'preview.view': 'Preview',

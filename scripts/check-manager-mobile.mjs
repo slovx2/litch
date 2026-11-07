@@ -64,6 +64,11 @@ try {
   })
   const call = (method, params) => cdp.call(method, params, sessionId)
   const read = async (expression) => {
+    // 此脚本只驱动模拟核心；正式发送入口弹出的数据同意按用户发送动作确认。
+    // 同意流程自身由 privacy 专项测试覆盖，不能让它挡住后续布局断言。
+    await call('Runtime.evaluate', {
+      expression: `document.querySelector('[data-testid="ai-consent:allow"]')?.click()`,
+    })
     const result = await call('Runtime.evaluate', {
       expression,
       returnByValue: true,
@@ -560,6 +565,38 @@ try {
     '读屏名称与临时模式占位一致',
   )
   await press('经理对话')
+  const questionSelector = `${drawer} textarea`
+  const fillQuestion = (value) =>
+    read(
+      `(()=>{const input=document.querySelector(${JSON.stringify(questionSelector)});Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+    )
+  const questionSize = () =>
+    read(
+      `(()=>{const input=document.querySelector(${JSON.stringify(questionSelector)});const style=getComputedStyle(input);return {height:input.getBoundingClientRect().height,scroll:input.scrollHeight,client:input.clientHeight,max:parseFloat(style.maxHeight),resize:style.resize,overflow:style.overflowY}})()`,
+    )
+  const questionMinimum = (await questionSize()).height
+  await fillQuestion('第一行\n第二行\n第三行\n第四行')
+  await until(async () => (await questionSize()).height > questionMinimum + 10, '手机四行追问增高')
+  const fourLines = await questionSize()
+  assert.ok(fourLines.scroll <= fourLines.client + 1, '四行追问完整显示')
+  await read(
+    `(()=>{const input=document.querySelector(${JSON.stringify(questionSelector)});input.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));input.dispatchEvent(new CompositionEvent('compositionupdate',{bubbles:true,data:'中'}))})()`,
+  )
+  assert.equal((await questionSize()).height, fourLines.height, '组字事件不收缩输入框')
+  await read(
+    `document.querySelector(${JSON.stringify(questionSelector)}).dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:'中'}))`,
+  )
+  await fillQuestion(Array.from({ length: 40 }, (_, i) => `第 ${i} 行`).join('\n'))
+  await until(
+    async () => (await questionSize()).scroll > (await questionSize()).client,
+    '手机追问达到上限',
+  )
+  const cappedQuestion = await questionSize()
+  assert.ok(cappedQuestion.height <= cappedQuestion.max + 1)
+  assert.equal(cappedQuestion.overflow, 'auto')
+  assert.equal(cappedQuestion.resize, 'none')
+  await fillQuestion('')
+  await until(async () => (await questionSize()).height <= questionMinimum + 1, '手机追问清空恢复')
   await read(
     `(()=>{const input=document.querySelector('textarea:not([data-testid=manager-chat] textarea)');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'手机追问范围');input.dispatchEvent(new Event('input',{bubbles:true}))})()`,
   )
@@ -587,6 +624,7 @@ try {
     '经理回复',
   )
   assert.equal(await read(`document.querySelector('${drawer} textarea').value`), '', '提交后清空')
+  assert.ok((await questionSize()).height <= questionMinimum + 1, '发送后恢复高度')
   await shot('mobile-report-discussion')
   await tapId('discussion-drawer:close')
   await until(() => read(`!document.querySelector('${drawer}')`), '抽屉关闭')

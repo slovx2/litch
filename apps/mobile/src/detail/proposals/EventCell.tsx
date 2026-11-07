@@ -9,12 +9,13 @@ import { keys, type SessionNoteView, type SessionSummary } from '@litch/core'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { memo, useMemo, useState, useSyncExternalStore } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { ReportText } from '../../../../../packages/ui/src/tree/report-text.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey } from '../../shell/services'
 import { type Key, useT } from '../../ui/i18n'
+import { Caret, Icon } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import { CardMarkdown } from '../CardMarkdown'
 import { CompactRow } from '../CompactRow'
@@ -97,9 +98,11 @@ function Note({
             onPress={() => void report.toggle()}
             style={styles.reportExpand}
           >
-            <Text style={{ color: c.accent, fontSize: font.size.small + 1 }}>
-              {state.busy ? '…' : state.open ? '▴' : '▾'}
-            </Text>
+            {state.busy ? (
+              <ActivityIndicator size="small" color={c.accent} />
+            ) : (
+              <Caret open={state.open} color={c.accent} />
+            )}
           </Pressable>
         ) : null}
       </View>
@@ -137,7 +140,7 @@ function EventBar({
   return (
     <CompactRow
       testID={testID}
-      mark="ⓘ"
+      mark="info"
       source={t(head)}
       summary={
         summary ??
@@ -189,7 +192,7 @@ export function QueuedNotesChip({
 }) {
   const t = useT()
   const theme = useTheme()
-  const { c, font } = theme
+  const { c } = theme
   const notes = useQueuedNotes(deviceId, sessionId)
   if (notes.length === 0) return null
   const only = notes.length === 1 ? notes[0] : undefined
@@ -213,11 +216,12 @@ export function QueuedNotesChip({
         },
       ]}
     >
-      <Text style={{ color: c.ink3, fontFamily: font.mono, fontSize: 13 }}>ⓘ</Text>
+      <Icon name="info" size={15} color={c.ink3} />
       <Text numberOfLines={1} style={[styles.chipText, { color: c.ink }]}>
         {label}
       </Text>
-      <Text style={{ color: c.ink3 }}>{open ? '▾' : '▴'}</Text>
+      {/* 浮窗开在片的上方：收着朝上，开着朝下 */}
+      <Icon name={open ? 'down' : 'up'} size={14} color={c.ink3} />
     </Pressable>
   )
 }
@@ -312,7 +316,7 @@ export function QueuedNotesPanel({
 const styles = StyleSheet.create({
   note: { paddingVertical: 2, gap: 2 },
   noteRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  reportExpand: { paddingHorizontal: 4 },
+  reportExpand: { minWidth: 32, minHeight: 32, alignItems: 'center', justifyContent: 'center' },
   grow: { flex: 1 },
   chip: {
     flexDirection: 'row',

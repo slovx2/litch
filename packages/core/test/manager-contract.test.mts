@@ -266,6 +266,38 @@ test('角色规则保持预算，允许说明选项推荐；经理自行归档�
   assert.match(sessions, /Never replace already-authorized direct delegation/)
 })
 
+test('经理区分已授权任务和自行发现的建议，关闭任务卡时回到看板', () => {
+  const role = managerRoleRules('项目所有开发工作')
+  assert.match(role, /Start authorized in-scope work/)
+  assert.match(role, /Propose self-discovered work under the session rules/)
+  assert.match(role, /Worklines may propose cards directly/)
+  assert.match(role, /dismiss unhelpful or duplicate cards with a reason/)
+  assert.match(role, /do not recreate them as your own/)
+  assert.match(role, /Never substitute cards for already-authorized work/)
+  for (const taskCards of [true, false]) {
+    const sessions = managerSessionRules(4, taskCards)
+    assert.match(sessions, /work the user requested or approved.*initiation "user_asked"/)
+    assert.match(sessions, /Scope alone does not authorize self-discovered work/)
+    assert.match(sessions, /Raise out-of-scope work as a board decision first/)
+    assert.doesNotMatch(sessions, /creating this manager authorized this delegation/)
+    if (taskCards) {
+      assert.match(sessions, /self-discovered work the user has not requested or approved/)
+      assert.match(
+        sessions,
+        /incidental findings in line reports, review improvements or optional follow-ups/,
+      )
+      assert.match(sessions, /initiation "propose" and a full brief/)
+      assert.match(sessions, /starts a line only when the user clicks Start/)
+      assert.match(sessions, /Do not leave it only as a backlog item/)
+      assert.match(sessions, /close any corresponding open item as deferred and reference the card/)
+    } else {
+      assert.match(sessions, /Record self-discovered work in board decisions or items/)
+      assert.match(sessions, /user approval in a board decision before starting it/)
+      assert.doesNotMatch(sessions, /initiation "propose"|reference the card|Suggestions tab/)
+    }
+  }
+})
+
 test('线的回报和首次、结束回合遵守草稿约束', () => {
   const line = managerLineRules('版本经理', MANAGER_DEFAULT_DISPATCH)
   assert.match(line, /版本经理/)
@@ -273,6 +305,15 @@ test('线的回报和首次、结束回合遵守草稿约束', () => {
   assert.match(line, /Do not send progress messages to the manager during work unless/)
   assert.match(line, /a major change, a major finding, or a decision needed to continue/)
   assert.match(line, /Otherwise, report once at the end of the turn/)
+  assert.match(line, /outside this assignment.*initiation "propose".*full brief/)
+  assert.match(line, /without waiting for the manager/)
+  assert.match(line, /Do not just mention it in your report or do the extra work yourself/)
+  assert.match(line, /do not duplicate it in wrap_up or send a separate message/)
+  assert.match(line, /Follow the session card limits and wrap-up rules/)
+  assert.match(line, /Never substitute cards for already-authorized work or unfinished parts/)
+  const withoutCards = managerLineRules('版本经理', MANAGER_DEFAULT_DISPATCH, false)
+  assert.match(withoutCards, /Report findings outside this assignment to the manager/)
+  assert.doesNotMatch(withoutCards, /initiation "propose"/)
   assert.match(line, /Do not merge, push or release/)
   assert.match(line, /do not inherit litch_manager/)
   assert.match(managerOpenText('范围'), /Do not start lines yet/)

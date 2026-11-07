@@ -22,14 +22,12 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
-import { AppState } from 'react-native'
+import { AppState, Platform } from 'react-native'
 import type { SendMode } from '../../../../packages/ui/src/composer/send-mode-logic.ts'
 import { sendModeOf } from '../detail/composer/send-mode'
 import { backgroundMinutes } from '../platform/background'
-import { ConsentDialog } from '../privacy/ConsentDialog'
-import { type ConsentRequest, consentChannel } from '../privacy/consent'
-import { aiConsentRecords } from '../privacy/storage'
-import { consentTargets } from '../privacy/targets'
+import { consentChannel } from '../privacy/consent'
+import { aiConsent } from '../privacy/storage'
 import { type Lang, useT } from '../ui/i18n'
 import type { Skin } from '../ui/theme'
 import { createMobileActivity, watchMobileActivity } from './activity'
@@ -112,31 +110,20 @@ export function ServicesProvider({
   children: ReactNode
 }) {
   const t = useT()
-  const [consentRequest, setConsentRequest] = useState<ConsentRequest | null>(null)
   // 记录按装法分开存：模拟核心的示例会话和真设备上的不混
   const activity = useMemo(
     () =>
       createMobileActivity(booted.channel, clock, jsonFile(`${booted.mode}-sidebar-activity.json`)),
     [booted],
   )
-  const replica = useMemo(() => createReplica(activity.channel, activity), [activity])
-  const consent = useMemo(
-    () =>
-      consentChannel(
-        activity.channel,
-        aiConsentRecords,
-        consentTargets(
-          activity.channel,
-          replica,
-          () => t.lang,
-          () => t('privacy.ai.unavailable'),
-        ),
-        setConsentRequest,
-        () => t('privacy.ai.cancelled'),
-      ),
-    [activity, replica, t],
+  const replica = useMemo(
+    () => createReplica(activity.channel, activity, { globalPins: false }),
+    [activity],
   )
-  useEffect(() => () => consent.dispose(), [consent])
+  const consent = useMemo(
+    () => consentChannel(activity.channel, aiConsent, () => t('privacy.ai.required'), Platform.OS),
+    [activity, t],
+  )
   useEffect(() => replica.start(), [replica])
   useEffect(
     () =>
@@ -167,19 +154,14 @@ export function ServicesProvider({
     [activity, replica],
   )
   const value = useMemo(
-    () => ({ booted, channel: consent.channel, replica, prefs, setPrefs }),
+    () => ({ booted, channel: consent, replica, prefs, setPrefs }),
     [booted, consent, replica, prefs, setPrefs],
   )
   // 花括号不能省：onReady 的返回值会被当成清理函数，设置一变就拿它去调
   useEffect(() => {
     onReady?.(value)
   }, [onReady, value])
-  return (
-    <ServicesContext.Provider value={value}>
-      {children}
-      <ConsentDialog request={consentRequest} />
-    </ServicesContext.Provider>
-  )
+  return <ServicesContext.Provider value={value}>{children}</ServicesContext.Provider>
 }
 
 export function useServices(): Services {

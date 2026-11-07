@@ -9,6 +9,7 @@ final class UIRegressionTests: XCTestCase {
     XCUIDevice.shared.orientation = .portrait
     app.terminate()
     app.launch()
+    app.agreeToLaunchConsentIfNeeded()
     XCTAssertTrue(app.otherElements["devices"].waitForExistence(timeout: 15))
     // 相同 mode 不会重新装核心；先切换到 stored，再建立受控的全新 mock。
     app.open(URL(string: "litch-dev://boot?mode=stored")!)
@@ -85,7 +86,7 @@ final class UIRegressionTests: XCTestCase {
     let branch = app.descendants(matching: .any)["picker:option:branch:release/0.18"]
     XCTAssertTrue(branch.waitForExistence(timeout: 10))
     branch.tap()
-    XCTAssertTrue(app.buttons["new:from"].label.hasSuffix(", release/0.18"))
+    XCTAssertTrue(app.buttons["new:from"].label.hasSuffix(": release/0.18"))
     let input = app.textViews["new-input"]
     input.tap()
     input.typeText("propose a sub-session")

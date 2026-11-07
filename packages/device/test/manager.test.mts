@@ -11,6 +11,7 @@ import { formatSessionEvent, parseSessionEvent } from '../../protocol/src/sessio
 import { prepareInstructions } from '../src/codex-instructions.mjs'
 import { managerTools } from '../src/manager-rules.mjs'
 import { startChild } from '../src/session-start.mjs'
+import { card } from './approvals-kit.mjs'
 import type { TestClient } from './helpers.mjs'
 import { brief, parent, plain, refuseSteer, treeRig, until } from './tree-kit.mjs'
 
@@ -57,6 +58,56 @@ const value = (response: any) => {
   assert.equal(response.success, true, JSON.stringify(response))
   return JSON.parse(response.contentItems[0].text)
 }
+
+test('工作线等待 Chrome 站点审批时看板立即标记等待，并发出原有经理变更通知', async () => {
+  const env = treeRig()
+  try {
+    const connection = await client(env, [
+      'harness',
+      'litchManager',
+      'sessionTree',
+      'clientApprovals',
+    ])
+    const { manager, threadId } = await create(env, connection)
+    const child = await startChild(
+      env.device.sessionTree,
+      threadId,
+      {
+        kind: 'fresh',
+        title: '浏览器工作线',
+        prompt: '检查页面',
+        worktree: false,
+        wakeParent: true,
+      },
+      'model',
+    )
+    const state = () =>
+      env.device.managers.board(manager.id).lines.find((line) => line.threadId === child.threadId)
+        ?.status
+    assert.equal(state(), 'running')
+    const before = connection.notifications.length
+    const site = {
+      ...card({ threadId: child.threadId }),
+      kind: 'browserSite',
+      summary: {
+        origin: 'https://example.com',
+        device: 'Isolated desktop',
+        browser: 'chrome',
+      },
+    }
+    await connection.call('litch/approval/open', site)
+    assert.equal(state(), 'waiting')
+    await until(
+      () =>
+        connection.notifications.slice(before).some((n) => n.method === 'litch/manager/changed'),
+      '经理收到审批变更',
+    )
+    await connection.call('litch/approval/close', { id: site.id })
+    assert.equal(state(), 'running')
+  } finally {
+    await env.close()
+  }
+})
 
 test('经理归档别的会话：看板答复回合放行，wake 与其他事件仍拦，旧答复不授权后续回合', async () => {
   const env = treeRig()
@@ -385,6 +436,18 @@ test('经理扩展：声明、路由、创建工具/规则、每条投递连接�
     )
     const sessions = specs.find((spec) => spec.name === 'litch_sessions')
     assert.ok(sessions.instructions.includes('Manager sessions'))
+    assert.match(sessions.description, /Delegate user-requested or approved in-scope work/)
+    assert.match(sessions.description, /Scope alone does not authorize self-discovered work/)
+    const startDescription = sessions.tools.find((item: any) => item.name === 'start').description
+    assert.match(startDescription, /Start user-requested or approved in-scope work/)
+    assert.match(startDescription, /self-discovered work the user has not requested or approved/)
+    assert.match(startDescription, /initiation propose with a complete brief/)
+    assert.match(
+      startDescription,
+      /close any corresponding open item as deferred and reference the card/,
+    )
+    assert.match(startDescription, /Out-of-scope work requires a board decision first/)
+    assert.match(startDescription, /Do not use cards for already-authorized work/)
     assert.ok(
       sessions.tools
         .find((item: any) => item.name === 'start')
@@ -491,6 +554,10 @@ test('经理：事件回合直接派线、子树标记、默认 harness、并发
     assert.match(
       childTools.find((spec) => spec.name === 'litch_sessions').instructions,
       /Do not send progress messages to the manager during work unless/,
+    )
+    assert.match(
+      childTools.find((spec) => spec.name === 'litch_sessions').instructions,
+      /outside this assignment.*initiation "propose".*without waiting for the manager/,
     )
     assert.deepEqual(
       (await connection.call('thread/read', { threadId: childId })).thread.litchManager,

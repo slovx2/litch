@@ -1,0 +1,83 @@
+appId: dev.litch.app
+name: mock-提问输入框键盘避让
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- openLink: litch://open?session=b1&device=build
+- extendedWaitUntil:
+    visible:
+      id: request:question
+    timeout: 15000
+# 三题向导第一题有选项，末尾展开自填框会同时触发键盘和卡片缩高。
+- scrollUntilVisible:
+    element:
+      id: request:pick:other
+    direction: DOWN
+    centerElement: false
+- tapOn:
+    id: request:pick:other
+- inputText: visible question answer
+- assertVisible:
+    id: request:other
+    text: visible question answer
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - assertVisible:
+          id: keyboard:done
+# 先完成键盘打开时的可见性断言，再结束这一栏编辑并翻题。
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      id: request:next
+    direction: DOWN
+    centerElement: false
+- tapOn:
+    id: request:next
+- scrollUntilVisible:
+    element:
+      id: request:other
+    direction: DOWN
+    centerElement: false
+- tapOn:
+    id: request:other
+- inputText: visible service name
+- assertVisible:
+    id: request:other
+    text: visible service name
+# 审批的拒绝说明共用卡片视口，自动聚焦也必须完整可见。
+- openLink: litch://open?session=s2&device=local
+- extendedWaitUntil:
+    visible:
+      id: request:approval
+    timeout: 15000
+# 卡片正文在屏幕中心上方；默认全屏滚动会划到输入区或键盘，必须从卡片内部起手。
+- repeat:
+    times: 5
+    while:
+      notVisible:
+        id: request:note-open
+        above:
+          id: request:approval:foot
+        below:
+          id: request:approval:head
+    commands:
+      - swipe:
+          from:
+            id: request:approval:body
+          direction: UP
+- tapOn:
+    id: request:note-open
+    above:
+      id: request:approval:foot
+    below:
+      id: request:approval:head
+- inputText: visible approval note
+- assertVisible:
+    id: request:note
+    text: visible approval note

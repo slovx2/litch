@@ -70,8 +70,21 @@ tags: [fixture]
     visible:
       id: request:signIn
     timeout: 30000
+# 新卡片从顶部开始，先在卡片内翻过固定夹具的说明和两个账号。
+# Android 会把被裁切的按钮错误报告为覆盖下方区域的大节点，不能拿这个“可见”结果提前结束滚动。
+- repeat:
+    times: 3
+    commands:
+      - swipe:
+          from:
+            id: request:signIn:body
+          direction: UP
 - tapOn:
     id: request:signIn:decline
+    below:
+      id: request:signIn:head
+    above:
+      id: composer-input
 - runScript:
     file: ../_shared/approval-answered.js
 - assertTrue: ${output.verified && output.ref == 'null' && output.decision == 'decline'}

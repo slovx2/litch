@@ -8,6 +8,7 @@ import { Back, Close, Forward, Icon, Plus, Stop } from '../../app/icons.tsx'
 import { useBrowserImport } from '../../settings/BrowserImportEntry.tsx'
 import type { SideTabProps } from '../tabs.ts'
 import { type BrowserBridge, type BrowserTabInfo, browserBridge, ownerKey } from './bridge.ts'
+import { Downloads } from './Downloads.tsx'
 import { usePlacement } from './place.ts'
 import { SavePrompt } from './SavePrompt.tsx'
 import { SignInCard } from './SignInCard.tsx'
@@ -197,6 +198,7 @@ function BrowserPane({
       {current?.agentActive && <div className="bw-agent-bar">{t('browser.agentBar')}</div>}
       <SignInCard bridge={bridge} owner={owner} currentTabId={currentId ?? null} />
       <SavePrompt bridge={bridge} owner={owner} />
+      <Downloads bridge={bridge} owner={owner} />
       <div className="bw-view" ref={view}>
         {!current && <div className="bw-empty dim">{t('browser.empty')}</div>}
       </div>

@@ -1,5 +1,7 @@
 import { matchTitles } from '../search/titles.mjs'
 import { OUTSIDE_FILE_REPLY } from './sample-file-links.mjs'
+import { MEDIA_REPLY } from './sample-media.mjs'
+import { SAMPLE_TOOL_IMAGES } from './sample-tool-images.mjs'
 // 模拟核心：不连任何设备，拿示例数据实现核心对通道的两个入口。
 // 界面开发、组件测试、桌面外壳的自检都对着它跑。
 // 它会把回答按小块流出来，发送、排队、打断、审批、提问也都有个样子，让界面的每条路径真的被走到。
@@ -46,6 +48,11 @@ import type {
 } from '../model.mjs'
 import type { TerminalsAlive } from '../model-terminal.mjs'
 import type { SessionEventView } from '../model-tree.mjs'
+import {
+  createOrganizerHost,
+  memoryOrganizerStore,
+  type OrganizerStore,
+} from '../organizer/host.mjs'
 import { phrase } from '../phrase.mjs'
 import { projectItem } from '../projection/items.mjs'
 import { managerMark } from '../projection/manager.mjs'
@@ -133,6 +140,8 @@ export interface MockCoreOptions {
    * 不给是平常那一套示例
    */
   scene?: 'fresh'
+  /** 本机整理存在哪（界面预览可以给浏览器存储）。不给就只记在内存里 */
+  organizer?: OrganizerStore
 }
 
 const topicKey = (topic: Extract<Topic, { kind: 'app' | 'sidebar' | 'session' }>): string =>
@@ -453,6 +462,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     setTimer: (run, ms) => options.clock.setTimer(run, ms),
   }
   let proposalSeq = 0
+  const organizer = createOrganizerHost(options.organizer ?? memoryOrganizerStore(), clock.now)
   const chunkMs = options.chunkMs ?? 60
   const lang = options.lang ?? 'zh-CN'
   const app: AppView = sampleApp(lang, clock.now())
@@ -722,6 +732,14 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     // 和设备那边一样，添加条目时记上开始、结束的时刻（步骤组的时长用）
     const now = clock.now()
     const ops = given.map((op) => {
+      if (op.op === 'session.proposals') {
+        const sourceIsManager =
+          managerMark(findSummary(view.deviceId, view.sessionId))?.role === 'manager'
+        op = {
+          ...op,
+          proposals: op.proposals.map((proposal) => ({ ...proposal, sourceIsManager })),
+        }
+      }
       const stamped = spanOp(view, op, now)
       reduceSession(view, stamped)
       return stamped
@@ -1078,6 +1096,32 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     }
     if (/根外预览|outside previews/i.test(message.text)) {
       reply(view, turnId, OUTSIDE_FILE_REPLY)
+      return turnId
+    }
+    if (/media p1|图片验收/i.test(message.text)) {
+      reply(view, turnId, MEDIA_REPLY)
+      return turnId
+    }
+    if (/tool images|工具读图/i.test(message.text)) {
+      applySessionOps(view, [
+        {
+          op: 'item.add',
+          turnId,
+          item: projectItem({
+            type: 'dynamicToolCall',
+            id: `${turnId}-images`,
+            namespace: 'litch_browser',
+            tool: 'screenshot',
+            arguments: {},
+            contentItems: [],
+            success: true,
+            status: 'completed',
+            durationMs: 20,
+            litchToolImages: SAMPLE_TOOL_IMAGES,
+          } as ThreadItem),
+        },
+      ])
+      reply(view, turnId, '工具读图完成。')
       return turnId
     }
     if (SHOWS_FILES.test(message.text)) {
@@ -2851,6 +2895,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (name === 'core.info') {
         return { version: options.version ?? '0.0.0', mock: true }
       }
+      if (name === 'organizer.apply')
+        return organizer.apply((params as Commands['organizer.apply']['params']).action)
       const handled = deviceCommand(name, params)
       if (handled !== undefined) return handled
       const operated = machine.command(name, params)
@@ -2917,8 +2963,16 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (composed !== undefined) return composed
       const reviewed = diffs.command(name, params, signal)
       if (reviewed !== undefined) return reviewed
+      if (name === 'session.proposal.answer') {
+        const { deviceId, sessionId, choice } =
+          params as Commands['session.proposal.answer']['params']
+        if (choice === 'here' && managerMark(findSummary(deviceId, sessionId))?.role === 'manager')
+          throw new ChannelError('invalid', '经理的建议不能在经理会话中执行，请开始工作线或忽略。')
+      }
       if (name === 'session.proposal.here') {
         const { deviceId, sessionId } = params as Commands['session.proposal.here']['params']
+        if (managerMark(findSummary(deviceId, sessionId))?.role === 'manager')
+          throw new ChannelError('invalid', '经理的建议不能在经理会话中执行，请开始工作线或忽略。')
         if (shelved.get(deviceId)?.some((s) => s.id === sessionId))
           restoreSuggestionSource(deviceId, sessionId)
       }
@@ -3645,6 +3699,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     },
 
     subscribe(topic, sink) {
+      if (topic.kind === 'organizer') return organizer.subscribe(sink)
       if (topic.kind === 'suggestions') {
         const listeners = suggestionSinks.get(topic.deviceId) ?? new Set<HostSink>()
         suggestionSinks.set(topic.deviceId, listeners)

@@ -24,6 +24,8 @@ export type RootStackParamList = {
   DeviceDetail: { deviceId: string }
   /** 一台设备上一个 harness 的详情设置：配置、账号（登录、API key、provider）、MCP 与指令文件（只读）。name 是 harness 的名字，首帧就画 */
   HarnessSettings: { deviceId: string; harness: string; name?: string }
+  /** 一个本机分组（只存在这台手机上，混装各台设备的会话）：成员、长按的动作单。title 是组名，首帧就画 */
+  LocalGroup: { groupId: string; title?: string }
   /** 一台设备上的工作区和会话（相当于桌面端侧栏里这台设备的那一段），含已归档 */
   Sessions: { deviceId: string }
   /**

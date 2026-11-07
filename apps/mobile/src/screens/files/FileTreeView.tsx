@@ -3,9 +3,10 @@ import { type FileRow, keys } from '@litch/core'
 import { useIsFocused } from '@react-navigation/native'
 import * as Clipboard from 'expo-clipboard'
 import { useEffect, useRef, useState } from 'react'
-import { FlatList, Pressable, Text } from 'react-native'
+import { FlatList, Pressable, Text, View } from 'react-native'
 import { useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { Caret, Icon } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 
 const ROW_HEIGHT = 44
@@ -77,7 +78,10 @@ export function FileTreeView({
         return (
           <Pressable
             accessibilityRole="button"
-            accessibilityState={{ selected: item.path === path }}
+            accessibilityState={{
+              selected: item.path === path,
+              ...(item.kind === 'dir' ? { expanded: !!item.expanded } : {}),
+            }}
             testID={`file:${item.name}`}
             onLongPress={() => {
               void Clipboard.setStringAsync(item.path)
@@ -91,7 +95,9 @@ export function FileTreeView({
             }}
             style={({ pressed }) => ({
               height: ROW_HEIGHT,
-              justifyContent: 'center',
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
               paddingLeft: 16 + item.depth * 18,
               borderBottomWidth: 1,
               borderBottomColor: theme.c.line1,
@@ -102,15 +108,22 @@ export function FileTreeView({
                   : theme.c.panel,
             })}
           >
+            {item.kind === 'dir' ? (
+              <Caret open={!!item.expanded} size={12} />
+            ) : item.kind === 'file' ? (
+              <Icon name="file" size={13} color={theme.c.ink3} />
+            ) : (
+              <View style={{ width: 13 }} />
+            )}
             <Text
               numberOfLines={1}
               style={{
+                flex: 1,
                 color: theme.c.ink,
                 fontFamily: theme.font.mono,
                 fontSize: theme.font.size.meta,
               }}
             >
-              {item.kind === 'dir' ? (item.expanded ? '▾ ' : '▸ ') : '· '}
               {label}
               {item.kind === 'dir' ? '/' : ''}
             </Text>

@@ -9,8 +9,9 @@ import { thread, turn, userText } from '../../../packages/core/test/fixtures.mts
 import { SessionStore } from '../src/core/session-store.ts'
 import { until } from './helpers.mjs'
 
-async function fixture(t, tool = 'wrap_up') {
+async function fixture(t, tool = 'wrap_up', sourceIsManager = false) {
   const proposal = {
+    sourceIsManager,
     id: 'pr1',
     threadId: 'p',
     title: '整理',
@@ -90,6 +91,14 @@ async function fixture(t, tool = 'wrap_up') {
   await until(() => card()?.proposal?.status === 'pending', { what: '等待开始的卡片' })
   assert.equal(card().itemId, 't1:call1')
   return { world, channel, store, card, proposal }
+}
+
+for (const sourceIsManager of [true, false]) {
+  test(`提案发起者是经理=${sourceIsManager}：来源限制从协议保留到手机卡片和建议列表`, async (t) => {
+    const { store, card } = await fixture(t, 'start', sourceIsManager)
+    assert.equal(store.getProposals()[0].sourceIsManager, sourceIsManager)
+    assert.equal(card().proposal.sourceIsManager, sourceIsManager)
+  })
 }
 
 for (const tool of ['start', 'wrap_up']) {

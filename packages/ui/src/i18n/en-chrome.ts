@@ -10,6 +10,10 @@ export const enChrome = {
   'chrome.title': 'Chrome',
   'chrome.note':
     'Use signed-in websites in Chrome on this computer. Manage site permissions separately.',
+  'chrome.permissionsNote':
+    'When enabled, conversations on this device and selected remote devices can use connected Chrome profiles on this computer, including your signed-in tabs. Instances and tabs need no separate approval. Website permissions below control page access; sign-in still requires confirmation.',
+  'chrome.stopped':
+    'Chrome control was stopped by the user. Click the Litch extension in the Chrome toolbar to resume.',
   'chrome.enable': 'Allow agents to use Chrome',
   'chrome.unsupported': 'Not available on this platform.',
   'chrome.browsers.darwin': 'Supports Google Chrome.',
@@ -43,12 +47,12 @@ export const enChrome = {
   'chrome.install':
     'On the Chrome extensions page, enable Developer mode, choose Load unpacked, and select the folder below. Reload the extension after updating Litch.',
   'chrome.version': 'Folder version {version}',
-  'chrome.remote': 'Remote devices',
+  'chrome.remote': 'Remote devices allowed to use Chrome',
   'chrome.remoteNote':
-    'Selected devices may request control of Chrome on this computer. Chrome site permissions still apply.',
+    'This is the device scope of the Chrome master switch. Only selected remote devices can use Chrome on this computer. They need no instance or tab approval and follow the same site permissions as local conversations.',
   'chrome.signIn': 'Sign in with Chrome',
   'chrome.signInNote':
-    'Complete sign-in in Chrome. The agent cannot read or operate this tab while you sign in. Returning control reloads the page.',
+    'Open the Litch tab group in Chrome and sign in yourself. This card does not switch windows. Agent observation and actions in this Chrome instance are paused. Returning control reloads the page.',
   'chrome.signInDone': 'Sign-in complete',
   'chrome.approve': 'Allow access to a Chrome website',
 } as const

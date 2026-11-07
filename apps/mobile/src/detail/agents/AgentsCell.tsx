@@ -15,7 +15,8 @@ import { duration, elapsed } from '../../../../../packages/ui/src/app/format.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
-import { BreathingText } from '../../ui/kit/BreathingText'
+import { Icon } from '../../ui/kit/Icon'
+import { Breathe } from '../../ui/kit/marks'
 import { type Palette, type Theme, useTheme } from '../../ui/theme'
 import { type Props, useTicking } from '../cells'
 import { useTranscript } from '../context'
@@ -112,15 +113,9 @@ function AgentLine({
       ]}
       testID={threadId ? `agent:${threadId}` : 'agent:pending'}
     >
-      <BreathingText
-        active={state === 'running'}
-        style={[
-          styles.icon,
-          { color: state === 'running' ? c.accent : c.ink3, fontFamily: font.mono },
-        ]}
-      >
-        ⑂
-      </BreathingText>
+      <Breathe active={state === 'running'}>
+        <Icon name="branch" size={14} color={state === 'running' ? c.accent : c.ink3} />
+      </Breathe>
       {thread?.role ? (
         <Text style={[styles.kind, { color: c.ink3, fontFamily: font.mono }]} numberOfLines={1}>
           {thread.role}
@@ -141,7 +136,7 @@ function AgentLine({
       >
         {stateText(state, t, theme)}
       </Text>
-      {threadId ? <Text style={[styles.go, { color: c.ink3 }]}>›</Text> : null}
+      {threadId ? <Icon name="forward" size={14} color={c.ink3} /> : null}
     </Pressable>
   )
 }
@@ -205,10 +200,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     borderWidth: 1,
   },
-  icon: { fontSize: 13 },
   kind: { fontSize: 11, maxWidth: 88 },
   desc: { flex: 1, fontSize: 13 },
   time: { fontSize: 11 },
   state: { fontSize: 11, fontWeight: '500' },
-  go: { fontSize: 15, marginLeft: 2 },
 })

@@ -31,6 +31,11 @@
 .projection-block.off {
   border-inline-start-style: dashed;
 }
+/* 最近、未读：和置顶区一样每行行首一个设备色块，不再画整块的竖线 */
+.projection-block.ticked {
+  border-inline-start: none;
+  padding-inline-start: 0;
+}
 .projection-empty {
   padding: 4px 8px 8px;
   font-size: calc(12px * var(--fs));
@@ -42,6 +47,15 @@
   flex: none;
   max-width: 10ch;
   font-size: calc(11px * var(--fs));
+}
+/* 最近、未读行里的“离线”：不占宽度，只给读屏念（看得见的是虚线色块和淡色） */
+.projection-offline {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .pick-opt[aria-checked] > b {
   display: flex;

@@ -2,7 +2,7 @@ import type { OpenedUnread, SessionChildren, SidebarProjectionRow } from '@litch
 import type { Selection } from '../app/App.tsx'
 import { containsSession } from './reveal.ts'
 
-export type RowSource = 'tree' | 'recent' | 'unread'
+export type RowSource = 'tree' | 'recent' | 'unread' | 'local'
 export interface RowSelection extends Selection {
   source: RowSource
 }

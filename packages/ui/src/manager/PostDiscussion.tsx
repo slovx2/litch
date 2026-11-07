@@ -299,7 +299,7 @@ export function PostDiscussion({
       ) : null}
       <textarea
         id={inputId}
-        className="req-input mg-post-input"
+        className="req-input mg-post-input grow-input"
         // 未单独发送的经理追问仍随答复一起交；操作说明只放占位。
         placeholder={t(
           mode === 'temporary'

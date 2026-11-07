@@ -31,6 +31,7 @@ import type { RootStackParamList } from '../nav/routes'
 import { noteFirstContent, noteWork } from '../probe'
 import { useKey, useServices } from '../shell/services'
 import { useT } from '../ui/i18n'
+import { Icon } from '../ui/kit/Icon'
 import { useTheme } from '../ui/theme'
 import { AgentsCell } from './agents/AgentsCell'
 import { AskedCell } from './asks/AskCell'
@@ -304,6 +305,7 @@ function ToBottom({ away, onPress }: { away: Away; onPress(): void }) {
           },
         ]}
       >
+        <Icon name="arrowDown" size={14} color={c.ink2} />
         <Text style={[styles.toBottomText, { color: c.ink }]}>{t('transcript.toBottom')}</Text>
       </Pressable>
     </View>
@@ -562,9 +564,11 @@ const styles = StyleSheet.create({
   endMark: { height: 2, backgroundColor: colors.markEnd },
   toBottomRow: { position: 'absolute', left: 0, right: 0, bottom: 12, alignItems: 'center' },
   toBottom: {
-    height: 30,
+    height: 34,
     paddingHorizontal: 14,
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     borderWidth: 1,
     elevation: 3,
     shadowColor: '#000',

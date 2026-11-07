@@ -122,8 +122,12 @@ export function phoneCardOf(place: ToolAskPlace, device: string): ApprovalCard |
 
 export function createApprovals(host: ApprovalsHost): Approvals {
   const { deviceId } = host
+  // 站点卡只发布等待状态，不作为授权凭据；设备或手机无法据此批准操作。
+  const sitePrefix = `site-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`
+  let siteSequence = 0
   /** 这台桌面端挂出去的：卡片号 → 对话里那张卡片的标识 */
   const outgoing = new Map<string, string>()
+  const readOnly = new Set<string>()
   const sinks = new Set<HostSink>()
   /** 手机看到的：会话 → 挂着的卡片。null：还没取到 */
   let cards: Map<string, ApprovalCardView[]> | null = null
@@ -161,9 +165,25 @@ export function createApprovals(host: ApprovalsHost): Approvals {
   return {
     ask(place) {
       if (!host.online() || !host.supported()) return null
-      const card = phoneCardOf(place, host.deviceName())
+      const card: ApprovalCard | null =
+        place.ask.kind === 'site'
+          ? {
+              id: `${sitePrefix}-${++siteSequence}`,
+              threadId: place.threadId,
+              desktopId: sitePrefix,
+              nonce: sitePrefix,
+              expiresAt: null,
+              kind: 'browserSite',
+              summary: {
+                origin: place.ask.origin,
+                device: host.deviceName(),
+                browser: place.ask.browser ?? 'builtin',
+              },
+            }
+          : phoneCardOf(place, host.deviceName())
       if (!card) return null
       outgoing.set(card.id, place.askId)
+      if (card.kind === 'browserSite') readOnly.add(card.id)
       const mine = epoch
       host.request(APPROVAL_OPEN, card).catch((error: unknown) => {
         if (mine === epoch) host.log(`批准卡片 ${card.id} 挂不到设备上：${String(error)}`)
@@ -174,6 +194,7 @@ export function createApprovals(host: ApprovalsHost): Approvals {
         closed = true
         if (outgoing.get(card.id) !== place.askId) return
         outgoing.delete(card.id)
+        readOnly.delete(card.id)
         if (mine !== epoch || !host.online()) return
         host.request(APPROVAL_CLOSE, { id: card.id }).catch((error: unknown) => {
           host.log(`收掉批准卡片 ${card.id} 失败：${String(error)}`)
@@ -211,7 +232,7 @@ export function createApprovals(host: ApprovalsHost): Approvals {
       if (method === APPROVAL_ANSWERED) {
         // 原样交给主进程验签；不是这台桌面端挂的（或者已经收掉了）不理
         if (!isApprovalAnswer(params)) return true
-        if (outgoing.has(params.id)) host.phoneAnswer?.(params)
+        if (outgoing.has(params.id) && !readOnly.has(params.id)) host.phoneAnswer?.(params)
         return true
       }
       if (method === APPROVAL_CHANGED) {
@@ -237,6 +258,7 @@ export function createApprovals(host: ApprovalsHost): Approvals {
       epoch++
       // 设备那边随连接一起收掉了
       outgoing.clear()
+      readOnly.clear()
       cards = null
       publishAll()
     },

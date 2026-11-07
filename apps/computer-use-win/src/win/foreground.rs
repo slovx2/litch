@@ -20,13 +20,14 @@ thread_local! {
 pub struct Excursion { previous: HWND, target: HWND, revision: u64, sequence: u64, interactions: u64, cursor: POINT }
 impl Excursion {
     pub fn begin(target: HWND, session: &str, app_id: &str) -> RpcResult<Self> {
+        crate::action::check()?;
         let started = std::time::Instant::now();
         while super::hooks::held() || super::uia::composing() {
             if super::activity::is_stopped(session, app_id) { return Err(fail!(Stopped, "the user stopped this turn")); }
             if started.elapsed() >= Duration::from_secs(8) {
                 return Err(fail!(UserActive, "a button/key is held or IME composition is active; no input sent. Retry this step after release; the session is not stopped"));
             }
-            std::thread::sleep(Duration::from_millis(25));
+            crate::action::sleep(Duration::from_millis(25))?;
         }
         let revision = super::hooks::revision(target.0 as isize);
         let mut cursor = POINT::default();
@@ -68,6 +69,7 @@ fn same_foreground_process(target: HWND) -> bool {
 }
 
 fn check(completed: bool) -> RpcResult<()> {
+    crate::action::check()?;
     ACTIVE.with(|cell| {
         let Some(active) = cell.borrow().clone() else { return Ok(()) };
         if super::activity::is_stopped(&active.session, &active.app_id) { return Err(fail!(Stopped, "the user stopped this turn")); }

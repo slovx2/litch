@@ -7,6 +7,19 @@ appId: dev.litch.app
 - launchApp:
     clearState: true
     stopApp: true
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: ai-consent:title
+          timeout: 30000
+      - scrollUntilVisible:
+          element:
+            id: ai-consent:allow
+      - tapOn:
+          id: ai-consent:allow
 - extendedWaitUntil:
     visible:
       id: devices

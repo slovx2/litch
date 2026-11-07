@@ -40,6 +40,11 @@ import type { ClientToolPort } from './model-client-tools.mjs'
 import type { MachineAccessMode, MachineAccessView, MachineApproval } from './model-machine.mjs'
 import type { PairingView } from './model-pairing.mjs'
 import type { TerminalsAlive } from './model-terminal.mjs'
+import {
+  createOrganizerHost,
+  memoryOrganizerStore,
+  type OrganizerStore,
+} from './organizer/host.mjs'
 import { phrase } from './phrase.mjs'
 import { outgoing } from './projection/outgoing.mjs'
 import { createToolHub } from './tool-hub.mjs'
@@ -55,6 +60,8 @@ export interface CoreOptions {
   remote?: RemotePlatform
   /** 设备配置和侧栏快照存在哪。不给就什么都不记 */
   store?: DeviceStore
+  /** 本机整理（本机分组、置顶先后）存在哪。不给就只记在内存里 */
+  organizer?: OrganizerStore
   /** 通往主进程的客户端工具那一头（内置浏览器、Computer Use）。不给就是这台桌面什么都执行不了 */
   clientTools?: ClientToolPort
   /**
@@ -151,6 +158,10 @@ export function createCore(options: CoreOptions): Core {
   )
   // —— litch_config：本机 harness 里的 litch config ——
   const configBridge = createConfigBridge(options.clock)
+  const organizer = createOrganizerHost(
+    options.organizer ?? memoryOrganizerStore(),
+    options.clock.now,
+  )
   let configExecutor: ConfigExecutor | null = null
   /** 执行器经核心自己的两个入口（命令、订阅）做事：和界面点按钮走同一条路 */
   const executor = (): ConfigExecutor => {
@@ -438,6 +449,10 @@ export function createCore(options: CoreOptions): Core {
 
     async command(name, params, signal) {
       switch (name) {
+        case 'organizer.apply': {
+          const { action } = params as Commands['organizer.apply']['params']
+          return organizer.apply(action)
+        }
         case 'core.info':
           return { version: options.version, mock: false }
         case 'session.markRead': {
@@ -1238,6 +1253,10 @@ export function createCore(options: CoreOptions): Core {
           const { deviceId, root, path, format } = params as Commands['files.preview']['params']
           return await deviceOf(deviceId).files.preview(root, path, format, signal)
         }
+        case 'media.image': {
+          const { deviceId, source } = params as Commands['media.image']['params']
+          return await deviceOf(deviceId).files.image(source, signal)
+        }
         case 'files.readChunk': {
           const { deviceId, root, path, offset, revision } =
             params as Commands['files.readChunk']['params']
@@ -1769,6 +1788,7 @@ export function createCore(options: CoreOptions): Core {
       }
       // litch config 要界面做的事、确认卡
       if (topic.kind === 'config') return configBridge.subscribe(sink)
+      if (topic.kind === 'organizer') return organizer.subscribe(sink)
       const device = deviceOf(topic.deviceId)
       if (topic.kind === 'fileChanges')
         return device.files.watch(topic.root, topic.path, topic.directory === true, sink)

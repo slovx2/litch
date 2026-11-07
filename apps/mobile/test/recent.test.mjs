@@ -12,6 +12,39 @@ import { jsonFile } from '../src/shell/json-file.ts'
 import { mockChannel, until } from './helpers.mjs'
 
 const cleanup = []
+for (const globalPins of [true, false]) {
+  test(`${globalPins ? '桌面默认' : '手机设备内置顶'}：最近投影按是否显示全局置顶区去重`, async () => {
+    const mock = mockChannel()
+    const activity = createMobileActivity(
+      mock.channel,
+      fakeClock(Date.now()),
+      jsonFile('pins-activity.json'),
+    )
+    const replica = createReplica(
+      activity.channel,
+      activity,
+      globalPins ? undefined : { globalPins: false },
+    )
+    const stop = replica.start()
+    cleanup.push(stop, () => mock.close())
+    await until(() => replica.store.get(keys.summary('local', 'p1')))
+    await activity.channel.command('session.rename', {
+      deviceId: 'local',
+      sessionId: 'p1',
+      title: '置顶会话',
+    })
+    const rows = replica.store.get(keys.sidebarProjections('local')).recent
+    assert.equal(
+      rows.some((row) => row.sessionId === 'p1'),
+      !globalPins,
+    )
+    assert.equal(
+      replica.store.get(keys.summary('local', 'p1')).pinned,
+      true,
+      '只改变显示，不修改置顶资格',
+    )
+  })
+}
 afterEach(() => {
   for (const done of cleanup.splice(0).reverse()) done()
   files.clear()

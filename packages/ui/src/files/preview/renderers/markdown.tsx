@@ -8,8 +8,8 @@ import { Markdown } from '../../../transcript/Markdown.tsx'
 import { MermaidBlock } from '../../../transcript/Mermaid.tsx'
 import { type MarkdownPolicy, MarkdownPolicyContext } from '../../../transcript/markdown-policy.ts'
 import type { PreviewRendererProps } from '../contract.ts'
-import { imageInfo, svgInfo } from '../image-info.ts'
 import { documentTarget, headingSlug } from '../paths.ts'
+import { usePreviewImage } from '../use-image.ts'
 
 /** 文中的图没画出来时写的原因：还在读、读到了但不能显示、或者本来就不自动加载 */
 function imageNote(loads: boolean, content: FilePreview | null): MessageKey {
@@ -46,12 +46,14 @@ function DocumentImage({
   const element = useRef<HTMLSpanElement>(null)
   const [visible, setVisible] = useState(false)
   const [content, setContent] = useState<FilePreview | null>(null)
-  const [url, setUrl] = useState('')
-  const [failed, setFailed] = useState<MessageKey | null>(null)
+  const [readFailed, setReadFailed] = useState(false)
   const target = documentTarget(props.scope.root, props.scope.path, href)
   const path = target.kind === 'local' ? target.path : null
   const format = path ? previewKind(path) : null
   const loads = format === 'image' || format === 'svg'
+  const { image, failure, fail } = usePreviewImage(content, props.resources, path ?? href)
+  const failed = failure ?? (readFailed ? 'files.view.failed' : null)
+  const url = image?.url ?? ''
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -70,39 +72,18 @@ function DocumentImage({
         if (alive) setContent(result)
       },
       () => {
-        if (alive) setFailed('files.view.failed')
+        if (alive) setReadFailed(true)
       },
     )
     return () => {
       alive = false
     }
   }, [visible, path, format, loads, props.resources, props.scope])
-  useEffect(() => {
-    if (content?.kind !== 'ready') return
-    const bytes = decodeBase64(content.dataBase64)
-    const info = format === 'svg' ? svgInfo(new TextDecoder().decode(bytes)) : imageInfo(bytes)
-    if (!info) {
-      setFailed('preview.imageInvalid')
-      return
-    }
-    if (!props.resources.claimPixels(path ?? href, info.width * info.height)) {
-      setFailed('preview.imageBudget')
-      return
-    }
-    const made = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: info.mime }))
-    setUrl(made)
-    return () => URL.revokeObjectURL(made)
-  }, [content, format, props.resources, path, href])
   const shown = url && !failed
   return (
     <span ref={element} className="fp-resource" data-state={shown ? 'image' : 'note'}>
       {shown ? (
-        <img
-          className="fp-inline-image"
-          src={url}
-          alt={alt}
-          onError={() => setFailed('preview.imageInvalid')}
-        />
+        <img className="fp-inline-image" src={url} alt={alt} onError={fail} />
       ) : (
         <span className="dim">
           {alt || href} ·{' '}

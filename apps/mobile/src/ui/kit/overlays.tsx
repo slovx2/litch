@@ -3,11 +3,13 @@
 import { type ReactNode, useEffect, useState } from 'react'
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { ModalConsentHost } from '../../privacy/ConsentPresentation'
 import { useT } from '../i18n'
 import { useTheme } from '../theme'
 import { Button, sectionFont } from './controls'
-import { KeyboardFormScrollView } from './KeyboardForm'
+import { KeyboardCardScrollView } from './KeyboardCardScrollView'
 import { ModalKeyboardArea } from './ModalKeyboardArea'
+import { ChoiceMark } from './marks'
 
 export interface SheetAction {
   label: string
@@ -110,19 +112,21 @@ export function Sheet({
               },
             ]}
           >
-            <Text
-              style={[
-                styles.sheetText,
-                action.value !== undefined ? styles.sheetGrow : null,
-                { color: action.disabled ? c.ink3 : action.danger ? c.err : c.ink },
-              ]}
-            >
-              {action.selected !== undefined
-                ? `${action.selected ? theme.radio.on : theme.radio.off} ${action.label}`
-                : action.checked !== undefined
-                  ? `${action.checked ? theme.check.on : theme.check.off} ${action.label}`
-                  : action.label}
-            </Text>
+            <View style={[styles.sheetLabel, action.value !== undefined ? styles.sheetGrow : null]}>
+              {action.selected !== undefined ? (
+                <ChoiceMark kind="radio" state={action.selected ? 'on' : 'off'} />
+              ) : action.checked !== undefined ? (
+                <ChoiceMark kind="check" state={action.checked ? 'on' : 'off'} />
+              ) : null}
+              <Text
+                style={[
+                  styles.sheetText,
+                  { color: action.disabled ? c.ink3 : action.danger ? c.err : c.ink },
+                ]}
+              >
+                {action.label}
+              </Text>
+            </View>
             {action.value !== undefined ? (
               <Text numberOfLines={1} style={[styles.sheetValue, { color: c.ink2 }]}>
                 {action.value}
@@ -150,13 +154,19 @@ export function Sheet({
 export function Dialog({
   visible,
   onClose,
+  onRequestClose = onClose,
   onShow,
+  consentHost = true,
   children,
 }: {
   visible: boolean
   onClose(): void
+  /** 系统返回可先收键盘；遮罩与明确取消仍走 onClose。 */
+  onRequestClose?(): void
   /** 对话框出来以后（安卓上这时才拿得到窗口焦点，输入框此时拿焦点键盘才会出来） */
   onShow?(): void
+  /** 同意框自身不能再次注册承载点；其他弹窗中的发送复用最上层原生窗口。 */
+  consentHost?: boolean
   children: ReactNode
 }) {
   const theme = useTheme()
@@ -166,7 +176,7 @@ export function Dialog({
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={onRequestClose}
       onShow={onShow}
     >
       <Pressable style={styles.scrim} onPress={onClose} />
@@ -177,15 +187,17 @@ export function Dialog({
             { backgroundColor: c.raised, borderColor: c.line3, borderRadius: theme.radius.l },
           ]}
         >
-          <KeyboardFormScrollView
+          <KeyboardCardScrollView
+            trackInputs
             style={styles.dialogScroll}
             contentContainerStyle={styles.dialogBody}
             keyboardShouldPersistTaps="handled"
           >
             {children}
-          </KeyboardFormScrollView>
+          </KeyboardCardScrollView>
         </View>
       </ModalKeyboardArea>
+      {consentHost ? <ModalConsentHost active={visible} /> : null}
     </Modal>
   )
 }
@@ -236,6 +248,8 @@ export function Prompt({
   title,
   initial,
   placeholder,
+  note,
+  maxLength,
   submitLabel,
   onSubmit,
   onClose,
@@ -244,6 +258,9 @@ export function Prompt({
   title: string
   initial: string
   placeholder?: string
+  /** 输入框下的一句说明：存在哪里、有什么不明显的后果 */
+  note?: string
+  maxLength?: number
   submitLabel: string
   onSubmit(value: string): void
   onClose(): void
@@ -269,6 +286,7 @@ export function Prompt({
         onChangeText={setValue}
         placeholder={placeholder}
         placeholderTextColor={c.ink3}
+        maxLength={maxLength}
         onSubmitEditing={submit}
         // 填的是路径、目录、名字：不许输入法自作主张改字、改大小写（Gboard 曾把 …/s/work 改成 …/s/works ）
         autoCorrect={false}
@@ -286,6 +304,11 @@ export function Prompt({
           },
         ]}
       />
+      {note ? (
+        <Text testID="prompt:note" style={{ color: c.ink3, fontSize: theme.font.size.meta }}>
+          {note}
+        </Text>
+      ) : null}
       <View style={styles.dialogButtons}>
         <Button kind="plain" label={t('app.cancel')} onPress={onClose} />
         <Button label={submitLabel} testID="prompt:ok" onPress={submit} />
@@ -312,7 +335,8 @@ const styles = StyleSheet.create({
   },
   sheetNote: { paddingHorizontal: 16, paddingVertical: 12, lineHeight: 18 },
   sheetNoteTitled: { paddingTop: 0 },
-  sheetText: { fontSize: 16 },
+  sheetLabel: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sheetText: { fontSize: 16, flexShrink: 1 },
   sheetValued: {
     flexDirection: 'row',
     alignItems: 'center',

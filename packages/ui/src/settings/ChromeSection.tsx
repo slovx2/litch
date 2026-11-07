@@ -255,6 +255,14 @@ export function ChromeSection() {
               </div>
             </>
           )}
+          <p className="set-note" data-chrome-permissions>
+            {t('chrome.permissionsNote')}
+          </p>
+          {state?.instances.some((instance) => instance.stopped) ? (
+            <p className="set-note err" role="alert" data-chrome-stopped>
+              {t('chrome.stopped')}
+            </p>
+          ) : null}
           <TrustAll bridge={sites} />
           <SavedSites bridge={sites} />
           {devices.length ? (

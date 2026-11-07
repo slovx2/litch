@@ -1,0 +1,70 @@
+/* 侧栏最上面的快捷区：全局置顶、本机分组（sidebar/Shortcuts.tsx）。标题行沿用“未读 / 最近”的画法，
+   里面的对话不按设备分层，每行行首一个设备连线色块（颜色是设备的线色，和状态记号分开） */
+.sc-group {
+  margin-bottom: 8px;
+}
+.sc-head .dev-row {
+  min-width: 0;
+}
+.sc-head:has(> .row-add) .dev-row {
+  padding-inline-end: 32px;
+}
+.sc-head .arr {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+}
+.sc-head .arr.shut {
+  transform: rotate(-90deg);
+}
+.sc-head > .row-add {
+  opacity: 1;
+}
+.sc-body {
+  padding-inline: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+/* 设备连线色块：3 像素宽的竖条。离线画成虚的，设备没了是中性色 */
+.dev-tick {
+  flex: none;
+  width: 3px;
+  height: calc(12px * var(--fs));
+  margin-inline-start: -6px;
+  border-radius: 1px;
+  background: var(--wire);
+}
+.dev-tick.off {
+  background: repeating-linear-gradient(var(--wire) 0 2px, transparent 2px 4px);
+}
+.dev-tick.none {
+  background: var(--line-2);
+}
+.ws-row > .dev-tick {
+  margin-inline-start: 0;
+}
+/* 会话行里的色块画在行首留白里，不推记号和标题：有没有色块，记号和标题都在同一列，
+   置顶区、最近、未读的顶层行和经理行、子会话行对得齐（往左让出 6 像素，宽 3，再抵掉 3 像素） */
+.ss-row > .dev-tick {
+  margin-inline-end: -3px;
+}
+/* 本机组里另有几个在置顶区：一行淡字，不占按钮 */
+.sc-note {
+  padding: 2px 6px 4px 28px;
+  font-size: calc(11px * var(--fs));
+}
+/* 画不了的成员（未加载、已删除、设备没了）：一行占位，只能移出 */
+.sc-ghost .ss-row:disabled {
+  cursor: default;
+  opacity: 1;
+}
+.sc-ghost .title {
+  color: var(--ink-3);
+  font-style: italic;
+}
+/* 快捷区的设备名可能带“离线”，比投影里的略宽 */
+.sc-body .projection-device {
+  max-width: 14ch;
+}

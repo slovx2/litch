@@ -10,7 +10,7 @@
 
 - 设备地址、用户名、偏好、会话摘要和待发送内容保存在应用本地存储中。SSH 私钥保存在 iOS 安全存储中，用于验证连接；SSH 私钥不会作为会话内容上传。
 - 您发送的消息、文件、图片、终端输入和审批操作会传到您选择的远程计算机。计算机上的 harness、模型供应商和工具可能继续处理这些内容；其保存、使用和删除方式由您或相应服务提供方决定。
-- 手机端会在发起 AI 数据操作前请求同意；远程机器上的代理仍按您在该机器上的配置调用服务，由您在远程设备上控制，手机不拦截这些自主请求。撤回手机端同意不会停止已经运行的远程任务，也不会删除已传出的内容。
+- iOS 在首次启动时告知数据将交给您选择的远程电脑及其配置的第三方 AI 服务，并请求明确同意。该许可涵盖之后选择的设备、工具和供应商，保存至您在设置中撤回；升级及配置变化不重问。旧版已保存的许可沿用。不同意时不执行 AI 操作，保留草稿并提供查看告知的入口。Android 不显示此同意框；远程机器上的代理仍按您在该机器上的配置调用服务，由您在远程设备上控制，手机不拦截这些自主请求。撤回手机端同意不会停止已经运行的远程任务，也不会删除已传出的内容。
 - Litch 的发布者不运营用于集中收集这些远程会话内容的 Litch 云端会话服务。应用没有用于跨应用广告跟踪的 SDK，也不出售用户数据。
 - 文件或消息内的远程资源可能向资源提供者发起网络请求。打开外部网页后，该网站适用自己的隐私政策。
 
@@ -51,7 +51,7 @@ Device addresses, usernames, preferences, session summaries and pending inputs a
 
 Messages, attachments, images, terminal input and approval actions are sent to your selected computer. Harnesses, model providers and tools on that computer may process the content further. You or those service providers control its retention and deletion. The publisher does not operate a centralized Litch cloud service collecting these sessions. The app has no cross-app advertising tracking SDK and does not sell user data.
 
-The phone requests consent before initiating AI data actions. Agents on the remote machine continue to call services according to your configuration there; you control those agents on that machine. The phone does not intercept their autonomous requests. Withdrawing consent on the phone does not stop remote tasks already running or delete content already sent.
+On first launch, iOS explains that data goes to your selected remote computer and its configured third-party AI services and requests explicit consent. Consent covers devices, tools and providers you select later, remains saved until withdrawn in Settings, and is not requested again after upgrades or configuration changes. Previously saved consent is retained. If you decline, AI actions are not performed; drafts are kept and a review entry is provided. Android does not show this dialog. Agents on the remote machine continue to call services according to your configuration there; you control those agents on that machine. The phone does not intercept their autonomous requests. Withdrawing consent on the phone does not stop remote tasks already running or delete content already sent.
 
 Remote resources referenced in content may contact their providers. External websites have their own privacy policies.
 

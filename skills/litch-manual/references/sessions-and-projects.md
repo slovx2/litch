@@ -2,12 +2,25 @@
 
 侧栏运行标识会随已打开会话的实时回合更新，选中或清除未读不会隐藏运行、等待和后台任务标识。
 回合结束后若仍有后台任务，继续显示后台任务标识。
+从经理建议卡开始的工作线遵循同样的规则；回合中收到追加消息不表示回合结束，运行标识保持到回合完成。
+切换到其他会话后，原会话的侧栏状态仍持续更新。
 
 Sidebar activity follows live turns in open conversations. Selecting a row or clearing unread
 does not hide running, waiting or background-task indicators. Background activity remains visible
 after the foreground turn ends.
+Worklines started from manager suggestions follow the same rules. Additional messages during
+a turn do not end it; the running indicator stays until the turn finishes.
+Switching to another conversation does not stop sidebar status updates for the previous one.
 
 ## 手机输入与键盘
+
+评论和消息编辑弹窗在键盘上方滚动；添加评论只保存在草稿中，不请求 AI 数据同意。iOS 未同意数据使用时，发送编辑后的消息会提示去同意并保留编辑内容；同意后由用户再次发送。
+
+Comment and message-edit dialogs scroll above the keyboard. Adding a comment only updates the draft and does not request AI data consent. On iOS, sending without data consent shows a review entry and keeps the edited text. After agreeing, send again.
+
+提问卡片与审批说明在键盘弹出后自动滚到完整输入框。空间不足时，按钮随卡片内容滚动，多行文字在输入框内滚动。滚动收起键盘的操作不变。
+
+Question cards and approval notes scroll the full focused field into view above the keyboard. When space is limited, buttons scroll with the card and multiline text scrolls inside its field. Scrolling to dismiss the keyboard works as before.
 
 手机上的看板、设置和长表单会将正在编辑的输入框滚到键盘上方；标题和页签保持原位。添加设备、定时任务与建议任务编辑页的主操作固定在键盘上方，评论、改名和消息编辑弹窗也可直接提交。多行内容超过输入框高度后可在框内滚动。
 
@@ -61,6 +74,14 @@ On iOS, tap Done above the keyboard, including numeric and multiline keyboards, 
 
 On desktop and phone, `@` searches unarchived conversations, sub-sessions, managers and work lines on the same device. Each result shows its type, which is also searchable. Empty searches keep the recent-update order. The current session, already mentioned sessions and hidden native sub-sessions are excluded.
 
+选中后，输入框里的引用显示为会话标签（图标加标题），排队消息、编辑已发消息和对话中的用户消息也显示为同样的标签，点击打开该会话。标签整体删除：光标不会停在标签内部，紧挨标签按退格或删除会删掉整个标签。桌面端可以撤销恢复；复制含标签的文字后，粘贴到同一设备的输入框仍是标签；悬停显示全称，读屏读作“会话：标题”。草稿关闭或重开应用后标签仍在。发给模型的内容不变：正文写作 `＠[标题]`，末尾附会话列表。
+
+手机上长按已发送消息里的会话引用，会打开该消息的操作菜单；短按仍打开被引用的会话。
+
+On the phone, long-pressing a session mention in a sent message opens the message actions; tapping still opens the referenced session.
+
+After you pick one, the composer shows the mention as a session chip (icon and title). Queued messages, the edit box for a sent message and sent user messages show the same chip; clicking it opens the session. A chip is deleted as a whole: the caret never lands inside it, Backspace or Delete next to it removes the chip. On desktop, undo brings it back and copied text keeps its chips when pasted into a composer on the same device; hovering shows the full title and screen readers read "Session: title". Chips survive closing the draft and restarting the app. What the model receives is unchanged: `＠[title]` in the text plus the session list at the end.
+
 ## 侧栏「未读 / 最近」
 
 桌面「对话」视图在各设备前显示「未读」「最近」，两组可独立收起。
@@ -92,18 +113,18 @@ Managers also appear in Recent and Unread. Their worklines are grouped beneath t
 Viewing a manager for five continuous foreground seconds or completing an explicit action records a recent interaction. Reading, marking read, failed and rejected actions do not.
 Opening a manager from Recent, Unread, search, a notification or a session link opens the same workbench and board as the Managers directory. Desktop keeps the current navigation tree and the clicked Recent or Unread row. On phone, Back returns directly to the source page without visiting the Managers directory. Worklines and ordinary children keep their conversation view. Opening waits for session identity when needed. The projection groups remain hidden in the Managers tree.
 
-手机首页在定时任务入口之后、各台设备之前显示「最近」，规则与桌面相同：应用在前台、会话页正显示该会话时连续停留满 5 秒才记录；
+手机首页在定时任务入口之后依次显示「最近」「未读」，然后是各台设备。「最近」规则与桌面相同：应用在前台、会话页正显示该会话时连续停留满 5 秒才记录；
 切到后台、锁屏、下拉通知中心或离开会话页（回到列表、打开终端、文件、子代理页等）都会清零。在手机上发送、批准、停止等操作立即记录。
-手机只记录本机的查看和操作，与电脑上的「最近」各自独立。每行以设备色线区分设备，包含多台设备时远程设备的行第二行写设备名（本机的行不写）；
+手机只记录本机的查看和操作，与电脑上的「最近」各自独立。每行以设备色线区分设备，登记了多台设备时第二行写设备名（离线时带“离线”），
 普通子会话和经理工作线缩进显示在主项下面，不占主项分页名额，点击直接打开对应对话。行尾小箭头展开或收起，照桌面投影默认收起，开合独立记在手机上。
 收起时行尾动态点表示后代有未读、等待处理、运行或后台任务，读屏给出数量，包含更深层的后代。设备会话列表使用同样的提示，并让未读和待处理的后代及其父链在折叠时仍显示。
 On phone, Recent shows ordinary children and manager worklines below their parent. The compact arrow toggles children, collapsed by default, and remembers the state locally. Children do not count toward pagination. A dot on a folded parent indicates activity anywhere in its descendant tree, with its count available to screen readers. The device conversation list uses the same indicator and keeps unread and waiting descendants, together with their ancestors, visible when folded.
 点组头收起或展开；组头「⋯」可切换按项目聚合，并选择默认显示 5 / 10 / 20 条，
-「显示更多」每次增加 10 条，设置记在手机上。手机暂不显示「未读」组，会话列表里的未读标记照旧。
+「显示更多」每次增加 10 条，设置记在手机上。「未读」组没有未读对话时不显示，收起、聚合和条数与「最近」分开记。
 
 子会话符合条件时列出其主会话，展开主会话可查看整个子树，子会话不单独列出；父会话不在活动目录时不列出孤立子项。
 两组默认各显示 5 个主会话，「显示更多」每次增加 10 个，不限总数。组头菜单可分别选择按项目聚合、默认显示 5 / 10 / 20 条，设置在本机记住。
-默认不按项目聚合；聚合后项目按组内最新项排序、项目内按时间排序。当前显示的投影包含多台设备时，项目头显示“项目名 · 设备名”；只有一台设备时项目头不重复显示设备名。平铺时仅远程设备的行显示淡色设备名，本机行省略设备名，设备色线保留。
+默认不按项目聚合；聚合后项目按组内最新项排序、项目内按时间排序。当前显示的投影包含多台设备时，项目头显示“项目名 · 设备名”；只有一台设备时项目头不重复显示设备名。平铺时每行行首有设备色块；登记了多台设备时每行都显示淡色设备名（本机也显示，离线时带“离线”）。
 设备色线与原树一致；新添加设备自动选色优先蓝、紫、灰，已有设备的颜色保持原样。文字名称提供设备区分，不依赖颜色。组头菜单以勾选标明项目聚合状态和默认条数。
 最近组的时间是最后查看或操作的时间；未读组是主会话及子会话中最新未读结果的时间。悬停时间可查看口径和完整日期。
 项目的新建对话、重命名、颜色、置顶、移动与删除操作与原设备树相同。投影组不受设备树的 harness 筛选影响；原设备树仍保留全部原有条目。
@@ -178,11 +199,41 @@ that are not pinned or in a group are listed under the built-in Projects group (
 deleted). In the sidebar, drag a project onto a group's title row to put it at the end of that group
 (the row lights up), or between two projects to place it there (a line shows where it lands); dragging
 it onto Projects takes it out of its group. Drag a group's title row (or Projects') above or below
-another group to change their order, or use Move up / Move down in its menu; Pinned stays on top and
-the order is remembered on this computer only. Sessions can be dragged onto Pinned or a group's title, or
-back onto their own project. The phone app shows the same groups but has no dragging. Arranging the
+another group to change their order, or use Move up / Move down in its menu; the order is remembered
+on this computer only. Sessions can be dragged onto Pinned or a group's title, or back onto their own
+project. The phone app shows the same groups but has no dragging. Arranging the
 sidebar (groups, pins, order) is not available through the command; tell the user how to do it in the
 sidebar.
+
+### Desktop pinned and local groups
+
+Pinned sits at the top of the sidebar and merges the pinned sessions and projects of every device into
+one flat list. Each row starts with a small bar in the device's wire color and shows the device name
+(and "offline" when it is). Recent and Unread rows use the same marker; when grouped by project, the
+project row carries it too. The device name appears once more than one device is set up. In Recent and
+Unread an offline device shows a dashed bar instead of the word "offline", so the title keeps its room;
+the device name's tooltip and screen readers still say "offline". Pinning still lives on each device (pin and unpin need the device online and
+able to organize); only the order is local: drag rows, or use Move up / Move down, and the order is kept
+on this computer only. A pinned session appears only in Pinned, not again under its device,
+in Recent, Unread or a local group. Pinning still takes a session out of its device group, as before.
+
+Local groups are folders that live only in this desktop app (nothing is synced or sent to devices) and can mix sessions from any device. Create one from a session's menu
+(Add to local group → New local group…) or the **+** on the Local groups header; rename, reorder and
+delete it from its menu (deleting removes only the group). Add sessions by dragging them onto a group
+or from the session menu, reorder by dragging or Move up / Move down, and remove with "Remove from …".
+This works while a device is offline. Sessions in a local group still appear under their device. A
+member that is pinned is counted as "N more in Pinned" and returns to its place when unpinned. Members
+that can't be shown stay as a placeholder you can remove: not loaded yet, archived, deleted, not in the
+list, or device removed. The file is `sidebar-organizer.json` in the app data folder (a `.bak` keeps the
+previous version); if it is damaged or from a newer Litch, local groups are read-only and the file is
+left untouched.
+
+置顶区在侧栏最上方，合并所有设备的置顶对话和项目，每行有设备色块和设备名；置顶资格仍存在各设备上，先后只在本机排序。
+「最近」「未读」的行用同一个设备标记（按项目聚合时项目行也带）；登记了多台设备时才写设备名。设备离线时色块画成虚线，行上不写“离线”，以免挤占标题；悬停设备名和读屏仍会说明“离线”。
+桌面本机分组只保存在此客户端（不同客户端之间不同步），可混装各设备的对话，设备离线时也能整理；组里的对话照常显示在原设备下，已置顶的只在置顶区显示。
+手机首页不提供设备之上的置顶和本机分组，也不提供加入本机分组的长按入口。置顶会话、置顶项目和设备已有分区仍在各设备的列表里显示，原置顶／取消置顶和移出设备分区等操作保留。手机原有本机分组文件不删除；设备端置顶和分区数据不改变，桌面继续照常使用。
+
+Phone home screens no longer show cross-device Pins or Local groups, and session menus no longer offer local-group actions. Pinned sessions, pinned projects, and existing device sections remain inside each device's list, with the existing pin, unpin, and remove-from-section actions. Existing phone-local group files are retained. Device pin and section data is unchanged and remains available on desktop.
 
 ## Sessions
 
@@ -397,6 +448,17 @@ explain it:
 - **文件自动刷新**：桌面和手机打开文件页时，展开目录中的新增、删除和重命名自动更新，保留展开和选中状态。当前预览随文件改写重新读取；删除或重命名后原路径显示不存在。收起目录、关闭面板或离开手机文件页时停止相关监听；重新打开或重连后重新读取。批量变化会合并；设备不支持 `fs/watch` 时仍可手动刷新。
 - **在文件管理器中打开本机文件**：本机文件不显示另存操作。文件树的右键菜单、源码和渲染预览的标题栏与右键菜单、附件卡片提供此入口；对话中的文件链接打开预览后也可使用。macOS 显示“在 Finder 中打开”，Windows 和 Linux 显示“在文件管理器中打开”。文件会打开所在目录并选中，目录则打开自身；文件已删除或无法访问时会明确提示。远程会话中标为本机的附件仍按本机文件处理。
 - **远程文件另存到本地电脑**：远程设备的文件树右键菜单、当前预览的右键菜单及标题栏、附件卡片均可选择“另存到本地…”。系统保存对话框的目标属于运行客户端的这台电脑，默认使用原文件名，重名确认由系统处理。传输显示进度并可取消；完成后可打开文件或显示所在文件夹。只支持单个普通文件，需要设备服务提供 `fileDownload`；不支持时提示升级，不回退整文件读取。大文件按 256 KiB 分块读取和落盘；来源变化会停止，完成前不覆盖目标。手机尚无系统导出入口。
+- **Images in replies (desktop and phone)**: `![description](path-or-url)` displays a thumbnail.
+  Relative paths use the conversation's working directory; absolute paths may point anywhere on
+  its device. Paths containing `..` and network shares are rejected. The device probes content before
+  reading the image, so a renamed non-image does not become a preview. Click to enlarge: desktop
+  supports zoom, drag, previous/next, copy, save and Show in file browser; phone supports pinch and drag.
+  HTTP/HTTPS images are lazily downloaded by the conversation's device, without cookies or Referer,
+  using public-IP-only DNS-pinned connections. Private addresses and unsafe redirects are rejected.
+  Old devices and failed external downloads remain links; the viewing app never downloads directly.
+  Static PNG/JPEG/GIF/WebP and safe SVG are supported, with 8 MiB/image and 1 MiB/SVG limits. Corrupt,
+  animated or oversized images become file cards. Plain links, code and HTML do not embed media.
+  Audio/video embedding and tool-image history recovery are not part of this first image release.
 - **File previews (desktop)**: the Files tab opens tree/search results and file links read-only.
   Markdown renders by default (Source is available; line-number links open source). Static images
   and SVG can zoom. PDF supports pages, scroll, zoom and text selection. CSV/TSV shows strings, never
@@ -714,3 +776,27 @@ External navigation selects the tree row when automatic location is enabled. Whe
 上传从选定文件时开始，完成前不能发送。文件存放在会话设备主目录的 `.litch/attachments/<独立编号>/` 下，不同附件不覆盖同名文件；上传失败会尝试清除本次目录。设备服务启动时清理一次，之后每 24 小时清理修改时间超过 30 天的附件编号目录。会话仍打开、回合或后台任务仍在运行时保留；重新引用、打开附件会刷新目录修改时间。无法确认会话状态时暂不清理。清理不跟随软链，不触及附件根目录之外的路径。已自动清理的附件在桌面和手机显示“已清理”，不能再打开；历史中的文件名保留。上传副本不包含后续对源文件的修改。
 
 手机可打开会话设备上的附件；属于控制端电脑的附件需要回到该电脑打开。新发送的文件卡信息保存在消息文本中，重新读取原生历史仍能恢复；既有历史中的裸路径不作猜测转换。
+## AI 读取的图片 / Images read by AI
+
+工具读取图片、MCP 返回图片或浏览器和 Computer Use 截图时，对话的工具摘要右侧会显示一排小图。
+组折叠时显示最近三张和“+N”，展开后按工具显示；窄屏只显示最后一张。点击可浏览同组全部图片，
+用左右按钮或方向键切换、Home/End 跳首尾、点击图片放大或还原、放大后拖动，Ctrl+滚轮调整缩放。
+右上关闭或 Esc 返回；点击背景时，已放大先还原，再点击关闭。
+
+设备设置的“隐私 → 在对话里显示 AI 读取的图片”默认开启。关闭后不再保存、传输或显示工具图片，
+不影响模型读取图片。原图保存在会话设备，按需加载；单张上限 8MiB，设备图片内容缓存上限 512MiB，
+30 天未使用失效，既有缓存定期清理。旧历史仅有文件路径时，第一次打开取的是当前文件；源文件已删除、
+缓存已清理、格式不支持或上游没保留图片时不能恢复。Codex 已截成文字的大 MCP 结果不能补回。
+
+Images returned by Read, MCP, browser and Computer Use tools appear beside the tool summary.
+Collapsed groups show the latest three thumbnails and “+N”; expanded groups show each tool’s images.
+Narrow screens show the last image. Click to browse the whole group, use arrows or Home/End to navigate,
+click to zoom, drag while zoomed, and Ctrl+scroll to adjust zoom. Close with the top-right button or Escape;
+a background click first resets zoom, then closes the viewer.
+
+**Device settings → Privacy → Show images read by AI in conversations** is on by default. Turning it off
+stops saving, transferring and displaying tool images without changing what the model receives.
+Originals load on demand from the session device: up to 8MiB each, within a 512MiB image-content cache,
+expiring after 30 days without use. Existing cached data is cleaned periodically. Old history containing
+only a path reads the current file on first view. Deleted files, evicted images and media omitted by the
+harness cannot be recovered; this includes large Codex MCP results already truncated to text.

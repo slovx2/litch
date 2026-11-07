@@ -1,0 +1,96 @@
+appId: dev.litch.app
+name: mock-对话图片与全屏
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- openLink: litch://new?device=local&prompt=media%20p1
+- extendedWaitUntil:
+    visible:
+      id: media:card
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: 'media:thumbnail:P1 图片'
+    direction: UP
+    timeout: 30000
+- tapOn:
+    id: 'media:thumbnail:P1 图片'
+- extendedWaitUntil:
+    visible:
+      id: media:fullscreen-web
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: media:zoom-value
+      text: '100%'
+    timeout: 15000
+# Maestro 无双指命令：按钮走同一视口变换；双指事件另由 media-gestures 单测覆盖。
+- tapOn:
+    id: media:zoom-in
+- extendedWaitUntil:
+    visible:
+      id: media:zoom-value
+      text: '125%'
+    timeout: 15000
+- takeScreenshot: media-fullscreen-zoom
+- swipe:
+    start: 40%, 50%
+    end: 65%, 60%
+    duration: 700
+- tapOn:
+    id: media:zoom-out
+- assertVisible:
+    id: media:zoom-value
+    text: '100%'
+- tapOn:
+    id: media:close
+- assertNotVisible:
+    id: media:fullscreen-web
+- scrollUntilVisible:
+    element:
+      id: 'media:thumbnail:工作区外'
+    direction: DOWN
+    timeout: 15000
+# example.invalid 只能通过 mock media.image 返回，原生直接下载不可能成功。
+- scrollUntilVisible:
+    element:
+      id: 'media:thumbnail:外网图片'
+    direction: DOWN
+    timeout: 15000
+- takeScreenshot: media-device-download
+- scrollUntilVisible:
+    element:
+      id: 'media:thumbnail:SVG'
+    direction: DOWN
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: 'media:failure:坏图'
+    direction: DOWN
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: 'media:failure:超限'
+    direction: DOWN
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: 'media:failure:失败链接'
+    direction: DOWN
+    timeout: 15000
+- takeScreenshot: media-fallbacks
+- openLink: litch://new?device=build&prompt=media%20p1
+- extendedWaitUntil:
+    visible:
+      id: media:card
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: 'media:thumbnail:P1 图片'
+    direction: UP
+    timeout: 30000
+- takeScreenshot: media-remote

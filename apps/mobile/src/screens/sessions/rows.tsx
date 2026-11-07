@@ -19,7 +19,8 @@ import { dropNativeChildren } from '../../../../../packages/ui/src/sidebar/filte
 import { treeUnread, unreadIn, withAncestors } from '../../../../../packages/ui/src/sidebar/tree.ts'
 import { useKey, useReplica, useServices } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
-import { StatusMark } from '../../ui/kit/controls'
+import { Caret, Icon } from '../../ui/kit/Icon'
+import { StatusMark } from '../../ui/kit/marks'
 import { useTheme } from '../../ui/theme'
 import { useNow } from './clock'
 import { type GroupHead, groupKeyOf } from './list'
@@ -169,7 +170,7 @@ export function SummaryLine({
                 },
               ]}
             >
-              ⏱ {t('timed.mark')}
+              {t('timed.mark')}
             </Text>
           ) : null}
           {waiting ? (
@@ -299,7 +300,7 @@ export function ChildLine({
             },
           ]}
         >
-          ⏱
+          {t('timed.mark')}
         </Text>
       ) : null}
       {summary.lineage && !summary.lineage.reportParent ? (
@@ -373,12 +374,14 @@ export function SessionFold({
       ]}
     >
       {count > 0 ? (
-        <Text testID={`${testID}:activity`} style={{ color: theme.c.accent, fontSize: 12 }}>
-          •
-        </Text>
+        <View
+          testID={`${testID}:activity`}
+          style={[styles.activity, { backgroundColor: theme.c.accent }]}
+        />
       ) : null}
+      <Caret open={!folded} size={12} />
       <Text style={[styles.foldText, { color: theme.c.ink3, fontFamily: theme.font.mono }]}>
-        {folded ? '▸' : '▾'} {kids}
+        {kids}
       </Text>
     </Pressable>
   )
@@ -566,9 +569,9 @@ export const GroupRow = memo(function GroupRow({
         onLongPress={onMenu ? () => onMenu(head) : undefined}
         style={[styles.groupMain, inner ? styles.groupInner : null]}
       >
-        <Text style={[styles.chevron, { color: c.ink3, fontFamily: theme.font.mono }]}>
-          {collapsed ? '▸' : '▾'}
-        </Text>
+        <View style={styles.chevron}>
+          <Caret open={!collapsed} size={12} />
+        </View>
         <Text
           numberOfLines={1}
           style={[styles.groupName, { color: c.ink2, fontFamily: theme.font.mono }]}
@@ -599,7 +602,7 @@ export const GroupRow = memo(function GroupRow({
           onPress={() => onNew(head)}
           style={styles.groupAction}
         >
-          <Text style={[styles.groupActionText, { color: c.accent }]}>＋</Text>
+          <Icon name="plus" size={18} color={c.accent} />
         </Pressable>
       ) : null}
       {onMenu ? (
@@ -611,7 +614,7 @@ export const GroupRow = memo(function GroupRow({
           onPress={() => onMenu(head)}
           style={styles.groupAction}
         >
-          <Text style={[styles.groupActionText, { color: c.ink2 }]}>⋯</Text>
+          <Icon name="more" size={18} color={c.ink2} />
         </Pressable>
       ) : null}
     </View>
@@ -632,9 +635,9 @@ export function ArchivedHead({ open, onToggle }: { open: boolean; onToggle(): vo
       style={[styles.group, styles.archivedHead, { backgroundColor: c.win, borderColor: c.line2 }]}
     >
       <View style={styles.groupMain}>
-        <Text style={[styles.chevron, { color: c.ink3, fontFamily: theme.font.mono }]}>
-          {open ? '▾' : '▸'}
-        </Text>
+        <View style={styles.chevron}>
+          <Caret open={open} size={12} />
+        </View>
         <Text style={[styles.groupName, { color: c.ink2, fontFamily: theme.font.mono }]}>
           {t('archived.title')}
         </Text>
@@ -686,6 +689,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   foldText: { fontSize: 12 },
+  activity: { width: 6, height: 6, borderRadius: 3 },
   sessionText: { flex: 1, minWidth: 0, gap: 4 },
   line: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { flex: 1 },
@@ -710,13 +714,12 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
   },
   groupInner: { paddingLeft: 26 },
-  chevron: { width: 14, fontSize: 12 },
+  chevron: { width: 14, alignItems: 'center' },
   groupName: { flexShrink: 1, fontSize: 13, fontWeight: '600' },
   groupCount: { fontSize: 11 },
   grow: { flex: 1 },
   tally: { flex: 1, fontSize: 11, textAlign: 'right' },
   groupAction: { width: 44, height: '100%', alignItems: 'center', justifyContent: 'center' },
-  groupActionText: { fontSize: 18, fontWeight: '600' },
   archivedHead: { marginTop: 16, borderTopWidth: StyleSheet.hairlineWidth },
   note: { paddingHorizontal: 16, paddingVertical: 14, fontSize: 13 },
 })

@@ -45,21 +45,23 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
     <Card
       testID="request:clientAsk"
       title={t(
-        ask.kind === 'computerSelf'
-          ? 'computerSelf.title'
-          : ask.kind === 'chromeTab'
-            ? 'chrome.tab'
-            : ask.kind === 'chromeInstance'
-              ? 'chrome.instance'
-              : ask.kind === 'chromeSignIn'
-                ? 'chrome.signIn'
-                : ask.kind === 'site'
-                  ? ask.browser === 'chrome'
-                    ? 'chrome.approve'
-                    : 'clientAsk.site'
-                  : ask.kind === 'machine'
-                    ? MACHINE_TITLE[ask.action]
-                    : 'signInAsk.title',
+        ask.kind === 'browserDownload'
+          ? 'browser.download.title'
+          : ask.kind === 'computerSelf'
+            ? 'computerSelf.title'
+            : ask.kind === 'chromeTab'
+              ? 'chrome.tab'
+              : ask.kind === 'chromeInstance'
+                ? 'chrome.instance'
+                : ask.kind === 'chromeSignIn'
+                  ? 'chrome.signIn'
+                  : ask.kind === 'site'
+                    ? ask.browser === 'chrome'
+                      ? 'chrome.approve'
+                      : 'clientAsk.site'
+                    : ask.kind === 'machine'
+                      ? MACHINE_TITLE[ask.action]
+                      : 'signInAsk.title',
       )}
       waiting={waiting}
       error={error}
@@ -72,17 +74,19 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
           kind={option === primary ? 'primary' : option.role === 'decline' ? 'ghost' : 'plain'}
           testID={`request:option:${option.id}`}
           label={t(
-            ask.kind === 'computerSelf' && option.role === 'acceptAlways'
-              ? 'computerSelf.day'
-              : ask.kind === 'computerSelf' && option.role === 'accept'
-                ? 'computerSelf.once'
-                : ask.kind === 'computerSelf' && option.role === 'acceptSession'
-                  ? 'computerSelf.session'
-                  : ask.kind === 'chromeTab' && option.role === 'accept'
-                    ? 'chrome.tabAllow'
-                    : ask.kind === 'chromeSignIn' && option.role === 'accept'
-                      ? 'chrome.signInDone'
-                      : optionText[option.role],
+            ask.kind === 'browserDownload' && option.role === 'accept'
+              ? 'browser.download.allow'
+              : ask.kind === 'computerSelf' && option.role === 'acceptAlways'
+                ? 'computerSelf.day'
+                : ask.kind === 'computerSelf' && option.role === 'accept'
+                  ? 'computerSelf.once'
+                  : ask.kind === 'computerSelf' && option.role === 'acceptSession'
+                    ? 'computerSelf.session'
+                    : ask.kind === 'chromeTab' && option.role === 'accept'
+                      ? 'chrome.tabAllow'
+                      : ask.kind === 'chromeSignIn' && option.role === 'accept'
+                        ? 'chrome.signInDone'
+                        : optionText[option.role],
           )}
           disabled={busy}
           onPress={() => respond({ optionId: option.id })}
@@ -116,6 +120,15 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
         <>
           <Meta label={t('chrome.instanceLabel')} value={ask.name} />
           <Why>{t('chrome.instanceNote')}</Why>
+        </>
+      ) : ask.kind === 'browserDownload' ? (
+        <>
+          <Well>{ask.filename}</Well>
+          <Meta
+            label={t('clientAsk.origin')}
+            value={`${ask.origin} · ${ask.totalBytes === null ? t('browser.download.unknown') : downloadSize(ask.totalBytes)}`}
+          />
+          <Why>{t('browser.download.note')}</Why>
         </>
       ) : ask.kind === 'chromeSignIn' ? (
         <>
@@ -156,4 +169,12 @@ function MachineWhat({ ask }: { ask: MachineAskView }) {
       {ask.path ? <Meta label={t('machine.ask.path')} value={ask.path} /> : null}
     </>
   )
+}
+
+/** 下载审批卡上的大小，和桌面端的写法一致 */
+function downloadSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KiB`
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MiB`
+  return `${(bytes / 1024 ** 3).toFixed(1)} GiB`
 }

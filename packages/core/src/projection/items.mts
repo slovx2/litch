@@ -1,6 +1,9 @@
 import { parseFileAttachments } from '../../../protocol/src/file-attachments.mjs'
 import { inputDelivery } from '../../../protocol/src/input-delivery.mjs'
 import { wrapQuestionFields } from '../../../protocol/src/pending-history.mjs'
+import { toolImagesOf } from '../../../protocol/src/tool-images.mjs'
+import { imageInfo } from '../image-info.mjs'
+import { decodeBase64 } from '../text/bytes.mjs'
 // 投影的第一步：协议条目 → 显示条目。纯函数，不碰连接，不碰状态。
 // 各种 harness 的差异在这里消化掉，界面拿到的条目和 harness 无关。
 // 对面的协议版本可能比我们的类型新，所以不认识的条目类型、缺的字段都有兜底，不抛错。
@@ -736,6 +739,32 @@ export function settledItem(item: ItemView, turnCompleted: boolean): ItemView | 
  * streaming 表示这个条目所在的回合还在进行：助手消息和推理本身不带状态，要靠它判断。
  */
 export function projectItem(item: ThreadItem, streaming = false): ItemView {
+  const images = toolImagesOf((item as { litchToolImages?: unknown }).litchToolImages).map(
+    (image) => {
+      if (!image.thumbnail) return image
+      try {
+        const info = imageInfo(decodeBase64(image.thumbnail.dataBase64))
+        if (
+          info?.mime === 'image/png' &&
+          info.width === image.thumbnail.width &&
+          info.height === image.thumbnail.height
+        )
+          return image
+      } catch {
+        /* 不可信缩略图降为占位，原图仍需按需读取并完整预检。 */
+      }
+      return { ...image, thumbnail: null }
+    },
+  )
+  const projected = projectPlainItem(item, streaming)
+  if (!images.length) return projected
+  if (projected.kind === 'toolCall') return { ...projected, images }
+  if (item.type === 'imageView')
+    return toolCall(item.id, { tool: phrase('notice.imageView'), images })
+  return projected
+}
+
+function projectPlainItem(item: ThreadItem, streaming = false): ItemView {
   const id = item.id
   const open: ItemStatus = streaming ? 'inProgress' : 'completed'
   switch (item.type) {

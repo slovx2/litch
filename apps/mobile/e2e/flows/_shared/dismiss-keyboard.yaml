@@ -1,9 +1,12 @@
 # 数字与多行键盘没有系统回车键；iOS 使用应用提供的统一完成入口。
 appId: dev.litch.app
+tags: [privacy]
 ---
 - runFlow:
     when:
       platform: iOS
+      visible:
+        id: keyboard:done
     commands:
       - tapOn:
           id: keyboard:done
@@ -15,4 +18,15 @@ appId: dev.litch.app
     when:
       platform: Android
     commands:
-      - hideKeyboard
+      # 验收镜像使用 Gboard。只在其键盘存在时发一次返回，不使用会重复返回的 hideKeyboard。
+      # 没有键盘时返回会关闭讨论等 Modal；原生键盘已收起时不能再发一次。
+      - runFlow:
+          when:
+            visible:
+              id: com.google.android.inputmethod.latin:id/keyboard_holder
+          commands:
+            - pressKey: BACK
+            - extendedWaitUntil:
+                notVisible:
+                  id: com.google.android.inputmethod.latin:id/keyboard_holder
+                timeout: 5000

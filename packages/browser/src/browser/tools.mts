@@ -6,6 +6,11 @@ import { requestSignIn } from './tools-signin.mjs'
 import { navigate, show, tabs } from './tools-tabs.mjs'
 
 export const TOOLS: Readonly<Record<string, Tool>> = {
+  downloads: async (call) =>
+    call.done(
+      null,
+      'Download status follows. Pending files require individual user approval; do not retry a download.',
+    ),
   tabs,
   navigate,
   snapshot,

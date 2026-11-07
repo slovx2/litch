@@ -234,7 +234,21 @@ test('桌面端：人在桌面端答了也收掉；没有桌面端号、不是�
 
   await w.ask(signInAsk({ desktopId: null }), 'k2')
   await w.ask({ kind: 'site', origin: 'https://a.example', url: 'https://a.example/' }, 'k3')
-  assert.equal(w.seen('litch/approval/open').length, 1)
+  assert.equal(w.seen('litch/approval/open').length, 2)
+  const site = w.seen('litch/approval/open')[1]
+  assert.equal(site?.kind, 'browserSite')
+  assert.deepEqual(site?.summary, {
+    origin: 'https://a.example',
+    device: 'song-debian',
+    browser: 'builtin',
+  })
+  const phoneAnswers = w.sent.filter((message) => message.op === 'phoneAnswer').length
+  w.broadcast('litch/approval/answered', { ...answer, id: site?.id, ref: 'session' })
+  await settled()
+  assert.equal(w.sent.filter((message) => message.op === 'phoneAnswer').length, phoneAnswers)
+  w.reply({ op: 'askDone', askId: 'k3' })
+  await settled()
+  assert.ok(w.seen('litch/approval/close').some((row) => row.id === site?.id))
 
   const old = world(['harness'])
   old.core.start()

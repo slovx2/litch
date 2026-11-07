@@ -167,6 +167,7 @@ test('CDP 白名单', () => {
     'Input.dispatchKeyEvent',
     'Input.insertText',
     'DOM.setFileInputFiles',
+    'Page.createIsolatedWorld',
     'Runtime.evaluate',
   ]) {
     assert.equal(isAllowedCdp(method), true, method)

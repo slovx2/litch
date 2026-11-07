@@ -41,8 +41,9 @@ const projected = {
   signInFailures: projectedFailures,
 }
 
-test('全部平台/批量/portable 的 schema、说明和指令与抽取前基线逐字相同', () => {
-  assert.equal(baseline.commit, 'a686bcea14410f34b386a03fda0e611de7e9e303')
+// 基线取自最近一次反合的 main 提交里 protocol 的定义；反合带来 schema 变化时，先核对与 main 逐字相同再更新。
+test('全部平台/批量/portable 的 schema、说明和指令与 main 基线逐字相同', () => {
+  assert.equal(baseline.commit, 'f52180dbc96584f414db3f48725b27c375ed85d5')
   assert.deepEqual(Object.keys(source).sort(), Object.keys(baseline.sha256).sort())
   for (const [name, value] of Object.entries(source)) {
     assert.equal(

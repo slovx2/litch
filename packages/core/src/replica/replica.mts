@@ -45,6 +45,8 @@ import type { SuggestionsView, SuggestionView } from '../model-suggestions.mjs'
 import type { TaskRunApprovalView, TaskRunView, TasksView, TaskView } from '../model-tasks.mjs'
 import type { TerminalInfo, TerminalsOp, TerminalsView } from '../model-terminal.mjs'
 import type { AgentThreadView, SessionNoteView, SessionProposalView } from '../model-tree.mjs'
+import type { OrganizerOp, OrganizerView } from '../organizer/host.mjs'
+import { pinCover } from '../organizer/shortcuts.mjs'
 import type { Text } from '../phrase.mjs'
 import { type AskAnswers, gatherAnswers, parseAskReply } from '../projection/asks.mjs'
 import { changedKeys } from '../projection/manage.mjs'
@@ -70,6 +72,13 @@ export const keys = {
   history: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:history`,
   /** SidebarProjections：本设备的未读 / 最近根会话投影，包含经理子树的聚合。 */
   sidebarProjections: (deviceId: string) => `sidebar:${deviceId}:projections`,
+  /**
+   * string[]：画在全局置顶区里的会话（置顶的、置顶项目里的，连同它们的子会话），按标识排。
+   * 设备目录、最近、未读、本机分组都不再画这些（organizer/shortcuts.mts 的 pinCover）
+   */
+  pinCover: (deviceId: string) => `sidebar:${deviceId}:pinCover`,
+  /** OrganizerView：这台客户端上的本机整理（本机分组、置顶先后、收起），所有设备共用一份 */
+  organizer: 'organizer',
   /** string[]：设备标识，按添加顺序 */
   devices: 'devices',
   /** DeviceView */
@@ -559,7 +568,11 @@ function sameHarnesses(a: SessionHarnesses, b: SessionHarnesses): boolean {
   return ids.length === Object.keys(b).length && ids.every((id) => a[id] === b[id])
 }
 
-export function createReplica(channel: CoreChannel, activity?: SidebarActivity): Replica {
+export function createReplica(
+  channel: CoreChannel,
+  activity?: SidebarActivity,
+  options: { globalPins?: boolean } = {},
+): Replica {
   const store = new KeyedStore()
   const decisionListeners = new Set<(manager: ManagerView, decision: ManagerDecisionView) => void>()
   const managerLists = new Map<string, { stop(): void; rows: Map<string, ManagerView> }>()
@@ -855,7 +868,16 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
 
   // 投影的主项、项目或排序依据没变就不通知；正文流式增量不经过侧栏目录。
   const refreshProjections = (deviceId: string, sessions: Map<string, SessionSummary>) => {
-    const next = projectSidebarGroups(deviceId, sessions, (id) => activity?.time(deviceId, id) ?? 0)
+    // 画在置顶区里的不进最近、未读（置顶只出现一次）
+    const covered = new Set(
+      options.globalPins === false ? [] : (store.get<string[]>(keys.pinCover(deviceId)) ?? []),
+    )
+    const next = projectSidebarGroups(
+      deviceId,
+      sessions,
+      (id) => activity?.time(deviceId, id) ?? 0,
+      covered,
+    )
     const previous = store.get<SidebarProjections>(keys.sidebarProjections(deviceId))
     if (JSON.stringify(previous) !== JSON.stringify(next)) {
       store.set(keys.sidebarProjections(deviceId), next)
@@ -869,7 +891,6 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
     listed: readonly SectionView[],
   ) => {
     const allSessions = sessions
-    refreshProjections(deviceId, allSessions)
     // 保留原选择器的分组次序，但目录独立于普通侧栏的经理树过滤。
     const catalogGroups = groupSessions(allSessions.values())
     settlePlaced(catalogGroups, allSessions)
@@ -958,6 +979,15 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
     if (!nested || JSON.stringify(nested) !== JSON.stringify(children)) {
       store.set(keys.children(deviceId), children)
     }
+    const cover = pinCover(
+      next,
+      store.get<SidebarView['workspaces']>(keys.workspaces(deviceId)) ?? [],
+      children,
+    )
+    const covered = store.get<string[]>(keys.pinCover(deviceId))
+    if (!covered || covered.join('\n') !== cover.join('\n'))
+      store.set(keys.pinCover(deviceId), cover)
+    refreshProjections(deviceId, allSessions)
     const starts = startsOf(allSessions)
     const started = store.get<ProposalStarts>(keys.proposalStarts(deviceId))
     if (!started || JSON.stringify(started) !== JSON.stringify(starts)) {
@@ -1384,11 +1414,25 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
           },
         },
       )
+      // 本机整理：所有窗口订阅同一份，核心写完推过来
+      const stopOrganizer = channel.subscribe(
+        { kind: 'organizer' },
+        {
+          snapshot(view: OrganizerView) {
+            store.set(keys.organizer, view)
+          },
+          delta(ops: OrganizerOp[]) {
+            const last = ops.at(-1)
+            if (last) store.set(keys.organizer, last.view)
+          },
+        },
+      )
       return () => {
         stopActivity?.()
         activity?.view(null)
         activity?.flush()
         stopApp()
+        stopOrganizer()
         for (const deviceId of [...sidebars.keys()]) dropSidebar(deviceId)
       }
     },

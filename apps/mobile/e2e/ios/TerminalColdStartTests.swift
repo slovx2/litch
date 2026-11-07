@@ -8,6 +8,7 @@ final class TerminalColdStartTests: XCTestCase {
     XCUIDevice.shared.orientation = .portrait
     app.terminate()
     app.launch()
+    app.agreeToLaunchConsentIfNeeded()
     XCTAssertTrue(app.otherElements["devices"].waitForExistence(timeout: 15))
     app.open(URL(string: "litch-dev://boot?mode=mock")!)
     let local = app.buttons["device:local"]

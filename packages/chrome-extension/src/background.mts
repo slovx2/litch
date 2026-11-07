@@ -40,6 +40,7 @@ export function createExtensionRuntime(options: ExtensionOptions) {
     stopped: `${options.storagePrefix}StoppedTurns`,
     pointers: `${options.storagePrefix}PointerLeases`,
     instance: `${options.storagePrefix}InstanceId`,
+    control: `${options.storagePrefix}ControlStopped`,
   }
   let active = false
   let generation = 0
@@ -79,6 +80,8 @@ export function createExtensionRuntime(options: ExtensionOptions) {
     paused: new Set(),
     generations: new Map(),
     stoppedTurns: new Set(),
+    stopped: false,
+    productName: options.identity.productName,
     console: new Map(),
     send(message) {
       if (port) {
@@ -109,14 +112,44 @@ export function createExtensionRuntime(options: ExtensionOptions) {
   }
 
   async function stopAll(): Promise<void> {
+    state.stopped = true
+    await chrome.storage.local.set({ [keys.control]: true })
+    state.send({ kind: 'control', stopped: true })
+    await controlLabel()
     for (const grant of state.grants.values()) state.stoppedTurns.add(ownerKey(grant.owner))
     await chrome.storage.session.set({ [keys.stopped]: [...state.stoppedTurns].slice(-100) })
     await Promise.all([...state.grants.keys()].map((id) => state.revoke(id, 'userStopped')))
   }
 
+  async function controlLabel(): Promise<void> {
+    const zh = chrome.i18n.getUILanguage().startsWith('zh')
+    const name = options.identity.productName
+    await chrome.action.setTitle({
+      title: state.stopped
+        ? zh
+          ? `${name} — 控制已停止，点击重新打开`
+          : `${name} — Control stopped; click to resume`
+        : zh
+          ? `${name} — 点击停止控制`
+          : `${name} — Click to stop control`,
+    })
+    await chrome.action.setBadgeText({ text: state.stopped ? 'OFF' : '' })
+  }
+
+  async function resumeControl(): Promise<void> {
+    await chrome.storage.local.set({ [keys.control]: false })
+    state.stoppedTurns.clear()
+    await chrome.storage.session.remove(keys.stopped)
+    state.stopped = false
+    state.send({ kind: 'control', stopped: false })
+    await controlLabel()
+  }
+
   function register(): void {
     listen(chrome.action.onClicked, () => {
-      void stopAll()
+      if (!ready) return
+      if (state.stopped) void resumeControl()
+      else void stopAll()
     })
     listen(chrome.runtime.onInstalled, () => {
       void connect()
@@ -142,6 +175,7 @@ export function createExtensionRuntime(options: ExtensionOptions) {
             version: chrome.runtime.getManifest().version,
             protocol: wire,
             claimed: state.grants.size,
+            stopped: state.stopped,
           })
           return false
         }
@@ -314,6 +348,8 @@ export function createExtensionRuntime(options: ExtensionOptions) {
         instanceId,
         epoch: state.epoch,
         name: 'Chrome',
+        stopped: state.stopped,
+        inputReceipts: true,
       })
       attempt = 0
     }
@@ -329,6 +365,7 @@ export function createExtensionRuntime(options: ExtensionOptions) {
 
   /** 不兼容时在工具栏图标上标出来；详细原因和办法在 Litch 设置页。 */
   async function showCompatibility(welcome: ChromeWelcome | null): Promise<void> {
+    if (!welcome?.incompatible) return controlLabel()
     const title =
       welcome?.incompatible === 'litchOutdated'
         ? `${options.identity.productName} — Update ${options.identity.productName} (${welcome.litchVersion}) to use this extension`
@@ -369,6 +406,8 @@ export function createExtensionRuntime(options: ExtensionOptions) {
   }
 
   async function initialize(run: number): Promise<void> {
+    state.stopped = (await chrome.storage.local.get(keys.control))[keys.control] === true
+    await controlLabel()
     await state.presentation.recover()
     const saved = await chrome.storage.session.get([keys.attached, keys.stopped, keys.pointers])
     for (const prior of saved[keys.pointers] ?? [])

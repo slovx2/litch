@@ -16,8 +16,6 @@ use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXVIRTUALSCRE
 pub const INJECTED_TAG: usize = 0x4C49_5443;
 /// 一个滚轮刻度
 const WHEEL_DELTA: i32 = 120;
-/// 一批最多发多少个事件（点击、组合键这类一次发多个事件时分批，免得数组太大）
-const BATCH: usize = 200;
 /// 逐字发时每个键击之间等多久（毫秒）。只在退回逐字（粘贴不可用、或控制台类窗口）时用。
 const TYPE_GAP_MS: u64 = 5;
 /// 'V' 的虚拟键码（Ctrl+V 粘贴用）
@@ -61,11 +59,39 @@ fn mouse(dx: i32, dy: i32, data: i32, flags: MOUSE_EVENT_FLAGS) -> INPUT {
 }
 
 fn send(inputs: &[INPUT]) -> RpcResult<()> {
-    for chunk in inputs.chunks(BATCH) {
-        super::foreground::check_input()?;
-        unsafe { SendInput(chunk, std::mem::size_of::<INPUT>() as i32) };
-    }
+    crate::input_sequence::send(inputs, 1, super::foreground::check_input, inject)?;
     super::foreground::check_completion()
+}
+
+fn inject(inputs: &[INPUT]) -> usize {
+    let sent = unsafe { SendInput(inputs, std::mem::size_of::<INPUT>() as i32) } as usize;
+    if sent != inputs.len() { super::system::log("SendInput 拒绝输入（包括收尾释放）"); }
+    sent
+}
+
+impl crate::input_sequence::Event for INPUT {
+    // 键码/Unicode 码元/扩展标志，或者鼠标按钮标志；只释放当前动作实际按下的输入。
+    type Held = (u32, u16, u16, u32);
+    fn transition(&self) -> Option<(Self::Held, Option<Self>)> {
+        unsafe {
+            if self.r#type == INPUT_KEYBOARD {
+                let k = self.Anonymous.ki;
+                let flags = k.dwFlags.0 & !KEYEVENTF_KEYUP.0;
+                let held = (0, k.wVk.0, k.wScan, flags);
+                return Some((held, if k.dwFlags.contains(KEYEVENTF_KEYUP) { None }
+                    else { Some(key(k.wVk.0, k.wScan, KEYBD_EVENT_FLAGS(flags) | KEYEVENTF_KEYUP)) }));
+            }
+            if self.r#type == INPUT_MOUSE {
+                let flags = self.Anonymous.mi.dwFlags;
+                for (down, up) in [(MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP),
+                    (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP), (MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP)] {
+                    if flags.contains(down) { return Some(((1, 0, 0, down.0), Some(mouse(0, 0, 0, up)))); }
+                    if flags.contains(up) { return Some(((1, 0, 0, down.0), None)); }
+                }
+            }
+            None
+        }
+    }
 }
 
 /// 把光标移到屏幕坐标（绝对），作为一条输入
@@ -185,6 +211,7 @@ fn is_console_class(class: &str) -> bool {
 /// 有确认回调时：发一次等最多 800ms，没变化就再发一次（剪贴板里还是要打的文字）再等；两次都没变化回
 /// Unconfirmed。没有确认回调（焦点元素既没有值也没有文字）就固定等 PASTE_SETTLE_MS，当作已落下。
 fn paste_text(value: &str, confirmed: Option<&dyn Fn() -> bool>) -> RpcResult<Paste> {
+    super::foreground::check_input()?;
     let saved = clipboard::get_text();
     if !clipboard::set_text(value) {
         return Ok(Paste::ClipboardUnavailable);
@@ -195,31 +222,38 @@ fn paste_text(value: &str, confirmed: Option<&dyn Fn() -> bool>) -> RpcResult<Pa
         }
         return Ok(Paste::ClipboardUnavailable);
     }
-    struct Restore { saved: Option<String>, written: String }
+    struct Restore { saved: Option<String>, written: String, not_before: Option<Instant> }
     impl Drop for Restore {
         fn drop(&mut self) {
+            // Ctrl+V 已交给系统时，目标可能还没读取剪贴板。取消只禁止后续输入，
+            // 收尾仍留出读取时间，不能把旧剪贴板抢先放回去让目标误粘用户原来的内容。
+            if let Some(deadline) = self.not_before {
+                std::thread::sleep(deadline.saturating_duration_since(Instant::now()));
+            }
             // 当前步骤让行时不覆盖用户期间复制的新内容。
             if clipboard::get_text().as_deref() == Some(&self.written) {
                 if let Some(value) = &self.saved { clipboard::set_text(value); }
             }
         }
     }
-    let _restore = Restore { saved, written: value.into() };
+    let mut restore = Restore { saved, written: value.into(), not_before: None };
     // 刚写完剪贴板稍等再粘，躲开剪贴板被别的进程短暂占用导致 Ctrl+V 静默失败
-    std::thread::sleep(Duration::from_millis(PRE_PASTE_MS));
+    crate::action::sleep(Duration::from_millis(PRE_PASTE_MS))?;
+    restore.not_before = Some(Instant::now() + Duration::from_millis(PASTE_SETTLE_MS));
     send_paste()?;
     let result = match confirmed {
         None => {
-            std::thread::sleep(Duration::from_millis(PASTE_SETTLE_MS));
+            crate::action::sleep(Duration::from_millis(PASTE_SETTLE_MS))?;
             Paste::Ok
         }
         Some(check) => {
-            if wait_for_change(check) {
+            if wait_for_change(check)? {
                 Paste::Ok
             } else {
                 // 没落下，剪贴板里还是要打的文字，再发一次
+                restore.not_before = Some(Instant::now() + Duration::from_millis(PASTE_SETTLE_MS));
                 send_paste()?;
-                if wait_for_change(check) {
+                if wait_for_change(check)? {
                     Paste::Ok
                 } else {
                     Paste::Unconfirmed
@@ -227,6 +261,7 @@ fn paste_text(value: &str, confirmed: Option<&dyn Fn() -> bool>) -> RpcResult<Pa
             }
         }
     };
+    restore.not_before = None;
     Ok(result)
 }
 
@@ -236,15 +271,15 @@ fn send_paste() -> RpcResult<()> {
 }
 
 /// 轮询确认回调，最多等 PASTE_CONFIRM_MAX_MS；变化了回 true，超时回 false
-fn wait_for_change(check: &dyn Fn() -> bool) -> bool {
+fn wait_for_change(check: &dyn Fn() -> bool) -> RpcResult<bool> {
     let deadline = Instant::now() + Duration::from_millis(PASTE_CONFIRM_MAX_MS);
     loop {
-        std::thread::sleep(Duration::from_millis(PASTE_POLL_MS));
+        crate::action::sleep(Duration::from_millis(PASTE_POLL_MS))?;
         if check() {
-            return true;
+            return Ok(true);
         }
         if Instant::now() >= deadline {
-            return false;
+            return Ok(false);
         }
     }
 }
@@ -266,8 +301,10 @@ fn type_per_char(value: &str) -> RpcResult<()> {
                 inputs.push(key(vk, 0, KEYEVENTF_KEYUP));
             }
         }
-        send(&inputs)?;
-        std::thread::sleep(Duration::from_millis(TYPE_GAP_MS));
+        // 一个字符的 UTF-16 代理对不拆开；系统部分接受时，公共收尾只释放已接受的 down。
+        crate::input_sequence::send(&inputs, inputs.len(), super::foreground::check_input, inject)?;
+        super::foreground::check_completion()?;
+        crate::action::sleep(Duration::from_millis(TYPE_GAP_MS))?;
     }
     Ok(())
 }
@@ -282,4 +319,44 @@ pub fn press_key(combo: &KeyCombo, repeat: u32) -> RpcResult<()> {
     }
     inputs.extend(mods_up(&combo.modifiers));
     send(&inputs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::input_sequence::{self, Event};
+    use std::cell::Cell;
+
+    #[test]
+    fn native_keyboard_cleanup_preserves_unicode_extended_flags_and_marker() {
+        for down in [key(0x11, 0, KEYBD_EVENT_FLAGS(0)), key(0x25, 0, KEYEVENTF_EXTENDEDKEY), key(0, 0xD83D, KEYEVENTF_UNICODE)] {
+            let (held, Some(up)) = down.transition().unwrap() else { panic!("缺少释放事件") };
+            assert_eq!(up.transition().unwrap().0, held);
+            assert!(up.transition().unwrap().1.is_none());
+            unsafe {
+                assert_eq!(up.Anonymous.ki.dwFlags.0, down.Anonymous.ki.dwFlags.0 | KEYEVENTF_KEYUP.0);
+                assert_eq!(up.Anonymous.ki.dwExtraInfo, INJECTED_TAG);
+            }
+        }
+    }
+
+    #[test]
+    fn native_drag_cancellation_releases_button_without_sending_remaining_moves() {
+        let events = [mouse(0, 0, 0, MOUSEEVENTF_LEFTDOWN), mouse(10, 10, 0, MOUSEEVENTF_MOVE), mouse(20, 20, 0, MOUSEEVENTF_MOVE)];
+        let count = Cell::new(0);
+        let mut sent = vec![];
+        let result = input_sequence::send(&events, 1, || {
+            if count.get() == 2 { Err(crate::fail!(Stopped, "cancelled")) } else { Ok(()) }
+        }, |chunk| {
+            sent.extend_from_slice(chunk);
+            count.set(count.get() + chunk.len());
+            chunk.len()
+        });
+        assert!(result.is_err());
+        assert_eq!(sent.len(), 3);
+        unsafe {
+            assert_eq!(sent[2].Anonymous.mi.dwFlags, MOUSEEVENTF_LEFTUP);
+            assert_eq!(sent[2].Anonymous.mi.dwExtraInfo, INJECTED_TAG);
+        }
+    }
 }

@@ -12,6 +12,7 @@ import { chromeOrigin } from '../../chrome-extension/src/origin.mjs'
 import { ChromeBridgeError } from './bridge.mjs'
 import type { ChromeExecutor } from './executor.mjs'
 import type { ChromePage } from './page.mjs'
+import { CHROME_UPLOAD_MAX_BYTES, uploadChromeFiles } from './upload.mjs'
 
 const done = (text: string, images: string[] = []): ClientToolCallResponse => ({
   success: true,
@@ -177,8 +178,12 @@ export async function executePageTool(
       }
     },
     handover: null,
+    uploadFiles: uploadChromeFiles,
+    uploadMaxBytes: CHROME_UPLOAD_MAX_BYTES,
   }
   const result = await handler(call)
-  await page.cdp('Page.getFrameTree')
+  // 输入已附带独立观察回执；不能用又一次读页失败覆盖已派发的结果。
+  if (!['click', 'type', 'press', 'scroll', 'upload', 'dialog'].includes(tool))
+    await page.cdp('Page.getFrameTree')
   return result
 }

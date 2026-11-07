@@ -16,6 +16,7 @@ import {
 import { phoneNameOf } from '../../platform/pairing'
 import { useChannel } from '../../shell/services'
 import { type Key, useT } from '../../ui/i18n'
+import { ChoiceMark } from '../../ui/kit/marks'
 import { useTheme } from '../../ui/theme'
 import { Card, CardButton, Meta, Why } from '../requests/Card'
 import { ComputerSelfApprovalCard } from './ComputerSelfApprovalCard'
@@ -46,6 +47,20 @@ export function SignInApprovalCard(props: {
   card: ApprovalCardView
   waiting: number
 }) {
+  const t = useT()
+  if (props.card.kind === 'browserSite')
+    return (
+      <Card
+        title={t('clientAsk.site')}
+        waiting={props.waiting}
+        actions={null}
+        error={null}
+        testID="request:browserSite"
+      >
+        <Why>{props.card.summary.origin}</Why>
+        <Why>{t('approval.siteDesktop')}</Why>
+      </Card>
+    )
   return props.card.kind === 'computerSelf' ? (
     <ComputerSelfApprovalCard {...props} card={props.card} />
   ) : (
@@ -186,9 +201,7 @@ function BrowserSignInApprovalCard({
                 onPress={() => setPicked(each.ref)}
                 style={[styles.row, { minHeight: theme.hit - 8 }]}
               >
-                <Text style={{ color: on ? c.accent : c.ink3, fontFamily: theme.font.mono }}>
-                  {on ? theme.radio.on : theme.radio.off}
-                </Text>
+                <ChoiceMark kind="radio" state={on ? 'on' : 'off'} />
                 <Text style={{ color: c.ink, fontFamily: theme.font.mono }}>
                   {shownName(each.masked)}
                 </Text>
@@ -206,9 +219,7 @@ function BrowserSignInApprovalCard({
           onPress={() => setRemember(!remember)}
           style={[styles.row, { minHeight: theme.hit - 8 }]}
         >
-          <Text style={{ color: remember ? c.accent : c.ink3, fontFamily: theme.font.mono }}>
-            {remember ? theme.check.on : theme.check.off}
-          </Text>
+          <ChoiceMark kind="check" state={remember ? 'on' : 'off'} />
           <Text style={[styles.rememberText, { color: c.ink }]}>{t('approval.remember')}</Text>
         </Pressable>
       ) : null}

@@ -2,7 +2,8 @@
 import { keys } from '@litch/core'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Row, StatusMark } from '../../ui/kit/controls'
+import { Row } from '../../ui/kit/controls'
+import { StatusMark } from '../../ui/kit/marks'
 
 export function ManagersEntry({ onPress }: { onPress(): void }) {
   const t = useT()

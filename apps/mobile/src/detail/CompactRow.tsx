@@ -1,9 +1,11 @@
 // 默认收起的卡片共用的样子（系统消息、子会话回报、别的会话发来的话、问题卡）：左边一道细线，
-// 第一行是标记、来源、标题、小标签（手动运行、对方跳过确认，不另占一行）、末尾的 ▸/▾；
-// 收着的时候下面一行是正文摘要（只占一行），点一下展开，
+// 第一行是标记、来源、标题、小标签（手动运行、对方跳过确认，不另占一行）、末尾的展开箭头；
+// 收着的时候下面一行是正文摘要（只占一行，去掉 Markdown 记号），点一下展开，
 // 展开后摘要不再显示，内容（children）排在下面。同桌面的 CompactRow
 import type { ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Caret, Icon, type IconName } from '../ui/kit/Icon'
+import { plainPreview } from '../ui/plain-text'
 import { useTheme } from '../ui/theme'
 
 export function CompactRow({
@@ -19,7 +21,8 @@ export function CompactRow({
   testID,
   children,
 }: {
-  mark: string
+  /** 种类图标（定时任务是钟、简报是分支、别的会话发来的是信封……） */
+  mark: IconName
   /** 标记的颜色，缺省是三级字色（还没答的问题用等待色） */
   markColor?: string
   source: string
@@ -48,9 +51,7 @@ export function CompactRow({
         style={({ pressed }) => [styles.press, pressed ? { backgroundColor: c.press } : null]}
       >
         <View style={styles.line}>
-          <Text style={[styles.mark, { color: markColor ?? c.ink3, fontFamily: font.mono }]}>
-            {mark}
-          </Text>
+          <Icon name={mark} size={14} color={markColor ?? c.ink3} />
           <Text
             numberOfLines={1}
             style={[styles.source, size, { color: c.ink2 }, title ? styles.capped : styles.shrink]}
@@ -71,12 +72,14 @@ export function CompactRow({
             </Text>
           ) : null}
           {fixed ? null : (
-            <Text style={[size, styles.caret, { color: c.ink3 }]}>{open ? '▾' : '▸'}</Text>
+            <View style={styles.caret}>
+              <Caret open={open} />
+            </View>
           )}
         </View>
         {!open && summary ? (
           <Text numberOfLines={1} style={[styles.sum, size, { color: c.ink3 }]}>
-            {summary}
+            {plainPreview(summary)}
           </Text>
         ) : null}
       </Pressable>
@@ -89,7 +92,6 @@ const styles = StyleSheet.create({
   bar: { marginHorizontal: 16, marginVertical: 4, paddingLeft: 10, borderLeftWidth: 2 },
   press: { paddingVertical: 6, gap: 2 },
   line: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 20 },
-  mark: { fontSize: 12, width: 14 },
   source: { fontWeight: '500' },
   title: { fontWeight: '600' },
   capped: { flexShrink: 1, maxWidth: '45%' },

@@ -383,6 +383,9 @@ func buildSettingsSchema(c configuration) settingsSchema {
 		)
 	}
 	group, specs := processSettings()
+	mediaGroup, mediaSpecs := mediaSettings()
+	schema.Groups = append(schema.Groups, mediaGroup)
+	schema.Settings = append(schema.Settings, mediaSpecs...)
 	schema.Groups = append(schema.Groups, settingGroup{ID: "tools", Title: both("客户端工具", "Client tools"), Scope: deviceScope})
 	schema.Settings = append(schema.Settings, c.clientToolSettings("", "tools")...)
 	schema.Groups = append(schema.Groups, group)

@@ -62,6 +62,10 @@ export interface ChromeInstance {
   source: ChromeExtensionSource | null
   /** 连上来的扩展 ID（允许列表中的一个）。 */
   extensionId: string
+  /** 用户在扩展中主动停止，必须由用户手动恢复。 */
+  stopped?: boolean
+  /** 支持按命令返回输入派发回执；商店扩展可能晚于桌面更新。 */
+  inputReceipts?: boolean
 }
 
 export interface ChromeLeaseOwner {
@@ -79,6 +83,15 @@ export interface ChromeTabState {
   openerTabId?: number
 }
 
+export interface ChromeListedTab extends ChromeTabState {
+  origins: string[]
+  busy: boolean
+  /** 列举时在所在窗口中是否为活动标签。增量字段不要求商店扩展同步更新。 */
+  active?: boolean
+  /** 所在窗口是否为此 Chrome 实例最后获得焦点的窗口，不代表系统当前前台。 */
+  lastFocusedWindow?: boolean
+}
+
 export interface ChromeGrant {
   /** 宿主从会话投影取得的标题，只用于 Chrome 分组显示。 */
   sessionTitle?: string
@@ -92,6 +105,7 @@ export interface ChromeGrant {
 }
 
 export type ChromeErrorCode =
+  | 'userStopped'
   | 'disconnected'
   | 'versionMismatch'
   | 'staleLease'
@@ -132,6 +146,7 @@ export interface ChromeRequest {
     | 'stop'
     | 'authorize'
     | 'console'
+    | 'refresh'
   leaseId?: string
   generation?: number
   args: Record<string, unknown>
@@ -156,7 +171,10 @@ export type ChromeEvent =
       instanceId: string
       epoch: string
       name: string
+      stopped?: boolean
+      inputReceipts?: boolean
     }
+  | { kind: 'control'; stopped: boolean }
   | { kind: 'tab'; tab: ChromeTabState }
   | { kind: 'revoked'; leaseId: string; reason: string }
   | { kind: 'removed'; tabId: number }

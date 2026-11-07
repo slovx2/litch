@@ -85,7 +85,14 @@ export function approvalSignedText(
 // ---------- 卡片 ----------
 
 /** 卡片的种类。自身访问签名中的固定 origin 与网站登录严格区分。 */
-export type ApprovalKind = 'browserSignIn' | 'computerSelf'
+export type ApprovalKind = 'browserSignIn' | 'computerSelf' | 'browserSite'
+
+/** 只读的站点审批状态；必须回到执行桌面答复，不经手机签名通道授权。 */
+export interface BrowserSiteSummary {
+  origin: string
+  device: string
+  browser: 'chrome' | 'builtin'
+}
 
 /** 自身访问独立于网站登录；授权档位用已有签名字段 ref（once/session/always）传递，always 只代表 24 小时。 */
 export interface ComputerSelfSummary {
@@ -136,6 +143,7 @@ export type ApprovalCard = ApprovalCardBase &
   (
     | { kind: 'browserSignIn'; summary: BrowserSignInSummary }
     | { kind: 'computerSelf'; summary: ComputerSelfSummary }
+    | { kind: 'browserSite'; summary: BrowserSiteSummary }
   )
 
 export type ApprovalCardView = ApprovalCard & {

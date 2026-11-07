@@ -46,6 +46,11 @@ export interface ElectronHostOptions {
   navigation?: NavigationResolver
   /** 仅用于导航失败的可信本地说明页。 */
   failurePage(url: string, reason: string): string
-  /** 保持宿主自己的产品描述；Litch 接线传入现有文字。 */
+  /** 保持宿主自己的产品描述；没开受控下载时，网页触发的下载被拦下并用这句提示代理。 */
   blockedDownload(name: string): string
+  /**
+   * 受控下载：给了就接收到 stagingRoot 下的私有目录，审批后发布到 downloadsDirectory；不给就一律拦下。
+   * 宿主负责在应用退出前调用 host.downloads.dispose() 清掉暂存目录。
+   */
+  downloads?: { stagingRoot: string; downloadsDirectory: string }
 }

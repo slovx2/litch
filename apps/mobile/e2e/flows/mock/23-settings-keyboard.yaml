@@ -88,6 +88,11 @@ tags: [mock]
     id: pair:paste:go
 - tapOn:
     id: pair:paste:go
+- scrollUntilVisible:
+    element:
+      text: '不是 Litch 的配对文本。|This isn’t a Litch pairing text\.'
+    direction: DOWN
+- assertVisible: '不是 Litch 的配对文本。|This isn’t a Litch pairing text\.'
 - assertNotVisible:
     id: keyboard:done
 - assertVisible:

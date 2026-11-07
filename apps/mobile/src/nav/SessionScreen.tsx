@@ -32,7 +32,7 @@ export function SessionScreen(props: Props) {
   // replace 保留原入口下面的栈，返回一次即可离开工作台；不会留下一个普通对话中间页。
   return (
     <Screen title={title ?? ''} testID="session-opening">
-      <Empty title={t('detail.sync.loading')} />
+      <Empty busy title={t('detail.sync.loading')} />
     </Screen>
   )
 }

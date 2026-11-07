@@ -10,7 +10,7 @@ import { keyInfo } from '../../platform/keys'
 import { knownHost } from '../../platform/known-hosts'
 import { useChannel, useKey } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
-import { Button, Empty, Row, SectionLabel } from '../../ui/kit/controls'
+import { Button, Empty, Row, SectionLabel, ValueRow } from '../../ui/kit/controls'
 import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { Prompt } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
@@ -160,12 +160,20 @@ export function DeviceDetailScreen({ route, navigation }: Props) {
         ) : null}
 
         <SectionLabel>{t('manage.device')}</SectionLabel>
-        <Row
-          title={t.text(device.name)}
-          detail={t('devices.rename')}
-          testID="detail:rename"
-          onPress={device.kind === 'ssh' ? () => setRenaming(true) : undefined}
-        />
+        {device.kind === 'ssh' ? (
+          <ValueRow
+            title={t('devices.nameLabel')}
+            value={t.text(device.name)}
+            testID="detail:rename"
+            onPress={() => setRenaming(true)}
+          />
+        ) : (
+          <InfoLine
+            label={t('devices.nameLabel')}
+            value={t.text(device.name)}
+            testID="detail:rename"
+          />
+        )}
         <InfoLine label={t('devices.wire')} value={t(`devices.color.${device.wire}`)} />
         <WirePicker
           value={device.wire}

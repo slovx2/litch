@@ -52,6 +52,12 @@ export {
   type TaskScheduleProblem,
   validateTaskSchedule,
 } from '../../protocol/src/task-schedule.mjs'
+export {
+  TOOL_IMAGE_PREFIX,
+  TOOL_IMAGES_SETTING,
+  type ToolImage,
+  toolImagesOf,
+} from '../../protocol/src/tool-images.mjs'
 export { attachmentState } from './attachment-state.mjs'
 export { withAutomationPreview } from './automation-preview/host.mjs'
 export type {
@@ -243,6 +249,7 @@ export {
   managerReferencesResolver,
   mapManagerMarkdown,
 } from './manager-references.mjs'
+export { type ImageTarget, transcriptImageTarget } from './media.mjs'
 export { createMockCore, type MockCore, type MockCoreOptions } from './mock/mock-core.mjs'
 export type { SampleLang } from './mock/sample-text.mjs'
 export type * from './model.mjs'
@@ -286,6 +293,46 @@ export {
   proposedBy,
 } from './model-tree.mjs'
 export type * from './model-worktrees.mjs'
+// 本机整理：本机分组、全局置顶的本机先后（只存在这台客户端上）
+export {
+  applyOrganizer,
+  type OrganizerAction,
+  OrganizerRefusal,
+} from './organizer/actions.mjs'
+export {
+  emptyOrganizer,
+  GROUP_NAME_MAX,
+  GROUPS_FOLD,
+  groupName,
+  type LocalGroup,
+  ORGANIZER_VERSION,
+  type OrganizerFile,
+  type OrganizerLoad,
+  PINS_FOLD,
+  type PinRef,
+  parseOrganizer,
+  pinKey,
+  refKey,
+  type SessionRef,
+  sameRef,
+} from './organizer/file.mjs'
+export {
+  createOrganizerHost,
+  memoryOrganizerStore,
+  type OrganizerHost,
+  type OrganizerOp,
+  type OrganizerStore,
+  type OrganizerView,
+} from './organizer/host.mjs'
+export { type MergedPins, mergePins, movePin, type PinSource } from './organizer/pins.mjs'
+export {
+  catalogSettled,
+  type MemberFacts,
+  type MemberState,
+  memberState,
+  pinCover,
+  pinSourceOf,
+} from './organizer/shortcuts.mjs'
 export {
   type PathPickerKind,
   type PathPickerListing,

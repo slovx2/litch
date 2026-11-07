@@ -34,6 +34,7 @@ async function component(path, name) {
     Pressable: '"Pressable"',
     View: '"View"',
     Text: '"Text"',
+    Icon: '"Icon"',
   }
   const result = await build({
     entryPoints: [path],
@@ -174,8 +175,16 @@ test('手机交付记号：已发送不画；其余只画记号，读屏名称�
     const mark = render({ delivery, onPress: (note) => (said = note) })
     assert.equal(mark.props.testID, `input-delivery-${delivery}`)
     assert.equal(mark.props['aria-label'], `inputDelivery.${delivery}.note`)
-    const glyph = nodes(mark).find((node) => node.type === 'Text').props.children
-    assert.equal([glyph].flat().join('').length, 1)
+    // 只画一个图标，不带字
+    const icons = nodes(mark).filter((node) => node.type === 'Icon')
+    assert.deepEqual(
+      icons.map((node) => node.props.name),
+      [{ queued: 'clock', held: 'pause', unknown: 'info' }[delivery]],
+    )
+    assert.equal(
+      nodes(mark).some((node) => node.type === 'Text'),
+      false,
+    )
     mark.props.onPress()
     assert.equal(said, `inputDelivery.${delivery}.note`)
     // 没给 onPress（输入框上方的待发列表）：不能点，读屏名称照样是整句
@@ -205,7 +214,7 @@ test('手机待发：停止后一行头加每条一行图标按钮，不每行�
       .filter((node) => node.type === 'Text')
       .flatMap((node) => [node.props.children].flat())
       .filter((child) => typeof child === 'string')
-  const acts = (tree) => nodes(tree).filter((node) => node.props && 'glyph' in node.props)
+  const acts = (tree) => nodes(tree).filter((node) => node.props && 'icon' in node.props)
 
   const held = render(props([message('a', 'held'), message('b', 'held')]))
   assert.ok(nodes(held).some((node) => node.props?.testID === 'queue:send'))
@@ -223,8 +232,8 @@ test('手机待发：停止后一行头加每条一行图标按钮，不每行�
     const row = nodes(held).find((node) => node.props?.testID === `queue:${index}`)
     const icons = acts(row)
     assert.deepEqual(
-      icons.map((node) => node.props.glyph),
-      ['↑', '✎', '✕'],
+      icons.map((node) => node.props.icon),
+      ['send', 'pencil', 'close'],
     )
     // 每个图标按钮都有读屏名称（动作），不是只有记号
     assert.deepEqual(
@@ -241,7 +250,12 @@ test('手机待发：停止后一行头加每条一行图标按钮，不每行�
     false,
   )
   // 没有标题行：数目写在第一行前面
-  assert.ok(texts(queued).includes('◷ 2'))
+  const first = nodes(queued).find((node) => node.props?.testID === 'queue:0')
+  assert.ok(nodes(first).some((node) => node.type === 'Icon' && node.props.name === 'clock'))
+  assert.ok(
+    nodes(first).some((node) => node.type === 'Text' && [node.props.children].flat().includes(2)),
+  )
+  assert.ok(nodes(first).some((node) => node.props?.accessibilityLabel === 'composer.queued 2'))
   assert.deepEqual(
     acts(nodes(queued).find((node) => node.props?.testID === 'queue:0')).map(
       (node) => node.props.label,

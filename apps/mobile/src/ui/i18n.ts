@@ -16,6 +16,7 @@ import * as devices from './messages/devices'
 import * as filePreview from './messages/file-preview'
 import * as hconfig from './messages/hconfig'
 import * as managers from './messages/managers'
+import * as organizer from './messages/organizer'
 import * as pairing from './messages/pairing'
 import * as privacy from './messages/privacy'
 import * as proposals from './messages/proposals'
@@ -49,6 +50,7 @@ const zhCN = {
   ...usage.zhCN,
   ...approvals.zhCN,
   ...managers.zhCN,
+  ...organizer.zhCN,
 }
 type MobileKey = keyof typeof zhCN
 const en: Record<MobileKey, Entry> = {
@@ -72,6 +74,7 @@ const en: Record<MobileKey, Entry> = {
   ...usage.en,
   ...approvals.en,
   ...managers.en,
+  ...organizer.en,
 }
 const MOBILE: Record<Lang, Record<MobileKey, Entry>> = { 'zh-CN': zhCN, en }
 

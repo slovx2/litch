@@ -99,6 +99,8 @@ AVD、SDK 和 KVM 信息在 `android-host.json`，传输层 trace 在 `adb-serve
 | `mock/24-comment-keyboard` | 选取回答文字，在评论弹窗输入后直接提交，草稿评论片出现 | 未计时 |
 | `mock/25-discussion-keyboard` | 决策的临时对话、报告与建议的追问，键盘打开时直接发送 | 未计时 |
 | `mock/28-manager-chat-scroll` | 长经理对话在列表重进和切页签后保持底部；历史消息锚点在重进、后台新增消息和流式输出后保持；普通看板页签不参与对话恢复 | Android / iOS |
+| `mock/31-pending-keyboard` | 两道异步提问，聚焦选项下的自填框，键盘打开时断言文字可见 | Android / iOS |
+| `mock/32-question-keyboard` | 三题向导展开自填框，键盘打开时输入并断言文字可见，再填下一题；审批拒绝说明自动聚焦。首个可见性断言之前不收键盘 | Android / iOS |
 | `fixture/01-home` | 夹具：首页列出设备，设备详情里 8 个 harness、Pi 就绪 → 会话列表 | 14 秒 |
 | `fixture/02-new-session` | 新建会话发第一句，收到假模型一段段发来的回答 | 17 秒 |
 | `fixture/03-tools` | 建在备好的 git 仓库里 → 终端敲命令真在远端跑了（入口脚本在电脑这边看文件）→ 差异的文件列表和单文件差异 → 文件页打开文件 | 72 秒 |
@@ -180,6 +182,15 @@ Release E2E 构建使用 `EXPO_PUBLIC_LITCH_E2E=1`，发布包为 `0`；不要�
 `scripts/e2e.mjs --build` 自动设置验收开关，iOS `LITCH_MOBILE_DEV=1 scripts/build-ios.sh` 同样设置。
 普通流程的执行器在遇到数据同意卡时显式点击“同意并继续”，然后仍执行原产品断言；
 带 `privacy` 标签的专项流程不自动同意，验证取消、允许、撤回与登录前披露。
+等待元素消失（例如发送后草稿清空）也会在有界轮询中处理同意卡，不重复发送操作，
+最终仍执行完整的原选择器和断言。25 号流程首次讨论发送显式要求同意框出现并点击允许，
+用于发现讨论抽屉打开时同意框无法显示或无法点击的问题。
+
+`e2e/ios/DiscussionConsentTests.swift` 使用独立 XCUITest 检查讨论内同意、取消保留草稿、
+允许后消息出现且输入清空，以及关闭抽屉后主输入框的同意。先在专用模拟器卸载、重装
+Litch Dev 验收包，保证没有已保存的同意记录；使用模拟核心，不连接真实模型。
+用 `scripts/ios-test-project.rb` 生成独立测试工程，在 iPhone 和 iPad 各跑一次，
+结束立即关闭模拟器。XCUITest 不使用 Maestro 的 7001 端口。
 
 - `mock/29-review-privacy.yaml`：新建取消不发送、允许后继续、撤回后再问、Tailscale 取消。
 - `scripts/check-review-production.mjs <专用模拟器> <发布 .app 绝对路径>`：持有 Maestro 7001 共享锁，
@@ -189,6 +200,12 @@ Release E2E 构建使用 `EXPO_PUBLIC_LITCH_E2E=1`，发布包为 `0`；不要�
 - `scripts/audit-ios-review.mjs <.app> [--e2e]`：检查包内构建档位与所有原生主程序/framework。
 
 ## 平板与窗口变化
+
+`e2e/ios/QuestionKeyboardTests.swift` 用独立 XCUITest 验提问、多行输入、审批说明和异步提问。
+它用 `app.typeText` 输入，避免 XCTest 替应用滚动字段；断言完整输入框边界在所属卡片视口内，下沿不越过键盘上沿。
+只在已安装本分支 Litch Dev 验收包的专用模拟器上运行，不占 Maestro 7001。可复用固定版本的 `scripts/ios-test-project.rb`
+生成测试工程（第三个参数用 `app.json` 作资源即可），再以 `-parallel-testing-enabled NO` 指定该模拟器跑 `TerminalTests` scheme。
+测试只用 mock；异步提问从初始空闲的 s3 发起，不能用仍在演示回合中、会把新消息当插话的 s1。
 
 `node scripts/check-tablet.mjs <模拟器标识> tablet/navigation.yaml tablet/window.yaml` 只接受
 `litch_` AVD 和 `Litch-iOS-` iOS 模拟器，使用模拟核心、共享 Maestro 7001 锁，退出删除临时报告。

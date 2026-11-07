@@ -6,10 +6,12 @@ import { ago } from '../../../../../packages/ui/src/app/format.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Empty, Row, SectionLabel, StatusMark } from '../../ui/kit/controls'
+import { Empty, Row, SectionLabel } from '../../ui/kit/controls'
+import { StatusMark } from '../../ui/kit/marks'
 import { Screen } from '../../ui/kit/Screen'
+import { plainLine } from '../../ui/plain-text'
 import { useTheme } from '../../ui/theme'
-import { managerRowState, plainLine } from './presentation'
+import { managerRowState } from './presentation'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Managers'>
 function ManagerRow({
@@ -39,6 +41,7 @@ function ManagerRow({
         .filter(Boolean)
         .join(' · ')}
       left={<StatusMark status={mark} />}
+      trail="forward"
       right={
         pending > 0 ? (
           <Text

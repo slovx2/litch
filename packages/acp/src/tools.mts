@@ -135,8 +135,12 @@ export function rawOutputText(rawOutput: any): string {
 export function mcpResult(update: any): any {
   const content = (Array.isArray(update.content) ? update.content : [])
     .filter((entry: any) => entry?.type === 'content')
-    .map((entry: any) => ({ type: 'text', text: blockText(entry.content) }))
-    .filter((entry: any) => entry.text)
+    .map((entry: any) =>
+      entry.content?.type === 'image'
+        ? { type: 'image', data: entry.content.data, mimeType: entry.content.mimeType }
+        : { type: 'text', text: blockText(entry.content) },
+    )
+    .filter((entry: any) => entry.type === 'image' || entry.text)
   const raw = update.rawOutput
   return {
     content,

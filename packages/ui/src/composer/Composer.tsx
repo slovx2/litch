@@ -53,6 +53,7 @@ import {
 import { CommentChip, ExtraChip, useExtraLabel } from './Chips.tsx'
 import { type Compaction, ContextMeter } from './ContextMeter.tsx'
 import { type DraftSnapshot, draftShortcut, hasDraft } from './clear-draft.ts'
+import { DraftText } from './DraftText.tsx'
 import {
   dropDraft,
   insertIntoDraft,
@@ -92,16 +93,20 @@ import {
   MAX_IMAGES,
   readImages,
 } from './images.ts'
+import { editNative, MentionMirror, useMentionGuard } from './MentionField.tsx'
+import { type DraftMention, mentionRanges } from './mention-field.ts'
 import { ProviderSwitchDialog } from './ProviderSwitchDialog.tsx'
 import type { ProjectPermissionController } from './project-permission.ts'
 import { switchedProvider } from './provider-switch.ts'
 import { SettingsBar, useComposeOptions } from './SettingsBar.tsx'
 import { useRunningSend } from './send-mode.ts'
 import { canSend, runningPlaceholder } from './send-mode-logic.ts'
-import { keepMentioned } from './session-hits.ts'
+import { syncMentioned } from './session-hits.ts'
 import { rememberSubmitted, submittedHistory } from './submitted-history.ts'
 import { useProviderSwitch } from './useProviderSwitch.ts'
 import { useSuggest } from './useSuggest.tsx'
+
+type SessionExtra = Extract<MessageExtra, { kind: 'session' }>
 
 interface ComposerProps {
   projectPermission?: ProjectPermissionController | undefined
@@ -214,10 +219,41 @@ export function Composer(props: ComposerProps) {
   useEffect(() => {
     saveDraftExtras(draftKey, extras)
   }, [draftKey, extras])
-  // 提到的会话跟着正文走：@[标题] 那几个字删掉了，就不再带这个会话
+  // 提到的会话跟着正文走：@[标题] 那几个字删掉了，就不再带这个会话；撤销、粘贴又回来了的从记得的里找回来。
+  // 记得的是这个草稿里提到过的会话（换了草稿就重记），自己这个会话不算
+  const known = useRef<{ key: string; list: SessionExtra[] }>({ key: draftKey, list: [] })
+  if (known.current.key !== draftKey) known.current = { key: draftKey, list: [] }
+  const remember = (more: readonly DraftMention[]) => {
+    const list = known.current.list
+    for (const one of more) {
+      if (one.threadId === sessionId) continue
+      if (!list.some((have) => have.threadId === one.threadId && have.title === one.title))
+        list.push({ kind: 'session', threadId: one.threadId, title: one.title })
+    }
+  }
+  remember(extras.flatMap((extra) => (extra.kind === 'session' ? [extra] : [])))
   useEffect(() => {
-    setExtras((current) => keepMentioned(current, text))
+    setExtras((current) => syncMentioned(current, text, known.current.list))
   }, [text])
+  const ranges = useMemo(
+    () =>
+      mentionRanges(
+        text,
+        extras.flatMap((extra) => (extra.kind === 'session' ? [extra] : [])),
+      ),
+    [text, extras],
+  )
+  const guard = useMentionGuard({
+    area: input,
+    ranges,
+    deviceId,
+    replace: (next, caret) => {
+      recalling.current = null
+      landing.current = caret
+      setText(next)
+    },
+    remember,
+  })
   // 别处把一段话放回来（回退之后把原来那条消息还给用户改）：放进输入框，光标落到末尾
   useEffect(
     () =>
@@ -271,12 +307,14 @@ export function Composer(props: ComposerProps) {
             area.selectionStart,
             area.selectionEnd,
           )
-          setText(next.text)
           setExtras((current) =>
             mergeExtras(current, [
               { kind: 'session', threadId: mention.threadId, title: mention.title },
             ]),
           )
+          // 走输入框自己的编辑，撤销得回来；浏览器不让时改值
+          if (editNative(area, next.text, next.caret)) return true
+          setText(next.text)
           requestAnimationFrame(() => {
             area.focus()
             area.setSelectionRange(next.caret, next.caret)
@@ -364,6 +402,13 @@ export function Composer(props: ComposerProps) {
       : undefined,
     edit: (next, caret) => {
       recalling.current = null
+      landing.current = caret
+      setText(next)
+    },
+    mention: (next, caret) => {
+      recalling.current = null
+      const area = input.current
+      if (area && editNative(area, next, caret)) return
       landing.current = caret
       setText(next)
     },
@@ -615,6 +660,8 @@ export function Composer(props: ComposerProps) {
         return
       }
     }
+    // 光标紧挨着提到的会话按退格、删除：整片删掉
+    if (guard.onKeyDown(event)) return
     // 单子开着：上下键、回车、Tab、Esc 先归它
     if (suggest.onKeyDown(event)) return
     if (lineJump(event)) return
@@ -628,6 +675,8 @@ export function Composer(props: ComposerProps) {
 
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const data = event.clipboardData
+    // 同一台设备上复制的会话片：记下是哪几个，字贴进来以后还是片
+    guard.onPaste(event)
     const { files, folders } = filesOf(data)
     const plain = tidyText(data.getData('text/plain'))
     // 从表格、文档里复制文字时，剪贴板里会顺带一张渲染出来的图：有字又有富文本，就按文字贴
@@ -756,7 +805,9 @@ export function Composer(props: ComposerProps) {
                     {t('composer.imageCount', { n: message.images.length })}
                   </span>
                 ) : null}
-                <span className="ell grow">{message.text}</span>
+                <span className="ell grow">
+                  <DraftText deviceId={deviceId} text={message.text} extras={message.extras} />
+                </span>
                 {message.delivery === 'unknown' ? (
                   <span
                     className="tray-unknown"
@@ -916,27 +967,42 @@ export function Composer(props: ComposerProps) {
           />
         ) : null}
         <div className="cmp-row">
-          <textarea
-            data-composer-session={sessionId ? JSON.stringify([deviceId, sessionId]) : undefined}
-            ref={input}
-            className="cmp-text"
-            rows={1}
-            value={text}
-            placeholder={props.placeholder}
-            onChange={(event) => {
-              recalling.current = null
-              setText(event.target.value)
-              suggest.typed(event.target.value, event.target.selectionStart)
-            }}
-            onSelect={(event) => {
-              const area = event.currentTarget
-              suggest.moved(area.selectionStart === area.selectionEnd ? area.selectionStart : null)
-            }}
-            onFocus={() => suggest.focus(true)}
-            onBlur={() => suggest.focus(false)}
-            onKeyDown={onKeyDown}
-            onPaste={onPaste}
-          />
+          <div className="men-field">
+            <textarea
+              data-composer-session={sessionId ? JSON.stringify([deviceId, sessionId]) : undefined}
+              ref={input}
+              className={ranges.length > 0 ? 'cmp-text men-on' : 'cmp-text'}
+              rows={1}
+              value={text}
+              placeholder={props.placeholder}
+              {...guard.props}
+              onChange={(event) => {
+                recalling.current = null
+                setText(event.target.value)
+                suggest.typed(event.target.value, event.target.selectionStart)
+              }}
+              onSelect={(event) => {
+                // 光标先挪出片，再按挪好的位置看要不要弹单子
+                guard.onSelect()
+                const area = event.currentTarget
+                suggest.moved(
+                  area.selectionStart === area.selectionEnd ? area.selectionStart : null,
+                )
+              }}
+              onFocus={() => suggest.focus(true)}
+              onBlur={() => suggest.focus(false)}
+              onKeyDown={onKeyDown}
+              onPaste={onPaste}
+            />
+            {ranges.length > 0 ? (
+              <MentionMirror
+                area={input}
+                text={text}
+                ranges={ranges}
+                describedBy={guard.describedBy}
+              />
+            ) : null}
+          </div>
         </div>
         <div className="cmp-bar">
           <button

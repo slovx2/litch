@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native'
 import { useT } from '../../ui/i18n'
+import { Loading } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
 import { useTranscript } from '../context'
 import { type DrawBox, type Drawing, drawer, drawKey, TIMED_OUT } from './drawer'
@@ -159,7 +160,7 @@ export const MermaidCard = memo(function MermaidCard({ source }: { source: strin
               testID="mermaid-card:image"
             />
           ) : (
-            <Text style={[meta, { color: c.ink3 }]}>{t('detail.mermaid.drawing')}</Text>
+            <Loading text={t('detail.mermaid.drawing')} center />
           )}
         </Pressable>
       )}

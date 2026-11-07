@@ -28,6 +28,7 @@ import { createFileSaveCore } from './file-save-core.mjs'
 import { ATTACH, LANGUAGE, SERVICE, TERMINALS } from './ipc.mjs'
 import { type AdapterLang, localDevice, upgradeReport } from './local-adapter.mjs'
 import { createDesktopLog, DESKTOP_LOG_DIR, type DesktopLog, teeConsole } from './log-file.mjs'
+import { fileOrganizerStore } from './organizer-store.mjs'
 import { desktopPairing } from './pairing.mjs'
 import { createForwarder } from './ssh/forward.mjs'
 import { discoverHosts } from './ssh/hosts.mjs'
@@ -177,6 +178,9 @@ function authForward(): AuthForwardPlatform {
 }
 
 function createHost(): Core | MockCore {
+  // 本机整理（本机分组、置顶先后）的文件也在用户数据目录里；模拟核心同样存，隐藏窗口验收能试重启后还在
+  const organizerDir = process.env.LITCH_DATA_DIR
+  const organizer = organizerDir ? { organizer: fileOrganizerStore(organizerDir) } : {}
   // LITCH_MOCK=1：不连任何设备，用示例数据。界面开发和不带入口的自检用
   // 示例数据用哪种语言由主进程定（LITCH_LANG），和界面的语言对上
   if (process.env.LITCH_MOCK === '1') {
@@ -189,6 +193,7 @@ function createHost(): Core | MockCore {
       ...(pairTtlMs > 0 ? { pairTtlMs } : {}),
       // fresh：本机一个 harness 都没装（试首启引导、一键安装）
       ...(process.env.LITCH_MOCK_SCENE === 'fresh' ? { scene: 'fresh' as const } : {}),
+      ...organizer,
     })
   }
   // 设备配置和侧栏快照放在用户数据目录里，目录由主进程告诉我们
@@ -223,6 +228,7 @@ function createHost(): Core | MockCore {
     // 本机 harness 里的 litch config（产品手册的配置命令）交给这台桌面端执行；没给语言时按界面的
     config: { lang: () => adapterLang },
     ...(dataDir ? { store: fileDeviceStore(dataDir, version) } : {}),
+    ...organizer,
     devices: [
       {
         id: 'local',

@@ -1,0 +1,7 @@
+appId: dev.litch.app
+tags:
+  - privacy
+---
+# 启动时已同意，提案选择另一个工具也不得打断发送。
+- assertNotVisible:
+    id: ai-consent:title

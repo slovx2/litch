@@ -11,6 +11,7 @@ final class ManualSshUITests: XCTestCase {
     let config = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as! [String: String]
     let target = try JSONSerialization.jsonObject(with: Data(config["target"]!.utf8)) as! [String: Any]
     app.launch()
+    app.agreeToLaunchConsentIfNeeded()
     XCTAssertTrue(app.otherElements["devices"].waitForExistence(timeout: 15))
     app.open(URL(string: config["remote"]!)!)
     app.buttons["devices:empty:add"].tap()

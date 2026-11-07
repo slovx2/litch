@@ -8,6 +8,7 @@
 
 import { type BrowserWindow, type Session, session } from 'electron'
 import type { ElectronHostOptions } from '../ports.mjs'
+import { BrowserDownloads } from './downloads.mjs'
 import { createTab, HIDDEN_BOUNDS, type HostTab } from './electron-tab.mjs'
 import type { BrowserHost, BrowserPage, OpenOptions, TabInfo, TabKind, TabOwner } from './model.mjs'
 import { blockGatedPopup, handoverOf, isHandedOver, notePopup } from './passwords/tabs.mjs'
@@ -46,16 +47,18 @@ export interface ElectronBrowserHost extends BrowserHost {
 type PartitionHost = {
   tabOf(contentsId: number): HostTab | undefined
   blockedDownload(name: string): string
+  downloads: BrowserDownloads | undefined
 }
 const guardedPartitions = new WeakMap<Session, Set<PartitionHost>>()
 
-/** 共用分区的安全设置：网页的权限一律拒绝，下载不做，屏幕共享不给 */
+/** 共用分区的安全设置：网页权限和屏幕共享拒绝，下载只能经过受控队列（宿主没开就拦下）。 */
 function guardPartition(
   options: ElectronHostOptions,
   tabOf: (contentsId: number) => HostTab | undefined,
+  downloads: BrowserDownloads | undefined,
 ): () => void {
   const shared = session.fromPartition(options.partition)
-  const entry = { tabOf, blockedDownload: options.blockedDownload }
+  const entry: PartitionHost = { tabOf, blockedDownload: options.blockedDownload, downloads }
   const previous = guardedPartitions.get(shared)
   if (previous) {
     previous.add(entry)
@@ -71,10 +74,26 @@ function guardPartition(
   shared.setDisplayMediaRequestHandler((_request, callback) => callback(null))
   shared.setPreloads([])
   shared.on('will-download', (event, item, contents) => {
-    event.preventDefault()
-    item.cancel()
-    for (const host of hosts)
-      host.tabOf(contents.id)?.notice(host.blockedDownload(item.getFilename()))
+    let owner: { host: PartitionHost; tab: HostTab } | undefined
+    for (const host of hosts) {
+      const tab = contents && host.tabOf(contents.id)
+      if (tab) {
+        owner = { host, tab }
+        break
+      }
+    }
+    if (!owner?.host.downloads) {
+      event.preventDefault()
+      if (owner) {
+        item.cancel()
+        owner.tab.notice(owner.host.blockedDownload(item.getFilename()))
+      }
+      return
+    }
+    owner.host.downloads.capture(item, owner.tab.info())
+    owner.tab.notice(
+      'A download was detected. Call downloads to review its approval, progress and final local path. Do not click again or retry a one-time link.',
+    )
   })
   return () => {
     hosts.delete(entry)
@@ -83,6 +102,7 @@ function guardPartition(
 
 export function createElectronHost(options: ElectronHostOptions): ElectronBrowserHost {
   const hostOptions = options
+  const downloads = options.downloads ? new BrowserDownloads(options.downloads) : undefined
   const tabs = new Map<string, HostTab>()
   let seq = 0
   let gate: (page: BrowserPage, url: string) => boolean = () => false
@@ -95,8 +115,10 @@ export function createElectronHost(options: ElectronHostOptions): ElectronBrowse
   let pending = false
   let disposed = false
 
-  const unguard = guardPartition(options, (contentsId) =>
-    [...tabs.values()].find((tab) => tab.view.webContents.id === contentsId),
+  const unguard = guardPartition(
+    options,
+    (contentsId) => [...tabs.values()].find((tab) => tab.view.webContents.id === contentsId),
+    downloads,
   )
 
   const list = () => [...tabs.values()].map((tab) => tab.info())
@@ -182,11 +204,13 @@ export function createElectronHost(options: ElectronHostOptions): ElectronBrowse
     if (!tab) return
     detach(tab)
     tabs.delete(id)
+    downloads?.closeTab(id)
     tab.destroy()
     changed()
   }
 
   return {
+    ...(downloads ? { downloads } : {}),
     dispose() {
       if (disposed) return
       disposed = true

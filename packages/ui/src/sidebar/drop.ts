@@ -5,11 +5,20 @@
 // 工作区总在某一组里（置顶、用户建的组，或者“项目”），既能放进一组（排到最后），也能插到一组里两个工作区之间。
 // 用户建的组和“项目”自己也能拖（拖标题行）：插到别的组前面、后面，先后只记在这台电脑上（state.ts 的 bands）。
 
+/**
+ * 从快捷区拖出来的：置顶区里的一项，或者某个本机组里的成员。设备目录不接本机组成员
+ * （拖回目录不等于搬会话、改项目，要移出用菜单）
+ */
+export type DragOrigin = { kind: 'pins' } | { kind: 'group'; groupId: string }
+
 /** 正在拖的东西。拖的时候记着，放下或者松手就清掉 */
 export interface DragItem {
   deviceId: string
-  /** band 是一整组（用户建的组、“项目”），id 是组的键 */
-  kind: 'session' | 'workspace' | 'band'
+  /** band 是一整组（用户建的组、“项目”），id 是组的键；localGroup 是一个本机组，id 是组的标识 */
+  kind: 'session' | 'workspace' | 'band' | 'localGroup'
+  /** 会话所在设备现在能不能整理（置顶、进设备分组）。本机分组不看这个 */
+  organizable?: boolean
+  origin?: DragOrigin
   id: string
   /** 会话所属的工作区；拖的是工作区时是它自己，拖的是组时是 null */
   workspaceId: string | null
@@ -80,8 +89,15 @@ export function dropCommands(
   deviceId: string,
   order: readonly Placed[] = [],
 ): DropCommand[] {
-  // 组的先后不经设备（bandsAfter）
-  if (item.deviceId !== deviceId || item.kind === 'band') return []
+  // 组的先后不经设备（bandsAfter）；本机组和它的成员不归设备目录管
+  if (
+    item.deviceId !== deviceId ||
+    item.kind === 'band' ||
+    item.kind === 'localGroup' ||
+    item.origin?.kind === 'group' ||
+    item.organizable === false
+  )
+    return []
   if (item.kind === 'session') {
     const sessionId = item.id
     switch (target.kind) {

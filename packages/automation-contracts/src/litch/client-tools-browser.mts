@@ -52,6 +52,7 @@ const fn = (
   inputSchema: { type: 'object', properties, required, additionalProperties: false },
 })
 
+// codex 限命名空间说明 1024 个字，这里只剩几个字的余量；输入回执的用法写在 click、type、press 的说明里。
 const GUIDE = `A real web browser in the Litch desktop app's side panel, for opening and checking web pages (especially local dev servers), filling forms and taking screenshots.
 
 How to use: start with \`navigate\`, read the page with \`snapshot\` (elements have refs like [e12]) and act by ref; use x/y only without a ref. Work in the background; call \`show\` only when the user should look.
@@ -154,13 +155,18 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
   description: GUIDE,
   tools: [
     fn(
+      'downloads',
+      'Built-in browser only: list this conversation’s downloads and ask the user to approve pending files. Downloads are received once into a private temporary area; approval publishes them to the controlling desktop’s system Downloads folder (not the remote session device). No arbitrary save paths. Pending paths/content are never exposed. Completed results include the local path; do not execute files automatically. Rejection, 10-minute timeout or shutdown deletes temporary files. Limits: 1 GiB/file, 2 GiB temporary data, 4 active files. Call after a download click and again for delayed/large transfers; never repeat a one-time download link. User-owned tabs save automatically; agent-owned tabs always require approval.',
+      {},
+    ),
+    fn(
       'targets',
-      'List connected Chrome instances. Chrome: call targets, then tabs(action:list,targetId), then claim(claimToken) for a user tab. For a new Chrome tab use navigate(targetId,url). Always keep the returned chrome: tabId in subsequent calls. Chrome runs on the controlling computer; localhost refers to that computer even in a remote session. Chrome uses its own saved site permissions, including localhost; user tabs always require individual claim approval. Popups are unclaimed; list and claim them separately. release returns a user tab without closing it. Old leases and refs expire on reconnect or turn end; list and claim again. request_sign_in pauses all observation while the user signs in manually, then requires a fresh claim. Do not switch browser or tab to bypass a refusal.',
+      'List connected Chrome instances. Chrome: call targets, then tabs(action:list,targetId), then claim(claimToken) for a user tab. For a new Chrome tab use navigate(targetId,url). Always keep the returned chrome: tabId in subsequent calls. Chrome runs on the controlling computer; localhost refers to that computer even in a remote session. Chrome uses its own saved site permissions, including localhost; Chrome control must be enabled in Litch Settings; instance and tab access do not require separate approval. Site permissions still apply. If the user stopped control, ask them to click the extension to resume. Popups are unclaimed; list and claim them separately. release returns a user tab without closing it. Old leases and refs expire on reconnect or turn end; list and claim again. request_sign_in pauses all observation while the user signs in manually, then requires a fresh claim. Do not switch browser or tab to bypass a refusal.',
       {},
     ),
     fn(
       'claim',
-      'Request approval to control one Chrome tab after its site permissions are checked. Use a fresh claimToken from tabs.',
+      'Claim one Chrome tab after its site permissions are checked. Use a fresh claimToken from tabs.',
       { claimToken: { type: 'string' } },
       ['claimToken'],
     ),
@@ -169,7 +175,7 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
     ]),
     fn(
       'tabs',
-      'List, open, select, close or keep browser tabs of this conversation. Tabs you open are temporary and are closed when your turn ends unless you keep them (keep:true here or in `navigate`). `list` also shows tabs the user opened (owner "user"); you can read their URL and title but can only operate your own tabs. `keep` marks one of your tabs to stay open for the user after your turn.',
+      'List, open, select, close or keep browser tabs of this conversation. Tabs you open are temporary and are closed when your turn ends unless you keep them (keep:true here or in `navigate`). `list` also shows tabs the user opened (owner "user"); you can read their URL and title but can only operate your own tabs. For Chrome, current:true marks the active tab in its last-focused window; when the user says "this page" or "current tab", prefer claiming that tab. Listing does not focus windows or switch tabs. `keep` marks one of your tabs to stay open for the user after your turn.',
       {
         action: { type: 'string', enum: ['list', 'new', 'select', 'close', 'keep'] },
         targetId,
@@ -208,7 +214,7 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
     ),
     fn(
       'click',
-      'Click an element by ref, or a point by x/y. Scrolls the element into view first.',
+      'Click an element by ref, or a point by x/y. Scrolls the element into view first. Built-in browser downloads require individual approval before saving to Downloads; call downloads for progress/path and limits. Never repeat one-time download links. Returns inputReceipt: dispatch is not business success. Verify the expected confirmation (wait for a selector, text or url); an unchanged page does not prove failure, and never blindly repeat input that may have executed.',
       {
         tabId,
         ref,
@@ -220,7 +226,7 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
     ),
     fn(
       'type',
-      'Type text into an element (focused by ref; without ref, into the focused element). For a <select>, picks the option whose label or value equals the text. Does not press Enter unless submit is true.',
+      'Type text into an element (focused by ref; without ref, into the focused element). For a <select>, picks the option whose label or value equals the text. Does not press Enter unless submit is true. Returns inputReceipt: dispatch is not business success. Verify the expected confirmation (wait for a selector, text or url); an unchanged page does not prove failure, and never blindly repeat input that may have executed.',
       {
         tabId,
         ref,
@@ -232,7 +238,7 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
     ),
     fn(
       'press',
-      'Press a key or key combination in the page, like "Enter", "Tab", "Escape", "ArrowDown", "Backspace", "Control+A", "Meta+Shift+K".',
+      'Press a key or key combination in the page, like "Enter", "Tab", "Escape", "ArrowDown", "Backspace", "Control+A", "Meta+Shift+K". Returns inputReceipt: dispatch is not business success. Verify the expected confirmation (wait for a selector, text or url); an unchanged page does not prove failure, and never blindly repeat input that may have executed.',
       { tabId, key: { type: 'string' } },
       ['key'],
     ),
@@ -255,11 +261,15 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
     ),
     fn(
       'wait',
-      'Wait for the page to finish loading, for a CSS selector or a text to appear, or for a fixed time. Times out after timeoutMs (default 10000, max 30000).',
+      'Wait for load, a CSS selector, text, a URL substring, a dialog, or a fixed time. Use a specific selector or confirmation text to verify SPA or business outcomes; network idle is not a business confirmation. Times out after timeoutMs (default 10000, max 30000).',
       {
         tabId,
-        for: { type: 'string', enum: ['load', 'selector', 'text', 'time'] },
+        for: { type: 'string', enum: ['load', 'selector', 'text', 'time', 'url', 'dialog'] },
         selector: { type: 'string' },
+        url: {
+          type: 'string',
+          description: 'For url: a substring to wait for in the current URL.',
+        },
         text: { type: 'string' },
         ms: { type: 'number', description: 'For `time`: how long to wait (max 30000).' },
         timeoutMs: { type: 'number' },
@@ -284,11 +294,17 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
     ),
     fn(
       'upload',
-      'Set files on an <input type="file"> element (by ref). Paths are absolute paths on the computer running the Litch desktop app. Only available when the conversation runs on that same computer. Uploading is sending data: confirm with the user first unless they asked for it.',
+      'Set files on an <input type="file"> element (by ref); Chrome also supports mode="drop" on a drop zone ref. Paths are absolute paths on the computer running Litch; local sessions only. Chrome streams up to 32 files totaling 512 MiB without file-URL permission; built-in browser limit is 100 MiB per file. Uploading is sending data: confirm first unless requested. If unsupported or rejected, ask the user to choose the file on the page; do not start a local file server or bypass permissions. Synthetic events may be rejected by the site; verify its response before retrying.',
       {
         tabId,
         ref,
         paths: { type: 'array', items: { type: 'string' } },
+        mode: {
+          type: 'string',
+          enum: ['input', 'drop'],
+          description:
+            'Default input. Chrome only: drop sends dragenter, dragover and drop to this ref.',
+        },
       },
       ['ref', 'paths'],
     ),
@@ -339,7 +355,7 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
     ),
     fn(
       'show',
-      'Open the browser panel in the Litch app and show a tab to the user. Use when the user wants to see the page or watch; otherwise work in the background.',
+      'Show a tab to the user (Chrome activates its tab and window). Call only when the user explicitly asks to see the page or watch. Background clicks and typing do not need show; never call it to fix input focus.',
       { tabId },
     ),
   ],
@@ -351,12 +367,12 @@ export function browserToolsSpec(batch = false): ClientToolNamespaceSpec {
   return {
     ...BROWSER_TOOLS,
     instructions:
-      'After observing a tab, prefer run_actions for two or more known actions. Stop before a choice that needs new UI. Every action needs the same approval as a separate call; never invent refs or batch sign-in. Inspect the final snapshot and continue only unfinished work.',
+      'After observing a tab, prefer run_actions for two or more known actions. Stop before a choice that needs new UI. Every action needs the same approval as a separate call; never invent refs or batch sign-in. Inspect inputReceipt and the final snapshot: dispatched is not verified business success, unchanged may be legitimate, and unknown dispatch must not be replayed blindly. Continue only unfinished work.',
     tools: [
       ...BROWSER_TOOLS.tools,
       fn(
         'run_actions',
-        'Execute 1–12 known browser actions in order on an existing tab. Uses the same tool names and arguments as individual calls. No loops, nested batches, new tabs or sign-in. Each step keeps source approval, lease, document and stop checks. Stops at the first failure without rollback or retries; a failed step may have partly executed. Returns short step results and a final snapshot of the last attempted tab. Observe first and obtain necessary user approval before batching. Actions have 60 seconds total; final snapshot has up to 10 seconds.',
+        'Execute 1–12 known browser actions in order on an existing tab. Uses the same tool names and arguments as individual calls. No loops, nested batches, new tabs or sign-in. Each step keeps source approval, lease, document and stop checks. Stops at the first failure without rollback or retries; a failed step may have partly executed. Returns per-step dispatch/observation status, duration, firstFailedStep and a final snapshot. actionsStatus and observationStatus are independent: final observation failure does not mean earlier inputs failed. Input receipts do not verify business outcomes. Observe first and obtain necessary user approval before batching. Actions have 60 seconds total; final snapshot has up to 10 seconds.',
         {
           actions: {
             type: 'array',

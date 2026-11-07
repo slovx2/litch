@@ -52,22 +52,18 @@ export async function guarded<T>(
 
 /**
  * 发输入事件之前等页面画出两帧。实测（自检里比过几种做法）：页面刚加载完时，第一下鼠标事件会丢，
- * 等过一次绘制就不丢了；摘下来的视图在代理在用时不节流，rAF 照跑。等不到（页面卡着）也不拦，最多等一秒
+ * 等过一次绘制就不丢了；焦点模拟让后台标签也能绘制。超时不能继续把未就绪页面当成可输入。
  */
 export async function inputReady(page: BrowserPage): Promise<void> {
-  try {
-    await within(
-      page.cdp('Runtime.evaluate', {
-        expression:
-          'new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(true))))',
-        awaitPromise: true,
-      }),
-      1000,
-      'no frame',
-    )
-  } catch {
-    // 接着发
-  }
+  await within(
+    page.cdp('Runtime.evaluate', {
+      expression:
+        'new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(true))))',
+      awaitPromise: true,
+    }),
+    1000,
+    'Input was not dispatched: the page did not become ready to paint within 1000 ms. Take a fresh snapshot and check page readiness.',
+  )
 }
 
 /** 页面开着对话框时先让模型答它：除了 dialog 工具，别的都动不了页面 */

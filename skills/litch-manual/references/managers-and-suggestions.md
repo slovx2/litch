@@ -2,6 +2,32 @@
 
 ## Managers
 
+用户要求过或已批准的范围内任务，经理直接开工作线；经理自行发现、用户尚未要求或批准的工作
+（如回报中顺带发现的问题、审查改进点、可选后续工作），会附完整简报放到「建议」页，由用户决定是否开始。
+这些工作不会只留在待排事项中；已有对应事项会标为暂缓并注明建议卡。范围外工作先提看板决策。
+关闭任务卡时，自行发现的工作改记看板决策或事项，需要批准的仍先等用户答复。
+
+Managers directly start in-scope work you requested or approved. Self-discovered work you have not
+requested or approved, such as incidental findings, review improvements or optional follow-ups,
+appears in Suggestions with a full brief for you to start. It is not left only in the backlog;
+any corresponding open item is deferred with a reference to the card. Out-of-scope work first
+requires a board decision. With task cards disabled, findings go into board decisions or items,
+and work requiring approval waits for your answer.
+
+工作线也可以直接为任务外的新发现提建议卡，不必先请经理转提。卡片出现在经理的建议页，经理可推荐，
+也可写明理由忽略无用或重复的卡片。提卡通知只进入回报队列，不单独唤醒或插话打断经理；随后随正常回报
+投递或下一回合带入，读取时也可查看。工作线仍须完成已授权任务，不能把未完成部分改成建议。
+
+Worklines can directly propose out-of-assignment findings. Their cards appear in the manager's
+Suggestions tab for endorsement or dismissal with a reason; the manager does not recreate them.
+Proposal notifications queue without starting or interrupting a manager turn. They travel with
+later report delivery or the next turn and remain readable while queued. Assigned work still
+belongs to the workline and must not be replaced by a suggestion.
+
+经理自己提出的建议卡提供“开始”（创建工作线）、“编辑后开始”（修改简报后创建工作线）和“忽略”，不提供“在这里做”。普通会话和工作线提出的建议保持原有操作。旧客户端请求在经理会话执行建议时，设备会拒绝并提示开始工作线或忽略。
+
+Suggestions proposed by a manager offer **Start** (create a workline), **Edit before starting** (revise the brief and create a workline), and **Dismiss**, without **Do it here**. Suggestions from ordinary sessions and worklines keep their usual actions. Requests from older clients to run a manager’s suggestion in place are rejected with guidance to start a workline or dismiss it.
+
 经理负责维护「现状」，固定按顺序使用 `### 正在做`、`### 等你`、`### 接下来` 三个 Markdown 小节。
 没有内容的小节整节省略，需要时可加 `### 风险`。每条一行，约 40 字以内，开头的关键词加粗；
 细节用 `#D-n` / `#I-n` 编号指向看板，不在现状里重复。不写大段落，不用表格、代码块或一级、二级标题。
@@ -108,7 +134,7 @@ desktop actions.
 交接摘要，再创建同引擎的新会话接手看板与工作线。旧对话只读，可从桌面重置对话框中的历史入口打开。
 其余对话细节不会传入新线程；摘要失败时必须再次确认，才能仅根据看板接手。
 Claude 刷新只等待当前回合结束，后台任务、临时追问与目标继续运行；其他引擎换会话仍等待经理回合、后台任务和临时追问结束。
-等待期间可使用桌面原重置图标位置或手机标题栏的「×」取消重置，不增加页面高度。
+等待期间可使用桌面原重置图标位置或手机标题栏的关闭图标取消重置，不增加页面高度。
 发送消息或插话会自动取消等待并正常提交，重新加载会话与附件监听始终可用。
 摘要或应用开始后不可取消，完成后可继续操作。重置结束、经理状态更新或设备重连时，客户端会重新订阅受影响的只读会话。
 工作线继续运行，重置期间回报先排队。
@@ -456,6 +482,8 @@ the running mark a single ring.
 取消答案修改也保留同一决策的追问草稿。追问入口旁的草稿标记表示有尚未提交的追问。
 写了草稿还没提交，议题却在别处结束了（决策被经理记下答复、关闭、忽略或撤回，请你做在别处交付、回复或被取消，建议已处理），草稿不删，但不再计入底部“N 项草稿，尚未提交”和侧栏的草稿数，也不会随“提交给经理”发出。卡片上先是答复、关闭或忽略的记录，再写明草稿还在，可“查看草稿”或“丢弃”；丢弃要再点一次“确认丢弃”，丢了不能恢复。决策重新打开（含撤销忽略）且问题本身没改时，草稿自动恢复、可直接提交；问题改过的仍要先确认。手机相同。
 原帖操作留在议题卡中，追问时间线通过卡片标题行的讨论入口打开，追问方式可切换，记录标明发言人。
+追问输入框随内容自动增高，达到上限后在框内滚动；发送或清空后收回，不需手动拖拽。桌面上限与主输入框一致，手机沿用手机主输入框的增高方式。
+Follow-up inputs grow with their content up to a limit, then scroll internally. Sending or clearing the text shrinks them again; no manual resizing is needed. Desktop uses the main composer’s height limit, and mobile uses its main composer’s growth behavior.
 动态时间沿用消息时间格式，非当天显示星期或日期，悬停查看完整日期与时刻。
 
 看板挤压对话时，输入框底栏保持单行，模型、权限等选项文字按可用宽度省略，完整当前值可通过悬停或读屏查看。
@@ -633,3 +661,9 @@ With the system's reduce-motion setting on, these transitions are skipped and ch
 请你做与事项的依据、相关链接统一显示在“关联”中，同一目标只显示一次。文件链接在所属设备的文件预览打开，仓库外绝对路径同样支持；目录定位到文件树。
 网址沿用浏览器偏好，分支与提交显示 Git 原文，会话与看板编号跳到对应对象。
 桌面悬停显示完整目标，手机长按查看；无法读取时显示原因。
+
+### 工作线并发上限
+
+经理的 `dispatch.maxRunningLines` 是整个经理子树的并发上限，替代普通会话的直接子会话 8 条、整树 24 条默认保护；不计经理自身。新建工作线、恢复后开始新回合、`send` 唤起已结束的工作线执行同一检查。启动中、运行回合、等待审批或输入、后台任务、待接续都占一个名额，同一工作线只计一次；插话不重复占位，仅加载历史不占位。非经理会话仍使用 8/24 的默认上限；深度和单回合直接启动次数限制不变。超限错误会显示限制来源、当前数量和上限。
+
+A manager's `dispatch.maxRunningLines` replaces the ordinary 8-direct-child / 24-session-tree concurrency defaults for its entire subtree, excluding the manager itself. Starting a line, starting a new turn after resume, and waking an idle line with `send` share the same check. Starting sessions, active turns, waiting approvals or input, background work, and pending continuations each occupy one slot per line. Steering an active turn adds no slot; loading history alone adds none. Ordinary sessions retain the 8/24 defaults. Depth and per-turn direct-start limits still apply. Capacity errors identify the limit, current occupancy, and maximum.
