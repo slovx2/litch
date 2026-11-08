@@ -10,8 +10,8 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
-import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { homedir, userInfo } from 'node:os'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { type AutomationSkill, automationSkill } from '../../protocol/src/automation-skills.mjs'
 
 const MARKER = '.litch-automation.json'
@@ -27,6 +27,35 @@ const present = (path: string) => {
 }
 const object = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/** 测试遗漏 HOME 隔离时，在任何 mkdir/锁/清理之前失败，不能被安装器的容错吞掉。 */
+function assertTestRoot(root: string): void {
+  if (
+    !process.env.NODE_TEST_CONTEXT &&
+    process.env.NODE_ENV !== 'test' &&
+    !process.env.LITCH_TEST_ISOLATED
+  )
+    return
+  // HOME 可被测试改写，操作系统账户的目录才是真实用户目录。解析已有祖先以防链接绕过。
+  const canonical = (path: string): string => {
+    const absolute = resolve(path)
+    if (present(absolute)) return realpathSync(absolute)
+    const parent = dirname(absolute)
+    return join(canonical(parent), relative(parent, absolute))
+  }
+  const home = canonical(userInfo().homedir),
+    target = canonical(root)
+  const inside = (parent: string) => {
+    const path = relative(parent, target)
+    return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path))
+  }
+  // Windows 的系统临时目录也在用户目录里；只拦真实配置树，不误伤隔离的临时 HOME。
+  if (
+    target === home ||
+    ['.agents', '.claude', '.codex'].some((name) => inside(canonical(join(home, name))))
+  )
+    throw new Error('测试禁止写入真实用户的技能目录；请先隔离 HOME 和配置目录')
+}
 function safeParents(path: string): boolean {
   for (let cursor = resolve(path); ; ) {
     if (present(cursor) && (!lstatSync(cursor).isDirectory() || lstatSync(cursor).isSymbolicLink()))
@@ -80,6 +109,7 @@ export function automationSkillPath(root: string, skill: AutomationSkill): strin
 
 /** 跨进程互斥；只回收已确认原进程不存在的锁。繁忙或未知锁直接回退。 */
 function locked<T>(root: string, skill: AutomationSkill, run: () => T): T | null {
+  assertTestRoot(root)
   const lock = join(root, `.${skill.name}.litch-lock`)
   try {
     if (!safeParents(root)) return null

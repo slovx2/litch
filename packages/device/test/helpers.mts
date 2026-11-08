@@ -1,4 +1,5 @@
 // 测试用的客户端和搭设备的小工具。客户端不经套接字，直接接在设备进程的 attach 上。
+import './isolate-process.mjs'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
