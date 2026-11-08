@@ -20,7 +20,7 @@ import { useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { nameOf } from '../app/device.ts'
 import { Icon } from '../app/icons.tsx'
-import { useKey } from '../app/services.tsx'
+import { useKey, useServices } from '../app/services.tsx'
 import type { ItemRef } from '../transcript/messages.tsx'
 import { useToggle } from '../transcript/state.ts'
 import { useWorktreesOn, WorktreeCheck } from '../worktrees/WorktreeCheck.tsx'
@@ -28,6 +28,7 @@ import { findOffer, offerState } from './offer.ts'
 import { Brief, ProposalActs, ProposalMeta, StartedChild } from './ProposalCard.tsx'
 import { STATUS_TEXT, useProposalAct, useProposalClock, useProposalList } from './proposals.ts'
 import { SANDBOX_LEVEL } from './sandbox.ts'
+import { useProposalWorktree } from './useProposalWorktree.ts'
 
 /** “新会话”“在这里做”两个按钮，和没做成时的那句话。卡片和侧面板共用 */
 export function OfferActs({
@@ -42,10 +43,18 @@ export function OfferActs({
   small?: boolean
 }) {
   const t = useT()
+  const { channel } = useServices()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const act = useProposalAct(deviceId, sessionId, proposal.id)
   const [worktree, setWorktree] = useState(proposal.worktree ?? proposal.worktreeDefault)
   const worktrees = useWorktreesOn(deviceId)
+  const worktreeBlock = useProposalWorktree(
+    channel,
+    deviceId,
+    sessionId,
+    proposal.id,
+    worktrees && worktree,
+  )
   const off = act.busy || device?.connection !== 'online'
   return (
     <>
@@ -54,7 +63,7 @@ export function OfferActs({
           type="button"
           className="btn primary"
           data-act="session"
-          disabled={off}
+          disabled={off || worktreeBlock !== null}
           onClick={() => act.answer('session', worktrees ? worktree : undefined)}
         >
           {t('proposal.offer.session')}
@@ -77,6 +86,7 @@ export function OfferActs({
           onChange={setWorktree}
         />
       </div>
+      {worktreeBlock ? <p className="prop-err err">{t(worktreeBlock)}</p> : null}
       {act.failure ? <p className="prop-err err">{act.failure}</p> : null}
     </>
   )

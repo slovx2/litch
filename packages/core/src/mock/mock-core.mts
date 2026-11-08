@@ -2953,6 +2953,19 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (approved !== undefined) return approved
       const installing = install.command(name, params)
       if (installing !== undefined) return installing
+      if (name === 'session.proposal.checkWorktree') {
+        const { deviceId, sessionId, proposalId, cwd } =
+          params as Commands['session.proposal.checkWorktree']['params']
+        const view = loadSession(deviceId, sessionId)
+        const proposal = view.proposals.find((entry) => entry.id === proposalId)
+        if (!proposal) throw new ChannelError('rejected', '没有这张提案')
+        const directory = cwd === undefined ? proposal.cwd || view.cwd : cwd || view.cwd
+        const result = (await worktrees.command('worktree.branches', {
+          deviceId,
+          cwd: directory,
+        })) as { branches: unknown }
+        return { available: result.branches !== null }
+      }
       const branched = worktrees.command(name, params)
       if (branched !== undefined) return branched
       const configured = config.command(name, params)

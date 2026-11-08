@@ -24,6 +24,7 @@ import {
   SESSION_TREE_LIMITS,
   type SessionLineageKind,
   type SessionLineageOrigin,
+  type SessionProposal,
 } from '../../protocol/src/session-tree.mjs'
 import type { Worktree, WorktreeFrom } from '../../protocol/src/worktrees.mjs'
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
@@ -45,6 +46,7 @@ import {
 } from './session-permissions.mjs'
 import type { SessionTree } from './session-tree.mjs'
 import { isObject } from './wire.mjs'
+import { repoOf } from './worktree-git.mjs'
 import { worktreeCwd } from './worktrees.mjs'
 
 export interface ChildSpec {
@@ -276,6 +278,8 @@ export async function worktreeDefault(
   parentId: string,
   cwd: string | null,
 ): Promise<boolean> {
+  const manager = tree.managers?.lines.managerFor(parentId)
+  if (manager) return manager.dispatch.worktree
   const worktrees = tree.host.worktrees
   if (!worktrees || worktrees.list().length === 0) return false
   if (cwd) return hostWorktree(tree, parentId, cwd, true) !== null
@@ -645,12 +649,43 @@ export interface ProposalOverrides {
   worktree?: boolean
 }
 
-/**
- * 开始一个 pending 的提案：用户点“开始”（litch/sessionProposal/accept）和模型的 litch_sessions.accept 都走这里。
- * 照提案（加上用户改的）派子会话，origin 是 proposal、带 proposalId，起好后提案标 started。
- * from 是 chosen 时开始的是用户选了新会话的 offer 卡（模型补的简报在 overrides 里）。
- * 同一个提案正在开始时再来一次抛错；撤回、不要会等它起完（tree.accepting）
- */
+/** 预检与开始使用同一父会话；已归档工作线不因读取配置而被恢复。 */
+function proposalParent(tree: SessionTree, proposal: SessionProposal) {
+  const manager = !proposal.offer ? tree.managers?.lines.managerFor(proposal.threadId) : null
+  const archivedSource = Boolean(
+    manager &&
+      manager.threadId !== proposal.threadId &&
+      tree.host.index.archived(proposal.threadId),
+  )
+  const parentId =
+    archivedSource && manager
+      ? manager.threadId
+      : (tree.managers?.store.historical(proposal.threadId)?.threadId ?? proposal.threadId)
+  return { manager, archivedSource, parentId }
+}
+
+/** 卡片开关的只读预检，目录解析与实际开始共用父会话规则；不创建工作树或子会话。 */
+export async function checkProposalWorktree(tree: SessionTree, proposalId: string, cwd?: string) {
+  const proposal = tree.proposal(proposalId)
+  if (!proposal) throw new ProtocolError(-32602, `没有提案 ${proposalId}`)
+  const { parentId } = proposalParent(tree, proposal)
+  let directory = cwd === undefined ? proposal.cwd : cwd || null
+  if (!directory) {
+    const { config } = await parentSettings(tree, parentId, await tree.owner(parentId))
+    const thread = isObject(config?.thread) ? config.thread : null
+    directory = textOf(config?.cwd) ?? textOf(thread?.cwd)
+  }
+  if (!directory || !tree.host.worktrees) return { available: false }
+  try {
+    await repoOf(directory)
+    return { available: true }
+  } catch (error) {
+    if (error instanceof ProtocolError && error.code === -32602) return { available: false }
+    throw error
+  }
+}
+
+/** 按提案与用户覆盖值开始；chosen 是已由用户选择、等待模型补简报的 offer。 */
 export async function acceptProposal(
   tree: SessionTree,
   proposalId: string,
@@ -659,16 +694,12 @@ export async function acceptProposal(
 ): Promise<{ threadId: string; harness: string; branch: string | null }> {
   if (tree.accepting.has(proposalId)) throw new ProtocolError(-32602, `提案 ${proposalId} 正在开始`)
   const proposal = tree.pendingProposal(proposalId, from)
-  const manager = !proposal.offer ? tree.managers?.lines.managerFor(proposal.threadId) : null
-  const archivedSource =
-    manager && manager.threadId !== proposal.threadId && tree.host.index.archived(proposal.threadId)
+  const { manager, archivedSource, parentId } = proposalParent(tree, proposal)
   const pick = (value: string | undefined, fallback: string | null) =>
     value === undefined ? fallback : value || null
   const started = startChild(
     tree,
-    archivedSource
-      ? manager.threadId
-      : (tree.managers?.store.historical(proposal.threadId)?.threadId ?? proposal.threadId),
+    parentId,
     {
       ...(manager && manager.threadId !== proposal.threadId
         ? { lineageParentId: manager.threadId }

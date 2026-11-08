@@ -850,6 +850,15 @@ export function createCore(options: CoreOptions): Core {
           }
           return {}
         }
+        case 'session.proposal.checkWorktree': {
+          const { deviceId, sessionId, proposalId, cwd } =
+            params as Commands['session.proposal.checkWorktree']['params']
+          try {
+            return await deviceOf(deviceId).checkProposalWorktree(sessionId, proposalId, cwd)
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
+        }
         case 'session.proposal.accept': {
           const { deviceId, sessionId, proposalId, overrides } =
             params as Commands['session.proposal.accept']['params']

@@ -36,6 +36,7 @@ import { SpawnDialog } from './SpawnDialog.tsx'
 import { SANDBOX_LEVEL } from './sandbox.ts'
 import { markOf } from './TreeCards.tsx'
 import { turnOffTaskCards } from './task-cards.ts'
+import { useProposalWorktree } from './useProposalWorktree.ts'
 
 /**
  * “开始”“在这里做”“改了再开始”“不要”四个按钮，和没做成时的那句话。卡片和侧面板共用。
@@ -57,13 +58,21 @@ export function ProposalActs({
   sourceParent?: Pick<SessionSummary, 'id' | 'title' | 'harness' | 'cwd' | 'workspaceId'>
 }) {
   const t = useT()
+  const { channel } = useServices()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const parent = useKey<SessionSummary>(keys.summary(deviceId, sessionId)) ?? sourceParent
   const act = useProposalAct(deviceId, sessionId, proposal.id)
   const [editing, setEditing] = useState(false)
-  // 卡上的工作树开关为准：初值是模型定的，没定的照设备算的缺省
+  // 卡上的工作树开关为准：设备按经理设置或普通会话规则给初值，用户仍可修改。
   const [worktree, setWorktree] = useState(proposal.worktree ?? proposal.worktreeDefault)
   const worktrees = useWorktreesOn(deviceId)
+  const worktreeBlock = useProposalWorktree(
+    channel,
+    deviceId,
+    sessionId,
+    proposal.id,
+    worktrees && worktree,
+  )
   const off = act.busy || device?.connection !== 'online'
   return (
     <>
@@ -72,7 +81,7 @@ export function ProposalActs({
           type="button"
           className="btn primary"
           data-act="start"
-          disabled={off}
+          disabled={off || worktreeBlock !== null}
           onClick={() => act.accept(worktrees ? { worktree } : undefined)}
         >
           {t('proposal.start')}
@@ -114,6 +123,7 @@ export function ProposalActs({
           onChange={setWorktree}
         />
       </div>
+      {worktreeBlock ? <p className="prop-err err">{t(worktreeBlock)}</p> : null}
       {act.failure ? <p className="prop-err err">{act.failure}</p> : null}
       {editing && parent ? (
         <SpawnDialog

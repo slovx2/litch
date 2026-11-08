@@ -659,7 +659,9 @@ woken to continue.
   appear where raised. Card actions, inheritance, retention and the session/global lists are in
   `managers-and-suggestions.md`. Repeated Start returns the original child, not another session;
   an already settled card reports its actual state.
-- **Where a sub-session works** (devices that support worktrees): when the parent session is in a
+- **建议卡工作树**：经理及任意层级工作线的建议卡（含 offer）初值沿用经理的工作树设置，模型传参不覆盖它。用户仍可在卡片上改；勾选后会在开始前检查目录，不在 Git 仓库时提示关闭“新工作树”共享目录，或编辑启动目录。
+- **Worktrees on manager cards**: proposals and offers from a manager or any descendant workline inherit the manager’s worktree setting, overriding the model’s argument. You can still change the card’s switch. Before starting with a worktree, the folder is checked; outside Git, turn the switch off to share the folder or edit the starting folder.
+- **Where an ordinary sub-session works** (devices that support worktrees): when the parent session is in a
   worktree Litch created (or shares one), a new sub-session gets its own new worktree and branch,
   starting from the last commit of the parent's branch (the parent's uncommitted changes are not
   carried over); otherwise it shares the parent's folder. The model can say which it wants; cards,

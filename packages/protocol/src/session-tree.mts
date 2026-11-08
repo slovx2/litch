@@ -130,11 +130,11 @@ export interface SessionProposal {
    */
   widerSandbox?: string
   /**
-   * 子会话要不要自己的工作树（worktrees 扩展）：模型明说的，或用户在 offer 卡上选新会话时定的；没定是 null。
+   * 卡片初值：经理/工作线取经理设置（优先于模型参数）；普通会话照模型参数。用户在卡片上可以改，offer 选择会存回。
    * 旧设备进程不带
    */
   worktree?: boolean | null
-  /** 没人定时照缺省算出来的（父会话在 Litch 建的工作树里就是真），卡上开关的初值用 worktree ?? 它。旧设备进程不带 */
+  /** 经理/工作线取经理设置，普通会话按宿主工作树推导；卡片用 worktree ?? 它。 */
   worktreeDefault?: boolean
 }
 
@@ -170,6 +170,8 @@ export const SESSION_TREE_METHOD = {
   proposalList: 'litch/sessionProposal/list',
   /** 用户点“开始”（可带 overrides）。已 started 且记有子会话时返回原 threadId，不重复派出。应答 SessionStartResponse */
   proposalAccept: 'litch/sessionProposal/accept',
+  /** 卡片选择新工作树时，按实际启动目录只读检查是否在 Git 仓库中。 */
+  proposalCheckWorktree: 'litch/sessionProposal/checkWorktree',
   /** 用户点“不要”。已 dismissed 时幂等成功；其他结算状态拒绝并给具体原因。应答空对象 */
   proposalDismiss: 'litch/sessionProposal/dismiss',
   /** 用户在 offer 卡上选“新会话”或“在这里做”。参数 SessionProposalAnswerParams，应答空对象 */

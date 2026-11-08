@@ -139,7 +139,7 @@ export interface SessionsStartArguments {
   kind?: SessionLineageKind
   /**
    * true：子会话有自己的 git 工作树和分支（从这个会话分支的最新提交切）；false：在这个会话的目录里做。
-   * 不给：这个会话在 Litch 建的工作树里（或者共用着一棵）就开新的，否则共用目录。offer 不给（用户在卡上定）
+   * 经理及其工作线的卡片初值取经理设置，模型给的值不覆盖它；用户可在卡片上改。普通会话不给时照宿主推导。
    */
   worktree?: boolean
   /**
@@ -527,7 +527,7 @@ export const PROPOSAL_SUMMARY_RULE =
 export const FRESH_BRIEF = `A fresh session sees nothing of this conversation: it gets only the two parts of its brief, written in your own words for someone who has not read any of this. background: the overall goal, what has been decided or ruled out so far, the constraints to respect, and how this piece fits in (at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth} wide; a CJK character counts as 2). prompt: the task itself, the files or area, and what done looks like. A fork already has this conversation, so it needs only the prompt. Follow-ups for a session you started go to it with litch_sessions.send, not to a new session.`
 
 export const WORKTREE_RULE =
-  "Where a new session works: work that ends in a branch or pull request of its own gets its own git worktree (worktree true; the folder must be in a git repository), so it does not mix with this session's changes; work that must land in one change with this one, or only reads, shares this folder (worktree false). Leave worktree out to follow the default: a new worktree when this session is in a worktree Litch created, otherwise this folder. A new worktree starts from the last commit of this session's branch, so commit first what it needs. If this session is already in a worktree Litch created, do not create another one with your own worktree tool (for example EnterWorktree)."
+  "Where a new session works: work that ends in a branch or pull request of its own gets its own git worktree (worktree true; the folder must be in a git repository), so it does not mix with this session's changes; work that must land in one change with this one, or only reads, shares this folder (worktree false). Manager/workline cards inherit the manager’s worktree setting even if you pass a value; the user can change it on the card. Other sessions default to a new worktree when already in a Litch worktree, otherwise this folder. A new worktree starts from the last commit of this session's branch, so commit first what it needs. If this session is already in a worktree Litch created, do not create another one with your own worktree tool (for example EnterWorktree)."
 
 /**
  * 归档：照 Claude 桌面端 archive_session 的用法，只在用户同意了归档那个会话之后才归档，不自己拿主意；
@@ -562,7 +562,7 @@ export const SESSION_PROPOSAL_RULES = sessionProposalRules(true)
 const WORKTREE_PARAM = {
   type: 'boolean',
   description:
-    'true: its own git worktree and branch, from the last commit of this session’s branch. false: this session’s folder. Default: a new worktree when this session is in a worktree Litch created, otherwise this folder. Not for "offer" (the user picks on the card).',
+    'true: its own git worktree and branch from the latest commit; false: share this folder. Manager/workline cards start with the manager’s worktree setting, overriding this argument; the user can change it on the card. Other sessions default to a new worktree when already in a Litch worktree. Omit for offers.',
 }
 const THREAD_ID = { type: 'string', description: 'Session id (thread id) from list or start.' }
 const PROPOSAL_ID = { type: 'string', description: 'proposal_id returned by start.' }

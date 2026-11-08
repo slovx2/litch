@@ -73,6 +73,7 @@ for (const edit of [false, true]) {
       const accepted = await client.call('litch/sessionProposal/accept', {
         threadId: source.threadId,
         proposalId: proposal.id,
+        overrides: { worktree: true },
         ...(edit
           ? {
               overrides: {

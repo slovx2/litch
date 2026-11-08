@@ -578,6 +578,9 @@ function treeWorld(options: { tree?: boolean; markHere?: boolean } = {}) {
       },
       'litch/session/detach': record('litch/session/detach', {}),
       'litch/sessionProposal/list': record('litch/sessionProposal/list', { proposals: [proposal] }),
+      'litch/sessionProposal/checkWorktree': record('litch/sessionProposal/checkWorktree', {
+        available: false,
+      }),
       'litch/sessionProposal/accept': (params) => {
         calls.push({
           method: 'litch/sessionProposal/accept',
@@ -609,6 +612,28 @@ const failureOf = async (promise: Promise<unknown>): Promise<ChannelError> => {
   }
   throw new Error('应该失败')
 }
+
+test('提案工作树预检：转发来源、卡片和编辑后的目录，不触发开始', async () => {
+  const world = treeWorld()
+  world.core.start()
+  await settle()
+  const result = await world.command('session.proposal.checkWorktree', {
+    sessionId: 'p',
+    proposalId: 'pr1',
+    cwd: '/not-a-repo',
+  })
+  assert.deepEqual(result, { available: false })
+  assert.deepEqual(world.calls.find((call) => call.method.endsWith('/checkWorktree'))?.params, {
+    threadId: 'p',
+    proposalId: 'pr1',
+    cwd: '/not-a-repo',
+  })
+  assert.equal(
+    world.calls.some((call) => call.method.endsWith('/accept')),
+    false,
+  )
+  world.core.stop()
+})
 
 test('设备：声明了会话树才算有；握手时客户端声明 sessionTree，自己的客户端工具里没有 litch_sessions', async () => {
   const world = treeWorld()

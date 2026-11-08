@@ -23,6 +23,7 @@ import { PathPicker } from '../path-picker/PathPicker.tsx'
 import { WorktreeCheck } from '../worktrees/WorktreeCheck.tsx'
 import { SANDBOX_CHOICES, SANDBOX_LEVEL, widerLevel } from './sandbox.ts'
 import { fieldsFor, kindOf, overridesOf, type SpawnFields, spawnParams } from './spawn-form.ts'
+import { useProposalWorktree } from './useProposalWorktree.ts'
 
 interface SpawnDialogProps {
   deviceId: string
@@ -54,6 +55,14 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
   const set = (patch: Partial<SpawnFields>) => setFields((now) => ({ ...now, ...patch }))
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+  const worktreeBlock = useProposalWorktree(
+    channel,
+    deviceId,
+    parent.id,
+    proposal?.id,
+    device?.worktrees === true && fields.worktree,
+    fields.cwd.trim(),
+  )
   const options = useComposeOptions(deviceId, fields.harness)
   const models = options?.models ?? []
   const model = models.find((entry) => entry.id === fields.model)
@@ -89,7 +98,7 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
   const text = fields.prompt.trim()
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (!text || busy || permissionBlocked) return
+    if (!text || busy || permissionBlocked || worktreeBlock) return
     setBusy(true)
     setFailure(null)
     const sent = proposal
@@ -368,6 +377,7 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
             checked={fields.worktree}
             onChange={(worktree) => set({ worktree })}
           />
+          {worktreeBlock ? <div className="modal-note err">{t(worktreeBlock)}</div> : null}
           {failure ? <div className="modal-note err">{failure}</div> : null}
         </div>
         <div className="modal-foot">
@@ -378,7 +388,7 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
           <button
             type="submit"
             className="btn primary"
-            disabled={!text || busy || permissionBlocked}
+            disabled={!text || busy || permissionBlocked || worktreeBlock !== null}
           >
             {proposal ? t('proposal.start') : t('tree.dialog.start')}
           </button>

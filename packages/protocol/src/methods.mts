@@ -612,6 +612,10 @@ export interface ClientRequests extends AcpControlsRequests {
     result: SessionProposalListResponse
   }
   'litch/sessionProposal/accept': { params: SessionProposalIdParams; result: SessionStartResponse }
+  'litch/sessionProposal/checkWorktree': {
+    params: { proposalId: string; threadId?: string; cwd?: string }
+    result: { available: boolean }
+  }
   'litch/sessionProposal/dismiss': {
     params: SessionProposalIdParams
     result: Record<string, never>

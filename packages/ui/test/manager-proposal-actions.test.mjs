@@ -9,7 +9,7 @@ const compiled = await build({
 import {renderToStaticMarkup} from 'react-dom/server';
 import {ProposalActs, Brief} from './src/tree/ProposalCard.tsx';
 export const renderBrief=(background,prompt,expanded=false)=>renderToStaticMarkup(React.createElement(Brief,{background,prompt,expanded,renderText:({text})=>React.createElement("div",{"data-md-test":true},text)}));
-export const render=(sourceIsManager,inbox)=>renderToStaticMarkup(React.createElement(ProposalActs,{deviceId:'local',sessionId:'source',proposal:{id:'p',sourceIsManager},inbox}));`,
+export const render=(sourceIsManager,inbox,worktree=false)=>renderToStaticMarkup(React.createElement(ProposalActs,{deviceId:'local',sessionId:'source',proposal:{id:'p',sourceIsManager,worktree},inbox}));`,
     resolveDir: new URL('../', import.meta.url).pathname,
   },
   bundle: true,
@@ -38,7 +38,7 @@ export const render=(sourceIsManager,inbox)=>renderToStaticMarkup(React.createEl
         api.onLoad({ filter: /.*/, namespace: 'fixture' }, (args) => ({
           contents: args.path.includes('appearance')
             ? 'export const useT=()=>Object.assign((key)=>key,{text:x=>x}); export const onAppearanceChange=()=>()=>{};'
-            : 'export const useKey=()=>({connection:"online"}); export const useKeys=()=>[]; export const useServices=()=>({channel:{}});',
+            : 'export const useKey=()=>({connection:"online",worktrees:true}); export const useKeys=()=>[]; export const useServices=()=>({channel:{}});',
         }))
       },
     },
@@ -50,6 +50,17 @@ new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(
   module,
   module.exports,
 )
+
+test('卡片仍可修改工作树：预检期间只禁用开始，不禁用开关', () => {
+  const pending = module.exports.render(true, true, true)
+  assert.match(pending, /data-act="start" disabled=""/)
+  assert.match(pending, /worktree.check.pending/)
+  const checkbox = pending.match(/<input[^>]*data-act="worktree"[^>]*>/)?.[0]
+  assert.ok(checkbox)
+  assert.doesNotMatch(checkbox, /disabled/)
+  const shared = module.exports.render(true, true, false)
+  assert.doesNotMatch(shared, /data-act="start" disabled=""|worktree.check.pending/)
+})
 
 for (const inbox of [false, true]) {
   test(`对话/侧栏与看板共用按钮 inbox=${inbox}：经理保留开始、编辑和忽略，普通卡还可原地执行`, () => {

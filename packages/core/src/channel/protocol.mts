@@ -1340,6 +1340,10 @@ export interface Commands {
     }
     result: { sessionId: string }
   }
+  'session.proposal.checkWorktree': {
+    params: { deviceId: string; sessionId: string; proposalId: string; cwd?: string }
+    result: { available: boolean }
+  }
   /** 用户点了提案上的“不要” */
   'session.proposal.dismiss': {
     params: { deviceId: string; sessionId: string; proposalId: string }

@@ -6,10 +6,17 @@ import { transformSync } from '../../../node_modules/esbuild/lib/main.js'
 // 执行真实动作 hook，替换原生 UI 和数据订阅，不加载 React 或模拟器。
 const { code } = transformSync(
   readFileSync(new URL('../src/detail/proposals/ProposalActs.tsx', import.meta.url), 'utf8'),
-  { loader: 'tsx', format: 'cjs' },
+  { loader: 'tsx', format: 'cjs', jsx: 'automatic' },
 )
 
-function actions({ manager = false, managerSource = false, busy = false, online = true } = {}) {
+function actions({
+  manager = false,
+  managerSource = false,
+  busy = false,
+  online = true,
+  worktree = false,
+  block = null,
+} = {}) {
   const navigations = []
   const stubs = {
     '@litch/core': {
@@ -20,19 +27,28 @@ function actions({ manager = false, managerSource = false, busy = false, online 
       useNavigation: () => ({ navigate: (...args) => navigations.push(args) }),
     },
     react: { useState: (value) => [value, () => {}] },
-    'react-native': { StyleSheet: { create: (value) => value } },
+    'react/jsx-runtime': {
+      jsx: (type, props) => ({ type, props }),
+      jsxs: (type, props) => ({ type, props }),
+      Fragment: 'Fragment',
+    },
+    'react-native': { StyleSheet: { create: (value) => value }, Text: 'Text', View: 'View' },
     '../../shell/services': {
+      useChannel: () => ({}),
       useKey: (key) =>
         key === 'device' ? { connection: online ? 'online' : 'offline' } : { id: 'source' },
     },
     '../../ui/i18n': { useT: () => (key) => key },
     './hooks': { useProposalAct: () => ({ busy, dismiss() {} }) },
-    './WorktreeSwitch': { useWorktreesOn: () => false },
+    './WorktreeSwitch': { useWorktreesOn: () => true, WorktreeSwitch: 'WorktreeSwitch' },
+    '../../../../../packages/ui/src/tree/useProposalWorktree.ts': {
+      useProposalWorktree: () => block,
+    },
     '../../../../../packages/ui/src/tree/sandbox.ts': {},
-    '../../ui/kit/controls': {},
+    '../../ui/kit/controls': { Button: 'Button' },
     '../../ui/kit/Icon': {},
     '../../ui/kit/overlays': {},
-    '../../ui/theme': {},
+    '../../ui/theme': { useTheme: () => ({ c: {}, font: { size: {} } }) },
     './logic': {},
   }
   const module = { exports: {} }
@@ -46,10 +62,30 @@ function actions({ manager = false, managerSource = false, busy = false, online 
   )
   return {
     // biome-ignore lint/correctness/useHookAtTopLevel: 单测用无 React 的 hook 替身直接检查菜单与导航。
-    acts: module.exports.useProposalActs('local', 'source', 'p', false, managerSource),
+    acts: module.exports.useProposalActs('local', 'source', 'p', worktree, managerSource),
+    render: module.exports.ProposalActsRow,
     navigations,
   }
 }
+
+test('手机工作树预检失败时开始禁用、理由可见，工作树开关仍可修改', () => {
+  const { acts, render } = actions({
+    manager: true,
+    worktree: true,
+    block: 'worktree.check.notRepo',
+  })
+  const rows = []
+  function visit(node) {
+    if (!node || typeof node !== 'object') return
+    rows.push(node)
+    for (const child of [node.props?.children].flat()) visit(child)
+  }
+  visit(render({ acts }))
+  assert.equal(rows.find((r) => r.props?.testID === 'proposal:p:start').props.disabled, true)
+  assert.equal(rows.find((r) => r.type === 'WorktreeSwitch').props.disabled, false)
+  assert.equal(rows.find((r) => r.type === 'WorktreeSwitch').props.value, true)
+  assert.ok(rows.some((r) => r.type === 'Text' && r.props.children === 'worktree.check.notRepo'))
+})
 
 for (const source of [{}, { manager: true }, { managerSource: true }]) {
   test(`手机建议菜单保留编辑并打开当前卡片的编辑页：${JSON.stringify(source)}`, () => {

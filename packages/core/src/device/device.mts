@@ -468,6 +468,12 @@ export interface Device {
   /** 会话树：把子会话脱离成独立会话 */
   detach(sessionId: string): Promise<void>
   setReportParent(sessionId: string, reportParent: boolean): Promise<void>
+  /** 只读预检提案的实际启动目录，供卡片的工作树开关使用。 */
+  checkProposalWorktree(
+    sessionId: string,
+    proposalId: string,
+    cwd?: string,
+  ): Promise<{ available: boolean }>
   /** 会话树：提案上点了“开始”（overrides 是“改了再开始”改过的那几项），返回起出来的子会话 */
   acceptProposal(
     sessionId: string,
@@ -3271,6 +3277,16 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         link.request(SESSION_TREE_METHOD.reportSet, { threadId: sessionId, reportParent }),
       )
       // 通知是权威状态，避免并发切换时用迟到应答覆盖更新的通知。
+    },
+    async checkProposalWorktree(sessionId, proposalId, cwd) {
+      treeOnly()
+      return guarded(() =>
+        link.request(SESSION_TREE_METHOD.proposalCheckWorktree, {
+          threadId: sessionId,
+          proposalId,
+          ...(cwd === undefined ? {} : { cwd }),
+        }),
+      )
     },
     async acceptProposal(sessionId, proposalId, overrides) {
       treeOnly()

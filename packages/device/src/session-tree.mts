@@ -1531,8 +1531,13 @@ export class SessionTree {
     >,
   ): SessionProposal {
     const createdAt = now()
+    // 经理与任意层级工作线的卡片初值统一跟经理；用户之后在卡片上的选择另存，不在开始时覆盖。
+    const manager = this.managers?.lines.managerFor(fields.threadId)
     const proposal = this.store.addProposal({
       ...fields,
+      ...(manager
+        ? { worktree: manager.dispatch.worktree, worktreeDefault: manager.dispatch.worktree }
+        : {}),
       id: randomUUID(),
       createdAt,
       expiresAt: fields.offer

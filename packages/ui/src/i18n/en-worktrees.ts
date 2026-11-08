@@ -76,6 +76,11 @@ export const enWorktrees: Record<keyof typeof zhWorktrees, Entry> = {
   'worktree.sync.conflicts':
     'The merge has conflicts and is stopped there: {files}. Resolve them in the terminal or ask the model to.',
   'worktree.check': 'New worktree',
+  'worktree.check.pending': 'Checking the worktree folder…',
+  'worktree.check.notRepo':
+    'The starting folder is not in a Git repository. Turn off “New worktree” to share the folder, or edit the starting folder before starting.',
+  'worktree.check.failed':
+    'Could not check the folder. Check the device connection and toggle “New worktree” again, or turn it off.',
   'worktree.check.hint':
     'Checked: the sub-session gets its own worktree and branch. Unchecked: it shares this session’s folder',
 }

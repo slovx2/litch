@@ -203,6 +203,10 @@ subtree; approvals and background work also occupy slots.
 独立改动或需要单独分支时，经理可为该线指定工作树；需要共享目录时也可单独关闭。
 工作线遵守简报中实际分配的目录或工作树，共享目录时仍需保留其他线的修改。
 
+经理或任意层级工作线**提出建议卡**时，卡片上的“新工作树”初值取经理设置，模型显式传参也不会覆盖。用户可在开始前修改开关；非 Git 目录不能勾选后直接开始，应关闭开关共享目录，或先编辑目录。直接派线仍可由经理按任务指定工作树。
+
+For **suggestion cards** from a manager or any descendant workline, “New worktree” initially follows the manager setting, overriding the model’s argument. You can change the switch before starting. Outside a Git repository, turn it off to share the folder or edit the folder first. Direct dispatch can still select a worktree per task.
+
 工作线执行期间仅在出现重大变更、重大发现，或需要经理决策才能继续时发送中途消息；其余结果在每回合结束时集中回报。
 
 ### 看板编号

@@ -88,9 +88,9 @@ export interface SessionProposalView {
   callId: string | null
   /** 目标 harness 收不到父会话那么严时，子会话实际会是的沙箱档；收得紧是 null。卡片上要写明 */
   widerSandbox: SandboxLevel | null
-  /** 子会话要不要自己的工作树：模型明说的、用户在 offer 卡上定的；没定是 null */
+  /** 卡片初值：经理/工作线取经理设置，普通会话照模型参数；用户在卡片上可改。 */
   worktree: boolean | null
-  /** 没定时设备照缺省算的（父会话在设备层工作树里就是真）。卡上开关的初值是 worktree ?? 它 */
+  /** 经理/工作线取经理设置，普通会话按宿主工作树推导。卡上开关初值是 worktree ?? 它。 */
   worktreeDefault: boolean
 }
 

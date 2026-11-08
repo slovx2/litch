@@ -70,5 +70,9 @@ export const zhWorktrees = {
   'worktree.sync.upToDate': '{base} 没有新提交。',
   'worktree.sync.conflicts': '合并有冲突，停在冲突状态：{files}。可在终端里解决，或交给模型处理。',
   'worktree.check': '新工作树',
+  'worktree.check.pending': '正在检查工作树目录…',
+  'worktree.check.notRepo':
+    '启动目录不在 Git 仓库中。请关闭“新工作树”共享目录，或编辑启动目录后再开始。',
+  'worktree.check.failed': '无法检查工作树目录。请确认设备连接后重新勾选，或关闭“新工作树”。',
   'worktree.check.hint': '勾选：子会话使用独立的工作树和分支。不勾选：与当前会话共用目录',
 } satisfies Record<string, Entry>

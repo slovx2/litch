@@ -11,6 +11,7 @@ import { SESSION_TREE_METHOD, type SessionLineageKind } from '../../protocol/src
 import { ProtocolError, requiredString } from '../../shared/src/protocol-contract.mjs'
 import {
   acceptProposal,
+  checkProposalWorktree,
   type ProposalOverrides,
   StartRefused,
   startChild,
@@ -166,6 +167,16 @@ export async function sessionTreeCall(
           fields.includeSettled === true,
         ),
       }
+    case SESSION_TREE_METHOD.proposalCheckWorktree:
+      return checkProposalWorktree(
+        tree,
+        proposalIdOf(tree, fields),
+        fields.cwd === undefined
+          ? undefined
+          : typeof fields.cwd === 'string'
+            ? fields.cwd
+            : requiredString(fields.cwd, 'cwd'),
+      )
     case SESSION_TREE_METHOD.proposalAccept: {
       const id = proposalIdOf(tree, fields)
       // 应答丢失、旧卡片或另一个客户端再点：已创建的子会话只返回原标识，不重复派出。

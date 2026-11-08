@@ -18,8 +18,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { type ReactNode, useState, useSyncExternalStore } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { SANDBOX_LEVEL } from '../../../../../packages/ui/src/tree/sandbox.ts'
+import { useProposalWorktree } from '../../../../../packages/ui/src/tree/useProposalWorktree.ts'
 import type { RootStackParamList } from '../../nav/routes'
-import { useKey } from '../../shell/services'
+import { useChannel, useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
 import { Icon } from '../../ui/kit/Icon'
@@ -39,6 +40,7 @@ export function useProposalActs(
   managerSource = false,
 ) {
   const t = useT()
+  const channel = useChannel()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const device = useKey<DeviceView>(keys.device(deviceId))
   // “编辑后开始”那一页要父会话的摘要（harness、项目、目录）
@@ -52,6 +54,13 @@ export function useProposalActs(
   const [chosen, setWorktree] = useState<boolean | null>(null)
   const worktree = chosen ?? initial
   const worktrees = useWorktreesOn(deviceId)
+  const worktreeBlock = useProposalWorktree(
+    channel,
+    deviceId,
+    sessionId,
+    proposalId,
+    worktrees && worktree,
+  )
   const gate = offline ? { disabled: t('devices.state.offline') } : {}
   // 正在开始或忽略时不给另一条路
   const menu: SheetAction[] = act.busy
@@ -75,7 +84,18 @@ export function useProposalActs(
           ...gate,
         },
       ]
-  return { deviceId, proposalId, act, off, worktree, setWorktree, worktrees, menu, sourceIsManager }
+  return {
+    deviceId,
+    proposalId,
+    act,
+    off,
+    worktree,
+    setWorktree,
+    worktrees,
+    worktreeBlock,
+    menu,
+    sourceIsManager,
+  }
 }
 
 export type ProposalActsState = ReturnType<typeof useProposalActs>
@@ -124,7 +144,7 @@ export function ProposalActsRow({
         <Button
           label={t('proposal.start')}
           kind={blocked ? 'plain' : 'solid'}
-          disabled={off || blocked !== null}
+          disabled={off || blocked !== null || acts.worktreeBlock !== null}
           busy={act.busy}
           {...(blocked ? { spoken: t('proposals.start.blocked', { reason: blocked }) } : {})}
           onPress={() => act.accept(worktrees ? { worktree } : undefined)}
@@ -153,6 +173,11 @@ export function ProposalActsRow({
       </View>
       {blocked && explain ? (
         <Text style={[styles.failure, { color: c.wait, fontSize: font.size.meta }]}>{blocked}</Text>
+      ) : null}
+      {acts.worktreeBlock ? (
+        <Text style={[styles.failure, { color: c.wait, fontSize: font.size.meta }]}>
+          {t(acts.worktreeBlock)}
+        </Text>
       ) : null}
       {act.failure ? (
         <Text style={[styles.failure, { color: c.err, fontSize: font.size.meta }]}>
@@ -274,12 +299,20 @@ export function OfferActs({
   const off = act.busy || device?.connection !== 'online'
   const [worktree, setWorktree] = useState(initial)
   const worktrees = useWorktreesOn(deviceId)
+  const channel = useChannel()
+  const worktreeBlock = useProposalWorktree(
+    channel,
+    deviceId,
+    sessionId,
+    proposalId,
+    worktrees && worktree,
+  )
   return (
     <>
       <View style={styles.acts}>
         <Button
           label={t('proposals.offer.session')}
-          disabled={off}
+          disabled={off || worktreeBlock !== null}
           busy={act.busy}
           onPress={() => act.answer('session', worktrees ? worktree : undefined)}
           testID={`proposal:${proposalId}:session`}
@@ -304,6 +337,11 @@ export function OfferActs({
           />
         </View>
       </View>
+      {worktreeBlock ? (
+        <Text style={[styles.failure, { color: c.wait, fontSize: font.size.meta }]}>
+          {t(worktreeBlock)}
+        </Text>
+      ) : null}
       {act.failure ? (
         <Text style={[styles.failure, { color: c.err, fontSize: font.size.meta }]}>
           {act.failure}

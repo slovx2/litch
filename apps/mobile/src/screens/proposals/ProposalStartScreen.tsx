@@ -2,6 +2,7 @@
 // harness、模型、强度、项目、目录、权限、全新还是带上下文、标题、简报、完成后唤醒、新工作树都能改；
 // 开始时只把和提案不一样的几项放进 overrides（logic.ts 的 overridesFor，初值和改动用桌面 spawn-form.ts 那一份）。
 // 沙箱照样收紧到不宽于父会话，目标 harness 收不紧时写明；带上下文只能用父会话的 harness。成了就回到对话。
+
 import {
   type DeviceView,
   keys,
@@ -25,6 +26,7 @@ import {
   kindOf,
   type SpawnFields,
 } from '../../../../../packages/ui/src/tree/spawn-form.ts'
+import { useProposalWorktree } from '../../../../../packages/ui/src/tree/useProposalWorktree.ts'
 import { useComposeOptions } from '../../detail/composer/options'
 import { type PickerOption, PickerSheet } from '../../detail/composer/PickerSheet'
 import { useProposalList, useSessionStore } from '../../detail/proposals/hooks'
@@ -100,6 +102,14 @@ function StartForm({
   const [fields, setFields] = useState<SpawnFields>(() => fieldsFor(parent, proposal))
   const set = (patch: Partial<SpawnFields>) => setFields((now) => ({ ...now, ...patch }))
   const worktrees = useWorktreesOn(deviceId)
+  const worktreeBlock = useProposalWorktree(
+    channel,
+    deviceId,
+    parent.id,
+    proposal.id,
+    worktrees && fields.worktree,
+    fields.cwd.trim(),
+  )
   const [picking, setPicking] = useState<Picking | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [busy, run] = useBusy()
@@ -132,7 +142,7 @@ function StartForm({
 
   const start = async () => {
     Keyboard.dismiss()
-    if (!text || blocked) return
+    if (!text || blocked || worktreeBlock) return
     setFailure(null)
     try {
       await run(
@@ -359,6 +369,9 @@ function StartForm({
               {blocked}
             </Text>
           ) : null}
+          {worktreeBlock ? (
+            <Text style={[styles.note, { color: c.err }]}>{t(worktreeBlock)}</Text>
+          ) : null}
           {failure ? <Text style={[styles.note, { color: c.err }]}>{failure}</Text> : null}
         </KeyboardFormScrollView>
         <KeyboardFormFooter>
@@ -366,7 +379,7 @@ function StartForm({
             label={t('proposal.start')}
             testID="proposal-start:go"
             busy={busy}
-            disabled={!text || blocked !== null}
+            disabled={!text || blocked !== null || worktreeBlock !== null}
             onPress={() => void start()}
           />
         </KeyboardFormFooter>
