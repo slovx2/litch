@@ -220,6 +220,7 @@ export const enManager = {
   'manager.feature.feedback': 'decision follow-ups, request deliveries and replies',
   'manager.feature.posts': 'follow-ups on issues, marking reports as read, reference previews',
   'manager.feature.ignore': 'ignoring decisions',
+  'manager.feature.issues': 'the unified issue list and ordinary issues',
   'manager.feature.join': '; ',
   'manager.unignore': 'Undo ignore',
   'manager.reopenedBy': 'Reopened by the manager',

@@ -34,7 +34,7 @@ export function ManagerIssueScreen({ route, navigation }: Props) {
   const suggestions = useKey<readonly SuggestionView[]>(keys.suggestions) ?? []
   const device = useKey<{ connection?: string }>(keys.device(deviceId))
   const board = view?.board ?? null
-  const issues = useManagerIssues({ deviceId, id: managerId }, board, t.lang)
+  const issues = useManagerIssues(view)
   const commands = useIssueCommands({ deviceId, id: managerId })
   const issue = issues.details[id as keyof typeof issues.details]
   const offline = device?.connection !== 'online'
@@ -51,9 +51,7 @@ export function ManagerIssueScreen({ route, navigation }: Props) {
   const post = board?.posts?.find((one) => one.id === (issue.id as string))
   const quick =
     issue.kind !== 'ordinary' && board && post && view ? (
-      <IssueContext.Provider
-        value={{ manager, board, features: view.features, open: openItem }}
-      >
+      <IssueContext.Provider value={{ manager, board, features: view.features, open: openItem }}>
         <Issue
           manager={manager}
           post={post}
@@ -76,7 +74,12 @@ export function ManagerIssueScreen({ route, navigation }: Props) {
             {issue.title}
           </Text>
           <IssueMetaLine
-            head={{ ...issue, author: issue.author.kind, followUp: issue.followUp.state, preview: '' }}
+            head={{
+              ...issue,
+              author: issue.author.kind,
+              followUp: issue.followUp.state,
+              preview: '',
+            }}
             comments={issue.discussion.comments.length}
           />
           {offline ? (

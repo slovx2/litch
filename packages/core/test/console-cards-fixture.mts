@@ -37,7 +37,7 @@ export function consoleCardsFixture(mock: CoreHost) {
     '发版前要不要在 Windows 真机补验',
     '插话消息在不支持的 harness 上露不露编辑',
     '子会话要不要算进后台任务',
-    'Pi 压缩失败要不要在网关兜底',
+    '旧版支付请求缺少字段要不要在网关兜底',
     '定时任务回合里的审批没人答等多久',
     '手机端要不要画 mermaid',
     '旧版设备服务的草稿留多久',

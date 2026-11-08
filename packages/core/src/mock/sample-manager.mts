@@ -115,7 +115,7 @@ export function sampleManagers(
     [
       'm2',
       'build',
-      t('sub2api 网关稳定性', 'sub2api gateway stability'),
+      t('支付网关稳定性', 'Payment gateway stability'),
       t(
         '查清 522 的来源，加监控，观察一周',
         'Find the source of 522 errors, add monitoring, and observe for a week',
@@ -423,8 +423,8 @@ export function sampleManagers(
           'Verify on a Windows machine before releasing 0.23.0?',
         ),
         t(
-          '0.20–0.22 的新功能都没在 Windows 上跑过：插话回退、子会话归档、重试次数。song-pc 现在空着，补验大约两小时，期间那台机器不能干别的。',
-          'Features from 0.20–0.22 have not run on Windows: steering rewind, child archiving, and retry counts. song-pc is available; verification takes about two hours and occupies the machine.',
+          '0.20–0.22 的新功能都没在 Windows 上跑过：插话回退、子会话归档、重试次数。win-test 现在空着，补验大约两小时，期间那台机器不能干别的。',
+          'Features from 0.20–0.22 have not run on Windows: steering rewind, child archiving, and retry counts. win-test is available; verification takes about two hours and occupies the machine.',
         ),
         [
           t('补验完再发', 'Verify before release'),
@@ -435,12 +435,12 @@ export function sampleManagers(
       decision(
         'D-17',
         t(
-          'Pi 压缩失败那件事，网关那边要不要兜底',
-          'Should the gateway handle Pi compaction failures?',
+          '旧版支付请求缺少字段，网关要不要兜底',
+          'Should the gateway handle missing fields in older payment requests?',
         ),
         t(
-          'models.json 里的显式缓存项经 OAuth 直通被网关 400。你本机的配置已经改好；问题是要不要在 sub2api 里把这类请求降级处理，免得别人踩到。这是开放题，经理没有倾向。',
-          'Explicit cache entries from models.json cause HTTP 400 through OAuth passthrough. The local configuration is fixed. Should sub2api downgrade these requests to protect other users? This is an open question without a recommendation.',
+          '测试客户端缺少币种字段时，支付网关返回 HTTP 400。示例客户端已经补齐；问题是网关要不要为旧版请求提供默认值，减少接入失败。这是开放题，经理没有倾向。',
+          'The payment gateway returns HTTP 400 when the test client omits the currency field. The sample client is fixed. Should the gateway provide a default for older requests to reduce integration failures? This is an open question without a recommendation.',
         ),
       ),
       decision(
@@ -503,8 +503,8 @@ export function sampleManagers(
       // 用户忽略过，经理因为情况变了重新打开：卡片上收起显示经理写的理由
       d16.reopened = {
         reason: t(
-          'song-pc 今天空出来了，0.23.0 发版前只剩这一次补验窗口，需要你重新看一下。',
-          'song-pc is free today, and this is the last verification window before 0.23.0. Please review this again.',
+          'win-test 今天空出来了，0.23.0 发版前只剩这一次补验窗口，需要你重新看一下。',
+          'win-test is free today, and this is the last verification window before 0.23.0. Please review this again.',
         ),
         by: 'manager',
         at: ago(90),

@@ -315,6 +315,8 @@ const child = spawn(usePacked ? packedBinary() : electron, usePacked ? [] : [app
     LITCH_PROFILE: profile,
     // 上手功能：本机一个 harness 都没装的开局，首启引导照第一次启动那样出
     ...(probe === 'onboard' ? { LITCH_MOCK_SCENE: 'fresh', LITCH_ONBOARDING: '1' } : {}),
+    // 经理冒烟按四类控制台写（设备服务较旧时仍是这一套）；issue 控制台另有验收
+    ...(probe === 'manager' ? { LITCH_MOCK_MANAGER_ISSUES: '0' } : {}),
     ...(fixture ? { LITCH_ENTRY: fixture.entry } : {}),
     // 本机设备直接连聚合面的套接字
     ...(device ? { LITCH_ENTRY: device.socket } : {}),

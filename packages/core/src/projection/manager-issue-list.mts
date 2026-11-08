@@ -1,5 +1,6 @@
-// 经理 issue 列表的过滤、排序与计数：桌面与手机共用同一套规则（60 号设计 5.6），界面只负责画。
-// 输入是协议里的 ManagerIssueHead / ManagerIssue（时间已由核心换成毫秒），不碰设备逻辑。
+// 经理 issue 列表的过滤条件：桌面与手机共用（60 号设计 5.6）。过滤、排序、分页都在设备上做，
+// 这里只把界面上的条件换成 ManagerIssueQuery；缓存按 managerIssueQueryKey(query) 分页，所以数组按固定次序给。
+
 import type {
   ManagerIssue,
   ManagerIssueAuthorKind,
@@ -7,8 +8,10 @@ import type {
   ManagerIssueHead,
   ManagerIssueKind,
   ManagerIssueOrder,
+  ManagerIssueQuery,
   ManagerIssueStatus,
 } from '../../../protocol/src/manager-issues.mjs'
+import { managerIssueQueryKey } from '../model-manager-issues.mjs'
 
 export const MANAGER_ISSUE_KINDS: readonly ManagerIssueKind[] = [
   'ordinary',
@@ -83,86 +86,68 @@ export function withManagerIssueKinds(
   return { ...filter, kinds, statuses: filter.statuses.filter((one) => options.has(one)) }
 }
 
-/**
- * 待处理：只算要用户动手的特殊类型（未答决策、待做请求、待开始建议）。
- * 普通 issue 与报告不计入（D-102：未读报告不算待处理）。
- */
-export function managerIssuePending(head: Pick<ManagerIssueHead, 'kind' | 'status'>): boolean {
-  if (head.kind === 'decision' || head.kind === 'request') return head.status === 'open'
-  if (head.kind === 'suggestion') return head.status === 'pending' || head.status === 'endorsed'
-  return false
-}
+const inOrder = <T extends string>(order: readonly T[], list: readonly T[]): T[] =>
+  order.filter((one) => list.includes(one))
+const ALL_STATUSES = managerIssueStatusOptions(MANAGER_ISSUE_KINDS)
 
-/** 普通 issue 是否还开着（开放、进行中、受阻）。 */
-export function managerIssueActive(head: Pick<ManagerIssueHead, 'kind' | 'status'>): boolean {
-  return (
-    head.kind === 'ordinary' &&
-    (head.status === 'open' || head.status === 'in_progress' || head.status === 'blocked')
-  )
-}
-
-export function managerIssueMatches(head: ManagerIssueHead, filter: ManagerIssueFilter): boolean {
-  if (filter.kinds.length && !filter.kinds.includes(head.kind)) return false
-  if (filter.statuses.length && !filter.statuses.includes(head.status)) return false
-  if (filter.authors.length && !filter.authors.includes(head.author)) return false
-  if (filter.followUp !== 'all' && head.followUp !== filter.followUp) return false
-  if (filter.unread && !head.unread) return false
-  return true
-}
-
-/** 按条件过滤并排序；时间相同按编号兜底（同一字母下数字大的更新）。 */
-export function filterManagerIssues(
-  heads: readonly ManagerIssueHead[],
+/** 界面条件换成设备查询；kinds 为空表示全部类型。只读未读时才带 unread（不带表示不限）。 */
+export function managerIssueQuery(
+  managerId: string,
   filter: ManagerIssueFilter,
-): ManagerIssueHead[] {
-  const number = (head: ManagerIssueHead) => Number(head.id.split('-')[1]) || 0
-  const rows = heads.filter((head) => managerIssueMatches(head, filter))
-  const at = (head: ManagerIssueHead) =>
-    filter.order === 'updated' ? head.updatedAt : head.createdAt
-  return rows.sort((a, b) => {
-    if (filter.order === 'pending') {
-      const pa = managerIssuePending(a) || (a.unread && a.kind !== 'report')
-      const pb = managerIssuePending(b) || (b.unread && b.kind !== 'report')
-      if (pa !== pb) return pa ? -1 : 1
-    }
-    const diff = filter.order === 'oldest' ? at(a) - at(b) : at(b) - at(a)
-    const tie = number(a) - number(b) || a.id.localeCompare(b.id)
-    return diff || (filter.order === 'oldest' ? tie : -tie)
-  })
+  limit?: number,
+): ManagerIssueQuery {
+  return {
+    managerId,
+    kinds: filter.kinds.length
+      ? inOrder(MANAGER_ISSUE_KINDS, filter.kinds)
+      : [...MANAGER_ISSUE_KINDS],
+    statuses: inOrder(ALL_STATUSES, filter.statuses),
+    authors: inOrder(['user', 'manager'], filter.authors),
+    followUp: filter.followUp,
+    ...(filter.unread ? { unread: true } : {}),
+    order: filter.order,
+    ...(limit === undefined ? {} : { limit }),
+  }
 }
 
-export interface ManagerIssueSummary {
-  /** 普通 issue：还开着的、经理有新回复等我看的、跟进已暂停的（未关闭） */
-  ordinary: { active: number; unread: number; paused: number; total: number }
-  /** 各类型的待处理数（类别胶囊上的数字）；报告给未读数 */
-  attention: Record<ManagerIssueKind, number>
-  total: Record<ManagerIssueKind, number>
+/** 这组条件在缓存里的页键（加载更多会并进同一页）。 */
+export function managerIssuePageKey(managerId: string, filter: ManagerIssueFilter): string {
+  return managerIssueQueryKey(managerIssueQuery(managerId, filter))
 }
 
-export function managerIssueSummary(heads: readonly ManagerIssueHead[]): ManagerIssueSummary {
-  const zero = () =>
-    Object.fromEntries(MANAGER_ISSUE_KINDS.map((kind) => [kind, 0])) as Record<
-      ManagerIssueKind,
-      number
-    >
-  const summary: ManagerIssueSummary = {
-    ordinary: { active: 0, unread: 0, paused: 0, total: 0 },
-    attention: zero(),
-    total: zero(),
-  }
-  for (const head of heads) {
-    summary.total[head.kind] += 1
-    if (head.kind === 'ordinary') {
-      summary.ordinary.total += 1
-      if (managerIssueActive(head)) summary.ordinary.active += 1
-      if (head.unread) summary.ordinary.unread += 1
-      if (head.followUp === 'off' && head.status !== 'closed') summary.ordinary.paused += 1
-      if (head.unread) summary.attention.ordinary += 1
-    } else if (head.kind === 'report') {
-      if (head.unread) summary.attention.report += 1
-    } else if (managerIssuePending(head)) summary.attention[head.kind] += 1
-  }
-  return summary
+/** 普通 issue 还开着的三种状态。 */
+export const MANAGER_ISSUE_ACTIVE: readonly ManagerIssueStatus[] = [
+  'open',
+  'in_progress',
+  'blocked',
+]
+
+/**
+ * 概览上普通 issue 的三个数：还开着的、经理有新回复等我看的、跟进已暂停的（还开着）。
+ * 各是一条只取一行的查询，数字用 total；点数字进控制台带上同一组条件。
+ */
+export const MANAGER_ISSUE_SUMMARY_FILTERS = {
+  active: { ...DEFAULT_MANAGER_ISSUE_FILTER, statuses: [...MANAGER_ISSUE_ACTIVE] },
+  unread: { ...DEFAULT_MANAGER_ISSUE_FILTER, unread: true },
+  paused: {
+    ...DEFAULT_MANAGER_ISSUE_FILTER,
+    statuses: [...MANAGER_ISSUE_ACTIVE],
+    followUp: 'off',
+  },
+} satisfies Record<string, ManagerIssueFilter>
+export type ManagerIssueSummaryKey = keyof typeof MANAGER_ISSUE_SUMMARY_FILTERS
+
+/** 各类型要我处理的（类别胶囊上的数字）：普通 issue 给未读，报告给未读，其余给待处理状态。 */
+export const MANAGER_ISSUE_ATTENTION_FILTERS: Record<ManagerIssueKind, ManagerIssueFilter> = {
+  ordinary: { ...DEFAULT_MANAGER_ISSUE_FILTER, unread: true },
+  decision: { ...DEFAULT_MANAGER_ISSUE_FILTER, kinds: ['decision'], statuses: ['open'] },
+  suggestion: {
+    ...DEFAULT_MANAGER_ISSUE_FILTER,
+    kinds: ['suggestion'],
+    statuses: ['pending', 'endorsed'],
+  },
+  request: { ...DEFAULT_MANAGER_ISSUE_FILTER, kinds: ['request'], statuses: ['open'] },
+  report: { ...DEFAULT_MANAGER_ISSUE_FILTER, kinds: ['report'], unread: true },
 }
 
 /** 完整 issue 收成列表行；预览取正文第一段非空文字。 */
@@ -174,7 +159,6 @@ export function managerIssueHead(issue: ManagerIssue): ManagerIssueHead {
       .find(Boolean) ?? ''
   return {
     id: issue.id,
-    aliases: issue.aliases,
     kind: issue.kind,
     title: issue.title,
     preview: preview.length > 200 ? `${preview.slice(0, 199)}…` : preview,

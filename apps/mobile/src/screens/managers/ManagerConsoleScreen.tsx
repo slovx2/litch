@@ -33,6 +33,7 @@ import {
   managerBoardMemory,
 } from '../../../../../packages/core/src/manager-board-memory.mts'
 import { pagedDraftBoard } from '../../../../../packages/core/src/projection/manager-drafts.mts'
+import { MANAGER_ISSUE_SUMMARY_FILTERS } from '../../../../../packages/core/src/projection/manager-issue-list.mts'
 import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
 import { sessionMark } from '../../../../../packages/ui/src/sidebar/session-mark.ts'
 import { useSessionPage } from '../../detail/session-page'
@@ -52,6 +53,8 @@ import { Issue } from './Issue'
 import { IssueContext } from './IssueRelations'
 import { IssueSheet } from './IssueSheet'
 import { setIssueOrder, useIssueOrder } from './issue-order'
+import { useIssueCounts, useManagerIssues } from './issues/data'
+import { type IssuePreset, useIssueConsole } from './issues/IssueConsole'
 import { ManagerLines } from './ManagerLines'
 import {
   ManagerOverview,
@@ -62,8 +65,6 @@ import {
 import { PagedBoard } from './PagedBoard'
 import { issueCounts, managerRowState, orderedIssues } from './presentation'
 import { useManagerReset } from './use-reset'
-import { useManagerIssues } from './issues/data'
-import { type IssuePreset, useIssueConsole } from './issues/IssueConsole'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ManagerConsole'>
 type Category = ManagerPost['kind']
@@ -345,7 +346,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
       total: totals?.suggestion.all ?? postsOf('suggestion'),
     },
   }
-  const missing = (['feedback', 'posts', 'ignore', 'requestIgnore'] as const).filter(
+  const missing = (['feedback', 'posts', 'ignore', 'requestIgnore', 'issues'] as const).filter(
     (key) => !features[key],
   )
   const chatMark = sessionMark(summary)
@@ -355,7 +356,8 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const linesWaiting = waitingLines > 0
   const narrow = width < NARROW
   const offline = device?.connection !== 'online'
-  const issueView = useManagerIssues(manager, board, t.lang)
+  const issueView = useManagerIssues(view)
+  const ordinaryCounts = useIssueCounts(manager, issueView, MANAGER_ISSUE_SUMMARY_FILTERS)
   const issueMode = issueView.supported === true
   const [issuePreset, setIssuePreset] = useState<IssuePreset | null>(null)
   const presetIssues = (patch: IssuePreset['patch']) => {
@@ -376,23 +378,13 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
     onOpenItem: (id) => openIssue(id),
   })
   issueOpen.current = issueMode ? issueUI.open : null
-  const overviewIssues: OverviewIssues | undefined = issueMode
-    ? {
-        counts: {
-          active: issueView.summary.ordinary.active,
-          unread: issueView.summary.ordinary.unread,
-          paused: issueView.summary.ordinary.paused,
-        },
-        onOpen: (key) =>
-          presetIssues(
-            key === 'active'
-              ? { statuses: ['open', 'in_progress', 'blocked'] }
-              : key === 'unread'
-                ? { unread: true }
-                : { followUp: 'off' },
-          ),
-      }
-    : undefined
+  const overviewIssues: OverviewIssues | undefined =
+    issueMode && ordinaryCounts
+      ? {
+          counts: ordinaryCounts,
+          onOpen: (key) => presetIssues(MANAGER_ISSUE_SUMMARY_FILTERS[key]),
+        }
+      : undefined
   const toCategory = (category: Category) =>
     issueMode ? presetIssues({ kinds: [category] }) : go('console', category)
 
@@ -624,10 +616,6 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
                     ? 'manager.ending'
                     : 'manager.ended',
               )}
-            </Text>
-          ) : tab === 'console' && issueView.supported === false ? (
-            <Text testID="manager-old-device-issues" role="note" style={[styles.note, { color: c.ink2 }]}>
-              {t('issue.oldDevice')}
             </Text>
           ) : missing.length && tab === 'console' ? (
             <Text testID="manager-old-device" role="note" style={[styles.note, { color: c.ink2 }]}>

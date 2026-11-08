@@ -43,10 +43,7 @@
     },
     {
       "kind": "ServerNotification",
-      "methods": [
-        "litch/manager/issue/changed",
-        "litch/manager/issue/activity"
-      ],
+      "methods": ["litch/manager/issue/changed", "litch/manager/issue/activity"],
       "description": "changed 用于快照失效；activity 携带事件 id、issue id、作者和 followUp，供用户未读与经理自动投递。"
     }
   ]

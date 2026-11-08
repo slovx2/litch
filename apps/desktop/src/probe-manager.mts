@@ -1038,7 +1038,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     reopenedNote &&
       reopenedNote.open &&
       reopenedNote.querySelector('summary')?.textContent?.includes('经理重新打开') &&
-      reopenedNote.textContent?.includes('song-pc'),
+      reopenedNote.textContent?.includes('win-test'),
   )
 
   // 忽略 D-17：选填理由，确认后离开待定、不计待处理；在“已忽略”里看得到理由，撤销忽略回到待定
@@ -1566,10 +1566,10 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       (id) => !document.querySelector(`.sb-scroll [data-session="${CSS.escape(id ?? '')}"]`),
     )
   await click('[data-sidebar-mode="manager"]')
-  // 示例里的 sub2api：经理自己回合已停、挂着后台命令，另有一条工作线在跑。记号是后台记号而不是运行中，文字写明工作线
+  // 支付网关示例：经理自己回合已停、挂着后台命令，另有一条工作线在跑。记号是后台记号而不是运行中，文字写明工作线
   const linesRow = await until('只有工作线在跑的经理行', () =>
     [...document.querySelectorAll<HTMLElement>('.mg-sidebar-manager')].find((row) =>
-      row.querySelector('.mg-pick')?.textContent?.includes('sub2api'),
+      row.querySelector('.mg-pick')?.textContent?.includes('支付网关'),
     ),
   )
   const linesState =

@@ -5,7 +5,17 @@ import { type ManagerIssuesView, managerIssueQueryKey } from '../model-manager-i
 import { managerIssuePending } from '../projection/manager-public-issues.mjs'
 import { copyValue } from '../value.mjs'
 
+/** 预览播种：第一次投影某个经理时调用，返回要加入或同编号覆盖的 issue。 */
+export type MockManagerIssueSeed = (
+  key: string,
+  specials: readonly ManagerIssue[],
+) => ManagerIssue[]
+
 export class MockManagerIssues {
+  private readonly seed: MockManagerIssueSeed | undefined
+  constructor(options: { seed?: MockManagerIssueSeed } = {}) {
+    this.seed = options.seed
+  }
   private readonly records = new Map<string, Map<string, ManagerIssue>>()
   private readonly caches = new Map<string, ManagerIssuesView>()
   private readonly queries = new Map<string, Map<string, ManagerIssueQuery>>()
@@ -16,6 +26,7 @@ export class MockManagerIssues {
   }
   private data(key: string, board: ManagerBoardView) {
     let records = this.records.get(key)
+    const fresh = !records
     if (!records) {
       records = new Map()
       this.records.set(key, records)
@@ -99,7 +110,56 @@ export class MockManagerIssues {
             : 'closed'
       records.set(id, issue)
     }
+    if (fresh && this.seed)
+      for (const issue of this.seed(key, [...records.values()])) records.set(issue.id, issue)
     return records
+  }
+  /** 缓存里的页：加载过更多时保留从头到已加载处的全部条目（与核心缓存的合并结果同形）。 */
+  private cached(records: Map<string, ManagerIssue>, query: ManagerIssueQuery) {
+    if (!query.cursor) return this.page(records, query)
+    const { cursor, ...rest } = query
+    return {
+      ...this.page(records, { ...rest, limit: Number(cursor) + (query.limit ?? 30) }),
+      query,
+    }
+  }
+  private refreshCache(key: string, records: Map<string, ManagerIssue>, issue: ManagerIssue) {
+    const cache = this.caches.get(key)
+    if (!cache) return
+    cache.details[issue.id] = copyValue(issue)
+    for (const [queryKey, query] of this.queries.get(key) ?? [])
+      cache.pages[queryKey] = this.cached(records, query)
+  }
+  /**
+   * 预览里模拟经理回复：跟进开着才回（暂停时经理不回），回复标成未读。
+   * 由 mock-manager.mts 在用户评论后延时调用；返回是否回了。
+   */
+  reply(key: string, id: string, body: string, at: number): boolean {
+    const records = this.records.get(key)
+    const issue = records?.get(id)
+    if (!records || !issue || issue.followUp.state !== 'on') return false
+    const comment = {
+      id: `mock-comment-${++this.seq}`,
+      revision: 1,
+      author: { kind: 'manager' as const },
+      body,
+      createdAt: at,
+      updatedAt: at,
+      replyTo: null,
+    }
+    issue.discussion.comments.push(comment)
+    issue.timeline.push({
+      id: `comment:${comment.id}:1`,
+      kind: 'comment',
+      actor: 'manager',
+      at,
+      summary: body,
+      commentId: comment.id,
+    })
+    issue.unread = true
+    issue.updatedAt = at
+    this.refreshCache(key, records, issue)
+    return true
   }
   private page(records: Map<string, ManagerIssue>, q: ManagerIssueQuery) {
     const rows = [...records.values()].filter(
@@ -165,7 +225,7 @@ export class MockManagerIssues {
       }
       queries.set(queryKey, query)
       const page = this.page(records, query)
-      cache.pages[queryKey] = page
+      cache.pages[queryKey] = this.cached(records, query)
       return { page: copyValue(page) }
     }
     const idem = p.idempotencyKey ? JSON.stringify([key, name, p.idempotencyKey]) : null
@@ -240,15 +300,27 @@ export class MockManagerIssues {
         if (followUp) issue.followUp = { state: followUp, changedAt: at, changedBy: 'user' }
         issue.revision++
         issue.stateGroup = managerIssuePending(issue) ? 'open' : 'closed'
+        issue.timeline.push({
+          id: `change:mock-${++this.seq}`,
+          kind: followUp ? 'followUp' : patch.status ? 'status' : 'edited',
+          actor: 'user',
+          at,
+          summary: typeof p.why === 'string' ? p.why : '',
+        })
       } else if (name === 'managers.issue.follow') {
         issue.followUp = { state: p.state, changedAt: at, changedBy: 'user' }
         issue.revision++
+        issue.timeline.push({
+          id: `change:mock-${++this.seq}`,
+          kind: 'followUp',
+          actor: 'user',
+          at,
+          summary: typeof p.why === 'string' ? p.why : '',
+        })
       } else if (name === 'managers.issue.seen') issue.unread = issue.quick.report?.unread ?? false
       if (name !== 'managers.issue.read') issue.updatedAt = at
     }
-    cache.details[issue.id] = copyValue(issue)
-    for (const [queryKey, query] of this.queries.get(key) ?? [])
-      cache.pages[queryKey] = this.page(records, query)
+    this.refreshCache(key, records, issue)
     const result = { issue: copyValue(issue) }
     if (idem) this.idem.set(idem, result)
     return result

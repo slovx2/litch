@@ -193,6 +193,8 @@ function createHost(): Core | MockCore {
       ...(pairTtlMs > 0 ? { pairTtlMs } : {}),
       // fresh：本机一个 harness 都没装（试首启引导、一键安装）
       ...(process.env.LITCH_MOCK_SCENE === 'fresh' ? { scene: 'fresh' as const } : {}),
+      // 按四类控制台写的验收关掉经理 issue（设备服务较旧时的样子）
+      ...(process.env.LITCH_MOCK_MANAGER_ISSUES === '0' ? { managerIssues: false } : {}),
       ...organizer,
     })
   }

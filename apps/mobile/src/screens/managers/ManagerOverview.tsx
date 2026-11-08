@@ -17,7 +17,8 @@ export type OverviewCategory = ManagerPost['kind']
 /** 普通 issue 摘要：开放、等我看、跟进已暂停；点了带着对应过滤进控制台 */
 export type OverviewIssueKey = 'active' | 'unread' | 'paused'
 export interface OverviewIssues {
-  counts: Record<OverviewIssueKey, number>
+  /** 还没数回来是 null */
+  counts: Record<OverviewIssueKey, number | null>
   onOpen(key: OverviewIssueKey): void
 }
 export type OverviewCounts = Record<OverviewCategory, { pending: number; total: number }>
@@ -143,13 +144,13 @@ export function ManagerOverview({
         <View style={styles.issues} testID="overview-issues">
           <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{t('issue.summary')}</Text>
           {(['active', 'unread', 'paused'] as const).map((key) => {
-            const hot = key === 'unread' && issues.counts.unread > 0
+            const hot = key === 'unread' && (issues.counts.unread ?? 0) > 0
             return (
               <Pressable
                 key={key}
                 testID={`overview-issues:${key}`}
                 accessibilityRole="button"
-                aria-label={`${t('issue.summary')} · ${t(`issue.summary.${key}`)} ${issues.counts[key]}`}
+                aria-label={`${t('issue.summary')} · ${t(`issue.summary.${key}`)} ${issues.counts[key] ?? ''}`}
                 onPress={() => issues.onOpen(key)}
                 style={({ pressed }) => [
                   styles.issue,
@@ -169,7 +170,7 @@ export function ManagerOverview({
                     fontWeight: hot ? '700' : '400',
                   }}
                 >
-                  {issues.counts[key]}
+                  {issues.counts[key] ?? '…'}
                 </Text>
               </Pressable>
             )

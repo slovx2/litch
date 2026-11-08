@@ -9,13 +9,14 @@ import type {
 } from '@litch/core'
 import { type ReactNode, useCallback, useEffect, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
-import type { ManagerIssuesView } from '../../../../../../packages/core/src/manager-issues-stub.mts'
 import {
   DEFAULT_MANAGER_ISSUE_FILTER,
+  MANAGER_ISSUE_ATTENTION_FILTERS,
   MANAGER_ISSUE_KINDS,
   MANAGER_ISSUE_LIST_ORDERS,
   type ManagerIssueFilter,
   managerIssueFilterKey,
+  managerIssuePageKey,
   managerIssueStatusOptions,
   withManagerIssueKinds,
 } from '../../../../../../packages/core/src/projection/manager-issue-list.mts'
@@ -31,7 +32,12 @@ import { useTheme } from '../../../ui/theme'
 import { DiscussionDrawer } from '../DiscussionDrawer'
 import { Issue } from '../Issue'
 import { IssueContext } from '../IssueRelations'
-import { type IssueCommands, useIssueCommands } from './data'
+import {
+  type IssueCommands,
+  type ManagerIssuesState,
+  useIssueCommands,
+  useIssueCounts,
+} from './data'
 import { IssueComposer, IssueMetaLine, IssueThread } from './IssueThread'
 
 const memory = new Map<string, ManagerIssueFilter>()
@@ -59,7 +65,7 @@ export function useIssueConsole({
   board: ManagerBoardView | null
   features: ManagerFeaturesView
   suggestions: readonly SuggestionView[]
-  issues: ManagerIssuesView
+  issues: ManagerIssuesState
   disabled: boolean
   reason: string
   narrow: boolean
@@ -84,10 +90,11 @@ export function useIssueConsole({
   const [creating, setCreating] = useState(false)
   const [sheet, setSheet] = useState<string | null>(null)
   const [error, setError] = useState('')
-  const page = issues.pages[managerIssueFilterKey(filter)]
+  const page = issues.pages[managerIssuePageKey(manager.id, filter)]
+  const attention = useIssueCounts(manager, issues, MANAGER_ISSUE_ATTENTION_FILTERS)
   const list = useCallback(
-    (more = false) =>
-      void commands.list(filter, more).then(
+    (cursor?: string) =>
+      void commands.list(filter, cursor ? { cursor } : {}).then(
         () => setError(''),
         (cause) => setError(cause instanceof Error ? cause.message : String(cause)),
       ),
@@ -104,10 +111,11 @@ export function useIssueConsole({
   }, [preset, applied, setFilter])
   const single = filter.kinds.length === 1 ? filter.kinds[0] : null
   const filtered =
-    managerIssueFilterKey(filter) !== managerIssueFilterKey(withManagerIssueKinds(DEFAULT_MANAGER_ISSUE_FILTER, filter.kinds))
+    managerIssueFilterKey(filter) !==
+    managerIssueFilterKey(withManagerIssueKinds(DEFAULT_MANAGER_ISSUE_FILTER, filter.kinds))
   const capsule = (kind: ManagerIssueKind | 'all') => {
     const on = kind === 'all' ? filter.kinds.length === 0 : single === kind
-    const count = kind === 'all' ? 0 : issues.summary.attention[kind]
+    const count = kind === 'all' ? 0 : (attention?.[kind] ?? 0)
     const label = t(kind === 'all' ? 'issue.kind.all' : `issue.kind.${kind}`)
     return (
       <Pressable
@@ -224,22 +232,27 @@ export function useIssueConsole({
           {t('issue.loaded', { n: page.entries.length, total: page.total })}
         </Text>
         {page.nextCursor ? (
-          <Button kind="plain" label={t('issue.loadMore')} testID="issue-more" onPress={() => list(true)} />
+          <Button
+            kind="plain"
+            label={t('issue.loadMore')}
+            testID="issue-more"
+            onPress={() => list(page?.nextCursor ?? undefined)}
+          />
         ) : null}
       </View>
     ) : (
       <Text testID="issue-empty" style={[styles.note, { color: c.ink3, textAlign: 'center' }]}>
-        {t(filtered || filter.kinds.length !== 1 || single !== 'ordinary' ? 'issue.empty' : 'issue.emptyAll')}
+        {t(
+          filtered || filter.kinds.length !== 1 || single !== 'ordinary'
+            ? 'issue.empty'
+            : 'issue.emptyAll',
+        )}
       </Text>
     )
   const overlays = (
     <>
       {filtering ? (
-        <FilterDrawer
-          filter={filter}
-          onChange={setFilter}
-          onClose={() => setFiltering(false)}
-        />
+        <FilterDrawer filter={filter} onChange={setFilter} onClose={() => setFiltering(false)} />
       ) : null}
       {creating ? (
         <NewIssueDrawer
@@ -299,7 +312,7 @@ export function IssueSheetDrawer({
   features: ManagerFeaturesView
   suggestions: readonly SuggestionView[]
   issueId: string
-  issues: ManagerIssuesView
+  issues: ManagerIssuesState
   commands: IssueCommands
   disabled: boolean
   reason: string
@@ -359,7 +372,12 @@ export function IssueSheetDrawer({
     >
       <View style={{ gap: 10 }}>
         <IssueMetaLine
-          head={{ ...issue, author: issue.author.kind, followUp: issue.followUp.state, preview: '' }}
+          head={{
+            ...issue,
+            author: issue.author.kind,
+            followUp: issue.followUp.state,
+            preview: '',
+          }}
           comments={issue.discussion.comments.length}
         />
         {special && !talking ? (
@@ -429,7 +447,11 @@ function FilterDrawer({
               key={kind}
               radio
               label={t(kind === 'all' ? 'issue.kind.all' : `issue.kind.${kind}`)}
-              on={kind === 'all' ? !filter.kinds.length : filter.kinds.length === 1 && filter.kinds[0] === kind}
+              on={
+                kind === 'all'
+                  ? !filter.kinds.length
+                  : filter.kinds.length === 1 && filter.kinds[0] === kind
+              }
               testID={`issue-filter-kind:${kind}`}
               onPress={() => onChange(withManagerIssueKinds(filter, kind === 'all' ? [] : [kind]))}
             />
@@ -444,7 +466,10 @@ function FilterDrawer({
               on={filter.statuses.includes(status)}
               testID={`issue-filter-status:${status}`}
               onPress={() =>
-                onChange({ ...filter, statuses: toggle<ManagerIssueStatus>(filter.statuses, status) })
+                onChange({
+                  ...filter,
+                  statuses: toggle<ManagerIssueStatus>(filter.statuses, status),
+                })
               }
             />
           )),
@@ -468,7 +493,11 @@ function FilterDrawer({
               key={value}
               radio
               label={t(
-                value === 'all' ? 'issue.filter.all' : value === 'on' ? 'issue.follow.on' : 'issue.follow.off',
+                value === 'all'
+                  ? 'issue.filter.all'
+                  : value === 'on'
+                    ? 'issue.follow.on'
+                    : 'issue.follow.off',
               )}
               on={filter.followUp === value}
               testID={`issue-filter-follow:${value}`}

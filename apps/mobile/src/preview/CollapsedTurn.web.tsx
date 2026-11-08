@@ -26,7 +26,7 @@ const background: SessionBackgroundView = {
       id: 'tests',
       kind: 'shell',
       status: 'completed',
-      title: 'cd /root/tyrs-hand/litch && npm run client:test',
+      title: 'cd /home/dev/projects/litch && npm run client:test',
       itemId: 'tests',
       turnId: 'first',
       agentThreadId: null,

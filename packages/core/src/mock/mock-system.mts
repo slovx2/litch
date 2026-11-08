@@ -31,7 +31,7 @@ const TEXT = {
     herePrompt: '侧栏分区、分组标题前面的 “## ” 去掉，其他皮肤不变。',
     child: '查构建为什么变慢',
     excerpt:
-      '最慢的三步找到了，结论写在 [ci-timing.md](</Volumes/workspace/litch/docs/ci-timing.md>)，原始计时在 `artifacts/timing.json`。\n\n## 最慢的三步\n\n- **端到端用例**：9 分钟，串行跑 4 个浏览器；可以按浏览器拆成并行任务。\n- **安装依赖**：3 分钟，`npm ci` 没走缓存，缓存键带了时间戳。\n- **类型检查**：2 分钟，`tsc` 每个包各起一次。\n\n## 没做的\n\n只读没改；并行拆分要改 `ci.yml`，留给下一步。',
+      '最慢的三步找到了，结论写在 [ci-timing.md](</Users/dev/projects/litch/docs/ci-timing.md>)，原始计时在 `artifacts/timing.json`。\n\n## 最慢的三步\n\n- **端到端用例**：9 分钟，串行跑 4 个浏览器；可以按浏览器拆成并行任务。\n- **安装依赖**：3 分钟，`npm ci` 没走缓存，缓存键带了时间戳。\n- **类型检查**：2 分钟，`tsc` 每个包各起一次。\n\n## 没做的\n\n只读没改；并行拆分要改 `ci.yml`，留给下一步。',
     from: '修 CI',
     message:
       '我这边改完了 `ci.yml` 的缓存键：\n\n- 去掉了时间戳\n- 改成按 `package-lock.json` 的哈希\n\n你那边的基线能再跑一次吗？跑完把**墙钟时间**告诉我。',
@@ -56,7 +56,7 @@ const TEXT = {
       'Remove the “## ” before sidebar section and group headings; other skins stay as they are.',
     child: 'Find why the build got slower',
     excerpt:
-      'Found the three slowest steps. Findings are in [ci-timing.md](</Volumes/workspace/litch/docs/ci-timing.md>), raw timings in `artifacts/timing.json`.\n\n## Slowest steps\n\n- **End-to-end tests**: 9 minutes, 4 browsers run serially; they can be split into parallel jobs.\n- **Install dependencies**: 3 minutes, `npm ci` misses the cache because the key has a timestamp.\n- **Type check**: 2 minutes, `tsc` starts once per package.\n\n## Not done\n\nRead only; splitting the jobs needs a change to `ci.yml`, left for the next step.',
+      'Found the three slowest steps. Findings are in [ci-timing.md](</Users/dev/projects/litch/docs/ci-timing.md>), raw timings in `artifacts/timing.json`.\n\n## Slowest steps\n\n- **End-to-end tests**: 9 minutes, 4 browsers run serially; they can be split into parallel jobs.\n- **Install dependencies**: 3 minutes, `npm ci` misses the cache because the key has a timestamp.\n- **Type check**: 2 minutes, `tsc` starts once per package.\n\n## Not done\n\nRead only; splitting the jobs needs a change to `ci.yml`, left for the next step.',
     from: 'Fix CI',
     message:
       'I changed the cache key in `ci.yml`:\n\n- dropped the timestamp\n- keyed on the `package-lock.json` hash\n\nCan you run the baseline again and tell me the **wall-clock time**?',

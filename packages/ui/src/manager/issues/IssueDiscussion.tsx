@@ -66,20 +66,14 @@ export function IssueDiscussion({
     ...issue.timeline.flatMap((entry): Row[] => {
       // 评论、问答在上面单独画；创建写在卡头的元信息里
       if (['comment', 'question', 'answer', 'created'].includes(entry.kind)) return []
-      const who = t(entry.actor === 'manager' ? 'issue.author.manager' : 'issue.author.user')
+      // 设备把操作原因写在 summary 里（用户操作时由界面给出“状态改为 进行中”这样的话）；没有就用通用说法
+      const who =
+        entry.actor === 'manager' || entry.actor === 'user'
+          ? `${t(entry.actor === 'manager' ? 'issue.author.manager' : 'issue.author.user')} · `
+          : ''
       const what =
-        entry.kind === 'status'
-          ? t('issue.timeline.status', {
-              status: t(`issue.status.${entry.summary}` as Parameters<typeof t>[0]),
-            })
-          : entry.kind === 'followUp'
-            ? t(
-                entry.summary === 'off'
-                  ? 'issue.timeline.followUp.off'
-                  : 'issue.timeline.followUp.on',
-              )
-            : t(`issue.timeline.${entry.kind}` as Parameters<typeof t>[0])
-      return [{ kind: 'event', at: entry.at, id: entry.id, text: `${who} · ${what}` }]
+        entry.summary.trim() || t(`issue.timeline.${entry.kind}` as Parameters<typeof t>[0])
+      return [{ kind: 'event', at: entry.at, id: entry.id, text: `${who}${what}` }]
     }),
   ].sort((a, b) => a.at - b.at)
   const send = async () => {

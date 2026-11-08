@@ -1,41 +1,43 @@
 // 手机上经理 issue 的数据入口：组件只经这里读 issue 视图、发 issue 命令，与桌面 packages/ui/src/manager/issues/data.ts 对应。
-// 【桩】核心还没有 issue 的订阅与命令（M1 补），先接 core 里的内存桩；M1 接上后换成 useKey + channel.command，组件不用改。
-import type { ManagerBoardView, ManagerView } from '@litch/core'
-import { useEffect, useMemo, useSyncExternalStore } from 'react'
+// 视图是经理看板订阅里的 issues（核心缓存，时间是毫秒）；命令走 managers.issues.list 与 managers.issue.*。
 import {
-  createManagerIssueStub,
+  type ManagerBoardTopicView,
+  type ManagerIssueFollowUp,
+  type ManagerIssueId,
   type ManagerIssuesView,
-} from '../../../../../../packages/core/src/manager-issues-stub.mts'
-import type { ManagerIssueFilter } from '../../../../../../packages/core/src/projection/manager-issue-list.mts'
-import type {
-  ManagerIssueFollowUp,
-  ManagerOrdinaryStatus,
-} from '../../../../../../packages/protocol/src/manager-issues.mts'
-import { ISSUE_STUB_ENABLED, ISSUE_STUB_SCENE } from './stub-enabled'
+  type ManagerOrdinaryStatus,
+  type ManagerView,
+  managerIssueQueryKey,
+} from '@litch/core'
+import { useEffect, useMemo } from 'react'
+import {
+  type ManagerIssueFilter,
+  managerIssueQuery,
+} from '../../../../../../packages/core/src/projection/manager-issue-list.mts'
+import { useChannel } from '../../../shell/services'
 
-let lang: 'zh-CN' | 'en' = 'zh-CN'
-const stub = createManagerIssueStub({
-  now: () => Date.now(),
-  lang: () => lang,
-  later: (run) => setTimeout(run, 2500),
-})
-stub.configure({ enabled: ISSUE_STUB_ENABLED, scene: ISSUE_STUB_SCENE })
+export interface ManagerIssuesState extends ManagerIssuesView {
+  /** true：设备支持 issue；false：设备服务旧，控制台照旧是四类；null：看板还没到 */
+  supported: boolean | null
+}
+
+const EMPTY: ManagerIssuesView = { pages: {}, details: {}, loading: [], error: null }
 
 export function useManagerIssues(
-  manager: Pick<ManagerView, 'deviceId' | 'id'>,
-  board: ManagerBoardView | null,
-  language: 'zh-CN' | 'en',
-): ManagerIssuesView {
-  lang = language
-  const { deviceId, id } = manager
-  useEffect(() => {
-    if (board) stub.syncBoard(deviceId, id, board)
-  }, [deviceId, id, board])
-  return useSyncExternalStore(stub.subscribe, () => stub.view(deviceId, id))
+  view: ManagerBoardTopicView | null | undefined,
+): ManagerIssuesState {
+  return useMemo(
+    () => ({
+      ...(view?.issues ?? EMPTY),
+      supported: view ? view.features.issues === true : null,
+    }),
+    [view],
+  )
 }
 
 export interface IssueCommands {
-  list(filter: ManagerIssueFilter, more?: boolean): Promise<void>
+  /** 列一页；cursor 是上一页的 nextCursor（加载更多）；limit 给计数用的一行查询 */
+  list(filter: ManagerIssueFilter, options?: { cursor?: string; limit?: number }): Promise<void>
   read(id: string): Promise<unknown>
   create(params: {
     title: string
@@ -46,24 +48,78 @@ export interface IssueCommands {
     id: string
     revision: number
     patch: { title?: string; body?: string; status?: ManagerOrdinaryStatus }
+    why: string
   }): Promise<unknown>
   comment(params: { id: string; revision: number; body: string }): Promise<unknown>
-  follow(params: { id: string; revision: number; state: ManagerIssueFollowUp }): Promise<unknown>
+  follow(params: {
+    id: string
+    revision: number
+    state: ManagerIssueFollowUp
+    why: string
+  }): Promise<unknown>
   seen(params: { id: string; revision: number }): Promise<unknown>
 }
 
+/** 提交标识：重发同一次新建或评论时设备认得出来 */
+const once = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+
 export function useIssueCommands(manager: Pick<ManagerView, 'deviceId' | 'id'>): IssueCommands {
+  const channel = useChannel()
   const { deviceId, id: managerId } = manager
-  return useMemo(
-    () => ({
-      list: (filter, more) => stub.list(deviceId, managerId, filter, more),
-      read: (id) => stub.read(deviceId, managerId, id),
-      create: (params) => stub.create(deviceId, managerId, params),
-      update: (params) => stub.update(deviceId, managerId, params),
-      comment: (params) => stub.comment(deviceId, managerId, params),
-      follow: (params) => stub.follow(deviceId, managerId, params),
-      seen: (params) => stub.seen(deviceId, managerId, params),
-    }),
-    [deviceId, managerId],
-  )
+  return useMemo(() => {
+    const ref = (id: string) => id as ManagerIssueId
+    return {
+      list: async (filter, options = {}) => {
+        await channel.command('managers.issues.list', {
+          deviceId,
+          ...managerIssueQuery(managerId, filter, options.limit),
+          ...(options.cursor ? { cursor: options.cursor } : {}),
+        })
+      },
+      read: (id) => channel.command('managers.issue.read', { deviceId, managerId, id: ref(id) }),
+      create: (params) =>
+        channel.command('managers.issue.create', {
+          deviceId,
+          managerId,
+          ...params,
+          idempotencyKey: once(),
+        }),
+      update: ({ id, ...rest }) =>
+        channel.command('managers.issue.update', { deviceId, managerId, id: ref(id), ...rest }),
+      comment: ({ id, ...rest }) =>
+        channel.command('managers.issue.comment', {
+          deviceId,
+          managerId,
+          id: ref(id),
+          ...rest,
+          idempotencyKey: once(),
+        }),
+      follow: ({ id, ...rest }) =>
+        channel.command('managers.issue.follow', { deviceId, managerId, id: ref(id), ...rest }),
+      seen: ({ id, ...rest }) =>
+        channel.command('managers.issue.seen', { deviceId, managerId, id: ref(id), ...rest }),
+    }
+  }, [channel, deviceId, managerId])
+}
+
+/** 几组条件各自的总数：每组一条只取一行的查询，读那一页的 total；还没回来是 null。 */
+export function useIssueCounts<K extends string>(
+  manager: Pick<ManagerView, 'deviceId' | 'id'>,
+  issues: ManagerIssuesState,
+  filters: Record<K, ManagerIssueFilter>,
+): Record<K, number | null> | null {
+  const commands = useIssueCommands(manager)
+  const { supported } = issues
+  useEffect(() => {
+    if (!supported) return
+    for (const filter of new Set(Object.values<ManagerIssueFilter>(filters)))
+      void commands.list(filter, { limit: 1 }).catch(() => {})
+  }, [supported, commands, filters])
+  if (!supported) return null
+  return Object.fromEntries(
+    Object.entries<ManagerIssueFilter>(filters).map(([key, filter]) => [
+      key,
+      issues.pages[managerIssueQueryKey(managerIssueQuery(manager.id, filter, 1))]?.total ?? null,
+    ]),
+  ) as Record<K, number | null>
 }

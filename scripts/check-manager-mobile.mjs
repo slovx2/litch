@@ -295,13 +295,13 @@ try {
   await wait(reopenedNote)
   assert.ok(
     await read(
-      `(()=>{const e=document.querySelector('${reopenedNote}');return e.innerText.includes('经理重新打开')&&e.innerText.includes('song-pc')})()`,
+      `(()=>{const e=document.querySelector('${reopenedNote}');return e.innerText.includes('经理重新打开')&&e.innerText.includes('win-test')})()`,
     ),
     '经理重开的理由默认展开',
   )
   await read(`document.querySelector('${reopenedNote} [role=button]').click()`)
   await until(
-    () => read(`!document.querySelector('${reopenedNote}').innerText.includes('song-pc')`),
+    () => read(`!document.querySelector('${reopenedNote}').innerText.includes('win-test')`),
     '收起经理重开的理由',
   )
   // 忽略 D-17：选填理由确认后标“已忽略”、不计待处理、默认收起；展开看理由，撤销忽略回到待定

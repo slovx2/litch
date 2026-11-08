@@ -11,6 +11,7 @@ export type BoardReference =
   | ManagerRequestId
   | `P-${number}`
   | `S-${string}`
+  | `X-${number}`
 export interface ReferencePart {
   text: string
   id?: BoardReference
@@ -26,7 +27,7 @@ export function boardReferences(
   const parts: ReferencePart[] = []
   const pattern = prose
     ? managerReferencePattern()
-    : /(?<!\w)#?(?:[IDRP]-\d+|S-[\w]+(?:-[\w]+)*)(?!\w)/g
+    : /(?<!\w)#?(?:[IDRPX]-\d+|S-[\w]+(?:-[\w]+)*)(?!\w)/g
   let start = 0
   for (const match of text.matchAll(pattern)) {
     const id = match[0].replace(/^#/, '') as BoardReference

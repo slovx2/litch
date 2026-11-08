@@ -141,6 +141,11 @@ export interface MockCoreOptions {
    * 不给是平常那一套示例
    */
   scene?: 'fresh'
+  /**
+   * 设备是否宣告经理 issue（litchManagerIssues），默认宣告。false 时控制台照旧是四类，
+   * 给按四类写的验收（经理冒烟）用；比应用旧的设备服务本来就没有这项
+   */
+  managerIssues?: boolean
   /** 本机整理存在哪（界面预览可以给浏览器存储）。不给就只记在内存里 */
   organizer?: OrganizerStore
 }
@@ -2163,6 +2168,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     },
   })
   const managers = createMockManagers({
+    issues: options.managerIssues !== false,
     summaries: (deviceId) => sidebars.get(deviceId)?.sessions ?? [],
     suggestions: (deviceId) => suggestionsView(deviceId).suggestions,
     ...tasksHost,

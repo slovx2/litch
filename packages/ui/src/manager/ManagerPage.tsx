@@ -22,6 +22,7 @@ import type {
   ManagerRequestId,
   ManagerView,
 } from '../../../core/src/model-manager.mts'
+import { MANAGER_ISSUE_SUMMARY_FILTERS } from '../../../core/src/projection/manager-issue-list.mts'
 import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
@@ -39,7 +40,7 @@ import { DiscussionPane } from './DiscussionPane.tsx'
 import { ManagerFeaturesContext, useManagerBoard } from './data.ts'
 import { DiscussionPaneContext } from './discussion-pane.ts'
 import { IssueOrderSelect } from './issue-order.tsx'
-import { useManagerIssues } from './issues/data.ts'
+import { useIssueCounts, useManagerIssues } from './issues/data.ts'
 import { IssueConsole, type IssuePreset } from './issues/IssueConsole.tsx'
 import { ManagerForm } from './ManagerForm.tsx'
 import { ManagerRules } from './ManagerRules.tsx'
@@ -97,7 +98,7 @@ export function ManagerPage({
     requestIgnore: true,
   }
   /** 设备服务比应用旧、没宣告的后加能力（按功能列出，写进看板顶上的说明） */
-  const missing = (['feedback', 'posts', 'ignore', 'requestIgnore'] as const).filter(
+  const missing = (['feedback', 'posts', 'ignore', 'requestIgnore', 'issues'] as const).filter(
     (key) => !features[key],
   )
   const allSuggestions = useKey<readonly SuggestionView[]>(keys.suggestions) ?? []
@@ -133,10 +134,13 @@ export function ManagerPage({
   const [itemTarget, setItemTarget] = useState<{ id: ManagerItemId } | null>(null)
   const itemLocated = useCallback(() => setItemTarget(null), [])
   const [requestTarget, setRequestTarget] = useState<{ id: ManagerRequestId } | null>(null)
-  const [pagingTarget, setPagingTarget] = useState<BoardReference | null>(null)
+  const [pagingTarget, setPagingTarget] = useState<Exclude<BoardReference, `X-${number}`> | null>(
+    null,
+  )
   const requestLocated = useCallback(() => setRequestTarget(null), [])
   // issue 控制台（设备支持 litchManagerIssues 时）：编号跳转与概览摘要的过滤都交给它
-  const issues = useManagerIssues(manager, view?.board ?? null)
+  const issues = useManagerIssues(view)
+  const issueCounts = useIssueCounts(manager, issues, MANAGER_ISSUE_SUMMARY_FILTERS)
   const issueMode = issues.supported === true
   const [issueTarget, setIssueTarget] = useState<string | null>(null)
   const issueLocated = useCallback(() => setIssueTarget(null), [])
@@ -146,15 +150,16 @@ export function ManagerPage({
     setBoardLayout({ open: true })
     onLocation({ ...location, tab: 'inbox', narrow: 'board' })
   }
-  const openReference = (ref: BoardReference | `#${number}`) => {
+  const openReference = (ref: BoardReference) => {
     if (issueMode && !ref.startsWith('I-')) {
       setBoardLayout({ open: true })
       setIssueTarget(ref)
       onLocation({ ...location, tab: 'inbox', narrow: 'board' })
       return
     }
-    // 没有 issue 控制台的设备不会发 #n
-    const id = ref as BoardReference
+    // 没有 issue 控制台的设备不会出现 X-n
+    if (ref.startsWith('X-')) return
+    const id = ref as Exclude<BoardReference, `X-${number}`>
     if (view?.paging) setPagingTarget(id)
     if (boardBody.current && !view?.paging) boardBody.current.scrollTop = 0
     setBoardLayout({ open: true })
@@ -357,23 +362,13 @@ export function ManagerPage({
     setInboxTab(kind)
     setTab(kind)
   }
-  const overviewIssues: OverviewIssues | undefined = issueMode
-    ? {
-        counts: {
-          active: issues.summary.ordinary.active,
-          unread: issues.summary.ordinary.unread,
-          paused: issues.summary.ordinary.paused,
-        },
-        onOpen: (key: OverviewIssueKey) =>
-          presetIssues(
-            key === 'active'
-              ? { statuses: ['open', 'in_progress', 'blocked'] }
-              : key === 'unread'
-                ? { unread: true }
-                : { followUp: 'off' },
-          ),
-      }
-    : undefined
+  const overviewIssues: OverviewIssues | undefined =
+    issueMode && issueCounts
+      ? {
+          counts: issueCounts,
+          onOpen: (key: OverviewIssueKey) => presetIssues(MANAGER_ISSUE_SUMMARY_FILTERS[key]),
+        }
+      : undefined
   const consoleTab = ['inbox', 'decisions', 'requests', 'suggestions', 'reports'].includes(tab)
   const readOnly = manager.status !== 'active'
   const readOnlyText = t(manager.status === 'ending' ? 'manager.endingNote' : 'manager.readOnly')
@@ -566,10 +561,6 @@ export function ManagerPage({
         ) : null}
         {disabled ? (
           <p className="mg-readonly">{readOnly ? readOnlyText : t('manager.offline')}</p>
-        ) : consoleTab && issues.supported === false ? (
-          <p className="mg-readonly" data-old-device="issues" role="note">
-            {t('issue.oldDevice')}
-          </p>
         ) : missing.length ? (
           <p className="mg-readonly" data-old-device role="note">
             {t('manager.oldDevice', {
@@ -617,6 +608,11 @@ export function ManagerPage({
                         ...(board.requests ?? []).map((request) => request.id),
                         ...board.items.map((item) => item.id),
                         ...board.decisions.map((decision) => decision.id),
+                        // 普通 issue（X-n）：已读到的列表行和详情
+                        ...Object.values(issues.pages).flatMap((one) =>
+                          one.entries.map((head) => head.id as BoardReference),
+                        ),
+                        ...(Object.keys(issues.details) as BoardReference[]),
                       ]),
                       previews: new Map([
                         ...board.items.map(

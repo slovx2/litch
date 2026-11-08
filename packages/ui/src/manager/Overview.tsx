@@ -8,7 +8,8 @@ import { BoardMarkdown } from './BoardMarkdown.tsx'
 /** 普通 issue 的摘要：开放、等我看、跟进已暂停；点了带着对应过滤进控制台 */
 export type OverviewIssueKey = 'active' | 'unread' | 'paused'
 export interface OverviewIssues {
-  counts: Record<OverviewIssueKey, number>
+  /** 还没数回来是 null */
+  counts: Record<OverviewIssueKey, number | null>
   onOpen(key: OverviewIssueKey): void
 }
 const ISSUE_KEYS: readonly OverviewIssueKey[] = ['active', 'unread', 'paused']
@@ -68,11 +69,12 @@ export function Overview({
               type="button"
               key={key}
               data-overview-issues={key}
-              data-pending={(key === 'unread' && issues.counts.unread > 0) || undefined}
-              aria-label={`${t('issue.summary')} · ${t(`issue.summary.${key}`)} ${issues.counts[key]}`}
+              data-pending={(key === 'unread' && (issues.counts.unread ?? 0) > 0) || undefined}
+              aria-label={`${t('issue.summary')} · ${t(`issue.summary.${key}`)} ${issues.counts[key] ?? ''}`}
               onClick={() => issues.onOpen(key)}
             >
-              {t(`issue.summary.${key}`)} <b className="mg-overview-num">{issues.counts[key]}</b>
+              {t(`issue.summary.${key}`)}{' '}
+              <b className="mg-overview-num">{issues.counts[key] ?? '…'}</b>
             </button>
           ))}
         </nav>

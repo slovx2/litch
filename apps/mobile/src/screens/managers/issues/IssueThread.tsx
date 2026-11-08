@@ -4,13 +4,13 @@
 import type { ManagerView } from '@litch/core'
 import { type ReactNode, useState } from 'react'
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
-import { stamp } from '../../../../../../packages/ui/src/app/format.ts'
 import { MANAGER_ISSUE_STATUSES } from '../../../../../../packages/core/src/projection/manager-issue-list.mts'
 import type {
   ManagerIssue,
   ManagerIssueHead,
   ManagerOrdinaryStatus,
 } from '../../../../../../packages/protocol/src/manager-issues.mts'
+import { stamp } from '../../../../../../packages/ui/src/app/format.ts'
 import { useT } from '../../../ui/i18n'
 import { Chip } from '../../../ui/kit/controls'
 import { Icon, IconButton } from '../../../ui/kit/Icon'
@@ -35,7 +35,10 @@ export function IssueKindTag({ kind }: { kind: ManagerIssueHead['kind'] }) {
   return (
     <Text
       testID={`issue-kind:${kind}`}
-      style={[styles.kind, { color, borderColor: color, borderRadius: radius.s, fontSize: font.size.meta - 1 }]}
+      style={[
+        styles.kind,
+        { color, borderColor: color, borderRadius: radius.s, fontSize: font.size.meta - 1 },
+      ]}
     >
       {t(`issue.kind.${kind}`)}
     </Text>
@@ -130,16 +133,14 @@ export function IssueThread({
     ),
     ...issue.timeline.flatMap((entry): Row[] => {
       if (['comment', 'question', 'answer', 'created'].includes(entry.kind)) return []
-      const who = t(entry.actor === 'manager' ? 'issue.author.manager' : 'issue.author.user')
+      // 设备把操作原因写在 summary 里；没有就用通用说法（与桌面一致）
+      const who =
+        entry.actor === 'manager' || entry.actor === 'user'
+          ? `${t(entry.actor === 'manager' ? 'issue.author.manager' : 'issue.author.user')} · `
+          : ''
       const what =
-        entry.kind === 'status'
-          ? t('issue.timeline.status', {
-              status: t(`issue.status.${entry.summary}` as Parameters<typeof t>[0]),
-            })
-          : entry.kind === 'followUp'
-            ? t(entry.summary === 'off' ? 'issue.timeline.followUp.off' : 'issue.timeline.followUp.on')
-            : t(`issue.timeline.${entry.kind}` as Parameters<typeof t>[0])
-      return [{ kind: 'event', id: entry.id, at: entry.at, text: `${who} · ${what}` }]
+        entry.summary.trim() || t(`issue.timeline.${entry.kind}` as Parameters<typeof t>[0])
+      return [{ kind: 'event', id: entry.id, at: entry.at, text: `${who}${what}` }]
     }),
   ].sort((a, b) => a.at - b.at)
   const ordinary = issue.kind === 'ordinary'
@@ -170,6 +171,9 @@ export function IssueThread({
                           id: issue.id,
                           revision: issue.revision,
                           patch: { status: status as ManagerOrdinaryStatus },
+                          why: t('issue.why.status', {
+                            status: t(`issue.status.${status}` as Parameters<typeof t>[0]),
+                          }),
                         }),
                       )
                 }
@@ -188,6 +192,11 @@ export function IssueThread({
                   id: issue.id,
                   revision: issue.revision,
                   state: issue.followUp.state === 'on' ? 'off' : 'on',
+                  why: t(
+                    issue.followUp.state === 'on'
+                      ? 'issue.why.followUp.off'
+                      : 'issue.why.followUp.on',
+                  ),
                 }),
               )
             }
@@ -201,7 +210,11 @@ export function IssueThread({
               },
             ]}
           >
-            <Icon name={issue.followUp.state === 'on' ? 'pause' : 'forward'} size={14} color={c.ink2} />
+            <Icon
+              name={issue.followUp.state === 'on' ? 'pause' : 'forward'}
+              size={14}
+              color={c.ink2}
+            />
             <Text style={{ color: c.ink2, fontSize: font.size.meta + 1 }}>
               {t(issue.followUp.state === 'on' ? 'issue.follow.pause' : 'issue.follow.resume')}
             </Text>
@@ -265,7 +278,12 @@ export function IssueThread({
                 />
                 <Markdown text={row.body} />
                 {row.kind === 'question' && row.answer ? (
-                  <View style={[styles.answer, { borderLeftColor: c.accent, backgroundColor: c.sunken }]}>
+                  <View
+                    style={[
+                      styles.answer,
+                      { borderLeftColor: c.accent, backgroundColor: c.sunken },
+                    ]}
+                  >
                     <Markdown text={row.answer} />
                   </View>
                 ) : null}

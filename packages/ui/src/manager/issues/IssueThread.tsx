@@ -6,7 +6,10 @@ import {
   MANAGER_ISSUE_STATUSES,
   managerIssueHead,
 } from '../../../../core/src/projection/manager-issue-list.mts'
-import type { ManagerIssue } from '../../../../protocol/src/manager-issues.mts'
+import type {
+  ManagerIssue,
+  ManagerOrdinaryStatus,
+} from '../../../../protocol/src/manager-issues.mts'
 import type { ManagerPostId } from '../../../../protocol/src/manager-posts.mts'
 import { useT } from '../../app/appearance.ts'
 import { reasonOf } from '../../app/errors.ts'
@@ -66,15 +69,19 @@ export function IssueControls({
           disabled={disabled || busy}
           title={disabled ? reason : t('issue.filter.status')}
           data-issue-status-select
-          onChange={(event) =>
+          onChange={(event) => {
+            const status = event.target.value as ManagerOrdinaryStatus
             void run(
               commands.update({
                 id: issue.id,
                 revision: issue.revision,
-                patch: { status: event.target.value as 'open' },
+                patch: { status },
+                why: t('issue.why.status', {
+                  status: t(`issue.status.${status}` as Parameters<typeof t>[0]),
+                }),
               }),
             )
-          }
+          }}
         >
           {MANAGER_ISSUE_STATUSES.ordinary.map((status) => (
             <option key={status} value={status}>
@@ -89,15 +96,17 @@ export function IssueControls({
           aria-pressed={issue.followUp.state === 'on'}
           disabled={disabled || busy}
           title={disabled ? reason : undefined}
-          onClick={() =>
+          onClick={() => {
+            const state = issue.followUp.state === 'on' ? 'off' : 'on'
             void run(
               commands.follow({
                 id: issue.id,
                 revision: issue.revision,
-                state: issue.followUp.state === 'on' ? 'off' : 'on',
+                state,
+                why: t(state === 'on' ? 'issue.why.followUp.on' : 'issue.why.followUp.off'),
               }),
             )
-          }
+          }}
         >
           <Icon name={issue.followUp.state === 'on' ? 'pause' : 'play'} small />{' '}
           {t(issue.followUp.state === 'on' ? 'issue.follow.pause' : 'issue.follow.resume')}

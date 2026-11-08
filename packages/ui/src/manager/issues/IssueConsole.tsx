@@ -3,7 +3,6 @@
 import { managerBoardPages } from '@litch/core'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { ManagerIssuesView } from '../../../../core/src/manager-issues-stub.mts'
 import type { ManagerBoardTopicView, ManagerView } from '../../../../core/src/model-manager.mts'
 import { pagedDraftBoard } from '../../../../core/src/projection/manager-drafts.mts'
 import {
@@ -13,6 +12,7 @@ import {
   type ManagerIssueFilter,
   managerIssueFilterKey,
   managerIssueHead,
+  managerIssuePageKey,
   managerIssueStatusOptions,
   withManagerIssueKinds,
 } from '../../../../core/src/projection/manager-issue-list.mts'
@@ -28,7 +28,7 @@ import { reasonOf } from '../../app/errors.ts'
 import { Icon } from '../../app/icons.tsx'
 import { Decisions } from '../Decisions.tsx'
 import { useDiscussionPane } from '../discussion-pane.ts'
-import { type IssueCommands, useIssueCommands } from './data.ts'
+import { type IssueCommands, type ManagerIssuesState, useIssueCommands } from './data.ts'
 import { IssueCard } from './IssueCard.tsx'
 import { IssueQuick } from './IssueQuick.tsx'
 import { IssueThread } from './IssueThread.tsx'
@@ -77,7 +77,7 @@ export function IssueConsole({
 }: {
   manager: ManagerView
   view: ManagerBoardTopicView & { board: NonNullable<ManagerBoardTopicView['board']> }
-  issues: ManagerIssuesView
+  issues: ManagerIssuesState
   disabled: boolean
   reason: string
   /** 编号跳转来的 issue（#n 或旧别名） */
@@ -122,8 +122,7 @@ export function IssueConsole({
     },
     [saved],
   )
-  const key = managerIssueFilterKey(filter)
-  const page = issues.pages[key]
+  const page = issues.pages[managerIssuePageKey(manager.id, filter)]
   const invoke = useCallback(
     (request: Promise<unknown>) => {
       void request.then(
@@ -144,7 +143,7 @@ export function IssueConsole({
     setFilter({ ...DEFAULT_MANAGER_ISSUE_FILTER, ...preset.patch })
   }, [preset, saved, setFilter])
   const reading = useRef<string | null>(null)
-  // 编号跳转：解析别名，类型不在当前过滤里就切到那一类，展开并滚到它
+  // 编号跳转：类型不在当前过滤里就切到那一类，展开并滚到它
   useEffect(() => {
     if (!target) return
     const id = target as ManagerIssueId
@@ -182,7 +181,8 @@ export function IssueConsole({
         : board,
     [board, view.paging],
   )
-  const postRevision = (id: string) => board.posts?.find((post) => post.id === id)?.revision
+  // 特殊 issue 的旧对象操作（问经理）用对象自己的版本，不是 issue 的公共版本
+  const postRevision = (id: ManagerIssueId) => issues.details[id]?.quick.revision
   const entries = page?.entries ?? []
   const linkedHead =
     linked && !entries.some((head) => head.id === linked) && issues.details[linked]
@@ -363,7 +363,7 @@ export function IssueConsole({
               type="button"
               className="btn ghost"
               data-issue-more
-              onClick={() => invoke(commands.list(filter, true))}
+              onClick={() => invoke(commands.list(filter, { cursor: page.nextCursor ?? '' }))}
             >
               {t('issue.loadMore')}
             </button>

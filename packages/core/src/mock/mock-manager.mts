@@ -1,6 +1,7 @@
 import type { SuggestionView } from '../model-suggestions.mjs'
 import { mockPosts, sampleReport } from './manager-posts.mjs'
 import { MockManagerIssues } from './mock-manager-issues.mjs'
+import { sampleManagerIssues } from './sample-manager-issues.mjs'
 // 模拟经理：与真实通道同形的快照、增量和命令，答复按项校验版本。
 
 import { forwardedManagerQuestion } from '../../../protocol/src/manager-question.mjs'
@@ -43,12 +44,22 @@ export interface MockManagerHost
   say(deviceId: string, threadId: string, prompt: string, answer: string): void
   add(deviceId: string, session: ManagerSessionSummary): void
   mark(deviceId: string, threadId: string, manager: ManagerView): void
+  /** 是否宣告经理 issue；不给当作宣告 */
+  issues?: boolean
   /** 发出结束事件并开始收尾回合；回合停止时由宿主调用 turnEnded。 */
   ending(deviceId: string, threadId: string, prompt: string, answer: string): string
 }
 
 export function createMockManagers(host: MockManagerHost) {
-  const issues = new MockManagerIssues()
+  const issues = new MockManagerIssues({
+    seed: (key, specials) =>
+      sampleManagerIssues(
+        (JSON.parse(key) as [string, string])[1],
+        specials,
+        host.clock.now(),
+        host.lang,
+      ),
+  })
   const states = new Map<string, ReturnType<typeof sampleManagers>>()
   const histories = new Map<string, ReturnType<typeof sampleManagerHistory>>()
   const lists = new Map<string, Set<HostSink>>()
@@ -71,7 +82,13 @@ export function createMockManagers(host: MockManagerHost) {
     const [a = 0, b = 0, c = 0] = version ? parts(version) : []
     const [x = 0, y = 0, z = 0] = parts(SERVICE_VERSIONS.bundled)
     const old = version !== undefined && (a - x || b - y || c - z) < 0
-    return { feedback: !old, posts: !old, ignore: !old, requestIgnore: !old, issues: !old }
+    return {
+      feedback: !old,
+      posts: !old,
+      ignore: !old,
+      requestIgnore: !old,
+      issues: !old && host.issues !== false,
+    }
   }
   const oldDevice = () =>
     new ChannelError(
@@ -310,6 +327,17 @@ export function createMockManagers(host: MockManagerHost) {
         host.clock.now(),
       )
       publish(deviceId, manager, board)
+      // 模拟经理：跟进开着时过一会儿回一条（暂停时不回），回复标成未读
+      if (name === 'managers.issue.comment' && manager.status === 'active')
+        host.clock.setTimer(() => {
+          const id = (params as { id: string }).id
+          const body = t(
+            '收到。我先看一下现状，有结论再回复。',
+            'Got it. I will look into it and reply when I have something.',
+          )
+          if (issues.reply(key(deviceId, managerId), id, body, host.clock.now()))
+            publish(deviceId, manager, board)
+        }, 2500)
       return result
     }
     if (manager.status !== 'active')
@@ -898,6 +926,13 @@ export function createMockManagers(host: MockManagerHost) {
         'managers.decision.ignore',
         'managers.question.ask',
         'managers.question.forward',
+        'managers.issues.list',
+        'managers.issue.read',
+        'managers.issue.create',
+        'managers.issue.update',
+        'managers.issue.comment',
+        'managers.issue.follow',
+        'managers.issue.seen',
       ].includes(name)
         ? run(name, params)
         : undefined

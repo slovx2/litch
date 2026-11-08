@@ -520,7 +520,11 @@ export function Issue({
     >
       <Icon name="note" size={16} color={noTalk ? c.ink2 : c.accent} />
       <Text
-        style={{ color: noTalk ? c.ink2 : c.accent, fontSize: font.size.meta + 1, fontWeight: '600' }}
+        style={{
+          color: noTalk ? c.ink2 : c.accent,
+          fontSize: font.size.meta + 1,
+          fontWeight: '600',
+        }}
       >
         {t('manager.discussion')}
       </Text>
