@@ -1,6 +1,6 @@
 import type { AutomationPreviewView } from '@litch/core'
 import { useEffect, useRef, useState } from 'react'
-import { createAutomationPointer } from '../../../browser/src/pointer-renderer.mjs'
+import { createAutomationPointer } from '../../../../third_party/litch-automation/packages/browser/src/pointer-renderer.mjs'
 import { useT } from '../app/appearance.ts'
 import { useServices } from '../app/services.tsx'
 import type { SideTabProps } from '../side/tabs.ts'

@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/slovx2/litch/chromebridge"
+	"github.com/slovx2/litch-automation/chromebridge"
 )
 
 // 命令入口只组装标准输入输出；通用转发实现由宿主复用。

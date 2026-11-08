@@ -1,0 +1,47 @@
+{
+  "name": "@litch/computer-use",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "可嵌入的 Computer Use 执行器及原生组件传输",
+  "exports": {
+    ".": {
+      "types": "./dist/computer-use/src/index.d.mts",
+      "import": "./dist/computer-use/src/index.mjs"
+    },
+    "./tools": {
+      "types": "./dist/computer-use/src/tools.d.mts",
+      "import": "./dist/computer-use/src/tools.mjs"
+    },
+    "./node": {
+      "types": "./dist/computer-use/src/node.d.mts",
+      "import": "./dist/computer-use/src/node.mjs"
+    },
+    "./wire": {
+      "types": "./dist/computer-use/src/wire.d.mts",
+      "import": "./dist/computer-use/src/wire.mjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "NATIVE-PROTOCOL.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json",
+    "test": "node --import tsx --test test/*.test.mts"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/slovx2/litch-automation.git",
+    "directory": "packages/computer-use"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

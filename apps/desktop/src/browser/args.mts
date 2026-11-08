@@ -1,2 +1,2 @@
 // Litch 的稳定接线入口；实现由通用浏览器包提供。
-export * from '../../../../packages/browser/src/browser/args.mjs'
+export * from '../../../../third_party/litch-automation/packages/browser/src/browser/args.mjs'

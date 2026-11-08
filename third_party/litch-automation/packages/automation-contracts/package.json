@@ -1,0 +1,36 @@
+{
+  "name": "@litch/automation-contracts",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "自动化公共合同；内部标识不代表最终发布包名",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./litch": {
+      "types": "./dist/litch/index.d.mts",
+      "import": "./dist/litch/index.mjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check:package": "node scripts/check-package.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/*.test.mts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/slovx2/litch-automation.git",
+    "directory": "packages/automation-contracts"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

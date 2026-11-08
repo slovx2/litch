@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import {
   copyDownloadFile,
   publishDownloadFile,
-} from '../../../../../packages/browser/src/browser/download-files.mjs'
+} from '../../../../../third_party/litch-automation/packages/browser/src/browser/download-files.mjs'
 
 test('发布与跨卷复制均不覆盖目标，保留内容及本平台隔离元数据', async () => {
   const root = mkdtempSync(join(tmpdir(), 'litch-download-files-'))

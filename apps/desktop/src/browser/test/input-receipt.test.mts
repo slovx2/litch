@@ -4,7 +4,7 @@ import {
   type InputState,
   observedInput,
   receiptUrl,
-} from '../../../../../packages/browser/src/browser/input-receipt.mjs'
+} from '../../../../../third_party/litch-automation/packages/browser/src/browser/input-receipt.mjs'
 import type { Call, Tool } from '../executor.mjs'
 import type { BrowserPage } from '../model.mjs'
 import { inputReady } from '../page-ops.mjs'

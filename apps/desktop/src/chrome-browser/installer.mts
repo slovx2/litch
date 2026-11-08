@@ -43,12 +43,12 @@ async function manifestDirectories(root: string): Promise<string[]> {
   ]
 }
 
-import { chromeClaimDirectory } from '../../../../packages/chrome-bridge/src/claim-directory.mjs'
+import { chromeClaimDirectory } from '../../../../third_party/litch-automation/packages/chrome-bridge/src/claim-directory.mjs'
 // 路径选择和系统登记属于 Litch 外壳，库只接显式的存储端口。
-import { ChromeInstaller as Installer } from '../../../../packages/chrome-bridge/src/installer.mjs'
-import { FileRegistrationStore } from '../../../../packages/chrome-bridge/src/registration.mjs'
+import { ChromeInstaller as Installer } from '../../../../third_party/litch-automation/packages/chrome-bridge/src/installer.mjs'
+import { FileRegistrationStore } from '../../../../third_party/litch-automation/packages/chrome-bridge/src/registration.mjs'
 
-export { chromeIdentity } from '../../../../packages/chrome-bridge/src/installer.mjs'
+export { chromeIdentity } from '../../../../third_party/litch-automation/packages/chrome-bridge/src/installer.mjs'
 
 export class ChromeInstaller {
   private options: ChromeInstallOptions

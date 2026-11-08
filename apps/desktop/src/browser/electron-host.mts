@@ -2,13 +2,13 @@
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from 'electron'
-import { createElectronHost as createHost } from '../../../../packages/browser/src/browser/electron-host.mjs'
+import { createElectronHost as createHost } from '../../../../third_party/litch-automation/packages/browser/src/browser/electron-host.mjs'
 import { failurePage } from './forwarding.mjs'
 
 export type {
   ElectronBrowserHost,
   Rect,
-} from '../../../../packages/browser/src/browser/electron-host.mjs'
+} from '../../../../third_party/litch-automation/packages/browser/src/browser/electron-host.mjs'
 export function createElectronHost() {
   const host = createHost({
     partition: 'persist:litch-browser',

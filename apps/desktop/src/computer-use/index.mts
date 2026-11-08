@@ -58,7 +58,7 @@ export interface WinHelperInfo {
  * macOS：设了 LITCH_COMPUTER_USE_APP 用它；打包后在 Litch.app/Contents/SharedSupport 里（resourcesPath 是
  * Contents/Resources）；开发时用 apps/computer-use/build-app.mjs 组装出来的那一份。
  * Windows：设了 LITCH_COMPUTER_USE_WIN_HELPER 用它；打包后在 <resources>/computer-use/ 下；开发时是
- * apps/computer-use-win 交叉编译出来的那一份（构建命令见 scripts/win-helper.mjs）。
+ * third_party/litch-automation/apps/computer-use-win 交叉编译出来的那一份（构建命令见 scripts/win-helper.mjs）。
  */
 export function locateHelper(where: {
   platform: string
@@ -73,7 +73,7 @@ export function locateHelper(where: {
     // 主进程打包成 apps/desktop/dist/main.mjs
     return fileURLToPath(
       new URL(
-        `../../computer-use-win/target/x86_64-pc-windows-msvc/release/${HELPER_EXE_NAME}`,
+        `../../../third_party/litch-automation/apps/computer-use-win/target/x86_64-pc-windows-msvc/release/${HELPER_EXE_NAME}`,
         import.meta.url,
       ),
     )

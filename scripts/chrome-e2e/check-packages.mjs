@@ -26,7 +26,7 @@ const env = {
 }
 const artifacts = []
 for (const name of ['chrome-bridge', 'chrome-extension']) {
-  const pkg = join(root, 'packages', name)
+  const pkg = join(root, 'third_party/litch-automation/packages', name)
   execFileSync(npm, ['run', 'build'], { cwd: pkg, env, stdio: 'pipe' })
   const result = JSON.parse(
     execFileSync(npm, ['pack', '--ignore-scripts', '--json', '--pack-destination', output], {
@@ -62,10 +62,10 @@ execFileSync(
 )
 const probe = `
 import assert from 'node:assert/strict';
-import { ChromeBridge, createChromeExecutor, chromeToolsSpec } from 'chrome-bridge-internal';
-import { createExtensionRuntime } from 'chrome-extension-internal';
-import { installPointerWorld } from 'chrome-extension-internal/pointer-world';
-import { extensionId, assembleExtension } from 'chrome-extension-internal/build';
+import { ChromeBridge, createChromeExecutor, chromeToolsSpec } from '@litch/chrome-bridge';
+import { createExtensionRuntime } from '@litch/chrome-extension';
+import { installPointerWorld } from '@litch/chrome-extension/pointer-world';
+import { extensionId, assembleExtension } from '@litch/chrome-extension/build';
 assert.equal(typeof ChromeBridge, 'function'); assert.equal(typeof createChromeExecutor, 'function');
 assert.equal(chromeToolsSpec('example_browser', 'Example').name, 'example_browser');
 assert.equal(typeof installPointerWorld, 'function'); assert.equal(typeof assembleExtension, 'function');
@@ -81,7 +81,7 @@ execFileSync(process.execPath, ['--input-type=module', '-e', probe], {
 })
 // 所有相对依赖必须仍落在安装后的包内；类型和运行时不依赖 apps/core/UI/protocol。
 for (const name of ['chrome-bridge', 'chrome-extension']) {
-  const pkg = join(consumer, 'node_modules', `${name}-internal`)
+  const pkg = join(consumer, 'node_modules', `@litch/${name}`)
   for (const entry of await readdir(join(pkg, 'dist'), { recursive: true })) {
     if (!/\.m[jt]s$/.test(entry)) continue
     const source = await readFile(join(pkg, 'dist', entry), 'utf8')

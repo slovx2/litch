@@ -74,7 +74,7 @@ function launch(helper) {
 export async function checkWindowsHelper({ helper, require }) {
   const path = helper ?? winHelperPath()
   if (!existsSync(path)) {
-    const why = `没有找到 Windows 的 Computer Use 助手 ${path}（先在 apps/computer-use-win 里 ${WIN_HELPER_BUILD.join(' ')}，或用 --helper、LITCH_COMPUTER_USE_WIN_HELPER 指过去）`
+    const why = `没有找到 Windows 的 Computer Use 助手 ${path}（先在 third_party/litch-automation/apps/computer-use-win 里 ${WIN_HELPER_BUILD.join(' ')}，或用 --helper、LITCH_COMPUTER_USE_WIN_HELPER 指过去）`
     if (require) throw new Error(why)
     return [`${why}，跳过`]
   }

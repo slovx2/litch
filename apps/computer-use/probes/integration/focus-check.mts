@@ -6,8 +6,8 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { runComputerActions } from '../../../../packages/computer-use/src/batch.mjs'
-import { MacLauncher } from '../../../../packages/computer-use/src/launcher-mac.mjs'
+import { runComputerActions } from '../../../../third_party/litch-automation/packages/computer-use/src/batch.mjs'
+import { MacLauncher } from '../../../../third_party/litch-automation/packages/computer-use/src/launcher-mac.mjs'
 import { hidIdleSeconds } from '../coexist/idle.mjs'
 
 const cu = resolve(dirname(fileURLToPath(import.meta.url)), '../..')

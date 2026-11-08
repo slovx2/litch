@@ -285,7 +285,7 @@ jobs:
         if: steps.checkpoint.outputs.restored != 'true'
         run: |
           swift --version
-          swift test --package-path apps/computer-use
+          swift test --package-path third_party/litch-automation/apps/computer-use
       - run: npm run client:pack
         if: steps.checkpoint.outputs.restored != 'true'
       - name: 签名并公证到 Accepted 检查点
@@ -376,16 +376,16 @@ jobs:
       - run: npm ci --prefix packages/opencode --no-audit --no-fund
       - run: npm ci --prefix packages/acp --no-audit --no-fund
       # 工具链的版本只在 rust-toolchain.toml 里写（乙线定），rustup 在 crate 目录里按它装、按它用
-      - name: Rust 工具链（apps/computer-use-win/rust-toolchain.toml）
-        working-directory: apps/computer-use-win
+      - name: Rust 工具链（third_party/litch-automation/apps/computer-use-win/rust-toolchain.toml）
+        working-directory: third_party/litch-automation/apps/computer-use-win
         run: |
           rustup set auto-self-update disable
           rustup toolchain install
           rustup show active-toolchain
           cargo --version
       - name: Computer Use 助手
-        working-directory: apps/computer-use-win
-        run: cargo build --release --locked --target x86_64-pc-windows-msvc
+        working-directory: third_party/litch-automation/apps/computer-use-win
+        run: node ../../../../apps/desktop/scripts/build-computer-use-win.mjs build --release --locked --target x86_64-pc-windows-msvc
       - run: npm run build
       - run: npm run client:setup
       - run: node apps/desktop/scripts/check-computer-use.mjs --require

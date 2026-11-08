@@ -8,7 +8,9 @@ import { LITCH_HOST_IDENTITY } from '../../host-identity.mjs'
 const here = dirname(fileURLToPath(import.meta.url)),
   root = resolve(here, '../..')
 // 可用已提交源码的导出副本做同夹具的前后对照，不切工作树或改正式助手。
-const productRoot = process.env.LITCH_CU_PRODUCT_ROOT ?? root
+const productRoot =
+  process.env.LITCH_CU_PRODUCT_ROOT ??
+  resolve(root, '../../third_party/litch-automation/apps/computer-use')
 execFileSync('swift', ['build', '--package-path', productRoot], { stdio: 'inherit' })
 const bin = execFileSync('swift', ['build', '--package-path', productRoot, '--show-bin-path'], {
   encoding: 'utf8',

@@ -17,7 +17,7 @@ import type { DownloadItem } from 'electron'
 import {
   BrowserDownloads,
   safeDownloadName,
-} from '../../../../../packages/browser/src/browser/downloads.mjs'
+} from '../../../../../third_party/litch-automation/packages/browser/src/browser/downloads.mjs'
 import type { TabInfo } from '../model.mjs'
 
 class Item extends EventEmitter {
