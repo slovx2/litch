@@ -1,10 +1,23 @@
-// 只接受专用于本地探针的证书；拒绝产品签名和随构建变化的 ad-hoc 身份。
+// 专用测试证书是可选加固；未设置时沿用探针原有的显式签名配置。
 import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { basename, join, relative } from 'node:path'
 import { PROBE_IDENTITY } from './identity.mjs'
 
 export const TEST_CERTIFICATE_NAME = 'Litch CU Probe Local'
+
+export function probeSigningPlan(localIdentity, originalIdentity, identities = '') {
+  if (localIdentity !== undefined) {
+    return {
+      identity: localIdentity,
+      requirement: signingRequirement(localIdentity, identities),
+      timestamp: '--timestamp=none',
+    }
+  }
+  if (!originalIdentity)
+    throw new Error('请提供原有 LITCH_SIGN_IDENTITY 或可选 LITCH_CU_SIGN_IDENTITY')
+  return { identity: originalIdentity, requirement: null, timestamp: '--timestamp' }
+}
 
 export function signingRequirement(fingerprint, identities) {
   if (!/^[A-Fa-f0-9]{40}$/.test(fingerprint ?? ''))

@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import {
   fileHash,
+  probeSigningPlan,
   reusableBuild,
   signingRequirement,
   sourceFingerprint,
@@ -36,6 +37,15 @@ const { encodeFrame, FrameReader, HELPER_PROTOCOL } = await import(
 
 const probePath = '/Apps/Litch Background Input Probe.app'
 const productId = 'io.github.slovx2.litch.computer-use'
+test('专用测试证书可选；未设置时保留原有显式签名，设置无效值不能回退', () => {
+  assert.deepEqual(probeSigningPlan(undefined, 'existing Developer ID'), {
+    identity: 'existing Developer ID',
+    requirement: null,
+    timestamp: '--timestamp',
+  })
+  assert.throws(() => probeSigningPlan(undefined, undefined))
+  assert.throws(() => probeSigningPlan('', 'existing Developer ID'))
+})
 test('只接受测试专用证书；要求不依赖二进制 cdhash', () => {
   const sha = 'A'.repeat(40)
   const inventory = `  1) ${sha} "Litch CU Probe Local"`

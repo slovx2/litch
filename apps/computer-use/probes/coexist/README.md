@@ -8,11 +8,11 @@ AppKit 目标与守卫均来自本仓库夹具，Electron 始终 `show: false`�
 
 ```sh
 LITCH_SIGN_IDENTITY=- node apps/computer-use/probes/background/build.mjs
-LITCH_CU_SIGN_IDENTITY=<测试专用证书的SHA-1> node apps/computer-use/probes/integration/build.mjs --coexist
+LITCH_SIGN_IDENTITY=<原有探针签名身份> node apps/computer-use/probes/integration/build.mjs --coexist
 LITCH_CU_PEEKABOO=<已授权的 Peekaboo 绝对路径> node apps/computer-use/probes/coexist/wait.mjs
 ```
 
-探针签名与首次系统授权见 [测试签名与系统确认](../integration/PERMISSIONS.md)，不使用正式 Developer ID。
+探针签名与系统确认见 [测试签名与系统确认](../integration/PERMISSIONS.md)，新测试证书是可选加固。
 
 每组开始前用 `ioreg -c IOHIDSystem` 读取 `HIDIdleTime`，满 60 秒才启动；读取失败不能放行。
 等待器每两分钟检查一次，最长两小时，也可用 `LITCH_CU_DEADLINE` 给出更早的绝对截止时间。

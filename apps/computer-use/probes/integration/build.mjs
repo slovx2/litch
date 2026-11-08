@@ -4,12 +4,7 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { LITCH_HOST_IDENTITY } from '../../host-identity.mjs'
-import {
-  fileHash,
-  reusableBuild,
-  signingRequirement,
-  sourceFingerprint,
-} from './build-contract.mjs'
+import { fileHash, probeSigningPlan, reusableBuild, sourceFingerprint } from './build-contract.mjs'
 import { PROBE_IDENTITY } from './identity.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url)),
@@ -24,12 +19,14 @@ const out = resolve(
 )
 if (!out.endsWith(`/.artifacts/integration/${PROBE_IDENTITY.helperName}.app`))
   throw new Error('探针只能输出到专用 .artifacts/integration/Litch Background Input Probe.app')
-const identity = process.env.LITCH_CU_SIGN_IDENTITY
-const requirement = signingRequirement(
-  identity,
-  execFileSync('/usr/bin/security', ['find-identity', '-v', '-p', 'codesigning'], {
-    encoding: 'utf8',
-  }),
+const signing = probeSigningPlan(
+  process.env.LITCH_CU_SIGN_IDENTITY,
+  process.env.LITCH_SIGN_IDENTITY,
+  process.env.LITCH_CU_SIGN_IDENTITY === undefined
+    ? ''
+    : execFileSync('/usr/bin/security', ['find-identity', '-v', '-p', 'codesigning'], {
+        encoding: 'utf8',
+      }),
 )
 const coexist = process.argv.includes('--coexist')
 const fingerprint = sourceFingerprint(
@@ -55,7 +52,7 @@ const fingerprint = sourceFingerprint(
   ],
   {
     out,
-    requirement,
+    signing,
     coexist,
     arch: process.arch,
     swift: execFileSync('swift', ['--version'], { encoding: 'utf8' }),
@@ -64,7 +61,11 @@ const fingerprint = sourceFingerprint(
 )
 const recordPath = `${out}.build.json`
 const verify = () =>
-  execFileSync('codesign', ['--verify', '--strict', `-R=${requirement}`, out], { stdio: 'inherit' })
+  execFileSync(
+    'codesign',
+    ['--verify', '--strict', ...(signing.requirement ? [`-R=${signing.requirement}`] : []), out],
+    { stdio: 'inherit' },
+  )
 if (!process.argv.includes('--rebuild') && reusableBuild(recordPath, fingerprint, out)) {
   verify()
   console.log(`复用未变更的测试探针（未构建、未签名）：${out}`)
@@ -137,11 +138,11 @@ execFileSync(
   [
     '--force',
     '--sign',
-    identity,
+    signing.identity,
     '--options',
     'runtime',
-    '--timestamp=none',
-    `-r=designated => ${requirement}`,
+    signing.timestamp,
+    ...(signing.requirement ? [`-r=designated => ${signing.requirement}`] : []),
     out,
   ],
   { stdio: 'inherit' },

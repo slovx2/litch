@@ -7,15 +7,16 @@
 在仓库根目录、Node 24 环境下构建：
 
 ```sh
-LITCH_CU_SIGN_IDENTITY=<测试专用证书的SHA-1> node apps/computer-use/probes/integration/build.mjs
+LITCH_SIGN_IDENTITY=<原有探针签名身份> node apps/computer-use/probes/integration/build.mjs
 node_modules/.bin/esbuild apps/computer-use/probes/integration/check.mts \
   --bundle --platform=node --format=esm \
   --outfile=apps/computer-use/.artifacts/integration/check.mjs
 ```
 
 输出 `apps/computer-use/.artifacts/integration/Litch Background Input Probe.app`。
-首次设置见 [测试签名与系统确认](PERMISSIONS.md)。只接受名为 `Litch CU Probe Local` 的
-本地测试证书，不使用正式 Developer ID。源码、配置、工具链和产物都未变时复用签名产物；
+签名与系统确认见 [测试签名与系统确认](PERMISSIONS.md)。默认保留原有探针签名；
+只有显式设置 `LITCH_CU_SIGN_IDENTITY` 才启用测试专用证书加固，不强制新建证书。
+源码、配置、工具链和产物都未变时复用签名产物；
 `--rebuild` 强制重建，用于核验两次构建的身份与授权是否保持。
 包标识是 `io.github.slovx2.litch.background-input-probe`；由 LaunchServices 独立启动，
 不借终端或其他应用的权限。系统设置 → 隐私与安全性中，用户需要为这个探针开启
