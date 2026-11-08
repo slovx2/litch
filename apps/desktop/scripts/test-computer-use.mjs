@@ -19,6 +19,9 @@ try {
       fileURLToPath(
         new URL('../../computer-use/probes/integration/identity.test.mjs', import.meta.url),
       ),
+      fileURLToPath(
+        new URL('../../computer-use/probes/integration/shared-probe.test.mjs', import.meta.url),
+      ),
     ],
     outdir: out,
     entryNames: '[name]',
@@ -33,7 +36,7 @@ try {
   const outputs = readdirSync(out)
     .filter((name) => name.endsWith('.mjs'))
     .map((name) => join(out, name))
-  if (outputs.length !== files.length + 1) throw new Error('Computer Use 测试构建产物不完整')
+  if (outputs.length !== files.length + 2) throw new Error('Computer Use 测试构建产物不完整')
   const result = spawnSync(process.execPath, ['--test', ...outputs], {
     stdio: 'inherit',
     env: { ...process.env, LITCH_DESKTOP_ROOT: fileURLToPath(new URL('..', import.meta.url)) },

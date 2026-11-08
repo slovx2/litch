@@ -8,15 +8,12 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { MacLauncher } from '../../../../third_party/litch-automation/packages/computer-use/src/launcher-mac.mjs'
 import type { HelperClient } from '../../../desktop/src/computer-use/helper-client.mjs'
 import { PROBE_IDENTITY } from './identity.mjs'
+import { probeAppPath } from './shared-probe.mjs'
 
 const fixture = process.argv[2],
   directory = process.argv[3],
-  appPath = process.argv[4]
-if (
-  !fixture?.startsWith('/tmp/litch-cu-') ||
-  !directory?.startsWith('/tmp/litch-cu-') ||
-  !appPath?.includes('/.artifacts/integration/')
-)
+  appPath = probeAppPath(process.argv[4])
+if (!fixture?.startsWith('/tmp/litch-cu-') || !directory?.startsWith('/tmp/litch-cu-'))
   throw new Error('只接受隔离验收路径')
 mkdirSync(directory, { recursive: true, mode: 0o700 })
 const read = (path: string): any => JSON.parse(readFileSync(path, 'utf8'))

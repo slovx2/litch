@@ -5,6 +5,7 @@ import { createServer } from 'node:net'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { probeAppPath } from './shared-probe.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..')
 const directory = process.env.LITCH_CU_UI_PROFILE
@@ -41,10 +42,7 @@ if (process.argv[2] === 'launch') {
         CODEX_HOME: join(directory, 'codex'),
         LITCH_PROFILE: directory,
         LITCH_LANG: 'zh-CN',
-        LITCH_COMPUTER_USE_APP: join(
-          root,
-          'apps/computer-use/.artifacts/integration/Litch Background Input Probe.app',
-        ),
+        LITCH_COMPUTER_USE_APP: probeAppPath(),
       },
     },
   )

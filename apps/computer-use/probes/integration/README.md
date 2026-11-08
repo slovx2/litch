@@ -13,7 +13,9 @@ node_modules/.bin/esbuild apps/computer-use/probes/integration/check.mts \
   --outfile=apps/computer-use/.artifacts/integration/check.mjs
 ```
 
-输出 `apps/computer-use/.artifacts/integration/Litch Background Input Probe.app`。
+默认输出到系统账户目录下的
+`~/Library/Application Support/Litch Tests/computer-use/Litch Background Input Probe.app`，跨工作树共用。
+运行中的探针和构建器使用内核锁互斥，构建不会覆盖正在使用的应用。
 签名与系统确认见 [测试签名与系统确认](PERMISSIONS.md)。默认保留原有探针签名；
 只有显式设置 `LITCH_CU_SIGN_IDENTITY` 才启用测试专用证书加固，不强制新建证书。
 源码、配置、工具链和产物都未变时复用签名产物；
@@ -28,8 +30,7 @@ node_modules/.bin/esbuild apps/computer-use/probes/integration/check.mts \
 
 ```sh
 node apps/computer-use/.artifacts/integration/check.mjs \
-  /tmp/litch-cu-fixtures /tmp/litch-cu-integration-results \
-  '<仓库绝对路径>/apps/computer-use/.artifacts/integration/Litch Background Input Probe.app'
+  /tmp/litch-cu-fixtures /tmp/litch-cu-integration-results
 ```
 
 运行前确认无人使用电脑，并独占 GUI 验收时段。脚本会激活自有夹具，只在这些窗口中
@@ -54,6 +55,7 @@ node apps/computer-use/.artifacts/integration/check.mjs \
 
 ```sh
 node --test apps/computer-use/probes/integration/identity.test.mjs
+node --test apps/computer-use/probes/integration/shared-probe.test.mjs
 ```
 
 构建独立探针及下方宿主驱动后，可单独验证原生握手与退出；此入口关闭鼠标自测，

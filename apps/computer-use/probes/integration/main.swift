@@ -10,6 +10,7 @@ guard let directory = environment["LITCH_COMPUTER_USE_DIR"], directory.hasPrefix
 }
 try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
 Log.open(directory: directory)
+let probeLease = holdProbeLease()
 let server = Server(socketPath: directory + "/helper.sock") {
   Engine(connection: $0, mode: .token(token), ownTeam: nil)
 }

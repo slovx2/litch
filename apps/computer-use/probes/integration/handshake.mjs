@@ -2,17 +2,18 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync } from 'node:fs'
-import { join, resolve } from 'node:path'
-import { MacLauncher, PROBE_IDENTITY } from '../../.artifacts/integration/remote-driver.mjs'
+import { join } from 'node:path'
+import {
+  MacLauncher,
+  PROBE_IDENTITY,
+  probeAppPath,
+} from '../../.artifacts/integration/remote-driver.mjs'
 
 const root = mkdtempSync('/tmp/litch-cu-handshake-')
 for (const name of ['home', 'codex']) mkdirSync(join(root, name), { mode: 0o700 })
 const launcher = new MacLauncher({
   identity: PROBE_IDENTITY,
-  appPath: resolve(
-    process.env.LITCH_CU_PROBE_APP ??
-      `apps/computer-use/.artifacts/integration/${PROBE_IDENTITY.helperName}.app`,
-  ),
+  appPath: probeAppPath(),
   directory: join(root, 'helper'),
   version: null,
   async launch(appPath, env) {

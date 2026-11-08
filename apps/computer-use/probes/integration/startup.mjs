@@ -3,9 +3,13 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
-import { MacLauncher, PROBE_IDENTITY } from '../../.artifacts/integration/remote-driver.mjs'
+import {
+  MacLauncher,
+  PROBE_IDENTITY,
+  probeAppPath,
+} from '../../.artifacts/integration/remote-driver.mjs'
 
 const root = process.argv[2]
 if (!root?.startsWith('/tmp/litch-cu-')) throw new Error('需要隔离目录')
@@ -13,10 +17,7 @@ mkdirSync(root, { recursive: true })
 const results = []
 for (let i = 0; i < 3; i++) {
   const directory = join(root, String(i))
-  const appPath = resolve(
-    process.env.LITCH_CU_PROBE_APP ??
-      'apps/computer-use/.artifacts/integration/Litch Background Input Probe.app',
-  )
+  const appPath = probeAppPath()
   const launcher = new MacLauncher({
     identity: PROBE_IDENTITY,
     appPath,

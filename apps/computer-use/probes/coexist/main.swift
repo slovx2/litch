@@ -9,6 +9,7 @@ let root = env["LITCH_CU_COEXIST_DIR"] ?? ""
 guard root.hasPrefix("/tmp/litch-cu-") else {
   fatalError("隔离目录必填")
 }
+let probeLease = holdProbeLease()
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 Overlay.shared.installMonitors()

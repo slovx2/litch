@@ -19,6 +19,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { PROBE_IDENTITY } from '../../apps/computer-use/probes/integration/identity.mjs'
+import { probeAppPath } from '../../apps/computer-use/probes/integration/shared-probe.mjs'
 import { prepareEnvironment } from './environment.mjs'
 import { startCodex } from './rpc.mjs'
 
@@ -45,12 +46,9 @@ const option = (name) => {
 const preflight = process.argv.includes('--preflight')
 if (!preflight && !process.argv.includes('--execute'))
   throw new Error('请明确选择 --preflight 或 --execute')
-const helperPath = option('--helper'),
+const helperPath = probeAppPath(option('--helper')),
   outPath = option('--out')
-if (!helperPath || !outPath)
-  throw new Error('需要 --helper 和 --out，必须指向独立测试助手及忽略的记录目录')
-if (!helperPath.includes('/.artifacts/'))
-  throw new Error('助手必须是 .artifacts 下单独构建的测试应用')
+if (!outPath) throw new Error('需要 --out，必须指向新的验收记录目录')
 const out = resolve(outPath)
 if (existsSync(out)) throw new Error('记录目录已存在，请换一个新目录，避免覆盖证据')
 mkdirSync(out, { recursive: true, mode: 0o700 })

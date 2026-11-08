@@ -19,14 +19,18 @@ M10 起显式用 `computerToolsSpec('darwin', true)` 下发批量工具；批内
 签名阶段须能读取用户已配置的签名身份；运行阶段的 HOME 独立。
 
 ```sh
-# 以下路径都由操作者提供，不使用全局 Codex 配置来运行。
+# 探针默认取系统账户的固定测试目录；模型配置仍显式提供。
 node scripts/cu-trial/run.mjs --preflight \
-  --helper "$TRIAL_HELPER" --out .artifacts/cu-trial/preflight-1
+  --out .artifacts/cu-trial/preflight-1
 node scripts/cu-trial/run.mjs --execute \
   --codex "$TRIAL_CODEX" --auth-source "$TRIAL_AUTH_SOURCE" \
-  --helper "$TRIAL_HELPER" --out .artifacts/cu-trial/round-1
+  --out .artifacts/cu-trial/round-1
 node scripts/cu-trial/summarize.mjs .artifacts/cu-trial/round-1 .artifacts/cu-trial/round-2
 ```
+
+默认助手位于 `~/Library/Application Support/Litch Tests/computer-use/Litch Background Input Probe.app`，
+`~` 取系统账户目录，不随隔离 HOME 或工作树改变。可用 `--helper` 或
+`LITCH_CU_PROBE_APP` 覆盖；构建覆盖与运行覆盖必须一致。
 
 `--auth-source` 是经用户明确许可读取的 Codex 配置目录。脚本只复制 `auth.json`、
 模型目录 JSON 和模型提供方配置，不复制 MCP、插件、技能、项目、历史或 notify。
@@ -71,7 +75,6 @@ TextEdit 必须已退出，`/tmp/litch-cu-trial` 和输出目录必须不存在�
 
 ```sh
 PATH=/opt/homebrew/opt/node@24/bin:$PATH node scripts/cu-trial/save-panel.mjs \
-  '/绝对工作树/apps/computer-use/.artifacts/integration/Litch Background Input Probe.app' \
   '/绝对工作树/.artifacts/cu-trial/save-panel-regression'
 ```
 

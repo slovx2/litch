@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import {
   createAutomationPreviewHost,
@@ -12,6 +12,7 @@ import {
   createCore,
   MacLauncher,
   PROBE_IDENTITY,
+  probeAppPath,
   reduceSession,
   sshOpener,
 } from '../../.artifacts/integration/remote-driver.mjs'
@@ -62,10 +63,7 @@ async function command(name, action) {
 try {
   const launcher = new MacLauncher({
     identity: PROBE_IDENTITY,
-    appPath: resolve(
-      process.env.LITCH_CU_PROBE_APP ??
-        'apps/computer-use/.artifacts/integration/Litch Background Input Probe.app',
-    ),
+    appPath: probeAppPath(),
     directory,
     version: null,
     async launch(path, env) {

@@ -16,6 +16,7 @@ import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { PROBE_IDENTITY } from '../../apps/computer-use/probes/integration/identity.mjs'
+import { probeAppPath } from '../../apps/computer-use/probes/integration/shared-probe.mjs'
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -33,8 +34,10 @@ const { MacLauncher } = await import(
 )
 const { HelperSupervisor } = await import('../../apps/desktop/src/computer-use/supervisor.mts')
 const here = dirname(fileURLToPath(import.meta.url))
-const [helperPath, output] = process.argv.slice(2)
-assert(helperPath?.includes('/.artifacts/') && output, '需要独立签名探针路径及新记录目录')
+const [pathArgument, outputArgument] = process.argv.slice(2)
+const helperPath = probeAppPath(outputArgument ? pathArgument : undefined)
+const output = outputArgument ?? pathArgument
+assert(output, '需要新的记录目录；可选第一个参数指定独立签名探针路径')
 const out = resolve(output)
 assert(!existsSync(out) && !existsSync('/tmp/litch-cu-trial'), '记录或测试目录已存在，不接管')
 const inspect = () =>

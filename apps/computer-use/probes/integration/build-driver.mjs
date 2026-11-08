@@ -14,6 +14,7 @@ await build({
       "export {createComputerExecutor} from './apps/desktop/src/computer-use/executor.mts'",
       "export {MacLauncher} from './third_party/litch-automation/packages/computer-use/src/launcher-mac.mts'",
       "export {PROBE_IDENTITY} from './apps/computer-use/probes/integration/identity.mjs'",
+      "export {probeAppPath} from './apps/computer-use/probes/integration/shared-probe.mjs'",
       "export {createAutomationPreviewHost} from './apps/desktop/src/automation-preview/host.mts'",
     ].join('\n'),
     resolveDir: root,

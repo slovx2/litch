@@ -10,9 +10,27 @@
 Developer ID，不因本次修复改换证书、重置授权或扩大用途；只签专用探针，不修改正式助手。
 截图与预览保持不变：一次截图使用 ScreenCaptureKit 的 `SCScreenshotManager`，预览使用 `SCStream`。
 
-优先固定 `.app` 的绝对路径，避免每个工作树各起一份新路径的探针。构建用
-`LITCH_CU_PROBE_OUTPUT`，运行用 `LITCH_CU_PROBE_APP` 或各入口原有路径参数。
+构建与运行默认共用仓库外的固定路径：
+
+```text
+~/Library/Application Support/Litch Tests/computer-use/Litch Background Input Probe.app
+```
+
+这里的 `~` 来自系统账户记录，不是测试覆盖后的 `HOME`。从任意工作树执行构建、
+`check`、`startup`、`remote`、`focus-check`、`handshake`、`capture-check`、UI/coexist 或
+cu-trial 时，默认都取这个位置。无需按工作树复制应用，也无需新建测试证书。
+`LITCH_CU_PROBE_APP` 或 `LITCH_CU_PROBE_OUTPUT` 均可覆盖构建和运行路径；必须是绝对路径，
+两者同时设置时必须相同。仍可显式传入各入口原有的探针路径参数。
 签名时使用能访问既有钥匙串的本地构建上下文；测试助手运行时仍使用独立 HOME/CODEX_HOME。
+
+构建器与原生探针共用 `.app.lock` 内核锁：构建持排他锁，普通及 coexist 探针进程持共享锁。
+另有构建或活探针时，构建立即报忙，不覆盖产物、不终止其他线的助手；等持有者退出后再运行。
+进程退出/崩溃由内核释放，不根据 PID 或超时强抢。锁文件保留，不要在运行期间删除它。
+新版本先在同目录的私有暂存目录编译、签名和校验，成功后持锁替换固定路径；失败保留原产物。
+源码、配置和工具链不变则复用；源码路径不计入版本指纹，所以相同代码换工作树不会触发重建。
+普通与 `--coexist` 模式是不同构建配置，切换模式需要重建，但仍受同一运行锁保护。
+
+外部验收驱动应调用 `shared-probe.mjs` 导出的 `probeAppPath()`，不要拼接工作树内的 `.app` 路径。
 
 ## 可选加固：测试专用证书（用户本人操作）
 
@@ -26,20 +44,16 @@ Developer ID，不因本次修复改换证书、重置授权或扩大用途；�
    `LITCH_CU_SIGN_IDENTITY`。此可选模式拒绝 `-`、证书名称和正式 Developer ID 的指纹；
    不自动创建证书、不解锁钥匙串、不代填密码。若 codesign 首次请求访问该私钥，
    由用户确认请求来自 `/usr/bin/codesign`，再决定是否允许其后续使用。
-3. 选一个跨工作树固定的专用输出路径，后续不更名、不搬动。例如将构建与运行路径同时设为：
+3. 保持上面的默认共用路径，后续不更名、不搬动：
 
    ```sh
-   export LITCH_CU_PROBE_OUTPUT='/Volumes/workspace/tyrs-hand/.local/cu-probe/.artifacts/integration/Litch Background Input Probe.app'
-   export LITCH_CU_PROBE_APP="$LITCH_CU_PROBE_OUTPUT"
    export LITCH_CU_SIGN_IDENTITY='<测试证书的 SHA-1>'
    node apps/computer-use/probes/integration/build.mjs
    node apps/computer-use/probes/integration/build-driver.mjs
    node apps/computer-use/probes/integration/handshake.mjs
    ```
 
-   这是示例路径，首次运行才创建。`startup`、`remote`、`focus-check` 和 `handshake` 接受
-   `LITCH_CU_PROBE_APP`；`check`、`cu-trial/run` 和 `save-panel` 继续显式传入该绝对路径。
-   不要让两个工作线并发覆盖或运行这份应用。切换普通探针与 `--coexist` 模式也会重建。
+   构建器首次运行创建共用目录。需要额外隔离产物时，再显式设置覆盖路径。
 4. 在“系统设置 → 隐私与安全性”中，为该路径的探针开启“辅助功能”和
    “屏幕与系统音频录制”。若列表中有旧路径或旧证书的同名探针，由用户核对后处理，
    不撤销或复用正式 `Litch Computer Use` 的授权。
@@ -59,10 +73,10 @@ Developer ID，不因本次修复改换证书、重置授权或扩大用途；�
 ```sh
 LITCH_SIGN_IDENTITY=- node apps/computer-use/probes/background/build.mjs
 node apps/computer-use/probes/integration/build.mjs --rebuild
-codesign -d -r- "$LITCH_CU_PROBE_APP"
+codesign -d -r- "$HOME/Library/Application Support/Litch Tests/computer-use/Litch Background Input Probe.app"
 node --import tsx apps/computer-use/probes/integration/focus-check.mts /tmp/litch-cu-rebuild-1.json
 node apps/computer-use/probes/integration/build.mjs --rebuild
-codesign -d -r- "$LITCH_CU_PROBE_APP"
+codesign -d -r- "$HOME/Library/Application Support/Litch Tests/computer-use/Litch Background Input Probe.app"
 node --import tsx apps/computer-use/probes/integration/focus-check.mts /tmp/litch-cu-rebuild-2.json
 node apps/computer-use/probes/integration/build.mjs
 ```
@@ -71,6 +85,15 @@ node apps/computer-use/probes/integration/build.mjs
 最后一次构建应输出“复用未变更的测试探针”。系统弹窗、真实用户活动或锁屏都使该轮无效，
 不能为了通过而代点、改安全闸、写 TCC 数据库、重置授权或改写 replayd 的确认记录。
 SIP 状态单独记录；SIP 关闭时的结果不代表开启时的权限行为。
+
+只验证一次自有窗口截图可运行（先构建探针及 `build-driver.mjs`）：
+
+```sh
+node apps/computer-use/probes/integration/capture-check.mjs /tmp/litch-cu-capture-evidence
+```
+
+该入口不发送输入，只请求一次真实截图；出现系统确认即停止并记录 `blocked`，不重试。
+记录包括实际助手路径、权限、截图结果、前台变化，以及运行中的助手确实阻止重建的断言。
 
 ## 区分系统确认与身份失效
 

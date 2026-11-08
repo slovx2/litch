@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { probeAppPath } from '../integration/shared-probe.mjs'
 import { hidIdleSeconds } from './idle.mjs'
 
 const idle = hidIdleSeconds()
@@ -81,7 +82,7 @@ try {
     )
     process.exitCode = 75
   } else {
-    open(join(cu, '.artifacts/integration/Litch Background Input Probe.app'), {
+    open(probeAppPath(), {
       LITCH_CU_COEXIST_DIR: root,
       LITCH_CU_PEEKABOO: process.env.LITCH_CU_PEEKABOO ?? '',
       LITCH_CU_GROUP: process.env.LITCH_CU_GROUP ?? 'coexist',

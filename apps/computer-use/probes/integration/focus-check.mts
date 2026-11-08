@@ -10,6 +10,7 @@ import { runComputerActions } from '../../../../third_party/litch-automation/pac
 import { MacLauncher } from '../../../../third_party/litch-automation/packages/computer-use/src/launcher-mac.mjs'
 import { hidIdleSeconds } from '../coexist/idle.mjs'
 import { PROBE_IDENTITY } from './identity.mjs'
+import { probeAppPath } from './shared-probe.mjs'
 
 const cu = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const root = mkdtempSync('/tmp/litch-cu-focus-')
@@ -63,9 +64,7 @@ try {
   }
   const launcher = new MacLauncher({
     identity: PROBE_IDENTITY,
-    appPath:
-      process.env.LITCH_CU_PROBE_APP ??
-      join(cu, '.artifacts/integration/Litch Background Input Probe.app'),
+    appPath: probeAppPath(),
     directory: join(root, 'helper'),
     version: null,
     async launch(path, env) {
