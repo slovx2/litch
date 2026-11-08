@@ -1,77 +1,85 @@
-/* 经理 issue 控制台：统一列表、过滤、详情与讨论。颜色、圆角都用皮肤变量；状态写在一行小字里，不另占高度。 */
+/* 经理 issue 控制台：按类别分页签的列表、过滤、详情与讨论。颜色、圆角都用皮肤变量；
+   视觉沿用看板原有的部件：状态行用文字切换（同决策的状态行），评论块同答复块（浅底加左侧线），输入区同追问区。 */
 
-/* ---------- 顶上一行：新建 + 过滤，窄了折行 ---------- */
-.mg-issue-bar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--line-1);
-}
-.mg-issue-new {
-  display: inline-grid;
-  place-items: center;
-  width: calc(26px * var(--fs));
-  height: calc(26px * var(--fs));
-  padding: 0;
-  flex: none;
-}
+/* ---------- 过滤：状态一行文字切换，排序在右端 ---------- */
 .mg-issue-filters {
-  border: 0;
+  align-items: center;
+}
+.mg-issue-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  min-width: 0;
   margin: 0;
   padding: 0;
+  border: 0;
+}
+
+/* 普通 issue 页签的第二行：新建 + 几个开关 */
+.mg-issue-subbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 6px;
-  flex: 1;
-  min-width: 0;
+  align-items: center;
+  gap: 6px 10px;
 }
-.mg-issue-filter {
+.mg-issue-new {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: calc(12px * var(--fs));
-  color: var(--ink-3);
-}
-.mg-issue-filter select,
-.mg-issue-status {
-  font-size: calc(12px * var(--fs));
-  color: var(--ink);
-  background: var(--panel);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r1);
-  padding: 2px 4px;
-  max-width: 14em;
-}
-.mg-issue-total {
-  margin-left: auto;
-  font-size: calc(12px * var(--fs));
-  color: var(--ink-3);
-  white-space: nowrap;
+  flex: none;
 }
 .mg-issue-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 .mg-issue-chip {
-  font-size: calc(12px * var(--fs));
-  padding: 1px 8px;
+  height: calc(24px * var(--fs));
+  padding: 0 10px;
   border: 1px solid var(--line-2);
-  border-radius: var(--r1);
-  color: var(--ink-2);
+  border-radius: 999px;
   background: transparent;
+  color: var(--ink-2);
+  font-size: calc(12px * var(--fs));
+  white-space: nowrap;
   cursor: pointer;
 }
 .mg-issue-chip:hover {
   background: var(--hover);
   color: var(--ink);
 }
-.mg-issue-empty {
+.mg-issue-chip[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line-2));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+/* 列表尾：已显示几条 + 加载更多 */
+.mg-issue-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 4px 0 8px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink-3);
-  padding: 18px 0;
+}
+.mg-issue-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 28px 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r2);
+  color: var(--ink-3);
   text-align: center;
+}
+.mg-issue-empty p {
+  margin: 0;
 }
 
 /* ---------- 卡片：编号加标题一行，元信息一行小字 ---------- */
@@ -80,11 +88,14 @@
 }
 .mg-issue-id {
   font-weight: 600;
-  color: var(--ink-2);
+  color: var(--ink-3);
   margin-right: 2px;
 }
 .mg-issue[data-linked] {
   border-color: var(--accent);
+}
+.mg-issue[data-unread] .mg-paging-title {
+  font-weight: 600;
 }
 .mg-issue-dot {
   flex: none;
@@ -115,27 +126,65 @@
   margin-right: 8px;
   color: var(--line-3);
 }
+.mg-issue-meta [data-issue-status] {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-2);
+}
 .mg-issue-meta [data-follow="off"] {
   color: var(--wait);
 }
 .mg-issue-meta .ic {
   vertical-align: -2px;
 }
-/* 类型记号：小号描边字，五种各取一个皮肤色；不当按钮用 */
+
+/* 状态圆点：开放=强调色，进行中=等待色，受阻=错误色，已解决/已完成=成功色，其余灰 */
+.mg-issue-state {
+  flex: none;
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+.mg-issue-state:is(
+  [data-state="open"],
+  [data-state="pending"],
+  [data-state="endorsed"],
+  [data-state="unread"]
+) {
+  background: var(--accent);
+}
+.mg-issue-state[data-state="in_progress"] {
+  background: var(--wait);
+}
+.mg-issue-state[data-state="blocked"] {
+  background: var(--err);
+}
+.mg-issue-state:is(
+  [data-state="resolved"],
+  [data-state="answered"],
+  [data-state="started"],
+  [data-state="delivered"],
+  [data-state="replied"]
+) {
+  background: var(--ok);
+}
+
+/* 类型记号：只在抽屉和完整讨论页（离开了页签）出现；浅底色字 */
 .mg-issue-kind {
   display: inline-block;
-  padding: 0 5px;
-  border: 1px solid currentColor;
+  padding: 0 6px;
   border-radius: var(--r1);
   font-size: calc(10.5px * var(--fs));
-  line-height: 1.5;
+  line-height: 1.6;
   white-space: nowrap;
+  color: var(--ink-2);
+  background: color-mix(in srgb, currentColor 12%, transparent);
 }
 .mg-issue-meta > .mg-issue-kind + span::before {
   content: none;
-}
-.mg-issue-kind[data-issue-kind="ordinary"] {
-  color: var(--ink-2);
 }
 .mg-issue-kind[data-issue-kind="decision"] {
   color: var(--accent);
@@ -146,15 +195,12 @@
 .mg-issue-kind[data-issue-kind="suggestion"] {
   color: var(--ok);
 }
-.mg-issue-kind[data-issue-kind="report"] {
-  color: var(--ink-3);
-}
 
 /* ---------- 详情 ---------- */
 .mg-issue-detail,
 .mg-issue-thread {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
   margin-top: 6px;
 }
@@ -174,19 +220,49 @@
 .mg-issue-quick .mg-talk-slot {
   display: none;
 }
+.mg-issue-post {
+  min-width: 0;
+}
+
+/* 状态分段 + 跟进开关一行；窄了折行 */
 .mg-issue-controls,
 .mg-issue-acts {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px 12px;
 }
+fieldset.mg-issue-status {
+  margin: 0;
+  min-inline-size: 0;
+  flex-wrap: wrap;
+}
+.mg-issue-status button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.mg-issue-status button:not([aria-pressed="true"]) .mg-issue-state {
+  opacity: 0.55;
+}
+.mg-issue-status:disabled button {
+  cursor: default;
+  opacity: 0.6;
+}
+.mg-issue-follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  font-size: calc(12px * var(--fs));
+  color: var(--ink-2);
+}
+
 .mg-issue-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   font-size: calc(12px * var(--fs));
-  padding: 2px 8px;
 }
 /* 转讨论：强调色描边，比实心主按钮轻，比幽灵按钮醒目 */
 .mg-issue-discuss {
@@ -204,26 +280,43 @@
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 .mg-issue-count {
-  min-width: 1.4em;
-  padding: 0 4px;
-  border-radius: var(--r1);
+  min-width: 1.6em;
+  padding: 0 5px;
+  border-radius: 999px;
   font-family: var(--mono);
   font-size: calc(11px * var(--fs));
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  line-height: 1.6;
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--ink-3) 18%, transparent);
   text-align: center;
 }
+.mg-issue-discuss .mg-issue-count {
+  color: inherit;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* 关联：一行小标签 */
 .mg-issue-relations {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 10px;
+  gap: 6px;
   font-size: calc(12px * var(--fs));
 }
+.mg-issue-relations > .dim {
+  margin-right: 2px;
+}
+.mg-issue-relations > :is(a, button):not(.mg-issue-item-link) {
+  padding: 1px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--sunken);
+}
 .mg-issue-item-link {
+  padding: 1px 8px;
   color: var(--ink-2);
   border: 1px dashed var(--line-3);
-  border-radius: var(--r1);
-  padding: 0 6px;
+  border-radius: 999px;
   background: transparent;
   cursor: pointer;
 }
@@ -248,10 +341,17 @@
 /* ---------- 讨论：评论、问答、状态变化一条时间线 ---------- */
 .mg-issue-talk {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
-  padding-top: 8px;
+  padding-top: 12px;
   border-top: 1px solid var(--line-1);
+}
+.mg-issue-talk-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: calc(12.5px * var(--fs));
+  color: var(--ink-2);
 }
 .mg-issue-timeline {
   list-style: none;
@@ -260,10 +360,13 @@
   display: grid;
   gap: 8px;
 }
+/* 评论块同答复块：浅底加左侧线；经理用强调色，问答用虚线 */
 .mg-issue-comment {
-  padding: 6px 10px 8px;
-  border-left: 2px solid var(--line-2);
   min-width: 0;
+  padding: 8px 12px 10px;
+  border-left: 3px solid var(--line-3);
+  border-radius: var(--r1);
+  background: var(--sunken);
 }
 .mg-issue-comment[data-author="manager"] {
   border-left-color: var(--accent);
@@ -271,24 +374,49 @@
 .mg-issue-comment[data-timeline="question"] {
   border-left-style: dashed;
 }
-.mg-issue-comment .mg-issue-meta b {
-  color: var(--ink-2);
+.mg-issue-comment > :is(p, ul, ol, pre):last-child {
+  margin-bottom: 0;
+}
+.mg-issue-comment-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: calc(11.5px * var(--fs));
+  color: var(--ink-3);
+}
+.mg-issue-comment-head b {
+  color: var(--ink);
   font-weight: 600;
 }
+.mg-issue-comment[data-author="manager"] .mg-issue-comment-head b {
+  color: var(--accent);
+}
 .mg-issue-answer {
-  margin: 4px 0 0;
-  padding: 4px 10px;
+  margin: 6px 0 0;
+  padding: 6px 10px;
   border-left: 2px solid var(--accent);
-  background: var(--sunken);
+  background: var(--raised);
   border-radius: var(--r1);
 }
 .mg-issue-event {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
+  padding: 0 4px;
   font-size: calc(11.5px * var(--fs));
   color: var(--ink-3);
-  padding-left: 12px;
+}
+.mg-issue-event-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line-3);
+}
+.mg-issue-event time {
+  flex: none;
 }
 .mg-issue-note {
   margin: 0;
@@ -301,41 +429,43 @@
 .mg-issue-note[data-follow-note] {
   color: var(--wait);
 }
-.mg-issue-mode {
-  justify-self: start;
-}
+/* 输入区同追问区：浅底加左侧线，发送按钮在右下 */
 .mg-issue-compose {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  margin-top: 0;
+}
+.mg-issue-compose > :is(fieldset, .err) {
+  grid-column: 1 / -1;
+}
+.mg-issue-compose > fieldset {
+  margin-bottom: 0;
 }
 .mg-issue-compose textarea {
-  flex: 1;
-  min-width: 0;
-  resize: vertical;
-  min-height: calc(44px * var(--fs));
-}
-.mg-issue-compose .ibtn {
-  width: calc(30px * var(--fs));
-  height: calc(30px * var(--fs));
-  color: var(--accent);
-}
-.mg-issue-compose .ibtn:disabled {
-  color: var(--ink-3);
-  opacity: 0.5;
+  min-height: calc(52px * var(--fs));
 }
 
 /* ---------- 新建表单 ---------- */
 .mg-issue-form {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
-.mg-issue-form input,
-.mg-issue-form textarea {
+.mg-issue-form-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: calc(12px * var(--fs));
+}
+.mg-issue-form-title {
+  font-size: calc(13.5px * var(--fs));
+}
+.mg-issue-form .req-input {
   width: 100%;
-  resize: vertical;
 }
-.mg-issue-form input[aria-invalid] {
+.mg-issue-form textarea.req-input {
+  min-height: calc(96px * var(--fs));
+}
+.mg-issue-form .req-input[aria-invalid] {
   border-color: var(--err);
 }
 .mg-issue-form-acts {
@@ -377,13 +507,13 @@
   color: var(--ink-3);
   margin-right: 2px;
 }
-.mg-overview-issues > button {
+.mg-overview-issues > button[data-overview-issues] {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
-  padding: 3px 10px;
-  border: 1px solid var(--line-1);
-  border-radius: var(--r1);
+  padding: 3px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
   background: transparent;
   color: var(--ink-2);
   cursor: pointer;

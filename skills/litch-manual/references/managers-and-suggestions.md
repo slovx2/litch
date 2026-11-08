@@ -24,26 +24,28 @@ the new issue tools; devices must advertise `litchManagerIssues` to support thes
 
 #### 控制台里的 issue 列表 / Issues in Console
 
-支持 issue 的设备上，控制台是一份统一列表，默认只列普通 issue；顶上一行是“新建 issue”（＋，标题必填、正文可空）
-和类型、状态、创建者、跟进、排序过滤，每页 30 条，以“加载更多”继续。每行写编号（X-n、D-n、R-n、P-n、S-…）
-和类型标记。展开普通 issue 依次是原帖、状态与跟进、关联（I-n 写作“经理事项”，可点开）、评论时间线和输入框；
+支持 issue 的设备上，控制台仍按页签分类：决策、建议、请你做、报告在前，末尾多一个“普通 issue”，默认打开决策。
+每个页签上方一行是状态切换（普通 issue 另有“未完成”），排序在右端；普通 issue 页签下另有“新建 issue”
+（标题必填、正文可空）和“我建的 / 经理建的 / 未读 / 跟进已暂停”几个开关。每页 30 条，以“加载更多”继续。
+展开普通 issue 依次是原帖、状态分段与跟进开关、关联（I-n 写作“经理事项”，可点开）、评论和输入框；
 经理的新回复标未读，打开即已读。决策、请你做、建议、报告展开后先是原来的快速处理区，下面的“展开讨论”
-在底部抽屉里打开同一套讨论界面；抽屉和卡片里都有“打开完整讨论”，进入整页讨论。概览的“普通 issue”一行给出
-开放、等我看、跟进已暂停三个数，点数字进入带同样条件的控制台。手机上用类别胶囊切类型（数字是待处理数），
-其余条件在过滤抽屉里；点一条拉起半屏抽屉，右上角可进完整讨论页。设备服务较旧时控制台仍按四类显示，
-页顶提示去设备详情升级。
+在底部抽屉里打开同一套讨论界面；抽屉和卡片里都有“打开完整讨论”，进入整页。概览的“普通 issue”一行给出
+未完成、等我看、跟进已暂停三个数，点数字进入带同样条件的普通 issue 页签。手机上用类别胶囊切换（顺序相同，
+数字是待处理数），其余条件在过滤抽屉里；点一条拉起半屏抽屉，右上角可进完整讨论页。设备服务较旧时没有
+“普通 issue”页签，页顶提示去设备详情升级。
 
-On devices that support issues, Console is one list that shows ordinary issues by default. The top row
-holds **New issue** (+; title required, body optional) and filters for type, status, author, follow-up
-and order; 30 issues per page with **Load more**. Each row shows its ID (X-n, D-n, R-n, P-n, S-…) and a
-type badge. An expanded ordinary issue shows the post, status and follow-up, links (I-n opens the manager
-item), the comment timeline and a composer; new manager replies are unread until you open the issue.
-Decisions, requests, suggestions and reports keep their quick actions on top; **Open discussion** shows
-the same discussion view in the bottom drawer, and **Open full discussion** opens it as a page. Overview
-shows open, waiting-for-you and paused counts for ordinary issues; each opens Console with that filter.
-On the phone, type capsules (with pending counts) switch the type, other filters are in the filter drawer,
-and a tapped issue opens a half-height sheet that links to the full discussion page. Older device services
-keep the four-category Console and show an upgrade note.
+On devices that support issues, Console keeps its category tabs: Decisions, Suggestions, For you and
+Reports first, then **Issues**; Decisions opens by default. Each tab has a status row (Issues adds
+**Not done**) with the order on the right. The Issues tab adds **New issue** (title required, body
+optional) and toggles for created by me, created by the manager, unread and paused follow-up. Lists
+load 30 at a time with **Load more**. An expanded issue shows the post, status and follow-up controls,
+links (I-n opens the manager item), comments and a composer; new manager replies are unread until you
+open the issue. Decisions, requests, suggestions and reports keep their quick actions on top;
+**Open discussion** shows the same discussion view in the bottom drawer, and **Open full discussion**
+opens it as a page. Overview shows not-done, waiting-for-you and paused counts for issues; each opens
+the Issues tab with that filter. The phone uses capsules in the same order (with pending counts),
+other filters are in the filter drawer, and a tapped issue opens a half-height sheet that links to the
+full discussion page. Older device services have no Issues tab and show an upgrade note.
 
 用户要求过或已批准的范围内任务，经理直接开工作线；经理自行发现、用户尚未要求或批准的工作
 （如回报中顺带发现的问题、审查改进点、可选后续工作），会附完整简报放到「建议」页，由用户决定是否开始。

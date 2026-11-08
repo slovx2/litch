@@ -7,18 +7,16 @@ import type {
   ManagerView,
   SuggestionView,
 } from '@litch/core'
-import { type ReactNode, useCallback, useEffect, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import {
   DEFAULT_MANAGER_ISSUE_FILTER,
   MANAGER_ISSUE_ATTENTION_FILTERS,
-  MANAGER_ISSUE_KINDS,
   MANAGER_ISSUE_LIST_ORDERS,
   type ManagerIssueFilter,
   managerIssueFilterKey,
   managerIssuePageKey,
   managerIssueStatusOptions,
-  withManagerIssueKinds,
 } from '../../../../../../packages/core/src/projection/manager-issue-list.mts'
 import type {
   ManagerIssueHead,
@@ -40,7 +38,23 @@ import {
 } from './data'
 import { IssueComposer, IssueMetaLine, IssueThread } from './IssueThread'
 
-const memory = new Map<string, ManagerIssueFilter>()
+/** 页签次序：四类特殊 issue 在前（日常处理的都在这里），普通 issue 在末尾 */
+const TABS: readonly ManagerIssueKind[] = [
+  'decision',
+  'suggestion',
+  'request',
+  'report',
+  'ordinary',
+]
+const kindFilter = (kind: ManagerIssueKind): ManagerIssueFilter => ({
+  ...DEFAULT_MANAGER_ISSUE_FILTER,
+  kinds: [kind],
+})
+/** 每个经理记住当前页签和每一类的过滤条件 */
+const memory = new Map<
+  string,
+  { kind: ManagerIssueKind; filters: Partial<Record<ManagerIssueKind, ManagerIssueFilter>> }
+>()
 
 /** 概览摘要点进来时带的过滤；version 变了才套用 */
 export interface IssuePreset {
@@ -78,14 +92,28 @@ export function useIssueConsole({
   const { c, font, radius } = theme
   const commands = useIssueCommands(manager)
   const key = JSON.stringify([manager.deviceId, manager.id])
-  const [filter, setFilterState] = useState(memory.get(key) ?? DEFAULT_MANAGER_ISSUE_FILTER)
-  const setFilter = useCallback(
-    (next: ManagerIssueFilter) => {
+  const [saved, setSaved] = useState(
+    () => memory.get(key) ?? { kind: 'decision' as ManagerIssueKind, filters: {} },
+  )
+  const kind = saved.kind
+  const filter = saved.filters[kind] ?? kindFilter(kind)
+  const save = useCallback(
+    (next: typeof saved) => {
       memory.set(key, next)
-      setFilterState(next)
+      setSaved(next)
     },
     [key],
   )
+  /** 换条件；条件里的类型就是页签 */
+  const setFilter = useCallback(
+    (next: ManagerIssueFilter) => {
+      const one = next.kinds[0] ?? 'ordinary'
+      const now = memory.get(key) ?? saved
+      save({ kind: one, filters: { ...now.filters, [one]: next } })
+    },
+    [key, save, saved],
+  )
+  const pickKind = (one: ManagerIssueKind) => save({ ...saved, kind: one })
   const [filtering, setFiltering] = useState(false)
   const [creating, setCreating] = useState(false)
   const [sheet, setSheet] = useState<string | null>(null)
@@ -107,25 +135,30 @@ export function useIssueConsole({
   useEffect(() => {
     if (!preset || preset.version === applied) return
     setApplied(preset.version)
-    setFilter({ ...DEFAULT_MANAGER_ISSUE_FILTER, ...preset.patch })
+    const kinds = preset.patch.kinds ?? ['ordinary']
+    setFilter({ ...kindFilter(kinds[0] ?? 'ordinary'), ...preset.patch })
   }, [preset, applied, setFilter])
-  const single = filter.kinds.length === 1 ? filter.kinds[0] : null
-  const filtered =
-    managerIssueFilterKey(filter) !==
-    managerIssueFilterKey(withManagerIssueKinds(DEFAULT_MANAGER_ISSUE_FILTER, filter.kinds))
-  const capsule = (kind: ManagerIssueKind | 'all') => {
-    const on = kind === 'all' ? filter.kinds.length === 0 : single === kind
-    const count = kind === 'all' ? 0 : (attention?.[kind] ?? 0)
-    const label = t(kind === 'all' ? 'issue.kind.all' : `issue.kind.${kind}`)
+  const ordinary = kind === 'ordinary'
+  const filtered = managerIssueFilterKey(filter) !== managerIssueFilterKey(kindFilter(kind))
+  // 窄屏放不下五个胶囊：选到末尾的普通 issue 时把胶囊行滚到头，选回特殊类型时滚回开头
+  const pills = useRef<ScrollView>(null)
+  useEffect(() => {
+    if (ordinary) pills.current?.scrollToEnd({ animated: true })
+    else pills.current?.scrollTo({ x: 0, animated: true })
+  }, [ordinary])
+  const capsule = (one: ManagerIssueKind) => {
+    const on = one === kind
+    const count = attention?.[one] ?? 0
+    const label = t(`issue.kind.${one}`)
     return (
       <Pressable
-        key={kind}
+        key={one}
         role="radio"
         aria-checked={on}
         aria-label={count ? `${label} ${count}` : label}
-        testID={`issue-capsule:${kind}`}
+        testID={`issue-capsule:${one}`}
         hitSlop={{ top: 6, bottom: 6 }}
-        onPress={() => setFilter(withManagerIssueKinds(filter, kind === 'all' ? [] : [kind]))}
+        onPress={() => pickKind(one)}
         style={[
           styles.pill,
           narrow ? styles.pillNarrow : null,
@@ -148,12 +181,13 @@ export function useIssueConsole({
   const header = (
     <View style={styles.categories}>
       <ScrollView
+        ref={pills}
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.fill}
         contentContainerStyle={[styles.pills, narrow ? styles.pillsNarrow : null]}
       >
-        {[...MANAGER_ISSUE_KINDS, 'all' as const].map(capsule)}
+        {TABS.map(capsule)}
       </ScrollView>
       <IconButton
         icon="list"
@@ -162,13 +196,15 @@ export function useIssueConsole({
         testID="issue-filter-open"
         onPress={() => setFiltering(true)}
       />
-      <IconButton
-        icon="plus"
-        label={disabled ? reason : t('issue.new')}
-        disabled={disabled}
-        testID="issue-new"
-        onPress={() => setCreating(true)}
-      />
+      {ordinary ? (
+        <IconButton
+          icon="plus"
+          label={disabled ? reason : t('issue.new')}
+          disabled={disabled}
+          testID="issue-new"
+          onPress={() => setCreating(true)}
+        />
+      ) : null}
     </View>
   )
   const card = (head: ManagerIssueHead) => {
@@ -241,13 +277,21 @@ export function useIssueConsole({
         ) : null}
       </View>
     ) : (
-      <Text testID="issue-empty" style={[styles.note, { color: c.ink3, textAlign: 'center' }]}>
-        {t(
-          filtered || filter.kinds.length !== 1 || single !== 'ordinary'
-            ? 'issue.empty'
-            : 'issue.emptyAll',
-        )}
-      </Text>
+      <View
+        testID="issue-empty"
+        style={[styles.empty, { borderColor: c.line2, borderRadius: radius.m }]}
+      >
+        <Text style={{ color: c.ink3, fontSize: font.size.body - 1, textAlign: 'center' }}>
+          {t(filtered ? 'issue.empty' : ordinary ? 'issue.emptyAll' : 'issue.emptyKind')}
+        </Text>
+        {filtered ? (
+          <Button
+            kind="plain"
+            label={t('issue.filter.reset')}
+            onPress={() => setFilter(kindFilter(kind))}
+          />
+        ) : null}
+      </View>
     )
   const overlays = (
     <>
@@ -260,7 +304,6 @@ export function useIssueConsole({
           onClose={(id) => {
             setCreating(false)
             if (!id) return
-            if (single !== 'ordinary') setFilter(withManagerIssueKinds(filter, ['ordinary']))
             setSheet(id)
           }}
         />
@@ -372,6 +415,7 @@ export function IssueSheetDrawer({
     >
       <View style={{ gap: 10 }}>
         <IssueMetaLine
+          withKind
           head={{
             ...issue,
             author: issue.author.kind,
@@ -410,6 +454,8 @@ function FilterDrawer({
 }) {
   const t = useT()
   const { c, font } = useTheme()
+  const kind = filter.kinds[0] ?? 'ordinary'
+  const ordinary = kind === 'ordinary'
   const section = (label: string, children: ReactNode) => (
     <View style={{ gap: 6 }}>
       <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{label}</Text>
@@ -433,30 +479,13 @@ function FilterDrawer({
             kind="plain"
             label={t('issue.filter.reset')}
             testID="issue-filter-reset"
-            onPress={() => onChange(DEFAULT_MANAGER_ISSUE_FILTER)}
+            onPress={() => onChange(kindFilter(kind))}
           />
           <Button label={t('issue.filter.done')} testID="issue-filter-done" onPress={onClose} />
         </View>
       }
     >
       <View style={{ gap: 14 }}>
-        {section(
-          t('issue.filter.kind'),
-          [...MANAGER_ISSUE_KINDS, 'all' as const].map((kind) => (
-            <Chip
-              key={kind}
-              radio
-              label={t(kind === 'all' ? 'issue.kind.all' : `issue.kind.${kind}`)}
-              on={
-                kind === 'all'
-                  ? !filter.kinds.length
-                  : filter.kinds.length === 1 && filter.kinds[0] === kind
-              }
-              testID={`issue-filter-kind:${kind}`}
-              onPress={() => onChange(withManagerIssueKinds(filter, kind === 'all' ? [] : [kind]))}
-            />
-          )),
-        )}
         {section(
           t('issue.filter.status'),
           managerIssueStatusOptions(filter.kinds).map((status) => (
@@ -474,37 +503,41 @@ function FilterDrawer({
             />
           )),
         )}
-        {section(
-          t('issue.filter.author'),
-          (['user', 'manager'] as const).map((author) => (
-            <Chip
-              key={author}
-              label={t(author === 'user' ? 'issue.filter.byUser' : 'issue.filter.byManager')}
-              on={filter.authors.includes(author)}
-              testID={`issue-filter-author:${author}`}
-              onPress={() => onChange({ ...filter, authors: toggle(filter.authors, author) })}
-            />
-          )),
-        )}
-        {section(
-          t('issue.filter.follow'),
-          (['all', 'on', 'off'] as const).map((value) => (
-            <Chip
-              key={value}
-              radio
-              label={t(
-                value === 'all'
-                  ? 'issue.filter.all'
-                  : value === 'on'
-                    ? 'issue.follow.on'
-                    : 'issue.follow.off',
-              )}
-              on={filter.followUp === value}
-              testID={`issue-filter-follow:${value}`}
-              onPress={() => onChange({ ...filter, followUp: value })}
-            />
-          )),
-        )}
+        {ordinary
+          ? section(
+              t('issue.filter.author'),
+              (['user', 'manager'] as const).map((author) => (
+                <Chip
+                  key={author}
+                  label={t(author === 'user' ? 'issue.filter.byUser' : 'issue.filter.byManager')}
+                  on={filter.authors.includes(author)}
+                  testID={`issue-filter-author:${author}`}
+                  onPress={() => onChange({ ...filter, authors: toggle(filter.authors, author) })}
+                />
+              )),
+            )
+          : null}
+        {ordinary
+          ? section(
+              t('issue.filter.follow'),
+              (['all', 'on', 'off'] as const).map((value) => (
+                <Chip
+                  key={value}
+                  radio
+                  label={t(
+                    value === 'all'
+                      ? 'issue.filter.all'
+                      : value === 'on'
+                        ? 'issue.follow.on'
+                        : 'issue.follow.off',
+                  )}
+                  on={filter.followUp === value}
+                  testID={`issue-filter-follow:${value}`}
+                  onPress={() => onChange({ ...filter, followUp: value })}
+                />
+              )),
+            )
+          : null}
         {section(
           t('issue.filter.order'),
           MANAGER_ISSUE_LIST_ORDERS.map((order) => (
@@ -518,7 +551,7 @@ function FilterDrawer({
             />
           )),
         )}
-        <View style={styles.wrap}>
+        <View style={[styles.wrap, ordinary ? null : styles.hidden]}>
           <Chip
             label={t('issue.filter.unread')}
             on={filter.unread}
@@ -629,6 +662,15 @@ function NewIssueDrawer({
 }
 
 const styles = StyleSheet.create({
+  hidden: { display: 'none' },
+  empty: {
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 24,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+  },
   fill: { flex: 1 },
   categories: { flexDirection: 'row', alignItems: 'center', paddingRight: 4 },
   pills: { alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6 },

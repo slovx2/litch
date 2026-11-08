@@ -59,58 +59,67 @@ export function IssueControls({
     }
   }
   if (issue.kind !== 'ordinary') return null
+  const following = issue.followUp.state === 'on'
   return (
     <>
       <div className="mg-issue-controls">
-        <select
-          className="mg-issue-status"
-          value={issue.status}
+        <fieldset
+          className="seg mg-issue-status"
           aria-label={t('issue.filter.status')}
-          disabled={disabled || busy}
-          title={disabled ? reason : t('issue.filter.status')}
           data-issue-status-select
-          onChange={(event) => {
-            const status = event.target.value as ManagerOrdinaryStatus
-            void run(
-              commands.update({
-                id: issue.id,
-                revision: issue.revision,
-                patch: { status },
-                why: t('issue.why.status', {
-                  status: t(`issue.status.${status}` as Parameters<typeof t>[0]),
-                }),
-              }),
-            )
-          }}
-        >
-          {MANAGER_ISSUE_STATUSES.ordinary.map((status) => (
-            <option key={status} value={status}>
-              {t(`issue.status.${status}` as Parameters<typeof t>[0])}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          className="btn ghost mg-issue-btn"
-          data-act="issue-follow"
-          aria-pressed={issue.followUp.state === 'on'}
           disabled={disabled || busy}
           title={disabled ? reason : undefined}
-          onClick={() => {
-            const state = issue.followUp.state === 'on' ? 'off' : 'on'
-            void run(
-              commands.follow({
-                id: issue.id,
-                revision: issue.revision,
-                state,
-                why: t(state === 'on' ? 'issue.why.followUp.on' : 'issue.why.followUp.off'),
-              }),
-            )
-          }}
         >
-          <Icon name={issue.followUp.state === 'on' ? 'pause' : 'play'} small />{' '}
-          {t(issue.followUp.state === 'on' ? 'issue.follow.pause' : 'issue.follow.resume')}
-        </button>
+          {MANAGER_ISSUE_STATUSES.ordinary.map((status) => (
+            <button
+              type="button"
+              key={status}
+              aria-pressed={issue.status === status}
+              data-issue-status={status}
+              onClick={() => {
+                if (issue.status === status) return
+                void run(
+                  commands.update({
+                    id: issue.id,
+                    revision: issue.revision,
+                    patch: { status: status as ManagerOrdinaryStatus },
+                    why: t('issue.why.status', {
+                      status: t(`issue.status.${status}` as Parameters<typeof t>[0]),
+                    }),
+                  }),
+                )
+              }}
+            >
+              <span className="mg-issue-state" data-state={status} aria-hidden="true" />
+              {t(`issue.status.${status}` as Parameters<typeof t>[0])}
+            </button>
+          ))}
+        </fieldset>
+        <span className="mg-issue-follow" title={disabled ? reason : t('issue.follow.hint')}>
+          <span className="mg-issue-follow-label">{t('issue.follow.label')}</span>
+          <button
+            type="button"
+            role="switch"
+            className="switch"
+            data-act="issue-follow"
+            aria-checked={following}
+            aria-label={t('issue.follow.label')}
+            disabled={disabled || busy}
+            onClick={() => {
+              const state = following ? 'off' : 'on'
+              void run(
+                commands.follow({
+                  id: issue.id,
+                  revision: issue.revision,
+                  state,
+                  why: t(state === 'on' ? 'issue.why.followUp.on' : 'issue.why.followUp.off'),
+                }),
+              )
+            }}
+          >
+            <i />
+          </button>
+        </span>
       </div>
       {error ? (
         <p className="err" role="alert">
@@ -228,7 +237,11 @@ export function IssueThread({
         </header>
       ) : null}
       {mode !== 'inline' ? (
-        <IssueMeta head={managerIssueHead(issue)} comments={issue.discussion.comments.length} />
+        <IssueMeta
+          head={managerIssueHead(issue)}
+          comments={issue.discussion.comments.length}
+          withKind
+        />
       ) : null}
       {special && quick && mode !== 'pane' ? (
         quick

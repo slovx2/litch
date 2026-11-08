@@ -23,6 +23,7 @@ import type {
   ManagerView,
 } from '../../../core/src/model-manager.mts'
 import { MANAGER_ISSUE_SUMMARY_FILTERS } from '../../../core/src/projection/manager-issue-list.mts'
+import type { ManagerIssueKind } from '../../../protocol/src/manager-issues.mts'
 import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
@@ -74,6 +75,13 @@ export interface ManagerPageLocation {
   draftFocus?: number
 }
 const defaultLocation: ManagerPageLocation = { tab: 'inbox', narrow: 'board', settings: false }
+
+const CATEGORY_KIND = {
+  decisions: 'decision',
+  suggestions: 'suggestion',
+  requests: 'request',
+  reports: 'report',
+} as const
 
 export function ManagerPage({
   manager,
@@ -138,6 +146,8 @@ export function ManagerPage({
     null,
   )
   const requestLocated = useCallback(() => setRequestTarget(null), [])
+  const reading = managerBoardMemory(manager.deviceId, manager.id)
+  const [, renderCategory] = useState(0)
   // issue 控制台（设备支持 litchManagerIssues 时）：编号跳转与概览摘要的过滤都交给它
   const issues = useManagerIssues(view)
   const issueCounts = useIssueCounts(manager, issues, MANAGER_ISSUE_SUMMARY_FILTERS)
@@ -146,6 +156,8 @@ export function ManagerPage({
   const issueLocated = useCallback(() => setIssueTarget(null), [])
   const [issuePreset, setIssuePreset] = useState<IssuePreset | null>(null)
   const presetIssues = (patch: IssuePreset['patch']) => {
+    reading.ordinary = true
+    renderCategory((value) => value + 1)
     setIssuePreset((now) => ({ patch, version: (now?.version ?? 0) + 1 }))
     setBoardLayout({ open: true })
     onLocation({ ...location, tab: 'inbox', narrow: 'board' })
@@ -199,8 +211,6 @@ export function ManagerPage({
     window.addEventListener('litch-manager-issue', listener)
     return () => window.removeEventListener('litch-manager-issue', listener)
   })
-  const reading = managerBoardMemory(manager.deviceId, manager.id)
-  const [, renderCategory] = useState(0)
   const inboxTab = (
     {
       decision: 'decisions',
@@ -210,6 +220,7 @@ export function ManagerPage({
     } as const
   )[reading.category]
   const setInboxTab = (tab: 'decisions' | 'suggestions' | 'requests' | 'reports') => {
+    reading.ordinary = false
     reading.category = (
       {
         decisions: 'decision',
@@ -221,6 +232,26 @@ export function ManagerPage({
     renderCategory((value) => value + 1)
   }
   const activeTab = tab === 'inbox' ? inboxTab : tab
+  // issue 控制台的页签：四类特殊 issue 在前，普通 issue 在末尾
+  const issueKind: ManagerIssueKind =
+    tab === 'inbox'
+      ? reading.ordinary
+        ? 'ordinary'
+        : reading.category
+      : ((
+          {
+            decisions: 'decision',
+            suggestions: 'suggestion',
+            requests: 'request',
+            reports: 'report',
+          } as const
+        )[tab as 'decisions'] ?? reading.category)
+  const pickIssueKind = (kind: ManagerIssueKind) => {
+    reading.ordinary = kind === 'ordinary'
+    if (kind !== 'ordinary') reading.category = kind
+    renderCategory((value) => value + 1)
+    if (tab !== 'inbox') setTab('inbox')
+  }
   // 未分页看板同样在离开/返回时恢复阅读位置；分页看板继续使用自身的筛选记忆。
   useBoardScroll(
     boardBody,
@@ -345,18 +376,17 @@ export function ManagerPage({
   /** 概览跳到控制台某一类：和点控制台里的类别按钮是同一件事 */
   const openInbox = (kind: OverviewCategory) => {
     if (issueMode) {
-      presetIssues({
-        kinds: [
-          (
-            {
-              decisions: 'decision',
-              requests: 'request',
-              reports: 'report',
-              suggestions: 'suggestion',
-            } as const
-          )[kind],
-        ],
-      })
+      pickIssueKind(
+        (
+          {
+            decisions: 'decision',
+            requests: 'request',
+            reports: 'report',
+            suggestions: 'suggestion',
+          } as const
+        )[kind],
+      )
+      setBoardLayout({ open: true })
       return
     }
     setInboxTab(kind)
@@ -540,7 +570,7 @@ export function ManagerPage({
             ))}
           </div>
         </div>
-        {consoleTab && !issueMode ? (
+        {consoleTab ? (
           <div className="mg-inbox-bar">
             <div className="mg-inbox-tabs seg">
               {(['decisions', 'suggestions', 'requests', 'reports'] as const).map((kind) => (
@@ -549,13 +579,27 @@ export function ManagerPage({
                   data-inbox-tab={kind}
                   data-board-tab={kind}
                   key={kind}
-                  aria-pressed={activeTab === kind}
+                  aria-pressed={issueMode ? issueKind === CATEGORY_KIND[kind] : activeTab === kind}
                   onClick={() => openInbox(kind)}
                 >
                   {t(`manager.${kind}`)}
                   {counts[kind] ? <span className="pill wait">{counts[kind]}</span> : null}
                 </button>
               ))}
+              {issueMode ? (
+                <button
+                  type="button"
+                  data-inbox-tab="issues"
+                  key="issues"
+                  aria-pressed={issueKind === 'ordinary'}
+                  onClick={() => pickIssueKind('ordinary')}
+                >
+                  {t('issue.tab')}
+                  {issueCounts?.unread ? (
+                    <span className="pill wait">{issueCounts.unread}</span>
+                  ) : null}
+                </button>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -667,6 +711,8 @@ export function ManagerPage({
                     {issueMode && consoleTab ? (
                       <IssueConsole
                         manager={manager}
+                        kind={issueKind}
+                        onKind={pickIssueKind}
                         view={{ ...view, board }}
                         issues={issues}
                         disabled={disabled}

@@ -74,6 +74,7 @@ export function ManagerIssueScreen({ route, navigation }: Props) {
             {issue.title}
           </Text>
           <IssueMetaLine
+            withKind
             head={{
               ...issue,
               author: issue.author.kind,

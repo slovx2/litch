@@ -90,24 +90,33 @@ export function IssueDiscussion({
       setBusy(false)
     }
   }
+  const author = (who: 'user' | 'manager') =>
+    t(who === 'manager' ? 'issue.author.manager' : 'issue.author.user')
   return (
     <section
       className="mg-issue-talk"
       data-issue-discussion={issue.id}
       aria-label={t('issue.comments')}
     >
+      <header className="mg-issue-talk-head">
+        <b>{t('issue.comments')}</b>
+        <span className="mg-issue-count">{issue.discussion.comments.length}</span>
+      </header>
       {rows.length ? (
         <ol className="mg-issue-timeline">
           {rows.map((row) =>
             row.kind === 'event' ? (
               <li key={row.id} className="mg-issue-event" data-timeline="event">
-                <span className="ell">{row.text}</span> · <Stamp at={row.at} />
+                <span className="mg-issue-event-dot" aria-hidden="true" />
+                <span className="ell">{row.text}</span>
+                <Stamp at={row.at} />
               </li>
             ) : row.kind === 'question' ? (
               <li key={row.id} className="mg-issue-comment" data-timeline="question">
-                <p className="mg-issue-meta">
-                  {t('issue.timeline.question')} · <Stamp at={row.at} />
-                </p>
+                <header className="mg-issue-comment-head">
+                  <b>{t('issue.timeline.question')}</b>
+                  <Stamp at={row.at} />
+                </header>
                 <BoardMarkdown text={row.question} />
                 {row.answer ? (
                   <blockquote className="mg-issue-answer">
@@ -122,46 +131,47 @@ export function IssueDiscussion({
                 data-timeline="comment"
                 data-author={row.author}
               >
-                <p className="mg-issue-meta">
-                  <b>
-                    {t(row.author === 'manager' ? 'issue.author.manager' : 'issue.author.user')}
-                  </b>{' '}
-                  · <Stamp at={row.at} />
-                </p>
+                <header className="mg-issue-comment-head">
+                  <b>{author(row.author)}</b>
+                  <Stamp at={row.at} />
+                </header>
                 <BoardMarkdown text={row.body} />
               </li>
             ),
           )}
         </ol>
-      ) : null}
+      ) : (
+        <p className="mg-issue-note">{t('issue.comment.none')}</p>
+      )}
       {special ? <p className="mg-issue-note">{t('issue.comment.note')}</p> : null}
       {issue.followUp.state === 'off' ? (
         <p className="mg-issue-note" data-follow-note>
           {t('issue.follow.pausedNote')}
         </p>
       ) : null}
-      {onAsk ? (
-        <div className="mg-issue-mode seg" role="toolbar" aria-label={t('issue.mode')}>
-          <button
-            type="button"
-            aria-pressed={!asking}
-            data-issue-mode="comment"
-            onClick={() => setAsking(false)}
-          >
-            {t('issue.comments')}
-          </button>
-          <button
-            type="button"
-            aria-pressed={asking}
-            data-issue-mode="ask"
-            onClick={() => setAsking(true)}
-          >
-            {t('issue.ask')}
-          </button>
-        </div>
-      ) : null}
-      <div className="mg-issue-compose">
+      <div className="mg-post-compose mg-issue-compose">
+        {onAsk ? (
+          <fieldset className="mg-question-modes" aria-label={t('issue.mode')}>
+            <button
+              type="button"
+              aria-pressed={!asking}
+              data-issue-mode="comment"
+              onClick={() => setAsking(false)}
+            >
+              {t('issue.comments')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={asking}
+              data-issue-mode="ask"
+              onClick={() => setAsking(true)}
+            >
+              {t('issue.ask')}
+            </button>
+          </fieldset>
+        ) : null}
         <textarea
+          className="req-input mg-post-input grow-input"
           rows={2}
           value={text}
           disabled={disabled}
@@ -185,7 +195,7 @@ export function IssueDiscussion({
         />
         <button
           type="button"
-          className="ibtn"
+          className="ibtn mg-post-send"
           data-act="issue-comment"
           title={disabled ? reason : t(asking ? 'issue.ask.send' : 'issue.comment.send')}
           aria-label={t(asking ? 'issue.ask.send' : 'issue.comment.send')}
@@ -194,12 +204,12 @@ export function IssueDiscussion({
         >
           <Icon name="send" small />
         </button>
+        {error ? (
+          <p className="err" role="alert">
+            {error}
+          </p>
+        ) : null}
       </div>
-      {error ? (
-        <p className="err" role="alert">
-          {error}
-        </p>
-      ) : null}
     </section>
   )
 }

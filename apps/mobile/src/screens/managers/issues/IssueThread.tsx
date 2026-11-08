@@ -3,7 +3,7 @@
 // 抽屉里放在底部固定，完整页放在页尾。触控区不小于主题的 hit。
 import type { ManagerView } from '@litch/core'
 import { type ReactNode, useState } from 'react'
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import { MANAGER_ISSUE_STATUSES } from '../../../../../../packages/core/src/projection/manager-issue-list.mts'
 import type {
   ManagerIssue,
@@ -13,7 +13,7 @@ import type {
 import { stamp } from '../../../../../../packages/ui/src/app/format.ts'
 import { useT } from '../../../ui/i18n'
 import { Chip } from '../../../ui/kit/controls'
-import { Icon, IconButton } from '../../../ui/kit/Icon'
+import { IconButton } from '../../../ui/kit/Icon'
 import { useTheme } from '../../../ui/theme'
 import { Byline } from '../Byline'
 import { Markdown } from '../IssueMarkdown'
@@ -45,21 +45,41 @@ export function IssueKindTag({ kind }: { kind: ManagerIssueHead['kind'] }) {
   )
 }
 
-/** 一行小字，状态不另占一行；放不下时折行 */
-export function IssueMetaLine({ head, comments }: { head: ManagerIssueHead; comments?: number }) {
+/** 状态圆点的颜色：开放=强调色，进行中=等待色，受阻=错误色，完成一类=成功色，其余灰（与桌面一致） */
+export function issueStateColor(c: ReturnType<typeof useTheme>['c'], status: string): string {
+  if (['open', 'pending', 'endorsed', 'unread'].includes(status)) return c.accent
+  if (status === 'in_progress') return c.wait
+  if (status === 'blocked') return c.err
+  if (['resolved', 'answered', 'started', 'delivered', 'replied'].includes(status)) return c.ok
+  return c.ink3
+}
+
+/** 一行小字，状态不另占一行；放不下时折行。列表按类型分页签，卡上不写类型；抽屉和完整页带上 */
+export function IssueMetaLine({
+  head,
+  comments,
+  withKind = false,
+}: {
+  head: ManagerIssueHead
+  comments?: number
+  withKind?: boolean
+}) {
   const t = useT()
   const { c, font } = useTheme()
   const parts = [
-    t(`issue.status.${head.status}` as Parameters<typeof t>[0]),
     t(head.author === 'manager' ? 'issue.author.manager' : 'issue.author.user'),
     stamp(head.updatedAt, Date.now(), t.lang),
     comments ? t('issue.commentCount', { n: comments }) : '',
   ].filter(Boolean)
   return (
     <View style={styles.meta} testID={`issue-meta:${head.id}`}>
-      <IssueKindTag kind={head.kind} />
+      {withKind ? <IssueKindTag kind={head.kind} /> : null}
+      <View style={[styles.dot, { backgroundColor: issueStateColor(c, head.status) }]} />
       <Text style={{ color: c.ink3, fontSize: font.size.meta, flexShrink: 1 }}>
-        {parts.join(' · ')}
+        <Text style={{ color: c.ink2 }}>
+          {t(`issue.status.${head.status}` as Parameters<typeof t>[0])}
+        </Text>
+        {` · ${parts.join(' · ')}`}
         {head.kind === 'ordinary' && head.followUp === 'off' ? (
           <Text style={{ color: c.wait }}>{` · ${t('issue.follow.off')}`}</Text>
         ) : null}
@@ -180,45 +200,30 @@ export function IssueThread({
               />
             ))}
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ disabled: disabled || busy }}
-            aria-pressed={issue.followUp.state === 'on'}
-            disabled={disabled || busy}
-            testID="issue-follow"
-            onPress={() =>
-              void run(
-                commands.follow({
-                  id: issue.id,
-                  revision: issue.revision,
-                  state: issue.followUp.state === 'on' ? 'off' : 'on',
-                  why: t(
-                    issue.followUp.state === 'on'
-                      ? 'issue.why.followUp.off'
-                      : 'issue.why.followUp.on',
-                  ),
-                }),
-              )
-            }
-            style={({ pressed }) => [
-              styles.follow,
-              {
-                borderColor: c.line2,
-                borderRadius: radius.s,
-                backgroundColor: pressed ? c.press : 'transparent',
-                opacity: disabled ? 0.5 : 1,
-              },
-            ]}
-          >
-            <Icon
-              name={issue.followUp.state === 'on' ? 'pause' : 'forward'}
-              size={14}
-              color={c.ink2}
-            />
-            <Text style={{ color: c.ink2, fontSize: font.size.meta + 1 }}>
-              {t(issue.followUp.state === 'on' ? 'issue.follow.pause' : 'issue.follow.resume')}
+          <View style={styles.followRow}>
+            <Text style={{ color: c.ink2, fontSize: font.size.meta + 1, flex: 1 }}>
+              {t('issue.follow.label')}
+              <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
+                {`  ${t('issue.follow.hint')}`}
+              </Text>
             </Text>
-          </Pressable>
+            <Switch
+              testID="issue-follow"
+              value={issue.followUp.state === 'on'}
+              disabled={disabled || busy}
+              trackColor={{ true: c.accent, false: c.line2 }}
+              onValueChange={(on) =>
+                void run(
+                  commands.follow({
+                    id: issue.id,
+                    revision: issue.revision,
+                    state: on ? 'on' : 'off',
+                    why: t(on ? 'issue.why.followUp.on' : 'issue.why.followUp.off'),
+                  }),
+                )
+              }
+            />
+          </View>
         </View>
       ) : null}
       {error ? <Text style={{ color: c.err }}>{error}</Text> : null}
@@ -237,7 +242,15 @@ export function IssueThread({
             ) : (
               <Text
                 key={`${target.kind}:${target.target}`}
-                style={{ color: c.ink2, fontSize: font.size.meta }}
+                style={[
+                  styles.relation,
+                  {
+                    color: c.ink2,
+                    fontSize: font.size.meta,
+                    borderColor: c.line2,
+                    backgroundColor: c.sunken,
+                  },
+                ]}
               >
                 {t(`manager.relationKind.${target.kind}` as Parameters<typeof t>[0])} ·{' '}
                 {target.label ?? target.target}
@@ -248,14 +261,20 @@ export function IssueThread({
       ) : null}
       {rows.length ? (
         <View style={[styles.timeline, { borderTopColor: c.line1 }]}>
+          <Text style={{ color: c.ink2, fontSize: font.size.meta + 1, fontWeight: '600' }}>
+            {t('issue.comments')}
+            <Text style={{ color: c.ink3, fontWeight: '400' }}>
+              {`  ${issue.discussion.comments.length}`}
+            </Text>
+          </Text>
           {rows.map((row) =>
             row.kind === 'event' ? (
-              <Text
-                key={row.id}
-                style={{ color: c.ink3, fontSize: font.size.meta, paddingLeft: 10 }}
-              >
-                {row.text} · {stamp(row.at, Date.now(), t.lang)}
-              </Text>
+              <View key={row.id} style={styles.event}>
+                <View style={[styles.dot, { backgroundColor: c.line3 }]} />
+                <Text style={{ color: c.ink3, fontSize: font.size.meta, flexShrink: 1 }}>
+                  {row.text} · {stamp(row.at, Date.now(), t.lang)}
+                </Text>
+              </View>
             ) : (
               <View
                 key={row.id}
@@ -264,7 +283,9 @@ export function IssueThread({
                   styles.entry,
                   {
                     borderLeftColor:
-                      row.kind === 'comment' && row.who === 'manager' ? c.accent : c.line2,
+                      row.kind === 'comment' && row.who === 'manager' ? c.accent : c.line3,
+                    backgroundColor: c.sunken,
+                    borderRadius: radius.s,
                   },
                 ]}
               >
@@ -279,10 +300,7 @@ export function IssueThread({
                 <Markdown text={row.body} />
                 {row.kind === 'question' && row.answer ? (
                   <View
-                    style={[
-                      styles.answer,
-                      { borderLeftColor: c.accent, backgroundColor: c.sunken },
-                    ]}
+                    style={[styles.answer, { borderLeftColor: c.accent, backgroundColor: c.panel }]}
                   >
                     <Markdown text={row.answer} />
                   </View>
@@ -398,7 +416,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   timeline: { gap: 10, borderTopWidth: 1, paddingTop: 10 },
-  entry: { borderLeftWidth: 2, paddingLeft: 10, gap: 4 },
+  entry: { borderLeftWidth: 3, paddingHorizontal: 10, paddingVertical: 8, gap: 4 },
+  event: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  relation: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
+  followRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 40 },
   answer: { borderLeftWidth: 2, paddingLeft: 8, paddingVertical: 4, marginTop: 4 },
   composer: { gap: 4 },
   composeRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },

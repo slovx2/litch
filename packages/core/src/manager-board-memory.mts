@@ -5,6 +5,8 @@ export type BoardPageMemory = { selected: ManagerObjectId | null; y: number }
 type BoardMemory = {
   filters: Record<string, string>
   category: 'decision' | 'suggestion' | 'request' | 'report'
+  /** 支持 issue 的设备上选的是“普通 issue”页签（category 记着上一次选的特殊类型） */
+  ordinary: boolean
   items: boolean
   pages: Map<string, BoardPageMemory>
 }
@@ -14,7 +16,7 @@ export function managerBoardMemory(deviceId: string, managerId: string): BoardMe
   const key = JSON.stringify([deviceId, managerId])
   let memory = managers.get(key)
   if (!memory) {
-    memory = { filters: {}, category: 'decision', items: false, pages: new Map() }
+    memory = { filters: {}, category: 'decision', ordinary: false, items: false, pages: new Map() }
     managers.set(key, memory)
   }
   return memory
