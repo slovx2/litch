@@ -15,6 +15,7 @@ export const nightlyChecks = [
   ['files', `${desktop}check-files.mjs`],
   ['settings', `${desktop}check-settings.mjs`],
   ['navigation', `${desktop}smoke.mjs`, '--navigation'],
+  ['manager-issues', `${desktop}smoke.mjs`, '--manager-issues'],
   ['text-scale', `${desktop}check-text-scale.mjs`],
   ['full:mock', `${desktop}smoke.mjs`, '--full', '--mock'],
   ['sidebar', `${desktop}smoke.mjs`, '--sidebar'],

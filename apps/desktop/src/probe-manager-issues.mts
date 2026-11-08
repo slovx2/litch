@@ -1,0 +1,249 @@
+// 默认 issue 控制台的 Electron 冒烟。只操作正式界面，数据与延迟回复走模拟核心和消息端口。
+// 不依赖状态过滤器的具体控件形态；概览过滤用首屏读到的卡片集合交叉核对。
+export async function managerIssuesProbe() {
+  const passed: string[] = []
+  const one = <T extends HTMLElement = HTMLElement>(selector: string) =>
+    document.querySelector<T>(selector)
+  const all = (selector: string) => [...document.querySelectorAll<HTMLElement>(selector)]
+  const cards = () => all('[data-issue-type]')
+  const total = () => one('[data-issue-total]')?.textContent?.trim()
+  const assert = (ok: unknown, message: string) => {
+    if (!ok) throw new Error(`issue 冒烟：${message}；已通过 ${passed.join('、')}`)
+  }
+  const until = async <T,>(what: string, read: () => T | null | undefined | false): Promise<T> => {
+    const end = Date.now() + 15_000
+    while (Date.now() < end) {
+      const value = read()
+      if (value) return value
+      await new Promise((resolve) => setTimeout(resolve, 40))
+    }
+    throw new Error(
+      `issue 冒烟等待超时：${what}；${JSON.stringify({
+        passed,
+        total: total(),
+        cards: cards().map((card) => card.dataset.issue),
+        threads: all('[data-issue-thread]').map((thread) => thread.dataset.issueThread),
+        errors: all('[role="alert"]').map((alert) => alert.textContent),
+      })}`,
+    )
+  }
+  const click = async (selector: string) => {
+    const button = await until(selector, () => {
+      const element = one<HTMLButtonElement>(selector)
+      return element && !element.disabled ? element : null
+    })
+    button.click()
+  }
+  const fill = async (selector: string, value: string) => {
+    const input = await until(selector, () => one<HTMLInputElement | HTMLTextAreaElement>(selector))
+    const prototype =
+      input instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype
+    Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  }
+  const select = async (selector: string, value: string) => {
+    const input = await until(selector, () => {
+      const element = one<HTMLSelectElement>(selector)
+      return element && !element.disabled ? element : null
+    })
+    assert(
+      [...input.options].some((option) => option.value === value),
+      `${selector} 缺少 ${value}`,
+    )
+    input.value = value
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+  const sameIds = (expected: string[]) =>
+    JSON.stringify(
+      cards()
+        .map((card) => card.dataset.issue)
+        .sort(),
+    ) === JSON.stringify([...expected].sort())
+
+  await click('[data-sidebar-mode="manager"]')
+  await click('[data-manager-id="m1"] [data-session] > button')
+  await until('默认控制台选中', () => one('[data-board-tab="inbox"][aria-selected="true"]'))
+  await until('普通 issue 首屏 30/38', () => total() === '30/38' && cards().length === 30)
+  assert(
+    cards().every((card) => card.dataset.issueType === 'ordinary'),
+    '默认列表混入特殊 issue',
+  )
+  assert(one('[data-issue-more]'), '首屏没有加载更多')
+  passed.push('默认普通 issue：30/38')
+  await click('[data-issue-more]')
+  await until('全部 38 条', () => total() === '38/38' && cards().length === 38)
+  assert(!one('[data-issue-more]'), '加载完仍有下一页')
+  assert(new Set(cards().map((card) => card.dataset.issue)).size === 38, '分页出现重复卡片')
+  passed.push('加载更多：38/38 且无重复')
+
+  // 从完整列表的可见元信息得出期待集合，避免拿产品过滤函数给自身作断言。
+  const samples = cards().map((card) => ({
+    id: card.dataset.issue ?? '',
+    status: card.querySelector<HTMLElement>('[data-issue-status]')?.dataset.issueStatus,
+    unread: card.dataset.unread === 'true',
+    paused: Boolean(card.querySelector('[data-follow="off"]')),
+  }))
+  const active = (status: string | undefined) =>
+    ['open', 'in_progress', 'blocked'].includes(status ?? '')
+  const expectedSummary = {
+    active: samples.filter((sample) => active(sample.status)).map((sample) => sample.id),
+    unread: samples.filter((sample) => sample.unread).map((sample) => sample.id),
+    paused: samples
+      .filter((sample) => active(sample.status) && sample.paused)
+      .map((sample) => sample.id),
+  }
+  for (const [key, expected] of Object.entries(expectedSummary)) {
+    // 故意留下决策类型过滤，检验概览预设会清掉之前的类型条件。
+    if (one('[data-act="issue-filter-reset"]')) {
+      await click('[data-act="issue-filter-reset"]')
+      await until('清掉上一次概览过滤', () => !one('[data-act="issue-filter-reset"]'))
+    }
+    await select('[data-issue-filter="kind"] select', 'decision')
+    await until(
+      '切到决策列表',
+      () => cards().length && cards().every((card) => card.dataset.issueType === 'decision'),
+    )
+    await click('[data-board-tab="overview"]')
+    const summary = `[data-overview-issues="${key}"]`
+    await until(
+      `概览 ${key} 数字`,
+      () =>
+        one(summary)
+          ?.textContent?.match(/\d+\s*$/)?.[0]
+          ?.trim() === String(expected.length),
+    )
+    await click(summary)
+    await until(
+      `概览 ${key} 过滤集合一致`,
+      () => total() === `${expected.length}/${expected.length}` && sameIds(expected),
+    )
+    assert(
+      cards().every((card) => card.dataset.issueType === 'ordinary'),
+      `${key} 混入特殊 issue`,
+    )
+    if (key === 'unread') assert(one('[data-act="issue-unread-clear"]'), '未读过滤没有提示')
+    passed.push(`概览 ${key}：${expected.length} 条与列表一致`)
+  }
+  await click('[data-act="issue-filter-reset"]')
+  await until(
+    '重置默认列表',
+    () =>
+      total()?.endsWith('/38') && cards().every((card) => card.dataset.issueType === 'ordinary'),
+  )
+
+  await click('[data-act="issue-new"]')
+  await click('[data-act="issue-create"]')
+  await until('空标题被拒绝', () => one('[data-issue-title][aria-invalid="true"]'))
+  assert(
+    one('[data-issue-form] [role="alert"]')?.textContent?.includes('标题必填'),
+    '缺少标题必填说明',
+  )
+  assert(total()?.endsWith('/38'), '空标题创建了 issue')
+  await fill('[data-issue-title]', '   ')
+  await click('[data-act="issue-create"]')
+  assert(one('[data-issue-title][aria-invalid="true"]'), '空白标题未被拒绝')
+  const title = '桌面冒烟：跟进远程会话恢复'
+  const body = '重启后应恢复会话，后续在这里补充验收结果。'
+  await fill('[data-issue-title]', title)
+  await fill('[data-issue-body]', body)
+  await click('[data-act="issue-create"]')
+  const created = await until('新 issue 展开', () =>
+    cards().find(
+      (card) =>
+        card.textContent?.includes(title) && card.querySelector('[data-issue-thread="inline"]'),
+    ),
+  )
+  const id = created.dataset.issue ?? ''
+  const card = `[data-issue-type="ordinary"][data-issue="${CSS.escape(id)}"]`
+  await until('新建后的总数', () => total()?.endsWith('/39'))
+  assert(
+    !one('[data-issue-form]') && created.textContent?.includes(body),
+    '新建后表单未关或正文丢失',
+  )
+  passed.push('标题必填、空白拒绝、新建并展开')
+
+  const comment = '请核实重启时的恢复顺序。'
+  await fill(`${card} [data-issue-comment-input]`, comment)
+  const sentAt = performance.now()
+  await click(`${card} [data-act="issue-comment"]`)
+  await until('用户评论落时间线', () =>
+    one(`${card} [data-timeline="comment"][data-author="user"]`)?.textContent?.includes(comment),
+  )
+  await until(
+    '评论输入清空',
+    () => one<HTMLTextAreaElement>(`${card} [data-issue-comment-input]`)?.value === '',
+  )
+  // 收起后再等异步回复，避免展开卡自动已读，让未读状态有可观察的窗口。
+  await click(`${card} [data-act="issue-toggle"]`)
+  await until('评论后收起', () => !one(`${card} [data-issue-thread]`))
+  assert(!one(`${card}[data-unread="true"]`), '模拟回复提前到达')
+  await until('延迟经理回复标未读', () => one(`${card}[data-unread="true"]`))
+  const replyAfterMs = Math.round(performance.now() - sentAt)
+  // 定时器是 2.5 秒；上限由等待超时保护，不把繁忙机器的帧调度当精确计时测试。
+  assert(replyAfterMs >= 2000, `回复未等待约 2.5 秒：${replyAfterMs}ms`)
+  await click(`${card} [data-act="issue-toggle"]`)
+  await until('经理回复正文', () =>
+    one(`${card} [data-timeline="comment"][data-author="manager"]`)?.textContent?.includes(
+      '收到。我先看一下现状',
+    ),
+  )
+  await until('打开后已读', () => one(card) && !one(`${card}[data-unread="true"]`))
+  passed.push('评论、延迟经理回复、未读与打开后已读')
+
+  await select(`${card} [data-issue-status-select]`, 'in_progress')
+  await until('状态原因进时间线', () =>
+    all(`${card} [data-timeline="event"]`).some((event) =>
+      event.textContent?.includes('状态改为 进行中'),
+    ),
+  )
+  assert(one(`${card} [data-issue-status="in_progress"]`), '状态元信息未更新')
+  await click(`${card} [data-act="issue-follow"]`)
+  await until('暂停跟进原因进时间线', () =>
+    all(`${card} [data-timeline="event"]`).some((event) => event.textContent?.includes('暂停跟进')),
+  )
+  assert(
+    one(`${card} [data-follow="off"]`) && one(`${card} [data-follow-note]`),
+    '暂停跟进未显示状态与提示',
+  )
+  assert(
+    one(`${card} [data-act="issue-follow"]`)?.getAttribute('aria-pressed') === 'false',
+    '跟进按钮仍在开启状态',
+  )
+  passed.push('状态、暂停跟进与原因时间线')
+
+  await select('[data-issue-filter="kind"] select', 'decision')
+  await until(
+    '决策过滤',
+    () => cards().length && cards().every((item) => item.dataset.issueType === 'decision'),
+  )
+  const decisionIds = cards().map((item) => item.dataset.issue ?? '')
+  const decisionId = decisionIds[0] ?? ''
+  const decision = `[data-issue-type="decision"][data-issue="${CSS.escape(decisionId)}"]`
+  await click(`${decision} [data-act="issue-toggle"]`)
+  await until('决策快速处理区', () => one(`${decision} [data-paging-detail]`))
+  await click(`${decision} [data-act="issue-discuss"]`)
+  await until('底部讨论抽屉', () => one('[data-issue-thread="pane"] [data-issue-comment-input]'))
+  assert(one('[data-issue-thread="pane"]')?.dataset.issue === decisionId, '抽屉打开了别的 issue')
+  assert(one(decision) && !one('[data-issue-thread="page"]'), '抽屉替换了列表')
+  await click('[data-issue-thread="pane"] [data-act="issue-full"]')
+  await until('完整讨论页', () => one('[data-issue-thread="page"]')?.dataset.issue === decisionId)
+  assert(!one('[data-issue-thread="pane"]') && cards().length === 0, '整页还保留抽屉或列表')
+  await click('[data-act="issue-back"]')
+  await until(
+    '返回同一过滤列表和展开卡',
+    () =>
+      sameIds(decisionIds) && one(`${decision} [data-act="issue-toggle"][aria-expanded="true"]`),
+  )
+  assert(!one('[data-issue-thread="page"]'), '返回后仍停在整页')
+  passed.push('决策快速处理、抽屉、完整讨论与返回')
+  return {
+    passed,
+    createdId: id,
+    replyAfterMs,
+    summary: Object.fromEntries(
+      Object.entries(expectedSummary).map(([key, ids]) => [key, ids.length]),
+    ),
+  }
+}

@@ -78,11 +78,12 @@ test('等待有界，不重跑签名或产品检查；完成后才返回', async
 })
 
 test('合并保留窗口检查与原生CU；浏览器按CI覆盖，手机/未知域不能混入Mac', () => {
-  assert.equal(nativePlan(['client']).checks.length, 28)
+  assert.equal(nativePlan(['client']).checks.length, 29)
   assert.ok(
     nativePlan(['client']).checks.some((check) => check.id === 'client:browser:persistence'),
   )
   assert.ok(nativePlan(['client']).checks.some((check) => check.id === 'client:user-bubble'))
+  assert.ok(nativePlan(['client']).checks.some((check) => check.id === 'client:manager-issues'))
   assert.equal(nativePlan(['computer-use']).checks.length, 3)
   assert.deepEqual(
     nativePlan(['client-engines']).checks.map((x) => x.id),

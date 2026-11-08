@@ -8,6 +8,7 @@
 //   npm run check:sidebar  侧栏自己（对着模拟核心）：收起的项目和设备那一行上的汇总。check:full 里也有它
 //   npm run check:tasks    定时任务（对着模拟核心）：列表、新建、立即运行、去会话、会话顶上那一条
 //   npm run check:tree     会话树（对着模拟核心）：子会话的嵌套、派出与提案、注入的提示条、子代理的侧面板
+//   根目录 client:check:manager-issues：默认 issue 控制台、分页、新建、评论、状态、讨论导航和概览过滤
 //   npm run check:onboard  上手功能（对着模拟核心的 fresh 开局）：首启引导两步、装 harness 成与不成、配置助手预填、litch config
 //   npm run check:harness-settings  harness 详情设置（对着模拟核心）：配置、冲突、各种登录、MCP、指令文件与统一模式
 //   加 --packed            不用开发时的外壳，改成起装好的应用（先 npm run pack），验的是打包出来的那一份
@@ -65,6 +66,7 @@ const probe = useRemote
           'critical',
           'sidebar',
           'manager',
+          'manager-issues',
           'navigation',
           'tasks',
           'tree',
@@ -317,6 +319,7 @@ const child = spawn(usePacked ? packedBinary() : electron, usePacked ? [] : [app
     ...(probe === 'onboard' ? { LITCH_MOCK_SCENE: 'fresh', LITCH_ONBOARDING: '1' } : {}),
     // 经理冒烟按四类控制台写（设备服务较旧时仍是这一套）；issue 控制台另有验收
     ...(probe === 'manager' ? { LITCH_MOCK_MANAGER_ISSUES: '0' } : {}),
+    ...(probe === 'manager-issues' ? { LITCH_MOCK_MANAGER_ISSUES: '1' } : {}),
     ...(fixture ? { LITCH_ENTRY: fixture.entry } : {}),
     // 本机设备直接连聚合面的套接字
     ...(device ? { LITCH_ENTRY: device.socket } : {}),
