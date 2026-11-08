@@ -12,7 +12,7 @@ export const MANAGER_QUESTION_RULE = 'Litch decision background question'
 
 // 注入、各引擎的工具识别与设备执行闸共用这一份精确方法集合。
 const METHODS: Readonly<Record<string, readonly string[]>> = {
-  litch_manager: ['summary', 'get', 'update', 'close', 'post_get', 'post_reply'],
+  litch_manager: ['summary', 'get', 'update', 'close', 'post_get', 'post_reply', 'issue_get'],
   litch_sessions: ['list', 'read'],
   [REPOSITORY_NAMESPACE]: REPOSITORY_METHODS,
 }

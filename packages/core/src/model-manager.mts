@@ -97,6 +97,7 @@ export interface ManagerBoardView
  * 没有的是比应用旧的设备服务：界面禁用对应入口并写明原因，核心也不发这些请求。
  */
 export interface ManagerFeaturesView {
+  issues?: boolean
   /** 用户忽略请你做请求 */
   requestIgnore?: boolean
   paging?: boolean
@@ -108,6 +109,7 @@ export interface ManagerFeaturesView {
   ignore: boolean
 }
 export interface ManagerBoardTopicView {
+  issues?: import('./model-manager-issues.mjs').ManagerIssuesView
   loadError?: string
   /** 分页模式下 board 仅含已加载详情，不能用数组长度推总数。 */
   paging?: ManagerPagingView

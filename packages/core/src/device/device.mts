@@ -667,7 +667,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   /** 对面声明 litchManager 后才读取看板、接受经理通知与会话标记。 */
   let managersOn = false
   /** 设备宣告的后加经理能力；没宣告的是比应用旧的设备服务 */
-  let managerFeatures = {
+  let managerFeatures: import('../model-manager.mjs').ManagerFeaturesView = {
     feedback: false,
     posts: false,
     ignore: false,
@@ -1861,6 +1861,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         managersOn = info.device.extensions?.includes(EXTENSION.manager) === true
         managerFeatures = {
           paging: info.device.extensions?.includes(EXTENSION.managerPaging) === true,
+          issues: info.device.extensions?.includes(EXTENSION.managerIssues) === true,
           feedback: info.device.extensions?.includes(EXTENSION.managerFeedback) === true,
           posts: info.device.extensions?.includes(EXTENSION.managerPosts) === true,
           ignore: info.device.extensions?.includes(EXTENSION.managerIgnore) === true,

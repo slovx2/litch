@@ -34,6 +34,15 @@ const MIGRATIONS = [
   `CREATE TABLE manager_relations(manager_id TEXT NOT NULL, id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(manager_id,id));`,
   `CREATE TABLE manager_resets(manager_id TEXT PRIMARY KEY, body TEXT NOT NULL);
    CREATE TABLE manager_history(thread_id TEXT PRIMARY KEY, manager_id TEXT NOT NULL);`,
+  `CREATE TABLE issues(manager_id TEXT NOT NULL, id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(manager_id,id));
+   CREATE TABLE issue_comments(manager_id TEXT NOT NULL, issue_id TEXT NOT NULL, comment_id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(manager_id,comment_id));
+   CREATE TABLE issue_notifications(manager_id TEXT NOT NULL, event_id TEXT NOT NULL, issue_id TEXT NOT NULL, recipient TEXT NOT NULL, body TEXT NOT NULL, seen_at INTEGER, PRIMARY KEY(manager_id,event_id));
+   CREATE TABLE issue_idempotency(manager_id TEXT NOT NULL, idem_key TEXT NOT NULL, kind TEXT NOT NULL, result TEXT NOT NULL, PRIMARY KEY(manager_id,idem_key));
+   CREATE TABLE issue_meta(manager_id TEXT NOT NULL, issue_id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(manager_id,issue_id));
+   CREATE TABLE issue_history(seq INTEGER PRIMARY KEY AUTOINCREMENT, manager_id TEXT NOT NULL, body TEXT NOT NULL);
+   CREATE INDEX issue_comments_issue ON issue_comments(manager_id,issue_id);
+   CREATE INDEX issue_notifications_unread ON issue_notifications(manager_id,issue_id,recipient,seen_at);
+   CREATE INDEX issue_history_manager ON issue_history(manager_id,seq);`,
 ] as const
 export const MANAGER_SCHEMA_VERSION = MIGRATIONS.length
 export const managerNow = () => Math.floor(Date.now() / 1000)
@@ -329,6 +338,101 @@ export class ManagerStore {
       .get(managerId, kind)
     return `${kind}-${Number(row?.value)}`
   }
+  nextIssueId(managerId: string): `X-${number}` {
+    const row = this.db
+      .prepare(
+        "INSERT INTO counters(manager_id,kind,value) VALUES(?, 'issue', 1) ON CONFLICT(manager_id,kind) DO UPDATE SET value=value+1 RETURNING value",
+      )
+      .get(managerId)
+    return `X-${Number(row?.value)}`
+  }
+  issue(managerId: string, id: string): unknown | null {
+    return body(
+      this.db.prepare('SELECT body FROM issues WHERE manager_id=? AND id=?').get(managerId, id),
+    )
+  }
+  issues(managerId: string): unknown[] {
+    return this.db
+      .prepare('SELECT body FROM issues WHERE manager_id=? ORDER BY rowid')
+      .all(managerId)
+      .map((row) => JSON.parse(String(row.body)))
+  }
+  saveIssue(managerId: string, id: string, value: unknown): void {
+    this.db
+      .prepare(
+        'INSERT INTO issues VALUES(?,?,?) ON CONFLICT(manager_id,id) DO UPDATE SET body=excluded.body',
+      )
+      .run(managerId, id, JSON.stringify(value))
+  }
+  issueComments(managerId: string, issueId: string): unknown[] {
+    return this.db
+      .prepare('SELECT body FROM issue_comments WHERE manager_id=? AND issue_id=? ORDER BY rowid')
+      .all(managerId, issueId)
+      .map((row) => JSON.parse(String(row.body)))
+  }
+  saveIssueComment(managerId: string, issueId: string, commentId: string, value: unknown): void {
+    this.db
+      .prepare(
+        'INSERT INTO issue_comments VALUES(?,?,?,?) ON CONFLICT(manager_id,comment_id) DO UPDATE SET body=excluded.body',
+      )
+      .run(managerId, issueId, commentId, JSON.stringify(value))
+  }
+  issueMeta(managerId: string, issueId: string): unknown | null {
+    return body(
+      this.db
+        .prepare('SELECT body FROM issue_meta WHERE manager_id=? AND issue_id=?')
+        .get(managerId, issueId),
+    )
+  }
+  saveIssueMeta(managerId: string, issueId: string, value: unknown): void {
+    this.db
+      .prepare(
+        'INSERT INTO issue_meta VALUES(?,?,?) ON CONFLICT(manager_id,issue_id) DO UPDATE SET body=excluded.body',
+      )
+      .run(managerId, issueId, JSON.stringify(value))
+  }
+  saveIssueNotification(
+    managerId: string,
+    eventId: string,
+    issueId: string,
+    recipient: string,
+    value: string,
+  ): void {
+    this.db
+      .prepare(
+        'INSERT OR IGNORE INTO issue_notifications(manager_id,event_id,issue_id,recipient,body,seen_at) VALUES(?,?,?,?,?,NULL)',
+      )
+      .run(managerId, eventId, issueId, recipient, value)
+  }
+  markIssueSeen(managerId: string, issueId: string, at: number): void {
+    this.db
+      .prepare(
+        'UPDATE issue_notifications SET seen_at=? WHERE manager_id=? AND issue_id=? AND recipient=? AND seen_at IS NULL',
+      )
+      .run(at, managerId, issueId, 'user')
+  }
+  issueUnread(managerId: string, issueId: string, recipient: string): boolean {
+    return (
+      Number(
+        this.db
+          .prepare(
+            'SELECT count(*) AS n FROM issue_notifications WHERE manager_id=? AND issue_id=? AND recipient=? AND seen_at IS NULL',
+          )
+          .get(managerId, issueId, recipient)?.n ?? 0,
+      ) > 0
+    )
+  }
+  idempotency(managerId: string, key: string, kind: string): unknown | null {
+    const row = this.db
+      .prepare('SELECT result FROM issue_idempotency WHERE manager_id=? AND idem_key=? AND kind=?')
+      .get(managerId, key, kind)
+    return row ? JSON.parse(String(row.result)) : null
+  }
+  saveIdempotency(managerId: string, key: string, kind: string, result: unknown): void {
+    this.db
+      .prepare('INSERT INTO issue_idempotency VALUES(?,?,?,?)')
+      .run(managerId, key, kind, JSON.stringify(result))
+  }
   situation(managerId: string): ManagerSituation | null {
     return body(this.db.prepare('SELECT body FROM situations WHERE manager_id=?').get(managerId))
   }
@@ -344,6 +448,40 @@ export class ManagerStore {
       .prepare('SELECT body FROM changes WHERE manager_id=? ORDER BY seq DESC')
       .all(managerId)
       .map((row) => body<ManagerChange>(row) as ManagerChange)
+      .filter((change) => !String(change.objectId).startsWith('X-'))
+  }
+  issueChanges(managerId: string): ManagerChange[] {
+    return this.db
+      .prepare('SELECT body FROM issue_history WHERE manager_id=? ORDER BY seq')
+      .all(managerId)
+      .map((row) => JSON.parse(String(row.body)))
+  }
+  recordIssue(
+    managerId: string,
+    objectId: import('../../protocol/src/manager-issues.mjs').ManagerIssueId,
+    by: ManagerActor,
+    before: object | null,
+    after: object | null,
+    why: string,
+  ): void {
+    const previous = before as Record<string, unknown> | null
+    const next = after as Record<string, unknown> | null
+    const fields = [
+      ...new Set([...Object.keys(previous ?? {}), ...Object.keys(next ?? {})]),
+    ].filter((key) => JSON.stringify(previous?.[key]) !== JSON.stringify(next?.[key]))
+    this.db.prepare('INSERT INTO issue_history(manager_id,body) VALUES(?,?)').run(
+      managerId,
+      JSON.stringify({
+        id: randomUUID(),
+        objectId,
+        by,
+        at: managerNow(),
+        fields,
+        before,
+        after,
+        why,
+      }),
+    )
   }
   record(
     managerId: string,

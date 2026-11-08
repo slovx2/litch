@@ -1,6 +1,6 @@
 // 对话和看板共用编号边界；建议沿用 S-<proposalId>，不把路径或单词的一部分当编号。
 export const managerReferencePattern = () =>
-  /(?<![\w/#-])#?(?:[DIRP]-\d+|S-[\w]+(?:-[\w]+)*)(?![\w-])/g
+  /(?<![\w/#-])#?(?:[DIRPX]-\d+|S-[\w]+(?:-[\w]+)*)(?![\w-])/g
 export const managerReferenceIds = (text: string): string[] => [
   ...new Set(
     [...text.matchAll(managerReferencePattern())].map((match) => match[0].replace(/^#/, '')),

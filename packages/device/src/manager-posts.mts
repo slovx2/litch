@@ -174,7 +174,8 @@ export class ManagerPosts {
       if (![args.source, args.related].some((value) => Array.isArray(value) && value.length))
         invalid('Provide at least one source or related target.')
       const id = text(args.id, 'id')
-      if (!id.startsWith('I-')) this.get(managerId, id)
+      if (id.startsWith('X-')) this.owner.issues.get(managerId, id)
+      else if (!id.startsWith('I-')) this.get(managerId, id)
       else this.owner.writer.object(managerId, id)
       const relations = this.store.transaction(() =>
         addRelations(

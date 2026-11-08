@@ -1,5 +1,6 @@
 import type { SuggestionView } from '../model-suggestions.mjs'
 import { mockPosts, sampleReport } from './manager-posts.mjs'
+import { MockManagerIssues } from './mock-manager-issues.mjs'
 // 模拟经理：与真实通道同形的快照、增量和命令，答复按项校验版本。
 
 import { forwardedManagerQuestion } from '../../../protocol/src/manager-question.mjs'
@@ -47,6 +48,7 @@ export interface MockManagerHost
 }
 
 export function createMockManagers(host: MockManagerHost) {
+  const issues = new MockManagerIssues()
   const states = new Map<string, ReturnType<typeof sampleManagers>>()
   const histories = new Map<string, ReturnType<typeof sampleManagerHistory>>()
   const lists = new Map<string, Set<HostSink>>()
@@ -69,7 +71,7 @@ export function createMockManagers(host: MockManagerHost) {
     const [a = 0, b = 0, c = 0] = version ? parts(version) : []
     const [x = 0, y = 0, z = 0] = parts(SERVICE_VERSIONS.bundled)
     const old = version !== undefined && (a - x || b - y || c - z) < 0
-    return { feedback: !old, posts: !old, ignore: !old, requestIgnore: !old }
+    return { feedback: !old, posts: !old, ignore: !old, requestIgnore: !old, issues: !old }
   }
   const oldDevice = () =>
     new ChannelError(
@@ -153,6 +155,7 @@ export function createMockManagers(host: MockManagerHost) {
       available: available(deviceId),
       board,
       features: features(deviceId),
+      issues: issues.view(key(deviceId, managerId)),
     }
   }
   const publish = (deviceId: string, manager: ManagerView, board: ManagerBoardView) => {
@@ -296,6 +299,19 @@ export function createMockManagers(host: MockManagerHost) {
     const manager = data.managers.find((m) => m.id === managerId)
     const board = data.boards.find((b) => b.managerId === managerId)
     if (!manager || !board) throw new ChannelError('notFound', t('经理不存在', 'Manager not found'))
+    if (name.startsWith('managers.issue.') || name === 'managers.issues.list') {
+      if (!has.issues) throw oldDevice()
+      boardView(deviceId, managerId)
+      const result = issues.command(
+        key(deviceId, managerId),
+        board,
+        name,
+        params as Record<string, unknown>,
+        host.clock.now(),
+      )
+      publish(deviceId, manager, board)
+      return result
+    }
     if (manager.status !== 'active')
       throw new ChannelError(
         'rejected',

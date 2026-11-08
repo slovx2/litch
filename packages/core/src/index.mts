@@ -270,6 +270,7 @@ export type * from './model-limits.mjs'
 export type * from './model-machine.mjs'
 export type * from './model-manage.mjs'
 export type * from './model-manager.mjs'
+export * from './model-manager-issues.mjs'
 export type * from './model-pairing.mjs'
 export type * from './model-preview.mjs'
 export { PREVIEW_LIMIT, previewKind } from './model-preview.mjs'
@@ -494,6 +495,11 @@ export {
   parseManagerIssueOrder,
   sortManagerIssues,
 } from './projection/manager-issues.mjs'
+export {
+  managerIssuePending,
+  projectManagerIssue,
+  projectManagerIssuePage,
+} from './projection/manager-public-issues.mjs'
 export { type CopyMessage, messageCopyText } from './projection/message-copy.mjs'
 export { localUserMessage, MAX_EXTRA_TEXT, MAX_IMAGES } from './projection/outgoing.mjs'
 export {

@@ -1371,6 +1371,34 @@ export function createCore(options: CoreOptions): Core {
           const { deviceId, ...feedback } = params as Commands['managers.feedback.submit']['params']
           return await deviceOf(deviceId).managers.feedback(feedback)
         }
+        case 'managers.issues.list': {
+          const { deviceId, ...given } = params as Commands['managers.issues.list']['params']
+          return await deviceOf(deviceId).managers.issue('litch/manager/issues/list', given)
+        }
+        case 'managers.issue.read': {
+          const { deviceId, ...given } = params as Commands['managers.issue.read']['params']
+          return await deviceOf(deviceId).managers.issue('litch/manager/issue/read', given)
+        }
+        case 'managers.issue.create': {
+          const { deviceId, ...given } = params as Commands['managers.issue.create']['params']
+          return await deviceOf(deviceId).managers.issue('litch/manager/issue/create', given)
+        }
+        case 'managers.issue.update': {
+          const { deviceId, ...given } = params as Commands['managers.issue.update']['params']
+          return await deviceOf(deviceId).managers.issue('litch/manager/issue/update', given)
+        }
+        case 'managers.issue.comment': {
+          const { deviceId, ...given } = params as Commands['managers.issue.comment']['params']
+          return await deviceOf(deviceId).managers.issue('litch/manager/issue/comment', given)
+        }
+        case 'managers.issue.follow': {
+          const { deviceId, ...given } = params as Commands['managers.issue.follow']['params']
+          return await deviceOf(deviceId).managers.issue('litch/manager/issue/follow', given)
+        }
+        case 'managers.issue.seen': {
+          const { deviceId, ...given } = params as Commands['managers.issue.seen']['params']
+          return await deviceOf(deviceId).managers.issue('litch/manager/issue/seen', given)
+        }
         case 'managers.board.page': {
           const { deviceId, managerId, more, ...query } =
             params as Commands['managers.board.page']['params']

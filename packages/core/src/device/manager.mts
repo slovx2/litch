@@ -19,6 +19,10 @@ import {
   type ManagerSubmittedAnswer,
 } from '../../../protocol/src/manager.mjs'
 import {
+  MANAGER_ISSUE_NOTIFICATION,
+  type ManagerIssueRequests,
+} from '../../../protocol/src/manager-issues.mjs'
+import {
   MANAGER_PAGING_METHOD,
   type ManagerPageQuery,
 } from '../../../protocol/src/manager-paging.mjs'
@@ -44,7 +48,9 @@ import {
   projectManagerPost,
   projectManagerRequest,
 } from '../projection/manager.mjs'
+import { projectManagerIssue } from '../projection/manager-public-issues.mjs'
 import { openedManagerDecisions } from './manager-decisions.mjs'
+import { ManagerIssueCache } from './manager-issues.mjs'
 import { PagedManagerBoard } from './manager-paging.mjs'
 import { managerValidationError } from './manager-validation.mjs'
 
@@ -63,6 +69,7 @@ export interface ManagersHost {
   log(line: string): void
 }
 interface BoardEntry {
+  issues?: ManagerIssueCache
   paged?: PagedManagerBoard
   observedHeads?: Map<string, number>
   sinks: Set<HostSink>
@@ -79,6 +86,7 @@ export function createManagers(host: ManagersHost) {
   const sinks = new Set<HostSink>()
   const managers = new Map<string, ManagerView>()
   const boards = new Map<string, BoardEntry>()
+  const issueEvents = new Set<string>()
   let available: boolean | null = null
   let epoch = 0
   let early: Manager[] | null = null
@@ -142,6 +150,7 @@ export function createManagers(host: ManagersHost) {
           managerId,
           available: true,
           board: projected,
+          ...(entry.view.issues ? { issues: entry.view.issues } : {}),
           features: host.features(),
         }
         publishBoard(entry)
@@ -279,6 +288,8 @@ export function createManagers(host: ManagersHost) {
   }
   const invalidate = (managerId: string) => {
     const entry = boards.get(managerId)
+    if (entry?.issues && host.features().issues)
+      void entry.issues.refresh().catch((error) => host.log(String(error)))
     if (entry) void loadBoard(managerId, entry)
   }
   const applyDecisions = (managerId: string, decisions: ManagerDecision[]) => {
@@ -370,6 +381,13 @@ export function createManagers(host: ManagersHost) {
         unknownManager: ['notFound', '经理不存在'],
         managerEnded: ['rejected', '经理已结束，看板只读'],
         unknownDecision: ['notFound', '决策不存在'],
+        unknownIssue: ['notFound', '议题不存在或不属于此经理'],
+        unknownComment: ['notFound', '评论不存在或不属于此议题'],
+        issueConflict: ['rejected', '议题已更新，请重新读取后再提交'],
+        issueCommentConflict: ['rejected', '评论已更新，请重新读取后再编辑'],
+        issueIdempotencyConflict: ['rejected', '此提交标识已用于不同内容'],
+        issueForbidden: ['rejected', '只能编辑自己发表的评论'],
+        issueTypeMismatch: ['rejected', '请使用此类型议题的快速操作'],
         decisionNotClosed: ['rejected', '只能重新打开已关闭的决策'],
         lineLimitReached: ['rejected', '运行中的工作线已达上限'],
       }
@@ -433,13 +451,48 @@ export function createManagers(host: ManagersHost) {
     return next
   }
   return {
+    async issue<M extends keyof ManagerIssueRequests>(
+      method: M,
+      params: ManagerIssueRequests[M]['params'],
+    ) {
+      requires('issues', method)
+      const entry = boardEntry(params.managerId)
+      entry.issues ??= new ManagerIssueCache(host, params.managerId, (issues) => {
+        entry.view = { ...entry.view, issues }
+        publishBoard(entry)
+      })
+      return guarded(() => entry.issues!.call(method, params))
+    },
     async resolveReferences(managerId: string, ids: string[]) {
       if (
         !Array.isArray(ids) ||
         ids.length > 100 ||
-        ids.some((id) => typeof id !== 'string' || !/^(?:[DIRP]-\d+|S-[\w]+(?:-[\w]+)*)$/.test(id))
+        ids.some((id) => typeof id !== 'string' || !/^(?:[DIRPX]-\d+|S-[\w]+(?:-[\w]+)*)$/.test(id))
       )
         throw new ChannelError('invalid', 'Invalid manager references')
+      if (host.features().issues) {
+        const found = await Promise.all(
+          ids.map(async (id) => {
+            try {
+              if (id.startsWith('I-')) {
+                const result = await host.request(MANAGER_PAGING_METHOD.detail, {
+                  managerId,
+                  id: id as `I-${number}`,
+                })
+                return result.object ? id : null
+              }
+              await host.request('litch/manager/issue/read', {
+                managerId,
+                id: id as import('../../../protocol/src/manager-issues.mjs').ManagerIssueRef,
+              })
+              return id
+            } catch {
+              return null
+            }
+          }),
+        )
+        return { ids: found.filter((id): id is string => id !== null) }
+      }
       if (!host.features().paging) {
         const { board } = await host.request(MANAGER_METHOD.boardRead, { managerId })
         const known = new Set(
@@ -539,6 +592,9 @@ export function createManagers(host: ManagersHost) {
       epoch++
       early = null
       for (const entry of boards.values()) {
+        entry.issues?.stop()
+        if (host.features().issues)
+          void entry.issues?.refresh().catch((error) => host.log(String(error)))
         entry.paged?.stop()
         delete entry.paged
         delete entry.observedHeads
@@ -566,6 +622,7 @@ export function createManagers(host: ManagersHost) {
       epoch++
       early = null
       for (const entry of boards.values()) {
+        entry.issues?.stop()
         entry.paged?.stop()
         delete entry.paged
         delete entry.observedHeads
@@ -576,6 +633,43 @@ export function createManagers(host: ManagersHost) {
       }
     },
     notification(method: string, params: unknown): boolean {
+      if ((Object.values(MANAGER_ISSUE_NOTIFICATION) as string[]).includes(method)) {
+        if (host.online() && host.features().issues) {
+          const event =
+            params as import('../../../protocol/src/manager-issues.mjs').ManagerIssueActivityNotification
+          invalidate(event.managerId)
+          const manager = managers.get(event.managerId)
+          if (
+            method === MANAGER_ISSUE_NOTIFICATION.activity &&
+            event.actor === 'manager' &&
+            manager?.contact.desktopNotification &&
+            !issueEvents.has(event.eventId)
+          ) {
+            issueEvents.add(event.eventId)
+            if (issueEvents.size > 1000) issueEvents.delete(issueEvents.values().next().value!)
+            const mine = epoch
+            void host
+              .request('litch/manager/issue/read', {
+                managerId: event.managerId,
+                id: event.issueId,
+              })
+              .then(({ issue }) => {
+                if (mine !== epoch) return
+                for (const sink of sinks)
+                  sink.delta([
+                    {
+                      op: 'manager.issueActivity',
+                      manager,
+                      event,
+                      issue: projectManagerIssue(issue),
+                    },
+                  ])
+              })
+              .catch((error) => host.log(String(error)))
+          }
+        }
+        return true
+      }
       if (method !== MANAGER_NOTIFICATION.changed && method !== MANAGER_NOTIFICATION.boardChanged)
         return false
       if (!host.online() || !host.supported()) return true

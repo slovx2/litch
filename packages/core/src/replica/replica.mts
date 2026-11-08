@@ -222,6 +222,8 @@ export const keys = {
   suggestions: 'suggestions:all',
   suggestionsAvailable: (deviceId: string) => `suggestions:${deviceId}:available`,
   managerBoard: (deviceId: string, managerId: string) => `managers:${deviceId}:board:${managerId}`,
+  managerIssues: (deviceId: string, managerId: string) =>
+    `managers:${deviceId}:issues:${managerId}`,
   managerBoardPages: (deviceId: string, managerId: string) =>
     `managers:${deviceId}:pages:${managerId}`,
   managerBoardError: (deviceId: string, managerId: string) =>
@@ -454,6 +456,13 @@ export interface Replica {
   onManagerDecision(
     listener: (manager: ManagerView, decision: ManagerDecisionView) => void,
   ): () => void
+  onManagerIssue(
+    listener: (
+      manager: ManagerView,
+      issue: import('../../../protocol/src/manager-issues.mjs').ManagerIssue,
+      event: import('../../../protocol/src/manager-issues.mjs').ManagerIssueActivityNotification,
+    ) => void,
+  ): () => void
 }
 
 const byId = (a: { id: string }, b: { id: string }): number =>
@@ -575,6 +584,7 @@ export function createReplica(
 ): Replica {
   const store = new KeyedStore()
   const decisionListeners = new Set<(manager: ManagerView, decision: ManagerDecisionView) => void>()
+  const issueListeners = new Set<Parameters<Replica['onManagerIssue']>[0]>()
   const managerLists = new Map<string, { stop(): void; rows: Map<string, ManagerView> }>()
   const permissionEntries = new Map<string, { count: number; stop(): void }>()
   const managerBoards = new Map<string, { deviceId: string; count: number; stop(): void }>()
@@ -661,6 +671,8 @@ export function createReplica(
           store.batch(() => {
             for (const op of ops) {
               if (op.op === 'manager.upsert') put(op.manager)
+              else if (op.op === 'manager.issueActivity')
+                for (const listener of [...issueListeners]) listener(op.manager, op.issue, op.event)
               else for (const listener of [...decisionListeners]) listener(op.manager, op.decision)
             }
             const ids = [...entry.rows.keys()]
@@ -1639,6 +1651,7 @@ export function createReplica(
         const apply = (view: ManagerBoardTopicView) =>
           store.batch(() => {
             store.set(key, view)
+            store.set(keys.managerIssues(deviceId, managerId), view.issues ?? null)
             store.set(
               keys.managerBoardPages(deviceId, managerId),
               view.board ? managerBoardPages(view.board) : null,
@@ -1667,6 +1680,7 @@ export function createReplica(
         managerBoards.delete(key)
         store.delete(key)
         store.delete(keys.managerBoardPages(deviceId, managerId))
+        store.delete(keys.managerIssues(deviceId, managerId))
         store.delete(keys.managerBoardError(deviceId, managerId))
       }
     },
@@ -1721,6 +1735,12 @@ export function createReplica(
       decisionListeners.add(listener)
       return () => {
         decisionListeners.delete(listener)
+      }
+    },
+    onManagerIssue(listener) {
+      issueListeners.add(listener)
+      return () => {
+        issueListeners.delete(listener)
       }
     },
 

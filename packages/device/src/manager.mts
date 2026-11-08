@@ -18,6 +18,7 @@ import {
   type ManagerBoard,
   type ManagerObjectId,
 } from '../../protocol/src/manager.mjs'
+import { MANAGER_ISSUE_METHOD } from '../../protocol/src/manager-issues.mjs'
 import { MANAGER_PAGING_METHOD } from '../../protocol/src/manager-paging.mjs'
 import { MANAGER_POST_METHOD, type ManagerPostId } from '../../protocol/src/manager-posts.mjs'
 import {
@@ -31,6 +32,7 @@ import { isDecision, ManagerBoardWriter } from './manager-board.mjs'
 import { validateManagerRuntime } from './manager-create-validation.mjs'
 import { ManagerEndings } from './manager-ending.mjs'
 import { submitManagerFeedback } from './manager-feedback.mjs'
+import { ManagerIssues } from './manager-issues.mjs'
 import { ManagerLines } from './manager-lines.mjs'
 import { ManagerPaging } from './manager-paging.mjs'
 import { ManagerPosts } from './manager-posts.mjs'
@@ -60,6 +62,7 @@ export class DeviceManagers {
   readonly endings: ManagerEndings
   readonly writer: ManagerBoardWriter
   readonly posts: ManagerPosts
+  readonly issues: ManagerIssues
   readonly questions: ManagerQuestions
   readonly resets: ManagerResets
   readonly paging: ManagerPaging
@@ -95,6 +98,7 @@ export class DeviceManagers {
     this.questions = new ManagerQuestions(this)
     this.resets = new ManagerResets(this)
     this.paging = new ManagerPaging(this)
+    this.issues = new ManagerIssues(this)
     this.unlisten = tree.onTurnEnded((threadId) => {
       const manager = this.lines.managerFor(threadId)
       if (manager) {
@@ -190,7 +194,9 @@ export class DeviceManagers {
     return {
       managerId: id,
       posts: this.posts.list(id, changes),
-      relations: projectedRelations(this.store, id),
+      relations: projectedRelations(this.store, id).filter(
+        (r) => !r.from.target.startsWith('X-') && !r.to.target.startsWith('X-'),
+      ),
       situation: this.store.situation(id),
       decisions: objects.filter(isDecision).map((decision) => {
         const state = this.store.question(id, decision.id)
@@ -208,6 +214,7 @@ export class DeviceManagers {
   }
   changed(id: string): void {
     if (this.closed) return
+    this.issues?.specialChanged(id)
     this.questions.releaseClosed(id)
     this.tree.host.announce(
       MANAGER_NOTIFICATION.changed,
@@ -274,7 +281,15 @@ export class DeviceManagers {
     given: unknown,
     declared: boolean,
     pagingDeclared = false,
+    issuesDeclared = false,
   ): Promise<unknown> {
+    if ((Object.values(MANAGER_ISSUE_METHOD) as string[]).includes(method)) {
+      if (!issuesDeclared)
+        throw new DeviceError('extensionRequired', `${method} requires litchManagerIssues.`, {
+          required: [EXTENSION.managerIssues],
+        })
+      return this.issues.call(method, given)
+    }
     if (!declared)
       throw new DeviceError(
         'extensionRequired',
@@ -640,7 +655,36 @@ export class DeviceManagers {
           'litch_manager is available only in its owning manager session.',
         )
       let result: unknown
-      if (['report', 'post_get', 'post_reply', 'relate'].includes(call.tool)) {
+      if (call.tool.startsWith('issue_')) {
+        const args = validateTool(call.tool, call.arguments)
+        if (questionManager) {
+          const state = this.store.questions(manager.id).find((q) => q.threadId === call.threadId)
+          if (call.tool !== 'issue_get' || !state || text(args.id, 'id') !== state.decisionId)
+            throw new ManagerError(
+              'invalidManager',
+              'Temporary conversations may only read their current issue.',
+            )
+        }
+        const methods: Record<string, string> = {
+          issue_get: MANAGER_ISSUE_METHOD.read,
+          issue_create: MANAGER_ISSUE_METHOD.create,
+          issue_update: MANAGER_ISSUE_METHOD.update,
+          issue_comment: MANAGER_ISSUE_METHOD.comment,
+          issue_follow: MANAGER_ISSUE_METHOD.follow,
+        }
+        result = this.issues.call(
+          methods[call.tool]!,
+          {
+            ...args,
+            managerId: manager.id,
+            ...(['issue_create', 'issue_comment'].includes(call.tool) &&
+            args.idempotencyKey === undefined
+              ? { idempotencyKey: `${call.harness}:${call.threadId}:${call.callId}` }
+              : {}),
+          },
+          'manager',
+        )
+      } else if (['report', 'post_get', 'post_reply', 'relate'].includes(call.tool)) {
         if (questionManager) this.questions.validateWrite(call.threadId, call.tool, call.arguments)
         result = this.posts.tool(
           manager.id,
@@ -696,6 +740,16 @@ export class DeviceManagers {
         await this.lines.refresh(manager.id)
         const board = this.board(manager.id)
         result = {
+          ...(!questionManager
+            ? {
+                issues: this.issues.list(manager.id, {
+                  managerId: manager.id,
+                  kinds: ['ordinary'],
+                  order: 'updated',
+                  limit: 100,
+                }),
+              }
+            : {}),
           posts: board.posts?.map(({ id, kind, title, revision, unread }) => ({
             id,
             kind,
@@ -794,12 +848,14 @@ export class DeviceManagers {
   private async drain(id: string): Promise<void> {
     const manager = this.store.manager(id)
     if (!manager) return
+    if (manager.status === 'ended') return
     if (manager.status === 'ending') await this.endings.recover(id)
     const deliveries = this.store.deliveries(id)
     let suggestionsVisited = false
     for (const [index, event] of deliveries.entries()) {
       if (this.closed || this.resets.held(manager.threadId)) return
       const parsed = parseSessionEvent(event.text)
+      if (parsed.event?.kind === 'manager-issue' && manager.status !== 'active') continue
       if (parsed.event?.kind === 'manager-suggestions') {
         if (suggestionsVisited || this.suggestionTimers.has(id)) continue
         suggestionsVisited = true

@@ -102,11 +102,12 @@ test('两轮旁问共用分叉；不同决策隔离；设备拒绝开线、越�
     assert.equal(created.params.sandbox, 'read-only')
     assert.deepEqual(
       created.params.dynamicTools[0].tools.map((tool: { name: string }) => tool.name),
-      ['post_get', 'post_reply', 'summary', 'get', 'update', 'close'],
+      ['issue_get', 'post_get', 'post_reply', 'summary', 'get', 'update', 'close'],
     )
     for (const [namespace, tool, args] of [
       ['litch_sessions', 'start', { title: '不能开线' }],
       ['litch_manager', 'status', { text: '不能改板' }],
+      ['litch_manager', 'issue_comment', { id, revision: 1, body: '不能评论', why: '旁问' }],
       ['litch_echo', 'echo', { text: '不能发消息' }],
     ] as const) {
       const call = await env.pi.callTool(fork, namespace, tool, args)
@@ -114,6 +115,10 @@ test('两轮旁问共用分叉；不同决策隔离；设备拒绝开线、越�
     }
     const summary = await env.pi.callTool(fork, 'litch_manager', 'summary', {})
     assert.equal(summary?.answer.result.success, true)
+    const ownIssue = await env.pi.callTool(fork, 'litch_manager', 'issue_get', { id })
+    assert.equal(ownIssue?.answer.result.success, true)
+    const foreignIssue = await env.pi.callTool(fork, 'litch_manager', 'issue_get', { id: 'D-999' })
+    assert.equal(foreignIssue?.answer.result.success, false)
     await assert.rejects(
       client.call(MANAGER_METHOD.questionAsk, {
         managerId: manager.id,

@@ -2,6 +2,26 @@
 
 ## Managers
 
+### 普通议题与评论 / Ordinary issues and comments
+
+普通议题使用经理内独立递增的 `X-n`，用于双方共同维护的长期讨论。决策 `D-n`、请你做 `R-n`、
+报告 `P-n` 和建议 `S-…` 保持原编号；`I-n` 仍是经理内部事项。用户和经理各自只能编辑自己的评论，旧正文保留审计。普通议题支持开放、进行中、受阻、
+已解决、已关闭五种状态。状态与跟进开关独立，评论不会自动回答决策、交付请求或标记报告已阅。
+
+用户新建或评论会自动通知经理：运行时插话，空闲时唤醒。暂停跟进时评论照存但不唤醒，恢复后
+不回放暂停期间的评论。已结束经理可留存评论和事件，但不会重新启动。经理回复形成持久未读，
+客户端重连后仍可查看；报告的已阅状态独立保留。设备须支持 `litchManagerIssues`，旧设备不提供
+普通议题写入。已有经理需要重置会话才能取得新增 `issue_create/get/comment/update/follow` 工具。
+
+Ordinary issues use independent per-manager `X-n` numbers for shared, ongoing discussions. Decisions,
+requests, reports and suggestions retain their D/R/P/S identifiers; I-n remains the manager's notebook.
+Ordinary states are open, in progress, blocked, resolved and closed. Follow-up is independent of status.
+Comments do not answer decisions, deliver requests or mark reports read. User creation and comments
+automatically reach a running manager or wake an idle one. Pausing follow-up saves comments without
+waking the manager; resuming does not replay them. Ended managers retain comments without restarting.
+Manager replies remain unread across reconnects until seen. Reset an existing manager session to load
+the new issue tools; devices must advertise `litchManagerIssues` to support these actions.
+
 用户要求过或已批准的范围内任务，经理直接开工作线；经理自行发现、用户尚未要求或批准的工作
 （如回报中顺带发现的问题、审查改进点、可选后续工作），会附完整简报放到「建议」页，由用户决定是否开始。
 这些工作不会只留在待排事项中；已有对应事项会标为暂缓并注明建议卡。范围外工作先提看板决策。

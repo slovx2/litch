@@ -51,7 +51,14 @@ export const MANAGER_POST_TOOLS: ClientToolNamespaceSpec['tools'] = [
     name: 'relate',
     description:
       'Attach source/related links to an existing issue or manager item. Source means this object derives from that target. References must belong to this manager. Markdown supported in why; explain the relationship.',
-    inputSchema: object({ id, ...RELATION_INPUTS, why: markdown }, ['id', 'why']),
+    inputSchema: object(
+      {
+        id: { ...text, description: 'X/D/R/P/S issue id, or I-n manager item.' },
+        ...RELATION_INPUTS,
+        why: markdown,
+      },
+      ['id', 'why'],
+    ),
   },
   {
     type: 'function',

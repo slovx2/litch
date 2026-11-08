@@ -161,6 +161,20 @@ test('经理工具登记完整，通过原生 Codex 约束，命名空间说明�
 
 test('工具 schema 校验字段形状，拒绝写系统字段、工作线和跨板 id；kind 对应关系由设备校验', () => {
   const cases: Record<string, { valid: unknown; invalid: unknown[] }> = {
+    issue_create: { valid: { title: '跟进', body: '' }, invalid: [{ body: '缺标题' }] },
+    issue_get: { valid: { id: 'X-1' }, invalid: [{}] },
+    issue_comment: {
+      valid: { id: 'X-1', revision: 1, body: '回复', why: '处理评论' },
+      invalid: [{ id: 'X-1', body: '缺版本' }],
+    },
+    issue_update: {
+      valid: { id: 'X-1', revision: 1, patch: { status: 'blocked' }, why: '受阻' },
+      invalid: [{ id: 'X-1', revision: 1, patch: { status: 'started' }, why: '无效' }],
+    },
+    issue_follow: {
+      valid: { id: 'D-1', revision: 1, state: 'off', why: '暂停' },
+      invalid: [{ id: 'D-1', state: 'off' }],
+    },
     relate: {
       valid: { id: 'D-1', related: [{ kind: 'item', target: 'I-1' }], why: '来源' },
       invalid: [{ id: 'D-1' }],
@@ -237,17 +251,20 @@ test('角色规则保持预算，允许说明选项推荐；经理自行归档�
   assert.ok(role.length < 4000, String(role.length))
   assert.match(role, /scope-token/)
   assert.match(role, /Do not implement code yourself/)
-  assert.match(role, /Check the recorded basis before acting/)
+  assert.match(role, /verify recorded basis/)
   assert.match(role, /repository is authoritative/)
-  assert.match(role, /Use verify after checking that an object remains valid/)
+  assert.match(role, /Read issue_get before issue_comment\/update\/follow/)
   assert.match(role, /only the user can perform/)
   assert.match(role, /kind=request/)
   assert.match(role, /litch_manager.reply/)
   assert.match(role, /endorse useful work/)
   assert.match(role, /may include options and recommendations/)
   assert.match(role, /submits answers on the board or explicitly in chat/)
-  assert.match(role, /do not reopen them by habit/)
-  assert.match(role, /attention is truly needed, and state the reason/)
+  assert.match(
+    role,
+    /Respect ignored decisions; reopen only after a material change, with a reason/,
+  )
+  assert.match(role, /never poll for comments/)
   assert.doesNotMatch(role, /mention decision titles only/)
   const sessions = managerSessionRules(4)
   for (const shared of [FRESH_BRIEF, WORKTREE_RULE, TITLE_LINE, outsideLitch(false)])

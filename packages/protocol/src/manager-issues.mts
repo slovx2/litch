@@ -20,7 +20,12 @@ export const MANAGER_ISSUE_NOTIFICATION = {
   activity: 'litch/manager/issue/activity',
 } as const
 
-export type ManagerIssueId = `X-${number}` | `D-${number}` | `R-${number}` | `P-${number}` | `S-${string}`
+export type ManagerIssueId =
+  | `X-${number}`
+  | `D-${number}`
+  | `R-${number}`
+  | `P-${number}`
+  | `S-${string}`
 export type ManagerIssueRef = ManagerIssueId
 export type ManagerIssueKind = 'ordinary' | 'decision' | 'suggestion' | 'request' | 'report'
 export type ManagerIssueAuthorKind = 'user' | 'manager'
@@ -99,6 +104,8 @@ export interface ManagerIssueDiscussion {
 }
 
 export interface ManagerIssueQuickActions {
+  /** 特殊对象快速操作使用此版本；followUp 的公共版本不替代原对象 revision。 */
+  revision?: number
   decision?: { options: ManagerDecisionOption[]; answerable: boolean; ignored: boolean }
   suggestion?: { proposalId: string; canStart: boolean; reviewed: boolean }
   request?: { buttonLabel: string | null; deliverable: boolean }
@@ -192,6 +199,9 @@ export interface ManagerIssueCommentParams {
   body: string
   replyTo?: string | null
   idempotencyKey?: string
+  /** 编辑自己的评论时同时提供；评论版本与原帖版本独立。 */
+  commentId?: string
+  commentRevision?: number
 }
 
 export interface ManagerIssueFollowParams {

@@ -10,6 +10,7 @@ export function addRelations(
   args: Record<string, unknown>,
   belongs: (threadId: string) => boolean,
   suggestionBelongs: (id: string) => boolean = () => false,
+  actor: 'manager' | 'user' | 'question' = 'manager',
 ) {
   const self: ManagerRelationTarget = { kind: id.startsWith('I-') ? 'item' : 'issue', target: id }
   const pending: ManagerRelation[] = []
@@ -25,6 +26,7 @@ export function addRelations(
       if (target.kind === 'item' || target.kind === 'issue') {
         const object =
           store.object(managerId, target.target) ??
+          store.issue(managerId, target.target) ??
           store.publishedReports(managerId).find((r) => r.id === target.target) ??
           (target.target.startsWith('S-') && suggestionBelongs(target.target.slice(2))
             ? { id: target.target }
@@ -39,7 +41,7 @@ export function addRelations(
       if (target.kind === self.kind && target.target === id)
         invalid('An object cannot link to itself.')
       const key = JSON.stringify([self.kind, id, kind, target.kind, target.target])
-      pending.push({ id: key, from: self, to: target, kind, at: managerNow(), by: 'manager' })
+      pending.push({ id: key, from: self, to: target, kind, at: managerNow(), by: actor })
     }
   }
   for (const relation of pending) store.saveRelation(managerId, relation)
@@ -47,7 +49,7 @@ export function addRelations(
     store.record(
       managerId,
       id as import('../../protocol/src/manager.mjs').ManagerObjectId,
-      'manager',
+      actor,
       null,
       { relations: pending },
       typeof args.why === 'string' ? args.why : 'Links added',

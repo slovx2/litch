@@ -369,6 +369,12 @@ export type TasksOp =
 /** 列表按经理整条替换；看板重读后的快照整份替换。 */
 export type ManagersOp =
   | { op: 'manager.upsert'; manager: ManagerView }
+  | {
+      op: 'manager.issueActivity'
+      manager: ManagerView
+      issue: import('../../../protocol/src/manager-issues.mjs').ManagerIssue
+      event: import('../../../protocol/src/manager-issues.mjs').ManagerIssueActivityNotification
+    }
   | { op: 'manager.decisionOpened'; manager: ManagerView; decision: ManagerDecisionView }
 export type ManagerBoardOp = { op: 'managerBoard.set'; view: ManagerBoardTopicView }
 
@@ -424,6 +430,50 @@ export interface TopicOp {
 // ---------- 命令 ----------
 
 export interface Commands {
+  'managers.issues.list': {
+    params: import('../../../protocol/src/manager-issues.mjs').ManagerIssueQuery & {
+      deviceId: string
+    }
+    result: { page: import('../../../protocol/src/manager-issues.mjs').ManagerIssuePage }
+  }
+  'managers.issue.read': {
+    params: {
+      deviceId: string
+      managerId: string
+      id: import('../../../protocol/src/manager-issues.mjs').ManagerIssueRef
+    }
+    result: import('../../../protocol/src/manager-issues.mjs').ManagerIssueDetail
+  }
+  'managers.issue.create': {
+    params: import('../../../protocol/src/manager-issues.mjs').ManagerIssueCreateParams & {
+      deviceId: string
+    }
+    result: import('../../../protocol/src/manager-issues.mjs').ManagerIssueDetail
+  }
+  'managers.issue.update': {
+    params: import('../../../protocol/src/manager-issues.mjs').ManagerIssueUpdateParams & {
+      deviceId: string
+    }
+    result: import('../../../protocol/src/manager-issues.mjs').ManagerIssueDetail
+  }
+  'managers.issue.comment': {
+    params: import('../../../protocol/src/manager-issues.mjs').ManagerIssueCommentParams & {
+      deviceId: string
+    }
+    result: import('../../../protocol/src/manager-issues.mjs').ManagerIssueDetail
+  }
+  'managers.issue.follow': {
+    params: import('../../../protocol/src/manager-issues.mjs').ManagerIssueFollowParams & {
+      deviceId: string
+    }
+    result: import('../../../protocol/src/manager-issues.mjs').ManagerIssueDetail
+  }
+  'managers.issue.seen': {
+    params: import('../../../protocol/src/manager-issues.mjs').ManagerIssueSeenParams & {
+      deviceId: string
+    }
+    result: import('../../../protocol/src/manager-issues.mjs').ManagerIssueDetail
+  }
   /** 本机整理做一个动作（organizer/actions.mts）。新建组时回新组的标识 */
   'organizer.apply': {
     params: { action: import('../organizer/actions.mjs').OrganizerAction }
