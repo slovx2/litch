@@ -184,6 +184,8 @@ jobs:
           npm install --prefix .artifacts/host-cli --save-exact @anthropic-ai/claude-code@2.1.282 --no-audit --no-fund
           echo "CHA_CLAUDE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-cli/node_modules/.bin/claude" >> "${GITHUB_ENV}"
       - if: matrix.suite == 'platform'
+        run: npm run automation:setup
+      - if: matrix.suite == 'platform'
         id: stage-13
         run: npm run check
       - if: matrix.suite == 'platform'

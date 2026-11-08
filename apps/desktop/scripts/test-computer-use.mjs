@@ -11,16 +11,18 @@ import { build } from 'esbuild'
 
 const testDir = fileURLToPath(new URL('../src/computer-use/test/', import.meta.url))
 const files = readdirSync(testDir).filter((name) => name.endsWith('.test.mts'))
+// 路径与内核锁探针依赖 macOS lockf/Swift，仍由 Mac 原生门禁的同一命令完整执行。
+const probeFiles = [
+  'identity.test.mjs',
+  ...(process.platform === 'darwin' ? ['shared-probe.test.mjs'] : []),
+]
 const out = mkdtempSync(join(tmpdir(), 'litch-cu-tests-'))
 try {
   await build({
     entryPoints: [
       ...files.map((name) => join(testDir, name)),
-      fileURLToPath(
-        new URL('../../computer-use/probes/integration/identity.test.mjs', import.meta.url),
-      ),
-      fileURLToPath(
-        new URL('../../computer-use/probes/integration/shared-probe.test.mjs', import.meta.url),
+      ...probeFiles.map((name) =>
+        fileURLToPath(new URL(`../../computer-use/probes/integration/${name}`, import.meta.url)),
       ),
     ],
     outdir: out,
@@ -36,7 +38,8 @@ try {
   const outputs = readdirSync(out)
     .filter((name) => name.endsWith('.mjs'))
     .map((name) => join(out, name))
-  if (outputs.length !== files.length + 2) throw new Error('Computer Use 测试构建产物不完整')
+  if (outputs.length !== files.length + probeFiles.length)
+    throw new Error('Computer Use 测试构建产物不完整')
   const result = spawnSync(process.execPath, ['--test', ...outputs], {
     stdio: 'inherit',
     env: { ...process.env, LITCH_DESKTOP_ROOT: fileURLToPath(new URL('..', import.meta.url)) },
