@@ -213,7 +213,7 @@ sidebar.
 ### Desktop pinned and local groups
 
 Pinned sits at the top of the sidebar and merges the pinned sessions and projects of every device into
-one flat list. Each row starts with a small bar in the device's wire color and shows the device name
+one flat list. Each row starts with a small bar in the device's wire color, separate from the sub-session expand arrow, and shows the device name
 (and "offline" when it is). Recent and Unread rows use the same marker; when grouped by project, the
 project row carries it too. The device name appears once more than one device is set up. In Recent and
 Unread an offline device shows a dashed bar instead of the word "offline", so the title keeps its room;
@@ -233,7 +233,7 @@ list, or device removed. The file is `sidebar-organizer.json` in the app data fo
 previous version); if it is damaged or from a newer Litch, local groups are read-only and the file is
 left untouched.
 
-置顶区在侧栏最上方，合并所有设备的置顶对话和项目，每行有设备色块和设备名；置顶资格仍存在各设备上，先后只在本机排序。
+置顶区在侧栏最上方，合并所有设备的置顶对话和项目，每行有设备色块和设备名，色块与子会话展开箭头分开显示；置顶资格仍存在各设备上，先后只在本机排序。
 「最近」「未读」的行用同一个设备标记（按项目聚合时项目行也带）；登记了多台设备时才写设备名。设备离线时色块画成虚线，行上不写“离线”，以免挤占标题；悬停设备名和读屏仍会说明“离线”。
 桌面本机分组只保存在此客户端（不同客户端之间不同步），可混装各设备的对话，设备离线时也能整理；组里的对话照常显示在原设备下，已置顶的只在置顶区显示。
 手机首页不提供设备之上的置顶和本机分组，也不提供加入本机分组的长按入口。置顶会话、置顶项目和设备已有分区仍在各设备的列表里显示，原置顶／取消置顶和移出设备分区等操作保留。手机原有本机分组文件不删除；设备端置顶和分区数据不改变，桌面继续照常使用。

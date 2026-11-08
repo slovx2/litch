@@ -45,10 +45,12 @@
 .ws-row > .dev-tick {
   margin-inline-start: 0;
 }
-/* 会话行里的色块画在行首留白里，不推记号和标题：有没有色块，记号和标题都在同一列，
-   置顶区、最近、未读的顶层行和经理行、子会话行对得齐（往左让出 6 像素，宽 3，再抵掉 3 像素） */
+/* 色块放在列表已有的 8px 外边距内，给行首的展开按钮留完整热区。
+   不参与行内排版：有无色块或箭头都不改变状态点、标题和父子缩进的位置。 */
 .ss-row > .dev-tick {
-  margin-inline-end: -3px;
+  position: absolute;
+  inset-inline-start: -5px;
+  margin-inline: 0;
 }
 /* 本机组里另有几个在置顶区：一行淡字，不占按钮 */
 .sc-note {
