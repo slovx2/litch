@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { execute } from '../../../../../packages/chrome-extension/src/requests.mjs'
-import type { ExtensionState } from '../../../../../packages/chrome-extension/src/state.mjs'
 import type { ChromeListedTab } from '../../../../../packages/protocol/src/chrome-browser.mjs'
+import { execute } from '../../../../../third_party/litch-automation/packages/chrome-extension/src/requests.mjs'
+import type { ExtensionState } from '../../../../../third_party/litch-automation/packages/chrome-extension/src/state.mjs'
 
 const tabs = [
   { id: 1, windowId: 10, active: true },

@@ -23,7 +23,7 @@ import {
 } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { buildNative } from './build.mjs'
+import { buildNative } from '../../third_party/litch-automation/apps/computer-use/build.mjs'
 import { LITCH_HOST_IDENTITY, validateHostIdentity } from './host-identity.mjs'
 
 const here = (path) => fileURLToPath(new URL(path, import.meta.url))

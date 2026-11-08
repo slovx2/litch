@@ -1,16 +1,17 @@
 // Litch 实例的默认配置；库不默认信任任何产品身份。
-import {
-  ChromeBridge as Bridge,
-  incompatibleMessage as message,
-  type BridgeOptions as Options,
-} from '../../../../packages/chrome-bridge/src/bridge.mjs'
+
 import {
   CHROME_WIRE_MIN,
   CHROME_WIRE_VERSION,
   type ChromeInstance,
 } from '../../../../packages/protocol/src/chrome-browser.mjs'
+import {
+  ChromeBridge as Bridge,
+  incompatibleMessage as message,
+  type BridgeOptions as Options,
+} from '../../../../third_party/litch-automation/packages/chrome-bridge/src/bridge.mjs'
 
-export { ChromeBridgeError } from '../../../../packages/chrome-bridge/src/bridge.mjs'
+export { ChromeBridgeError } from '../../../../third_party/litch-automation/packages/chrome-bridge/src/bridge.mjs'
 export type BridgeOptions = Omit<Options, 'protocol' | 'productName'>
 export class ChromeBridge extends Bridge {
   constructor(options: BridgeOptions) {

@@ -3,7 +3,10 @@ import assert from 'node:assert/strict'
 import { generateKeyPairSync } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { assembleExtension, extensionId } from '../../packages/chrome-extension/build.mjs'
+import {
+  assembleExtension,
+  extensionId,
+} from '../../third_party/litch-automation/packages/chrome-extension/build.mjs'
 
 export async function secondIdentity({
   root,
@@ -28,7 +31,7 @@ export async function secondIdentity({
   const background = join(output, 'second-worker.mts')
   await writeFile(
     background,
-    `import { createExtensionRuntime } from ${JSON.stringify(join(root, 'packages/chrome-extension/src/index.mts'))};
+    `import { createExtensionRuntime } from ${JSON.stringify(join(root, 'third_party/litch-automation/packages/chrome-extension/src/index.mts'))};
 const runtime = createExtensionRuntime({ chrome, identity: ${JSON.stringify({ hostName, extensionIds: [id], productName: 'Second fixture' })}, protocol: {min:1,max:1}, storagePrefix:'secondFixture', pointerSource:__FIXTURE_POINTER__ });
 void runtime.start();\n`,
   )

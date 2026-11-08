@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import {
   type MacKeychainRuntime,
   readMacKeychain as read,
-} from '../../../../../packages/browser/src/browser-import/protected/mac-keychain.mjs'
+} from '../../../../../third_party/litch-automation/packages/browser/src/browser-import/protected/mac-keychain.mjs'
 import type { BrowserId } from '../types.mjs'
 import { runCommand } from './process.mjs'
 

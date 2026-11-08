@@ -79,6 +79,7 @@ jobs:
           echo "CHA_CLAUDE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-cli/node_modules/.bin/claude" >> "${GITHUB_ENV}"
       - run: node --test --test-concurrency=1 scripts/ci/*.test.mjs
         id: stage-13
+      - run: npm run automation:setup
       - run: npm run check
         id: phase-12
       - run: npm run typecheck
@@ -93,7 +94,7 @@ jobs:
           node scripts/ci/test-shard.mjs device
           npm run test:antigravity
           npm run test:computer-use-sdk
-          npm ci --ignore-scripts --prefix packages/browser --no-audit --no-fund
+          npm ci --ignore-scripts --prefix third_party/litch-automation/packages/browser --no-audit --no-fund
           npm run test:browser-package
           npm run test:chrome-packages
           npm run build:automation-packages

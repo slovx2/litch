@@ -308,9 +308,9 @@ jobs:
         with:
           go-version: 1.26.10
       # 工具链的版本只在 rust-toolchain.toml 里写，rustup 在 crate 目录里按它装、按它用
-      - name: Rust 工具链（apps/computer-use-win/rust-toolchain.toml）
+      - name: Rust 工具链（third_party/litch-automation/apps/computer-use-win/rust-toolchain.toml）
         id: phase-16
-        working-directory: apps/computer-use-win
+        working-directory: third_party/litch-automation/apps/computer-use-win
         run: |
           rustup set auto-self-update disable
           rustup toolchain install
@@ -318,7 +318,7 @@ jobs:
           cargo --version
       - name: Cargo 工具链指纹
         id: rust
-        working-directory: apps/computer-use-win
+        working-directory: third_party/litch-automation/apps/computer-use-win
         run: echo "fingerprint=$(rustc -vV | sha256sum | cut -d ' ' -f 1)" >> "${GITHUB_OUTPUT}"
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: cache-cargo
@@ -328,18 +328,18 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/registry/src
             ~/.cargo/git/db
-            apps/computer-use-win/target
-          key: cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.fingerprint }}-${{ hashFiles('apps/computer-use-win/Cargo.lock', 'apps/computer-use-win/rust-toolchain.toml') }}-${{ needs.source.outputs.sha }}
+            third_party/litch-automation/apps/computer-use-win/target
+          key: cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.fingerprint }}-${{ hashFiles('third_party/litch-automation/apps/computer-use-win/Cargo.lock', 'third_party/litch-automation/apps/computer-use-win/rust-toolchain.toml') }}-${{ needs.source.outputs.sha }}
           restore-keys: |
-            cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.fingerprint }}-${{ hashFiles('apps/computer-use-win/Cargo.lock', 'apps/computer-use-win/rust-toolchain.toml') }}-
+            cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.fingerprint }}-${{ hashFiles('third_party/litch-automation/apps/computer-use-win/Cargo.lock', 'third_party/litch-automation/apps/computer-use-win/rust-toolchain.toml') }}-
       - name: 助手的单元测试
         id: phase-15
-        working-directory: apps/computer-use-win
-        run: node ../desktop/scripts/build-computer-use-win.mjs test --locked --target x86_64-pc-windows-msvc
+        working-directory: third_party/litch-automation/apps/computer-use-win
+        run: node ../../../../apps/desktop/scripts/build-computer-use-win.mjs test --locked --target x86_64-pc-windows-msvc
       - name: 构建助手
         id: phase-14
-        working-directory: apps/computer-use-win
-        run: node ../desktop/scripts/build-computer-use-win.mjs build --release --locked --target x86_64-pc-windows-msvc
+        working-directory: third_party/litch-automation/apps/computer-use-win
+        run: node ../../../../apps/desktop/scripts/build-computer-use-win.mjs build --release --locked --target x86_64-pc-windows-msvc
       - name: Inno Setup 6.7.1
         id: phase-13
         run: choco install innosetup --version=6.7.1 --no-progress -y

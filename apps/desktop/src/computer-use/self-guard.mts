@@ -1,7 +1,7 @@
 // Litch 自身审批的存储和手机验签留在可信桌面宿主。
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { ComputerSelfGuard as SharedSelfGuard } from '../../../../packages/computer-use/src/self-guard.mjs'
+import { ComputerSelfGuard as SharedSelfGuard } from '../../../../third_party/litch-automation/packages/computer-use/src/self-guard.mjs'
 import { approvalDesktopId, phoneAnswerLanded, verifyPhoneAnswer } from '../approvals/verify.mjs'
 
 export class ComputerSelfGuard extends SharedSelfGuard {

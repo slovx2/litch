@@ -16,7 +16,7 @@ export const projections = [
 export function projectContracts(root = automationRoot, check = true) {
   for (const [source, target] of projections) {
     const content = readFileSync(
-      join(root, 'packages/automation-contracts/src', source),
+      join(root, 'third_party/litch-automation/packages/automation-contracts/src', source),
       'utf8',
     ).replaceAll("from '../tool-spec.mjs'", "from './automation-tool-spec.mjs'")
     const expected = `// 由 scripts/generate-automation-contracts.mjs 生成；请修改 automation-contracts/src/${source}。\n${content}`

@@ -2,9 +2,9 @@
 import {
   MacLauncher as SharedLauncher,
   type MacLauncherOptions as SharedOptions,
-} from '../../../../packages/computer-use/src/launcher-mac.mjs'
+} from '../../../../third_party/litch-automation/packages/computer-use/src/launcher-mac.mjs'
 
-export { openApp } from '../../../../packages/computer-use/src/launcher-mac.mjs'
+export { openApp } from '../../../../third_party/litch-automation/packages/computer-use/src/launcher-mac.mjs'
 export type MacLauncherOptions = Omit<SharedOptions, 'identity'>
 export class MacLauncher extends SharedLauncher {
   constructor(options: MacLauncherOptions) {

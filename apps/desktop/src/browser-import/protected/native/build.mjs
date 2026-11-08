@@ -1,9 +1,9 @@
 // Litch 原生资源构建位置；通用读取器的构建实现由包提供。
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { buildKeychain as build } from '../../../../../../packages/browser/native/build.mjs'
+import { buildKeychain as build } from '../../../../../../third_party/litch-automation/packages/browser/native/build.mjs'
 
-export { NATIVE_DIRECTORY } from '../../../../../../packages/browser/native/build.mjs'
+export { NATIVE_DIRECTORY } from '../../../../../../third_party/litch-automation/packages/browser/native/build.mjs'
 export function buildKeychain(options = {}) {
   return build({
     out: resolve(dirname(fileURLToPath(import.meta.url)), '../../../../dist/browser-import-native'),

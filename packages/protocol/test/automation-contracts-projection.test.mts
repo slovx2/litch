@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { negotiateChromeWire } from '../../automation-contracts/src/litch/index.mjs'
+import { negotiateChromeWire } from '../../../third_party/litch-automation/packages/automation-contracts/src/litch/index.mjs'
 import {
   readBaseline,
   schemaHashes,
   schemaSources,
-} from '../../automation-contracts/test/schema-baseline.mjs'
+} from '../../../third_party/litch-automation/packages/automation-contracts/test/schema-baseline.mjs'
 import { negotiateChromeWire as projectedWire } from '../src/chrome-browser.mjs'
 import {
   browserToolsSpec as projectedBrowser,

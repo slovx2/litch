@@ -2,13 +2,13 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { targetsChrome } from '../../../../packages/chrome-bridge/src/dispatcher.mjs'
 import {
   CHROME_STORE_URL,
   type ChromeSettingsRequest,
   type ChromeSettingsState,
   chromeExtensionIds,
 } from '../../../../packages/protocol/src/chrome-browser.mjs'
+import { targetsChrome } from '../../../../third_party/litch-automation/packages/chrome-bridge/src/dispatcher.mjs'
 import type { BrowserExecutor } from '../browser/executor.mjs'
 import { createSiteBook } from '../browser/sites.mjs'
 import { blockedHostOf } from '../browser/url.mjs'

@@ -55,7 +55,12 @@ export function nativePlan(selected) {
   if (selected.includes('browser'))
     add('browser', ['npm', 'run', 'test:browser', '--prefix', 'apps/desktop'])
   if (selected.includes('computer-use')) {
-    add('computer-use:swift', ['swift', 'test', '--package-path', 'apps/computer-use'])
+    add('computer-use:swift', [
+      'swift',
+      'test',
+      '--package-path',
+      'third_party/litch-automation/apps/computer-use',
+    ])
     add('computer-use:unit', ['npm', 'run', 'test:computer-use', '--prefix', 'apps/desktop'])
     add('computer-use:native', ['node', 'apps/desktop/scripts/check-computer-use.mjs'])
   }

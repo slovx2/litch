@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import {
   HelperSupervisor,
   MacLauncher,
-} from '../../packages/computer-use/dist/computer-use/src/node.mjs'
+} from '../../third_party/litch-automation/packages/computer-use/dist/computer-use/src/node.mjs'
 import { buildHelper, signHelper } from './build-app.mjs'
 import { validateHostIdentity } from './host-identity.mjs'
 

@@ -10,7 +10,7 @@ const result = spawnSync(
   'cargo',
   args.length ? args : ['build', '--release', '--locked', '--target', 'x86_64-pc-windows-msvc'],
   {
-    cwd: fileURLToPath(new URL('apps/computer-use-win/', root)),
+    cwd: fileURLToPath(new URL('third_party/litch-automation/apps/computer-use-win/', root)),
     stdio: 'inherit',
     env: {
       ...process.env,

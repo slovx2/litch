@@ -3,8 +3,8 @@ import {
   CHROME_WIRE_MIN,
   CHROME_WIRE_VERSION,
   chromeExtensionIds,
-} from '../../../packages/automation-contracts/src/litch/chrome-browser.mjs'
-import { createExtensionRuntime } from '../../../packages/chrome-extension/src/index.mjs'
+} from '../../../third_party/litch-automation/packages/automation-contracts/src/litch/chrome-browser.mjs'
+import { createExtensionRuntime } from '../../../third_party/litch-automation/packages/chrome-extension/src/index.mjs'
 
 declare const chrome: any
 declare const __LITCH_POINTER_SOURCE__: string

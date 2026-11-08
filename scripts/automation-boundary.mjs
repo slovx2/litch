@@ -2,9 +2,9 @@
 import assert from 'node:assert/strict'
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
-import { importsOf } from '../packages/browser/scripts/imports-of.mjs'
+import { importsOf } from '../third_party/litch-automation/packages/browser/scripts/imports-of.mjs'
 
-export { importsOf } from '../packages/browser/scripts/imports-of.mjs'
+export { importsOf } from '../third_party/litch-automation/packages/browser/scripts/imports-of.mjs'
 
 import { automationRoot, projections } from './generate-automation-contracts.mjs'
 
@@ -32,7 +32,7 @@ export function checkClosure(entries, root) {
 }
 
 export function checkAutomationBoundary(root = automationRoot) {
-  const source = join(root, 'packages/automation-contracts/src')
+  const source = join(root, 'third_party/litch-automation/packages/automation-contracts/src')
   const files = readdirSync(source, { recursive: true }).filter((file) => file.endsWith('.mts'))
   const count = checkClosure(
     files.map((file) => join(source, file)),

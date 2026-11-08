@@ -108,10 +108,19 @@ try {
     stdio: 'pipe',
   })
   const embeddedNativeBinary = join(work, 'embedded-chrome-host')
-  execFileSync(go, ['build', '-o', embeddedNativeBinary, './chromebridge/example'], {
-    cwd: root,
-    stdio: 'pipe',
-  })
+  execFileSync(
+    go,
+    [
+      'build',
+      '-o',
+      embeddedNativeBinary,
+      'github.com/slovx2/litch-automation/chromebridge/example',
+    ],
+    {
+      cwd: root,
+      stdio: 'pipe',
+    },
+  )
   await build({
     stdin: {
       contents:

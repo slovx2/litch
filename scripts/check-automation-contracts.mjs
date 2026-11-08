@@ -5,7 +5,9 @@ import { projectContracts, automationRoot as root } from './generate-automation-
 
 projectContracts(root, true)
 checkAutomationBoundary(root)
-await import('../packages/automation-contracts/scripts/check-package.mjs')
+await import(
+  '../third_party/litch-automation/packages/automation-contracts/scripts/check-package.mjs'
+)
 for (const args of [
   ['--test', 'scripts/automation-boundary.test.mjs'],
   ['--import', 'tsx', '--test', 'packages/protocol/test/automation-contracts-projection.test.mts'],
