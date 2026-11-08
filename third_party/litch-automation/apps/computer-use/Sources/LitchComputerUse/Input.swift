@@ -95,14 +95,23 @@ enum Input {
   static func drag(from start: CGPoint, to end: CGPoint, check: () throws -> Void = {}) throws {
     try check()
     move(to: start)
-    post(
-      CGEvent(
-        mouseEventSource: source, mouseType: .leftMouseDown, mouseCursorPosition: start,
-        mouseButton: .left))
+    var lastPoint = start
+    func send(_ type: CGEventType, _ point: CGPoint) throws {
+      guard let event = CGEvent(mouseEventSource: source, mouseType: type,
+        mouseCursorPosition: point, mouseButton: .left) else {
+        throw RPCError(.failed, "Could not create a drag event.")
+      }
+      event.flags = []
+      event.setIntegerValueField(.mouseEventClickState, value: 1)
+      event.setDoubleValueField(.mouseEventPressure, value: type == .leftMouseUp ? 0 : 1)
+      post(event)
+      lastPoint = point
+    }
+    try send(.leftMouseDown, start)
     // 中止也释放代理按下的按钮，避免把拖动留给用户。
     defer {
-      post(CGEvent(mouseEventSource: source, mouseType: .leftMouseUp,
-        mouseCursorPosition: CGEvent(source: nil)?.location ?? end, mouseButton: .left))
+      try? send(.leftMouseUp, CGEvent(source: nil)?.location ?? lastPoint)
+      Thread.sleep(forTimeInterval: 0.02)
     }
     Thread.sleep(forTimeInterval: 0.08)
     let steps = 12
@@ -111,10 +120,7 @@ enum Input {
       let t = Double(step) / Double(steps)
       let point = CGPoint(
         x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t)
-      post(
-        CGEvent(
-          mouseEventSource: source, mouseType: .leftMouseDragged, mouseCursorPosition: point,
-          mouseButton: .left))
+      try send(.leftMouseDragged, point)
       Thread.sleep(forTimeInterval: 0.02)
     }
     Thread.sleep(forTimeInterval: 0.05)

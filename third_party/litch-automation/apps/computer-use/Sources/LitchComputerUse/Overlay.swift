@@ -12,11 +12,13 @@ import LitchComputerUseCore
 enum UserActivity {
   private static let lock = NSLock()
   private static var sequence: UInt64 = 0
+  private static var pointerSequence: UInt64 = 0
   private static var state = InputConflict()
   private static var lastAt = Date.distantPast
 
   // 全局版本仅供修饰键和光标收尾使用，不作为动作冲突判据。
   static var revision: UInt64 { lock.withLock { sequence } }
+  static var pointerRevision: UInt64 { lock.withLock { pointerSequence } }
   static var idleSeconds: TimeInterval { lock.withLock { Date().timeIntervalSince(lastAt) } }
   static func seed() {
     _ = heldInput()
@@ -49,6 +51,7 @@ enum UserActivity {
   static func note(_ kind: InputConflict.Kind, pid: pid_t, code: Int = 0) {
     lock.withLock {
       sequence &+= 1
+      if kind == .mouseDown || kind == .mouseUp { pointerSequence &+= 1 }
       lastAt = Date()
       state.note(kind, pid: pid, code: code)
     }

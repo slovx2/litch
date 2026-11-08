@@ -2,6 +2,22 @@
 public enum InputPolicy {
   public static let waitSeconds: Double = 8
 
+  /// AX 菜单默认包含 Command；位 3 表示不含 Command，其他三位为 Shift/Option/Control。
+  public static func menuShortcutMatches(keyCode: Int, modifiers: Int, combo: KeyCombo) -> Bool {
+    guard keyCode == Int(combo.keyCode), modifiers >= 0, modifiers & ~15 == 0 else { return false }
+    let flags = (modifiers & 8 == 0 ? Keys.command : 0)
+      | (modifiers & 1 != 0 ? Keys.shift : 0)
+      | (modifiers & 2 != 0 ? Keys.option : 0)
+      | (modifiers & 4 != 0 ? Keys.control : 0)
+    return flags == combo.flags
+  }
+
+  public static func mouseSelfTestResult(clicked: Bool, scrolled: Bool, frontStable: Bool,
+    cursorStable: Bool, userActive: Bool) -> String {
+    if userActive { return "interrupted" }
+    return clicked && scrolled && frontStable && cursorStable ? "available" : "unavailable"
+  }
+
   /// 事件携带的实际接收窗口优先；屏幕矩形重叠不能证明窗口接收了点击。
   public static func mouseRecipient(windowIDs: [Int64], owner: (UInt32) -> Int32?) -> Int32? {
     var seen = Set<UInt32>()
