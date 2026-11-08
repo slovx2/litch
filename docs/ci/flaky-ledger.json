@@ -26,6 +26,28 @@
       "issues": ["https://github.com/slovx2/litch/issues/16"]
     },
     {
+      "job": "gate / tests / real-engines / checks",
+      "test": "manager-fixture",
+      "status": "active",
+      "events": [
+        {
+          "runId": 42497331702,
+          "attempt": 1,
+          "jobId": 128786876739,
+          "sha": "bf110d251bda4ecde6a670efd30782b7ad56dff0",
+          "date": "2026-11-08T16:13:53Z",
+          "trigger": "workflow_dispatch",
+          "url": "https://github.com/slovx2/litch/actions/runs/42497331702/job/128786876739",
+          "failure": "manager-fixture 的 codex 1/1：endorse 返回 endorsed 后，同回合收到同卡 manager-suggestions，最终没有经理结果；report 连带失败。",
+          "evidence": {
+            "kind": "local-rerun",
+            "reference": "docs/ci/manager-fixture-suggestion-race.md",
+            "note": "macOS arm64 / Node 24.19.0 / Codex 0.163.0，隔离 HOME 和回环假模型；上述 SHA 未修改产物执行 check-manager-fixture.mjs --harness codex --repeat 10：1/3/6 失败，其余七轮完整通过。完整命令与取证见报告；本 run 为 Prepare 调用 Full 的 real-engines 作业，依经理要求记第1次。"
+          }
+        }
+      ]
+    },
+    {
       "job": "gate / unit",
       "test": "dsh 子代理：派出去是子代理条目、接收方是子会话号；子会话按父地址打开、可继续的能接着发消息；分叉不当子代理",
       "status": "active",

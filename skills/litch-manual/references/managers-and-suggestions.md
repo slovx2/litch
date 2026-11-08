@@ -56,11 +56,11 @@ requires a board decision. With task cards disabled, findings go into board deci
 and work requiring approval waits for your answer.
 
 工作线也可以直接为任务外的新发现提建议卡，不必先请经理转提。卡片出现在经理的建议页，经理可推荐，
-也可写明理由忽略无用或重复的卡片。任意层级工作线提卡成功后，Litch 设备服务自动通知经理，不依赖模型发送消息或工作线结束回合。短时间连发的卡片合并通知，包含短号、标题、背景首句和来源；经理先对照已合入提交及事项查重，再推荐或附理由撤掉。运行中的经理直接收到插话；空闲经理按唤醒上限、用户停止、后台任务等保护规则唤醒。通知独立持久保存，投递失败或经理重置期间留队，成功后移除；已有未审核旧卡不补发。工作线仍须完成已授权任务，不能把未完成部分改成建议。
+也可写明理由忽略无用或重复的卡片。任意层级工作线提卡成功后，Litch 设备服务自动通知经理，不依赖模型发送消息或工作线结束回合。短时间连发的卡片合并通知，包含短号、标题、背景首句和来源；经理先对照已合入提交及事项查重，再推荐或附理由撤掉。运行中的经理直接收到插话；空闲经理按唤醒上限、用户停止、后台任务等保护规则唤醒。通知独立持久保存，投递失败或经理重置期间留队，成功后移除；发送前再次检查卡片，已审核、已开始、已撤回或已过期的卡不再提醒，整批失效时不会唤醒经理。已有未审核旧卡不补发。工作线仍须完成已授权任务，不能把未完成部分改成建议。
 
 Worklines can directly propose out-of-assignment findings. Their cards appear in the manager's
 Suggestions tab for endorsement or dismissal with a reason; the manager does not recreate them.
-After a workline at any depth proposes a card, the device automatically notifies the manager without a model sending a message or ending its turn. Cards created in a short burst are batched with their short IDs, titles, first background sentences and sources. The manager checks landed commits and items for duplicates, then endorses or dismisses with a reason. Running managers receive an in-turn message; idle managers follow the existing wake budget, user-stop and background-task protections. Notifications persist separately through failed delivery and manager resets, and are removed only after delivery. Existing unreviewed cards are not backfilled. Assigned work still
+After a workline at any depth proposes a card, the device automatically notifies the manager without a model sending a message or ending its turn. Cards created in a short burst are batched with their short IDs, titles, first background sentences and sources. The manager checks landed commits and items for duplicates, then endorses or dismisses with a reason. Running managers receive an in-turn message; idle managers follow the existing wake budget, user-stop and background-task protections. Notifications persist separately through failed delivery and manager resets, and are removed after delivery or when no review is needed. Before sending, Litch rechecks each card: reviewed, starting, started, withdrawn or expired cards no longer trigger a reminder. An empty batch does not wake the manager. Existing unreviewed cards are not backfilled. Assigned work still
 belongs to the workline and must not be replaced by a suggestion.
 
 工作线建议在经理“建议”页默认显示，待审核卡带有标记，来源会话保留在卡片上。无论从看板还是工作线对话点“开始”，新会话都是经理的直属工作线，与来源线平级，计入经理并发限制；首条简报包含来源。来源线未归档时，分叉仍使用来源线的上下文和权限。来源线已归档时，“开始”和“编辑后开始”只用卡片背景与任务新建经理直属工作线，默认配置取当前经理，卡片和编辑覆盖值仍优先；不恢复来源，也不继承分叉历史。“在来源会话里做”则先恢复来源，再向原会话发送任务。已开始的旧嵌套会话不迁移，普通会话的建议行为不变。

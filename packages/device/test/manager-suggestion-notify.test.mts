@@ -192,6 +192,141 @@ for (const barrier of ['limit', 'stopped', 'background', 'reset', 'longIdle'] as
   })
 }
 
+for (const running of [false, true]) {
+  for (const state of [
+    'endorsed',
+    'dismissed',
+    'started',
+    'withdrawn',
+    'expired',
+    'accepting',
+  ] as const) {
+    test(`最终${running ? '插话' : '唤醒'}前过滤 ${state} 卡，保留同批未审核卡`, async (t) => {
+      const env = await fixture(running)
+      let release: (() => void) | undefined
+      try {
+        t.mock.timers.enable({ apis: ['setTimeout'] })
+        const stale = env.propose('即将失效'),
+          fresh = env.propose('仍待审核')
+        let arrived = () => {}
+        const reached = new Promise<void>((resolve) => {
+          arrived = resolve
+        })
+        const gate = new Promise<void>((resolve) => {
+          release = resolve
+        })
+        // 暂停最终发送前的异步等待；恢复之后必须再查状态，不能只在 drain 开始时过滤。
+        const method = running ? 'thread/read' : 'thread/resume'
+        const handler = env.pi.handlers[method]
+        assert.ok(handler)
+        env.pi.handlers[method] = async (params, connection) => {
+          const value = await handler(params, connection)
+          if (params.threadId === env.manager.threadId) {
+            arrived()
+            await gate
+          }
+          return value
+        }
+        t.mock.timers.tick(250)
+        await reached
+        if (state === 'endorsed' || state === 'dismissed') {
+          env.device.managers.store.saveSuggestionReview(env.manager.id, stale.id, {
+            state,
+            reason: '已处理',
+            at: Math.floor(Date.now() / 1000),
+          })
+        } else if (state === 'accepting') {
+          env.tree.accepting.set(
+            stale.id,
+            Promise.resolve({ threadId: 'starting-child', harness: 'pi' }),
+          )
+        } else {
+          env.tree.settleProposal(stale.id, state, state === 'started' ? 'started-child' : null)
+        }
+        release?.()
+        await env.device.managers.settleDeliveries(env.manager.id)
+        assert.equal(env.notices().length, 1)
+        const sent = env.notices()[0]?.params.input[0].text as string
+        assert.ok(sent.includes(fresh.id))
+        assert.ok(!sent.includes(stale.id), '已处理卡不得到达引擎')
+        assert.equal(env.device.managers.store.deliveries(env.manager.id).length, 0)
+      } finally {
+        release?.()
+        t.mock.timers.reset()
+        await env.close()
+      }
+    })
+  }
+}
+
+test('延迟合并期间已审核的单卡不通知、不消耗唤醒预算', async (t) => {
+  const env = await fixture()
+  try {
+    t.mock.timers.enable({ apis: ['setTimeout'] })
+    const proposal = env.propose()
+    env.device.managers.store.saveSuggestionReview(env.manager.id, proposal.id, {
+      state: 'endorsed',
+      reason: '已核实',
+      at: Math.floor(Date.now() / 1000),
+    })
+    t.mock.timers.tick(250)
+    await env.device.managers.settleDeliveries(env.manager.id)
+    assert.equal(env.notices().length, 0)
+    assert.equal(env.device.managers.store.deliveries(env.manager.id).length, 0)
+    assert.equal(env.tree.store.wakes(env.manager.threadId), 0)
+  } finally {
+    t.mock.timers.reset()
+    await env.close()
+  }
+})
+
+test('引擎等待回合配额期间已审核，写协议前撤销旧批次并保留未审核卡', async (t) => {
+  const env = await fixture()
+  let release: (() => void) | undefined
+  try {
+    t.mock.timers.enable({ apis: ['setTimeout'] })
+    const stale = env.propose('配额等待期间审核'),
+      fresh = env.propose('保留新卡')
+    let arrived = () => {}
+    const reached = new Promise<void>((resolve) => {
+      arrived = resolve
+    })
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const reserve = env.device.managers.lines.reserve.bind(env.device.managers.lines)
+    env.device.managers.lines.reserve = async (...args) => {
+      const result = await reserve(...args)
+      if (args[1] === env.manager.threadId) {
+        arrived()
+        await gate
+      }
+      return result
+    }
+    t.mock.timers.tick(250)
+    await reached
+    env.device.managers.store.saveSuggestionReview(env.manager.id, stale.id, {
+      state: 'endorsed',
+      reason: '配额等待期间已审核',
+      at: Math.floor(Date.now() / 1000),
+    })
+    release?.()
+    await env.device.managers.settleDeliveries(env.manager.id)
+    assert.equal(env.notices().length, 0, '旧批次不能到达引擎')
+    assert.equal(env.tree.store.wakes(env.manager.threadId), 0)
+    assert.equal(env.device.managers.store.deliveries(env.manager.id).length, 1)
+    env.device.managers.kick(env.manager.id)
+    await env.device.managers.settleDeliveries(env.manager.id)
+    assert.equal(env.notices().length, 1)
+    const body = env.notices()[0]?.params.input[0].text as string
+    assert.ok(body.includes(fresh.id) && !body.includes(stale.id))
+  } finally {
+    release?.()
+    t.mock.timers.reset()
+    await env.close()
+  }
+})
+
 test('提卡通知插话失败留队，回合结束后送达，不依赖来源回报', async (t) => {
   const env = await fixture(true)
   try {

@@ -404,12 +404,28 @@ async function checkManager(t, client, cwd, harness) {
       (entry) => entry.proposal.id === proposalId,
     )
   assert.equal((await suggestion()).managerReview.state, 'pending')
-  // 工作线出卡会触发经理回报；等这轮处理停稳再发审核指令。
+  // 普通工作线回报可能先结束，审核通知仍在合并队列；必须等这张卡的审核通知完成。
+  // “审核先于通知”的产品竞态由 manager-suggestion-notify 的受控等待单测覆盖。
   await until(
     `${harness} 经理处理线卡通知`,
     () => client.call('thread/read', { threadId, includeTurns: true }),
     ({ thread }) =>
-      thread.status.type !== 'active' && !thread.turns.some((turn) => turn.status === 'inProgress'),
+      thread.status.type !== 'active' &&
+      !thread.turns.some((turn) => turn.status === 'inProgress') &&
+      thread.turns.some(
+        (turn) =>
+          turn.status === 'completed' &&
+          turn.items.some(
+            (item) =>
+              item.type === 'userMessage' &&
+              item.content?.some(
+                (part) =>
+                  typeof part.text === 'string' &&
+                  part.text.startsWith('<litch-session-event kind="manager-suggestions">') &&
+                  part.text.includes(`(proposalId: ${proposalId})`),
+              ),
+          ),
+      ),
   )
   await say(
     client,

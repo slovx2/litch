@@ -1067,9 +1067,17 @@ export class SessionTree {
       startOnly?: boolean
       automatic?: boolean
       onStarted?: (turnId: string) => void
+      /** 完成引擎状态/恢复等等待后，在最终发送前同步重建；null 表示事件已失效。 */
+      prepare?: () => { text: string; eventId: string } | null
     } = {},
   ): Promise<boolean> {
     let sent = false
+    const beforeSend = (prepared: { text: string; eventId: string }) => () => {
+      if (!options.prepare) return
+      const current = options.prepare()
+      if (!current || current.text !== prepared.text || current.eventId !== prepared.eventId)
+        throw new Error('经理事件在引擎请求排队期间已变化，保留仍有效的通知重新投递')
+    }
     const previous = this.checks.get(threadId) ?? Promise.resolve()
     const next = previous
       .catch(() => {})
@@ -1094,17 +1102,22 @@ export class SessionTree {
           if (isObject(active)) this.turnEvent(harness, 'turn/started', { threadId, turn: active })
         }
         const running = this.active.get(threadId)
-        const input = [{ type: 'text', text, text_elements: [] }]
         if (running) {
           if (options.startOnly) return
           if (this.noSteer.has(harness)) return
+          const prepared = options.prepare ? options.prepare() : { text, eventId }
+          if (!prepared) return
           try {
-            await link.request('turn/steer', {
-              threadId,
-              expectedTurnId: running,
-              clientUserMessageId: eventId,
-              input,
-            })
+            await link.request(
+              'turn/steer',
+              {
+                threadId,
+                expectedTurnId: running,
+                clientUserMessageId: prepared.eventId,
+                input: [{ type: 'text', text: prepared.text, text_elements: [] }],
+              },
+              { beforeSend: beforeSend(prepared) },
+            )
             sent = true
           } catch (error) {
             if (error instanceof UpstreamRpcError && error.code === -32601)
@@ -1120,17 +1133,19 @@ export class SessionTree {
           const current = isObject(settings) ? settings : {}
           if (options.automatic && (!this.canAutoWake(threadId) || this.active.has(threadId)))
             return
+          const prepared = options.prepare ? options.prepare() : { text, eventId }
+          if (!prepared) return
           const result = await link.request(
             'turn/start',
             {
               threadId,
-              input,
+              input: [{ type: 'text', text: prepared.text, text_elements: [] }],
               ...(typeof current.model === 'string' ? { model: current.model } : {}),
               ...(typeof current.reasoningEffort === 'string'
                 ? { effort: current.reasoningEffort }
                 : {}),
             },
-            { restartable: !options.startOnly },
+            { restartable: !options.startOnly, beforeSend: beforeSend(prepared) },
           )
           if (isObject(result?.turn) && typeof result.turn.id === 'string') {
             if (options.automatic) this.store.setWakes(threadId, this.store.wakes(threadId) + 1)

@@ -886,27 +886,48 @@ export class DeviceManagers {
         const batch = deliveries.filter(
           (next) => parseSessionEvent(next.text).event?.kind === 'manager-suggestions',
         )
-        const text = formatSessionEvent({
-          kind: 'manager-suggestions',
-          notes: [],
-          manager: {
-            managerId: id,
-            text: batch
-              .map((next) => parseSessionEvent(next.text).event?.manager?.text ?? '')
-              .join('\n\n'),
-          },
-        })
-        // 重试保持相同批次 ID；失败期间新到卡片改变批次，不能被引擎按旧 ID 去重后误出队。
-        const batchId = `litch-suggestions-${createHash('sha256')
-          .update(batch.map((entry) => entry.id).join('\n'))
-          .digest('hex')}`
+        let currentBatch: typeof batch = []
+        const prepare = () => {
+          currentBatch = batch.filter((entry) => {
+            const body = parseSessionEvent(entry.text).event?.manager?.text ?? ''
+            // 单卡持久事件的首行固定带完整 proposalId；只读此标记，不从标题或背景推断身份。
+            const proposalId = /\(proposalId: ([0-9a-f-]+)\)$/.exec(body.split('\n')[0] ?? '')?.[1]
+            const proposal = proposalId ? this.tree.proposal(proposalId) : null
+            const pending =
+              proposal &&
+              proposal.status === 'pending' &&
+              !proposal.offer &&
+              !this.tree.accepting.has(proposal.id) &&
+              !this.store.suggestionReview(id, proposal.id)
+            if (!pending) this.store.delivered(entry.id)
+            return Boolean(pending)
+          })
+          if (!currentBatch.length) return null
+          return {
+            text: formatSessionEvent({
+              kind: 'manager-suggestions',
+              notes: [],
+              manager: {
+                managerId: id,
+                text: currentBatch
+                  .map((entry) => parseSessionEvent(entry.text).event?.manager?.text ?? '')
+                  .join('\n\n'),
+              },
+            }),
+            // 过滤后仍保留稳定身份；重试时新增或已处理的卡改变批次，不能被旧 ID 去重。
+            eventId: `litch-suggestions-${createHash('sha256')
+              .update(currentBatch.map((entry) => entry.id).join('\n'))
+              .digest('hex')}`,
+          }
+        }
         const sent =
           manager.status === 'active' &&
-          (await this.tree.deliverManagerEvent(manager.threadId, text, batchId, {
+          (await this.tree.deliverManagerEvent(manager.threadId, '', '', {
             automatic: true,
+            prepare,
           }))
         if (this.closed) return
-        if (sent) for (const entry of batch) this.store.delivered(entry.id)
+        if (sent) for (const entry of currentBatch) this.store.delivered(entry.id)
         // 唤醒被保护规则阻止时仍允许后面的用户答复投递，不能堵住用户。
         continue
       }
