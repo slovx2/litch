@@ -35,7 +35,7 @@ export function ManagerIssueScreen({ route, navigation }: Props) {
   const device = useKey<{ connection?: string }>(keys.device(deviceId))
   const board = view?.board ?? null
   const issues = useManagerIssues(view)
-  const commands = useIssueCommands({ deviceId, id: managerId })
+  const commands = useIssueCommands({ deviceId, id: managerId }, issues.discussions === true)
   const issue = issues.details[id as keyof typeof issues.details]
   const offline = device?.connection !== 'online'
   const disabled = offline || manager?.status !== 'active'

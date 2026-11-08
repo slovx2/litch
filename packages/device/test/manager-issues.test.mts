@@ -20,7 +20,12 @@ import { refuseSteer, treeRig, until } from './tree-kit.mjs'
 async function setup() {
   const env = treeRig()
   const client = env.connect()
-  await client.initialize(['harness', 'litchManager', 'litchManagerIssues'])
+  await client.initialize([
+    'harness',
+    'litchManager',
+    'litchManagerIssues',
+    'litchManagerIssueDiscussions',
+  ])
   const { manager, threadId } = await client.call(MANAGER_METHOD.create, {
     cwd: env.stateDir,
     harness: 'pi',
@@ -235,7 +240,7 @@ test('经理评论持久未读，重连读取与 seen；用户评论唤醒闲置
     assert.equal(issue.unread, true)
     await until(() => client.notifications.some((n) => n.method === N.activity), '经理评论通知')
     const reconnect = env.connect()
-    await reconnect.initialize(['harness', 'litchManagerIssues'])
+    await reconnect.initialize(['harness', 'litchManagerIssues', 'litchManagerIssueDiscussions'])
     assert.equal((await reconnect.call(M.read, { managerId, id: issue.id })).issue.unread, true)
     assert.equal(
       (await reconnect.call(M.seen, { managerId, id: issue.id, revision: issue.revision })).issue
@@ -373,7 +378,7 @@ test('设备重启后评论与幂等回执保留，未投递事件恢复且只�
     env.pi.end(threadId, 'completed', '完成')
     second = rig({ pi: env.pi }, {}, { stateDir: env.stateDir })
     const after = second.connect()
-    await after.initialize(['harness', 'litchManagerIssues'])
+    await after.initialize(['harness', 'litchManagerIssues', 'litchManagerIssueDiscussions'])
     assert.deepEqual(await after.call(M.comment, input), result)
     assert.equal(
       (await after.call(M.read, { managerId, id: created.id })).issue.discussion.comments.length,
@@ -485,7 +490,7 @@ test('v6 连续升级保留 D/R/P/S/I、问答、关联、报告已阅；不建�
       undefined,
     )
     const api = second.connect()
-    await api.initialize(['harness', 'litchManagerIssues'])
+    await api.initialize(['harness', 'litchManagerIssues', 'litchManagerIssueDiscussions'])
     const page = (
       await api.call(M.list, {
         managerId,
@@ -585,6 +590,45 @@ test('issue 讨论过滤在计数和分页前生效；开启标记持久化且�
     assert.equal(
       (await client.call(M.read, { managerId, id: opened.id })).issue.title,
       before.title,
+    )
+  } finally {
+    await env.close()
+  }
+})
+
+test('新设备对未声明讨论子能力的连接不回传标记，并拒绝新字段', async () => {
+  const { env, client, managerId } = await setup()
+  try {
+    const old = env.connect()
+    await old.initialize(['harness', 'litchManagerIssues'])
+    const created = (await client.call(M.create, { managerId, title: '协商测试', body: '' })).issue
+    await client.call(M.update, {
+      managerId,
+      id: created.id,
+      revision: created.revision,
+      patch: { discussionOpened: true },
+      why: '打开讨论',
+    })
+    const newReply = (await client.call(M.read, { managerId, id: created.id })).issue
+    const oldReply = (await old.call(M.read, { managerId, id: created.id })).issue
+    assert.equal(newReply.discussion.opened, true)
+    assert.equal('opened' in oldReply.discussion, false)
+    assert.equal((await old.call(M.list, { managerId, order: 'newest' })).page.total, 1)
+    assert.equal(
+      (await old.fails(M.list, { managerId, order: 'newest', discussionsOnly: true })).data.litch,
+      'extensionRequired',
+    )
+    assert.equal(
+      (
+        await old.fails(M.update, {
+          managerId,
+          id: created.id,
+          revision: newReply.revision,
+          patch: { discussionOpened: true },
+          why: '未声明',
+        })
+      ).data.litch,
+      'extensionRequired',
     )
   } finally {
     await env.close()

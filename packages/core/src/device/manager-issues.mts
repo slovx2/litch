@@ -58,7 +58,30 @@ export class ManagerIssueCache {
     this.publish(this.view)
     let result: ManagerIssueRequests[M]['result']
     try {
-      result = await this.host.request(method, params)
+      // 每次发送（包括重连后的缓存刷新）都按当前能力裁剪，不能只在 UI 隐藏入口。
+      if (!this.host.features().issueDiscussions && method === METHOD.list) {
+        const { discussionsOnly, ...query } = params as ManagerIssueQuery
+        const reply = await this.host.request(METHOD.list, {
+          ...query,
+          ...(discussionsOnly ? { kinds: ['ordinary'] } : {}),
+        })
+        // 用调用方原查询缓存结果，防止降级后页面一直等不到原来的页键。
+        result = {
+          page: { ...reply.page, query: params as ManagerIssueQuery },
+        } as ManagerIssueRequests[M]['result']
+      } else if (
+        !this.host.features().issueDiscussions &&
+        method === METHOD.update &&
+        'patch' in params &&
+        'discussionOpened' in params.patch
+      ) {
+        const { discussionOpened: _opened, ...patch } = params.patch
+        result = (
+          Object.keys(patch).length
+            ? await this.host.request(METHOD.update, { ...params, patch })
+            : await this.host.request(METHOD.read, { managerId: params.managerId, id: params.id })
+        ) as ManagerIssueRequests[M]['result']
+      } else result = await this.host.request(method, params)
     } catch (error) {
       if (mine === this.epoch) {
         this.view = { ...this.view, error: String(error) }

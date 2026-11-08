@@ -203,7 +203,7 @@ export function IssueThread({
     issue.discussion.comments.length > 0 ||
     issue.discussion.questions.length > 0
   useEffect(() => {
-    if (disabled || issue.kind === 'ordinary' || opened) return
+    if (disabled || !commands.canOpenDiscussion || issue.kind === 'ordinary' || opened) return
     void commands
       .update({
         id: issue.id,

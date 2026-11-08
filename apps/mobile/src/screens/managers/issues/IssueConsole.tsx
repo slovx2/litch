@@ -18,6 +18,7 @@ import {
   managerIssueFilterKey,
   managerIssuePageKey,
   managerIssueStatusOptions,
+  supportedManagerIssueFilter,
   withManagerIssueKinds,
 } from '../../../../../../packages/core/src/projection/manager-issue-list.mts'
 import type {
@@ -93,14 +94,21 @@ export function useIssueConsole({
   const t = useT()
   const theme = useTheme()
   const { c, font, radius } = theme
-  const commands = useIssueCommands(manager)
+  const commands = useIssueCommands(manager, issues.discussions === true)
   const key = JSON.stringify([manager.deviceId, manager.id])
   const [saved, setSaved] = useState(
     () => memory.get(key) ?? { kind: 'decision' as ManagerIssueKind, filters: {} },
   )
   const kind = saved.kind
   // 保持默认条件引用，分页结果不能触发 list effect 再读首屏。
-  const filter = useMemo(() => saved.filters[kind] ?? kindFilter(kind), [saved.filters, kind])
+  const filter = useMemo(
+    () =>
+      supportedManagerIssueFilter(
+        saved.filters[kind] ?? kindFilter(kind),
+        issues.discussions === true,
+      ),
+    [saved.filters, kind, issues.discussions],
+  )
   const save = useCallback(
     (next: typeof saved) => {
       memory.set(key, next)
@@ -299,6 +307,7 @@ export function useIssueConsole({
     <>
       {filtering ? (
         <FilterDrawer
+          discussions={issues.discussions === true}
           kind={kind}
           filter={filter}
           onChange={setFilter}
@@ -451,11 +460,13 @@ export function IssueSheetDrawer({
 }
 
 function FilterDrawer({
+  discussions,
   kind,
   filter,
   onChange,
   onClose,
 }: {
+  discussions: boolean
   kind: ManagerIssueKind
   filter: ManagerIssueFilter
   onChange(filter: ManagerIssueFilter): void
@@ -498,13 +509,15 @@ function FilterDrawer({
           ? section(
               t('issue.filter.kind'),
               <>
-                <Chip
-                  label={t('issue.kind.all')}
-                  testID="issue-filter-kind:all"
-                  on={!filter.kinds.length || filter.kinds.length === MANAGER_ISSUE_KINDS.length}
-                  onPress={() => onChange(withManagerIssueKinds(filter, []))}
-                />
-                {MANAGER_ISSUE_KINDS.map((one) => (
+                {discussions ? (
+                  <Chip
+                    label={t('issue.kind.all')}
+                    testID="issue-filter-kind:all"
+                    on={!filter.kinds.length || filter.kinds.length === MANAGER_ISSUE_KINDS.length}
+                    onPress={() => onChange(withManagerIssueKinds(filter, []))}
+                  />
+                ) : null}
+                {(discussions ? MANAGER_ISSUE_KINDS : (['ordinary'] as const)).map((one) => (
                   <Chip
                     key={one}
                     label={t(`issue.kind.${one}`)}

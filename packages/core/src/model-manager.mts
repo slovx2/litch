@@ -98,6 +98,8 @@ export interface ManagerBoardView
  */
 export interface ManagerFeaturesView {
   issues?: boolean
+  /** issue 讨论开启标记与按讨论过滤；未声明时保持 X-n 列表。 */
+  issueDiscussions?: boolean
   /** 用户忽略请你做请求 */
   requestIgnore?: boolean
   paging?: boolean

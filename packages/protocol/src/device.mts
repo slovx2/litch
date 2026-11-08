@@ -38,6 +38,7 @@ export const EXTENSION = {
   managerPaging: 'litchManagerPaging',
   /** 公共 issue 外壳、X-n/特殊类型编号、评论、跟进和通知；只发给声明过的连接。 */
   managerIssues: 'litchManagerIssues',
+  managerIssueDiscussions: 'litchManagerIssueDiscussions',
   suggestionInbox: 'suggestionInbox',
   /** 受根目录与字节预算约束的 fs/readFile，见 file-preview.mts。 */
   filePreview: 'filePreview',

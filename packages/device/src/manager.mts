@@ -282,13 +282,36 @@ export class DeviceManagers {
     declared: boolean,
     pagingDeclared = false,
     issuesDeclared = false,
+    issueDiscussionsDeclared = false,
   ): Promise<unknown> {
     if ((Object.values(MANAGER_ISSUE_METHOD) as string[]).includes(method)) {
       if (!issuesDeclared)
         throw new DeviceError('extensionRequired', `${method} requires litchManagerIssues.`, {
           required: [EXTENSION.managerIssues],
         })
-      return this.issues.call(method, given)
+      const params = fields(given)
+      if (
+        !issueDiscussionsDeclared &&
+        ('discussionsOnly' in params ||
+          (method === MANAGER_ISSUE_METHOD.update && 'discussionOpened' in fields(params.patch)))
+      )
+        throw new DeviceError(
+          'extensionRequired',
+          `${method} requires litchManagerIssueDiscussions.`,
+          {
+            required: [EXTENSION.managerIssueDiscussions],
+          },
+        )
+      const result = this.issues.call(method, given)
+      // 只有声明新能力的连接能收到开启标记；其它 issue 数据继续按原合同返回。
+      if (!issueDiscussionsDeclared && result && typeof result === 'object' && 'issue' in result) {
+        const issue = (
+          result as { issue: import('../../protocol/src/manager-issues.mjs').ManagerIssue }
+        ).issue
+        const { opened: _opened, ...discussion } = issue.discussion
+        return { ...result, issue: { ...issue, discussion } }
+      }
+      return result
     }
     if (!declared)
       throw new DeviceError(

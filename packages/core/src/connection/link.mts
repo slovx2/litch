@@ -240,6 +240,7 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.manager,
                 EXTENSION.managerPaging,
                 EXTENSION.managerIssues,
+                EXTENSION.managerIssueDiscussions,
                 EXTENSION.harnessProjectPermissions,
                 PATH_PICKER_EXTENSION,
                 // sessionTree：声明了，会话对象上才有 Litch 子会话的 litchLineage，才收得到父子关系、提案变了的通知

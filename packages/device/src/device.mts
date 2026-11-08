@@ -573,6 +573,7 @@ export class DeviceServer {
       EXTENSION.managerRequestIgnore,
       EXTENSION.managerPaging,
       EXTENSION.managerIssues,
+      EXTENSION.managerIssueDiscussions,
       EXTENSION.suggestionInbox,
     )
     this.index.onChanged = () => this.sessionTree.suggestions.changed()

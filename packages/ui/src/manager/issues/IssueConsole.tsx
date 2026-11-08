@@ -15,6 +15,7 @@ import {
   managerIssueHead,
   managerIssuePageKey,
   managerIssueStatusOptions,
+  supportedManagerIssueFilter,
   withManagerIssueKinds,
 } from '../../../../core/src/projection/manager-issue-list.mts'
 import type {
@@ -103,12 +104,19 @@ export function IssueConsole({
   onSuggestionSource(selection: Selection, archived: boolean): void
 }) {
   const t = useT()
-  const commands = useIssueCommands(manager)
+  const commands = useIssueCommands(manager, issues.discussions === true)
   const board = view.board
   const saved = remembered(manager.deviceId, manager.id)
   const [filters, setFiltersState] = useState(saved.filters)
   // 初次打开分类也保持条件引用，避免分页回包重渲染后重发首屏查询、覆盖已追加的页。
-  const filter = useMemo(() => filters[kind] ?? issueKindFilter(kind), [filters, kind])
+  const filter = useMemo(
+    () =>
+      supportedManagerIssueFilter(
+        filters[kind] ?? issueKindFilter(kind),
+        issues.discussions === true,
+      ),
+    [filters, kind, issues.discussions],
+  )
   const [open, setOpenState] = useState<ManagerIssueId | null>(saved.open)
   const [linked, setLinked] = useState<ManagerIssueId | null>(null)
   const [creating, setCreating] = useState(false)
@@ -308,7 +316,12 @@ export function IssueConsole({
   const ordinary = kind === 'ordinary'
   return (
     <div ref={root} className="mg-stack" data-issue-console data-issue-kind={kind}>
-      <IssueFilters kind={kind} filter={filter} onChange={setFilter} />
+      <IssueFilters
+        discussions={issues.discussions === true}
+        kind={kind}
+        filter={filter}
+        onChange={setFilter}
+      />
       {ordinary ? (
         <div className="mg-issue-subbar">
           <button
@@ -406,10 +419,12 @@ export function IssueConsole({
 
 /** 状态一行文字切换（和原来决策的状态行一样），排序在右端 */
 function IssueFilters({
+  discussions,
   kind,
   filter,
   onChange,
 }: {
+  discussions: boolean
   kind: ManagerIssueKind
   filter: ManagerIssueFilter
   onChange(filter: ManagerIssueFilter): void
@@ -433,17 +448,19 @@ function IssueFilters({
       {kind === 'ordinary' ? (
         <fieldset className="mg-issue-statuses" aria-label={t('issue.filter.kind')}>
           <legend>{t('issue.filter.kind')}</legend>
-          <button
-            type="button"
-            data-issue-filter-kind="all"
-            aria-pressed={
-              !filter.kinds.length || filter.kinds.length === MANAGER_ISSUE_KINDS.length
-            }
-            onClick={() => onChange(withManagerIssueKinds(filter, []))}
-          >
-            {t('issue.kind.all')}
-          </button>
-          {MANAGER_ISSUE_KINDS.map((one) => (
+          {discussions ? (
+            <button
+              type="button"
+              data-issue-filter-kind="all"
+              aria-pressed={
+                !filter.kinds.length || filter.kinds.length === MANAGER_ISSUE_KINDS.length
+              }
+              onClick={() => onChange(withManagerIssueKinds(filter, []))}
+            >
+              {t('issue.kind.all')}
+            </button>
+          ) : null}
+          {(discussions ? MANAGER_ISSUE_KINDS : (['ordinary'] as const)).map((one) => (
             <button
               type="button"
               key={one}

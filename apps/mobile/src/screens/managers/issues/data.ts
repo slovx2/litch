@@ -19,6 +19,7 @@ import { useChannel } from '../../../shell/services'
 export interface ManagerIssuesState extends ManagerIssuesView {
   /** true：设备支持 issue；false：设备服务旧，控制台照旧是四类；null：看板还没到 */
   supported: boolean | null
+  discussions?: boolean
 }
 
 const EMPTY: ManagerIssuesView = { pages: {}, details: {}, loading: [], error: null }
@@ -30,12 +31,14 @@ export function useManagerIssues(
     () => ({
       ...(view?.issues ?? EMPTY),
       supported: view ? view.features.issues === true : null,
+      discussions: view?.features.issueDiscussions === true,
     }),
     [view],
   )
 }
 
 export interface IssueCommands {
+  canOpenDiscussion?: boolean
   /** 列一页；cursor 是上一页的 nextCursor（加载更多）；limit 给计数用的一行查询 */
   list(filter: ManagerIssueFilter, options?: { cursor?: string; limit?: number }): Promise<void>
   read(id: string): Promise<unknown>
@@ -68,12 +71,16 @@ export interface IssueCommands {
 /** 提交标识：重发同一次新建或评论时设备认得出来 */
 const once = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 
-export function useIssueCommands(manager: Pick<ManagerView, 'deviceId' | 'id'>): IssueCommands {
+export function useIssueCommands(
+  manager: Pick<ManagerView, 'deviceId' | 'id'>,
+  discussions = false,
+): IssueCommands {
   const channel = useChannel()
   const { deviceId, id: managerId } = manager
   return useMemo(() => {
     const ref = (id: string) => id as ManagerIssueId
     return {
+      canOpenDiscussion: discussions,
       list: async (filter, options = {}) => {
         await channel.command('managers.issues.list', {
           deviceId,
@@ -104,7 +111,7 @@ export function useIssueCommands(manager: Pick<ManagerView, 'deviceId' | 'id'>):
       seen: ({ id, ...rest }) =>
         channel.command('managers.issue.seen', { deviceId, managerId, id: ref(id), ...rest }),
     }
-  }, [channel, deviceId, managerId])
+  }, [channel, deviceId, managerId, discussions])
 }
 
 /** 几组条件各自的总数：每组一条只取一行的查询，读那一页的 total；还没回来是 null。 */

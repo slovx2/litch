@@ -23,7 +23,7 @@
     "issue 的评论与 manager question 分开保存和投影。评论不自动回答决策、交付请求、开始建议或标已阅；问题/回答保留原有只读旁问和 post_reply 安全边界。",
     "followUp=off 时评论仍持久化并广播给用户端，但不唤醒经理；恢复后不回放暂停期间旧评论。followUp=on 的用户创建/评论产生稳定 activity event，设备自动送达或唤醒经理。",
     "issue/activity 是持久业务事件的摘要；issue/changed 是客户端失效通知。两者只发给声明 litchManagerIssues 的连接，设备重启和断线重连不得重复创建评论或重复唤醒。",
-    "issues/list 默认 kinds=[ordinary]；查询支持 kind、status、author、followUp、unread、order、cursor、limit。discussionsOnly=true 在分页和计数前只保留 X-n 与已开启讨论的特殊条目；讨论开启由 discussion.opened=true、comments 非空或 questions 非空判断。issue/update 的 patch.discussionOpened=true 持久保存开启状态，不改变原类型、快速处理状态或未读。I-n 经理事项不属于 issue，不进入公共 issue 列表。",
+    "issues/list 默认 kinds=[ordinary]；查询支持 kind、status、author、followUp、unread、order、cursor、limit。新增 discussionsOnly、patch.discussionOpened 和 discussion.opened 需另外协商 litchManagerIssueDiscussions（见 manager-issue-discussions.json）。discussionsOnly=true 在分页和计数前只保留 X-n 与已开启讨论的特殊条目；讨论开启由 discussion.opened=true、comments 非空或 questions 非空判断。issue/update 的 patch.discussionOpened=true 持久保存开启状态，不改变原类型、快速处理状态或未读。I-n 经理事项不属于 issue，不进入公共 issue 列表。",
     "quick.revision 为特殊类型原对象的快速操作版本；公共 revision 还包括跟进元数据变更。评论不修改原帖 revision；重复 idempotencyKey 返回原回执，不同内容复用同一 key 拒绝。",
     "issue/comment 可选 commentId 与 commentRevision 用于编辑本人评论；只递增评论 revision，记录旧正文审计。经理不能修改用户评论，旁问不能调用任何 issue 写入。"
   ],

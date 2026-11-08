@@ -95,7 +95,7 @@ export interface ManagerIssueTimelineEntry {
 }
 
 export interface ManagerIssueDiscussion {
-  /** 用户已开启讨论；关闭抽屉不会撤销。 */
+  /** 用户已开启讨论；关闭抽屉不会撤销。仅向声明 litchManagerIssueDiscussions 的连接返回。 */
   opened?: boolean
   comments: ManagerIssueComment[]
   /** 旧“问经理/临时旁问”记录，保持与 ManagerDiscussion 相同的安全语义。 */
@@ -158,7 +158,7 @@ export interface ManagerIssueHead {
 export type ManagerIssueOrder = 'newest' | 'oldest' | 'pending' | 'updated'
 export interface ManagerIssueQuery {
   managerId: string
-  /** 只列 X-n 和已开启讨论或已有消息的特殊 issue；分页前应用。 */
+  /** 只列 X-n 和已开启讨论或已有消息的特殊 issue；分页前应用。需 litchManagerIssueDiscussions。 */
   discussionsOnly?: boolean
   kinds?: ManagerIssueKind[]
   statuses?: ManagerIssueStatus[]
@@ -192,7 +192,7 @@ export interface ManagerIssueUpdateParams {
   id: ManagerIssueRef
   revision: number
   patch: {
-    /** 只允许置为 true，不改变特殊类型的快速处理状态。 */
+    /** 只允许置为 true，不改变特殊类型的快速处理状态。需 litchManagerIssueDiscussions。 */
     discussionOpened?: true
     title?: string
     body?: string

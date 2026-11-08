@@ -40,6 +40,7 @@ const compiled = Object.fromEntries(
 )
 
 function fixture(platform) {
+  let discussions = true
   const slots = []
   let cursor = 0
   let effects = []
@@ -141,7 +142,7 @@ function fixture(platform) {
       manager,
       kind,
       view: { board: { decisions: [], changes: [] } },
-      issues: { supported: true, pages, details: {}, error: null },
+      issues: { supported: true, discussions, pages, details: {}, error: null },
       disabled: false,
       target: null,
       preset: null,
@@ -154,6 +155,28 @@ function fixture(platform) {
     requests,
     filters,
     render,
+    oldDevice() {
+      discussions = false
+      render()
+    },
+    typeChoices() {
+      if (platform === 'mobile') {
+        nodes(tree)
+          .find((node) => node.props?.testID === 'issue-filter-open')
+          .props.onPress()
+        render()
+      }
+      const control = nodes(tree).find(
+        (node) => typeof node.type === 'function' && node.props?.filter && node.props?.onChange,
+      )
+      return nodes(control.type(control.props)).flatMap((node) => {
+        const value =
+          platform === 'desktop'
+            ? node.props?.['data-issue-filter-kind']
+            : node.props?.testID?.match(/^issue-filter-kind:(.+)$/)?.[1]
+        return value ? [value] : []
+      })
+    },
     pickDecision() {
       if (platform === 'desktop') kind = 'decision'
       else
@@ -243,5 +266,23 @@ for (const platform of Object.keys(sources)) {
     f.toggleType('all')
     assert.deepEqual(f.filters.at(-1).kinds, [])
     assert.equal(f.filters.at(-1).discussionsOnly, true)
+  })
+}
+
+for (const platform of Object.keys(sources)) {
+  test(`${platform}：旧设备只提供 issue 类型，已记住的混合过滤也退回 X-n`, () => {
+    const f = fixture(platform)
+    f.render()
+    f.pickOrdinary()
+    f.toggleType('all')
+    assert.ok(f.typeChoices().includes('report'))
+    f.oldDevice()
+    assert.deepEqual(f.typeChoices(), ['ordinary'])
+    assert.deepEqual(f.filters.at(-1).kinds, ['ordinary'])
+    f.pickDecision()
+    assert.deepEqual(f.filters.at(-1).kinds, ['decision'])
+    assert.equal(f.filters.at(-1).discussionsOnly, undefined)
+    f.pickOrdinary()
+    assert.deepEqual(f.filters.at(-1).kinds, ['ordinary'])
   })
 }

@@ -88,6 +88,15 @@ export function withManagerIssueKinds(
   return { ...filter, kinds, statuses: filter.statuses.filter((one) => options.has(one)) }
 }
 
+export function supportedManagerIssueFilter(
+  filter: ManagerIssueFilter,
+  discussions: boolean,
+): ManagerIssueFilter {
+  return filter.discussionsOnly && !discussions
+    ? withManagerIssueKinds(filter, ['ordinary'])
+    : filter
+}
+
 const inOrder = <T extends string>(order: readonly T[], list: readonly T[]): T[] =>
   order.filter((one) => list.includes(one))
 const ALL_STATUSES = managerIssueStatusOptions(MANAGER_ISSUE_KINDS)

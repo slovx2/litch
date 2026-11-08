@@ -1,0 +1,30 @@
+{
+  "extension": "litchManagerIssueDiscussions",
+  "description": "经理 issue 的讨论开启标记和讨论列表过滤，依赖 litchManagerIssues。",
+  "appliesTo": "设备聚合面；设备 runtime/info.device.extensions 声明支持，连接 initialize.capabilities.litchExtensions 声明接收。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "litchManagerIssueDiscussions"
+      }
+    }
+  },
+  "undeclared": "不接受 discussionsOnly 或 patch.discussionOpened，不回传 discussion.opened；其余 issue 方法和字段继续按 litchManagerIssues 提供。",
+  "rules": [
+    "客户端仅在设备声明此能力时发送 discussionsOnly 和 patch.discussionOpened；只有连接也声明时设备才回传 discussion.opened。",
+    "旧 I-255 设备仍提供 X-n issue 列表；issue 页签只提供 X-n 类型，不显示特殊类型与全选。不额外提示。已记住的混合过滤退回 X-n，打开讨论不写开启标记。",
+    "核心在每次请求和缓存刷新时按当前设备能力处理；移除 discussionsOnly 并把讨论页查询限制为 ordinary；纯开启标记改为只读，混合编辑只去掉标记。正常旧接口调用不变。"
+  ],
+  "parts": [
+    {
+      "kind": "ClientRequest",
+      "methods": ["litch/manager/issues/list", "litch/manager/issue/update"],
+      "description": "仅新增可选字段，参数定义见 packages/protocol/src/manager-issues.mts；旧字段含义不变。"
+    }
+  ]
+}

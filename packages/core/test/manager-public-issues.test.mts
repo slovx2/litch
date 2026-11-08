@@ -208,3 +208,102 @@ test('mock 命令行为与协议一致，普通 X-n 不影响旧对象编号', (
   assert.equal(updated.issue.followUp.state, 'off')
   assert.equal(updated.issue.stateGroup, 'closed')
 })
+
+test('讨论子能力门禁：旧 I-255 白名单接受默认列表、混合记忆与讨论打开；新能力保留字段', async () => {
+  let supported = false
+  const calls: { method: string; params: any }[] = []
+  const issue = structuredClone(managerIssueFixture.newOrdinary)
+  const host: ManagersHost = {
+    deviceId: 'fixture',
+    online: () => true,
+    supported: () => true,
+    features: () => ({
+      issues: true,
+      issueDiscussions: supported,
+      posts: true,
+      feedback: true,
+      ignore: true,
+    }),
+    changed() {},
+    log() {},
+    fail: (e) => new ChannelError('internal', String(e)),
+    request: (async (method: string, params: any) => {
+      calls.push({ method, params: structuredClone(params) })
+      // 复刻 I-255 两处字段白名单：漏发一个新字段就按旧设备返回 -32602。
+      const allow = (value: object, keys: string[]) => {
+        for (const key of Object.keys(value))
+          if (!keys.includes(key)) throw new Error(`-32602 Unknown field: ${key}`)
+      }
+      if (method === M.list) {
+        allow(params, [
+          'managerId',
+          'kinds',
+          'statuses',
+          'authors',
+          'followUp',
+          'unread',
+          'order',
+          'cursor',
+          'limit',
+          ...(supported ? ['discussionsOnly'] : []),
+        ])
+        return { page: { query: params, entries: [], total: 0, nextCursor: null } }
+      }
+      if (method === M.update)
+        allow(params.patch, [
+          'title',
+          'body',
+          'status',
+          'followUp',
+          'source',
+          'related',
+          ...(supported ? ['discussionOpened'] : []),
+        ])
+      return { issue }
+    }) as ManagersHost['request'],
+  }
+  const service = createManagers(host)
+  const query = {
+    managerId: 'manager',
+    kinds: ['ordinary', 'report'] as ('ordinary' | 'report')[],
+    discussionsOnly: true,
+    order: 'newest' as const,
+  }
+  const page = await service.issue(M.list, query)
+  assert.deepEqual(calls.at(-1)?.params.kinds, ['ordinary'])
+  assert.equal('discussionsOnly' in (calls.at(-1)?.params ?? {}), false)
+  assert.deepEqual(page.page.query, query, '返回页仍使用 UI 查询键，不能一直加载中')
+  const marker = {
+    managerId: 'manager',
+    id: 'X-1' as const,
+    revision: 1,
+    patch: { discussionOpened: true as const },
+    why: '打开讨论',
+  }
+  await service.issue(M.update, marker)
+  await settle()
+  assert.equal(
+    calls.some((c) => c.method === M.update),
+    false,
+    '纯标记退为读取，不能发空 update',
+  )
+  await service.issue(M.update, { ...marker, patch: { ...marker.patch, title: '保留原有编辑' } })
+  await settle()
+  assert.deepEqual(calls.find((c) => c.method === M.update)?.params.patch, {
+    title: '保留原有编辑',
+  })
+  supported = true
+  await service.issue(M.list, query)
+  assert.equal(calls.at(-1)?.params.discussionsOnly, true)
+  assert.deepEqual(calls.at(-1)?.params.kinds, ['ordinary', 'report'])
+  await service.issue(M.update, marker)
+  await settle()
+  assert.equal(calls.findLast((c) => c.method === M.update)?.params.patch.discussionOpened, true)
+  // 原查询已经被缓存；降级后写入触发刷新，仍不能漏发新字段。
+  supported = false
+  const start = calls.length
+  await service.issue(M.seen, { managerId: 'manager', id: 'X-1', revision: 1 })
+  await settle()
+  assert.ok(calls.slice(start).some((c) => c.method === M.list))
+  assert.ok(calls.slice(start).every((c) => !('discussionsOnly' in c.params)))
+})

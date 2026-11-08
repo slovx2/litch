@@ -88,6 +88,7 @@ export function createMockManagers(host: MockManagerHost) {
       ignore: !old,
       requestIgnore: !old,
       issues: !old && host.issues !== false,
+      issueDiscussions: !old && host.issues !== false,
     }
   }
   const oldDevice = () =>
