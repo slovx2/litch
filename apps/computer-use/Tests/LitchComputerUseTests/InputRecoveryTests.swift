@@ -4,6 +4,19 @@ import LitchComputerUseCore
 @testable import LitchComputerUse
 
 final class InputRecoveryTests: XCTestCase {
+  func testPhysicalPointerEdgesStaySeparateFromHeldStateAndMotion() {
+    let original = UserActivity.pointerRevision
+    UserActivity.note(.move, pid: 123456)
+    UserActivity.note(.scroll, pid: 123456)
+    _ = UserActivity.heldInput(keyDown: { _ in false }, buttonDown: { $0 == 0 })
+    XCTAssertEqual(UserActivity.pointerRevision, original)
+    UserActivity.note(.mouseDown, pid: 654321)
+    XCTAssertNotEqual(UserActivity.pointerRevision, original)
+    let down = UserActivity.pointerRevision
+    UserActivity.note(.mouseUp, pid: 654321)
+    XCTAssertNotEqual(UserActivity.pointerRevision, down)
+    _ = UserActivity.heldInput(keyDown: { _ in false }, buttonDown: { _ in false })
+  }
   func testLostReleaseAfterFocusChangeIsReconciledWithoutNewConflict() {
     let pid: pid_t = 123456
     UserActivity.note(.keyDown, pid: pid, code: 12)

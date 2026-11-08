@@ -58,8 +58,13 @@ enum BackgroundMouse {
   /// 在请求线程等待，保留主线程处理自测事件与控制面处理取消的机会。
   static func waitForSelfTest(check: () throws -> Void) throws {
     let deadline = ProcessInfo.processInfo.systemUptime + 2
-    while status == "pending" {
+    while status == "pending" || status == "interrupted" {
       try check()
+      lock.lock()
+      let retry = state == "interrupted"
+      if retry { state = "pending" }
+      lock.unlock()
+      if retry { DispatchQueue.main.async { startSelfTest() } }
       guard ProcessInfo.processInfo.systemUptime < deadline else {
         throw RPCError(.failed, "The input self-test has not completed; no input was sent. Retry after startup.")
       }
@@ -94,6 +99,7 @@ enum BackgroundMouse {
     window.orderBack(nil)
     let front = NSWorkspace.shared.frontmostApplication?.processIdentifier
     let cursor = CGEvent(source: nil)?.location
+    let activityRevision = UserActivity.revision
     let top = NSScreen.screens.first?.frame.maxY ?? 0
     let frame = CGRect(x: window.frame.minX, y: top - window.frame.maxY, width: 32, height: 32)
     let id = CGWindowID(window.windowNumber)
@@ -115,8 +121,12 @@ enum BackgroundMouse {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
         let frontStable = NSWorkspace.shared.frontmostApplication?.processIdentifier == front
         let cursorStable = CGEvent(source: nil)?.location == cursor
-        let ok = view.clicked && view.scrolled && frontStable && cursorStable
-        finish(ok ? "available" : "unavailable")
+        // 人在使用电脑时，前台/光标变化不能证明定向事件失败。
+        // 保留为可重测状态；不能因此让此进程余下的所有鼠标动作改走前台。
+        let result = InputPolicy.mouseSelfTestResult(clicked: view.clicked, scrolled: view.scrolled,
+          frontStable: frontStable, cursorStable: cursorStable,
+          userActive: UserActivity.revision != activityRevision)
+        finish(result)
         window.orderOut(nil)
         Log.write("后台鼠标启动自测：\(status)；click=\(view.clicked) scroll=\(view.scrolled) frontStable=\(frontStable) cursorStable=\(cursorStable) elapsedMs=\(Int(Date().timeIntervalSince(started) * 1000))；SIP 开启未验")
       }

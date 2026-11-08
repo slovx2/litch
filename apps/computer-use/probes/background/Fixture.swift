@@ -48,10 +48,23 @@ document.font = .systemFont(ofSize: 16)
 scroll.documentView = document
 content.addSubview(scroll)
 window.makeFirstResponder(text)
+let menu = NSMenu()
+let applicationItem = NSMenuItem()
+applicationItem.submenu = NSMenu(title: "Fixture")
+menu.addItem(applicationItem)
+let editItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+let editMenu = NSMenu(title: "Edit")
+editMenu.autoenablesItems = false
+let selectAll = NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+selectAll.target = text
+editMenu.addItem(selectAll)
+editItem.submenu = editMenu
+menu.addItem(editItem)
+app.mainMenu = menu
 window.orderFront(nil)
 
-func point(_ view: NSView) -> [String: Double] {
-  let local = NSPoint(x: view.bounds.midX, y: view.bounds.midY)
+func point(_ view: NSView, local: NSPoint? = nil) -> [String: Double] {
+  let local = local ?? NSPoint(x: view.bounds.midX, y: view.bounds.midY)
   let screen = window.convertPoint(toScreen: view.convert(local, to: nil))
   let top = NSScreen.screens.first?.frame.maxY ?? 0
   return ["x": screen.x, "y": top - screen.y]
@@ -61,8 +74,11 @@ func save() {
     "kind": "appkit", "pid": getpid(), "role": role, "windowId": window.windowNumber,
     "bundleId": Bundle.main.bundleIdentifier ?? "", "active": app.isActive,
     "keyWindow": window.isKeyWindow, "text": text.string, "clicks": buttonCount,
+    "selection": ["location": text.selectedRange().location, "length": text.selectedRange().length],
     "scrollY": scroll.contentView.bounds.origin.y,
-    "points": ["text": point(text), "button": point(button), "scroll": point(scroll)],
+    "points": ["text": point(text), "button": point(button), "scroll": point(scroll),
+      "textStart": point(text, local: NSPoint(x: 5, y: 10)),
+      "textEnd": point(text, local: NSPoint(x: 100, y: 10))],
     "frame": ["x": window.frame.minX, "y": (NSScreen.screens.first?.frame.maxY ?? 0) - window.frame.maxY,
               "width": window.frame.width, "height": window.frame.height],
     "events": events, "commandID": commandID,
@@ -71,7 +87,7 @@ func save() {
     try? data.write(to: folder.appendingPathComponent("state.json"), options: .atomic)
   }
 }
-let monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .leftMouseDown, .leftMouseUp, .scrollWheel]) { event in
+let monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .leftMouseDown, .leftMouseUp, .leftMouseDragged, .rightMouseDown, .rightMouseUp, .scrollWheel]) { event in
   // 只留测试窗口事件，不监视别的应用，也不记录系统全局键盘内容。
   if event.windowNumber == window.windowNumber {
     let keyboard = event.type == .keyDown || event.type == .keyUp
