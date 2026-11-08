@@ -22,6 +22,12 @@ import { codexConfig, startResponsesModel } from './client-fixture-responses.mjs
 
 // --child-entry=start|accept|manager-line 同时验收派子会话的真实工具调用链。
 const entry = process.argv.find((arg) => arg.startsWith('--child-entry='))?.split('=')[1]
+// 真正等待固定时长，用于核验回合释放后原生命令仍存活并触发接续；默认保留原来的可控释放夹具。
+const sleepSeconds = Number(
+  process.argv.find((arg) => arg.startsWith('--sleep='))?.split('=')[1] ?? 0,
+)
+if (!Number.isInteger(sleepSeconds) || sleepSeconds < 0 || sleepSeconds > 60)
+  throw new Error('--sleep must be an integer from 0 to 60')
 if (entry && !['start', 'accept', 'manager-line'].includes(entry))
   throw new Error(`Unknown child entry: ${entry}`)
 const cli = process.env.CHA_CODEX_CLI
@@ -106,7 +112,9 @@ const respond = (body) => {
         name: 'exec_command',
         arguments: JSON.stringify({
           // 由验收主流程在登记完成后放行，避免机器负载让命令早于 watch 退出。
-          cmd: 'while [ ! -f release-background ]; do sleep 0.1; done; echo WAKE_NATIVE_RESULT; exit 7',
+          cmd: sleepSeconds
+            ? `sleep ${sleepSeconds}; echo WAKE_NATIVE_RESULT; exit 7`
+            : 'while [ ! -f release-background ]; do sleep 0.1; done; echo WAKE_NATIVE_RESULT; exit 7',
           yield_time_ms: 1000,
           max_output_tokens: 1000,
         }),
@@ -335,7 +343,7 @@ try {
   client.close()
   legacy.close()
   writeFileSync(join(dirs.work, 'release-background'), '')
-  for (let i = 0; i < 200 && !continued; i++) await pause(50)
+  for (let i = 0; i < (sleepSeconds + 15) * 20 && !continued; i++) await pause(50)
   assert.ifError(scriptError)
   assert.ok(continued, 'all UI clients disconnected; device still delivers completion')
   await pause(200)
@@ -397,7 +405,7 @@ try {
     await restarted.close()
   }
   console.log(
-    `PASS native background continuation (${entry ?? 'client'}): final tools, explicit watch, no UI clients, exit output, origin persistence, restart does not replay`,
+    `PASS native background continuation (${entry ?? 'client'}, sleep=${sleepSeconds}s): final tools, explicit watch, no UI clients, exit output, origin persistence, restart does not replay`,
   )
 } finally {
   client.close()

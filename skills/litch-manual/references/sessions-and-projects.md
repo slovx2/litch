@@ -599,6 +599,10 @@ explain it:
 
 Native Codex **0.163.0 or later** adds `litch_background.watch/read/cancel` to new Litch sessions. Finite commands that exit after one message or email, or after a build finishes, must register with `watch` when their result is needed for the current task, even if called watchers or listeners. Persistent services and indefinite listeners remain unregistered. Registration permits ending the turn; completion triggers continuation. The Background tasks page explains an unsupported runtime or a session without the tool; upgrade and start a new session as needed.
 
+Codex 等 CI 等外部事件时，必须先启动有限命令并取得 `litch_background.watch` 的登记确认，才能结束回合等待自动续跑。没有这个工具时，不会仅凭“待唤醒”自动检查；应在当前回合处理完，或明确请经理/用户后续检查。工具在建会话时固定：重启设备服务或 app-server 不会给旧会话补装；升级实际选用的 Codex 后需要新建会话。本机与远程设备遵循同一规则。
+
+Ending a turn does not register a CI wait. Automatic continuation requires confirmation from `litch_background.watch` after starting a finite command. Without that tool, finish within the turn or explicitly ask the manager/user to check later. Tools are fixed at session creation: restarting the device service or app-server does not add them to old sessions. Upgrade the Codex executable actually selected by the device, then start a new session. This applies to local and remote devices.
+
 ## Claude Code sessions started elsewhere
 
 The Claude Code harness also lists Claude Code sessions started elsewhere on the machine (Claude desktop

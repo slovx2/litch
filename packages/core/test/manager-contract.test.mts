@@ -289,13 +289,13 @@ test('角色规则保持预算，允许说明选项推荐；经理自行归档�
 test('经理区分已授权任务和自行发现的建议，关闭任务卡时回到看板', () => {
   const role = managerRoleRules('项目所有开发工作')
   assert.match(role, /Start authorized in-scope work/)
-  assert.match(role, /Propose self-discovered work under the session rules/)
-  assert.match(role, /Workline cards arrive as Litch notifications/)
+  assert.match(role, /Propose self-discovered work under session rules/)
+  assert.match(role, /Review every workline card notification/)
   assert.match(
     role,
-    /check landed commits and manager items for duplicates, then endorse useful work or dismiss with a reason/,
+    /check landed commits and items for duplicates, then endorse useful work or dismiss with a reason/,
   )
-  assert.match(role, /Review every card; do not recreate it/)
+  assert.match(role, /Do not recreate cards/)
   for (const taskCards of [true, false]) {
     const sessions = managerSessionRules(4, taskCards)
     assert.match(sessions, /work the user requested or approved.*initiation "user_asked"/)

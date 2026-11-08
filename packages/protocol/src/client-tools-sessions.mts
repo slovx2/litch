@@ -11,6 +11,7 @@ import {
   type ClientToolFunctionSpec,
   type ClientToolNamespaceSpec,
 } from './client-tools.mjs'
+import { CODEX_WAIT_RULE } from './native-background-wake.mjs'
 import type { SessionDelegatedResponse, SessionPendingRequest } from './session-pending.mjs'
 import { SESSION_TREE_LIMITS, type SessionLineageKind } from './session-tree.mjs'
 
@@ -497,6 +498,7 @@ export function sessionProposalRules(wrapUp: boolean, taskCards = true): string 
     TITLE_LINE,
     'If the user tells you to start a card ("start the second one"), call litch_sessions.accept with its proposal_id. If a card went stale (done here after all, no longer needed, replaced by a better one), withdraw it with litch_sessions.withdraw; propose the replacement first.',
     archiveRule(wrapUp),
+    CODEX_WAIT_RULE,
     outsideLitch(wrapUp),
   ].join('\n')
 }
@@ -552,6 +554,7 @@ function plainSessionRules(): string {
     TITLE_LINE,
     'If the user tells you to start one of the cards already in this conversation, call litch_sessions.accept with its proposal_id. Write your final answer to the user as the last message of the turn.',
     archiveRule(false),
+    CODEX_WAIT_RULE,
     outsideLitch(false),
   ].join('\n')
 }
@@ -571,7 +574,7 @@ const PROPOSAL_ID = { type: 'string', description: 'proposal_id returned by star
 const WRAP_UP_TOOL: ClientToolFunctionSpec = {
   type: 'function',
   name: SESSION_TOOL.wrapUp,
-  description: `Call this exactly once in every turn, when the work is done and before your final answer, even when there is nothing to pass (an empty suggestions list, no ask); then write the final answer as the last message of the turn, complete on its own (not a summary of or a pointer to text above). First decide, unasked, whether the request left a real follow-up and where it runs; most turns leave none. suggestions: tasks of their own, each a card the user can start (nothing runs until they do): work that lands apart from this change, something the user set aside earlier, or a self-contained next task better started fresh; never unrelated work, and never a piece of this task (a piece you left or could not verify is this task: finish it, or say so in your answer). ask and actions: the one decision or step this turn leaves to the user, such as going ahead here with the one piece of work that acts on what you just found (that piece is never a card), also after a turn that only investigated or answered a question. At most ${SESSION_TOOL_LIMITS.proposalsPerTurn} cards per turn, counting start proposals. Final workline reports support Markdown in Litch; use it for lists and emphasis.`,
+  description: `Call this exactly once in every turn, when the work is done and before your final answer, even when there is nothing to pass (an empty suggestions list, no ask); then write the final answer as the last message of the turn, complete on its own (not a summary of or a pointer to text above). First decide, unasked, whether the request left a real follow-up and where it runs; most turns leave none. suggestions: tasks of their own, each a card the user can start (nothing runs until they do): work that lands apart from this change, something the user set aside earlier, or a self-contained next task better started fresh; never unrelated work, and never a piece of this task (a piece you left or could not verify is this task: finish it, or say so in your answer). ask and actions: the one decision or step this turn leaves to the user, such as going ahead here with the one piece of work that acts on what you just found (that piece is never a card), also after a turn that only investigated or answered a question. At most ${SESSION_TOOL_LIMITS.proposalsPerTurn} cards per turn, counting start proposals. Final workline reports support Markdown in Litch; use it for lists and emphasis. ${CODEX_WAIT_RULE}`,
   inputSchema: {
     type: 'object',
     properties: {
