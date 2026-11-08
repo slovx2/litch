@@ -734,7 +734,11 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     cancelable: true,
   })
   answerInput().dispatchEvent(answerEnter)
-  questionEnter &&= !answerEnter.defaultPrevented
+  // 补充文字现在用 Enter 提交，但未确认的版本冲突仍阻止发送并保留草稿。
+  questionEnter &&=
+    answerEnter.defaultPrevented &&
+    answerInput().value === '新版仍需核对这段补充' &&
+    Boolean(one('.mg-conflict'))
   await until('文字草稿', () => one(UNSENT_BAR))
   await askBackground(updateQuestion, 7)
   const textKept = await until(

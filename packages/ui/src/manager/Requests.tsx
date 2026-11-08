@@ -23,6 +23,7 @@ import { useIssueOrder } from './issue-order.tsx'
 import { PostCard } from './PostCard.tsx'
 import { PostDiscussion, PostHistory } from './PostDiscussion.tsx'
 import { usePostDrafts } from './post-drafts.ts'
+import { submitQuestionOnEnter } from './post-presentation.ts'
 import { Relations } from './Relations.tsx'
 import { useRequestDrafts } from './request-drafts.ts'
 
@@ -229,6 +230,12 @@ export function Requests({
                   placeholder={t('manager.ignoreReason')}
                   disabled={locked}
                   value={ignoring.reason}
+                  onKeyDown={(event) => {
+                    if (!submitQuestionOnEnter(event.nativeEvent)) return
+                    event.preventDefault()
+                    if (!locked && features.requestIgnore && ignoring.reason.trim())
+                      void submit(request, false, true)
+                  }}
                   onChange={(event) => setIgnoring({ ...ignoring, reason: event.target.value })}
                 />
                 <button
@@ -259,6 +266,12 @@ export function Requests({
                   rows={2}
                   data-act="manager-request-text"
                   value={draft?.text ?? ''}
+                  onKeyDown={(event) => {
+                    if (!submitQuestionOnEnter(event.nativeEvent)) return
+                    event.preventDefault()
+                    if (!locked && !old && state !== 'conflict' && draft?.text.trim())
+                      void submit(request, false)
+                  }}
                   aria-label={t('manager.requestText')}
                   placeholder={t('manager.requestText')}
                   onChange={(event) => change(request, { text: event.target.value })}

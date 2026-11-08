@@ -24,6 +24,7 @@ import {
   managerStepError,
   managerTabTarget,
 } from './form-steps.ts'
+import { useBoardFormKeys } from './form-submit-keys.ts'
 import {
   fitManagerHarness,
   fitManagerModels,
@@ -232,6 +233,7 @@ export function ManagerForm({
       setBusy(false)
     }
   }
+  const formKeys = useBoardFormKeys(save)
   return (
     <form
       ref={formRef}
@@ -240,10 +242,7 @@ export function ManagerForm({
       data-manager-mode={manager ? 'edit' : 'create'}
       data-manager-step={step}
       noValidate
-      onSubmit={(event) => {
-        event.preventDefault()
-        void save()
-      }}
+      {...formKeys}
     >
       <nav
         className="mg-form-nav"

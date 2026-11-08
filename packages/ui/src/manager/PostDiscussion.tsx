@@ -78,6 +78,7 @@ export function PostDiscussion({
   onQuestion?(text: string): void
 }) {
   const t = useT()
+  const inFlight = useRef(false)
   const { channel } = useServices()
   const device = useKey<DeviceView>(keys.device(manager.deviceId))
   const board = useKey<ManagerBoardTopicView>(
@@ -162,7 +163,8 @@ export function PostDiscussion({
     }
   }
   const send = async () => {
-    if (locked || old || !value.trim() || (ended && mode === 'manager')) return
+    if (locked || old || inFlight.current || !value.trim() || (ended && mode === 'manager')) return
+    inFlight.current = true
     setBusy(true)
     setError('')
     try {
@@ -180,6 +182,7 @@ export function PostDiscussion({
     } catch (e) {
       setError(reasonOf(e, t))
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }

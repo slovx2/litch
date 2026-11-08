@@ -29,6 +29,7 @@ import { reasonOf } from '../../app/errors.ts'
 import { Icon } from '../../app/icons.tsx'
 import { Decisions } from '../Decisions.tsx'
 import { useDiscussionPane } from '../discussion-pane.ts'
+import { useBoardFormKeys } from '../form-submit-keys.ts'
 import { type IssueCommands, type ManagerIssuesState, useIssueCommands } from './data.ts'
 import { IssueCard } from './IssueCard.tsx'
 import { IssueQuick } from './IssueQuick.tsx'
@@ -567,6 +568,7 @@ function IssueNew({
   const titleRef = useRef<HTMLInputElement>(null)
   useEffect(() => titleRef.current?.focus(), [])
   const submit = async () => {
+    if (busy) return
     if (!title.trim()) {
       setError(t('issue.new.titleRequired'))
       titleRef.current?.focus()
@@ -585,15 +587,9 @@ function IssueNew({
       setBusy(false)
     }
   }
+  const formKeys = useBoardFormKeys(submit)
   return (
-    <form
-      className="mg-card mg-issue-form"
-      data-issue-form
-      onSubmit={(event) => {
-        event.preventDefault()
-        void submit()
-      }}
-    >
+    <form className="mg-card mg-issue-form" data-issue-form {...formKeys}>
       <header className="mg-issue-form-head">
         <b className="mg-issue-form-title">{t('issue.new')}</b>
         <span className="dim">{t('issue.new.note')}</span>

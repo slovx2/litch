@@ -46,6 +46,20 @@ export async function managerIssuesProbe() {
     Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(input, value)
     input.dispatchEvent(new Event('input', { bubbles: true }))
   }
+  const enter = async (selector: string, options: KeyboardEventInit = {}) => {
+    const input = await until(selector, () => one(selector))
+    const event = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      code: 'Enter',
+      keyCode: 13,
+      bubbles: true,
+      cancelable: true,
+      ...options,
+    })
+    input.dispatchEvent(event)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    return event.defaultPrevented
+  }
   const select = async (selector: string, value: string) => {
     const input = await until(selector, () => {
       const element = one<HTMLSelectElement>(selector)
@@ -248,7 +262,13 @@ export async function managerIssuesProbe() {
   const body = '重启后应恢复会话，后续在这里补充验收结果。'
   await fill('[data-issue-title]', title)
   await fill('[data-issue-body]', body)
-  await click('[data-act="issue-create"]')
+  assert(!(await enter('[data-issue-title]', { isComposing: true })), '输入法上屏被拦截')
+  assert(!(await enter('[data-issue-title]', { keyCode: 229 })), '229 上屏被拦截')
+  assert(one('[data-issue-form]'), '输入法回车创建了 issue')
+  assert(!(await enter('[data-issue-body]')), '正文 Enter 应保留换行')
+  assert(!(await enter('[data-issue-body]', { shiftKey: true })), '正文 Shift+Enter 应换行')
+  assert(one('[data-issue-form]'), '正文换行创建了 issue')
+  await enter('[data-issue-body]', { metaKey: true })
   const created = await until('新 issue 展开', () =>
     cards().find(
       (card) =>
@@ -267,7 +287,22 @@ export async function managerIssuesProbe() {
   const comment = '请核实重启时的恢复顺序。'
   await fill(`${card} [data-issue-comment-input]`, comment)
   const sentAt = performance.now()
-  await click(`${card} [data-act="issue-comment"]`)
+  assert(
+    !(await enter(`${card} [data-issue-comment-input]`, { shiftKey: true })),
+    'Shift+Enter 默认换行被拦截',
+  )
+  assert(
+    !(await enter(`${card} [data-issue-comment-input]`, { isComposing: true })),
+    '输入法确认误发送',
+  )
+  assert(!(await enter(`${card} [data-issue-comment-input]`, { keyCode: 229 })), '229 确认误发送')
+  assert(!one(`${card} [data-timeline="comment"][data-author="user"]`), '换行或组字误发了评论')
+  assert(
+    one<HTMLTextAreaElement>(`${card} [data-issue-comment-input]`)?.value === comment,
+    '未发送时草稿丢失',
+  )
+  await enter(`${card} [data-issue-comment-input]`)
+  await enter(`${card} [data-issue-comment-input]`)
   await until('用户评论落时间线', () =>
     one(`${card} [data-timeline="comment"][data-author="user"]`)?.textContent?.includes(comment),
   )
@@ -275,6 +310,11 @@ export async function managerIssuesProbe() {
     '评论输入清空',
     () => one<HTMLTextAreaElement>(`${card} [data-issue-comment-input]`)?.value === '',
   )
+  assert(
+    all(`${card} [data-timeline="comment"][data-author="user"]`).length === 1,
+    '重复回车发送了两次',
+  )
+  passed.push('回车发送、正文 Cmd+Enter、Shift 换行、输入法保护与重复发送保护')
   // 收起后再等异步回复，避免展开卡自动已读，让未读状态有可观察的窗口。
   await click(`${card} [data-act="issue-toggle"]`)
   await until('评论后收起', () => !one(`${card} [data-issue-thread]`))

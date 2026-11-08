@@ -80,3 +80,18 @@ test('版本更新保留选项、文字和追问；只清空稿；结束的草�
     drafts,
   )
 })
+
+test('多行正文 Cmd/Ctrl+Enter 提交，Shift、Alt 和输入法仍优先', () => {
+  const event = { key: 'Enter', shiftKey: false, isComposing: false, keyCode: 13 }
+  assert.equal(submitQuestionOnEnter(event, true), false)
+  for (const modifier of [{ metaKey: true }, { ctrlKey: true }]) {
+    assert.equal(submitQuestionOnEnter({ ...event, ...modifier }, true), true)
+    for (const patch of [
+      { shiftKey: true },
+      { isComposing: true },
+      { keyCode: 229 },
+      { altKey: true },
+    ])
+      assert.equal(submitQuestionOnEnter({ ...event, ...modifier, ...patch }, true), false)
+  }
+})

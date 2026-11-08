@@ -43,11 +43,24 @@ export function questionMode(
 ): 'manager' | 'temporary' {
   return selected ?? (hasTemporaryQuestions(messages) ? 'temporary' : 'manager')
 }
-export function submitQuestionOnEnter(event: {
-  key: string
-  shiftKey: boolean
-  isComposing: boolean
-  keyCode: number
-}): boolean {
-  return event.key === 'Enter' && !event.shiftKey && !event.isComposing && event.keyCode !== 229
+export function submitQuestionOnEnter(
+  event: {
+    key: string
+    shiftKey: boolean
+    isComposing: boolean
+    keyCode: number
+    metaKey?: boolean
+    ctrlKey?: boolean
+    altKey?: boolean
+  },
+  multiline = false,
+): boolean {
+  return (
+    event.key === 'Enter' &&
+    !event.shiftKey &&
+    !event.altKey &&
+    !event.isComposing &&
+    event.keyCode !== 229 &&
+    (!multiline || event.metaKey === true || event.ctrlKey === true)
+  )
 }

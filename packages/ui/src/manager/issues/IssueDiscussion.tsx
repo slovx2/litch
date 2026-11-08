@@ -1,12 +1,14 @@
 // issue 的讨论区：评论、旧“问经理”问答与状态变化按时间排成一条；底部是评论框。
 // 评论与问答分开：评论不回答决策、不交付请求（60 号设计 5.3）。草稿按 [设备, 经理, #n] 存在内存里，切卡不丢。
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ManagerIssue } from '../../../../protocol/src/manager-issues.mts'
 import { useT } from '../../app/appearance.ts'
 import { reasonOf } from '../../app/errors.ts'
 import { Icon } from '../../app/icons.tsx'
 import { Stamp } from '../../transcript/Stamp.tsx'
 import { BoardMarkdown } from '../BoardMarkdown.tsx'
+
+import { submitQuestionOnEnter } from '../post-presentation.ts'
 
 const drafts = new Map<string, string>()
 
@@ -37,6 +39,7 @@ export function IssueDiscussion({
   const t = useT()
   const [text, setText] = useState(() => drafts.get(draftKey) ?? '')
   const [busy, setBusy] = useState(false)
+  const inFlight = useRef(false)
   const [error, setError] = useState('')
   const [asking, setAsking] = useState(false)
   const edit = (value: string) => {
@@ -78,7 +81,8 @@ export function IssueDiscussion({
   ].sort((a, b) => a.at - b.at)
   const send = async () => {
     const body = text.trim()
-    if (!body || busy) return
+    if (!body || busy || disabled || inFlight.current) return
+    inFlight.current = true
     setBusy(true)
     setError('')
     try {
@@ -87,6 +91,7 @@ export function IssueDiscussion({
     } catch (cause) {
       setError(reasonOf(cause, t))
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }
@@ -183,14 +188,9 @@ export function IssueDiscussion({
           data-issue-comment-input
           onChange={(event) => edit(event.target.value)}
           onKeyDown={(event) => {
-            if (
-              event.key === 'Enter' &&
-              (event.metaKey || event.ctrlKey) &&
-              !event.nativeEvent.isComposing
-            ) {
-              event.preventDefault()
-              void send()
-            }
+            if (!submitQuestionOnEnter(event.nativeEvent)) return
+            event.preventDefault()
+            void send()
           }}
         />
         <button

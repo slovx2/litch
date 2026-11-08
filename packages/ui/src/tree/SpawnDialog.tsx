@@ -13,12 +13,13 @@ import {
   type SessionSummary,
   type WorkspaceView,
 } from '@litch/core'
-import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { EFFORT_TEXT } from '../composer/efforts.ts'
 import { useComposeOptions } from '../composer/SettingsBar.tsx'
+import { useBoardFormKeys } from '../manager/form-submit-keys.ts'
 import { PathPicker } from '../path-picker/PathPicker.tsx'
 import { WorktreeCheck } from '../worktrees/WorktreeCheck.tsx'
 import { SANDBOX_CHOICES, SANDBOX_LEVEL, widerLevel } from './sandbox.ts'
@@ -96,8 +97,7 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
   }, [])
 
   const text = fields.prompt.trim()
-  const submit = (event: FormEvent) => {
-    event.preventDefault()
+  const submit = () => {
     if (!text || busy || permissionBlocked || worktreeBlock) return
     setBusy(true)
     setFailure(null)
@@ -113,7 +113,7 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
           parentId: parent.id,
           ...spawnParams(fields, parent, device?.worktrees === true),
         })
-    sent
+    return sent
       .then(({ sessionId }) => {
         onSpawned?.(sessionId)
         onClose()
@@ -124,6 +124,7 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
       })
   }
 
+  const formKeys = useBoardFormKeys(submit)
   const heading = proposal ? t('proposal.edit.title') : t('tree.dialog.title')
   return (
     <dialog
@@ -136,7 +137,7 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
         if (event.key === 'Escape') event.stopPropagation()
       }}
     >
-      <form onSubmit={submit}>
+      <form {...formKeys}>
         <div className="modal-head">
           <span className="grow">{heading}</span>
         </div>

@@ -111,6 +111,22 @@ note, while Submit to manager sends a written reply. Success clears that respons
 failure keeps it and explains the error. Other cards and discussion drafts remain available for
 batch submission on desktop and phone.
 
+### 看板键盘提交 / Board keyboard submission
+
+桌面看板的评论、讨论与追问、决策补充文字、请你做回复、忽略理由用 Enter 提交，Shift+Enter 换行。
+决策补充沿用底部“提交给经理”的批量提交语义；请你做回复只提交当前卡。忽略理由为空时 Enter 不提交，仍可点确认忽略。
+新建 issue 的标题用 Enter，正文用 Cmd+Enter（Windows/Linux 为 Ctrl+Enter）；多行正文的 Enter 和 Shift+Enter 都换行。
+经理设置/创建表单及建议的“编辑后开始”也按单行 Enter、多行 Cmd/Ctrl+Enter；候选控件的 Enter 留给选择。
+输入法组字确认不会发送；空内容不发送，提交中不重复发送，失败保留草稿。手机保留发送按钮，不新增外接键盘提交行为。
+
+On desktop, Enter submits comments, discussion questions, decision notes, For you replies and dismissal reasons;
+Shift+Enter inserts a newline. Decision notes use the existing batch submission; For you replies submit only that card.
+An empty dismissal reason requires the confirmation button. For a new issue, Enter submits the title;
+Cmd+Enter (Ctrl+Enter on Windows/Linux) submits its multiline body. Enter and Shift+Enter both add newlines in multiline editors.
+Manager forms and Edit before starting use the same single-line/multiline rules; candidate controls keep Enter for selection.
+IME confirmation never submits. Empty input and repeated submissions are blocked, and failed submissions keep drafts.
+Phone send buttons remain; no external-keyboard submission behavior is added.
+
 ### 工作线问题的代答与撤回 / Settling workline questions
 
 经理可通过 `litch_sessions.read` 查看 `pending_questions`，再以稳定的 `id` 调用

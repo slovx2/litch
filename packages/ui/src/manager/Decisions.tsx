@@ -37,6 +37,7 @@ import { IssueOrderSelect, useIssueOrder } from './issue-order.tsx'
 import { PostCard } from './PostCard.tsx'
 import { PostDiscussion, PostHistory } from './PostDiscussion.tsx'
 import { advancePostDrafts, usePostDrafts } from './post-drafts.ts'
+import { submitQuestionOnEnter } from './post-presentation.ts'
 import { Relations } from './Relations.tsx'
 import { useRequestDrafts } from './request-drafts.ts'
 
@@ -223,15 +224,18 @@ export function Decisions({
     new Set(pending.map((entry) => entry.decisionId)).size +
     requestReplies.length +
     postQuestions.length
+  const inFlight = useRef(false)
   const submit = async () => {
     if (
       busy ||
+      inFlight.current ||
       disabled ||
       conflict ||
       asking ||
       (!pending.length && !requestReplies.length && !postQuestions.length)
     )
       return
+    inFlight.current = true
     setBusy(true)
     setError('')
     try {
@@ -305,10 +309,13 @@ export function Decisions({
     } catch (cause) {
       setError(reasonOf(cause, t))
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }
   const ignore = async (decision: ManagerDecisionView, reason: string) => {
+    if (disabled || busy || inFlight.current) return
+    inFlight.current = true
     setBusy(true)
     setError('')
     try {
@@ -323,6 +330,7 @@ export function Decisions({
     } catch (cause) {
       setError(reasonOf(cause, t))
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }
@@ -599,6 +607,11 @@ export function Decisions({
                         placeholder={t('manager.answer')}
                         disabled={disabled || busy}
                         value={draft?.text ?? ''}
+                        onKeyDown={(event) => {
+                          if (!submitQuestionOnEnter(event.nativeEvent)) return
+                          event.preventDefault()
+                          if (draft?.text.trim()) void submit()
+                        }}
                         onChange={(event) => change(decision, { text: event.target.value })}
                       />
                       <div className="mg-actions">
@@ -640,6 +653,12 @@ export function Decisions({
                             placeholder={t('manager.ignoreReason')}
                             disabled={disabled || busy}
                             value={ignoring.reason}
+                            onKeyDown={(event) => {
+                              if (!submitQuestionOnEnter(event.nativeEvent)) return
+                              event.preventDefault()
+                              if (features.ignore && ignoring.reason.trim())
+                                void ignore(decision, ignoring.reason)
+                            }}
                             onChange={(event) =>
                               setIgnoring({ id: decision.id, reason: event.target.value })
                             }
