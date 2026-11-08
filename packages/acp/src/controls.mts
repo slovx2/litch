@@ -24,7 +24,11 @@ export async function control(s: AcpServer, method: string, params: any): Promis
     }
     return {
       status,
-      methods: agent.caps.authMethods,
+      // --login 是 Google 账号的终端授权；不再提供会在设备上打开浏览器的 ACP 登录入口。
+      methods:
+        s.agentId === 'agy'
+          ? agent.caps.authMethods.filter((entry) => entry.id === 'oauth-personal')
+          : agent.caps.authMethods,
       logout: agent.caps.logout,
       instruction: s.agentId === 'agy' ? 'agy acp --login' : null,
     }
@@ -37,9 +41,8 @@ export async function control(s: AcpServer, method: string, params: any): Promis
         -32602,
         '只能 authenticate agent 已声明的 agent 类型鉴权方式；terminal 类型需用户在终端完成',
       )
-    // agy 的 authenticate 会尝试在设备上打开浏览器；无浏览器环境改用官方终端登录。
-    if (s.agentId === 'agy' && id === 'oauth-personal')
-      return { login: await s.startTerminalLogin(id) }
+    // 本机、远程设备一律走复制链接；浏览器由客户端上的用户打开。
+    if (s.agentId === 'agy') return { login: await s.startTerminalLogin(id) }
     // 不传 key、token 或任意用户附加字段；登录交给 agent 自己完成。
     await s.ask(agent, 'authenticate', { methodId: id })
     return {}

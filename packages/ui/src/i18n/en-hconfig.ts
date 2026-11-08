@@ -15,13 +15,12 @@ export const enHconfig: Record<keyof typeof zhHconfig, Entry> = {
   'hc.acp.signedOut': 'Not signed in',
   'hc.acp.unknown': 'Sign-in status unknown',
   'hc.acp.instruction':
-    'agy opens a browser on the session’s device to sign in. If no browser opens, run agy acp --login on that device, then refresh the status.',
+    'The selected device generates a sign-in link. Copy it or open it in a browser on this client, then paste the authorization code or callback URL.',
   'hc.acp.failed':
     'Operation failed: {reason}. Check agy and the network on that device, or run agy acp --login and refresh the status.',
   'hc.acp.terminal':
     'This agy version does not offer subscription sign-in here. Run agy acp --login, then refresh the status.',
   'hc.acp.personal': 'Sign in with Google',
-  'hc.acp.business': 'Sign in with Gemini Enterprise',
   'hc.acp.signOut': 'Sign out',
   'hc.acp.refresh': 'Refresh status',
   'hc.acp.linkInstruction':

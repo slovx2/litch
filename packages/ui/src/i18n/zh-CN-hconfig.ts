@@ -12,12 +12,11 @@ export const zhHconfig = {
   'hc.acp.signedOut': '未登录',
   'hc.acp.unknown': '登录状态未知',
   'hc.acp.instruction':
-    '登录由会话所在设备的 agy 打开浏览器完成。未打开浏览器时，请在该设备运行 agy acp --login，完成后刷新状态。',
+    '登录链接由所选设备生成。复制链接或在当前客户端打开浏览器，完成授权后粘贴授权码或回调地址。',
   'hc.acp.failed':
     '操作失败：{reason}。请检查该设备的 agy 安装与网络，或运行 agy acp --login 后刷新状态。',
   'hc.acp.terminal': '此 agy 未提供可用的订阅登录方式，请运行 agy acp --login 后刷新状态。',
   'hc.acp.personal': '登录 Google 账号',
-  'hc.acp.business': '登录 Gemini Enterprise',
   'hc.acp.signOut': '退出登录',
   'hc.acp.refresh': '刷新状态',
   'hc.acp.linkInstruction': '请复制链接到浏览器完成 Google 登录，然后把回调地址或授权码粘贴回来。',

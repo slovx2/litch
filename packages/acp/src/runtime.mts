@@ -59,7 +59,7 @@ export class AcpRuntime {
     return this.running
   }
 
-  /** agy 的无浏览器登录走独立的 `agy acp --login`，避免阻塞常驻 ACP stdio。 */
+  /** agy 登录统一走独立的 `agy acp --login`，避免阻塞常驻 ACP stdio。 */
   terminalLogin(): ChildProcess {
     const handle = this.running
     if (!handle) throw new Error('ACP agent 尚未启动')

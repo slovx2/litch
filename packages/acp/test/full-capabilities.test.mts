@@ -258,7 +258,7 @@ test('不声明生命周期与 MCP transport 时拒绝，资源只有声明 embe
   }
 })
 
-test('agy 登录状态来自只读验证；登录、退出后重读，不创建会话或读令牌', async () => {
+test('agy 登录状态来自只读验证；不创建会话或读令牌', async () => {
   const { FAKE_AGENT } = await import('./client.mjs')
   const s = await scene({
     CHA_ACP_AGENT: 'agy',
@@ -270,8 +270,6 @@ test('agy 登录状态来自只读验证；登录、退出后重读，不创建�
   try {
     await s.desktop.call('initialize', initialize)
     assert.equal((await s.desktop.call('litch/acp/auth/read')).status, 'signedOut')
-    await s.desktop.call('litch/acp/auth/authenticate', { methodId: 'agent-login' })
-    assert.equal((await s.desktop.call('litch/acp/auth/read')).status, 'signedIn')
     await s.desktop.call('litch/acp/auth/logout')
     const loggedOut = await s.desktop.call('litch/acp/auth/read')
     assert.equal(loggedOut.status, 'signedOut')
@@ -300,10 +298,6 @@ test('agy 查询故障不得当作未登录；没有 list 的 agent 保持未知
       await s.desktop.call('initialize', initialize)
       if (listing) await assert.rejects(s.desktop.call('litch/acp/auth/read'), /connection failed/)
       else assert.equal((await s.desktop.call('litch/acp/auth/read')).status, 'unknown')
-      await assert.rejects(
-        s.desktop.call('litch/acp/auth/authenticate', { methodId: 'agent-login' }),
-        /sign-in failed/,
-      )
     } finally {
       await dispose(s)
     }

@@ -66,7 +66,7 @@ export function AcpAccounts({ deviceId, harness }: { deviceId: string; harness: 
               <button
                 type="button"
                 className="btn"
-                disabled={busy !== null}
+                disabled={busy !== null && busy !== 'continue'}
                 onClick={() => void run('cancel', login.attemptId)}
               >
                 {t('hc.acp.cancel')}
@@ -85,7 +85,7 @@ export function AcpAccounts({ deviceId, harness }: { deviceId: string; harness: 
               data-acp-login={method.id}
               onClick={() => void run('login', method.id)}
             >
-              {t(method.id === 'oauth-business' ? 'hc.acp.business' : 'hc.acp.personal')}
+              {t('hc.acp.personal')}
             </button>
           ))}
           {data?.logout ? (

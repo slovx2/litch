@@ -198,13 +198,15 @@ OpenCode 启动或重启时重新连接当前 serve 进程，不沿用旧进程�
 “其他 ACP Agent”（英文 Other ACP agent）用于接入没有单独适配的、支持 ACP 协议的 Agent，
 比如 Gemini、Qwen 或自定义命令。它的内部标识仍为 `acp`，显示名调整不改变已有会话或协议字段。
 
-Antigravity 的订阅入口运行用户安装的官方 `agy acp`。在详情设置的“账号”页查看登录状态，点击“登录 Google 账号”或“登录 Gemini Enterprise”，由会话所在设备的 agy 发起登录；可在同页退出登录。
-设备无法打开浏览器时，账号页会提供登录链接；在桌面或手机复制链接到浏览器完成授权，再把授权码填回账号页并提交，也可取消本次登录。仍无法完成时，在该设备运行 `agy acp --login`，完成后点击“刷新状态”。
+Antigravity 的订阅入口运行用户安装的官方 `agy acp`。在详情设置的“账号”页点击“登录 Google 账号”，本机和远程设备均运行 `agy acp --login`，不检测或打开目标设备的浏览器；可在同页查看状态、退出登录。
+账号页始终提供登录链接。在桌面或手机复制链接，或点击“打开浏览器”在当前客户端打开；完成授权后粘贴授权码或完整回调 URL 并提交。支持取消，成功后自动刷新状态。此入口只提供官方终端登录支持的 Google 账号授权，不再提供 ACP 的 Gemini Enterprise 浏览器登录分支。
 首次使用且尚未创建会话时，新建页也会查询官方 ACP 提供的模型和思考强度；具体选项以该入口返回的目录为准。
 
-If the device cannot open a browser, Accounts shows a sign-in link. Copy it from desktop or mobile,
-authorize in a browser, then paste the authorization code back into Accounts and submit it, or cancel
-the attempt. Model and reasoning-effort options are also loaded before the first conversation;
+Accounts always uses `agy acp --login` for both local and remote devices, without checking for a browser
+on the target device. Copy the link or open it in a browser on the current desktop or phone, then paste
+the authorization code or callback URL and submit. You can cancel; success refreshes the status automatically.
+This entry supports Google account terminal authorization, not ACP's Gemini Enterprise browser sign-in.
+Model and reasoning-effort options are also loaded before the first conversation;
 available choices come from the official ACP agent.
 订阅额度显示在桌面输入区的用量圆环弹层、手机的“用量与额度”页：按模型组列出 5 小时／每周
 已用百分比和重置时间（剩余量为 100% 减去已用量）。数据来自官方 `agy -p /usage --output-format json`，
