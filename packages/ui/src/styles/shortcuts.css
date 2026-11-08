@@ -66,7 +66,7 @@
   color: var(--ink-3);
   font-style: italic;
 }
-/* 快捷区的设备名可能带“离线”，比投影里的略宽 */
+/* 快捷区项目行的设备名比投影里的略宽；会话行不常显设备名。 */
 .sc-body .projection-device {
   max-width: 14ch;
 }

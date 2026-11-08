@@ -114,7 +114,7 @@ export async function cwdSeen(): Promise<CwdSeen> {
     .map((mark) => gap(mark.closest('.ss-row:not(.projection-group *)') as HTMLElement))
   // 拿来比的是标题和徽标之间什么记号都没有的行：带定时任务小钟的行中间本来就多一个记号
   const others = all('.ss-row:not(.projection-group *)')
-    .filter((row) => !one('.cwd-mark', row) && !one('.task-mark', row))
+    .filter((row) => !one('.cwd-mark', row) && !one('.task-mark-slot', row))
     .map(gap)
   await turn('ArrowRight', Math.round((widthBefore - panel.offsetWidth) / 24))
 

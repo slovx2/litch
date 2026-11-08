@@ -137,7 +137,7 @@ export function TaskDetail({
 
   if (!task) {
     return (
-      <div className="arch-page tk-page" data-tasks="detail">
+      <div className="arch-page tk-page" data-tasks="detail" data-task={taskId}>
         {head(t('tasks.title'))}
         <div className="arch-body">
           <div className="mng-wrap">
@@ -195,7 +195,12 @@ export function TaskDetail({
   const locked = !online || busy
 
   return (
-    <div className="arch-page tk-page" style={wireStyle(device?.wire)} data-tasks="detail">
+    <div
+      className="arch-page tk-page"
+      style={wireStyle(device?.wire)}
+      data-tasks="detail"
+      data-task={taskId}
+    >
       {head(task.name)}
       <div className="arch-body">
         <div className="mng-wrap">

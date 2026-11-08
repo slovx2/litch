@@ -15,6 +15,9 @@ Switching to another conversation does not stop sidebar status updates for the p
 桌面会话操作菜单按窗口可用高度展开；选项超出窗口时可以滚动。删除仅在 harness 支持时显示。Antigravity 的官方 ACP 入口可在 Litch 中归档和恢复；没有声明删除能力时不提供删除，归档不会删除 agent 原生历史。
 Desktop session menus expand to the available window height and scroll only when necessary. Delete appears only when the harness supports it. Antigravity's official ACP entry supports archive and restore in Litch; without native deletion support, Delete is unavailable. Archiving preserves the agent's history.
 
+桌面侧栏的小时钟可点击或用键盘聚焦后按 Enter/Space，直接查看对应定时任务，不打开会话。带设备色条的会话行不重复显示设备名；桌面悬停色条或会话行查看设备信息，手机保留离线提示与读屏设备信息，打开会话后仍可确认所属设备。
+On desktop, click the sidebar clock or focus it and press Enter/Space to view its scheduled task without opening the conversation. Session rows with device color strips omit repeated device names. Hover the strip or row on desktop to identify the device; phones retain offline status and screen-reader device hints, and the conversation still identifies its device.
+
 ## 手机输入与键盘
 
 评论和消息编辑弹窗在键盘上方滚动；添加评论只保存在草稿中，不请求 AI 数据同意。iOS 未同意数据使用时，发送编辑后的消息会提示去同意并保留编辑内容；同意后由用户再次发送。

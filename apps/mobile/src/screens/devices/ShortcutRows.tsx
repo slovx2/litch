@@ -1,5 +1,5 @@
 // 跨设备各区（置顶、本机分组、最近、未读）里的行：会话（连同它的子会话，默认收起）和置顶的项目。混着各台设备，
-// 左边是设备的线色，第二行写设备名（离线时带上“离线”），读屏读得到，不靠颜色认设备。
+// 左边是设备的线色；会话行省去重复设备名，离线提示保留，设备信息通过读屏和打开后的会话页查询。
 import {
   type DeviceView,
   keys,
@@ -114,6 +114,7 @@ function TreeLine({
   onOpen(summary: SessionSummary, deviceId: string): void
   onMenu?(summary: SessionSummary, deviceId: string): void
 }) {
+  const t = useT()
   const summary = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
   if (!summary) return null
   const fold =
@@ -144,7 +145,8 @@ function TreeLine({
       summary={summary}
       device={device}
       testID={testID}
-      {...(where ? { where } : {})}
+      deviceNote={where}
+      {...(device && device.connection !== 'online' ? { where: t('devices.state.offline') } : {})}
       {...(at !== undefined ? { at } : {})}
       onPress={open}
       {...(onMenu ? { onLongPress: () => onMenu(summary, deviceId) } : {})}

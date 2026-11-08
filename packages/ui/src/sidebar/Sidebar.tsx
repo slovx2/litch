@@ -11,6 +11,7 @@ import {
   type SessionGroups,
   type SessionHarnesses,
   type SessionSummary,
+  type SessionTaskMark,
   type SidebarProjections,
   type WorkspaceView,
 } from '@litch/core'
@@ -155,7 +156,7 @@ interface RowProps {
   onFold?(): void
   projectionTime?: { kind: 'recent' | 'unread'; at: number } | undefined
   deviceLabel?: string | undefined
-  /** 快捷区（置顶、本机分组）的行：行首一个设备连线色块，设备名常显（离线也写上） */
+  /** 快捷区（置顶、本机分组）的行：行首一个设备连线色块，设备名在悬停与读屏中保留 */
   tick?: boolean
   /** 快捷区里的位置：菜单里多上移、下移 */
   place?: ShortcutPlace | undefined
@@ -528,6 +529,13 @@ const SessionRow = memo(function SessionRow({
           type="button"
           className={classes.filter(Boolean).join(' ')}
           aria-current={selected ? 'true' : undefined}
+          aria-description={
+            deviceLabel
+              ? offline
+                ? `${deviceLabel} · ${t('sidebar.offline')}`
+                : deviceLabel
+              : undefined
+          }
           onClick={() => {
             const next = { deviceId, sessionId }
             fromTree(next, source)
@@ -566,6 +574,11 @@ const SessionRow = memo(function SessionRow({
             <i
               className={device?.connection === 'online' ? 'dev-tick' : 'dev-tick off'}
               style={wireStyle(device?.wire)}
+              title={
+                device
+                  ? `${t.text(device.name)}${offline ? ` · ${t('sidebar.offline')}` : ''}`
+                  : deviceId
+              }
               aria-hidden="true"
             />
           ) : null}
@@ -614,27 +627,13 @@ const SessionRow = memo(function SessionRow({
               <Icon name="folder" />
             </span>
           ) : null}
-          {summary.task ? <TaskMark kind={summary.task.kind} /> : null}
+          {summary.task ? <span className="task-mark-slot" aria-hidden="true" /> : null}
           <span
             className={down ? 'chip off' : 'chip'}
             title={down ? downText(down, 'chip', t) : nameOf(device, summary.harness, t)}
           >
             {badgeOf(device, summary.harness)}
           </span>
-          {deviceLabel ? (
-            <span
-              className="projection-device ell dim"
-              title={offline ? `${deviceLabel} · ${t('sidebar.offline')}` : deviceLabel}
-            >
-              {offline && !projectionTime
-                ? `${deviceLabel} · ${t('sidebar.offline')}`
-                : deviceLabel}
-              {/* 最近、未读的行窄：离线只靠虚线色块和淡色画出来，“离线”留给悬停和读屏，不挤标题 */}
-              {offline && projectionTime ? (
-                <span className="projection-offline">{` · ${t('sidebar.offline')}`}</span>
-              ) : null}
-            </span>
-          ) : null}
           {nested ? null : (
             <>
               <BrowserWants deviceId={deviceId} sessionId={sessionId} />
@@ -662,6 +661,7 @@ const SessionRow = memo(function SessionRow({
             </>
           )}
         </button>
+        {summary.task ? <TaskMark deviceId={deviceId} mark={summary.task} /> : null}
         {kids > 0 && onFold ? (
           <button
             type="button"
@@ -707,14 +707,25 @@ const SessionRow = memo(function SessionRow({
   )
 })
 
-/** 和定时任务有关的会话：标题后面一个小钟。是哪个任务、哪一次在会话顶上那一条里 */
-function TaskMark({ kind }: { kind: 'run' | 'target' }) {
+/** 与行按钮同级，避免嵌套交互控件；CSS anchor 对齐行内留位，不测量或回写布局。 */
+function TaskMark({ deviceId, mark }: { deviceId: string; mark: SessionTaskMark }) {
   const t = useT()
-  const said = t(kind === 'run' ? 'tasks.mark.run' : 'tasks.mark.target')
+  const said = `${t(mark.kind === 'run' ? 'tasks.mark.run' : 'tasks.mark.target')} · ${t('tasks.note.open')}`
   return (
-    <span className="task-mark" role="img" data-task-mark={kind} title={said} aria-label={said}>
+    <button
+      type="button"
+      className="task-mark"
+      data-task-mark={mark.kind}
+      data-task={mark.taskId}
+      title={said}
+      aria-label={said}
+      onClick={(event) => {
+        event.stopPropagation()
+        requestTasks({ view: 'detail', deviceId, taskId: mark.taskId })
+      }}
+    >
       <Icon name="clock" />
-    </span>
+    </button>
   )
 }
 
@@ -1155,7 +1166,7 @@ function useShortcutDeviceLabel(deviceId: string): string | undefined {
   return device && many ? t.text(device.name) : undefined
 }
 
-/** 快捷区（全局置顶、本机分组）里的一行会话：和设备树同一种行，多设备色块和设备名 */
+/** 快捷区（全局置顶、本机分组）里的一行会话：和设备树同一种行，多设备色块，设备名留在悬停和读屏信息中 */
 function ShortcutSession({
   props,
   onSelect,

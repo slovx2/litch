@@ -69,6 +69,7 @@ export function SummaryLine({
   fold,
   at,
   where,
+  deviceNote,
 }: {
   summary: SessionSummary
   device: DeviceView | undefined
@@ -79,8 +80,10 @@ export function SummaryLine({
   fold?: ReactNode
   /** 右上角的时间：默认是会话的更新时间，「最近」组给最后一次主动交互的时间 */
   at?: number
-  /** 第二行目录前面加的一段（「最近」组跨设备时写设备名） */
+  /** 第二行目录前的状态提示（例如离线），不重复设备名。 */
   where?: string
+  /** 跨设备色条所在行的设备信息，留给读屏。 */
+  deviceNote?: string
 }) {
   const theme = useTheme()
   const t = useT()
@@ -100,6 +103,7 @@ export function SummaryLine({
       action={fold}
       containerStyle={{ borderBottomColor: c.line1, backgroundColor: c.panel }}
       accessibilityRole="button"
+      accessibilityHint={deviceNote}
       testID={testID}
       onPress={onPress}
       onLongPress={onLongPress}

@@ -119,6 +119,7 @@ import { judgeMockService, judgeService, mockServiceProbe, serviceProbe } from '
 import { judgeSession, sessionProbe } from './probe-session.mjs'
 import { runSettingsChecks, type SettingsMode } from './probe-settings-run.mjs'
 import { runSidebarChecks } from './probe-sidebar-run.mjs'
+import { checkSidebarTaskLinks } from './probe-sidebar-task-links.mjs'
 import { judgeTasks, TASK_NAME, tasksProbe } from './probe-tasks.mjs'
 import { installTerminalKit } from './probe-terminal-kit.mjs'
 import { runTerminalChecks, type TerminalMode } from './probe-terminal-run.mjs'
@@ -340,7 +341,8 @@ async function measure(
   if (mode === 'navigation') return runNavigationChecks(window)
   if (mode === 'tasks') {
     const result = await runInPage(window, tasksProbe, TASK_NAME)
-    return [result, judgeTasks(result, TASK_NAME)]
+    const sidebar = await checkSidebarTaskLinks(window)
+    return [{ ...result, sidebar }, [...judgeTasks(result, TASK_NAME), ...sidebar.failed]]
   }
   if (mode === 'tree') return runTreeChecks(window)
   if (mode === 'background') {

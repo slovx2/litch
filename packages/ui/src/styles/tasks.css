@@ -367,29 +367,33 @@
   border-top: 1px solid var(--line-1);
 }
 
-/* 会话的那一行：和定时任务有关的，标题后面一个小钟。地方不够时和目录记号一样先让出来 */
-.ss-row .title:has(+ .task-mark) {
-  flex-basis: auto;
+/* 行内只留布局占位；独立任务按钮定位到它，既不嵌套 button，也不拦截整行的点击。 */
+.row-line:has(> .task-mark) {
+  anchor-scope: --sidebar-task;
 }
-.task-mark {
-  flex: 0 1000000 auto;
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  height: calc(12px * var(--fs));
-  margin-left: -6px;
-  overflow: hidden;
-  color: var(--ink-3);
-}
-.task-mark::before {
-  content: "";
+.task-mark-slot {
+  anchor-name: --sidebar-task;
   flex: none;
-  width: 6px;
-  height: calc(12px * var(--fs));
+  width: calc(20px * var(--fs));
+  height: calc(20px * var(--fs));
+}
+.row-line > .task-mark {
+  position: absolute;
+  position-anchor: --sidebar-task;
+  left: anchor(left);
+  top: anchor(top);
+  width: anchor-size(width);
+  height: anchor-size(height);
+  display: grid;
+  place-items: center;
+  color: var(--ink-3);
+  border-radius: var(--r1);
+}
+.task-mark:hover {
+  color: var(--ink);
+  background: var(--hover);
 }
 .task-mark > svg.ic {
-  flex: none;
   width: calc(12px * var(--fs));
   height: calc(12px * var(--fs));
 }
