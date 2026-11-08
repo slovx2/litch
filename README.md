@@ -63,6 +63,16 @@ Android 和 iOS 内置 Tailscale，不占用系统 VPN，可与已有 VPN 共存
 
 具体功能与平台限制见[产品手册](skills/litch-manual/SKILL.md)。
 
+## 通用模块
+
+Computer Use、内置浏览器和 Chrome 控制拆成了独立的包，别的桌面应用也能嵌入。三者共用 [`packages/automation-contracts`](packages/automation-contracts) 里的工具定义和宿主接口（调用与取消、审批、状态存储等）；路径、身份、审批界面都由宿主传入，导入时不读个人目录，也不登记任何东西。
+
+- **[Computer Use](packages/computer-use)。** 操作 macOS、Windows 普通应用的执行器，负责原生助手的启动、看护和通信。只需 Node 24，不依赖 Electron；原生助手由宿主自己构建、签名，随自己的应用分发。
+- **[内置浏览器](packages/browser)。** 基于 CDP 的浏览器工具执行器，带站点许可、代填登录和 Cookie、密码导入。Electron 宿主用 `/electron` 子入口直接接入；默认入口不加载 Electron，非 Electron 宿主提供自己的 CDP 页面宿主，或直接实现语义接口 `BrowserDriver`。
+- **Chrome 控制。** [扩展库](packages/chrome-extension)用来组装宿主自己的 MV3 扩展（自己的扩展 ID 和 host 名），提供标签租约和受限 CDP 执行器；[本机桥](packages/chrome-bridge)在 Node 进程里登记 Native Messaging、与扩展通信，并提供 AI 工具执行器，不依赖 Electron。
+
+包名（`computer-use-internal` 等）是内部构建名，版本跟随 Litch。目前构建后用 `npm pack` 以 tarball 交付，还没有发布到 npm。构建、接入示例和限制见各包的 README。
+
 ## 下载
 
 从[发布页](https://github.com/slovx2/litch/releases/latest)下载：

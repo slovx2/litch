@@ -2,7 +2,7 @@
 
 Node 本机桥、受控 Chrome 执行器、内置/Chrome 分流和 Native Messaging 登记适配器。无 Electron/core/UI 依赖；导入不监听、不登记、不读取个人 HOME。底层页面操作和站点策略复用 browser，线上 wire 唯一源为 automation-contracts。支持 macOS/Linux Unix socket 与 Windows named pipe；平台登记位置由宿主显式选择。
 
-包名 `chrome-bridge-internal` 暂不代表公开 npm 名称。版本跟 Litch，先构建并 `npm pack`，使用精确 tarball，例如 `npm install --save-exact ./chrome-bridge-internal-0.34.1.tgz`。包内 dist 自包含所需的源码投影，不引用仓库绝对路径。没有 postinstall。
+包名 `chrome-bridge-internal` 暂不代表公开 npm 名称。版本跟 Litch，先构建并 `npm pack`，使用精确 tarball，例如 `npm install --save-exact ./chrome-bridge-internal-<版本>.tgz`。包内 dist 自包含所需的源码投影，不引用仓库绝对路径。没有 postinstall。
 
 ```ts
 import {
@@ -18,7 +18,7 @@ const installer = new ChromeInstaller({
 })
 await installer.prepare() // 仅由宿主在用户请求安装/已安装后重连时显式调用
 const bridge = new ChromeBridge({ socketPath, token: installer.token, extensionIds,
-  version: '0.34.1', productName: 'Example', protocol: { min: 1, max: 1 } })
+  version: hostVersion, productName: 'Example', protocol: { min: 1, max: 1 } })
 await bridge.start()
 const executor = createChromeExecutor({ bridge, hostId: 'example', namespace: 'example_browser',
   productName: 'Example', allowed: scope => trustedSessions.has(scope.sessionId) })

@@ -2,7 +2,7 @@
 
 可嵌入的浏览器、AI 工具执行器、来源许可、密码登录与导入组件。默认入口不加载 Electron；Electron 主进程集成使用显式子入口。包目前 private，`browser-internal` 只是内部构建名，不表示最终 npm 发布名。先交付 tarball，版本跟随仓库；本包不提供成品浏览器应用，也不会注册扩展或 native host。
 
-Chrome 线可依赖：
+Chrome 桥复用的低层模块：
 
 - `src/browser/model.mts`：CDP 页面/标签宿主。ChromePage 可以实现它，不引用 Electron；低层 CDP 不进入模型参数。
 - `src/browser/sites.mts`：`createSiteBook(file | SitePersistence | null)`，独立 browser/Chrome 授权实例；文件路径由宿主传入，不改变 once/session/always 和拒绝规则。
@@ -10,7 +10,7 @@ Chrome 线可依赖：
 - `src/tool-port.mts`：当前工具适配器的调用/答复/审批端口，结构保持 Litch 接线，包不依赖 Litch core/protocol。第三方可以使用语义 driver，不需要使用 Litch 工具传输形状。
 - `src/browser/cdp-allow.mts`、`ax.mts`、`args.mts`、`keys.mts`：现有白名单与页面工具基础，归本包维护，不在扩展线复制。
 
-`apps/desktop/src/browser` 的同名入口是 Litch 接线外观；主进程/UI/Chrome 的 imports 由集成线统一更新。在此期间所有实现只有本包一份，没有旧数据回退或双实现。
+`apps/desktop/src/browser` 的同名入口只是 Litch 的转发外观，实现只有本包一份，没有旧数据回退或双实现。
 
 ## 入口与分层
 
@@ -24,7 +24,7 @@ Chrome 线可依赖：
 | `/batch`、`/executor`、`/tools`、`/url` | `runBrowserActions`、`Call/TabState`、`TOOLS` 和 URL 工具，供 Chrome bridge 复用 | 本机执行器装配、页面/租约/审批检查 |
 | `/pointer-renderer`、`/surface` | 纯 DOM 代理光标和坐标合同，无 Node/Electron/React 依赖 | surface 身份、布局版本、颜色与动作样本 |
 
-低层 `/model`、`/sites`、`/ax`、`/args`、`/keys`、`/cdp-allow` 也作为显式入口提供。扩展 isolated world 应只导入 `/pointer-renderer`（或 `/surface`）；默认入口包含 Node 工具组件，不能作为浏览器 bundle 的入口。光标的到位回执只报告呈现结果，不授予输入权限。UI 旧 renderer 的接线迁移由集成宿主完成。
+低层 `/model`、`/sites`、`/ax`、`/args`、`/keys`、`/cdp-allow` 也作为显式入口提供。扩展 isolated world 应只导入 `/pointer-renderer`（或 `/surface`）；默认入口包含 Node 工具组件，不能作为浏览器 bundle 的入口。光标的到位回执只报告呈现结果，不授予输入权限。Litch 界面的自动化预览同样使用 `/pointer-renderer`。
 
 `BrowserDriver` 是语义接口，包含页生命周期、观察、输入、导航、冻结和存储落盘。`createCdpDriver` 将 `CdpHost` 转成此接口：观察携带文档与布局版本；输入前复核身份、来源、冻结状态和版本。取消后不重放输入，已发出的动作可能已经发生。需要截图/输入的宿主必须提供真实能力，不能用 `evaluate` 冒充可信输入。
 

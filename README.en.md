@@ -63,6 +63,16 @@ Android and iOS include Tailscale without occupying the system VPN, so it can co
 
 See the [product manual](skills/litch-manual/SKILL.md) for features and platform limitations.
 
+## Shared modules
+
+Computer Use, the built-in browser and Chrome control are split into standalone packages that other desktop apps can embed. All three share the tool definitions and host interfaces (invocation and cancellation, approvals, state storage and more) in [`packages/automation-contracts`](packages/automation-contracts). Paths, identities and approval UI are passed in by the host; importing a package does not read your home directory or register anything.
+
+- **[Computer Use](packages/computer-use).** An executor for operating ordinary macOS and Windows apps, which launches, supervises and talks to a native helper. It needs only Node 24, not Electron; the host builds and signs the native helper itself and ships it with its own app.
+- **[Built-in browser](packages/browser).** A CDP-based browser tool executor with site permissions, sign-in autofill, and cookie and password import. Electron hosts plug in through the `/electron` subpath; the default entry does not load Electron, so other hosts supply their own CDP page host or implement the semantic `BrowserDriver` interface directly.
+- **Chrome control.** The [extension library](packages/chrome-extension) assembles the host's own MV3 extension (with its own extension ID and host name) and provides tab leases and a restricted CDP executor. The [native bridge](packages/chrome-bridge) registers Native Messaging from a Node process, talks to the extension and provides the AI tool executor, without Electron.
+
+The package names (`computer-use-internal` and so on) are internal build names, and versions follow Litch. For now they are built and delivered as tarballs with `npm pack`; none is published to npm yet. Each package's README (in Chinese) covers building, integration examples and limitations.
+
 ## Download
 
 Get it from the [releases page](https://github.com/slovx2/litch/releases/latest):
