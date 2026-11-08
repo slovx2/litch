@@ -32,6 +32,8 @@ export interface SessionProbe {
     closed: boolean
     /** 鼠标在窗口右下角时，整块菜单还在窗口里 */
     clamped: boolean
+    /** 三种皮肤下，窗口放得下时全部操作直接可见。 */
+    allActionsVisible: boolean
   }
   /** 归档之后的撤销 */
   undo: {
@@ -357,6 +359,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     focused: popped.contains(document.activeElement),
     closed: false,
     clamped: false,
+    allActionsVisible: true,
   }
   press(document.activeElement ?? popped, 'Escape')
   await until('右键菜单收起', () => !menu())
@@ -369,6 +372,38 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   contextMenu.clamped = edge.right <= window.innerWidth && edge.bottom <= window.innerHeight
   press(document.activeElement ?? cornered, 'Escape')
   await until('右键菜单收起', () => !menu())
+
+  // 人文皮肤的菜单更高；固定 320px 会让归档和删除都藏在重命名下方。
+  const root = document.documentElement
+  const previous = { skin: root.dataset.skin ?? 'retro', theme: root.dataset.theme ?? 'light' }
+  const look = (
+    window as unknown as { __litchLook: { set(patch: { skin?: string; theme?: string }): void } }
+  ).__litchLook
+  try {
+    for (const skin of ['standard', 'retro', 'human']) {
+      for (const theme of ['light', 'dark']) {
+        look.set({ skin, theme })
+        await frame()
+        rightClick(other, window.innerWidth - 3, window.innerHeight - 3)
+        const pop = await until(`${skin}/${theme} 右键菜单`, menu)
+        await frame()
+        await frame()
+        const bounds = pop.getBoundingClientRect()
+        const last = pop.querySelector<HTMLElement>('[data-action="delete"]')
+        contextMenu.allActionsVisible &&=
+          pop.scrollHeight <= pop.clientHeight + 1 &&
+          !!last &&
+          last.getBoundingClientRect().bottom <= bounds.bottom &&
+          bounds.top >= 7 &&
+          bounds.bottom <= window.innerHeight - 7
+        press(document.activeElement ?? pop, 'Escape')
+        await until('右键菜单收起', () => !menu())
+      }
+    }
+  } finally {
+    look.set(previous)
+    await frame()
+  }
 
   // ---- 三、归档之后的撤销 ----
   const toast = () => one('.toast[data-toast="archived"]')

@@ -12,6 +12,9 @@ Worklines started from manager suggestions follow the same rules. Additional mes
 a turn do not end it; the running indicator stays until the turn finishes.
 Switching to another conversation does not stop sidebar status updates for the previous one.
 
+桌面会话操作菜单按窗口可用高度展开；选项超出窗口时可以滚动。删除仅在 harness 支持时显示。Antigravity 的官方 ACP 入口可在 Litch 中归档和恢复；没有声明删除能力时不提供删除，归档不会删除 agent 原生历史。
+Desktop session menus expand to the available window height and scroll only when necessary. Delete appears only when the harness supports it. Antigravity's official ACP entry supports archive and restore in Litch; without native deletion support, Delete is unavailable. Archiving preserves the agent's history.
+
 ## 手机输入与键盘
 
 评论和消息编辑弹窗在键盘上方滚动；添加评论只保存在草稿中，不请求 AI 数据同意。iOS 未同意数据使用时，发送编辑后的消息会提示去同意并保留编辑内容；同意后由用户再次发送。

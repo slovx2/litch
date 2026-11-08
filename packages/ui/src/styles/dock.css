@@ -559,6 +559,11 @@
   margin: 0;
   color: inherit;
 }
+/* 会话操作按窗口可用高度展开，避免归档/删除藏在固定的 320px 滚动区下方。
+   超出窗口时仍滚动；位置钳制与 RowMenu 的 EDGE=8 保持一致。 */
+.row-more > .pick-pop.down.at {
+  max-height: calc(100dvh - 16px);
+}
 /* 往下弹、靠右对齐的那一种：侧栏顶上的筛选与“更多”这类按钮菜单 */
 .pick-pop.down {
   top: calc(100% + 4px);
