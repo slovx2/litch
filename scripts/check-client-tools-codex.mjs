@@ -12,7 +12,15 @@
 // 隔离照 scripts/check-native-codex.mjs：HOME、CODEX_HOME 都在临时目录，环境从零写，模型是回环上的假接口，
 // 代理指到回环上没人听的端口；不碰 ~/.codex 和 ~/.codex-harness-adapter；结束时收掉进程、删掉临时目录。
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { registerHooks } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -87,7 +95,9 @@ const TOOLS = clientToolSpecs(Object.values(CLIENT_TOOL_NAMESPACE), {
 /** 模型请求里出现过的命名空间：codex 收下的定义要原样交给模型 */
 const namespacesSeen = new Set()
 let batchSchemaSeen = null
-let batchInstructionsSeen = false
+let firstToolRequest = null
+const AUTOMATION_SKILLS = ['litch-browser-automation', 'litch-computer-automation']
+const BATCH_INSTRUCTION = 'Prefer run_actions for two or more known actions.'
 // 1x1 的 PNG
 const PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
@@ -105,14 +115,11 @@ const model = await startResponsesModel((body, serial) => {
     .find((entry) => entry.type === 'namespace' && entry.name === 'litch_computer')
     ?.tools.find((entry) => entry.name === 'run_actions')
   if (batch) batchSchemaSeen = batch.parameters
-  if (
-    JSON.stringify([body.instructions, body.input]).includes(
-      'Prefer run_actions for two or more known actions',
-    )
-  )
-    batchInstructionsSeen = true
   const tool = (body.tools ?? []).find((entry) => entry.type === 'namespace' && entry.name === ECHO)
-  if (tool) lastInputs.push(last)
+  if (tool) {
+    firstToolRequest ??= body
+    lastInputs.push(last)
+  }
   if (userText(body).includes('批量动作') && batch && last?.type !== 'function_call_output')
     return {
       call: {
@@ -329,7 +336,49 @@ async function main() {
     ),
     '批量动作的子工具 schema 必须到达模型',
   )
-  expect(batchInstructionsSeen, '批量优先的工作流指令必须到达原生 Codex 的模型请求')
+  // 长说明按需从 skill 读取；只检查首轮，不能让后续模型请求掩盖初始发现失败。
+  const firstInstructions = JSON.stringify([
+    firstToolRequest?.instructions,
+    firstToolRequest?.input,
+  ])
+  for (const name of AUTOMATION_SKILLS)
+    expect(
+      firstInstructions.includes(`Read ${name} skill (`),
+      `首轮模型请求必须带 ${name} 的短提醒和路径`,
+    )
+  expect(!firstInstructions.includes(BATCH_INSTRUCTION), '首轮不能重新注入已搬到 skill 的长说明')
+  passed('首轮模型请求带浏览器和 CU skill 短提醒，没有重新注入批量长说明')
+
+  // 通过真实 Codex 的发现接口取路径，不预装夹具 skill；验证设备服务在隔离 HOME 的安装链路。
+  const listed = await litch.call('skills/list', {
+    harness: 'codex',
+    cwds: [dirs.work],
+    forceReload: true,
+  })
+  const skills = (listed.data ?? []).flatMap((row) => row.skills ?? [])
+  for (const name of AUTOMATION_SKILLS) {
+    const skill = skills.find((entry) => entry.name === name && entry.enabled !== false)
+    expect(typeof skill?.path === 'string', `隔离 HOME 的原生 skills/list 必须发现并启用 ${name}`)
+    const path = realpathSync(
+      skill.path.startsWith('file:') ? fileURLToPath(skill.path) : skill.path,
+    )
+    const expectedPath = realpathSync(join(dirs.userHome, '.agents', 'skills', name, 'SKILL.md'))
+    expect(path === expectedPath, `${name} 必须来自本次隔离 HOME`)
+    const installed = readFileSync(path, 'utf8')
+    const source = readFileSync(
+      join(
+        repo,
+        'third_party/litch-automation/packages/automation-contracts/skills',
+        name,
+        'SKILL.md',
+      ),
+      'utf8',
+    )
+    expect(installed === source, `${name} 安装正文必须与契约源逐字一致`)
+    if (name === 'litch-computer-automation')
+      expect(installed.includes(BATCH_INSTRUCTION), 'CU skill 正文必须逐字保留批量优先指令')
+    passed(`隔离 HOME 的 Codex 发现 ${name}，正文与契约源一致`)
+  }
   await desktop.call('thread/resume', { threadId })
 
   // 一：桌面端发起，Litch 执行
