@@ -85,9 +85,9 @@ const card = (over = {}) => ({
     origin: 'https://github.com',
     site: 'GitHub',
     reason: '要看私有仓库',
-    device: 'song-debian',
+    device: 'linux-test',
     accounts: [
-      { ref: 'a1', masked: 'so•••@gmail.com' },
+      { ref: 'a1', masked: 'so•••@example.com' },
       { ref: 'a2', masked: 'wo•••' },
     ],
     task: null,
@@ -192,8 +192,8 @@ test('勾选“以后直接用这个账号”只在定时任务的卡片上算�
 })
 
 test('用户名打码：给来的带打码记号照原样，不带的照桌面端的规则打码', () => {
-  assert.equal(shownName('so•••@gmail.com'), 'so•••@gmail.com')
-  assert.equal(shownName('songsiyu@gmail.com'), 'so•••@gmail.com')
+  assert.equal(shownName('so•••@example.com'), 'so•••@example.com')
+  assert.equal(shownName('sophie@example.com'), 'so•••@example.com')
   assert.equal(shownName('ab@x.com'), 'a•••@x.com')
   assert.equal(shownName('admin'), 'ad•••')
   assert.equal(shownName('雪花飘飘'), '雪花•••')

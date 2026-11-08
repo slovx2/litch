@@ -50,5 +50,5 @@ manifest、权限、最低 Chrome 版本、公钥、开发 ID `fakgembkgnmeknpae
 
 没验：Windows 真实 LockFileEx/注册表和 Linux 实机；本轮系统锁运行证据来自 macOS。
 没验：正式商店签名安装与商店发布包本身、真实用户 profile。
-没验：WakeQora 实际产品打包/签名/联调，以及两版本 Electron 的 M4 集成夹具。
+没验：其他宿主实际产品打包/签名/联调，以及两版本 Electron 的 M4 集成夹具。
 没验：独立多 Chrome profile、prerender 激活边界的专项验证；完整引擎 test:compat 和手机不在本线范围。

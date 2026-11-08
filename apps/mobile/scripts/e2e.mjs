@@ -661,7 +661,7 @@ function pairing(config) {
           reason: 'e2e：看看登录后的页面',
           device: 'e2e-pair',
           accounts: [
-            { ref: 'a1', masked: 'so•••@gmail.com' },
+            { ref: 'a1', masked: 'so•••@example.com' },
             { ref: 'a2', masked: 'li•••@example.com' },
           ],
           task: null,

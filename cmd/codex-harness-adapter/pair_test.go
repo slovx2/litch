@@ -31,20 +31,20 @@ func TestPairExplicitHomeIgnoresInheritedDeviceSocket(t *testing.T) {
 // 和 packages/core/test/device-pairing-payload.test.mts 的 sample 是同一份；期望值是 Node 里
 // JSON.stringify 再 Buffer 转 base64url 得到的（那份测试断言 encodePairPayload 与它相等）
 var pairSample = pairPayload{
-	Name: "开发机 song-debian", Host: "device-ts", Port: 2222, User: "song",
+	Name: "开发机 linux-test", Host: "device-ts", Port: 2222, User: "dev",
 	HostKeyType: "ssh-ed25519", HostKeyFP: "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU",
 	Seed: base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)), PairID: "Ab3dEf6hIj9kLm2n", ExpiresAt: 1_792_000_000_000,
 }
 
 func TestEncodePairPayloadMatchesTypeScript(t *testing.T) {
-	want := "LITCHPAIR1:eyJ2IjoxLCJuIjoi5byA5Y-R5py6IHNvbmctZGViaWFuIiwiaCI6ImRldmljZS10cyIsInAiOjIyMjIsInUiOiJzb25nIiwiayI6eyJ0Ijoic3NoLWVkMjU1MTkiLCJmIjoiU0hBMjU2OitEaVkzd3Z2VjZUdUpKaGJwWmlzRi96TERBMHpQTVN2SGRrcjRVdkNPcVUifSwicyI6IkJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2MiLCJpIjoiQWIzZEVmNmhJajlrTG0ybiIsImUiOjE3OTIwMDAwMDAwMDB9"
+	want := "LITCHPAIR1:eyJ2IjoxLCJuIjoi5byA5Y-R5py6IGxpbnV4LXRlc3QiLCJoIjoiZGV2aWNlLXRzIiwicCI6MjIyMiwidSI6ImRldiIsImsiOnsidCI6InNzaC1lZDI1NTE5IiwiZiI6IlNIQTI1NjorRGlZM3d2dlY2VHVKSmhicFppc0YvekxEQTB6UE1Tdkhka3I0VXZDT3FVIn0sInMiOiJCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjIiwiaSI6IkFiM2RFZjZoSWo5a0xtMm4iLCJlIjoxNzkyMDAwMDAwMDAwfQ"
 	if got := encodePairPayload(pairSample); got != want {
 		t.Fatalf("和 TS 编出来的不一样：\n%s\n%s", got, want)
 	}
 	// 名字里有四字节字符、引号、反斜杠、控制字符、U+2028 和 HTML 字符：encoding/json 会把后两种转义，JSON.stringify 不会
 	odd := pairSample
 	odd.Name = "手机🙂 \"q\"\\\n\t\x01\u2028<&>"
-	want = "LITCHPAIR1:eyJ2IjoxLCJuIjoi5omL5py68J-ZgiBcInFcIlxcXG5cdFx1MDAwMeKAqDwmPiIsImgiOiJkZXZpY2UtdHMiLCJwIjoyMjIyLCJ1Ijoic29uZyIsImsiOnsidCI6InNzaC1lZDI1NTE5IiwiZiI6IlNIQTI1NjorRGlZM3d2dlY2VHVKSmhicFppc0YvekxEQTB6UE1Tdkhka3I0VXZDT3FVIn0sInMiOiJCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjIiwiaSI6IkFiM2RFZjZoSWo5a0xtMm4iLCJlIjoxNzkyMDAwMDAwMDAwfQ"
+	want = "LITCHPAIR1:eyJ2IjoxLCJuIjoi5omL5py68J-ZgiBcInFcIlxcXG5cdFx1MDAwMeKAqDwmPiIsImgiOiJkZXZpY2UtdHMiLCJwIjoyMjIyLCJ1IjoiZGV2IiwiayI6eyJ0Ijoic3NoLWVkMjU1MTkiLCJmIjoiU0hBMjU2OitEaVkzd3Z2VjZUdUpKaGJwWmlzRi96TERBMHpQTVN2SGRrcjRVdkNPcVUifSwicyI6IkJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2MiLCJpIjoiQWIzZEVmNmhJajlrTG0ybiIsImUiOjE3OTIwMDAwMDAwMDB9"
 	if got := encodePairPayload(odd); got != want {
 		t.Fatalf("特殊字符编出来和 TS 不一样：\n%s\n%s", got, want)
 	}
@@ -161,12 +161,12 @@ func TestIsYes(t *testing.T) {
 // 和 packages/core/test/device-pairing-payload.test.mts 的 tailscale 样例是同一份
 func TestEncodeTailscalePairPayloadMatchesTypeScript(t *testing.T) {
 	sample := pairPayload{
-		Name: "开发机 song-debian", Host: "song-debian.tail2e2f6a.ts.net", Port: 22, User: "root",
+		Name: "开发机 linux-test", Host: "linux-test.tail-example.ts.net", Port: 22, User: "root",
 		HostKeyType: "ssh-ed25519", HostKeyFP: "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU",
 		Tailscale: true, Command: "'/opt/litch/bin/codex-harness-adapter' pair-enroll --home '/root/.codex-harness-adapter' Ab3dEf6hIj9kLm2n",
 		PairID: "Ab3dEf6hIj9kLm2n", ExpiresAt: 1_792_000_000_000,
 	}
-	want := "LITCHPAIR1:eyJ2IjoxLCJuIjoi5byA5Y-R5py6IHNvbmctZGViaWFuIiwiaCI6InNvbmctZGViaWFuLnRhaWwyZTJmNmEudHMubmV0IiwicCI6MjIsInUiOiJyb290IiwiayI6eyJ0Ijoic3NoLWVkMjU1MTkiLCJmIjoiU0hBMjU2OitEaVkzd3Z2VjZUdUpKaGJwWmlzRi96TERBMHpQTVN2SGRrcjRVdkNPcVUifSwibSI6InRhaWxzY2FsZSIsImMiOiInL29wdC9saXRjaC9iaW4vY29kZXgtaGFybmVzcy1hZGFwdGVyJyBwYWlyLWVucm9sbCAtLWhvbWUgJy9yb290Ly5jb2RleC1oYXJuZXNzLWFkYXB0ZXInIEFiM2RFZjZoSWo5a0xtMm4iLCJpIjoiQWIzZEVmNmhJajlrTG0ybiIsImUiOjE3OTIwMDAwMDAwMDB9"
+	want := "LITCHPAIR1:eyJ2IjoxLCJuIjoi5byA5Y-R5py6IGxpbnV4LXRlc3QiLCJoIjoibGludXgtdGVzdC50YWlsLWV4YW1wbGUudHMubmV0IiwicCI6MjIsInUiOiJyb290IiwiayI6eyJ0Ijoic3NoLWVkMjU1MTkiLCJmIjoiU0hBMjU2OitEaVkzd3Z2VjZUdUpKaGJwWmlzRi96TERBMHpQTVN2SGRrcjRVdkNPcVUifSwibSI6InRhaWxzY2FsZSIsImMiOiInL29wdC9saXRjaC9iaW4vY29kZXgtaGFybmVzcy1hZGFwdGVyJyBwYWlyLWVucm9sbCAtLWhvbWUgJy9yb290Ly5jb2RleC1oYXJuZXNzLWFkYXB0ZXInIEFiM2RFZjZoSWo5a0xtMm4iLCJpIjoiQWIzZEVmNmhJajlrTG0ybiIsImUiOjE3OTIwMDAwMDAwMDB9"
 	if got := encodePairPayload(sample); got != want {
 		t.Fatalf("和 TS 编出来的不一样：\n%s\n%s", got, want)
 	}

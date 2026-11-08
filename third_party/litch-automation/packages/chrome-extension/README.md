@@ -35,4 +35,4 @@ AI 工具定义与宿主侧执行器在 `@litch/chrome-bridge`，不是通过网
 
 按随包 LICENSE 的 MIT 条款分发。未包含他人产品素材或私钥；宿主自己发布和审核其扩展实例。
 
-**互斥前提：两个宿主都使用新组件，且显式配置同一共享文件锁目录。** `list/new` 的真实 targetId 元数据在已有 claim.args 中传给 Go，原生 host 先持有系统锁才转发 claim；失败返回 busy。attach 前仍核对目标没有变化及没有已有调试器。只用 getTargets 的旧方案已复现 5 轮中 4 轮双方成功；后置 attached 布尔值无法辨识连接者，不能代替系统锁。旧扩展没有 metadata 时保留原协议行为，未加入锁约定的扩展/DevTools 不受文件锁仲裁。路径、生命周期和 WakeQora 接线见 chrome-bridge 包 README，最终测试与哈希见 [COMPATIBILITY.md](./COMPATIBILITY.md)。[Chrome API](https://developer.chrome.com/docs/extensions/reference/api/debugger#type-TargetInfo)
+**互斥前提：两个宿主都使用新组件，且显式配置同一共享文件锁目录。** `list/new` 的真实 targetId 元数据在已有 claim.args 中传给 Go，原生 host 先持有系统锁才转发 claim；失败返回 busy。attach 前仍核对目标没有变化及没有已有调试器。只用 getTargets 的旧方案已复现 5 轮中 4 轮双方成功；后置 attached 布尔值无法辨识连接者，不能代替系统锁。旧扩展没有 metadata 时保留原协议行为，未加入锁约定的扩展/DevTools 不受文件锁仲裁。路径、生命周期和其他宿主 接线见 chrome-bridge 包 README，最终测试与哈希见 [COMPATIBILITY.md](./COMPATIBILITY.md)。[Chrome API](https://developer.chrome.com/docs/extensions/reference/api/debugger#type-TargetInfo)

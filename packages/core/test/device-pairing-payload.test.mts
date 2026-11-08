@@ -15,10 +15,10 @@ const seed = Buffer.alloc(32, 7).toString('base64url')
 
 const sample: PairPayload = {
   v: 1,
-  n: '开发机 song-debian',
+  n: '开发机 linux-test',
   h: 'device-ts',
   p: 2222,
-  u: 'song',
+  u: 'dev',
   k: { t: 'ssh-ed25519', f: 'SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU' },
   s: seed,
   i: 'Ab3dEf6hIj9kLm2n',
@@ -57,8 +57,8 @@ test('不是配对文本、字段缺了、种子不是 32 字节，都返回 nul
 
 const tailscale: PairPayload = {
   v: 1,
-  n: '开发机 song-debian',
-  h: 'song-debian.tail2e2f6a.ts.net',
+  n: '开发机 linux-test',
+  h: 'linux-test.tail-example.ts.net',
   p: 22,
   u: 'root',
   k: { t: 'ssh-ed25519', f: 'SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU' },
@@ -70,7 +70,7 @@ const tailscale: PairPayload = {
 
 /** 命令行的 Go 那份（pair_test.go 的 pairTailscaleSample）断言和它一字不差 */
 const TAILSCALE_TEXT =
-  'LITCHPAIR1:eyJ2IjoxLCJuIjoi5byA5Y-R5py6IHNvbmctZGViaWFuIiwiaCI6InNvbmctZGViaWFuLnRhaWwyZTJmNmEudHMubmV0IiwicCI6MjIsInUiOiJyb290IiwiayI6eyJ0Ijoic3NoLWVkMjU1MTkiLCJmIjoiU0hBMjU2OitEaVkzd3Z2VjZUdUpKaGJwWmlzRi96TERBMHpQTVN2SGRrcjRVdkNPcVUifSwibSI6InRhaWxzY2FsZSIsImMiOiInL29wdC9saXRjaC9iaW4vY29kZXgtaGFybmVzcy1hZGFwdGVyJyBwYWlyLWVucm9sbCAtLWhvbWUgJy9yb290Ly5jb2RleC1oYXJuZXNzLWFkYXB0ZXInIEFiM2RFZjZoSWo5a0xtMm4iLCJpIjoiQWIzZEVmNmhJajlrTG0ybiIsImUiOjE3OTIwMDAwMDAwMDB9'
+  'LITCHPAIR1:eyJ2IjoxLCJuIjoi5byA5Y-R5py6IGxpbnV4LXRlc3QiLCJoIjoibGludXgtdGVzdC50YWlsLWV4YW1wbGUudHMubmV0IiwicCI6MjIsInUiOiJyb290IiwiayI6eyJ0Ijoic3NoLWVkMjU1MTkiLCJmIjoiU0hBMjU2OitEaVkzd3Z2VjZUdUpKaGJwWmlzRi96TERBMHpQTVN2SGRrcjRVdkNPcVUifSwibSI6InRhaWxzY2FsZSIsImMiOiInL29wdC9saXRjaC9iaW4vY29kZXgtaGFybmVzcy1hZGFwdGVyJyBwYWlyLWVucm9sbCAtLWhvbWUgJy9yb290Ly5jb2RleC1oYXJuZXNzLWFkYXB0ZXInIEFiM2RFZjZoSWo5a0xtMm4iLCJpIjoiQWIzZEVmNmhJajlrTG0ybiIsImUiOjE3OTIwMDAwMDAwMDB9'
 
 test('Tailscale 方式：键的顺序固定为 v n h p u k m c i e，解回来一样', () => {
   const text = encodePairPayload(tailscale)
@@ -110,7 +110,7 @@ test('Tailscale 方式：命令空的、多行的，方式不认识的，两种�
 
 test('isTailnetHost、pairModeOf：横幅优先，读不到时看设备自报和地址', () => {
   for (const host of [
-    'song-debian.tail2e2f6a.ts.net',
+    'linux-test.tail-example.ts.net',
     'X.TS.NET.',
     '100.64.0.1',
     '100.127.255.255',
@@ -121,7 +121,7 @@ test('isTailnetHost、pairModeOf：横幅优先，读不到时看设备自报和
     '100.63.0.1',
     '100.128.0.1',
     'ts.net.example.com',
-    'song-debian',
+    'linux-test',
   ])
     assert.equal(isTailnetHost(host), false, host)
   assert.equal(pairModeOf('SSH-2.0-Tailscale', false, '192.168.1.1'), 'tailscale')

@@ -97,7 +97,7 @@ test('open、list、answer、close：答复只转给发卡片的那条连接，c
   assert.equal(listed.data[0].kind, 'browserSignIn')
   assert.equal(
     listed.data[0].kind === 'browserSignIn' ? listed.data[0].summary.accounts[0].masked : null,
-    'so•••@gmail.com',
+    'so•••@example.com',
   )
   assert.deepEqual(r.approvals.call(phone, 'litch/approval/list', { threadId: 'other' }), {
     data: [],

@@ -43,7 +43,7 @@ await bridge.close()
 
 **跨应用互斥有明确前提：双方均使用新组件，并配置同一个 claimLockDirectory。** Go host 转发已有 claim 前，以真实 CDP targetId 的哈希文件做 flock / LockFileEx；扩展完成 detach 后的 revoked、claim 失败及进程退出释放内核锁。Node 不阻塞等待锁，也不重试输入；竞争者返回 busy。只用 getTargets 的旧方案曾在定向 5 轮中 4 轮双方成功，不能作为原子互斥。旧扩展不带新 metadata 时保留 wire 1 原行为，因此不能承诺与旧组件或不合作调试器之间的原子互斥。没有其他控制者时单 Litch 的允许/拒绝和租约语义保持，新增锁有少量系统调用耗时，实际基准见扩展包 COMPATIBILITY.md。
 
-共享目录由宿主**显式传入**，库不读取个人 HOME；Litch 和 WakeQora 应传同一个每用户约定路径（`chromeClaimDirectory` 为纯路径函数）：
+共享目录由宿主**显式传入**，库不读取个人 HOME；Litch 和其他宿主 应传同一个每用户约定路径（`chromeClaimDirectory` 为纯路径函数）：
 
 | 平台 | 路径 |
 |---|---|

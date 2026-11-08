@@ -10,9 +10,9 @@ export const card = (more: Partial<SignInCard> = {}): SignInCard => ({
     origin: 'https://github.com',
     site: 'GitHub',
     reason: 'Push the branch',
-    device: 'song-debian',
+    device: 'linux-test',
     accounts: [
-      { ref: 'a1', masked: 'so•••@gmail.com' },
+      { ref: 'a1', masked: 'so•••@example.com' },
       { ref: 'a2', masked: 'wo•••@corp.com' },
     ],
     task: null,

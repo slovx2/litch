@@ -152,7 +152,7 @@ function signInAsk(demo: SignInDemo, id: string): ClientAskView {
       : [
           {
             ref: `${id}-a1`,
-            username: 'song@example.com',
+            username: 'dev@example.com',
             masked: 'so•••@example.com',
             lastUsed: Date.now() - 3 * 86_400_000,
           },

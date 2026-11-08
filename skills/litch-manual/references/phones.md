@@ -303,7 +303,7 @@ the session's device is paired with the phone, the card also shows in that sessi
 the input box. The phone only offers "Sign in as {account}" and Decline (the web page is on the computer,
 so signing in by hand happens there); whichever side answers first wins.
 
-- Usernames are masked on the phone (`so•••@gmail.com`); the password never goes through it. Litch on
+- Usernames are masked on the phone (`so•••@example.com`); the password never goes through it. Litch on
   the computer fills in and submits after it has checked the phone's signature.
 - Approving needs the phone's fingerprint, face or screen lock. Without any screen lock the phone cannot
   approve.

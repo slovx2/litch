@@ -320,7 +320,7 @@ interface DevicePairStartBase {
 
 /** 一台机器在 tailnet 里的样子（tailscale status --json 的 Self） */
 export interface PairTailnet {
-  /** MagicDNS 全名，不带末尾的点，如 song-debian.tail2e2f6a.ts.net */
+  /** MagicDNS 全名，不带末尾的点，如 linux-test.tail-example.ts.net */
   name: string
   /** 它的 tailnet 地址：100.64.0.0/10 的 IPv4、fd7a:115c:a1e0::/48 的 IPv6 */
   addresses: string[]

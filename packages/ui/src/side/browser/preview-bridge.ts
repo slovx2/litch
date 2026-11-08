@@ -28,7 +28,7 @@ const PASSWORDS: BrowserSavedPassword[] = [
   {
     id: 'p1',
     origin: 'https://accounts.github.com',
-    username: 'song@example.com',
+    username: 'dev@example.com',
     source: 'chrome:Default',
     createdAt: Date.now() - 40 * DAY,
     lastUsedAt: Date.now() - 3 * DAY,
@@ -78,7 +78,7 @@ function createPreviewBridge(variant: string): BrowserBridge {
         : [
             {
               ref: `${tab.id}-a1`,
-              username: 'song@example.com',
+              username: 'dev@example.com',
               masked: 'so•••@example.com',
               lastUsed: Date.now() - 3 * DAY,
             },

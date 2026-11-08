@@ -177,12 +177,12 @@ func TestMachineHelpNamesDesktops(t *testing.T) {
 	device := startFakeDevice(t)
 	device.answer = func(method string, _ map[string]any) (any, *deviceRPCError) {
 		return map[string]any{"desktops": []any{
-			map[string]any{"hostname": "songs-mbp", "name": "Song 的 MacBook", "namespaces": []any{"litch_machine"}},
+			map[string]any{"hostname": "dev-mac", "name": "开发者的 MacBook", "namespaces": []any{"litch_machine"}},
 			map[string]any{"hostname": "other", "namespaces": []any{"litch_browser"}},
 		}}, nil
 	}
 	code, stdout, _ := runAgainst(t, device, "", "--help")
-	if code != 0 || !strings.Contains(stdout, `"Song 的 MacBook" (songs-mbp)`) || strings.Contains(stdout, "other") {
+	if code != 0 || !strings.Contains(stdout, `"开发者的 MacBook" (dev-mac)`) || strings.Contains(stdout, "other") {
 		t.Fatalf("help: %d %q", code, stdout)
 	}
 	host, _ := os.Hostname()

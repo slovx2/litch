@@ -144,7 +144,14 @@ def run(mode: str, server: http.server.ThreadingHTTPServer) -> dict[str, Any]:
            'ANTHROPIC_API_KEY': 'fake-local-only', 'ANTHROPIC_BASE_URL': f'http://127.0.0.1:{server.server_port}',
            'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC': '1', 'DISABLE_AUTOUPDATER': '1',
            'CLAUDE_CODE_DISABLE_TERMINAL_TITLE': '1', 'DISABLE_TELEMETRY': '1', 'DISABLE_ERROR_REPORTING': '1'}
-    profile = '(version 1)(allow default)(deny network*)(allow network* (remote ip "localhost:*"))(deny file-read* (subpath "/Users/songsiyu/.claude") (literal "/Users/songsiyu/.claude.json") (subpath "/Users/songsiyu/Library/Keychains"))'
+    # 隔离子进程之前解析真实用户目录，禁止读取凭据；不把某个开发者的路径写进仓库。
+    personal_home = Path.home()
+    protected = ' '.join(
+        f'({kind} {json.dumps(str(personal_home / relative), ensure_ascii=False)})'
+        for kind, relative in [('subpath', '.claude'), ('literal', '.claude.json'),
+                               ('subpath', 'Library/Keychains')]
+    )
+    profile = '(version 1)(allow default)(deny network*)(allow network* (remote ip "localhost:*"))' + f'(deny file-read* {protected})'
     command = ['/usr/bin/sandbox-exec', '-p', profile, CLI, '--model', 'claude-sonnet-4-6', '--setting-sources', 'user']
     if mode in ('unavailable', 'timeout', 'ask-unavailable', 'ask-update') or mode.startswith('block-'):
         # 用已被原生规则允许的工具检查 hook 失效会否绕过宿主权限。

@@ -96,7 +96,7 @@ ChatGPT 对照：静态符号中有 ignoredProcessID/sourcePID、事件 tap、�
 和 Finder 拖入严格失败。三次工具失败都是快捷键打开窗口后旧窗口校验过严，已修为派发后仅
 查取消、桌面和前台，正常窗口变化不失败；取消/用户介入检查保留。
 
-误存文件完整路径：`/Users/songsiyu/Library/Mobile Documents/com~apple~CloudDocs/:tmp:litch-cu-trial:cu-note.rtf`。
+误存文件完整路径：`/Users/dev/Library/Mobile Documents/com~apple~CloudDocs/:tmp:litch-cu-trial:cu-note.rtf`。
 文件名核对一致，创建/修改时间 2026-10-30 15:27:20.109 +08:00，落在本轮 15:24:46–15:32:17 内；
 只读 RTF 核验确认全文恰好两段测试文字，第一段非粗体、第二段粗体。经理明确要求核对这三项后
 清理，已精确删除该文件，未碰同目录其他文件或回收站。随后重开 TextEdit 并稳定观察为零窗口、

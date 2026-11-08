@@ -71,7 +71,7 @@ Computer Use、内置浏览器和 Chrome 控制拆成了独立的包，别的桌
 - **[内置浏览器](third_party/litch-automation/packages/browser)。** 基于 CDP 的浏览器工具执行器，带站点许可、代填登录和 Cookie、密码导入。Electron 宿主用 `/electron` 子入口直接接入；默认入口不加载 Electron，非 Electron 宿主提供自己的 CDP 页面宿主，或直接实现语义接口 `BrowserDriver`。
 - **Chrome 控制。** [扩展库](third_party/litch-automation/packages/chrome-extension)用来组装宿主自己的 MV3 扩展（自己的扩展 ID 和 host 名），提供标签租约和受限 CDP 执行器；[本机桥](third_party/litch-automation/packages/chrome-bridge)在 Node 进程里登记 Native Messaging、与扩展通信，并提供 AI 工具执行器，不依赖 Electron。
 
-通用模块的源码已集成在 `third_party/litch-automation`，对应公开代码库 [slovx2/litch-automation](https://github.com/slovx2/litch-automation)（MIT，npm 尚未首发）：提供五个包的源码，以及 macOS Swift、Windows Rust 原生助手的源码和构建脚本。独立仓库不签名、公证、打包或发布预编译助手；Litch、WakeQora 等使用方从源码自行构建、签名并随自己的应用分发。npm 正式包名为 `@litch/*`，各包独立 semver，首版为 `0.x`；源码和包版本与 Litch 版本独立。构建、接入示例和限制见各包的 README。
+通用模块的源码已集成在 `third_party/litch-automation`，对应公开代码库 [slovx2/litch-automation](https://github.com/slovx2/litch-automation)（MIT，npm 尚未首发）：提供五个包的源码，以及 macOS Swift、Windows Rust 原生助手的源码和构建脚本。独立仓库不签名、公证、打包或发布预编译助手；Litch、其他应用等使用方从源码自行构建、签名并随自己的应用分发。npm 正式包名为 `@litch/*`，各包独立 semver，首版为 `0.x`；源码和包版本与 Litch 版本独立。构建、接入示例和限制见各包的 README。
 
 通用模块源码修改后正常重建 Litch 即可验证，无须先发布 npm。提交前将改动回写独立仓，并同步 `third_party/litch-automation.lock.json`；`npm run check:shared-modules` 验证提交 SHA 和源码文件哈希。原生 helper 的产品身份、组装、签名和公证仍由 Litch 构建脚本管理。
 

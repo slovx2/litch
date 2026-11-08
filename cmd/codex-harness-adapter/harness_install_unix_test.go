@@ -210,7 +210,7 @@ EOF
 }
 
 // npm 有自己的全局目录（prefix -g），不在 PATH 上：假的 npm 问 prefix 时答它，装的时候把 pi 放进 <前缀>/bin。
-// 跟 song-debian 一样，PATH 上可能还有另一份 Node 早先装的 pi。
+// 跟 linux-test 一样，PATH 上可能还有另一份 Node 早先装的 pi。
 func (r *installRig) fakeNPMWithPrefix(t *testing.T, version string) string {
 	t.Helper()
 	prefix := filepath.Join(filepath.Dir(r.bin), "npm-global")

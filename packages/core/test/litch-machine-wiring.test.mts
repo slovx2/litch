@@ -42,11 +42,11 @@ import { watchSession } from './wire.mjs'
 const never = { aborted: false, addEventListener() {} }
 
 const DESKTOP: MachineFacts = {
-  name: 'Song 的 MacBook',
-  hostname: 'songs-mbp',
+  name: '开发者的 MacBook',
+  hostname: 'dev-mac',
   system: 'macOS 26.5 arm64',
-  user: 'song',
-  home: '/Users/song',
+  user: 'dev',
+  home: '/Users/dev',
   shell: '/bin/zsh',
 }
 
@@ -267,7 +267,7 @@ function setup(options: { threads?: Thread[]; machine?: boolean; desktop?: Machi
       {
         id: 'local',
         name: '本机',
-        host: 'song@songs-mbp',
+        host: 'dev@dev-mac',
         kind: 'local',
         target: null,
         wire: 'green',
@@ -384,7 +384,7 @@ test('Windows 桌面端：宣告工具、敏感名单、自定义范围、命令
   const desktop = {
     ...DESKTOP,
     system: 'Windows 11 x64',
-    home: 'C:\\Users\\song',
+    home: 'C:\\Users\\dev',
     shell: 'powershell.exe',
     appData: 'D:/配置',
   }
@@ -406,12 +406,12 @@ test('Windows 桌面端：宣告工具、敏感名单、自定义范围、命令
       access: { mode: 'custom', custom: ['C:\\机密'] },
     })
     const pending = detached(
-      { path: 'C:\\Users\\song\\中文.txt' },
+      { path: 'C:\\Users\\dev\\中文.txt' },
       { tool: 'read_file', harness: 'dsh' },
     )
     await settle()
     const card = activity.view?.pending[0]
-    assert.equal(card?.ask.path, 'C:\\Users\\song\\中文.txt')
+    assert.equal(card?.ask.path, 'C:\\Users\\dev\\中文.txt')
     assert.deepEqual(fake.seen.at(-1)?.context.policy, { mode: 'custom', denied: ['C:\\机密'] })
     await command('machine.answer', { pendingId: card?.id, optionId: 'once', note: null })
     assert.equal(textOf(await pending), 'ok')
@@ -493,7 +493,7 @@ test('握手：远程设备声明 litch_machine 并报桌面端的主机名和�
   assert.ok((far.litchExtensions as string[]).includes('clientTools'))
   assert.deepEqual(far.litchClientTools, {
     namespaces: ['litch_machine'],
-    desktop: { hostname: 'songs-mbp', name: 'Song 的 MacBook' },
+    desktop: { hostname: 'dev-mac', name: '开发者的 MacBook' },
   })
   // 本机：主进程什么都执行不了，litch_machine 也不给本机，干脆不声明
   const near = capsOf(local)
@@ -519,7 +519,7 @@ test('建会话：远程会话带上 litch_machine，说明开头写这个会话
   assert.match(spec.description, /^You are running on "dev-box" \(box\.internal, Linux x86_64\)\./)
   assert.match(
     spec.description,
-    /"Song 的 MacBook" \(songs-mbp, macOS 26\.5 arm64\) is the user's desktop/,
+    /"开发者的 MacBook" \(dev-mac, macOS 26\.5 arm64\) is the user's desktop/,
   )
   assert.ok(spec.description.length <= 1024)
   // 整份参数过得了原生 codex 对 thread/start 的校验（命名空间说明的上限就在这里面）。
@@ -905,7 +905,7 @@ test('关开关的那一刻：进行中的调用回 disabled、两种卡片都�
     owner: { deviceId: 'box', threadId: 'a', harness: 'pi' },
     targetId: 'desktop',
     command: 'npm run dev',
-    cwd: '/Users/song/app',
+    cwd: '/Users/dev/app',
     startedAt: 5,
   })
   const inSession = call({ path: '/x' }, { tool: 'read_file' })
@@ -941,7 +941,7 @@ test('主题 machine：执行器的进程表带上设备名和会话，变了整
     owner: { deviceId: 'box', threadId: null, harness: 'dsh' },
     targetId: 'desktop',
     command: 'make',
-    cwd: '/Users/song',
+    cwd: '/Users/dev',
     startedAt: 9,
   })
   assert.deepEqual(activity.view?.running, [
@@ -952,7 +952,7 @@ test('主题 machine：执行器的进程表带上设备名和会话，变了整
       sessionId: null,
       harness: 'dsh',
       command: 'make',
-      cwd: '/Users/song',
+      cwd: '/Users/dev',
       startedAt: 9,
     },
   ])

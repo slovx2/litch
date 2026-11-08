@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 出给集成方（WakeQora）的 Claude 入口包 cha-v<版本>.tar.gz，和它的校验和清单 cha-SHA256SUMS.txt。
+# 出给集成方（其他宿主）的 Claude 入口包 cha-v<版本>.tar.gz，和它的校验和清单 cha-SHA256SUMS.txt。
 #
 # 包里只有 packages/claude 的编译输出（含 linux-amd64、linux-arm64 两份守护进程）、按它的 package-lock.json
 # 装的运行依赖（不含 optional 依赖里 Agent SDK 自带的各平台 CLI，CLI 由集成方自己装），以及记版本的
@@ -7,7 +7,7 @@
 #
 # 构建在钉了摘要的 Go、Node 镜像里进行，源码取自 `git archive <提交>`（不含工作区未提交的改动），
 # 打包时去掉时间戳和属主：同一个提交在哪台机器上出都是同一个 sha256，集成方可以自己重出一份核对。
-# 镜像、步骤和 WakeQora 的 packaging/cha/build-cha-artifact.sh 一致，改这里要同时告诉集成方。
+# 镜像、步骤和其他宿主的 packaging/cha/build-cha-artifact.sh 一致，改这里要同时告诉集成方。
 #
 # 用法：
 #   bash scripts/package-cha.sh --out <目录> [--ref <提交或标签>]

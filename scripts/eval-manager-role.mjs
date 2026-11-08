@@ -8,7 +8,7 @@
 // 真跑：预先通过环境注入 EVAL_ANTHROPIC_BASE_URL、EVAL_ANTHROPIC_TOKEN、EVAL_MODEL、EVAL_SMALL_MODEL，
 //   CHA_CLAUDE_CLI=/隔离副本/claude node scripts/eval-manager-role.mjs --out /产物目录 --timeout 300
 // --timeout 是每步等待预算（秒，默认 180）；超时记录后打断仍在跑的回合，再继续下一步。
-// --out 须为空目录。缺省 /Volumes/workspace/tyrs-hand/litch-wt/_mgr/role-eval/<时间>/。
+// --out 须为空目录。缺省当前目录下的 .local/role-eval/<时间>/。
 // 真跑不添加任何夹具提示。--fake 另发“经理：”/“会话：”触发回合，明确记入证据，只检验驱动。
 // 模型用 Litch providers/upsert 配置；密钥仅进临时设备的 0600 密钥文件，退出时删除临时状态。
 // 环境白名单隔离 HOME/CLAUDE_CONFIG_DIR/CODEX_HOME，不读个人配置，不安装/升级 harness。
@@ -62,8 +62,7 @@ if (!values.fake && Object.values(options).some((value) => value === undefined |
 // 共用假模型的可选原始请求转储不适用于本驱动；证据只走统一脱敏出口。
 delete process.env.LITCH_FIXTURE_DUMP
 const output = resolve(
-  values.out ??
-    `/Volumes/workspace/tyrs-hand/litch-wt/_mgr/role-eval/${new Date().toISOString().replaceAll(':', '-')}`,
+  values.out ?? `.local/role-eval/${new Date().toISOString().replaceAll(':', '-')}`,
 )
 if (existsSync(output) && readdirSync(output).length)
   throw new Error('--out 必须为空，避免覆盖以前的评测')

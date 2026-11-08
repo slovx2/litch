@@ -18,7 +18,7 @@ export interface SignInAccount {
   ref: string
   /** 完整用户名：桌面端界面显示；给手机的那份由核心只给 masked */
   username: string
-  /** 打码的用户名（so•••@gmail.com） */
+  /** 打码的用户名（so•••@example.com） */
   masked: string
   /** 毫秒：最近一次在内置浏览器里填过；没填过是 null */
   lastUsed: number | null

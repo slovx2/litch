@@ -170,7 +170,7 @@ func (f *fakePairing) answer(method string, params map[string]any) (any, *device
 			"pairId": f.pairID, "expiresAt": time.Now().Add(10 * time.Minute).UnixMilli(),
 			"hostKey":  hostKey,
 			"hostKeys": []any{hostKey, map[string]any{"type": "ssh-rsa", "fingerprint": "SHA256:rsa", "publicKey": "ssh-rsa AAAArsa"}},
-			"hostname": "song-debian", "user": "song",
+			"hostname": "linux-test", "user": "dev",
 		}
 		if f.tailnet != nil {
 			answer["tailnet"] = f.tailnet
@@ -365,7 +365,7 @@ func TestPairAllowsPhone(t *testing.T) {
 	payload := pairTextIn(t, output)
 	k := payload["k"].(map[string]any)
 	if payload["v"] != float64(1) || payload["n"] != "开发机" || payload["h"] != "device-ts" || payload["p"] != float64(2222) ||
-		payload["u"] != "song" || k["t"] != "ssh-ed25519" || k["f"] != "SHA256:host" || payload["s"] != pairSample.Seed || payload["i"] != "Pair1" {
+		payload["u"] != "dev" || k["t"] != "ssh-ed25519" || k["f"] != "SHA256:host" || payload["s"] != pairSample.Seed || payload["i"] != "Pair1" {
 		t.Fatalf("配对文本不对：%v", payload)
 	}
 	if run.fake.decisions[0] != true || len(run.fake.decisions) != 1 || len(run.fake.cancels) != 0 {
@@ -384,7 +384,7 @@ func TestPairDefaultsAndReject(t *testing.T) {
 		t.Fatalf("退出码 %d", code)
 	}
 	payload := pairTextIn(t, run.stdout.String())
-	if payload["n"] != "song-debian" || payload["h"] != "song-debian" || payload["p"] != float64(22) {
+	if payload["n"] != "linux-test" || payload["h"] != "linux-test" || payload["p"] != float64(22) {
 		t.Fatalf("默认值不对：%v", payload)
 	}
 	if len(run.fake.decisions) != 1 || run.fake.decisions[0] || !strings.Contains(run.stdout.String(), "已拒绝") {
@@ -514,7 +514,7 @@ func TestPairSelfCheck(t *testing.T) {
 	run.cancel()
 	run.exit(t)
 	args := readLog(t, logs, "args")
-	for _, want := range []string{"-F\n/dev/null\n", "-T\n", "-p\n2222\n", "-l\nsong\n", "IdentitiesOnly=yes\n", "IdentityAgent=none\n",
+	for _, want := range []string{"-F\n/dev/null\n", "-T\n", "-p\n2222\n", "-l\ndev\n", "IdentitiesOnly=yes\n", "IdentityAgent=none\n",
 		"BatchMode=yes\n", "StrictHostKeyChecking=yes\n", "GlobalKnownHostsFile=/dev/null\n", "\n127.0.0.1\n"} {
 		if !strings.Contains(args, want) {
 			t.Fatalf("ssh 的参数里没有 %q：\n%s", want, args)
@@ -549,7 +549,7 @@ func TestPairSelfCheck(t *testing.T) {
 }
 
 func TestPairSelfCheckFailureStillShowsCode(t *testing.T) {
-	sshPath, _ := fakeSSH(t, `echo 'song@127.0.0.1: Permission denied (publickey).' >&2; exit 255`)
+	sshPath, _ := fakeSSH(t, `echo 'dev@127.0.0.1: Permission denied (publickey).' >&2; exit 255`)
 	run := startPairRun(t, &fakePairing{}, func() (string, error) { return sshPath, nil })
 	run.polled(t, 1)
 	run.cancel()
@@ -573,7 +573,7 @@ func TestPairSelfCheckFailureStillShowsCode(t *testing.T) {
 
 func TestPairTailscaleWay(t *testing.T) {
 	fake := &fakePairing{tailscale: true}
-	run := startPairRun(t, fake, nil, "--host", "song-debian.tail2e2f6a.ts.net")
+	run := startPairRun(t, fake, nil, "--host", "linux-test.tail-example.ts.net")
 	eventually(t, "问手机走不走 Tailscale", func() bool {
 		return strings.Contains(run.stdout.String(), "手机经 Tailscale 地址连这台机器吗？[y/N]")
 	})
@@ -582,10 +582,10 @@ func TestPairTailscaleWay(t *testing.T) {
 	output := run.stdout.String()
 	payload := pairTextIn(t, output)
 	if payload["m"] != "tailscale" || payload["c"] != "'/opt/litch/bin/codex-harness-adapter' pair-enroll --home '/h' Pair1" ||
-		payload["s"] != nil || payload["h"] != "song-debian.tail2e2f6a.ts.net" || payload["u"] != "song" {
+		payload["s"] != nil || payload["h"] != "linux-test.tail-example.ts.net" || payload["u"] != "dev" {
 		t.Fatalf("配对文本不对：%v", payload)
 	}
-	for _, want := range []string{"本机没有 ssh 客户端，跳过（自检会用一把临时钥匙", "经 Tailscale SSH 连接", "以 song 登录"} {
+	for _, want := range []string{"本机没有 ssh 客户端，跳过（自检会用一把临时钥匙", "经 Tailscale SSH 连接", "以 dev 登录"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("输出里没有 %q：\n%s", want, output)
 		}
@@ -604,14 +604,14 @@ func TestPairTailscaleWay(t *testing.T) {
 }
 
 func TestPairTailscaleDefaultsToTailnetIP(t *testing.T) {
-	tailnet := map[string]any{"name": "song-debian.tail2e2f6a.ts.net", "addresses": []any{"fd7a:115c:a1e0::ba34:8b64", "100.124.139.97"}}
+	tailnet := map[string]any{"name": "linux-test.tail-example.ts.net", "addresses": []any{"fd7a:115c:a1e0::42", "100.64.0.42"}}
 	// Tailscale 方式、没给 --host：主机用 tailnet 的 IPv4，名字仍是主机名
 	fake := &fakePairing{tailscale: true, tailnet: tailnet}
 	run := startPairRun(t, fake, nil)
 	eventually(t, "问手机走不走 Tailscale", func() bool { return strings.Contains(run.stdout.String(), "[y/N]") })
 	_, _ = run.stdin.Write([]byte("y\n"))
 	run.polled(t, 1)
-	if payload := pairTextIn(t, run.stdout.String()); payload["h"] != "100.124.139.97" || payload["n"] != "song-debian" {
+	if payload := pairTextIn(t, run.stdout.String()); payload["h"] != "100.64.0.42" || payload["n"] != "linux-test" {
 		t.Fatalf("配对文本不对：%v", payload)
 	}
 	run.cancel()
@@ -622,7 +622,7 @@ func TestPairTailscaleDefaultsToTailnetIP(t *testing.T) {
 	eventually(t, "问手机走不走 Tailscale", func() bool { return strings.Contains(run.stdout.String(), "[y/N]") })
 	_, _ = run.stdin.Write([]byte("n\n"))
 	run.polled(t, 1)
-	if payload := pairTextIn(t, run.stdout.String()); payload["h"] != "song-debian" {
+	if payload := pairTextIn(t, run.stdout.String()); payload["h"] != "linux-test" {
 		t.Fatalf("配对文本不对：%v", payload)
 	}
 	run.cancel()
@@ -678,7 +678,7 @@ func TestPairTailscaleSelfCheck(t *testing.T) {
 	run.cancel()
 	run.exit(t)
 	args := readLog(t, logs, "args")
-	for _, want := range []string{"-p\n22\n", "-l\nsong\n", "IdentitiesOnly=yes\n", "StrictHostKeyChecking=yes\n",
+	for _, want := range []string{"-p\n22\n", "-l\ndev\n", "IdentitiesOnly=yes\n", "StrictHostKeyChecking=yes\n",
 		"--\nbox.tail1.ts.net\n'/opt/litch/bin/codex-harness-adapter' pair-enroll --home '/h' Pair1\n"} {
 		if !strings.Contains(args, want) {
 			t.Fatalf("ssh 的参数里没有 %q：\n%s", want, args)

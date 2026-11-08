@@ -39,7 +39,7 @@ export function createMockApprovals(options: MockApprovalsOptions): MockApproval
               reason: 'Open the pull request to check the CI result',
               device: options.deviceName(deviceId),
               accounts: [
-                { ref: 'a1', masked: 'so•••@gmail.com' },
+                { ref: 'a1', masked: 'so•••@example.com' },
                 { ref: 'a2', masked: 'li•••@example.com' },
               ],
               task: null,

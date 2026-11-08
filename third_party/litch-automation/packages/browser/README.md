@@ -68,7 +68,7 @@ const executor = createBrowserExecutor({
 
 `partition` 必须专供本组件；该 session 会拒绝页面权限与屏幕共享，没开 `downloads` 时也拒绝下载，并清空 session 级 preloads。开了 `downloads` 时，下载先收进 `stagingRoot` 下的私有目录，`context.ask` 收到 `browserDownload` 审批，批准后才发布到 `downloadsDirectory`；接通用 `ApprovalPort` 的宿主用 `browserApprovalSubject` 转成 `{ kind: 'download' }`。退出前调用 `host.downloads?.dispose()` 清掉暂存区。不要传应用主界面的 session。这里复用 Chromium CDP 与 Electron session；不会把旧应用的 Cookie/密码目录迁移到新应用。Cookie 快照保留 session Cookie 和 CHIPS 键，使用私有控制页访问 Network，模型工具仍不能读取 Network/Storage。
 
-默认 Cookie 加密使用 Electron `safeStorage`，不可用时不保存明文。测试或有自己的密钥库的宿主可注入 `cipher`。日志钩子只通知保存失败，不携带 Cookie。站点策略可以传文件或 `SitePersistence`；不同产品必须使用不同实例和目录，禁止通过共用文件继承另一宿主的授权。
+默认 Cookie 加密使用 Electron `safeStorage`，不可用时不保存明文。测试或有自己的密钥库的宿主可注入 `cipher`。日志钩子只通知保存失败，不携带 Cookie。站点策略可以传文件或 `SitePersistence`；不同产品必须使用不同实例和目录，禁止通过共用文件继承其他宿主的授权。
 
 网页 preload 用 esbuild 等构建器将 `/preload` 入口打成 `format: 'cjs'`、`platform: 'node'`，将 `electron` 留作 external；`autofillPreload` 传该绝对路径。应用自己的 preload/IPC 负责面板与审批卡，不把网页 preload 的接口暴露给普通渲染页面。
 
@@ -84,7 +84,7 @@ macOS `createProtectedReader` 接受 `platform` 和 `SystemSecrets`。可用 `sy
 
 构建 macOS 原生组件：`buildKeychain({ out, nodeHeaders? })`，从 `/native/build` 导入。它使用 Node-API 8、系统 clang 与 Security.framework；tarball 附源码和启动脚本，宿主自己编译、签名、打包（通常放 asar 外）。不要把另一应用的签名当成自己访问钥匙串的授权。Electron/Node 宿主退出前必须取消导入并清理子进程。
 
-WakeQora 的新 Electron 客户端可采用以上主进程接线：它自己提供可信 preload、分区、存储路径、审批卡与构建资源。Litch 当前验证 Electron 44.7.0；WakeQora 的 44.10.2 仍需在其应用中复验 CDP、sandbox preload、session Cookie、koffi/打包与签名。本包不接管自动更新，退出前的 flush 等待顺序由宿主安排。
+其他宿主的新 Electron 客户端可采用以上主进程接线：它自己提供可信 preload、分区、存储路径、审批卡与构建资源。Litch 当前验证 Electron 44.7.0；其他 Electron 版本仍需在宿主应用中复验 CDP、sandbox preload、session Cookie、koffi/打包与签名。本包不接管自动更新，退出前的 flush 等待顺序由宿主安排。
 
 ## 构建与验收
 

@@ -39,11 +39,11 @@ test('exec：跑完回退出码和合并的输出，进程号那一行摘掉，�
   assert.equal(asks[0]?.class, 'mutate')
   assert.deepEqual(
     { action: asks[0]?.ask.action, command: asks[0]?.ask.command, cwd: asks[0]?.ask.cwd },
-    { action: 'exec', command: 'echo hi', cwd: '/Users/song' },
+    { action: 'exec', command: 'echo hi', cwd: '/Users/dev' },
   )
   const proc = desktop.execs[0]
   assert.deepEqual(proc?.command.slice(3), ['/bin/zsh', 'echo hi'])
-  assert.equal(proc?.cwd, '/Users/song')
+  assert.equal(proc?.cwd, '/Users/dev')
   // 没给 stdin、也不先回：标准输入起来就关
   assert.equal(proc?.stdinClosed, true)
   assert.deepEqual(logs, [{ tool: 'exec', summary: 'echo hi', result: 'ok', flagged: false }])
@@ -207,7 +207,7 @@ test('审批的几种结果：拒绝（带话）、没人答、取消，都不�
   const cancelled = await executor.call('write_file', { path: '~/a.txt', content: 'x' }, context)
   assert.match(textOf(cancelled), /^\[litch:failed\]/)
   assert.equal(desktop.execs.length, 0)
-  assert.throws(() => desktop.fs.read('/Users/song/a.txt'))
+  assert.throws(() => desktop.fs.read('/Users/dev/a.txt'))
   assert.deepEqual(
     logs.map((one) => one.result),
     ['declined', 'expired', 'failed'],
@@ -216,16 +216,16 @@ test('审批的几种结果：拒绝（带话）、没人答、取消，都不�
 
 test('exec 的命令里提到禁止位置时填 flagged：原样、展开、$HOME、相对、解开链接的写法', async () => {
   const { desktop, executor, context, asks, logs } = world(['~/.ssh', '~/.aws', '~/secrets'])
-  desktop.fs.mkdirp('/Users/song/.ssh')
+  desktop.fs.mkdirp('/Users/dev/.ssh')
   desktop.fs.mkdirp('/Volumes/vault/secrets')
-  desktop.fs.link('/Users/song/secrets', '/Volumes/vault/secrets')
+  desktop.fs.link('/Users/dev/secrets', '/Volumes/vault/secrets')
   desktop.onExec = (proc) => proc.exit(0)
   const flaggedFor = async (command: string, cwd?: string) => {
     await executor.call('exec', { command, ...(cwd ? { cwd } : {}) }, context)
     return asks.at(-1)?.ask.flagged
   }
   assert.deepEqual(await flaggedFor('cat ~/.ssh/id_ed25519'), ['~/.ssh'])
-  assert.deepEqual(await flaggedFor('ls /Users/song/.ssh'), ['~/.ssh'])
+  assert.deepEqual(await flaggedFor('ls /Users/dev/.ssh'), ['~/.ssh'])
   assert.deepEqual(await flaggedFor('cat "$HOME/.aws/credentials"'), ['~/.aws'])
   assert.deepEqual(await flaggedFor('tar cf x.tar .ssh'), ['~/.ssh'])
   assert.deepEqual(await flaggedFor('cat /Volumes/vault/secrets/key'), ['~/secrets'])
@@ -342,13 +342,13 @@ test('参数不对、不认识的机器和工具：回 invalid，不动手', asy
 test('machines：列出各台，桌面端带审批方式和访问范围，连不上的照实说', async () => {
   const time = fakeClock()
   const desktop = new FakeMachine('desktop', 'desktop', {
-    name: "Song's MacBook",
-    hostname: 'songs-mbp',
+    name: 'Developer MacBook',
+    hostname: 'dev-mac',
   })
   const session = new FakeMachine('session', 'session', {
     name: 'dev-box',
     system: 'Linux x86_64',
-    home: '/home/song',
+    home: '/home/dev',
     shell: '/bin/bash',
   })
   const other = new FakeMachine('nas', 'other')
@@ -358,12 +358,12 @@ test('machines：列出各台，桌面端带审批方式和访问范围，连不
   const text = textOf(await executor.call('machines', {}, context))
   assert.match(
     text,
-    /- desktop \(the user's desktop running Litch, the controller\): "Song's MacBook", host songs-mbp, macOS 26.5 arm64/,
+    /- desktop \(the user's desktop running Litch, the controller\): "Developer MacBook", host dev-mac, macOS 26.5 arm64/,
   )
   assert.match(text, /Approval: session .*Access: custom .*Blocked locations: ~\/\.ssh\./)
   assert.match(
     text,
-    /- session \(where this conversation runs\): "dev-box".*Linux x86_64.*home \/home\/song, shell \/bin\/bash$/m,
+    /- session \(where this conversation runs\): "dev-box".*Linux x86_64.*home \/home\/dev, shell \/bin\/bash$/m,
   )
   assert.match(text, /- nas \(another machine\): not reachable/)
 })

@@ -131,7 +131,7 @@ test('PEER-TARGET-006：读原生记录时回信按前面收到的消息认出�
       origin: {
         kind: 'peer',
         from: ADDRESS,
-        name: 'Litch远程连接song-debian Claude报错',
+        name: 'Litch远程连接linux-test Claude报错',
         fromSession: 'local_c437',
         fromMode: 'bypass',
         body: '我这边有未提交的改动',
@@ -160,16 +160,16 @@ test('PEER-TARGET-006：读原生记录时回信按前面收到的消息认出�
   const send = items.find((item) => item.type === 'mcpToolCall')
   assert.equal(
     send?.type === 'mcpToolCall' && send.tool,
-    'SendMessage Litch远程连接song-debian Claude报错',
+    'SendMessage Litch远程连接linux-test Claude报错',
   )
   assert.deepEqual(send?.type === 'mcpToolCall' && send.litchPeer, {
-    name: 'Litch远程连接song-debian Claude报错',
+    name: 'Litch远程连接linux-test Claude报错',
     session: 'local_c437',
   })
   // 收到的那条照旧是发送方自报的
   const received = items.find((item) => item.type === 'userMessage')
   assert.deepEqual(received?.type === 'userMessage' && received.litchPeer, {
-    name: 'Litch远程连接song-debian Claude报错',
+    name: 'Litch远程连接linux-test Claude报错',
     session: 'local_c437',
     mode: 'bypass',
   })
