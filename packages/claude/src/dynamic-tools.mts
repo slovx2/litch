@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import type { ValidateFunction } from 'ajv'
+import { resolveAutomationTools } from '../../shared/src/automation-tools.mjs'
 import { dynamicToolResult } from './dynamic-tool-result.mjs'
 import { jsonSchemaValidator } from './json-schema.mjs'
 import { ProtocolError, requiredString } from './protocol-contract.mjs'
@@ -29,6 +30,7 @@ export const toolDescription = (tool: DynamicTool): string =>
  * 一段都没有是 null。形状不对的定义在建会话时已经拒了，这里只挑认得的
  */
 export function dynamicToolInstructions(raw: unknown[] | undefined): string | null {
+  if (raw) raw = resolveAutomationTools(raw, 'claude')
   const sections: string[] = []
   const seen = new Set<string>()
   for (const spec of raw ?? []) {
@@ -87,6 +89,7 @@ export function dynamicToolCliNames(raw: unknown[] | undefined): ReadonlySet<str
 
 /** 把 function 和 namespace 两种定义摊平成一个个工具，命名空间的说明挂在它第一个工具上 */
 export function dynamicToolSpecs(raw: unknown[]): DynamicTool[] {
+  raw = resolveAutomationTools(raw, 'claude')
   return raw.flatMap((value): unknown[] => {
     if (!value || typeof value !== 'object') throw new ProtocolError(-32602, '工具定义无效')
     const spec = value as Record<string, unknown>

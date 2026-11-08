@@ -63,7 +63,14 @@ test('SESSION-TREE-001：用户回合里模型派一个跨 harness 的子会话�
     assert.equal(started.permissions, ':workspace')
     assert.deepEqual(
       started.dynamicTools.map((spec: any) => spec.name),
-      ['litch_echo', 'litch_tasks', SESSIONS, 'litch_browser', PRESENTATION_NAMESPACE],
+      [
+        'litch_echo',
+        'litch_tasks',
+        SESSIONS,
+        'litch_browser',
+        'litch_automation',
+        PRESENTATION_NAMESPACE,
+      ],
     )
     // 第一条消息：谁派的、任务、做完怎么回报
     const [briefed] = env.claude.sent('turn/start')
@@ -531,7 +538,7 @@ test('SESSION-TREE-010：用户在界面上派子会话（litch/session/start）
     // 没给工具的父会话：子会话只带 litch_sessions 和呈现风格
     assert.deepEqual(
       started.dynamicTools.map((spec: any) => spec.name),
-      ['litch_tasks', SESSIONS, 'litch_browser', PRESENTATION_NAMESPACE],
+      ['litch_tasks', SESSIONS, 'litch_browser', 'litch_automation', PRESENTATION_NAMESPACE],
     )
   } finally {
     await env.close()
@@ -656,7 +663,14 @@ test('SESSION-TREE-014：父会话带着呈现风格派子会话：子会话也�
     const [child] = env.claude.sent('thread/start')
     assert.deepEqual(
       child.dynamicTools.map((spec: any) => spec.name),
-      ['litch_echo', 'litch_tasks', SESSIONS, 'litch_browser', PRESENTATION_NAMESPACE],
+      [
+        'litch_echo',
+        'litch_tasks',
+        SESSIONS,
+        'litch_browser',
+        'litch_automation',
+        PRESENTATION_NAMESPACE,
+      ],
     )
     assert.deepEqual(child.dynamicTools.at(-1), PRESENTATION_SPEC)
     // 建在哪个 harness 上决定带不带：原生 codex 和不知道的不带

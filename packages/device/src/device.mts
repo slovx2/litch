@@ -6,6 +6,7 @@ import {
 import { PATH_PICKER_EXTENSION } from '../../protocol/src/path-picker.mjs'
 import { protectedAttachmentOwners } from './attachment-active.mjs'
 import { AttachmentRetention } from './attachment-retention.mjs'
+import { registerAutomationGuide } from './automation-guide.mjs'
 import { ResumeTools } from './resume-tools.mjs'
 import { reserveSessionWork } from './session-capacity.mjs'
 import { prepareSessionTools } from './session-client-tools.mjs'
@@ -394,6 +395,7 @@ export class DeviceServer {
     const taskTiming = { ...DEFAULT_TASK_TIMING, ...options.tasks?.timing }
     this.taskTiming = taskTiming
     this.deviceTools = new DeviceTools(log)
+    registerAutomationGuide(this.deviceTools)
     // litch_tasks 是第一个注册者：调用从哪条连接来都由设备进程答
     registerTasksTool(this.deviceTools, {
       tasks: () => this.tasks,

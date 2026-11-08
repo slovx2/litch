@@ -16,6 +16,7 @@
   },
   "files": [
     "dist",
+    "skills",
     "README.md",
     "LICENSE"
   ],
@@ -23,7 +24,7 @@
     "build": "tsc -p tsconfig.json",
     "check:package": "node scripts/check-package.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
-    "test": "node --import tsx --test test/*.test.mts"
+    "test": "node scripts/generate-skills.mjs && node --import tsx --test test/*.test.mts"
   },
   "repository": {
     "type": "git",

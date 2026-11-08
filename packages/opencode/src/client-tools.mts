@@ -6,6 +6,7 @@ import {
   isManagerQuestionTools,
   managerQuestionToolAllowed,
 } from '../../protocol/src/manager-question.mjs'
+import { resolveAutomationTools } from '../../shared/src/automation-tools.mjs'
 import {
   BACKGROUND_SHELL_NAMESPACE,
   backgroundShellSpec,
@@ -78,6 +79,7 @@ const describe = (namespace: string | null, tool: string, about: string, text: s
 export function dynamicToolSpecs(raw: unknown): DynamicToolSpec[] {
   if (raw == null) return []
   if (!Array.isArray(raw)) throw new ProtocolError(-32602, 'dynamicTools 必须是数组')
+  raw = resolveAutomationTools(raw, 'opencode')
   const flat: Array<Omit<DynamicToolSpec, 'mcpName'>> = []
   const add = (value: any, namespace: string | null, about: string) => {
     if (value?.type !== 'function') throw new ProtocolError(-32602, '动态工具必须是 function')
@@ -126,6 +128,7 @@ export function dynamicToolSpecs(raw: unknown): DynamicToolSpec[] {
  */
 export function toolInstructions(raw: unknown): string | null {
   if (!Array.isArray(raw)) return null
+  raw = resolveAutomationTools(raw, 'opencode')
   const sections: string[] = []
   const seen = new Set<string>()
   for (const spec of raw as any[]) {

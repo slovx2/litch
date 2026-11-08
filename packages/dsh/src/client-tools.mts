@@ -20,6 +20,7 @@ import { randomBytes } from 'node:crypto'
 import { createServer, type Server, type Socket } from 'node:net'
 import { fileURLToPath } from 'node:url'
 import type { ClientToolCallResponse } from '../../protocol/src/client-tools.mjs'
+import { resolveAutomationTools } from '../../shared/src/automation-tools.mjs'
 import { ProtocolError, requiredString } from '../../shared/src/protocol-contract.mjs'
 
 /** 原生 codex 对命名空间说明的上限（超了它拒绝建会话），这里照样拒，免得在 dsh 上能建、换到原生 codex 就不行 */
@@ -45,6 +46,7 @@ const TOOL_NAME = /^[a-zA-Z0-9_-]{1,64}$/
 export function dshClientTools(raw: unknown): DshClientTool[] {
   if (raw == null) return []
   if (!Array.isArray(raw)) throw new ProtocolError(-32602, 'dynamicTools 必须是数组')
+  raw = resolveAutomationTools(raw, 'dsh')
   const tools: DshClientTool[] = []
   const add = (spec: any, namespace: string | null, about: string) => {
     if (spec?.type !== 'function') throw new ProtocolError(-32602, '动态工具必须是 function')
@@ -93,6 +95,7 @@ export function dshClientTools(raw: unknown): DshClientTool[] {
  */
 export function dshToolInstructions(raw: unknown): string | null {
   if (!Array.isArray(raw)) return null
+  raw = resolveAutomationTools(raw, 'dsh')
   const sections: string[] = []
   const seen = new Set<string>()
   for (const spec of raw as any[]) {

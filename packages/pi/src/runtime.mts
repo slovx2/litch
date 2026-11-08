@@ -9,6 +9,7 @@ import type {
 } from '@earendil-works/pi-coding-agent'
 import type { ClientToolNamespaceSpec } from '../../protocol/src/client-tools.mjs'
 import { isManagerQuestionTools } from '../../protocol/src/manager-question.mjs'
+import { resolveAutomationTools } from '../../shared/src/automation-tools.mjs'
 import {
   BACKGROUND_SHELL_NAMESPACE,
   type ShellToolResult,
@@ -83,7 +84,8 @@ export async function openSession(
   prepared?: SessionManager,
 ): Promise<LiveSession> {
   // 装载期间可能收到另一条恢复请求；注册、提示与指纹必须使用同一份快照。
-  const dynamicTools = structuredClone(thread.dynamicTools)
+  const originalTools = structuredClone(thread.dynamicTools)
+  let dynamicTools = resolveAutomationTools(originalTools, 'pi')
   const agentDir = getAgentDir()
   const settingsManager = SettingsManager.create(thread.cwd, agentDir)
   const eventBus = createEventBus()
@@ -156,16 +158,24 @@ export async function openSession(
   }
   // 动态工具的命名空间带的规则接在追加提示的最后：用户自己的 APPEND_SYSTEM.md（项目的、全局的）照旧在前面。
   // 会话每次装载都按记下的工具重算，恢复、分叉出来的会话（带着原会话的工具）一样有
-  const toolInstructions = clientToolInstructions(dynamicTools)
+  let toolInstructions = clientToolInstructions(dynamicTools)
   const loader = new DefaultResourceLoader({
     cwd: thread.cwd,
     agentDir,
     settingsManager,
     eventBus,
+    skillsOverride(result) {
+      dynamicTools = resolveAutomationTools(originalTools, 'pi', {
+        visiblePaths: new Set(
+          result.skills.filter((s) => !s.disableModelInvocation).map((s) => s.filePath),
+        ),
+      })
+      toolInstructions = clientToolInstructions(dynamicTools)
+      return result
+    },
     ...(question ? { noExtensions: true, noSkills: true, noPromptTemplates: true } : {}),
-    ...(toolInstructions
-      ? { appendSystemPromptOverride: (base: string[]) => [...base, toolInstructions] }
-      : {}),
+    appendSystemPromptOverride: (base: string[]) =>
+      toolInstructions ? [...base, toolInstructions] : base,
     additionalExtensionPaths: managed,
     extensionFactories: [...(question ? [] : builtInExtensions), compaction, ...approvals],
     extensionsOverride(base) {
@@ -284,7 +294,7 @@ export async function openSession(
     throw error
   }
   live = {
-    toolsFingerprint: JSON.stringify(dynamicTools),
+    toolsFingerprint: JSON.stringify(originalTools),
     session,
     loader,
     hasPendingInputs: () => pendingInputs.size > 0,

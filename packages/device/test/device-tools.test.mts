@@ -117,6 +117,7 @@ test('另注册一个命名空间：每条通往引擎的连接都替它声明�
     // 设备进程自己执行的不看会话：都列进 anyThread
     assert.deepEqual(greeting.capabilities.litchClientTools, {
       namespaces: [
+        'litch_automation',
         'litch_tasks',
         'litch_manager',
         'litch_repository',
@@ -129,6 +130,7 @@ test('另注册一个命名空间：每条通往引擎的连接都替它声明�
       computerActions: true,
       browserActions: true,
       anyThread: [
+        'litch_automation',
         'litch_tasks',
         'litch_manager',
         'litch_repository',
@@ -162,8 +164,14 @@ test('另注册一个命名空间：每条通往引擎的连接都替它声明�
     const own = internal(engine)[0]
     assert.ok(own, '内部连接连上了')
     assert.deepEqual(JSON.parse(own.raw[0] as string).params.capabilities.litchClientTools, {
-      namespaces: [...Object.values(CLIENT_TOOL_NAMESPACE), 'litch_repository', 'litch_demo'],
+      namespaces: [
+        ...Object.values(CLIENT_TOOL_NAMESPACE),
+        'litch_automation',
+        'litch_repository',
+        'litch_demo',
+      ],
       anyThread: [
+        'litch_automation',
         'litch_tasks',
         'litch_manager',
         'litch_repository',

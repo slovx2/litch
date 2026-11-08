@@ -34,7 +34,10 @@ for (const harness of ['claude-code', 'pi']) {
       })
       const initial = env.device.sessionTree.store.tools(thread.id)!
       const preserved = initial.filter(
-        (tool: any) => !['litch_browser', 'litch_machine', 'litch_computer'].includes(tool.name),
+        (tool: any) =>
+          !['litch_browser', 'litch_machine', 'litch_computer', 'litch_automation'].includes(
+            tool.name,
+          ),
       )
       env.control!.patch({ values: { 'tools.browser': true, 'tools.machine': true } as never })
       const other = await litch(env)
@@ -46,7 +49,10 @@ for (const harness of ['claude-code', 'pi']) {
       assert.ok(names(tools).includes('litch_machine'))
       assert.ok(names(tools).includes('litch_browser'))
       assert.deepEqual(
-        tools.filter((tool: any) => !['litch_browser', 'litch_machine'].includes(tool.name)),
+        tools.filter(
+          (tool: any) =>
+            !['litch_browser', 'litch_machine', 'litch_automation'].includes(tool.name),
+        ),
         preserved,
       )
       assert.equal(names(tools).length, new Set(names(tools)).size)

@@ -27,6 +27,7 @@ import type {
 import { HARNESS_IDENTITY } from '../../protocol/src/harness-identity.mjs'
 import { supportsNativeBackground } from '../../protocol/src/native-background-wake.mjs'
 import { builtinPreset, PRESET } from '../../shared/src/harness-declaration.mjs'
+import { codexAutomationSkills } from './codex-automation-skills.mjs'
 import { CodexHarnessConfig } from './codex-harness-config.mjs'
 import { prepareInstructions } from './codex-instructions.mjs'
 import {
@@ -224,7 +225,12 @@ export const NATIVE_CODEX_DIALECT: UpstreamDialect = {
   harnessConfig: (context) => new CodexHarnessConfig(context),
 
   // 它不保存开发者指令：建会话、恢复、分叉之前由设备进程补齐（codex-instructions.mts）
-  instructions: prepareInstructions,
+  instructions(method, params, context) {
+    if (method !== 'thread/start') return prepareInstructions(method, params, context)
+    return codexAutomationSkills(params, context).then(
+      (next) => prepareInstructions(method, next, context) ?? { params: next, remember() {} },
+    )
+  },
 
   async describe(initialized, ask) {
     const version = isObject(initialized) ? codexVersion(initialized.userAgent) : null
