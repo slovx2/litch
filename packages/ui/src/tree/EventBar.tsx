@@ -27,6 +27,7 @@ const HEAD_TEXT: Partial<Record<string, MessageKey>> = {
   remind: 'tree.event.remind',
   'manager-answers': 'manager.event.answers',
   'manager-ignored': 'manager.event.ignored',
+  'manager-suggestions': 'manager.event.suggestions',
   'manager-open': 'manager.event.open',
   'manager-end': 'manager.event.end',
   'manager-rules': 'manager.event.rules',

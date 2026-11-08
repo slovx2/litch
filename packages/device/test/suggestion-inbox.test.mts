@@ -5,7 +5,6 @@ import {
   MANAGER_DEFAULT_DISPATCH,
   MANAGER_METHOD,
 } from '../../protocol/src/manager.mjs'
-import { MANAGER_PAGING_METHOD } from '../../protocol/src/manager-paging.mjs'
 import {
   SUGGESTION_NEVER,
   SUGGESTION_RETENTION_SETTING,
@@ -14,7 +13,7 @@ import {
 } from '../../protocol/src/suggestion-inbox.mjs'
 import { startChild } from '../src/session-start.mjs'
 import { RpcFailure } from './fake-upstream.mjs'
-import { got, parent, plain, TREE, text, treeRig, until } from './tree-kit.mjs'
+import { got, parent, plain, TREE, treeRig, until } from './tree-kit.mjs'
 
 async function setup(values?: Record<string, unknown>) {
   const env = treeRig({}, values ? { values } : {})
@@ -130,97 +129,6 @@ test('归档保留标记；在来源执行前恢复，失败保留卡；删除�
     await env.close()
   }
 })
-
-for (const running of [false, true]) {
-  test(`工作线提卡只排队：经理${running ? '运行中不插话' : '空闲时不唤醒'}，读取可见且下一回合带入`, async () => {
-    const { env, client, threadId, tree, propose } = await setup()
-    try {
-      const { manager } = await client.call(MANAGER_METHOD.create, {
-        cwd: env.stateDir,
-        harness: 'pi',
-        model: null,
-        effort: null,
-        name: '经理',
-        scope: '',
-        template: 'blank',
-        rules: '',
-        firstTask: '',
-        dispatch: { ...MANAGER_DEFAULT_DISPATCH, worktree: false },
-        contact: { ...MANAGER_DEFAULT_CONTACT },
-      })
-      await until(() => env.pi.running(manager.threadId), '经理开场')
-      tree.store.addLineage({
-        threadId,
-        parentThreadId: manager.threadId,
-        harness: 'pi',
-        title: '已完成的工作线',
-        prompt: '检查',
-        kind: 'fresh',
-        origin: 'model',
-        wakeParent: true,
-        createdAt: 1,
-        proposalId: '',
-      })
-      if (!running) {
-        env.pi.end(manager.threadId, 'completed', '等待后续工作')
-        await until(() => !tree.isActive(manager.threadId), '经理结束')
-      }
-      await tree.settleManagerQueue(manager.threadId)
-      const calls = () =>
-        env.pi.seen.filter(
-          (call) =>
-            call.params?.threadId === manager.threadId &&
-            ['turn/start', 'turn/steer'].includes(call.method),
-        ).length
-      const before = calls()
-      const proposal = propose(threadId)
-      await tree.settleManagerQueue(manager.threadId)
-      assert.equal(calls(), before, '提卡不得主动开回合或插话')
-      assert.equal(tree.store.notes(manager.threadId).length, 1)
-      assert.equal(tree.store.notes(manager.threadId)[0]?.wake, false)
-      assert.ok(tree.queuedNotes(manager.threadId)[0]?.excerpt.includes(proposal.id))
-      const board = await client.call(MANAGER_PAGING_METHOD.page, {
-        managerId: manager.id,
-        kind: 'suggestion',
-        status: 'review',
-        order: 'newest',
-        limit: 30,
-      })
-      assert.equal(board.entries[0]?.id, `S-${proposal.id}`)
-      if (running) {
-        env.pi.end(manager.threadId, 'completed', '当前回合结束')
-        await until(() => !tree.isActive(manager.threadId), '经理结束')
-      }
-      tree.checkAll()
-      await tree.settleManagerQueue(manager.threadId)
-      assert.equal(calls(), before, '后续检查也不能仅凭建议唤醒')
-      const read = await client.call('thread/read', { threadId: manager.threadId })
-      assert.ok(JSON.stringify(read.thread.litchQueuedNotes).includes(proposal.id))
-      if (running) {
-        await client.call('turn/start', { threadId: manager.threadId, input: text('继续检查建议') })
-      } else {
-        const reporter = await startChild(
-          tree,
-          manager.threadId,
-          {
-            kind: 'fresh',
-            title: '另一个工作线',
-            prompt: '检查',
-            worktree: false,
-            wakeParent: true,
-          },
-          'model',
-        )
-        env.pi.end(reporter.threadId, 'completed', '普通工作线完成回报')
-        await until(() => env.pi.running(manager.threadId), '普通回报唤醒经理')
-      }
-      assert.ok(JSON.stringify(env.pi.current(manager.threadId)?.items).includes(proposal.id))
-      assert.equal(tree.store.notes(manager.threadId).length, 0)
-    } finally {
-      await env.close()
-    }
-  })
-}
 
 test('经理筛选归属覆盖工作线的子孙，脱离后移除归属', async () => {
   const { env, client, tree, propose } = await setup()

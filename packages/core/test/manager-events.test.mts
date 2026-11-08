@@ -64,9 +64,17 @@ const events: SessionEvent[] = [
     notes: [],
     manager: { managerId: 'm1', text: '范围：只完成本轮验收。\n规矩：保留未完成事项。' },
   },
+  {
+    kind: 'manager-suggestions',
+    notes: [],
+    manager: {
+      managerId: 'm1',
+      text: 'S-12345678 检查重复建议\n背景首句。\nSource: 工作线 (line)\n先查重，再 endorse 或 dismiss。',
+    },
+  },
 ]
 
-test('四种经理事件带来源且 format/parse 无损往返，保留用户后文', () => {
+test('经理事件带来源且 format/parse 无损往返，保留用户后文', () => {
   for (const event of events) {
     const text = formatSessionEvent(event)
     assert.match(text, /This message is from Litch, not typed by the user/)

@@ -148,6 +148,7 @@ export const zhManager = {
   'manager.event.ignored': '已忽略决策',
   'manager.event.open': '经理已开始',
   'manager.event.end': '经理开始收尾',
+  'manager.event.suggestions': '工作线建议待审核',
   'manager.event.rules': '已更新经理设定',
   'manager.pending': '{n} 待处理',
   'manager.pendingDetail': ({ decisions, requests, suggestions }) =>

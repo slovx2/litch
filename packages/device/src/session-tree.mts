@@ -1063,7 +1063,11 @@ export class SessionTree {
     threadId: string,
     text: string,
     eventId: string,
-    options: { startOnly?: boolean; onStarted?: (turnId: string) => void } = {},
+    options: {
+      startOnly?: boolean
+      automatic?: boolean
+      onStarted?: (turnId: string) => void
+    } = {},
   ): Promise<boolean> {
     let sent = false
     const previous = this.checks.get(threadId) ?? Promise.resolve()
@@ -1072,6 +1076,7 @@ export class SessionTree {
       .then(async () => {
         if (
           this.closed ||
+          (options.automatic && this.host.index.archived(threadId)) ||
           this.host.restarting?.(threadId) ||
           this.managers?.resets.held(threadId) ||
           this.managers?.resets.refusal(threadId)
@@ -1107,9 +1112,14 @@ export class SessionTree {
             this.host.log(`经理事件未插入当前回合，保留重试：${String(error)}`)
           }
         } else if (idle) {
+          // 提卡审核不等待工作线结束，但沿用经理本身的自动唤醒保护与预算。
+          if (options.automatic && (!this.canAutoWake(threadId) || (await this.longIdle(threadId))))
+            return
           // 线程设置是当前型号/强度的唯一权威，不用经理创建记录覆盖用户的选择。
           const settings = await link.request('thread/resume', { threadId, excludeTurns: true })
           const current = isObject(settings) ? settings : {}
+          if (options.automatic && (!this.canAutoWake(threadId) || this.active.has(threadId)))
+            return
           const result = await link.request(
             'turn/start',
             {
@@ -1123,6 +1133,7 @@ export class SessionTree {
             { restartable: !options.startOnly },
           )
           if (isObject(result?.turn) && typeof result.turn.id === 'string') {
+            if (options.automatic) this.store.setWakes(threadId, this.store.wakes(threadId) + 1)
             options.onStarted?.(result.turn.id)
             this.turnEvent(harness, 'turn/started', { threadId, turn: result.turn })
             sent = true
@@ -1206,14 +1217,8 @@ export class SessionTree {
    * 父会话最后一个回合结束超过 wakeIdleMs（24 小时）的不再主动唤醒。这几种都等用户发话、定时任务回合或“立即处理”带上
    */
   private async wake(parentId: string): Promise<void> {
-    const manager = this.managers?.store.forThread(parentId)
-    if (manager && manager.status !== 'active') return
-    if (this.closed || !this.enabledFor(parentId)) return
+    if (!this.canAutoWake(parentId)) return
     if (!this.hasWakeNote(parentId)) return
-    if (this.store.wakes(parentId) >= SESSION_TREE_LIMITS.wakesPerUserMessage) return
-    if (this.cutShort.has(parentId)) return
-    if ((this.host.backgroundWorking?.(parentId) ?? this.host.backgroundRunning(parentId)) > 0)
-      return
     // 子会话都停下了（在等用户答的挂满一阵也算，有后台任务在跑的不算），父会话自己闲着（等着用户答请求的也是在跑）
     if ((await this.working(parentId)) > 0) return
     if (!(await this.idle(parentId))) return
@@ -1222,6 +1227,23 @@ export class SessionTree {
     if (!this.hasWakeNote(parentId) || this.active.has(parentId)) return
     if (await this.startWake(parentId, 0, true))
       this.store.setWakes(parentId, this.store.wakes(parentId) + 1)
+  }
+
+  /** 自动回合共用的保护；用户答复等有明确授权的经理事件不套此限制。 */
+  private canAutoWake(threadId: string): boolean {
+    const manager = this.managers?.store.forThread(threadId)
+    return (
+      !this.closed &&
+      this.enabledFor(threadId) &&
+      (!manager || manager.status === 'active') &&
+      !this.host.index.archived(threadId) &&
+      !this.host.restarting?.(threadId) &&
+      !this.managers?.resets.held(threadId) &&
+      !this.managers?.resets.refusal(threadId) &&
+      this.store.wakes(threadId) < SESSION_TREE_LIMITS.wakesPerUserMessage &&
+      !this.cutShort.has(threadId) &&
+      (this.host.backgroundWorking?.(threadId) ?? this.host.backgroundRunning(threadId)) === 0
+    )
   }
 
   /** 直接子会话里还在干活的有几个（在等用户答、挂满一阵的不算；回合停了、后台任务还在跑的算） */
@@ -1518,24 +1540,7 @@ export class SessionTree {
         : suggestionExpiry(createdAt, this.retentionDays),
     })
     this.proposalsChanged(fields.threadId, [proposal])
-    const mark = this.managers?.lines.mark(fields.threadId)
-    if (!fields.offer && mark?.role === 'line') {
-      const manager = this.managers?.store.manager(mark.managerId)
-      if (manager?.status === 'active') {
-        this.store.addNote(
-          manager.threadId,
-          {
-            threadId: fields.threadId,
-            title: proposal.title,
-            status: 'completed',
-            excerpt: `Workline suggestion awaiting manager review. Use litch_manager.endorse or dismiss with a reason. ${JSON.stringify(proposal)}`,
-          },
-          false,
-        )
-        // 建议随下一次回报投递或经理回合带入，不单独唤醒或插话打断经理。
-        this.notesChanged(manager.threadId)
-      }
-    }
+    if (!fields.offer) this.managers?.suggestionProposed(proposal)
     this.scheduleExpiry()
     return proposal
   }

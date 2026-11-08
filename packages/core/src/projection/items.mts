@@ -281,6 +281,7 @@ function unknownSessionEvent(text: string): { event: SessionEventView; rest: str
       'manager-open',
       'manager-answers',
       'manager-ignored',
+      'manager-suggestions',
       'manager-end',
       'manager-rules',
     ].includes(match[1] ?? '')

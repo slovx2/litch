@@ -353,6 +353,8 @@ export type SessionEventKind =
   | 'manager-answers'
   /** 用户在看板上忽略了决策：不开回合，只插进经理在跑的回合或随下一条开回合的事件交出 */
   | 'manager-ignored'
+  /** 工作线新提的建议独立通知经理审核，不依赖完成回报。 */
+  | 'manager-suggestions'
   | 'manager-open'
   | 'manager-end'
   | 'manager-rules'
@@ -475,13 +477,15 @@ export function formatSessionEvent(event: SessionEvent): string {
         ? manager.questions?.length || manager.requests?.length || manager.postQuestions?.length
           ? 'The user submitted these board entries.'
           : 'The user submitted these board answers.'
-        : event.kind === 'manager-ignored'
-          ? 'The user ignored these board decisions; they no longer count as pending.'
-          : event.kind === 'manager-open'
-            ? 'The user created this manager.'
-            : event.kind === 'manager-rules'
-              ? 'The user updated this manager’s scope or rules.'
-              : 'The user requested ending this manager.'
+        : event.kind === 'manager-suggestions'
+          ? 'Worklines proposed these suggestions for manager review.'
+          : event.kind === 'manager-ignored'
+            ? 'The user ignored these board decisions; they no longer count as pending.'
+            : event.kind === 'manager-open'
+              ? 'The user created this manager.'
+              : event.kind === 'manager-rules'
+                ? 'The user updated this manager’s scope or rules.'
+                : 'The user requested ending this manager.'
     return [
       `<${SESSION_EVENT_TAG} kind="${event.kind}">`,
       `${head} This message is from Litch, not typed by the user. Manager: ${manager.managerId}.`,
@@ -585,7 +589,7 @@ export function formatSessionEvent(event: SessionEvent): string {
  */
 export function parseSessionEvent(text: string): { event: SessionEvent | null; rest: string } {
   const pattern = new RegExp(
-    `^<${SESSION_EVENT_TAG} kind="(notes|wake|remind|manager-answers|manager-ignored|manager-open|manager-end|manager-rules)">\\n[\\s\\S]*?<!-- (\\{[\\s\\S]*?\\}) -->\\n</${SESSION_EVENT_TAG}>\\n?`,
+    `^<${SESSION_EVENT_TAG} kind="(notes|wake|remind|manager-answers|manager-ignored|manager-suggestions|manager-open|manager-end|manager-rules)">\\n[\\s\\S]*?<!-- (\\{[\\s\\S]*?\\}) -->\\n</${SESSION_EVENT_TAG}>\\n?`,
   )
   const match = pattern.exec(text)
   if (!match) return { event: null, rest: text }

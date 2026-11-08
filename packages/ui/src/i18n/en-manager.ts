@@ -159,6 +159,7 @@ export const enManager = {
   'manager.event.ignored': 'Decisions ignored',
   'manager.event.open': 'Manager started',
   'manager.event.end': 'Manager started final tasks',
+  'manager.event.suggestions': 'Workline suggestions awaiting review',
   'manager.event.rules': 'Manager settings updated',
   'manager.pending': '{n} to handle',
   'manager.pendingDetail': ({ decisions, requests, suggestions }) =>

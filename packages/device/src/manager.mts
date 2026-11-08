@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 // litchManager 的设备入口：建会话、读看板、投递持久事件，以及只向声明过的连接广播。
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { promisify } from 'node:util'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import {
@@ -20,7 +20,12 @@ import {
 } from '../../protocol/src/manager.mjs'
 import { MANAGER_PAGING_METHOD } from '../../protocol/src/manager-paging.mjs'
 import { MANAGER_POST_METHOD, type ManagerPostId } from '../../protocol/src/manager-posts.mjs'
-import { formatSessionEvent, parseSessionEvent } from '../../protocol/src/session-tree.mjs'
+import {
+  formatSessionEvent,
+  parseSessionEvent,
+  type SessionProposal,
+} from '../../protocol/src/session-tree.mjs'
+import { proposalSummary, shortObjectId } from '../../protocol/src/suggestion-summary.mjs'
 import type { DeviceToolCall } from './device-tools.mjs'
 import { isDecision, ManagerBoardWriter } from './manager-board.mjs'
 import { validateManagerRuntime } from './manager-create-validation.mjs'
@@ -59,6 +64,8 @@ export class DeviceManagers {
   readonly resets: ManagerResets
   readonly paging: ManagerPaging
   private readonly draining = new Map<string, Promise<void>>()
+  /** 先持久入队，再留一个固定的小窗口合并连发卡片；不会因持续提卡无限延后。 */
+  private readonly suggestionTimers = new Map<string, NodeJS.Timeout>()
   private readonly timer: NodeJS.Timeout
   private closed = false
   private readonly unlisten: () => void
@@ -741,6 +748,35 @@ export class DeviceManagers {
       )
     }
   }
+  suggestionProposed(proposal: SessionProposal): void {
+    const mark = this.lines.mark(proposal.threadId)
+    if (mark?.role !== 'line') return
+    const manager = this.store.manager(mark.managerId)
+    if (manager?.status !== 'active') return
+    const snapshot = this.lines.snapshots.get(proposal.threadId)
+    const sourceTitle =
+      typeof snapshot?.name === 'string' && snapshot.name.trim()
+        ? snapshot.name
+        : (this.tree.store.parentOf(proposal.threadId)?.title ?? proposal.threadId)
+    this.store.enqueue(
+      manager.id,
+      formatSessionEvent({
+        kind: 'manager-suggestions',
+        notes: [],
+        manager: {
+          managerId: manager.id,
+          text: `${shortObjectId(`S-${proposal.id}`)} ${JSON.stringify(proposal.title)} (proposalId: ${proposal.id})\nBackground: ${proposalSummary(proposal.background, proposal.prompt)}\nSource: ${JSON.stringify(sourceTitle)} (${proposal.threadId})\n请对照已合入的提交和事项查重，然后用 endorse 推荐或 dismiss 撤掉并写理由。 Check landed commits and manager items for duplicates, then use litch_manager.endorse or dismiss with a reason; do not leave this unreviewed.`,
+        },
+      }),
+    )
+    if (this.suggestionTimers.has(manager.id)) return
+    const timer = setTimeout(() => {
+      this.suggestionTimers.delete(manager.id)
+      this.kick(manager.id)
+    }, 250)
+    timer.unref()
+    this.suggestionTimers.set(manager.id, timer)
+  }
   kick(id: string): void {
     if (
       this.closed ||
@@ -760,9 +796,41 @@ export class DeviceManagers {
     if (!manager) return
     if (manager.status === 'ending') await this.endings.recover(id)
     const deliveries = this.store.deliveries(id)
+    let suggestionsVisited = false
     for (const [index, event] of deliveries.entries()) {
       if (this.closed || this.resets.held(manager.threadId)) return
       const parsed = parseSessionEvent(event.text)
+      if (parsed.event?.kind === 'manager-suggestions') {
+        if (suggestionsVisited || this.suggestionTimers.has(id)) continue
+        suggestionsVisited = true
+        // 独立于普通回报，避免同一来源的后续回报覆盖或截断卡片；重置后沿经理 ID 投递。
+        const batch = deliveries.filter(
+          (next) => parseSessionEvent(next.text).event?.kind === 'manager-suggestions',
+        )
+        const text = formatSessionEvent({
+          kind: 'manager-suggestions',
+          notes: [],
+          manager: {
+            managerId: id,
+            text: batch
+              .map((next) => parseSessionEvent(next.text).event?.manager?.text ?? '')
+              .join('\n\n'),
+          },
+        })
+        // 重试保持相同批次 ID；失败期间新到卡片改变批次，不能被引擎按旧 ID 去重后误出队。
+        const batchId = `litch-suggestions-${createHash('sha256')
+          .update(batch.map((entry) => entry.id).join('\n'))
+          .digest('hex')}`
+        const sent =
+          manager.status === 'active' &&
+          (await this.tree.deliverManagerEvent(manager.threadId, text, batchId, {
+            automatic: true,
+          }))
+        if (this.closed) return
+        if (sent) for (const entry of batch) this.store.delivered(entry.id)
+        // 唤醒被保护规则阻止时仍允许后面的用户答复投递，不能堵住用户。
+        continue
+      }
       // 结束回合单独开，避免结束请求把当前回合冒充成收尾回合。
       if (parsed.event?.kind === 'manager-end' && this.tree.isActive(manager.threadId)) return
       let text = event.text
@@ -770,8 +838,13 @@ export class DeviceManagers {
         // 忽略事件不开回合：经理闲着、后面也没有要开回合的事件就先留着
         const later = deliveries
           .slice(index + 1)
-          .some((next) => parseSessionEvent(next.text).event?.kind !== 'manager-ignored')
-        if (!later && !this.tree.isActive(manager.threadId)) return
+          .some(
+            (next) =>
+              !['manager-ignored', 'manager-suggestions'].includes(
+                parseSessionEvent(next.text).event?.kind ?? '',
+              ),
+          )
+        if (!later && !this.tree.isActive(manager.threadId)) continue
         // 交出前已撤销忽略或被重开的条目不再告诉经理
         const board = this.store.objects(id)
         const ignored = (parsed.event.manager.ignored ?? []).filter((entry) =>
@@ -802,6 +875,8 @@ export class DeviceManagers {
   async close(): Promise<void> {
     this.closed = true
     clearInterval(this.timer)
+    for (const timer of this.suggestionTimers.values()) clearTimeout(timer)
+    this.suggestionTimers.clear()
     this.unlisten()
     await this.resets.close()
     await this.questions.close()
