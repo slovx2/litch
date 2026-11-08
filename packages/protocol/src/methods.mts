@@ -251,6 +251,11 @@ import type {
   HarnessProvidersUpsertParams,
   HarnessProvidersWriteResponse,
 } from './harness-config.mjs'
+import type {
+  ManagerIssueActivityNotification,
+  ManagerIssueChangedNotification,
+  ManagerIssueRequests,
+} from './manager-issues.mjs'
 import type { NativeOwnerChangedNotification } from './native-owner.mjs'
 import type {
   LineageUpdatedNotification,
@@ -594,6 +599,14 @@ export interface ClientRequests extends AcpControlsRequests {
     params: Record<string, never>
     result: import('./suggestion-inbox.mjs').SuggestionsSnapshot
   }
+  // 经理 issue（litchManagerIssues）：客户端必须在握手声明能力；旧经理方法保持原样。
+  'litch/manager/issues/list': ManagerIssueRequests['litch/manager/issues/list']
+  'litch/manager/issue/read': ManagerIssueRequests['litch/manager/issue/read']
+  'litch/manager/issue/create': ManagerIssueRequests['litch/manager/issue/create']
+  'litch/manager/issue/update': ManagerIssueRequests['litch/manager/issue/update']
+  'litch/manager/issue/comment': ManagerIssueRequests['litch/manager/issue/comment']
+  'litch/manager/issue/follow': ManagerIssueRequests['litch/manager/issue/follow']
+  'litch/manager/issue/seen': ManagerIssueRequests['litch/manager/issue/seen']
   'litch/sessionProposal/list': {
     params: SessionProposalListParams
     result: SessionProposalListResponse
@@ -732,6 +745,10 @@ export interface ServerNotifications {
   'litch/sessionProposal/changed': ProposalChangedNotification
   /** 设备级增量，只发给声明过 suggestionInbox 的连接。 */
   'litch/suggestions/changed': import('./suggestion-inbox.mjs').SuggestionsChanged
+  /** 经理 issue 的快照失效通知，只发给声明过 litchManagerIssues 的连接。 */
+  'litch/manager/issue/changed': ManagerIssueChangedNotification
+  /** 经理 issue 的持久活动通知；设备按 followUp 决定是否唤醒经理。 */
+  'litch/manager/issue/activity': ManagerIssueActivityNotification
   /** 扩展，只发给握手时声明过 sessionTree 的连接：一个会话的回报队列变了 */
   'litch/thread/queuedNotes/updated': QueuedNotesUpdatedNotification
   'litch/thread/turn/notice': import('./turn-notices.mjs').TurnNotice
