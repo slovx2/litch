@@ -6,7 +6,10 @@ export async function managerIssuesProbe() {
     document.querySelector<T>(selector)
   const all = (selector: string) => [...document.querySelectorAll<HTMLElement>(selector)]
   const cards = () => all('[data-issue-type]')
-  const total = () => one('[data-issue-total]')?.textContent?.trim()
+  const total = () =>
+    one('[data-issue-total]')
+      ?.textContent?.match(/\d+\s*\/\s*\d+/)?.[0]
+      .replace(/\s/g, '')
   const assert = (ok: unknown, message: string) => {
     if (!ok) throw new Error(`issue 冒烟：${message}；已通过 ${passed.join('、')}`)
   }
@@ -30,7 +33,7 @@ export async function managerIssuesProbe() {
   const click = async (selector: string) => {
     const button = await until(selector, () => {
       const element = one<HTMLButtonElement>(selector)
-      return element && !element.disabled ? element : null
+      return element && !element.matches(':disabled') ? element : null
     })
     button.click()
   }
@@ -65,13 +68,36 @@ export async function managerIssuesProbe() {
   await click('[data-sidebar-mode="manager"]')
   await click('[data-manager-id="m1"] [data-session] > button')
   await until('默认控制台选中', () => one('[data-board-tab="inbox"][aria-selected="true"]'))
+  await until(
+    '默认决策标签选中',
+    () =>
+      one('[data-inbox-tab="decisions"][aria-pressed="true"]') &&
+      cards().length &&
+      cards().every((card) => card.dataset.issueType === 'decision'),
+  )
+  assert(
+    all('[data-inbox-tab]')
+      .map((tab) => tab.dataset.inboxTab)
+      .join(',') === 'decisions,suggestions,requests,reports,issues',
+    '控制台分类标签不完整或顺序错误',
+  )
+  assert(
+    !one('[data-act="issue-new"]') && !one('[data-issue-chip]'),
+    '决策标签出现普通 issue 专属操作',
+  )
+  passed.push('五类标签、默认决策、专属操作隔离')
+  await click('[data-inbox-tab="issues"]')
   await until('普通 issue 首屏 30/38', () => total() === '30/38' && cards().length === 30)
   assert(
     cards().every((card) => card.dataset.issueType === 'ordinary'),
-    '默认列表混入特殊 issue',
+    '普通 issue 标签混入特殊 issue',
+  )
+  assert(
+    one('[data-act="issue-new"]') && all('[data-issue-chip]').length === 4,
+    '普通 issue 缺少新建或过滤胶囊',
   )
   assert(one('[data-issue-more]'), '首屏没有加载更多')
-  passed.push('默认普通 issue：30/38')
+  passed.push('普通 issue 标签：30/38')
   await click('[data-issue-more]')
   await until('全部 38 条', () => total() === '38/38' && cards().length === 38)
   assert(!one('[data-issue-more]'), '加载完仍有下一页')
@@ -94,13 +120,42 @@ export async function managerIssuesProbe() {
       .filter((sample) => active(sample.status) && sample.paused)
       .map((sample) => sample.id),
   }
+  // 两个标签各留不同的状态与排序，切换回来仍取自己的过滤条件。
+  await click('[data-issue-filter-status="active"]')
+  await select('[data-issue-filter="order"]', 'oldest')
+  await until('普通 issue 开放集合', () => sameIds(expectedSummary.active))
+  await click('[data-inbox-tab="decisions"]')
+  await click('[data-issue-filter-status="open"]')
+  await select('[data-issue-filter="order"]', 'updated')
+  await until(
+    '决策待处理集合',
+    () =>
+      cards().length &&
+      cards().every(
+        (item) =>
+          item.dataset.issueType === 'decision' &&
+          item.querySelector('[data-issue-meta] [data-issue-status="open"]'),
+      ),
+  )
+  await click('[data-inbox-tab="issues"]')
+  await until(
+    '普通 issue 独立记忆',
+    () =>
+      one('[data-issue-filter-status="active"][aria-pressed="true"]') &&
+      one<HTMLSelectElement>('[data-issue-filter="order"]')?.value === 'oldest' &&
+      sameIds(expectedSummary.active),
+  )
+  await click('[data-inbox-tab="decisions"]')
+  await until(
+    '决策独立记忆',
+    () =>
+      one('[data-issue-filter-status="open"][aria-pressed="true"]') &&
+      one<HTMLSelectElement>('[data-issue-filter="order"]')?.value === 'updated',
+  )
+  passed.push('分类标签独立记忆状态与排序')
   for (const [key, expected] of Object.entries(expectedSummary)) {
-    // 故意留下决策类型过滤，检验概览预设会清掉之前的类型条件。
-    if (one('[data-act="issue-filter-reset"]')) {
-      await click('[data-act="issue-filter-reset"]')
-      await until('清掉上一次概览过滤', () => !one('[data-act="issue-filter-reset"]'))
-    }
-    await select('[data-issue-filter="kind"] select', 'decision')
+    // 从决策标签进入概览，数字应切到普通 issue 并覆盖它之前记住的过滤条件。
+    await click('[data-inbox-tab="decisions"]')
     await until(
       '切到决策列表',
       () => cards().length && cards().every((card) => card.dataset.issueType === 'decision'),
@@ -123,10 +178,17 @@ export async function managerIssuesProbe() {
       cards().every((card) => card.dataset.issueType === 'ordinary'),
       `${key} 混入特殊 issue`,
     )
-    if (key === 'unread') assert(one('[data-act="issue-unread-clear"]'), '未读过滤没有提示')
+    assert(one('[data-inbox-tab="issues"][aria-pressed="true"]'), '概览没有切到普通 issue 标签')
+    assert(
+      one<HTMLSelectElement>('[data-issue-filter="order"]')?.value === 'newest',
+      '概览仍沿用先前排序',
+    )
+    if (key === 'unread')
+      assert(one('[data-issue-chip="unread"][aria-pressed="true"]'), '未读过滤没有提示')
     passed.push(`概览 ${key}：${expected.length} 条与列表一致`)
   }
-  await click('[data-act="issue-filter-reset"]')
+  await click('[data-issue-filter-status="all"]')
+  await click('[data-issue-chip="paused"]')
   await until(
     '重置默认列表',
     () =>
@@ -192,13 +254,13 @@ export async function managerIssuesProbe() {
   await until('打开后已读', () => one(card) && !one(`${card}[data-unread="true"]`))
   passed.push('评论、延迟经理回复、未读与打开后已读')
 
-  await select(`${card} [data-issue-status-select]`, 'in_progress')
+  await click(`${card} [data-issue-status-select] [data-issue-status="in_progress"]`)
   await until('状态原因进时间线', () =>
     all(`${card} [data-timeline="event"]`).some((event) =>
       event.textContent?.includes('状态改为 进行中'),
     ),
   )
-  assert(one(`${card} [data-issue-status="in_progress"]`), '状态元信息未更新')
+  assert(one(`${card} [data-issue-meta] [data-issue-status="in_progress"]`), '状态元信息未更新')
   await click(`${card} [data-act="issue-follow"]`)
   await until('暂停跟进原因进时间线', () =>
     all(`${card} [data-timeline="event"]`).some((event) => event.textContent?.includes('暂停跟进')),
@@ -208,12 +270,12 @@ export async function managerIssuesProbe() {
     '暂停跟进未显示状态与提示',
   )
   assert(
-    one(`${card} [data-act="issue-follow"]`)?.getAttribute('aria-pressed') === 'false',
+    one(`${card} [data-act="issue-follow"]`)?.getAttribute('aria-checked') === 'false',
     '跟进按钮仍在开启状态',
   )
   passed.push('状态、暂停跟进与原因时间线')
 
-  await select('[data-issue-filter="kind"] select', 'decision')
+  await click('[data-inbox-tab="decisions"]')
   await until(
     '决策过滤',
     () => cards().length && cards().every((item) => item.dataset.issueType === 'decision'),
