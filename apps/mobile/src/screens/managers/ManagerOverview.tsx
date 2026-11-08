@@ -14,6 +14,12 @@ import { Markdown } from './IssueMarkdown'
 import { IssueRelations } from './IssueRelations'
 
 export type OverviewCategory = ManagerPost['kind']
+/** 普通 issue 摘要：开放、等我看、跟进已暂停；点了带着对应过滤进控制台 */
+export type OverviewIssueKey = 'active' | 'unread' | 'paused'
+export interface OverviewIssues {
+  counts: Record<OverviewIssueKey, number>
+  onOpen(key: OverviewIssueKey): void
+}
 export type OverviewCounts = Record<OverviewCategory, { pending: number; total: number }>
 
 const CATEGORIES = {
@@ -77,7 +83,10 @@ export function ManagerOverview({
   onCategory,
   refresh,
   children,
+  issues,
 }: {
+  /** 设备支持 issue 时才有 */
+  issues?: OverviewIssues | undefined
   situation: { text: string; at: number } | null
   counts: OverviewCounts
   onCategory(category: OverviewCategory): void
@@ -130,6 +139,43 @@ export function ManagerOverview({
           )
         })}
       </View>
+      {issues ? (
+        <View style={styles.issues} testID="overview-issues">
+          <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{t('issue.summary')}</Text>
+          {(['active', 'unread', 'paused'] as const).map((key) => {
+            const hot = key === 'unread' && issues.counts.unread > 0
+            return (
+              <Pressable
+                key={key}
+                testID={`overview-issues:${key}`}
+                accessibilityRole="button"
+                aria-label={`${t('issue.summary')} · ${t(`issue.summary.${key}`)} ${issues.counts[key]}`}
+                onPress={() => issues.onOpen(key)}
+                style={({ pressed }) => [
+                  styles.issue,
+                  {
+                    minHeight: 36,
+                    borderRadius: radius.s,
+                    borderColor: hot ? c.accent : c.line1,
+                    backgroundColor: pressed ? c.press : 'transparent',
+                  },
+                ]}
+              >
+                <Text style={{ color: hot ? c.ink : c.ink2 }}>{t(`issue.summary.${key}`)}</Text>
+                <Text
+                  style={{
+                    color: hot ? c.accent : c.ink3,
+                    fontFamily: font.mono,
+                    fontWeight: hot ? '700' : '400',
+                  }}
+                >
+                  {issues.counts[key]}
+                </Text>
+              </Pressable>
+            )
+          })}
+        </View>
+      ) : null}
       <View
         testID="overview-situation"
         style={[
@@ -213,6 +259,21 @@ export function OverviewItems({
 }
 
 const styles = StyleSheet.create({
+  issues: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+  },
+  issue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+  },
   counts: {
     flexDirection: 'row',
     flexWrap: 'wrap',

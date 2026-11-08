@@ -14,6 +14,8 @@ export type RootStackParamList = {
     tab?: ManagerTab
     issue?: string
   }
+  /** 经理 issue 的完整讨论页：原帖、状态与跟进、关联、评论时间线和输入框（从控制台抽屉或卡片进来） */
+  ManagerIssue: { deviceId: string; managerId: string; id: string }
   /** 首页：设备列表。每台设备一行（连接状态、忙闲、待处理数），点进去是这台设备的会话 */
   Devices: undefined
   /** 加一台设备：填主机、端口、用户，生成或导入密钥，核对主机指纹 */

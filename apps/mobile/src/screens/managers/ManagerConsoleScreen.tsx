@@ -53,10 +53,17 @@ import { IssueContext } from './IssueRelations'
 import { IssueSheet } from './IssueSheet'
 import { setIssueOrder, useIssueOrder } from './issue-order'
 import { ManagerLines } from './ManagerLines'
-import { ManagerOverview, type OverviewCounts, OverviewItems } from './ManagerOverview'
+import {
+  ManagerOverview,
+  type OverviewCounts,
+  type OverviewIssues,
+  OverviewItems,
+} from './ManagerOverview'
 import { PagedBoard } from './PagedBoard'
 import { issueCounts, managerRowState, orderedIssues } from './presentation'
 import { useManagerReset } from './use-reset'
+import { useManagerIssues } from './issues/data'
+import { type IssuePreset, useIssueConsole } from './issues/IssueConsole'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ManagerConsole'>
 type Category = ManagerPost['kind']
@@ -221,10 +228,18 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
     if (!view?.paging) scroll.current?.scrollTo({ y: 0, animated: false })
   }
   // 定位到一条议题：经理事项到概览展开那一项，其他到控制台只列这一条（点类别或页签恢复整列）
+  // issue 模式（设备支持 litchManagerIssues）：编号都交给 issue 控制台的抽屉；下面建好后填上
+  const issueOpen = useRef<((id: string) => void) | null>(null)
   const openIssue = useCallback(
     (id: string, talk = false) => {
       setSheet(null)
       setTargetVersion((value) => value + 1)
+      if (issueOpen.current && !id.startsWith('I-')) {
+        setFocusItem(null)
+        setTab('console')
+        issueOpen.current(id)
+        return
+      }
       if (id.startsWith('I-')) {
         setSelected(null)
         setFocusItem(id)
@@ -288,6 +303,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
             // 输入框还拿着焦点时，面板关上后安卓会把焦点还给它、键盘又弹出来：先放掉
             Keyboard.dismiss()
             if (id.startsWith('I-')) openIssue(id)
+            else if (issueOpen.current) issueOpen.current(id)
             else setSheet(id)
           },
         }
@@ -338,6 +354,47 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   ).length
   const linesWaiting = waitingLines > 0
   const narrow = width < NARROW
+  const offline = device?.connection !== 'online'
+  const issueView = useManagerIssues(manager, board, t.lang)
+  const issueMode = issueView.supported === true
+  const [issuePreset, setIssuePreset] = useState<IssuePreset | null>(null)
+  const presetIssues = (patch: IssuePreset['patch']) => {
+    setIssuePreset((now) => ({ patch, version: (now?.version ?? 0) + 1 }))
+    go('console')
+  }
+  const issueUI = useIssueConsole({
+    manager,
+    board,
+    features,
+    suggestions,
+    issues: issueView,
+    disabled: offline || manager.status !== 'active',
+    reason: t(offline ? 'issue.offline' : 'issue.readOnly'),
+    narrow,
+    preset: issuePreset,
+    onFull: (id) => navigation.push('ManagerIssue', { deviceId, managerId, id }),
+    onOpenItem: (id) => openIssue(id),
+  })
+  issueOpen.current = issueMode ? issueUI.open : null
+  const overviewIssues: OverviewIssues | undefined = issueMode
+    ? {
+        counts: {
+          active: issueView.summary.ordinary.active,
+          unread: issueView.summary.ordinary.unread,
+          paused: issueView.summary.ordinary.paused,
+        },
+        onOpen: (key) =>
+          presetIssues(
+            key === 'active'
+              ? { statuses: ['open', 'in_progress', 'blocked'] }
+              : key === 'unread'
+                ? { unread: true }
+                : { followUp: 'off' },
+          ),
+      }
+    : undefined
+  const toCategory = (category: Category) =>
+    issueMode ? presetIssues({ kinds: [category] }) : go('console', category)
 
   /**
    * 页签上的记号：对话是经理自己在跑（转圈）、等人（等待色圆点）、有新回复（未读色圆点）；
@@ -476,7 +533,8 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
           {page.body}
         </View>
         <KeyboardArea style={tab === 'chat' ? styles.hidden : undefined}>
-          {tab === 'console' ? (
+          {tab === 'console' && issueMode ? issueUI.header : null}
+          {tab === 'console' && !issueMode ? (
             // 类别胶囊放不下（窄屏、英文、大字号）时横着滚，排序固定在行尾
             <View style={styles.categories}>
               <ScrollView
@@ -567,6 +625,10 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
                     : 'manager.ended',
               )}
             </Text>
+          ) : tab === 'console' && issueView.supported === false ? (
+            <Text testID="manager-old-device-issues" role="note" style={[styles.note, { color: c.ink2 }]}>
+              {t('issue.oldDevice')}
+            </Text>
           ) : missing.length && tab === 'console' ? (
             <Text testID="manager-old-device" role="note" style={[styles.note, { color: c.ink2 }]}>
               {t('manager.oldDevice', {
@@ -607,7 +669,9 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
               </>
             ) : board ? (
               <IssueContext.Provider value={{ manager, board, features, open: openIssue }}>
-                {view?.paging ? (
+                {issueMode && tab === 'console' ? (
+                  issueUI.body
+                ) : view?.paging ? (
                   <PagedBoard
                     manager={manager}
                     view={{ ...view, board, paging: view.paging }}
@@ -618,7 +682,8 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
                     suggestions={suggestions}
                     onLine={openSession}
                     overviewCounts={overviewCounts}
-                    onCategory={(category) => go('console', category)}
+                    onCategory={toCategory}
+                    overviewIssues={overviewIssues}
                     onQuery={pagingQuery}
                     locator={locator}
                     nexter={nexter}
@@ -635,7 +700,8 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
                       <ManagerOverview
                         situation={board.situation}
                         counts={overviewCounts}
-                        onCategory={(category) => go('console', category)}
+                        onCategory={toCategory}
+                        issues={overviewIssues}
                       >
                         <OverviewItems
                           items={board.items}
@@ -723,6 +789,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
         </KeyboardArea>
       </View>
       {page.overlays}
+      {issueUI.overlays}
       {sheet && view?.paging && !board?.posts?.some((post) => post.id === sheet) ? (
         <Sheet
           visible

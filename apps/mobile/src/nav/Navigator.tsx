@@ -13,6 +13,7 @@ import { HarnessSettingsScreen } from '../screens/devices/hconfig/HarnessSetting
 import { PairDeviceScreen } from '../screens/devices/PairDeviceScreen'
 import { FilesScreen } from '../screens/files/FilesScreen'
 import { ManagerConsoleScreen } from '../screens/managers/ManagerConsoleScreen'
+import { ManagerIssueScreen } from '../screens/managers/issues/ManagerIssueScreen'
 import { ManagersScreen } from '../screens/managers/ManagersScreen'
 import { NewSessionScreen } from '../screens/new-session/NewSessionScreen'
 import { ProposalStartScreen } from '../screens/proposals/ProposalStartScreen'
@@ -60,6 +61,7 @@ export function Navigator() {
         }
         component={ManagerConsoleScreen}
       />
+      <Stack.Screen name="ManagerIssue" component={ManagerIssueScreen} />
       <Stack.Screen
         name="Devices"
         getId={() => (tablet ? 'devices' : undefined)}

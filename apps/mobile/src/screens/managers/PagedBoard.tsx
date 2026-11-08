@@ -57,6 +57,7 @@ import {
   ManagerOverview,
   type OverviewCategory,
   type OverviewCounts,
+  type OverviewIssues,
 } from './ManagerOverview'
 import { canAnimateToggle } from './presentation'
 import { useDraftVersion } from './use-draft-files'
@@ -75,6 +76,7 @@ export function PagedBoard({
   onLine,
   overviewCounts,
   onCategory,
+  overviewIssues,
   onQuery,
   onDetail,
   locator,
@@ -95,6 +97,7 @@ export function PagedBoard({
   onLine(id: string, title?: string): void
   overviewCounts: OverviewCounts
   onCategory(category: OverviewCategory): void
+  overviewIssues?: OverviewIssues | undefined
   onQuery(memory: BoardPageMemory, ready: boolean): void
   onDetail(y: number, relative?: boolean): void
   /** 底部提交条点草稿数时问这里：当前滚动位置之后下一张有草稿的卡在哪，到底了回到第一张 */
@@ -387,6 +390,7 @@ export function PagedBoard({
             situation={paging.summary.situation}
             counts={overviewCounts}
             onCategory={onCategory}
+            issues={overviewIssues}
             refresh={{
               busy: paging.loading.includes('summary'),
               run: () => invoke(channel.command('managers.board.refresh', address)),

@@ -508,22 +508,26 @@ export function Issue({
       hitSlop={{ top: 6, bottom: 6 }}
       style={({ pressed }) => [
         styles.entry,
+        // 转讨论的入口：强调色描边，醒目但不压过实心的快速处理主按钮
         {
-          borderColor: talking ? c.line3 : c.line2,
+          minHeight: 36,
+          borderColor: noTalk ? c.line2 : c.accent,
           borderRadius: radius.l,
-          backgroundColor: pressed ? c.press : talking ? c.selBg : 'transparent',
+          backgroundColor: pressed || talking ? c.selBg : c.panel,
           opacity: noTalk ? 0.5 : 1,
         },
       ]}
     >
-      <Icon name="note" size={16} color={talking ? c.ink : c.ink2} />
-      <Text style={{ color: talking ? c.ink : c.ink2, fontSize: font.size.meta }}>
+      <Icon name="note" size={16} color={noTalk ? c.ink2 : c.accent} />
+      <Text
+        style={{ color: noTalk ? c.ink2 : c.accent, fontSize: font.size.meta + 1, fontWeight: '600' }}
+      >
         {t('manager.discussion')}
       </Text>
       {replies ? (
         <Text
           style={{
-            color: c.ink2,
+            color: c.accent,
             fontSize: font.size.small + 1,
             fontWeight: '600',
             fontVariant: ['tabular-nums'],

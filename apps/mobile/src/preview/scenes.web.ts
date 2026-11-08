@@ -101,8 +101,36 @@ export const SCENES: Scene[] = [
   {
     id: 'manager-console',
     group: '经理',
-    name: '控制台与议题',
-    note: '四类议题、排序、已答决策分块、原帖操作、讨论与双向关联，复用正式页面',
+    name: '控制台与 issue',
+    note: '统一 issue 列表（默认普通 issue）、类别胶囊与过滤抽屉、新建、评论、改状态与跟进、特殊 issue 的快速处理与讨论、完整讨论页',
+    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1' })],
+  },
+  {
+    id: 'manager-issues-many',
+    group: '经理',
+    name: 'issue · 大量',
+    note: '120 条普通 issue：类别胶囊、过滤抽屉、每页 30 条加载更多',
+    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1' })],
+  },
+  {
+    id: 'manager-issues-empty',
+    group: '经理',
+    name: 'issue · 空列表',
+    note: '还没有普通 issue；右上角新建',
+    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1' })],
+  },
+  {
+    id: 'manager-issues-old',
+    group: '经理',
+    name: 'issue · 设备不支持',
+    note: '设备服务没宣告 litchManagerIssues：控制台回到四类，页顶写明去升级',
+    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1' })],
+  },
+  {
+    id: 'manager-issues-forbidden',
+    group: '经理',
+    name: 'issue · 无权限',
+    note: '读 issue 被设备拒绝：列表处写原因和重试',
     steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1' })],
   },
   {

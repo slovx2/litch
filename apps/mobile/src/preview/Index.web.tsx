@@ -14,6 +14,7 @@ type Lang = 'zh-CN' | 'en'
 
 const SIZES = [
   { id: '412', w: 412, h: 915, name: '412 × 915' },
+  { id: '390', w: 390, h: 844, name: '390 × 844' },
   { id: '360', w: 360, h: 780, name: '360 × 780' },
   { id: '320', w: 320, h: 640, name: '320 × 640' },
 ] as const
