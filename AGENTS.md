@@ -8,7 +8,7 @@
 
 - 用中文写新增注释与维护文档。在当前分支工作。修改分小块进行，每次尽量不超过 300 行。
 - TypeScript 用 `.mts`、ESM、可擦除语法（`packages/ui` 要写 JSX，用 `.ts`、`.tsx`）。不手工修改 `dist` 和生成的协议材料。
-- 依赖声明与锁文件一律用精确版本。整个仓库只有一个版本号（根目录 `package.json`），`scripts/check-versions.mjs` 会查出没跟上的地方。
+- 依赖声明与锁文件一律用精确版本。Litch 自有包跟根 `package.json` 版本，`scripts/check-versions.mjs` 检查；`third_party/litch-automation` 独立 semver，提交 SHA 与源码哈希由 `scripts/check-shared-modules.mjs` 检查。
 - 不写兼容旧数据、旧环境变量的代码：旧的适配数据库直接拒绝，不加持久化标记或路径回退。
 - 不从别的应用里搬代码、图标或文案进来。
 
@@ -25,6 +25,7 @@
 | `packages/core` | 客户端核心：通道、数据副本、连接层、投影、模拟核心。纯 TypeScript，平台能力由外壳注入 |
 | `packages/ui` | 界面。只用浏览器标准接口，只认核心给的显示数据，能在普通浏览器里对着模拟核心跑 |
 | `apps/desktop` | Electron 外壳。主进程只管窗口和牵线，不在数据路径上；渲染进程开沙箱 |
+| `third_party/litch-automation` | 自动化代码库的 subtree 源码；回写和锁定流程见根 README 的“通用模块” |
 | `apps/mobile` | React Native 移动端，直接用 `packages/core`（`@litch/core`），不另写核心 |
 
 - 客户端和适配器只经协议说话，互不引用代码。
