@@ -108,6 +108,8 @@ try {
     let release
     const waiting = new Promise((r) => (release = r))
     const q = query({
+      // 只探测 SDK 初始化，直到释放前都不投递用户消息。
+      // biome-ignore lint/correctness/useYield: 此异步迭代器有意保持空流。
       prompt: (async function* () {
         await waiting
       })(),

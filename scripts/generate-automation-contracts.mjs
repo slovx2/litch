@@ -1,4 +1,5 @@
 // 唯一源在 contracts；设备包只消费 protocol 内的自包含投影。
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -21,8 +22,20 @@ export function projectContracts(root = automationRoot, check = true) {
       join(root, 'third_party/litch-automation/packages/automation-contracts/src', source),
       'utf8',
     ).replaceAll("from '../tool-spec.mjs'", "from './automation-tool-spec.mjs'")
-    const expected = `// 由 scripts/generate-automation-contracts.mjs 生成；请修改 automation-contracts/src/${source}。\n${content}`
+    let expected = `// 由 scripts/generate-automation-contracts.mjs 生成；请修改 automation-contracts/src/${source}。\n${content}`
     const output = join(root, 'packages/protocol/src', target)
+    // 导入路径投影后排序会改变，生成时规范化，不能手改生成文件。
+    if (target === 'automation-skills.mts')
+      expected = execFileSync(
+        process.execPath,
+        [
+          join(root, 'node_modules/@biomejs/biome/bin/biome'),
+          'check',
+          '--write',
+          `--stdin-file-path=${output}`,
+        ],
+        { input: expected, encoding: 'utf8', cwd: root },
+      )
     if (check) {
       if (readFileSync(output, 'utf8') !== expected) throw new Error(`公共合同投影过期：${target}`)
     } else {

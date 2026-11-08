@@ -1,6 +1,7 @@
 // 由 scripts/generate-automation-contracts.mjs 生成；请修改 automation-contracts/src/litch/automation-skills.mts。
-import type { ClientToolNamespaceSpec } from './automation-tool-spec.mjs'
+
 import { AUTOMATION_SKILL_FILES, AUTOMATION_SKILL_TOOLS } from './automation-skill-files.mjs'
+import type { ClientToolNamespaceSpec } from './automation-tool-spec.mjs'
 
 export const AUTOMATION_GUIDE_NAMESPACE = 'litch_automation'
 export const AUTOMATION_GUIDE: ClientToolNamespaceSpec = {

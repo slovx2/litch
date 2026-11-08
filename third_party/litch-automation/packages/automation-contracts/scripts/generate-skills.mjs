@@ -50,8 +50,20 @@ outputs.push([
     `export const AUTOMATION_SKILL_FILES: Readonly<Record<string, string>> = ${JSON.stringify(files, null, 2)}\n` +
     `export const AUTOMATION_SKILL_TOOLS: Readonly<Record<string, string[]>> = ${JSON.stringify({ litch_browser: specs.browser.tools.map((t) => t.name), litch_computer: specs.mac.tools.map((t) => t.name) }, null, 2)}\n`,
 ])
-for (const [path, text] of outputs) {
+for (const [path, content] of outputs) {
   const output = new URL(path, root)
+  // 生成的模块同样遵守仓库格式，检查模式与写入模式共用完全相同的正文。
+  const text = path.endsWith('.mts')
+    ? execFileSync(
+        process.execPath,
+        [
+          fileURLToPath(new URL('../../../node_modules/@biomejs/biome/bin/biome', import.meta.url)),
+          'format',
+          `--stdin-file-path=${fileURLToPath(output)}`,
+        ],
+        { input: content, encoding: 'utf8', cwd: fileURLToPath(root) },
+      )
+    : content
   if (process.argv.includes('--write')) {
     mkdirSync(dirname(fileURLToPath(output)), { recursive: true })
     const lines = text.split('\n')
