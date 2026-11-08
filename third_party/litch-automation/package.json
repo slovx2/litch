@@ -1,0 +1,26 @@
+{
+  "name": "litch-automation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "npm run build --prefix packages/automation-contracts && npm run build --prefix packages/computer-use && npm run build --prefix packages/browser && npm run build --prefix packages/chrome-bridge && npm run build --prefix packages/chrome-extension",
+    "typecheck": "npm run typecheck --prefix packages/automation-contracts && npm run typecheck --prefix packages/computer-use && npm run typecheck --prefix packages/browser && npm run typecheck --prefix packages/chrome-bridge && npm run typecheck --prefix packages/chrome-extension",
+    "test": "npm test --prefix packages/automation-contracts && npm test --prefix packages/computer-use && npm test --prefix packages/browser && npm test --prefix packages/chrome-bridge && npm test --prefix packages/chrome-extension",
+    "check:packages": "npm run check:package --prefix packages/automation-contracts && npm run check:package --prefix packages/browser",
+    "check": "biome check packages"
+  },
+  "devDependencies": {
+    "@babel/parser": "7.29.7",
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "26.6.5",
+    "@types/pngjs": "6.0.5",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  }
+}

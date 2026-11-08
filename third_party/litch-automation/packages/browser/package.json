@@ -1,0 +1,95 @@
+{
+  "name": "@litch/browser",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "可嵌入浏览器运行时：语义驱动、CDP、Electron 与导入",
+  "exports": {
+    ".": {
+      "types": "./dist/browser/src/index.d.mts",
+      "import": "./dist/browser/src/index.mjs"
+    },
+    "./electron": {
+      "types": "./dist/browser/src/electron.d.mts",
+      "import": "./dist/browser/src/electron.mjs"
+    },
+    "./import": {
+      "types": "./dist/browser/src/import.d.mts",
+      "import": "./dist/browser/src/import.mjs"
+    },
+    "./preload": "./dist/browser/src/browser/passwords/preload.mjs",
+    "./native/build": "./native/build.mjs",
+    "./batch": {
+      "types": "./dist/browser/src/browser/batch.d.mts",
+      "import": "./dist/browser/src/browser/batch.mjs"
+    },
+    "./executor": {
+      "types": "./dist/browser/src/browser/executor.d.mts",
+      "import": "./dist/browser/src/browser/executor.mjs"
+    },
+    "./tools": {
+      "types": "./dist/browser/src/browser/tools.d.mts",
+      "import": "./dist/browser/src/browser/tools.mjs"
+    },
+    "./url": {
+      "types": "./dist/browser/src/browser/url.d.mts",
+      "import": "./dist/browser/src/browser/url.mjs"
+    },
+    "./model": {
+      "types": "./dist/browser/src/browser/model.d.mts",
+      "import": "./dist/browser/src/browser/model.mjs"
+    },
+    "./sites": {
+      "types": "./dist/browser/src/browser/sites.d.mts",
+      "import": "./dist/browser/src/browser/sites.mjs"
+    },
+    "./ax": {
+      "types": "./dist/browser/src/browser/ax.d.mts",
+      "import": "./dist/browser/src/browser/ax.mjs"
+    },
+    "./args": {
+      "types": "./dist/browser/src/browser/args.d.mts",
+      "import": "./dist/browser/src/browser/args.mjs"
+    },
+    "./keys": {
+      "types": "./dist/browser/src/browser/keys.d.mts",
+      "import": "./dist/browser/src/browser/keys.mjs"
+    },
+    "./cdp-allow": {
+      "types": "./dist/browser/src/browser/cdp-allow.d.mts",
+      "import": "./dist/browser/src/browser/cdp-allow.mjs"
+    },
+    "./pointer-renderer": {
+      "types": "./dist/browser/src/pointer-renderer.d.mts",
+      "import": "./dist/browser/src/pointer-renderer.mjs"
+    },
+    "./surface": {
+      "types": "./dist/browser/src/surface.d.mts",
+      "import": "./dist/browser/src/surface.mjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "native"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/*.test.mts test/*.test.mjs",
+    "check:package": "node scripts/check-package.mjs",
+    "check:electron": "node scripts/check-electron.mjs"
+  },
+  "devDependencies": {
+    "electron": "44.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/slovx2/litch-automation.git",
+    "directory": "packages/browser"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

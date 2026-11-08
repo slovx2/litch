@@ -1,0 +1,310 @@
+// 内置浏览器在主进程里的宿主：所有标签（WebContentsView）、共用分区的安全设置、把标签叠到界面报来的那块矩形上。
+//
+// 面板关着、或者标签不是眼前显示的那个时，视图从窗口上摘下来，不挂在任何窗口里。实测（Electron 44，
+// probe-browser-v0.mts）：摘下来的视图 CDP 截图、鼠标、键盘、插入文字都照常；移出可视区（坐标放到窗口外）
+// 和 setVisible(false) 反而不行（截图超时、点击丢失）。摘下来的页面算“看不见”，rAF 停着，所以代理在用时关掉
+// 后台节流（electron-tab.mts 的 setAgentActive），这时页面算看得见、rAF 照跑。截图一律用 CDP，
+// 不用 capturePage（关了节流的摘下视图上它会超时）。
+
+import { type BrowserWindow, type Session, session } from 'electron'
+import type { ElectronHostOptions } from '../ports.mjs'
+import { BrowserDownloads } from './downloads.mjs'
+import { createTab, HIDDEN_BOUNDS, type HostTab } from './electron-tab.mjs'
+import type { BrowserHost, BrowserPage, OpenOptions, TabInfo, TabKind, TabOwner } from './model.mjs'
+import { blockGatedPopup, handoverOf, isHandedOver, notePopup } from './passwords/tabs.mjs'
+
+/** 界面报来的矩形（界面页面里的 CSS 像素） */
+export interface Rect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface ElectronBrowserHost extends BrowserHost {
+  /** 界面说：这个窗口里，这块矩形上显示这个标签。tabId 或 rect 是 null 就是什么都不显示（面板收起、被浮层挡着） */
+  place(window: BrowserWindow, tabId: string | null, rect: Rect | null): void
+  /** 用户在面板里开的标签：不审批 */
+  openForUser(owner: TabOwner, url: string): TabInfo
+  /** 用户在地址栏里打的、点的前进后退刷新停止 */
+  userNavigate(id: string, to: string): void
+  list(): TabInfo[]
+  /** 标签有变化时（合并到下一拍）通知；回一个取消的函数 */
+  onChange(listener: (tabs: TabInfo[]) => void): () => void
+  /** 需要显示某个标签（代理 show 工具，或用户在当前网页打开前台标签） */
+  onShow(listener: (tab: TabInfo) => void): () => void
+  /** 清除浏览数据：cookie、站点存储、缓存、登录的凭据 */
+  clearData(): Promise<void>
+  /** 退出前先由宿主 flush Cookie，再关闭视图和订阅。 */
+  dispose(): void
+  /**
+   * 网页自己要去的地址（点链接、重定向、开新窗口）先过这个改写：远程会话里的远端 localhost 要经 ssh 转发。
+   * 不用改回 null
+   */
+  setNavigationRewrite(rewrite: (page: BrowserPage, url: string) => Promise<string> | null): void
+}
+
+type PartitionHost = {
+  tabOf(contentsId: number): HostTab | undefined
+  blockedDownload(name: string): string
+  downloads: BrowserDownloads | undefined
+}
+const guardedPartitions = new WeakMap<Session, Set<PartitionHost>>()
+
+/** 共用分区的安全设置：网页权限和屏幕共享拒绝，下载只能经过受控队列（宿主没开就拦下）。 */
+function guardPartition(
+  options: ElectronHostOptions,
+  tabOf: (contentsId: number) => HostTab | undefined,
+  downloads: BrowserDownloads | undefined,
+): () => void {
+  const shared = session.fromPartition(options.partition)
+  const entry: PartitionHost = { tabOf, blockedDownload: options.blockedDownload, downloads }
+  const previous = guardedPartitions.get(shared)
+  if (previous) {
+    previous.add(entry)
+    return () => {
+      previous.delete(entry)
+    }
+  }
+  const hosts = new Set([entry])
+  guardedPartitions.set(shared, hosts)
+  shared.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
+  shared.setPermissionCheckHandler(() => false)
+  shared.setDevicePermissionHandler(() => false)
+  shared.setDisplayMediaRequestHandler((_request, callback) => callback(null))
+  shared.setPreloads([])
+  shared.on('will-download', (event, item, contents) => {
+    let owner: { host: PartitionHost; tab: HostTab } | undefined
+    for (const host of hosts) {
+      const tab = contents && host.tabOf(contents.id)
+      if (tab) {
+        owner = { host, tab }
+        break
+      }
+    }
+    if (!owner?.host.downloads) {
+      event.preventDefault()
+      if (owner) {
+        item.cancel()
+        owner.tab.notice(owner.host.blockedDownload(item.getFilename()))
+      }
+      return
+    }
+    owner.host.downloads.capture(item, owner.tab.info())
+    owner.tab.notice(
+      'A download was detected. Call downloads to review its approval, progress and final local path. Do not click again or retry a one-time link.',
+    )
+  })
+  return () => {
+    hosts.delete(entry)
+  }
+}
+
+export function createElectronHost(options: ElectronHostOptions): ElectronBrowserHost {
+  const hostOptions = options
+  const downloads = options.downloads ? new BrowserDownloads(options.downloads) : undefined
+  const tabs = new Map<string, HostTab>()
+  let seq = 0
+  let gate: (page: BrowserPage, url: string) => boolean = () => false
+  let rewrite: (page: BrowserPage, url: string) => Promise<string> | null =
+    options.navigation?.rewrite ?? (() => null)
+  const changeListeners = new Set<(tabs: TabInfo[]) => void>()
+  const showListeners = new Set<(tab: TabInfo) => void>()
+  /** 每个窗口里现在显示的是哪个标签 */
+  const shown = new Map<BrowserWindow, string>()
+  let pending = false
+  let disposed = false
+
+  const unguard = guardPartition(
+    options,
+    (contentsId) => [...tabs.values()].find((tab) => tab.view.webContents.id === contentsId),
+    downloads,
+  )
+
+  const list = () => [...tabs.values()].map((tab) => tab.info())
+  const changed = () => {
+    if (pending) return
+    pending = true
+    setTimeout(() => {
+      pending = false
+      const snapshot = list()
+      for (const listener of changeListeners) listener(snapshot)
+    }, 16)
+  }
+
+  const detach = (tab: HostTab) => {
+    for (const [window, id] of shown) {
+      if (id !== tab.id) continue
+      if (!window.isDestroyed() && window.contentView.children.includes(tab.view)) {
+        window.contentView.removeChildView(tab.view)
+      }
+      tab.view.setBounds(HIDDEN_BOUNDS)
+      shown.delete(window)
+    }
+  }
+
+  const open = (owner: TabOwner, kind: TabKind, options: OpenOptions = {}): HostTab => {
+    if (disposed) throw new Error('Browser host has been disposed.')
+    const id = `t${++seq}`
+    const tab = createTab(
+      id,
+      { ...owner },
+      kind,
+      options.keep === true,
+      {
+        changed,
+        gate: (page, url) => gate(page, url),
+        rewrite: (page, url) => rewrite(page, url),
+        popup(from, url, foreground) {
+          // 网页要开的新窗口改成同一个会话里的新标签。代理的标签开出来的还是代理的（回合结束时关）
+          if (from.kind === 'agent' && from.info().agentActive && !gate(from, url)) {
+            from.notice(
+              `The page tried to open ${url} in a new window, which is not approved yet; it was blocked.`,
+            )
+            return
+          }
+          // Litch 正在代填（观察闸开着）：不开，代填完回 popup_needed，交给人登录
+          if (blockGatedPopup(from.view.webContents.id)) return
+          // 交给人登录的标签开的弹窗（单点登录常用）：开成用户的标签，代理碰不到，交接结束时一并处理
+          // 弹窗里再开的弹窗也记进同一次交接
+          const handover = handoverOf(from.view.webContents.id, from.id)
+          const next = open(from.owner, handover !== null ? 'user' : from.kind)
+          if (handover !== null) notePopup(handover, next.id)
+          const rewritten = rewrite(from, url)
+          if (rewritten) {
+            rewritten.then(
+              (target) => void next.load(target, 30_000),
+              (reason: unknown) =>
+                next.notice(
+                  `Could not open ${url}: ${reason instanceof Error ? reason.message : String(reason)}`,
+                ),
+            )
+          } else void next.load(url, 30_000)
+          // 只接续用户眼前页面的操作。代理自己的弹窗留在后台；交给人登录时按用户操作处理。
+          if (
+            foreground &&
+            (!from.info().agentActive || handover !== null) &&
+            [...shown.values()].includes(from.id)
+          ) {
+            for (const listener of showListeners) listener(next.info())
+          }
+          if (handover === null) from.notice(`The page opened ${url} in a new tab ${next.id}.`)
+        },
+      },
+      hostOptions,
+    )
+    tabs.set(id, tab)
+    void tab.view.webContents.loadURL('about:blank').catch(() => {})
+    changed()
+    return tab
+  }
+
+  const close = (id: string) => {
+    const tab = tabs.get(id)
+    if (!tab) return
+    detach(tab)
+    tabs.delete(id)
+    downloads?.closeTab(id)
+    tab.destroy()
+    changed()
+  }
+
+  return {
+    ...(downloads ? { downloads } : {}),
+    dispose() {
+      if (disposed) return
+      disposed = true
+      for (const id of tabs.keys()) close(id)
+      unguard()
+      changeListeners.clear()
+      showListeners.clear()
+    },
+    pages: () => [...tabs.values()],
+    page: (id) => tabs.get(id),
+    open,
+    close,
+    setKeep(id, keep) {
+      const tab = tabs.get(id)
+      if (!tab) return
+      tab.keep = keep
+      changed()
+    },
+    release(id) {
+      tabs.get(id)?.release()
+    },
+    show(id) {
+      const tab = tabs.get(id)
+      if (!tab) return
+      const info = tab.info()
+      for (const listener of showListeners) listener(info)
+    },
+    setNavigationGate(next) {
+      gate = next
+    },
+    setNavigationRewrite(next) {
+      rewrite = next
+    },
+    place(window, tabId, rect) {
+      const before = shown.get(window)
+      const next = tabId ? tabs.get(tabId) : undefined
+      if (before && (before !== next?.id || !rect)) {
+        const old = tabs.get(before)
+        if (old && !window.isDestroyed() && window.contentView.children.includes(old.view)) {
+          window.contentView.removeChildView(old.view)
+        }
+        old?.view.setBounds(HIDDEN_BOUNDS)
+        shown.delete(window)
+      }
+      if (!next || !rect || window.isDestroyed()) return
+      // 同一个标签只能挂在一个窗口里：别的窗口里显示着就先摘下来
+      detach(next)
+      const zoom = window.webContents.getZoomFactor()
+      window.contentView.addChildView(next.view)
+      next.view.setBounds({
+        x: Math.round(rect.x * zoom),
+        y: Math.round(rect.y * zoom),
+        width: Math.max(0, Math.round(rect.width * zoom)),
+        height: Math.max(0, Math.round(rect.height * zoom)),
+      })
+      shown.set(window, next.id)
+      if (!windowsWatched.has(window)) {
+        windowsWatched.add(window)
+        window.once('closed', () => shown.delete(window))
+      }
+    },
+    openForUser(owner, url) {
+      const tab = open(owner, 'user')
+      if (url !== 'about:blank') void tab.load(url, 30_000)
+      return tab.info()
+    },
+    userNavigate(id, to) {
+      const tab = tabs.get(id)
+      if (!tab) return
+      const contents = tab.view.webContents
+      // 交给人登录期间不许后退、前进（往返缓存会恢复代理执行过脚本的旧文档）；面板上的按钮也是灰的
+      if ((to === 'back' || to === 'forward') && isHandedOver(contents.id)) return
+      if (to === 'back') contents.navigationHistory.goBack()
+      else if (to === 'forward') contents.navigationHistory.goForward()
+      else if (to === 'reload') contents.reload()
+      else if (to === 'stop') contents.stop()
+      else void tab.load(to, 30_000)
+    },
+    list,
+    onChange(listener) {
+      changeListeners.add(listener)
+      return () => changeListeners.delete(listener)
+    },
+    onShow(listener) {
+      showListeners.add(listener)
+      return () => showListeners.delete(listener)
+    },
+    async clearData() {
+      const shared = session.fromPartition(options.partition)
+      await shared.clearStorageData()
+      await shared.clearCache()
+      await shared.clearAuthCache()
+    },
+  }
+}
+
+const windowsWatched = new WeakSet<BrowserWindow>()
