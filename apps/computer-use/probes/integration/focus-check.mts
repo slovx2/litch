@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { runComputerActions } from '../../../../third_party/litch-automation/packages/computer-use/src/batch.mjs'
 import { MacLauncher } from '../../../../third_party/litch-automation/packages/computer-use/src/launcher-mac.mjs'
 import { hidIdleSeconds } from '../coexist/idle.mjs'
+import { PROBE_IDENTITY } from './identity.mjs'
 
 const cu = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const root = mkdtempSync('/tmp/litch-cu-focus-')
@@ -61,13 +62,7 @@ try {
     children.push(read(name).pid)
   }
   const launcher = new MacLauncher({
-    identity: {
-      helperId: 'io.github.slovx2.litch.background-input-probe',
-      helperName: 'Litch Background Input Probe',
-      executableName: 'Probe',
-      directoryEnv: 'LITCH_COMPUTER_USE_DIR',
-      tokenEnv: 'LITCH_COMPUTER_USE_TOKEN',
-    },
+    identity: PROBE_IDENTITY,
     appPath:
       process.env.LITCH_CU_PROBE_APP ??
       join(cu, '.artifacts/integration/Litch Background Input Probe.app'),

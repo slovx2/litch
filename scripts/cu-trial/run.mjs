@@ -18,6 +18,7 @@ import { registerHooks } from 'node:module'
 import { basename, dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { PROBE_IDENTITY } from '../../apps/computer-use/probes/integration/identity.mjs'
 import { prepareEnvironment } from './environment.mjs'
 import { startCodex } from './rpc.mjs'
 
@@ -32,7 +33,9 @@ registerHooks({
   },
 })
 const { createComputerExecutor } = await import('../../apps/desktop/src/computer-use/executor.mts')
-const { MacLauncher } = await import('../../apps/desktop/src/computer-use/launcher-mac.mts')
+const { MacLauncher } = await import(
+  '../../third_party/litch-automation/packages/computer-use/src/launcher-mac.mts'
+)
 const { HelperSupervisor } = await import('../../apps/desktop/src/computer-use/supervisor.mts')
 const { computerToolsSpec } = await import('../../packages/protocol/src/client-tools-computer.mts')
 const option = (name) => {
@@ -83,6 +86,7 @@ const record = (file, value) => {
   appendFileSync(join(out, file), `${data}\n`, { mode: 0o600 })
 }
 const launcher = new MacLauncher({
+  identity: PROBE_IDENTITY,
   appPath: resolve(helperPath),
   directory: join(root, 'helper'),
   version: null,

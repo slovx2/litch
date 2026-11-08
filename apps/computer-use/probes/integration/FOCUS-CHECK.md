@@ -5,15 +5,15 @@
 原生观察器同时监听 NSWorkspace 激活通知并每 5ms 采样前台 PID 和真实光标位置。
 实际控件结果与前台稳定分别断言，前台回退单列，并验证恢复状态。
 
-需要本机已有的 Node 24、Swift 和 Developer ID 签名身份；不安装依赖。
+需要本机已有的 Node 24、Swift 和[测试专用签名证书](PERMISSIONS.md)；不安装依赖。
 探针必须已由用户授予辅助功能和屏幕录制权限；新路径首次截图还可能触发系统确认。
 脚本不会代点权限提示。当前台出现系统确认/锁屏，或用户在动作中切换前台时立即停止。
 开始前最多等两分钟，等到真实 HID 空闲三秒才创建并激活测试窗口。
 光标变化同样会令后台动作检查失败；先检查用户活动，不要直接归因到产品。
 
 ```sh
-LITCH_SIGN_IDENTITY='<本机 Developer ID>' node apps/computer-use/probes/background/build.mjs
-LITCH_SIGN_IDENTITY='<本机 Developer ID>' node apps/computer-use/probes/integration/build.mjs
+LITCH_SIGN_IDENTITY=- node apps/computer-use/probes/background/build.mjs
+LITCH_CU_SIGN_IDENTITY='<测试证书的 SHA-1>' node apps/computer-use/probes/integration/build.mjs
 node --import tsx apps/computer-use/probes/integration/focus-check.mts /绝对路径/after.json
 # 只在探针内注入一次活动版本变化，不发送全局键鼠事件：
 LITCH_CU_PROBE_INTERRUPT_SELFTEST=1 node --import tsx apps/computer-use/probes/integration/focus-check.mts /绝对路径/retry.json

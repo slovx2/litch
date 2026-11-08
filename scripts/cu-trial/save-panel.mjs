@@ -15,6 +15,7 @@ import { registerHooks } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { PROBE_IDENTITY } from '../../apps/computer-use/probes/integration/identity.mjs'
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -27,7 +28,9 @@ registerHooks({
   },
 })
 const { createComputerExecutor } = await import('../../apps/desktop/src/computer-use/executor.mts')
-const { MacLauncher } = await import('../../apps/desktop/src/computer-use/launcher-mac.mts')
+const { MacLauncher } = await import(
+  '../../third_party/litch-automation/packages/computer-use/src/launcher-mac.mts'
+)
 const { HelperSupervisor } = await import('../../apps/desktop/src/computer-use/supervisor.mts')
 const here = dirname(fileURLToPath(import.meta.url))
 const [helperPath, output] = process.argv.slice(2)
@@ -43,6 +46,7 @@ mkdirSync(out, { recursive: true, mode: 0o700 })
 const root = mkdtempSync('/tmp/litch-cu-save-panel-')
 mkdirSync(join(root, 'home'))
 const launcher = new MacLauncher({
+  identity: PROBE_IDENTITY,
   appPath: resolve(helperPath),
   directory: join(root, 'helper'),
   version: null,
@@ -50,10 +54,11 @@ const launcher = new MacLauncher({
     execFileSync('open', [
       '-n',
       '-g',
-      ...Object.entries({ ...env, HOME: join(root, 'home') }).flatMap(([key, value]) => [
-        '--env',
-        `${key}=${value}`,
-      ]),
+      ...Object.entries({
+        ...env,
+        HOME: join(root, 'home'),
+        CODEX_HOME: join(root, 'codex'),
+      }).flatMap(([key, value]) => ['--env', `${key}=${value}`]),
       path,
     ])
   },

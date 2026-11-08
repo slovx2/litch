@@ -11,6 +11,7 @@ import {
   createComputerExecutor,
   createCore,
   MacLauncher,
+  PROBE_IDENTITY,
   reduceSession,
   sshOpener,
 } from '../../.artifacts/integration/remote-driver.mjs'
@@ -60,7 +61,11 @@ async function command(name, action) {
 }
 try {
   const launcher = new MacLauncher({
-    appPath: resolve('apps/computer-use/.artifacts/integration/Litch Background Input Probe.app'),
+    identity: PROBE_IDENTITY,
+    appPath: resolve(
+      process.env.LITCH_CU_PROBE_APP ??
+        'apps/computer-use/.artifacts/integration/Litch Background Input Probe.app',
+    ),
     directory,
     version: null,
     async launch(path, env) {

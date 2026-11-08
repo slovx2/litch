@@ -7,13 +7,16 @@
 在仓库根目录、Node 24 环境下构建：
 
 ```sh
-LITCH_SIGN_IDENTITY=<自己的签名身份> node apps/computer-use/probes/integration/build.mjs
+LITCH_CU_SIGN_IDENTITY=<测试专用证书的SHA-1> node apps/computer-use/probes/integration/build.mjs
 node_modules/.bin/esbuild apps/computer-use/probes/integration/check.mts \
   --bundle --platform=node --format=esm \
   --outfile=apps/computer-use/.artifacts/integration/check.mjs
 ```
 
 输出 `apps/computer-use/.artifacts/integration/Litch Background Input Probe.app`。
+首次设置见 [测试签名与系统确认](PERMISSIONS.md)。只接受名为 `Litch CU Probe Local` 的
+本地测试证书，不使用正式 Developer ID。源码、配置、工具链和产物都未变时复用签名产物；
+`--rebuild` 强制重建，用于核验两次构建的身份与授权是否保持。
 包标识是 `io.github.slovx2.litch.background-input-probe`；由 LaunchServices 独立启动，
 不借终端或其他应用的权限。系统设置 → 隐私与安全性中，用户需要为这个探针开启
 “辅助功能”和“屏幕与系统音频录制”。真正首次采集还可能弹“直接访问屏幕”的确认；
@@ -42,6 +45,22 @@ node apps/computer-use/.artifacts/integration/check.mjs \
 移动和缩放、首帧确认、无消费者停流及视觉检查，不能用这里的动作结果代替。
 
 ## 回归与远程链路
+
+启动器直接使用第三方通用 `MacLauncher`，显式传入 `identity.mjs` 的探针身份与环境键；
+构建产物的包标识、显示名和可执行文件名也来自同一配置。正式 Litch 包装器继续只接受正式助手。
+
+无需系统授权的身份合同回归（也包含在桌面 `test:computer-use` 中）：
+
+```sh
+node --test apps/computer-use/probes/integration/identity.test.mjs
+```
+
+构建独立探针及下方宿主驱动后，可单独验证原生握手与退出；此入口关闭鼠标自测，
+不采集屏幕、不发送输入、不请求权限，日志保存在输出的 `/tmp/litch-cu-handshake-*` 目录：
+
+```sh
+node apps/computer-use/probes/integration/handshake.mjs
+```
 
 `swift test --package-path apps/computer-use` 包含真实 Connection 的控制请求绕过长动作、
 大图布局不撑大浮窗、首次输入等待自测/取消、浮窗系统输入穿透及恢复测试。

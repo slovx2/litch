@@ -5,8 +5,9 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { MacLauncher } from '../../../../third_party/litch-automation/packages/computer-use/src/launcher-mac.mjs'
 import type { HelperClient } from '../../../desktop/src/computer-use/helper-client.mjs'
-import { MacLauncher } from '../../../desktop/src/computer-use/launcher-mac.mjs'
+import { PROBE_IDENTITY } from './identity.mjs'
 
 const fixture = process.argv[2],
   directory = process.argv[3],
@@ -76,6 +77,7 @@ try {
     const root = join(directory, disabled ? 'disabled' : 'normal')
     mkdirSync(root, { recursive: true, mode: 0o700 })
     const launcher = new MacLauncher({
+      identity: PROBE_IDENTITY,
       appPath,
       directory: root,
       version: null,

@@ -1,9 +1,16 @@
 // 测试入口替换 main，生产源文件不替换权限、签名规则。只签专用探针，绝不改正式 Litch。
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { LITCH_HOST_IDENTITY } from '../../host-identity.mjs'
+import {
+  fileHash,
+  reusableBuild,
+  signingRequirement,
+  sourceFingerprint,
+} from './build-contract.mjs'
+import { PROBE_IDENTITY } from './identity.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url)),
   root = resolve(here, '../..')
@@ -11,28 +18,83 @@ const here = dirname(fileURLToPath(import.meta.url)),
 const productRoot =
   process.env.LITCH_CU_PRODUCT_ROOT ??
   resolve(root, '../../third_party/litch-automation/apps/computer-use')
+const out = resolve(
+  process.env.LITCH_CU_PROBE_OUTPUT ??
+    join(root, `.artifacts/integration/${PROBE_IDENTITY.helperName}.app`),
+)
+if (!out.endsWith(`/.artifacts/integration/${PROBE_IDENTITY.helperName}.app`))
+  throw new Error('探针只能输出到专用 .artifacts/integration/Litch Background Input Probe.app')
+const identity = process.env.LITCH_CU_SIGN_IDENTITY
+const requirement = signingRequirement(
+  identity,
+  execFileSync('/usr/bin/security', ['find-identity', '-v', '-p', 'codesigning'], {
+    encoding: 'utf8',
+  }),
+)
+const coexist = process.argv.includes('--coexist')
+const fingerprint = sourceFingerprint(
+  [
+    { path: join(productRoot, 'Package.swift') },
+    ...(existsSync(join(productRoot, 'Package.resolved'))
+      ? [{ path: join(productRoot, 'Package.resolved') }]
+      : []),
+    { path: join(productRoot, 'Sources'), directory: true },
+    ...['build.mjs', 'build-contract.mjs', 'identity.mjs', '../../host-identity.mjs'].map(
+      (name) => ({
+        path: resolve(here, name),
+      }),
+    ),
+    ...(coexist
+      ? [
+          '../coexist/main.swift',
+          '../coexist/ElectronMatrix.swift',
+          '../background/ProbeInput.swift',
+        ]
+      : ['main.swift']
+    ).map((name) => ({ path: resolve(here, name) })),
+  ],
+  {
+    out,
+    requirement,
+    coexist,
+    arch: process.arch,
+    swift: execFileSync('swift', ['--version'], { encoding: 'utf8' }),
+    sdk: execFileSync('xcrun', ['--show-sdk-version'], { encoding: 'utf8' }),
+  },
+)
+const recordPath = `${out}.build.json`
+const verify = () =>
+  execFileSync('codesign', ['--verify', '--strict', `-R=${requirement}`, out], { stdio: 'inherit' })
+if (!process.argv.includes('--rebuild') && reusableBuild(recordPath, fingerprint, out)) {
+  verify()
+  console.log(`复用未变更的测试探针（未构建、未签名）：${out}`)
+  process.exit(0)
+}
 execFileSync('swift', ['build', '--package-path', productRoot], { stdio: 'inherit' })
 const bin = execFileSync('swift', ['build', '--package-path', productRoot, '--show-bin-path'], {
   encoding: 'utf8',
 }).trim()
 const native = join(productRoot, 'Sources/LitchComputerUse')
 const core = join(bin, 'LitchComputerUseCore.build')
-const out =
-  process.env.LITCH_CU_PROBE_OUTPUT ??
-  join(root, '.artifacts/integration/Litch Background Input Probe.app')
 mkdirSync(join(out, 'Contents/MacOS'), { recursive: true })
 writeFileSync(
   join(out, 'Contents/Info.plist'),
   `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>CFBundleIdentifier</key><string>io.github.slovx2.litch.background-input-probe</string>
-<key>CFBundleName</key><string>Litch Background Input Probe</string>
-<key>CFBundleDisplayName</key><string>Litch Background Input Probe</string>
-<key>CFBundleExecutable</key><string>Probe</string>
+<key>CFBundleIdentifier</key><string>${PROBE_IDENTITY.helperId}</string>
+<key>CFBundleName</key><string>${PROBE_IDENTITY.helperName}</string>
+<key>CFBundleDisplayName</key><string>${PROBE_IDENTITY.helperName}</string>
+<key>CFBundleExecutable</key><string>${PROBE_IDENTITY.executableName}</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleVersion</key><string>1</string>
-<key>ComputerUseHostIdentity</key><string>${JSON.stringify({ ...LITCH_HOST_IDENTITY, helperId: 'io.github.slovx2.litch.background-input-probe' })}</string>
+<key>ComputerUseHostIdentity</key><string>${JSON.stringify({
+    ...LITCH_HOST_IDENTITY,
+    helperId: PROBE_IDENTITY.helperId,
+    helperName: PROBE_IDENTITY.helperName,
+    directoryEnvironmentKey: PROBE_IDENTITY.directoryEnv,
+    tokenEnvironmentKey: PROBE_IDENTITY.tokenEnv,
+  })}</string>
 <key>LSUIElement</key><true/>
 <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict></plist>\n`,
@@ -47,7 +109,7 @@ execFileSync(
     ...readdirSync(native)
       .filter((n) => n.endsWith('.swift') && n !== 'main.swift')
       .map((n) => join(native, n)),
-    ...(process.argv.includes('--coexist')
+    ...(coexist
       ? [
           join(here, '../coexist/main.swift'),
           join(here, '../coexist/ElectronMatrix.swift'),
@@ -58,7 +120,7 @@ execFileSync(
       .filter((n) => n.endsWith('.swift.o'))
       .map((n) => join(core, n)),
     '-o',
-    join(out, 'Contents/MacOS/Probe'),
+    join(out, 'Contents/MacOS', PROBE_IDENTITY.executableName),
     '-framework',
     'AppKit',
     '-framework',
@@ -70,13 +132,29 @@ execFileSync(
   ],
   { stdio: 'inherit' },
 )
-const identity = process.env.LITCH_SIGN_IDENTITY
-if (!identity) throw new Error('请显式提供探针 Developer ID 身份')
 execFileSync(
   'codesign',
-  ['--force', '--sign', identity, '--options', 'runtime', '--timestamp', out],
+  [
+    '--force',
+    '--sign',
+    identity,
+    '--options',
+    'runtime',
+    '--timestamp=none',
+    `-r=designated => ${requirement}`,
+    out,
+  ],
   { stdio: 'inherit' },
 )
-execFileSync('codesign', ['--verify', '--strict', out], { stdio: 'inherit' })
+verify()
+writeFileSync(
+  recordPath,
+  JSON.stringify({
+    fingerprint,
+    executable: fileHash(join(out, 'Contents/MacOS', PROBE_IDENTITY.executableName)),
+    plist: fileHash(join(out, 'Contents/Info.plist')),
+  }),
+)
+mkdirSync(join(root, '.artifacts/integration'), { recursive: true })
 writeFileSync(join(root, '.artifacts/integration/build-path.txt'), `${out}\n`)
 console.log(out)
