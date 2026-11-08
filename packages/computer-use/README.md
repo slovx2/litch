@@ -1,6 +1,6 @@
 # Computer Use 嵌入库
 
-`computer-use-internal` 是暂定的内部构建名，版本跟随 Litch；先交 tarball，不代表已公开发布 npm。Node 24+，无 Electron 运行时依赖。原生助手由使用方构建、签名和嵌入自己的应用。
+计划独立发布的包名为 `@litch/computer-use`，首版将使用独立的 `0.x` semver，不再跟随 Litch。Node 24+，无 Electron 运行时依赖。独立仓只提供 TS 执行器、macOS Swift/Windows Rust 原生助手源码和构建脚本；原生助手由使用方构建、签名、公证（如适用）、打包并嵌入自己的应用，不发布预编译资产。
 
 - 默认入口：`createComputerUse` / `createComputerExecutor`，使用 automation-contracts 的 `ToolInvocation`、`InvocationContext`、`ToolResult`。宿主提供 `HelperAccess` 与 `disposeHelper`，不会自动查找任何产品路径。
 - `/tools`：`computerTools`，来自 automation-contracts 唯一源，支持 macOS、Windows、portable 与批量能力开关；产品名、助手名和命名空间显式提供。
@@ -13,7 +13,7 @@
 
 构建：在仓库安装精确锁定的依赖后，`npm run build --prefix packages/computer-use`。当前独立编译把实际引用的 contracts 唯一源一并投影到 `dist/automation-contracts`；发布白名单只带 `dist`，不需要仓库源码或路径别名，也不手工维护第二份合同。
 
-Litch 的入口在 `apps/desktop/src/computer-use`：路径定位、手机验签、审批文件和设置 UI 留在宿主；实际执行器、批量、帧、启动器与看护来自本包。
+宿主入口负责路径定位、手机验签、审批文件和设置 UI；实际执行器、批量、帧、启动器与看护来自本包。
 
 ## 最小宿主接线
 
@@ -45,16 +45,16 @@ const runtime = createNodeComputerUse({
 
 ## 自己构建原生组件
 
-macOS：调用 `apps/computer-use/build-app.mjs` 导出的 `buildHelper`，提供完整 `hostIdentity`、`appName`、`executableName`、`iconPath`（null 表示不带图标）、`version`、`out`、`arch`；也可通过 `--config <JSON>` 传这些字段。再 `signHelper(app, {identity, keychain})`，签名 ID 从所构建的 Info.plist 读取。第三方应随 SDK 获取 `apps/computer-use` 的原生源码组件及构建器，自己构建、签名和公证；不复用 Litch 的签名助手。Litch 默认值在 `host-identity.mjs`，默认 bundle ID、名称和已有授权归属均不变。
+macOS：独立代码库提供 `apps/computer-use/build.mjs` 的 `buildNative({arch, debug})`，只编译 Swift 并返回可执行文件路径。使用方自己生成 `.app` 的 Info.plist、写入 `ComputerUseHostIdentity`、选择图标、签名、公证和打包。Litch 自己的 `build-app.mjs`/`host-identity.mjs` 是产品组装代码，留在 Litch，不随独立代码库导出。原生源码和构建脚本从对应源码 Release 获取，npm 包只带 TS 运行时。
 
-完整配置示例和启动验证在 `test/native-host.mjs`，其第二身份不包含 Litch peer ID。正式宿主必须与 helper 同团队签名，且 identifier 在构建白名单中；开发 ad-hoc token 示例不证明正式签名集成通过。SDK tarball 只含 TS 运行时，原生源码和构建器需另外获取（见上一段）。
+正式宿主必须与 helper 同团队签名，且 identifier 在构建白名单中；开发 ad-hoc token 示例不证明正式签名集成通过。WakeQora 使用自己的 bundle ID、peer/team 和系统授权。
 
-Windows：在 `apps/computer-use-win` 用锁定工具链构建 `x86_64-pc-windows-msvc`。构建变量见 [原生协议](NATIVE-PROTOCOL.md)，宿主自己嵌入 exe；运行时只接受 stdio，mutex 保持跨宿主共享。macOS 两个独立 helper 没有全局输入仲裁，不能同时输入。
+Windows：在 `apps/computer-use-win` 用锁定工具链构建 `x86_64-pc-windows-msvc`。构建必须显式提供 `CU_HELPER_VERSION`、`CU_HOST_PRODUCT`、`CU_HOST_REGISTRY_KEY`、`CU_HOST_EXECUTABLE`、`CU_HOST_ISOLATION_KEYS`；见 [原生协议](NATIVE-PROTOCOL.md)，宿主自己构建、签名（如适用）、打包并嵌入 exe；运行时只接受 stdio，mutex 保持跨宿主共享。macOS 两个独立 helper 没有全局输入仲裁，不能同时输入。
 
 ## 验收与限制
 
 - `npm run typecheck --prefix packages/computer-use`；`npm test --prefix packages/computer-use` 包含独立消费者和公共合同/审批/lifecycle/帧测试。
-- 原有 `apps/desktop` 的 `test:computer-use` 仍运行实际共享实现，旧入口不是另一份代码；Swift/Rust 同读黄金帧。
-- `test/native-host.mjs` 只启动自己构建的第二宿主 helper，不请求系统授权、不输入用户应用；在隔离 HOME 下运行。
+- 使用方的桌面端验收应运行实际共享实现；Swift/Rust 与 TypeScript 宿主同读黄金帧。
+- `apps/computer-use/test-native-host.mjs` 只启动自己构建的第二宿主 helper，不请求系统授权、不输入用户应用；在隔离 HOME 下运行。
 - 取消经 `cancelAction`（按 `actionId`）转给原生助手；已经发出的输入不会撤回。
 - 正式签名/TCC、Windows 真机、WakeQora 安装包接线不由这些假宿主/隐藏窗口测试证明。

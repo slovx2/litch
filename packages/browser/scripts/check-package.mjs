@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
-import { importsOf } from '../../../scripts/automation-boundary.mjs'
+import { importsOf } from './imports-of.mjs'
 
 const packageDir = fileURLToPath(new URL('..', import.meta.url))
 const root = resolve(packageDir, '../..')

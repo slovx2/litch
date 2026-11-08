@@ -1,5 +1,5 @@
 // 和 Computer Use 助手之间的线上格式：每帧 4 字节大端的长度，后面是 UTF-8 的 JSON-RPC 2.0。两个平台同一套帧。
-// macOS 助手（apps/computer-use）那一头在 Sources/LitchComputerUseCore/Wire.swift；Windows 助手（apps/computer-use-win）
+// macOS/Windows 原生助手两端分别实现同一份 wire；
 // 的方法和形状在下面“Windows 助手”那一段。常量和方法的形状两边要一致。
 
 /** macOS 助手的通道协议版本，握手时对不上助手直接断开 */

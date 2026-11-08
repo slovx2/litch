@@ -335,11 +335,11 @@ jobs:
       - name: 助手的单元测试
         id: phase-15
         working-directory: apps/computer-use-win
-        run: cargo test --locked --target x86_64-pc-windows-msvc
+        run: node ../desktop/scripts/build-computer-use-win.mjs test --locked --target x86_64-pc-windows-msvc
       - name: 构建助手
         id: phase-14
         working-directory: apps/computer-use-win
-        run: cargo build --release --locked --target x86_64-pc-windows-msvc
+        run: node ../desktop/scripts/build-computer-use-win.mjs build --release --locked --target x86_64-pc-windows-msvc
       - name: Inno Setup 6.7.1
         id: phase-13
         run: choco install innosetup --version=6.7.1 --no-progress -y

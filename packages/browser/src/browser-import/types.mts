@@ -1,4 +1,4 @@
-// 从别的浏览器导入：主进程和界面之间的数据形状（界面那边的类型在 packages/ui/src/side/browser/bridge.ts，改一边改另一边）。
+// 从别的浏览器导入的数据形状；界面桥由宿主提供。
 // 这里只有能放心交给界面的东西：条数、状态、资料名，没有 Cookie 的值、密码、密钥。
 
 import type { ProtectedStatus } from './protected-types.mjs'

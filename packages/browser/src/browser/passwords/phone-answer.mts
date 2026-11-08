@@ -1,5 +1,5 @@
 // 手机经会话所在设备答的登录卡片（22 号文档第八节）：设备服务不可信，答复要验过手机批准钥匙的签名才认。
-// 真的验签在 apps/desktop/src/approvals/verify.mts（照这里的 VerifyPhoneAnswer 写，browser/install.mts 建交接时传进来）；
+// 真的验签由宿主提供的 VerifyPhoneAnswer 完成，创建交接时显式传入；
 // 这里只有约定和一个一律不认的桩（不传验签时用，比如单测）。
 import type { SignInRequest } from './signin.mjs'
 

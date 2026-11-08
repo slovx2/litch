@@ -23,6 +23,7 @@ import {
 } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { buildNative } from './build.mjs'
 import { LITCH_HOST_IDENTITY, validateHostIdentity } from './host-identity.mjs'
 
 const here = (path) => fileURLToPath(new URL(path, import.meta.url))
@@ -95,13 +96,7 @@ export function buildHelper({
     if (!name || name === '.' || name === '..' || /[/\\\x00-\x1f]/.test(name))
       throw new Error('组件名称必须是单一文件名')
   }
-  if (process.platform !== 'darwin') throw new Error('Litch Computer Use 只在 macOS 上构建')
-  const swiftArch = arch === 'x64' ? 'x86_64' : 'arm64'
-  const args = ['build', '--package-path', PACKAGE_DIR, '-c', debug ? 'debug' : 'release']
-  args.push('--arch', swiftArch)
-  run('swift', args)
-  const binDir = execFileSync('swift', [...args, '--show-bin-path'], { encoding: 'utf8' }).trim()
-  const binary = join(binDir, EXECUTABLE)
+  const binary = buildNative({ arch, debug })
   if (!existsSync(binary)) throw new Error(`没有找到构建出来的 ${binary}`)
 
   const app = join(out, appName)

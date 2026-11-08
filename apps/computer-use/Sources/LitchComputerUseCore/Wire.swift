@@ -1,5 +1,5 @@
 // 通道的线上格式：每一帧是 4 字节大端的长度，后面跟这么多字节的 UTF-8 JSON（JSON-RPC 2.0）。
-// 主进程那一头的实现在 apps/desktop/src/computer-use/wire.mts，两边的常量要一致。
+// TypeScript 宿主端实现同一份 wire，两边的常量要一致。
 import Foundation
 
 public enum Wire {

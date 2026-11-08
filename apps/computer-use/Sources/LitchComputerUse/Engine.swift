@@ -1,7 +1,7 @@
 // 一条连接的请求处理：握手、权限、列应用、取状态，以及每个会话、每个应用的状态（编号、截图的坐标系、停了哪些）。
 // 动作本身在 Actions.swift。
 //
-// 方法（参数和结果的形状和主进程的 apps/desktop/src/computer-use/wire.mts 一致）：
+// 方法参数和结果的形状与 TypeScript 宿主端 wire 一致：
 //   hello          {protocol, token?, lang?}            → {protocol, pid, version, bundleId, auth, teamId}
 //   diagnostics    {}                                   → 进程号、父进程、责任进程、签名
 //   permissions    {}                                   → {accessibility, screenRecording}

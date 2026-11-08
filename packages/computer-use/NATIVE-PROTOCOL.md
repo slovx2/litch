@@ -83,3 +83,5 @@ Mac 的 `ComputerUseHostIdentity` JSON 写入 Info.plist，并由组件签名覆
 Windows 构建期注入 `CU_HOST_PRODUCT`、`CU_HOST_REGISTRY_KEY`、`CU_HOST_EXECUTABLE`、`CU_HOST_ISOLATION_KEYS`（分号分隔）、`CU_HELPER_VERSION`。编译后不读取这些运行时环境变量。目标按安装器 HKCU 的 InstallLocation 加 executable 识别；受保护目标环境的隔离键仍由原生进程查询，不信任模型参数。保持 x64 的进程参数读取约束。
 
 `test/native-frames.json` 是 TS/Swift/Rust 共跑的黄金帧，包含握手、取消、回合结束和认证错误。单元测试证明帧与身份判定；ad-hoc LaunchServices 自检证明隔离组件启动和收尾。正式签名、TCC、Windows 真机和两个实际宿主集成仍须单独验收。
+
+独立源码构建不读取 Litch 根 package.json。Windows 的五个 CU_* 构建变量必须由宿主显式提供；Litch 使用 `apps/desktop/scripts/build-computer-use-win.mjs`，第三方使用自己的构建入口。macOS `build.mjs` 只编译 Swift，签名、Info.plist、应用组装和公证归宿主。

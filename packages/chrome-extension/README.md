@@ -2,7 +2,7 @@
 
 这是 MV3 service worker、标签租约、受限 CDP 执行器和 isolated-world 光标的库。它不交付商店扩展，不注册 native host，也不在 import 时启动。Litch 的实例位于 `apps/chrome-extension`。
 
-内部包名 `chrome-extension-internal` 尚未决定公开 npm 作用域。版本跟仓库统一；先 `npm run build --prefix packages/chrome-extension`、`npm pack ./packages/chrome-extension` 生成 tarball，用精确制品安装，例如 `npm install --save-exact ./chrome-extension-internal-<版本>.tgz`。构建入口依赖精确的 esbuild 0.28.2；运行入口不加载 Node/Electron。
+计划独立发布的包名为 `@litch/chrome-extension`，首版将使用独立的 `0.x` semver，不再跟随 Litch。构建入口依赖精确的 esbuild 0.28.2；运行入口不加载 Node/Electron。扩展 key、ID、manifest、图标、商店上传和签名由使用方负责；独立仓只发布源码和 npm 包。
 
 ```ts
 import { createExtensionRuntime } from 'chrome-extension-internal'

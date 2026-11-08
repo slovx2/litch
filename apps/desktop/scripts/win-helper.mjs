@@ -23,7 +23,8 @@ export const WIN_HELPER_CRATE = join(repo, 'apps', 'computer-use-win')
 
 /** 构建助手的命令（在 WIN_HELPER_CRATE 里跑） */
 export const WIN_HELPER_BUILD = [
-  'cargo',
+  'node',
+  '../desktop/scripts/build-computer-use-win.mjs',
   'build',
   '--release',
   '--locked',

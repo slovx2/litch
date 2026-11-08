@@ -1,12 +1,15 @@
 // 单独运行的第二宿主原生夹具：不请求授权、不观察或输入用户应用。
-// 先 npm run build --prefix packages/computer-use，再 node packages/computer-use/test/native-host.mjs。
+// 先 npm run build --prefix packages/computer-use，再 node apps/computer-use/test-native-host.mjs。
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
-import { buildHelper, signHelper } from '../../../apps/computer-use/build-app.mjs'
-import { validateHostIdentity } from '../../../apps/computer-use/host-identity.mjs'
-import { HelperSupervisor, MacLauncher } from '../dist/computer-use/src/node.mjs'
+import {
+  HelperSupervisor,
+  MacLauncher,
+} from '../../packages/computer-use/dist/computer-use/src/node.mjs'
+import { buildHelper, signHelper } from './build-app.mjs'
+import { validateHostIdentity } from './host-identity.mjs'
 
 const root = mkdtempSync('/tmp/cu-host-')
 const hostIdentity = validateHostIdentity({

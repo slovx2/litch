@@ -1,4 +1,4 @@
-// 校验模型给的参数。形状和 packages/protocol/src/client-tools-browser.mts 里的定义一一对应，改一边要改另一边。
+// 校验模型给的参数。形状和 automation-contracts 的定义一一对应。
 // 不对的回一句给模型看的英文（执行器包成 invalid 失败）。
 
 export class BadArgs extends Error {

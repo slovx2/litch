@@ -7,8 +7,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 
-const root = fileURLToPath(new URL('../../..', import.meta.url))
-const require = createRequire(join(root, 'apps/desktop/package.json'))
+const packageDir = fileURLToPath(new URL('..', import.meta.url))
+const require = createRequire(join(packageDir, 'package.json'))
 const electron = require('electron')
 const temp = mkdtempSync(join(tmpdir(), 'browser-host-fixture-'))
 const home = join(temp, 'home'),
@@ -18,7 +18,7 @@ mkdirSync(home)
 mkdirSync(profile)
 writeFileSync(join(profile, 'empty-preload.cjs'), '// 隔离宿主夹具没有密码输入。\n')
 await build({
-  entryPoints: [join(root, 'packages/browser/test/electron-host.fixture.mts')],
+  entryPoints: [join(packageDir, 'test/electron-host.fixture.mts')],
   outfile,
   bundle: true,
   platform: 'node',

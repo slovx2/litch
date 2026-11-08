@@ -2,7 +2,7 @@
 
 Node 本机桥、受控 Chrome 执行器、内置/Chrome 分流和 Native Messaging 登记适配器。无 Electron/core/UI 依赖；导入不监听、不登记、不读取个人 HOME。底层页面操作和站点策略复用 browser，线上 wire 唯一源为 automation-contracts。支持 macOS/Linux Unix socket 与 Windows named pipe；平台登记位置由宿主显式选择。
 
-包名 `chrome-bridge-internal` 暂不代表公开 npm 名称。版本跟 Litch，先构建并 `npm pack`，使用精确 tarball，例如 `npm install --save-exact ./chrome-bridge-internal-<版本>.tgz`。包内 dist 自包含所需的源码投影，不引用仓库绝对路径。没有 postinstall。
+计划独立发布的包名为 `@litch/chrome-bridge`，首版将使用独立的 `0.x` semver，不再跟随 Litch。包内 dist 自包含所需的源码投影，不引用仓库绝对路径；npm 包没有 postinstall。Native Messaging host、登记目录、扩展 ID 和签名/打包由使用方配置和负责。
 
 ```ts
 import {

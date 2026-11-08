@@ -1,6 +1,6 @@
 # 可嵌入浏览器
 
-可嵌入的浏览器、AI 工具执行器、来源许可、密码登录与导入组件。默认入口不加载 Electron；Electron 主进程集成使用显式子入口。包目前 private，`browser-internal` 只是内部构建名，不表示最终 npm 发布名。先交付 tarball，版本跟随仓库；本包不提供成品浏览器应用，也不会注册扩展或 native host。
+计划独立发布的包名为 `@litch/browser`，首版将使用独立的 `0.x` semver，不再跟随 Litch。它提供可嵌入的浏览器、AI 工具执行器、来源许可、密码登录与导入组件。默认入口不加载 Electron；Electron 主进程集成使用显式子入口。本包不提供成品浏览器应用，也不会注册扩展或 native host。
 
 Chrome 桥复用的低层模块：
 
@@ -10,7 +10,7 @@ Chrome 桥复用的低层模块：
 - `src/tool-port.mts`：当前工具适配器的调用/答复/审批端口，结构保持 Litch 接线，包不依赖 Litch core/protocol。第三方可以使用语义 driver，不需要使用 Litch 工具传输形状。
 - `src/browser/cdp-allow.mts`、`ax.mts`、`args.mts`、`keys.mts`：现有白名单与页面工具基础，归本包维护，不在扩展线复制。
 
-`apps/desktop/src/browser` 的同名入口只是 Litch 的转发外观，实现只有本包一份，没有旧数据回退或双实现。
+宿主可以提供同名转发入口；实现只有本包一份，没有旧数据回退或双实现。
 
 ## 入口与分层
 
@@ -98,6 +98,6 @@ npm run check:package --prefix packages/browser
 npm run check:electron --prefix packages/browser
 ```
 
-`check:package` 检查源码边界和 tarball 依赖闭包，离线装入仓外消费者，并编译运行 [Node fake host](examples/node-host.mts)。`check:electron` 使用本仓库桌面端 Electron，测试独立 partition、私有 Cookie 文件、默认 session 隔离及语义 driver；全隐藏且使用模拟钥匙串。Litch 原有浏览器/导入测试继续经接线外观验证唯一实现，跨进程持久化与真实面板检查由桌面端脚本执行。
+`check:package` 检查源码边界和 tarball 依赖闭包，离线装入仓外消费者，并编译运行 [Node fake host](examples/node-host.mts)。`check:electron` 使用本包固定版本的 Electron，测试独立 partition、私有 Cookie 文件、默认 session 隔离及语义 driver；全隐藏且使用模拟钥匙串。Litch 原有浏览器/导入测试继续经接线外观验证唯一实现，跨进程持久化与真实面板检查由桌面端脚本执行。
 
 本包遵循 [MIT 许可证](LICENSE)。tarball 由宿主按自身发布流程集成；没有自动公开发布步骤。

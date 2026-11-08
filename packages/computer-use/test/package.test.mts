@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 test('独立 tarball：无仓库消费者 import、typecheck 和 fake helper 执行', () => {
   const pkg = fileURLToPath(new URL('..', import.meta.url))
   const root = fileURLToPath(new URL('../../..', import.meta.url))
+  const name: string = JSON.parse(readFileSync(join(pkg, 'package.json'), 'utf8')).name
   execFileSync(process.execPath, [
     join(root, 'node_modules/typescript/bin/tsc'),
     '-p',
@@ -50,9 +51,9 @@ test('独立 tarball：无仓库消费者 import、typecheck 和 fake helper 执
     { cwd: directory, env },
   )
   assert.ok(!readdirSync(join(directory, 'node_modules')).includes('electron'))
-  const consumer = `import { createComputerUse, type ToolInvocation, type InvocationContext } from 'computer-use-internal';
-import { computerTools } from 'computer-use-internal/tools';
-import { FrameReader } from 'computer-use-internal/node';
+  const consumer = `import { createComputerUse, type ToolInvocation, type InvocationContext } from '${name}';
+import { computerTools } from '${name}/tools';
+import { FrameReader } from '${name}/node';
 const client = { request: async () => ({ apps: [] }) };
 const runtime = createComputerUse({ hostId:'consumer', productName:'Consumer', helperName:'Consumer CU', namespace:'consumer_cu', platform:'darwin', batch:true, helper:{client:async()=>client,connected:client,restart:async()=>{}}, disposeHelper:async()=>{} });
 const call: ToolInvocation = { scope:{hostId:'consumer',deviceId:'d',sessionId:'s',turnId:'t',callId:'c'},namespace:'consumer_cu',tool:'list_apps',arguments:{} };
@@ -89,7 +90,7 @@ console.log('consumer ok');`
   })
   assert.match(output, /consumer ok/)
   const manifest = JSON.parse(
-    readFileSync(join(directory, 'node_modules/computer-use-internal/package.json'), 'utf8'),
+    readFileSync(join(directory, 'node_modules', name, 'package.json'), 'utf8'),
   )
   assert.equal(manifest.dependencies, undefined)
   // 临时目录保留验收制品，便于集成线复核，不写入个人配置。

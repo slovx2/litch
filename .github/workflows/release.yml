@@ -385,7 +385,7 @@ jobs:
           cargo --version
       - name: Computer Use 助手
         working-directory: apps/computer-use-win
-        run: cargo build --release --locked --target x86_64-pc-windows-msvc
+        run: node ../desktop/scripts/build-computer-use-win.mjs build --release --locked --target x86_64-pc-windows-msvc
       - run: npm run build
       - run: npm run client:setup
       - run: node apps/desktop/scripts/check-computer-use.mjs --require

@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { negotiateChromeWire as projectedWire } from '../../protocol/src/chrome-browser.mjs'
+import { negotiateChromeWire } from '../../automation-contracts/src/litch/index.mjs'
+import {
+  readBaseline,
+  schemaHashes,
+  schemaSources,
+} from '../../automation-contracts/test/schema-baseline.mjs'
+import { negotiateChromeWire as projectedWire } from '../src/chrome-browser.mjs'
 import {
   browserToolsSpec as projectedBrowser,
   SIGN_IN_FILL_FAILURES as projectedFailures,
-} from '../../protocol/src/client-tools-browser.mjs'
-import { computerToolsSpec as projectedComputer } from '../../protocol/src/client-tools-computer.mjs'
-import { portableComputerTools as projectedPortable } from '../../protocol/src/client-tools-computer-portable.mjs'
-import { negotiateChromeWire } from '../src/litch/index.mjs'
-import { readBaseline, schemaHashes, schemaSources } from './schema-baseline.mjs'
+} from '../src/client-tools-browser.mjs'
+import { computerToolsSpec as projectedComputer } from '../src/client-tools-computer.mjs'
+import { portableComputerTools as projectedPortable } from '../src/client-tools-computer-portable.mjs'
 
 const baseline = readBaseline()
 const source = schemaSources()

@@ -2,7 +2,7 @@
 
 本模块提供工具定义、宿主端口、Litch 自包含协议投影和独立消费者检查，本身不含执行器。执行器在 [computer-use](../computer-use)、[browser](../browser)、[chrome-extension](../chrome-extension) 与 [chrome-bridge](../chrome-bridge) 包里，都基于这里的合同。
 
-目录名与 `automation-contracts-internal` 是仓内构建标识，不代表已确定的公开包名。当前为 private，零运行时依赖；先验证 tarball，公开 npm 发布须另行批准。版本沿用仓库根版本，源码是 `.mts`，构建为 ESM `.mjs` 与 `.d.mts`。MIT，归属见 [LICENSE](LICENSE)。
+计划独立发布的包名为 `@litch/automation-contracts`，首版将使用独立的 `0.x` semver，不再跟随 Litch 版本。仓库发布 npm 包和源码 GitHub Release；不包含 Litch 的协议、core、UI 或桌面实现。零运行时依赖，源码是 `.mts`，构建为 ESM `.mjs` 与 `.d.mts`。MIT，归属见 [LICENSE](LICENSE)。
 
 ## 两种入口
 
@@ -26,7 +26,7 @@ npm run check:automation-contracts
 
 ## 唯一源与投影
 
-工具定义的唯一源为 `src/litch/client-tools-*.mts`，Chrome 现有 wire/实例配置为 `src/litch/chrome-browser.mts`，几何源为 `src/automation-surface.mts`。`scripts/generate-automation-contracts.mjs` 将它们投影到 protocol 同名文件及 `automation-tool-spec.mts`。设备包只看到 protocol 内部文件，不引本包、core 或 Node/Electron。
+工具定义的唯一源为 `src/litch/client-tools-*.mts`，Chrome wire/实例配置为 `src/litch/chrome-browser.mts`，几何源为 `src/automation-surface.mts`。独立仓的生成器可将它们投影到使用方的协议目录及 `automation-tool-spec.mts`；设备包只看到自己的自包含投影，不引 core、UI 或 Electron。
 
 ```sh
 npm run generate:automation-contracts

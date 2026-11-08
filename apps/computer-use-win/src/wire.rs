@@ -1,5 +1,5 @@
 // 和主进程之间的线上格式：每帧 4 字节大端的长度，后面是 UTF-8 的 JSON-RPC 2.0（和 macOS 助手同一套帧）。
-// 主进程那一头在 apps/desktop/src/computer-use/wire.mts，常量和错误分类两边要一致。
+// TypeScript 宿主端实现同一份 wire，常量和错误分类两边要一致。
 use serde_json::{json, Value};
 use std::io::{self, Read, Write};
 
