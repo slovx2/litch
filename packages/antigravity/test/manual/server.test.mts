@@ -147,7 +147,10 @@ test('逐连接扩展与通知退订，拒绝未实现的权限和输入', async
       /仅支持/,
     )
     await assert.rejects(f.call('thread/fork', { threadId: f.id }), /尚不支持/)
-    assert.equal((await f.call('runtime/info')).features.fork, false)
+    const info = await f.call('runtime/info')
+    assert.equal(info.features.fork, false)
+    assert.equal(info.permissionPresets[0].title['zh-CN'], '逐次审批（无沙箱）')
+    assert.equal(info.permissionPresets[0].switchInSession, false)
     const config = await f.call('litch/harness/config/read')
     await f.call('litch/harness/config/write', {
       expectedVersion: config.version,

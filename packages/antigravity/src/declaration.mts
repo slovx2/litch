@@ -31,14 +31,17 @@ export const declaration: HarnessDeclaration = {
   },
   // 第一阶段不宣称 OS 沙箱；所有内置工具都逐次审批，子代理、网络工具和异步命令关闭。
   permissionPresets: [
-    builtinPreset(
-      PRESET.fullAccess,
-      {
-        'zh-CN': '没有操作系统沙箱；工具每次执行前请求批准，拒绝或取消不会执行。子代理已关闭',
-        en: 'No OS sandbox. Each tool requires approval; declined or cancelled calls do not run. Subagents are disabled',
-      },
-      { switchInSession: false, switchDuringTurn: false },
-    ),
+    {
+      ...builtinPreset(
+        PRESET.fullAccess,
+        {
+          'zh-CN': '没有操作系统沙箱；工具每次执行前请求批准，拒绝或取消不会执行。子代理已关闭',
+          en: 'No OS sandbox. Each tool requires approval; declined or cancelled calls do not run. Subagents are disabled',
+        },
+        { switchInSession: false, switchDuringTurn: false },
+      ),
+      title: { 'zh-CN': '逐次审批（无沙箱）', en: 'Ask each time (no sandbox)' },
+    },
   ],
 }
 export const runtimeInfo = () => ({

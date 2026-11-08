@@ -161,6 +161,7 @@ export function declarationFor(
   caps: AgentCapabilities | null,
   catalog?: Catalog | null,
 ): HarnessDeclaration {
+  const agentModes = catalog ? modes(catalog) : []
   return {
     // 名字和徽标不在这里写：和设置里这一组的标题是同一个出处
     ...HARNESS_IDENTITY[id],
@@ -175,21 +176,30 @@ export function declarationFor(
     ],
     features: featuresOf(caps),
     permissionPresets: [
-      { ...builtinPreset(PRESET.fullAccess, PRESET_TEXT, switching), requiresConfirmation: false },
-      ...(catalog
-        ? modes(catalog).map((mode) => ({
-            id: `acp:mode:${mode.value}`,
-            title: { 'zh-CN': mode.name, en: mode.name },
-            description: {
-              'zh-CN': mode.description ?? mode.name,
-              en: mode.description ?? mode.name,
+      // agy 上报原生模式后，只显示能实际切换的模式，避免把无沙箱兜底误认为免审批。
+      ...(id === 'agy' && agentModes.length
+        ? []
+        : [
+            {
+              ...builtinPreset(PRESET.fullAccess, PRESET_TEXT, switching),
+              ...(id === 'agy'
+                ? { title: { 'zh-CN': '按 agy 配置审批', en: 'Use agy permission settings' } }
+                : {}),
+              requiresConfirmation: false,
             },
-            risk: 'high' as const,
-            requiresConfirmation: true,
-            switchInSession: true,
-            switchDuringTurn: false,
-          }))
-        : []),
+          ]),
+      ...agentModes.map((mode) => ({
+        id: `acp:mode:${mode.value}`,
+        title: { 'zh-CN': mode.name, en: mode.name },
+        description: {
+          'zh-CN': mode.description ?? mode.name,
+          en: mode.description ?? mode.name,
+        },
+        risk: 'high' as const,
+        requiresConfirmation: true,
+        switchInSession: true,
+        switchDuringTurn: false,
+      })),
     ],
   }
 }

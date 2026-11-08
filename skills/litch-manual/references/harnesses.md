@@ -223,6 +223,15 @@ ACP agent 声明的模式会出现在权限选项中，显示 agent 提供的名
 agy CLI 的具体能力以当前握手为准，不能套用独立 ACP 包的能力。文件引用在 agent 接受内嵌
 资源且文件较小、可读为 UTF-8 时附正文，否则作为文件链接。
 
+Antigravity 尚未返回原生模式时显示“按 agy 配置审批”；返回后只显示其原生模式，空闲时可切换，
+回合执行期间不支持切换。Default、Accept edits、Plan 不等于免审批；先前的“完全访问”仅表示
+Litch 不加沙箱，没有启用 agy 的跳过审批选项。命令审批的理由与命令相同时只显示一次。
+
+Antigravity shows “Use agy permission settings” until native modes arrive, then shows only those
+modes. You can switch between turns. Default, Accept edits, and Plan do not mean approval bypass:
+the previous “Full access” label only meant that Litch adds no sandbox. Duplicate command titles
+are omitted from approval reasons on both desktop and mobile.
+
 表单提问显示征询卡，数值、布尔和选项保留原始类型；取消或连接断开时不会默认接受。正式
 宣告的子代理可以向父会话的订阅者请求审批，未宣告的会话仍拒绝。子代理不能直接发送用户
 消息，只有 agent 明确授予取消能力时才能单独中断。
@@ -277,10 +286,13 @@ API key 模式无需安装 agy CLI；自定义 SDK runtime 仍用 `CHA_ANTIGRAVI
 收到 API key。API key 后端没有订阅登录按钮，不读取桌面或 CLI 的 OAuth 缓存。
 
 API key 后端支持文字流式、文件与同步命令工具、逐次审批、中断，以及自己创建的会话列表和恢复。
-没有操作系统沙箱，每个工具执行前都要批准；拒绝或取消不执行。只有完全访问这一档，不能把它当作
+没有操作系统沙箱，每个工具执行前都要批准；拒绝或取消不执行。只有“逐次审批（无沙箱）”这一档，不能把它当作
 只读或项目沙箱。第一期不支持计划、子代理、分叉、客户端工具或浏览器控制，模型切换需新建会话。
 SDK 会话与 App/CLI 会话不可互相恢复。鉴权失效时更新 key；下载校验失败时检查指定路径或重新安装，
 不要关闭校验或换未经核验的二进制。
+
+The API key backend offers “Ask each time (no sandbox)”: every tool needs approval. It does not
+provide read-only or workspace sandbox profiles, and it does not bypass approval.
 
 Antigravity 默认使用订阅（官方 ACP）。只装 `agy`、未配置 API key 的用户无需下载 SDK runtime。
 登录可在账号页通过链接和授权码完成，也可手动运行官方 `agy acp --login`。订阅通过官方 ACP 使用 CLI 登录；第三方客户端在消费套餐下的

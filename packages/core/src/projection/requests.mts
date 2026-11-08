@@ -220,7 +220,8 @@ export function projectRequest(
           itemId: null,
           command: params.command ?? null,
           cwd: params.cwd ?? null,
-          reason: params.reason ?? null,
+          // ACP agent 常把命令本身当标题，再作为审批理由传来；两端只展示一次。
+          reason: params.command?.trim() === params.reason?.trim() ? null : (params.reason ?? null),
           permissions: null,
           tool: null,
           options: strip(options),
