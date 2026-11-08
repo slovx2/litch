@@ -1,0 +1,45 @@
+{
+  "name": "@litch/chrome-extension",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "可嵌入的 Chrome 扩展运行时",
+  "exports": {
+    ".": {
+      "types": "./dist/chrome-extension/src/index.d.mts",
+      "import": "./dist/chrome-extension/src/index.mjs"
+    },
+    "./pointer-world": {
+      "types": "./dist/chrome-extension/src/pointer-world.d.mts",
+      "import": "./dist/chrome-extension/src/pointer-world.mjs"
+    },
+    "./build": {
+      "types": "./build.d.mts",
+      "import": "./build.mjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "COMPATIBILITY.md",
+    "LICENSE",
+    "build.mjs",
+    "build.d.mts"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/*.test.mts"
+  },
+  "dependencies": {
+    "esbuild": "0.28.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/slovx2/litch-automation.git",
+    "directory": "packages/chrome-extension"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
