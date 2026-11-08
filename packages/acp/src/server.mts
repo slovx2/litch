@@ -77,6 +77,8 @@ const INTERRUPT_WAIT_MS = 10_000
 
 export interface LiveThread {
   projection: Projection
+  /** 仅 agy：用户显式选择完全访问后，本会话的工具请求只批准本次。 */
+  agyAutoApprove?: boolean
   /** 会话在第几个 agent 进程里接上了（runtime.mts 的 generation）；0 是还没接上 */
   generation: number
   /** 换了、还没交给 agent 的设置：下一回合开始前交 */
@@ -702,6 +704,8 @@ export class AcpServer {
     projection.dynamicTool = (toolCall) => this.clientTools.detect(thread.id, toolCall)
     projection.toolAdded = () => this.clientTools.wake()
     return {
+      agyAutoApprove:
+        this.agentId === 'agy' && this.store.getMeta('agyApproval', thread.id) === true,
       projection,
       generation: 0,
       pending: { model: null, effort: null, mode: null },
@@ -1290,6 +1294,11 @@ export class AcpServer {
       live.pending.mode = null
     } else if (params.permissions && params.permissions !== ':danger-full-access') {
       throw new ProtocolError(-32602, 'ACP 入口不提供此沙箱权限档')
+    } else if (this.agentId === 'agy' && params.permissions === ':danger-full-access') {
+      // 完全访问不应继续停在原生 Plan；只改变这条会话，不改进程参数或 agy 配置。
+      if (modes(catalog).some((entry) => entry.value === 'default'))
+        live.pending.agentMode = 'default'
+      live.pending.mode = null
     }
     const mode = params.collaborationMode?.mode
     const model = nonEmpty(params.model) ?? nonEmpty(params.collaborationMode?.settings?.model)
@@ -1311,6 +1320,11 @@ export class AcpServer {
     if (!live.pending.agentMode && (mode === 'plan' || mode === 'default')) {
       if (mode === 'plan' && !planMode(catalog)) reject(`${this.agentName()} 没有计划模式`)
       else live.pending.mode = mode
+    }
+    if (this.agentId === 'agy' && typeof params.permissions === 'string') {
+      live.agyAutoApprove = params.permissions === ':danger-full-access'
+      if (!live.projection.thread.ephemeral)
+        this.store.setMeta('agyApproval', live.projection.thread.id, live.agyAutoApprove)
     }
   }
 
@@ -1354,7 +1368,7 @@ export class AcpServer {
       !live.projection.thread.ephemeral &&
       agent &&
       live.generation === agent.generation &&
-      !live.running
+      (!live.running || this.agentId === 'agy')
     )
       await this.flush(live, agent)
   }
@@ -1432,6 +1446,7 @@ export class AcpServer {
       'catalog',
       'turns',
       'turnOrigins',
+      'agyApproval',
       'environment',
       'dynamicTools',
     ])

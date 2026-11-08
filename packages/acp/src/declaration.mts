@@ -176,15 +176,34 @@ export function declarationFor(
     ],
     features: featuresOf(caps),
     permissionPresets: [
-      // agy 上报原生模式后，只显示能实际切换的模式，避免把无沙箱兜底误认为免审批。
-      ...(id === 'agy' && agentModes.length
-        ? []
+      ...(id === 'agy'
+        ? [
+            ...(!agentModes.length
+              ? [
+                  {
+                    id: 'acp:mode:default',
+                    title: { 'zh-CN': '按 agy 配置审批', en: 'Use agy permission settings' },
+                    description: PRESET_TEXT,
+                    risk: 'high' as const,
+                    requiresConfirmation: false,
+                    switchInSession: true,
+                    switchDuringTurn: true,
+                  },
+                ]
+              : []),
+            builtinPreset(
+              PRESET.fullAccess,
+              {
+                'zh-CN':
+                  '本会话的工具审批由 Litch 自动允许一次，不显示审批卡。不加沙箱，不改 agy 的持久规则；agent 没有提供一次性允许时仍需审批',
+                en: 'Litch allows each tool permission request once in this session without an approval card. No sandbox or persistent agy rule changes. Requests without an allow-once option still need approval',
+              },
+              { switchInSession: true, switchDuringTurn: true },
+            ),
+          ]
         : [
             {
               ...builtinPreset(PRESET.fullAccess, PRESET_TEXT, switching),
-              ...(id === 'agy'
-                ? { title: { 'zh-CN': '按 agy 配置审批', en: 'Use agy permission settings' } }
-                : {}),
               requiresConfirmation: false,
             },
           ]),
@@ -198,7 +217,7 @@ export function declarationFor(
         risk: 'high' as const,
         requiresConfirmation: true,
         switchInSession: true,
-        switchDuringTurn: false,
+        switchDuringTurn: id === 'agy',
       })),
     ],
   }

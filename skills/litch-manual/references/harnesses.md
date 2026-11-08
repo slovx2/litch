@@ -223,14 +223,18 @@ ACP agent 声明的模式会出现在权限选项中，显示 agent 提供的名
 agy CLI 的具体能力以当前握手为准，不能套用独立 ACP 包的能力。文件引用在 agent 接受内嵌
 资源且文件较小、可读为 UTF-8 时附正文，否则作为文件链接。
 
-Antigravity 尚未返回原生模式时显示“按 agy 配置审批”；返回后只显示其原生模式，空闲时可切换，
-回合执行期间不支持切换。Default、Accept edits、Plan 不等于免审批；先前的“完全访问”仅表示
-Litch 不加沙箱，没有启用 agy 的跳过审批选项。命令审批的理由与命令相同时只显示一次。
+Antigravity 的 ACP 入口默认按 agy 配置审批。选择“完全访问”后，Litch 只为这个会话自动批准
+每次工具请求，不弹审批卡或留下自动批准提示；不改 agy 配置，不开启进程级免审参数。
+完全访问和原生模式均可在回合中切换，下一个审批请求立即按新选择处理；切回 Default 等原生
+模式后恢复 agy 的审批规则。没有一次性允许选项的请求仍显示审批卡，避免扩大为永久授权。
+不提供只读或工作区沙箱。命令审批的理由与命令相同时只显示一次。
 
-Antigravity shows “Use agy permission settings” until native modes arrive, then shows only those
-modes. You can switch between turns. Default, Accept edits, and Plan do not mean approval bypass:
-the previous “Full access” label only meant that Litch adds no sandbox. Duplicate command titles
-are omitted from approval reasons on both desktop and mobile.
+Antigravity ACP uses agy's permission settings by default. Full access makes Litch allow each tool
+request once in that session, without an approval card or approval message. It changes neither agy
+configuration nor process flags. Switching between Full access and native modes takes effect for
+the next request, even during a turn. Requests without an allow-once option still ask; Litch never
+silently chooses a persistent grant. No read-only or workspace sandbox is provided. Duplicate
+command titles are omitted from approval reasons on desktop and mobile.
 
 表单提问显示征询卡，数值、布尔和选项保留原始类型；取消或连接断开时不会默认接受。正式
 宣告的子代理可以向父会话的订阅者请求审批，未宣告的会话仍拒绝。子代理不能直接发送用户

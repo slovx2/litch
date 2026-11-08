@@ -244,7 +244,7 @@ export async function dispatch(s: AcpServer, peer: RpcPeer, method: string, p: a
             saved.model_reasoning_effort ?? (catalog ? currentEffort(catalog) : null),
           approval_policy: 'on-request',
           sandbox_mode: 'danger-full-access',
-          default_permissions: PROFILE,
+          default_permissions: s.agentId === 'agy' ? 'acp:mode:default' : PROFILE,
           features: {},
           model_providers: {
             [s.agentId]: { name: s.agentName(), requires_openai_auth: false },

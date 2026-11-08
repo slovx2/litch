@@ -80,11 +80,14 @@ Antigravity 权限验收（已验证 CLI 1.5.2）单独运行，不使用真实�
 
 ```sh
 TEST_AGY_CLI=/absolute/path/to/agy node --test packages/acp/dist/acp/test/manual/agy-permissions.mjs
+TEST_AGY_CLI=/absolute/path/to/agy node --test packages/acp/dist/acp/test/manual/agy-litch-permissions.mjs
 ```
 
 它用隔离 HOME 和回环假 Gemini 验证默认审批、免审批启动参数、`toolPermission` 配置、
 空闲时切换原生模式及同进程另一会话的行为。未提供 CLI 时直接失败。当前免审批参数和
 配置均影响同进程的全部会话，不会添加 `yolo` 模式；不能把它们当成逐会话权限选择。
+第二项通过真正的 Litch ACP 入口，在同一回合内切换完全访问、Default、完全访问，断言
+仅 Default 的命令产生审批卡。Litch 选择 `allow_once`，不使用上述全局选项。
 
 `AcpServer(home, env)` 的 `handle(peer, message)`、`closePeer(peer)`、`close()` 是双后端外壳使用的公开接口。
 构建在 `dist/acp/src/server.mjs`；独立适配器安装包内为 `libexec/packages/acp/dist/acp/src/server.mjs`。

@@ -9,6 +9,7 @@ import type { AcpServer, LiveThread } from './server.mjs'
 export const PROFILE = ':danger-full-access'
 
 export const profileOf = (live: LiveThread | undefined): string => {
+  if (live?.agyAutoApprove) return PROFILE
   const mode = live && (live.pending.agentMode ?? currentMode(live.projection))
   return mode ? `acp:mode:${mode}` : PROFILE
 }
@@ -102,7 +103,7 @@ export function settings(s: AcpServer, live: LiveThread): any {
     modelProvider: s.agentId,
     cwd: thread.cwd,
     // 适配器不拦：agent 想问的时候才问
-    approvalPolicy: 'on-request',
+    approvalPolicy: live.agyAutoApprove ? 'never' : 'on-request',
     approvalsReviewer: 'user',
     sandbox: { type: 'dangerFullAccess' },
     sandboxPolicy: { type: 'dangerFullAccess' },
