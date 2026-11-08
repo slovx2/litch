@@ -161,6 +161,41 @@ export class Projection {
     return this.tools.get(toolCallId)
   }
 
+  hasActiveTools(): boolean {
+    return [...this.tools.values()].some(
+      (tool) => tool.turn === this.active && tool.item.status === 'inProgress',
+    )
+  }
+
+  /** 有界回读得到的后台观察快照：原地更新同一回合/条目，不把已读部分重新追加。 */
+  backgroundSnapshot(id: string, updates: readonly unknown[], notify: Notify): void {
+    const scratch = new Projection({ ...this.thread }, this.recorded)
+    scratch.server = this.server
+    const quiet: Notify = () => {}
+    const time = Date.now()
+    const turn = scratch.begin(quiet, time, 'backgroundTask', id)
+    for (const update of updates) scratch.update(update, quiet)
+    scratch.finish({ stopReason: 'end_turn' }, quiet, time, true)
+    const index = this.turns.findIndex((existing) => existing.id === id)
+    const before = this.turns[index]
+    if (before) turn.startedAt = before.startedAt
+    this.origins.set(id, 'backgroundTask')
+    if (index < 0) {
+      this.turns.push(turn)
+      notify('turn/started', { turn: { ...turn, status: 'inProgress', items: [] } })
+    } else this.turns[index] = turn
+    for (const item of turn.items) {
+      const previous = before?.items.find((existing) => existing.id === item.id)
+      if (JSON.stringify(previous) === JSON.stringify(item)) continue
+      if (!previous) notify('item/started', { turnId: id, item })
+      notify('item/completed', { turnId: id, item })
+    }
+    for (const [key, tool] of scratch.tools) this.tools.set(key, tool)
+    this.thread.updatedAt = Math.max(this.thread.updatedAt, Math.floor(time / 1000))
+    // 完成的是这次观察，不是臆断原生任务完成；独立监视器继续显示不确定状态。
+    notify('turn/completed', { turn })
+  }
+
   /** 开一个回合。实时的由适配器在发 prompt 之前开；回放的由用户的话开。origin：不是用户发起的，谁开的 */
   begin(notify: Notify, time = Date.now(), origin?: LitchTurnOrigin, id?: string): AcpTurn {
     if (this.active) this.finish({ interrupted: true }, notify, time)
@@ -731,7 +766,7 @@ export class Projection {
   }
 
   /** 回合收尾：按 agent 的 stopReason（cancelled 是被打断），或者出错、被适配器收尾 */
-  finish(outcome: TurnOutcome, notify: Notify, time = Date.now()): void {
+  finish(outcome: TurnOutcome, notify: Notify, time = Date.now(), preserveTools = false): void {
     const turn = this.active
     if (!turn) return
     this.closeCurrent(notify, true)
@@ -746,6 +781,7 @@ export class Projection {
       turn.error = { message: outcome.error, codexErrorInfo: null, additionalDetails: null }
     for (const state of this.tools.values()) {
       if (state.turn !== turn || state.item.status !== 'inProgress') continue
+      if (preserveTools) continue
       state.item.status = state.declined
         ? 'declined'
         : turn.status === 'completed' && this.replaying

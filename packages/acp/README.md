@@ -89,6 +89,19 @@ TEST_AGY_CLI=/absolute/path/to/agy node --test packages/acp/dist/acp/test/manual
 第二项通过真正的 Litch ACP 入口，在同一回合内切换完全访问、Default、完全访问，断言
 仅 Default 的命令产生审批卡。Litch 选择 `allow_once`，不使用上述全局选项。
 
+后台结果验收也使用真实 agy 和回环假模型：
+
+```sh
+TEST_AGY_CLI=/absolute/path/to/agy node --test packages/acp/dist/acp/test/manual/agy-background.mjs
+```
+
+它真实创建异步子智能体，控制子回答在父 `end_turn` 后到达；验证有界回读、增量追加和
+`backgroundTask` 来历，输出短历史与 256 KiB 旧正文的回读耗时、字节数。
+通用 ACP 的回合外正文立即展示，以 250ms 静默合并片段；仍有工具在跑则等工具结束。
+这是 v1 缺少独立结束帧时的展示分段，不冒充 v2 的前台状态。尚未实现完整 ACP v2。
+agy 专属回读与用户 prompt 共用会话锁；取消之后仍排空已经在途的回放，绝不将其并入新回合。
+8 MiB 是回放内容的保留上限，超限时排空当前响应并停止后续检查，不会反复读大历史。
+
 `AcpServer(home, env)` 的 `handle(peer, message)`、`closePeer(peer)`、`close()` 是双后端外壳使用的公开接口。
 构建在 `dist/acp/src/server.mjs`；独立适配器安装包内为 `libexec/packages/acp/dist/acp/src/server.mjs`。
 每会话能力见 `protocol/extensions/thread-capabilities.json`；通用鉴权和配置控制见 `protocol/extensions/acp-controls.json`。

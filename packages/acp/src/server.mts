@@ -30,6 +30,7 @@ import { ServerRequests } from '../../shared/src/server-requests.mjs'
 import type { RpcPeer, WireMessage } from '../../shared/src/types.mjs'
 import { sleep } from '../../shared/src/util.mjs'
 import { type AcpAgentId, agentId, BACKGROUND_SHELL_AGENTS } from './agent.mjs'
+import { AGY_MAX_REPLAY_BYTES, AgyBackgroundWatch } from './agy-background.mjs'
 import { requestPermission } from './approvals.mjs'
 import {
   type Catalog,
@@ -145,6 +146,16 @@ export class AcpServer {
   readonly shells: BackgroundShells | null
   /** 后台任务的集合、回合的来历怎么加到给声明过 backgroundTasks 的连接的应答和通知上 */
   readonly report: BackgroundReport
+  readonly agyBackground: AgyBackgroundWatch | null
+  private readonly backgroundReplays = new Map<
+    string,
+    { updates: any[]; bytes: number; overflow: boolean }
+  >()
+  private readonly unsolicited = new Map<
+    string,
+    { turn: AcpTurn; timer?: ReturnType<typeof setTimeout> }
+  >()
+  private readonly stoppedUnsolicited = new Set<string>()
   /** 各连接握手时声明认识的扩展：服务端主动给的扩展内容只发给声明过的连接 */
   readonly declared = new Map<string, Set<string>>()
   private closed = false
@@ -198,9 +209,73 @@ export class AcpServer {
               ),
           })
         : null
+    this.agyBackground =
+      this.agentId === 'agy'
+        ? new AgyBackgroundWatch({
+            allowed: (id) => {
+              const live = this.live.get(id)
+              return (
+                !this.closed &&
+                !!live &&
+                !live.running &&
+                !live.projection.active &&
+                this.subscribers(id).length > 0 &&
+                this.store.getMeta('thread', id)?.archived !== true
+              )
+            },
+            replay: (id) =>
+              this.serial(id, async () => {
+                const live = this.live.get(id)
+                if (
+                  !live ||
+                  live.running ||
+                  live.projection.active ||
+                  !this.agyBackground?.tasks(id).length
+                )
+                  return []
+                const agent = await this.attach(live)
+                if (!agent.caps.loadSession) return null
+                const capture = { updates: [] as any[], bytes: 0, overflow: false }
+                this.backgroundReplays.set(id, capture)
+                try {
+                  const environment = sessionOptions(
+                    this.store.getMeta('environment', id),
+                    agent.caps,
+                  )
+                  const { servers } = await this.clientTools.mount(id, this.clientTools.raw(id))
+                  await this.ask(agent, 'session/load', {
+                    sessionId: id,
+                    cwd: live.projection.thread.cwd,
+                    ...environment,
+                    mcpServers: [...environment.mcpServers, ...servers],
+                  })
+                  return capture.overflow ? null : capture.updates
+                } finally {
+                  this.backgroundReplays.delete(id)
+                }
+              }),
+            append: (id, updates, sourceTurnId) => {
+              const live = this.live.get(id)
+              if (!live || live.running || live.projection.active) return
+              live.projection.backgroundSnapshot(
+                `agy-background:${sourceTurnId}`,
+                updates,
+                (method, params) => this.notify(id, method, params),
+              )
+              this.save(live, true)
+              this.saveTurns(live)
+            },
+            changed: (id) => this.publishBackground(id),
+            expired: (id) =>
+              this.notify(id, 'warning', { message: '未收到后台结果，可发消息询问' }),
+          })
+        : null
     this.report = {
       declared: (peerId) => this.declared.get(peerId)?.has(EXTENSION.backgroundTasks) === true,
-      tasks: (threadId) => this.shells?.collection(threadId) ?? [],
+      tasks: (threadId) => [
+        ...(this.shells?.collection(threadId) ?? []),
+        ...(this.agyBackground?.tasks(threadId) ?? []),
+      ],
       origin: (threadId, turnId) => this.live.get(threadId)?.projection.origins.get(turnId),
       wakes: true,
     }
@@ -291,6 +366,20 @@ export class AcpServer {
         message.params && typeof message.params === 'object' ? (message.params as any) : {}
       const work = () => dispatch(this, peer, message.method, params)
       const threadId = typeof params.threadId === 'string' ? params.threadId : null
+      // 先撤销回读，再等同一会话的锁；已经在途的 load 必须排空后才交新 prompt。
+      if (
+        threadId &&
+        [
+          'turn/start',
+          'thread/archive',
+          'thread/delete',
+          'thread/unsubscribe',
+          'turn/interrupt',
+          'thread/settings/update',
+          'turn/settings/update',
+        ].includes(message.method)
+      )
+        this.agyBackground?.stop(threadId)
       const result = threadId ? await this.serial(threadId, work) : await work()
       peer.send({ id: message.id, result: this.shape(peer.id, result) } as any)
     } catch (error) {
@@ -450,6 +539,16 @@ export class AcpServer {
     if (method !== 'session/update') return
     const sessionId = typeof params?.sessionId === 'string' ? params.sessionId : null
     if (!sessionId) return
+    const capture = this.backgroundReplays.get(sessionId)
+    if (capture) {
+      capture.bytes += Buffer.byteLength(JSON.stringify(params.update))
+      if (capture.bytes <= AGY_MAX_REPLAY_BYTES) capture.updates.push(params.update)
+      else {
+        capture.overflow = true
+        capture.updates.length = 0
+      }
+      return
+    }
     const scratch = this.replays.get(sessionId)
     if (scratch) {
       scratch.update(params.update, () => {})
@@ -468,6 +567,21 @@ export class AcpServer {
   private apply(live: LiveThread, update: unknown): void {
     const id = live.projection.thread.id
     const patch = update as any
+    if (live.running) this.agyBackground?.observe(id, patch)
+    // v1 没有自发回合的结束帧：仅对收到的正文/新工具建立回合，静默后收尾。
+    // 元数据不触发回合；未来 v2 的 state_update/background 在此接显式状态，不靠静默判断。
+    const content = ['agent_message_chunk', 'agent_thought_chunk'].includes(patch?.sessionUpdate)
+    const newTool =
+      ['tool_call', 'tool_call_update'].includes(patch?.sessionUpdate) &&
+      typeof patch.toolCallId === 'string' &&
+      !live.projection.tool(patch.toolCallId)
+    if (
+      !live.projection.active &&
+      !live.running &&
+      !this.stoppedUnsolicited.has(id) &&
+      (content || newTool)
+    )
+      this.beginUnsolicited(live)
     if (patch?.sessionUpdate === 'subagent_update') {
       this.childUpdate(live, patch)
       return
@@ -486,6 +600,43 @@ export class AcpServer {
       this.save(live)
       this.notify(id, 'thread/name/updated', { threadName: live.projection.thread.name })
     }
+    const spontaneous = this.unsolicited.get(id)
+    if (spontaneous) {
+      clearTimeout(spontaneous.timer)
+      spontaneous.timer = setTimeout(() => {
+        if (!live.projection.hasActiveTools()) this.finishUnsolicited(id)
+      }, 250)
+      spontaneous.timer.unref()
+    }
+    // 旧回合的晚到工具结果也要保存，否则重开会话会退回旧快照。
+    if (!live.running && !live.projection.active) this.saveTurns(live)
+  }
+
+  private beginUnsolicited(live: LiveThread): void {
+    const id = live.projection.thread.id
+    if (this.store.getMeta('thread', id)?.archived) return
+    this.agyBackground?.stop(id)
+    const turn = live.projection.beginLive(
+      (method, params) => this.notify(id, method, params),
+      Date.now(),
+      'backgroundTask',
+    )
+    this.unsolicited.set(id, { turn })
+  }
+
+  private finishUnsolicited(id: string, interrupted = false): void {
+    const state = this.unsolicited.get(id)
+    if (!state) return
+    clearTimeout(state.timer)
+    this.unsolicited.delete(id)
+    const live = this.live.get(id)
+    if (!live || live.projection.active !== state.turn) return
+    live.projection.finish(
+      interrupted ? { interrupted: true } : { stopReason: 'end_turn' },
+      (method, params) => this.notify(id, method, params),
+    )
+    this.save(live, true)
+    this.saveTurns(live)
   }
 
   private childUpdate(parent: LiveThread, update: any): void {
@@ -564,7 +715,8 @@ export class AcpServer {
         return elicit(this, attached, params, agent.resolved.spec.displayName, signal)
       case 'session/request_permission': {
         // 回放、或者会话不在这里打开着：没有人能答，当取消
-        if (!attached) return { outcome: { outcome: 'cancelled' } }
+        if (!attached || this.stoppedUnsolicited.has(sessionId))
+          return { outcome: { outcome: 'cancelled' } }
         if (this.children.has(sessionId) && params.toolCall)
           params = {
             ...params,
@@ -683,6 +835,10 @@ export class AcpServer {
     void this.terminals.closeAll()
     for (const [id, live] of this.live) {
       if (live.generation !== agent.generation) continue
+      this.agyBackground?.stop(id)
+      const spontaneous = this.unsolicited.get(id)
+      clearTimeout(spontaneous?.timer)
+      this.unsolicited.delete(id)
       live.generation = 0
       this.requests.reject((threadId) => threadId === id, error.message)
       if (live.projection.active) {
@@ -1127,6 +1283,10 @@ export class AcpServer {
 
   /** turn/start：回合先回给客户端，接上会话、交设置、交提示词随后在后台做；出错按失败收尾 */
   start(peer: RpcPeer, live: LiveThread, params: any): AcpTurn {
+    const sessionId = live.projection.thread.id
+    this.agyBackground?.stop(sessionId)
+    this.stoppedUnsolicited.delete(sessionId)
+    if (!live.projection.hasActiveTools()) this.finishUnsolicited(sessionId)
     if (this.store.getMeta('thread', live.projection.thread.id)?.parentThreadId)
       throw new ProtocolError(-32004, '子会话由父 agent 管理，不能直接输入')
     const { projection } = live
@@ -1185,6 +1345,7 @@ export class AcpServer {
     const running: Running = { turn, sent: false, stopped: false, done: Promise.resolve() }
     live.running = running
     running.done = (async () => {
+      let endedNormally = false
       try {
         const agent = await this.attach(live)
         await this.flush(live, agent)
@@ -1196,6 +1357,7 @@ export class AcpServer {
           sessionId: threadId,
           prompt: blocks,
         })
+        endedNormally = response?.stopReason === 'end_turn'
         if (projection.active === turn)
           projection.finish(
             { stopReason: String(response?.stopReason ?? 'end_turn'), usage: response?.usage },
@@ -1213,6 +1375,9 @@ export class AcpServer {
         if (live.running === running) live.running = null
         this.save(live, true)
         this.saveTurns(live)
+        if (endedNormally && turn.status === 'completed' && !running.stopped)
+          this.agyBackground?.start(threadId, turn.id)
+        else this.agyBackground?.stop(threadId)
         if (!this.closed) void this.serial(threadId, () => this.release(threadId)).catch(() => {})
       }
     })()
@@ -1374,6 +1539,13 @@ export class AcpServer {
   }
 
   async interrupt(id: string): Promise<void> {
+    this.agyBackground?.stop(id)
+    this.stoppedUnsolicited.add(id)
+    if (this.unsolicited.has(id)) {
+      this.runtime.current()?.connection.notify('session/cancel', { sessionId: id })
+      this.requests.reject((threadId) => threadId === id, TURN_STOPPED)
+      this.finishUnsolicited(id, true)
+    }
     const child = this.children.get(id)
     if (child) {
       const agent = this.runtime.current()
@@ -1468,6 +1640,10 @@ export class AcpServer {
     this.processes.closePeer(peer.id)
     for (const [id, ids] of this.subscriptions) {
       ids.delete(peer.id)
+      if (!this.subscribers(id).length) {
+        this.agyBackground?.stop(id)
+        this.finishUnsolicited(id)
+      }
       if (!this.closed) void this.serial(id, () => this.release(id)).catch(() => {})
     }
     for (const id of [...this.ephemeral.keys()]) this.releaseEphemeral(id)
@@ -1477,6 +1653,8 @@ export class AcpServer {
   // signalled：是被结束信号要求退出的，交给 AcpRuntime.close 定怎么关 agent
   async close(signalled = false): Promise<void> {
     this.closed = true
+    this.agyBackground?.close()
+    for (const id of this.unsolicited.keys()) this.finishUnsolicited(id, true)
     for (const attempt of this.terminalLogins.values()) attempt.child.kill('SIGTERM')
     this.terminalLogins.clear()
     this.requests.reject(() => true, '适配器正在关闭')

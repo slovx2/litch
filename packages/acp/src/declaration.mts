@@ -173,8 +173,9 @@ export function declarationFor(
       EXTENSION.clientTools,
       EXTENSION.threadCapabilities,
       EXTENSION.acpControls,
+      EXTENSION.backgroundTasks,
     ],
-    features: featuresOf(caps),
+    features: { ...featuresOf(caps), backgroundTasks: true },
     permissionPresets: [
       ...(id === 'agy'
         ? [

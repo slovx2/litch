@@ -658,6 +658,23 @@ async function handle(method: string, params: any): Promise<unknown> {
     }
     case 'session/set_mode': {
       const found = session(params)
+      if (params.modeId === 'ask-late' && process.env.FAKE_ACP_LATE_PERMISSION) {
+        return request('session/request_permission', {
+          sessionId: found.sessionId,
+          toolCall: {
+            toolCallId: 'late-command',
+            kind: 'execute',
+            title: 'echo hi',
+            rawInput: { command: 'echo hi' },
+          },
+          options: PERMISSION_OPTIONS,
+        })
+      }
+      if (params.modeId === 'emit-late' && process.env.FAKE_ACP_LATE_UPDATES) {
+        for (const update of JSON.parse(process.env.FAKE_ACP_LATE_UPDATES))
+          notify(found.sessionId, update)
+        return {}
+      }
       found.mode = params.modeId
       return {}
     }

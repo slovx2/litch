@@ -229,12 +229,31 @@ Antigravity 的 ACP 入口默认按 agy 配置审批。选择“完全访问”�
 模式后恢复 agy 的审批规则。没有一次性允许选项的请求仍显示审批卡，避免扩大为永久授权。
 不提供只读或工作区沙箱。命令审批的理由与命令相同时只显示一次。
 
+ACP 在回合外推来的正文会显示为“后台续跑”，不再等下一条用户消息。Antigravity 1.5.x 的
+ACP 入口可能在父回合结束后停止推送子智能体结果；Litch 只在观察到 `invoke_subagent`
+且父回合正常结束后，显示“子智能体可能仍在运行”，并在空闲期间回读历史。回读间隔从
+3 秒逐步退避至 30 秒，最长 10 分钟；新内容立即显示，后半句在原条目更新，不重复追加。
+已有内容一分钟未变化后，每 60 秒检查一次，不据此推断完成。十分钟最多检查 22 次；
+这是结果检查，不是子智能体的精确状态或进度。用户发消息、停止、关闭或归档会话、修改
+会话设置、连接断开时取消；回放出现下一条用户消息或超过 8 MiB 时也停止。预算结束时
+撤掉检查行，只有一直没收到内容才提示“未收到后台结果，可发消息询问”。
+
 Antigravity ACP uses agy's permission settings by default. Full access makes Litch allow each tool
 request once in that session, without an approval card or approval message. It changes neither agy
 configuration nor process flags. Switching between Full access and native modes takes effect for
 the next request, even during a turn. Requests without an allow-once option still ask; Litch never
 silently chooses a persistent grant. No read-only or workspace sandbox is provided. Duplicate
 command titles are omitted from approval reasons on desktop and mobile.
+
+ACP output received between turns appears as a background continuation. Antigravity 1.5.x may
+stop forwarding subagent output after the parent turn ends. After an observed `invoke_subagent`
+and normal completion, Litch shows an uncertainty notice and checks history while idle. New text
+appears immediately; later chunks update the same item. Checks back off from 3 to 30 seconds and
+then to 60 seconds after received content stays unchanged for a minute. Unchanged content does
+not prove completion. The budget is 10 minutes, at most 22 checks. Sending a message, stopping,
+closing, archiving, changing session settings, or disconnecting cancels it. A subsequent user
+message in history or a replay exceeding 8 MiB also stops checks. At expiry the monitor disappears;
+Litch only suggests asking about the result if no content arrived.
 
 表单提问显示征询卡，数值、布尔和选项保留原始类型；取消或连接断开时不会默认接受。正式
 宣告的子代理可以向父会话的订阅者请求审批，未宣告的会话仍拒绝。子代理不能直接发送用户

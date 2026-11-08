@@ -1,4 +1,3 @@
-import { declareBackgroundTasks } from '../../shared/src/background-report.mjs'
 import { CODEX_PROTOCOL_VERSION } from '../../shared/src/runtime-version.mjs'
 import pkg from '../package.json' with { type: 'json' }
 import type { AcpAgentId } from './agent.mjs'
@@ -19,13 +18,14 @@ export const versions = {
  * runtime/info 的应答（也是 --runtime-info 打出来的那一行）。engine 就是扮演的标识，命令行按它核对。
  * caps 是握手拿到的能力，拿不到（agent 起不来）时按什么都没有报。
  */
-/** backgroundShell：这次运行打没打开注入的后台 shell，声明里的 backgroundTasks 跟着它走 */
+/** backgroundShell：只有注入的 shell 可用时才声明 stopBackground；所有 ACP 都保留自发回合来历。 */
 export function runtimeInfo(
   id: AcpAgentId,
   caps: AgentCapabilities | null,
   backgroundShell = false,
   catalog?: Catalog | null,
 ) {
+  const declaration = declarationFor(id, caps, catalog)
   return {
     engine: id,
     protocolVersion: versions.protocol,
@@ -35,8 +35,7 @@ export function runtimeInfo(
     // 同一个 clientUserMessageId 再发一遍回的是同一个回合（AcpServer.start）
     capabilities: ['submission.idempotency'],
     releaseReady: false,
-    ...(backgroundShell
-      ? declareBackgroundTasks(declarationFor(id, caps, catalog))
-      : declarationFor(id, caps, catalog)),
+    ...declaration,
+    ...(backgroundShell ? { features: { ...declaration.features, stopBackground: true } } : {}),
   }
 }

@@ -24,12 +24,9 @@ export async function requestPermission(
   const threadId = projection.thread.id
   const notify = (method: string, value: any) => host.notify(threadId, method, value)
   const options: any[] = Array.isArray(params?.options) ? params.options : []
-  const state = projection.active ? projection.ensureTool(params?.toolCall, notify) : undefined
-  // 没有在跑的回合、或者请求里没带工具调用：没有可以挂审批的条目，没人能答
-  if (!state) return CANCELLED
   // 用户授权只限当前请求；不选 allow_always，避免修改 agent 的持久规则。
   // 缺少一次性允许选项时仍请用户决定，不把更宽的授权冒充成本次允许。
-  if (live.agyAutoApprove && !signal.aborted) {
+  if (live.agyAutoApprove && !signal.aborted && typeof params?.toolCall?.toolCallId === 'string') {
     const once = options.find(
       (entry) =>
         entry?.kind === 'allow_once' &&
@@ -38,6 +35,9 @@ export async function requestPermission(
     )
     if (once) return { outcome: { outcome: 'selected', optionId: once.optionId } }
   }
+  const state = projection.active ? projection.ensureTool(params?.toolCall, notify) : undefined
+  // 没有活动回合且没有本会话的免审授权，不能替用户批准回合外请求。
+  if (!state) return CANCELLED
   const option = (...kinds: string[]) =>
     kinds.flatMap((kind) => options.filter((entry) => entry?.kind === kind))[0]
   const decisions = [
