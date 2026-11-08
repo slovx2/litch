@@ -147,7 +147,7 @@ export function computerToolsSpec(
     type: 'function',
     name: COMPUTER_TOOL.runActions,
     description:
-      'Execute 1–12 known actions in order using the same tool names and arguments as individual actions. Observe each app with get_app_state first. Use this when the next steps are already known (e.g. select text, bold, save shortcut); use individual actions and observe first when the next step depends on new UI. No loops, nested batches or observations inside a batch. Actions have 60 seconds total; final observation has up to 10 seconds. Every step keeps normal permission, user-activity, stop and safety checks; ordinary apps need no per-app approval. Observing or controlling the installed release of Litch itself requires user approval; never bypass a refusal. Stops on the first failure without rollback or retries. Returns short step results and one final full state of the last attempted app, with at most one screenshot. Element numbers and coordinates must come from an existing observation; stale references stop the batch. Never guess new numbers or reuse coordinates after a window change. Inspect the returned state and continue only unfinished work; a failed action may have partly executed. Ask for any necessary user approval before submitting the batch.',
+      'Execute 1–12 known actions in order using the same tool names and arguments as individual actions. Observe each app with get_app_state first. Use this when the next steps are already known (e.g. select text, bold, save shortcut); use individual actions and observe first when the next step depends on new UI. No loops, nested batches or observations inside a batch. Actions have 60 seconds total; final observation has up to 10 seconds. Every step keeps normal permission, user-activity, stop and safety checks; ordinary apps need no per-app approval. Observing or controlling the installed release of Litch itself requires user approval; never bypass a refusal. Stops on the first failure without rollback or retries. Returns short step results and one final state of the last attempted app (compact text by default), with at most one screenshot. Element numbers and coordinates must come from an existing observation; stale references stop the batch. Never guess new numbers or reuse coordinates after a window change. Inspect the returned state and continue only unfinished work; a failed action may have partly executed. Ask for any necessary user approval before submitting the batch.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -195,8 +195,18 @@ function discreteComputerToolsSpec(platform: ComputerPlatform): ClientToolNamesp
       {
         type: 'function',
         name: COMPUTER_TOOL.getAppState,
-        description: `Get the state of ${win ? "one of an app's windows" : "an app's key window"}: a screenshot plus the accessibility tree as numbered text. After the first call for an app, the text lists only what changed since the previous state (+ added, - removed, ~ changed) unless full is true.${win ? " The text starts with the app's other windows." : ''} Call this before acting on an app, when action changes do not confirm the result, and again if the window was resized. ${win ? 'UI Automation actions run in background; input fallback briefly brings the app forward and restores focus.' : 'Actions prefer background input; foreground fallback waits only for held input or IME composition, briefly brings the app forward and restores focus. Input conflicts stop only the current step; observe and retry. Without a capturable window, get_app_state returns menu text and foreground details; press_key (e.g. cmd+n) and menu elements still work. System screen-access prompts require the user to click Allow.'} Actions return changes in the accessibility tree, not a screenshot.`,
+        description: `Get the state of ${win ? "one of an app's windows" : "an app's key window"}: a screenshot plus the accessibility tree as numbered text. After the first call for an app, the text lists only what changed since the previous state (+ added, - removed, ~ changed) unless full is true.${win ? " The text starts with the app's other windows." : ''} Call this before acting on an app, when action changes do not confirm the result, and again if the window was resized. ${win ? 'UI Automation actions run in background; input fallback briefly brings the app forward and restores focus.' : 'Actions prefer background input; foreground fallback waits only for held input or IME composition, briefly brings the app forward and restores focus. Input conflicts stop only the current step; observe and retry. Without a capturable window, get_app_state returns menu text and foreground details; press_key (e.g. cmd+n) and menu elements still work. System screen-access prompts require the user to click Allow.'} Actions return changes in the accessibility tree, not a screenshot. Inspect the final state for the expected business result. Default compact output caps long lists; use detail:"full" or next_offset to read omitted lines.`,
         inputSchema: schema({
+          detail: {
+            type: 'string',
+            enum: ['compact', 'full'],
+            description: 'Default compact caps long trees. full returns the native bounded tree.',
+          },
+          offset: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Line offset from next_offset; reads a full tree for paging.',
+          },
           full: {
             type: 'boolean',
             description: 'Return the whole accessibility text instead of only the changes.',

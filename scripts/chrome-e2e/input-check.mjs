@@ -28,11 +28,68 @@ export async function inputChecks({ run, targetId, origin, check }) {
     const found = snapshot
       .split('\n')
       .find((line) => line.includes(`${role} "${name}"`))
-      ?.match(/\[ref=(e\d+)\]/)?.[1]
+      ?.match(/\[ref=([^\]\s]+)\]/)?.[1]
     assert.ok(found, snapshot)
     return found
   }
   try {
+    await check('ensure_claimed 一次恢复同一标签并返回新代次快照', async () => {
+      const first = await success('ensure_claimed', { tabId })
+      const oldRef = /\[ref=([^\]]+)\]/.exec(text(first))[1]
+      await success('release', { tabId })
+      const fresh = await success('ensure_claimed', { tabId })
+      assert.equal(JSON.parse(fresh.contentItems[0].text).tabId, tabId)
+      const stale = await run('click', { tabId, ref: oldRef })
+      assert.equal(stale.success, false)
+      assert.equal(receipt(stale).mayHaveExecuted, false)
+      assert.equal(receipt(stale).recovery.needs_snapshot, true)
+    })
+    await check('已知操作与业务等待合为一次批量调用', async () => {
+      const button = await ref('button', '0')
+      const result = await success('run_actions', {
+        actions: [
+          { tool: 'click', arguments: { tabId, ref: button } },
+          { tool: 'wait', arguments: { tabId, for: 'text', text: '1', timeoutMs: 2000 } },
+        ],
+      })
+      assert.equal(JSON.parse(result.contentItems[0].text).verification.status, 'matched')
+      await success('navigate', { tabId, url: `${origin}/input` })
+    })
+    await check('大页面默认压缩且完整快照、分页、紧凑 diff 可恢复', async () => {
+      await success('evaluate', {
+        tabId,
+        expression: `document.body.innerHTML = Array.from({length:500}, (_,i) => '<div><button>Fixture settings row '+i+' with a useful accessible name for permissions</button></div>').join('')`,
+      })
+      const compact = text(await success('snapshot', { tabId }))
+      const full = text(await success('snapshot', { tabId, detail: 'full' }))
+      assert.ok(compact.length < full.length / 3)
+      assert.match(full, /Fixture settings row 499/)
+      const metadata = JSON.parse(
+        compact.split('\n').find((l) => l.startsWith('{"observation":')),
+      ).observation
+      assert.match(
+        text(await success('snapshot', { tabId, offset: metadata.next_offset, detail: 'full' })),
+        /Fixture settings row 499/,
+      )
+      await success('snapshot', { tabId, detail: 'full' })
+      await success('evaluate', {
+        tabId,
+        expression: "document.querySelector('button').textContent = 'Saved fixture'",
+      })
+      const diff = text(await success('snapshot', { tabId, diff: true }))
+      assert.match(diff, /Saved fixture/)
+      assert.ok(diff.length < full.length / 10)
+      console.log(
+        'FRICTION_SIZE ' +
+          JSON.stringify({
+            browser: 'chrome',
+            full: full.length,
+            compact: compact.length,
+            diff: diff.length,
+          }),
+      )
+      await success('navigate', { tabId, url: `${origin}/input` })
+    })
     await check('后台点击和输入：回执记录派发与实际焦点/字段变化', async () => {
       const clicked = await success('click', { tabId, ref: await ref('button', '0') })
       assert.equal(receipt(clicked)?.dispatch, 'dispatched')

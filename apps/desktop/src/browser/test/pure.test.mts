@@ -141,10 +141,10 @@ test('快照：缩进、编号、略过的节点、编号稳定', () => {
   const lines = formatAxTree(nodes, book)
   assert.deepEqual(lines, [
     '- heading "Title" level=1',
-    '- button "Go" disabled [ref=e1]',
-    '- textbox "Name" value="Ada" [ref=e2]',
+    `- button "Go" disabled [ref=e${book.generation}g1]`,
+    `- textbox "Name" value="Ada" [ref=e${book.generation}g2]`,
   ])
-  assert.equal(book.byRef.get('e2'), 50)
+  assert.equal(book.byRef.get(`e${book.generation}g2`), 50)
   // 再排一次编号不变
   assert.deepEqual(formatAxTree(nodes, book), lines)
 })

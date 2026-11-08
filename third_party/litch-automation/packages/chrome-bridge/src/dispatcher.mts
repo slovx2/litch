@@ -4,7 +4,7 @@ import type { ClientToolExecutor, ClientToolInvocation } from '../../browser/src
 export function targetsChrome(invocation: ClientToolInvocation): boolean {
   const args = invocation.arguments as Record<string, unknown> | null
   return (
-    ['targets', 'claim', 'release'].includes(invocation.tool) ||
+    ['targets', 'claim', 'ensure_claimed', 'release'].includes(invocation.tool) ||
     typeof args?.targetId === 'string' ||
     (typeof args?.tabId === 'string' && args.tabId.startsWith('chrome:')) ||
     (invocation.tool === 'run_actions' &&

@@ -14,6 +14,7 @@ import {
   COMPUTER_BATCH_STATE_GUIDANCE,
   COMPUTER_TOOL,
 } from '../../automation-contracts/src/litch/client-tools-computer.mjs'
+import { observationSlice } from '../../automation-contracts/src/observation.mjs'
 import { runComputerActions } from './batch.mjs'
 import type { ClientToolContext, ClientToolExecutor, ClientToolInvocation } from './call-types.mjs'
 import {
@@ -83,6 +84,7 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
   const platform = options.platform === 'win32' ? 'win32' : 'darwin'
   const now = options.now ?? Date.now
   let lastRestart = 0
+  const truncatedStates = new Set<string>()
   const presentation = options.presentation ?? {
     productName: 'Litch',
     helperName: 'Litch Computer Use',
@@ -180,11 +182,30 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
 
   const single = async (invocation: ClientToolInvocation, context: ClientToolContext) => {
     try {
+      const args = invocation.arguments as Record<string, unknown> | null
+      const stateKey = JSON.stringify([sessionKey(invocation), args?.app, args?.window])
+      if (
+        invocation.tool === COMPUTER_TOOL.getAppState &&
+        (args?.detail === 'full' || args?.offset !== undefined || truncatedStates.has(stateKey))
+      )
+        invocation = { ...invocation, arguments: { ...args, full: true } }
       const result = await (win ? win.run(invocation, context) : run(invocation, context))
       if (invocation.tool === COMPUTER_TOOL.getAppState && result.success) {
         const first = result.contentItems.find((item) => item.type === 'inputText')
-        if (first?.type === 'inputText')
+        if (first?.type === 'inputText') {
+          const view = observationSlice(first.text.split('\n'), {
+            full: args?.detail === 'full',
+            offset: typeof args?.offset === 'number' ? args.offset : 0,
+          })
+          if (view.truncated || args?.offset) truncatedStates.add(stateKey)
+          else truncatedStates.delete(stateKey)
+          first.text =
+            view.text +
+            (view.truncated
+              ? `\n${JSON.stringify({ observation: { truncated: true, next_offset: view.next_offset, total_lines: view.total_lines } })}\nUse get_app_state(detail:"full", offset:${view.next_offset}) for subsequent lines; full:true resets the diff but keeps compact limits.`
+              : '')
           first.text += `\n\n${present(COMPUTER_BATCH_STATE_GUIDANCE)}`
+        }
       }
       return result
     } catch (error) {
@@ -212,6 +233,8 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
     },
     async turnEnded(turn) {
       const session = sessionKey({ device: { id: turn.deviceId }, threadId: turn.threadId })
+      for (const key of truncatedStates)
+        if (JSON.parse(key)[0] === session) truncatedStates.delete(key)
       win?.turnEnded(session, turn.turnId)
       await helper.connected
         ?.request('turnEnded', { session, turnId: turn.turnId }, 5000)

@@ -4,6 +4,7 @@ import type {
   ChromeListedTab,
   ChromeTabState,
 } from '../../automation-contracts/src/litch/chrome-browser.mjs'
+import { automationRecovery } from '../../automation-contracts/src/recovery.mjs'
 import { newRefBook } from '../../browser/src/browser/ax.mjs'
 import { runBrowserActions } from '../../browser/src/browser/batch.mjs'
 import type { BrowserExecutor, TabState } from '../../browser/src/browser/executor.mjs'
@@ -47,8 +48,12 @@ export const chromeFailure = (error: unknown): ClientToolCallResponse => ({
     {
       type: 'inputText',
       text: JSON.stringify({
-        code: error instanceof ChromeBridgeError ? error.code : 'failed',
+        code: (error as { code?: string })?.code ?? 'failed',
         message: error instanceof Error ? error.message : String(error),
+        recovery: automationRecovery(
+          (error as { code?: string })?.code ?? 'failed',
+          error instanceof Error ? error.message : String(error),
+        ),
       }),
     },
   ],
@@ -61,6 +66,7 @@ export class ChromeExecutor implements BrowserExecutor {
   private states = new Map<string, TabState & { generation: number; url: string }>()
   readonly sites: SiteBook
   private busy = new Set<string>()
+  private claiming = new Set<string>()
   private calls = new Map<
     string,
     { turn: string; fingerprint: string; promise: Promise<ClientToolCallResponse> }
@@ -76,6 +82,12 @@ export class ChromeExecutor implements BrowserExecutor {
     this.off = options.bridge.onEvent((instanceId, event) => {
       for (const page of this.pages.values()) {
         if (page.instanceId !== instanceId) continue
+        if (
+          event.kind === 'revoked' &&
+          event.leaseId === page.grant.leaseId &&
+          !['expired', 'bridgeDisconnected'].includes(event.reason)
+        )
+          page.recoverable = false
         if (
           event.kind === 'hello' ||
           event.kind === 'disconnected' ||
@@ -237,6 +249,7 @@ export class ChromeExecutor implements BrowserExecutor {
     token: ClaimToken,
     original = true,
     keep = true,
+    pageId?: string,
   ): Promise<ChromePage> {
     if (token.session !== session(invocation) || token.expires < Date.now())
       throw new ChromeBridgeError('staleDocument', 'The tab listing expired. List tabs again.')
@@ -299,14 +312,163 @@ export class ChromeExecutor implements BrowserExecutor {
       context.signal,
     )
     const page = new ChromePage(
-      `chrome:${randomUUID()}`,
+      pageId ?? `chrome:${randomUUID()}`,
       token.instanceId,
       grant,
       result.tab,
       this.options.bridge,
     )
+    if (token.tab.targetId !== undefined) page.targetId = token.tab.targetId
+    page.claimEpoch = token.epoch
     this.pages.set(page.id, page)
     return page
+  }
+  /** 只恢复连接和观察；不重放输入，不把另一标签/实例猜成原目标。 */
+  private async ensureClaimed(
+    invocation: ClientToolInvocation,
+    context: ClientToolContext,
+    args: Record<string, unknown>,
+  ): Promise<ClientToolCallResponse> {
+    const old = typeof args.tabId === 'string' ? this.pages.get(args.tabId) : undefined
+    if (
+      args.tabId !== undefined &&
+      (!old ||
+        JSON.stringify([old.grant.owner.deviceId, old.grant.owner.threadId]) !==
+          session(invocation))
+    )
+      throw new ChromeBridgeError('tabNotClaimed', 'This tab does not belong to this conversation.')
+    const target = old ? `chrome:${old.instanceId}` : args.targetId
+    const instanceId = this.instance(target)
+    if (
+      old?.paused ||
+      [...this.pages.values()].some((p) => p.instanceId === instanceId && p.paused)
+    )
+      throw new ChromeBridgeError(
+        'signingIn',
+        'Wait for request_sign_in to return; do not reclaim.',
+      )
+    const key = instanceId
+    if (this.claiming.has(key) || (old && this.busy.has(old.id)))
+      throw new ChromeBridgeError('busy', 'Another operation is preparing this Chrome tab.')
+    this.claiming.add(key)
+    try {
+      let page: ChromePage | undefined
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (context.signal.aborted)
+          throw new ChromeBridgeError('cancelled', 'The call was cancelled.')
+        this.instance(target)
+        const tabs = await this.listTabs(instanceId, context.signal)
+        const matches = tabs.filter((tab) =>
+          old
+            ? tab.id === old.grant.tabId
+            : typeof args.url === 'string'
+              ? tab.url === args.url
+              : tab.active === true && tab.lastFocusedWindow === true,
+        )
+        const tab = matches[0]
+        if (matches.length !== 1 || !tab)
+          throw new ChromeBridgeError(
+            'invalid',
+            'No unique matching tab. Use tabs(list) and claim a specific token; do not guess another tab.',
+          )
+        if (
+          old &&
+          (old.targetId
+            ? tab.targetId !== old.targetId
+            : this.options.bridge.instances().find((i) => i.id === instanceId)?.epoch !==
+              old.claimEpoch)
+        )
+          throw new ChromeBridgeError(
+            'targetUnavailable',
+            'The original Chrome target cannot be verified after reconnect. List tabs and choose the intended tab explicitly; do not reuse its old refs.',
+          )
+        const owned = [...this.pages.values()].find(
+          (p) => p.instanceId === instanceId && p.grant.tabId === tab.id && p.valid,
+        )
+        if (
+          owned &&
+          (owned.paused ||
+            this.busy.has(owned.id) ||
+            JSON.stringify([owned.grant.owner.deviceId, owned.grant.owner.threadId]) !==
+              session(invocation))
+        )
+          throw new ChromeBridgeError(
+            'busy',
+            'This tab is in use by another operation or conversation.',
+          )
+        await this.approve(invocation, context, tab.origins)
+        try {
+          if (owned && owned.grant.owner.turnId === invocation.turnId) {
+            await owned.request('renew', {}, false)
+            await owned.authorize(tab.origins)
+            owned.state = tab
+            page = owned
+          } else {
+            page = await this.claim(
+              invocation,
+              context,
+              {
+                instanceId,
+                epoch:
+                  this.options.bridge.instances().find((i) => i.id === instanceId)?.epoch ?? '',
+                tab,
+                session: session(invocation),
+                expires: Date.now() + 30_000,
+              },
+              old?.grant.original ?? true,
+              old?.grant.keep ?? true,
+              old?.id,
+            )
+            // 重认领后的编号不能指向旧文档，哪怕 URL 和 generation 恰好相同。
+            this.states.delete(page.id)
+          }
+          break
+        } catch (error) {
+          if (
+            !(error instanceof ChromeBridgeError) ||
+            !['staleLease', 'staleDocument'].includes(error.code) ||
+            attempt > 0
+          )
+            throw error
+          if (owned) owned.valid = false
+        }
+      }
+      if (!page)
+        throw new ChromeBridgeError('staleLease', 'Chrome changed while preparing the tab.')
+      this.busy.add(page.id)
+      page.bind(context.signal, page.state.generation)
+      try {
+        if (page.state.loading && !(await page.waitForLoad(10_000, context.signal)))
+          throw new ChromeBridgeError(
+            'failed',
+            'The tab is still loading; wait for load before input.',
+          )
+        await page.prepareObservation()
+        const result = await executePageTool(
+          this,
+          page,
+          { ...invocation, tool: 'snapshot' },
+          context,
+          { tabId: page.id, diff: false },
+        )
+        result.contentItems.unshift({
+          type: 'inputText',
+          text: JSON.stringify({
+            tabId: page.id,
+            browser: 'chrome',
+            status: 'ready',
+            recovered: !!old,
+            note: 'Use this tabId and the fresh refs below. Verify the business result before repeating earlier input.',
+          }),
+        })
+        return result
+      } finally {
+        page.unbind()
+        this.busy.delete(page.id)
+      }
+    } finally {
+      this.claiming.delete(key)
+    }
   }
   async call(
     invocation: ClientToolInvocation,
@@ -395,6 +557,14 @@ export class ChromeExecutor implements BrowserExecutor {
         throw new ChromeBridgeError('invalid', 'Expected an argument object.')
       if (context.signal.aborted)
         throw new ChromeBridgeError('cancelled', 'The call was cancelled.')
+      if (invocation.tool === 'ensure_claimed')
+        return await this.ensureClaimed(invocation, context, args)
+      // 只读快照的失效租约可在输入前恢复。明确 release 后的旧句柄不隐式恢复。
+      if (invocation.tool === 'snapshot' && typeof args.tabId === 'string') {
+        const old = this.pages.get(args.tabId)
+        if (old && !old.valid && old.recoverable)
+          return await this.ensureClaimed(invocation, context, args).catch(chromeFailure)
+      }
       if (invocation.tool === 'run_actions') {
         const generations = new Map<string, string>()
         return runBrowserActions(invocation, context, this.call.bind(this), true, (action) => {
@@ -558,6 +728,24 @@ export class ChromeExecutor implements BrowserExecutor {
         this.busy.delete(page.id)
       }
     } catch (error) {
+      // 仅 snapshot 可在桥刚报告过期时重做观察；任何输入都留给调用方检查回执。
+      if (
+        invocation.tool === 'snapshot' &&
+        error instanceof ChromeBridgeError &&
+        error.code === 'staleLease' &&
+        !context.signal.aborted
+      ) {
+        const args = invocation.arguments as Record<string, unknown>
+        const page = typeof args.tabId === 'string' ? this.pages.get(args.tabId) : undefined
+        if (page?.recoverable) {
+          page.valid = false
+          try {
+            return await this.ensureClaimed(invocation, context, args)
+          } catch (recoveryError) {
+            return chromeFailure(recoveryError)
+          }
+        }
+      }
       return chromeFailure(error)
     }
   }

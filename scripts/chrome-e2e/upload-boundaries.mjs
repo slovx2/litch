@@ -22,7 +22,7 @@ export async function uploadBoundaries({
     const ref = snapshot
       .split('\n')
       .find((line) => line.includes('"Upload fixture"'))
-      ?.match(/\[ref=(e\d+)\]/)?.[1]
+      ?.match(/\[ref=([^\]\s]+)\]/)?.[1]
     assert.ok(ref, snapshot)
     return { tabId, ref, page: executor.pages.get(tabId) }
   }

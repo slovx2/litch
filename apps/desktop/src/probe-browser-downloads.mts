@@ -123,7 +123,7 @@ export async function checkDownloads(options: {
     await call('navigate', { url: `${origin}/page?id=${id}`, newTab: true })
     const current = required(browser.executor.currentTab(owner.deviceId, owner.threadId))
     const snapshot = await call('snapshot', { tabId: current })
-    const ref = /link "Download".*?\[ref=(e\d+)\]/.exec(textOf(snapshot))?.[1]
+    const ref = /link "Download".*?\[ref=([^\]\s]+)\]/.exec(textOf(snapshot))?.[1]
     if (!ref) throw new Error(`下载链接不在快照里：${textOf(snapshot)}`)
     return {
       tabId: current,
@@ -197,7 +197,7 @@ export async function checkDownloads(options: {
     const alias = join(app.getPath('userData'), 'pending-alias')
     symlinkSync(privateFile, alias)
     const privateSnapshot = await call('snapshot', { tabId: allowed.tabId })
-    const fileRef = /.*File.*?\[ref=(e\d+)\]/.exec(textOf(privateSnapshot))?.[1] ?? 'e999'
+    const fileRef = /.*File.*?\[ref=([^\]\s]+)\]/.exec(textOf(privateSnapshot))?.[1] ?? 'e999'
     for (const path of [privateFile, alias]) {
       const upload = await call('upload', { tabId: allowed.tabId, ref: fileRef, paths: [path] })
       check(

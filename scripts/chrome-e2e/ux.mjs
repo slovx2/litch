@@ -115,7 +115,7 @@ export async function chromeUx({
   })
   await check('Chrome 批量正常执行 / 中途失败 / 最后快照 / callId 不重放', async () => {
     const snapshot = await success('snapshot', { tabId: claimed })
-    const ref = snapshot.match(/button "0".*?\[ref=(e\d+)\]/)?.[1]
+    const ref = snapshot.match(/button "0".*?\[ref=([^\]\s]+)\]/)?.[1]
     assert.ok(ref, snapshot)
     const batch = {
       ...owner,
@@ -132,7 +132,7 @@ export async function chromeUx({
     assert.equal(first.success, true, text(first))
     assert.match(text(first), /Final snapshot:[\s\S]*button "2"/)
     assert.deepEqual(await executor.call(batch, context), first)
-    const next = text(first).match(/button "2".*?\[ref=(e\d+)\]/)?.[1]
+    const next = text(first).match(/button "2".*?\[ref=([^\]\s]+)\]/)?.[1]
     const failed = await call('run_actions', {
       actions: [
         { tool: 'click', arguments: { tabId: claimed, ref: next } },

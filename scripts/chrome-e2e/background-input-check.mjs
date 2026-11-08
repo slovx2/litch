@@ -216,7 +216,7 @@ export async function backgroundInputChecks({
       const value = snapshot
         .split('\n')
         .find((l) => l.includes(name))
-        ?.match(/\[ref=(e\d+)\]/)?.[1]
+        ?.match(/\[ref=([^\]\s]+)\]/)?.[1]
       assert.ok(value, snapshot)
       return value
     }

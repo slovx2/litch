@@ -431,8 +431,9 @@ Post-input observation is bounded to about 2.5 seconds. It watches URL, DOM, foc
 
 ```json
 {"actions":[
-  {"tool":"type","arguments":{"tabId":"已观察的标签编号","ref":"e12","text":"查询词","clear":true}},
-  {"tool":"press","arguments":{"tabId":"已观察的标签编号","key":"Enter"}}
+  {"tool":"type","arguments":{"tabId":"已观察的标签编号","ref":"e3g12","text":"查询词","clear":true}},
+  {"tool":"press","arguments":{"tabId":"已观察的标签编号","key":"Enter"}},
+  {"tool":"wait","arguments":{"tabId":"已观察的标签编号","for":"text","text":"查询完成"}}
 ]}
 ```
 
@@ -445,3 +446,16 @@ Post-input observation is bounded to about 2.5 seconds. It watches URL, DOM, foc
 Batch receipts include each step's duration, dispatch/observation status and `mayHaveExecuted`, plus `firstFailedStep`. `actionsStatus` and `observationStatus` are separate. If only the final snapshot fails, actions remain `completed` with `stopped:false`; do not repeat completed inputs. The overall result can still be `success:false`, so inspect both statuses before deciding what remains to do.
 
 执行桌面必须声明浏览器批量能力。升级后 Claude Code/Pi 会话恢复时可刷新工具；已有 Codex 会话需要新建才能获得新增工具。
+
+
+### 自动化错误恢复与紧凑观察
+
+Chrome 推荐先 targets，再 ensure_claimed(targetId)：选当前标签、认领、等加载和首次快照合为一次调用；指定 url 时必须精确且唯一匹配，指定已有 tabId 时只恢复原标签。断线失效后的只读 snapshot 自动恢复；显式释放后要明确 ensure_claimed。登录暂停、站点拒绝、用户停止不会自动重试或绕过，等用户处理后继续。不会自动重放点击、输入、导航等动作。
+
+错误新增 recovery JSON，给出是否可重试、是否需要新快照/认领/用户处理、可能已执行及下一步。输入回执中的 recovery 依据实际派发记录；retryable 只表示完成提示步骤后可继续，不表示可以盲重做。登录暂停时不要反复 list/claim。
+
+snapshot 默认紧凑输出，约 10K 字符/180 行；detail:"full" 提供较大视图，next_offset 可用于后续页。diff:true 返回已完整观察基准后的变化。ref 带代次（例如 e3g12），换文档或重新认领后必须使用新 ref。get_app_state 同样默认压缩，detail:"full" 返回原生采集上限内的全文；full:true 仅关闭差异模式。原生树本身截断时仍要滚动或换到对应窗口观察。
+
+已知连续动作合成 run_actions，浏览器批次最后加 wait(selector/text/url) 核实预期业务条件。verification:matched 只证明条件匹配，success 或派发回执都不能代替业务成功。CU 检查批末的实际状态；图像仍保留，避免坐标失去对应截图。只有视觉检查才另取截图。
+
+Chrome preparation is one ensure_claimed call after choosing a target. Recovery hints never authorize replaying input or bypassing sign-in, denied origins or user stop. Snapshots and app states default to compact text; detail:"full" and next_offset expose the bounded full observation. Finish known browser batches with an explicit selector/text/URL wait and inspect the actual business result.

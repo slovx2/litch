@@ -619,7 +619,7 @@ test('编号提示：冻结之前给指的元素加一次性标记，口令交�
     return plain<T>(method, params)
   }
   const snap = textOf(await run('snapshot'))
-  const ref = /\[ref=(e\d+)\]/.exec(snap)?.[1]
+  const ref = /\[ref=([^\]\s]+)\]/.exec(snap)?.[1]
   assert.ok(ref, snap)
   const bad = await run('request_sign_in', { reason: 'r', passwordRef: 'e99' })
   assert.equal(bad.success, false)

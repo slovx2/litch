@@ -183,7 +183,7 @@ test('批量顺序执行后回最终快照；中途失败不重放或执行余�
   })
   assert.equal(good.success, true, text(good))
   assert.match(text(good), /"completed":2/)
-  assert.match(text(good), /Final snapshot:[\s\S]*button "OK"/)
+  assert.match(text(good), /Final snapshot:[\s\S]*no changes/)
   const page = host.pages()[0] as FakePage
   const before = page.sent.filter((method) => method === 'Input.dispatchKeyEvent').length
   const failed = await run('run_actions', {
@@ -418,8 +418,8 @@ test('快照带编号，点击按编号找元素', async () => {
   const { run, host } = setup()
   await run('navigate', { url: 'http://localhost/' })
   const snapshot = text(await run('snapshot'))
-  assert.match(snapshot, /- button "OK" \[ref=e1\]/)
-  const clicked = await run('click', { ref: 'e1' })
+  assert.match(snapshot, /- button "OK" \[ref=e\d+g1\]/)
+  const clicked = await run('click', { ref: /\[ref=([^\]]+)\]/.exec(snapshot)![1] })
   assert.equal(clicked.success, true, text(clicked))
   const page = host.pages()[0] as FakePage
   assert.ok(page.sent.includes('Input.dispatchMouseEvent'))
