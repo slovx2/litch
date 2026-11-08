@@ -120,6 +120,9 @@ function fromDevice(error: RpcError, fault: DeviceErrorData, nameOf: HarnessName
 export function channelFailure(error: unknown, nameOf: HarnessNamer = (id) => id): ChannelError {
   if (error instanceof ChannelError) return error
   if (error instanceof RpcError) {
+    // 原生 Codex 的归档拒绝含 CLI 恢复命令；客户端给出对应的界面操作。
+    if (/\b(?:session|thread)\b[^\n]*\bis archived\b/i.test(error.message))
+      return new ChannelError('rejected', 'Session is archived', phrase('fault.sessionArchived'))
     if (isManagerResetWaiting(error))
       return new ChannelError('busy', error.message, phrase('manager.resetWaiting'))
     // 被别处的 codex 用着：现在做不了，不是出了故障

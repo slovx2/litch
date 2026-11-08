@@ -1942,6 +1942,7 @@ export const en: Record<MessageKey, Entry> = {
   'fault.unknownThreadMaybe':
     'session not found. It may be in {names}, which is unavailable. Try again once it’s back',
   'fault.noHarness': 'no harness is available on this device',
+  'fault.sessionArchived': 'This session is archived. Restore it from Archived, then try again.',
   'session.archiveChildrenRunning': 'Stop sub-sessions before archiving. Still active: {sessions}',
   'fault.heldElsewhere':
     'this session is in use by Codex elsewhere (another terminal or client). Finish there, then try again',

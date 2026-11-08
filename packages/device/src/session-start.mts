@@ -50,6 +50,8 @@ import { worktreeCwd } from './worktrees.mjs'
 export interface ChildSpec {
   /** 设备解析出的归属父会话；工作线建议保留来源的分叉上下文和权限，但由经理接收回报。 */
   lineageParentId?: string
+  /** 来源已归档时只保留设备记录的标识与标题，不恢复来源来取配置或上下文。 */
+  suggestionSource?: { threadId: string; title: string }
   /** 不给是父会话的 harness */
   harness?: string | null
   model?: string | null
@@ -553,8 +555,12 @@ async function createChild(
     spec.background ?? '',
   )
   if (spec.lineageParentId && manager) {
-    const source = threadTitle(parentThread, store.parentOf(parentId)?.title) || parentId
-    text += `\n\n[Litch] Suggestion source: "${source}" (${parentId}). This suggestion was started as a workline of manager "${manager.name}" (${manager.threadId}), alongside the source line. Report to the manager; the source line is not your parent.`
+    const sourceId = spec.suggestionSource?.threadId ?? parentId
+    const source =
+      spec.suggestionSource?.title ||
+      threadTitle(parentThread, store.parentOf(parentId)?.title) ||
+      sourceId
+    text += `\n\n[Litch] Suggestion source: "${source}" (${sourceId}). This suggestion was started as a workline of manager "${manager.name}" (${manager.threadId}), alongside the source line. Report to the manager; the source line is not your parent.`
   }
   const begun = await link.request(
     'turn/start',
@@ -654,21 +660,34 @@ export async function acceptProposal(
   if (tree.accepting.has(proposalId)) throw new ProtocolError(-32602, `提案 ${proposalId} 正在开始`)
   const proposal = tree.pendingProposal(proposalId, from)
   const manager = !proposal.offer ? tree.managers?.lines.managerFor(proposal.threadId) : null
+  const archivedSource =
+    manager && manager.threadId !== proposal.threadId && tree.host.index.archived(proposal.threadId)
   const pick = (value: string | undefined, fallback: string | null) =>
     value === undefined ? fallback : value || null
   const started = startChild(
     tree,
-    tree.managers?.store.historical(proposal.threadId)?.threadId ?? proposal.threadId,
+    archivedSource
+      ? manager.threadId
+      : (tree.managers?.store.historical(proposal.threadId)?.threadId ?? proposal.threadId),
     {
       ...(manager && manager.threadId !== proposal.threadId
         ? { lineageParentId: manager.threadId }
+        : {}),
+      // 归档来源的配置读取同样会触发 resume；按经理当前配置新建，绝不为“开始”恢复来源。
+      ...(archivedSource
+        ? {
+            suggestionSource: {
+              threadId: proposal.threadId,
+              title: tree.store.parentOf(proposal.threadId)?.title ?? proposal.threadId,
+            },
+          }
         : {}),
       harness: pick(overrides.harness, proposal.harness),
       model: pick(overrides.model, proposal.model),
       effort: pick(overrides.effort, proposal.effort ?? null),
       cwd: pick(overrides.cwd, proposal.cwd),
       projectId: overrides.projectId || null,
-      kind: overrides.kind ?? proposal.kind,
+      kind: archivedSource ? 'fresh' : (overrides.kind ?? proposal.kind),
       title: overrides.title ?? proposal.title,
       prompt: overrides.prompt ?? proposal.prompt,
       background: overrides.background ?? proposal.background ?? '',

@@ -1860,6 +1860,7 @@ export const zhCN = {
   'fault.noHarness': '此设备上暂无可用的 harness',
   'session.archiveChildrenRunning': '先停止子会话再归档。仍在运行：{sessions}',
   'fault.heldElsewhere': '此会话正在其他位置的 Codex 中使用（其他终端或客户端）。在那边结束后再试',
+  'fault.sessionArchived': '此会话已归档。请在“已归档”中恢复后重试',
   'session.heldElsewhere':
     '此会话正在其他位置的 Codex 中使用，当前只读。在那边结束后重新打开即可继续。',
   'fault.steerImages': '带图片的消息不能在回合中途插入，请在本回合结束后发送',

@@ -6,6 +6,21 @@ import { channelFailure } from '../src/device/faults.mjs'
 import { projectSummary } from '../src/projection/session.mjs'
 import { thread } from './fixtures.mjs'
 
+test('归档引擎拒绝映射为界面恢复提示，不暴露 codex unarchive 命令', () => {
+  const error = channelFailure(
+    new RpcError(
+      -32600,
+      'session old-source is archived. Run `codex unarchive old-source` to unarchive it first.',
+    ),
+  )
+  assert.equal(error.code, 'rejected')
+  assert.equal(error.text?.key, 'fault.sessionArchived')
+  assert.doesNotMatch(error.message, /codex unarchive/)
+  const unrelated = channelFailure(new RpcError(-32600, 'could not read session'))
+  assert.equal(unrelated.message, 'could not read session')
+  assert.equal(unrelated.text, undefined)
+})
+
 const summary = (id: string, parentId: string | null, state = 'idle', running = 0) => ({
   ...projectSummary(thread({ id, name: `会话 ${id}` }), { harness: 'pi', workspaceId: null }),
   status: state as 'idle' | 'running' | 'waiting',

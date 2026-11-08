@@ -41,6 +41,7 @@ export type PhraseKey =
   | 'fault.noHarness'
   // 这个会话正被别处的 codex 用着，这边现在动不了它；只读地打开时在对话上面说的那一句
   | 'fault.heldElsewhere'
+  | 'fault.sessionArchived'
   | 'session.heldElsewhere'
   // 带图片的消息不能中途插进回合里（它所属的 harness 声明了引导时带不了图片）
   | 'fault.steerImages'

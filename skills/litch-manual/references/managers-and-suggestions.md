@@ -24,9 +24,9 @@ Proposal notifications queue without starting or interrupting a manager turn. Th
 later report delivery or the next turn and remain readable while queued. Assigned work still
 belongs to the workline and must not be replaced by a suggestion.
 
-工作线建议在经理“建议”页默认显示，待审核卡带有标记，来源会话保留在卡片上。无论从看板还是工作线对话点“开始”，新会话都是经理的直属工作线，与来源线平级，计入经理并发限制；首条简报包含来源。分叉仍使用来源线的上下文和权限。已开始的旧嵌套会话不迁移，普通会话的建议行为不变。
+工作线建议在经理“建议”页默认显示，待审核卡带有标记，来源会话保留在卡片上。无论从看板还是工作线对话点“开始”，新会话都是经理的直属工作线，与来源线平级，计入经理并发限制；首条简报包含来源。来源线未归档时，分叉仍使用来源线的上下文和权限。来源线已归档时，“开始”和“编辑后开始”只用卡片背景与任务新建经理直属工作线，默认配置取当前经理，卡片和编辑覆盖值仍优先；不恢复来源，也不继承分叉历史。“在来源会话里做”则先恢复来源，再向原会话发送任务。已开始的旧嵌套会话不迁移，普通会话的建议行为不变。
 
-Workline suggestions appear by default in the manager’s Suggestions page, labeled when awaiting review and retaining their source session. Starting from either the board or the source conversation creates a direct workline of the manager, alongside the source line and subject to the manager’s concurrency limit. Its brief identifies the source; forks retain the source context and permissions. Existing nested sessions and ordinary-session suggestions are unchanged.
+Workline suggestions appear by default in the manager’s Suggestions page, labeled when awaiting review and retaining their source session. Starting from either the board or the source conversation creates a direct workline of the manager, alongside the source line and subject to the manager’s concurrency limit. Its brief identifies the source; forks retain the context and permissions of an unarchived source. If the source is archived, Start and Edit then start create a fresh direct workline using the card’s background and task, with defaults from the current manager and any card or edited overrides taking priority. They do not restore the source or inherit its fork history. Do in source restores the source before sending the task there. Existing nested sessions and ordinary-session suggestions are unchanged.
 
 经理自己提出的建议卡提供“开始”（创建工作线）、“编辑后开始”（修改简报后创建工作线）和“忽略”，不提供“在这里做”。普通会话和工作线提出的建议保持原有操作。旧客户端请求在经理会话执行建议时，设备会拒绝并提示开始工作线或忽略。
 
