@@ -150,7 +150,7 @@ jobs:
         id: stage-2
         with:
           node-version: 24.21.0
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         id: cache-npm
         with:
           path: ${{ github.workspace }}/.artifacts/npm-cache
@@ -284,7 +284,7 @@ jobs:
         id: stage-1
         with:
           ref: ${{ needs.source.outputs.sha }}
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         id: cache-electron
         with:
           # 安装器用 electron_config_cache；packager 用 @electron/get 的平台默认目录。
@@ -298,7 +298,7 @@ jobs:
         id: stage-3
         with:
           node-version: 24.21.0
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         id: cache-npm
         with:
           path: ${{ github.workspace }}/.artifacts/npm-cache
@@ -320,7 +320,7 @@ jobs:
         id: rust
         working-directory: third_party/litch-automation/apps/computer-use-win
         run: echo "fingerprint=$(rustc -vV | sha256sum | cut -d ' ' -f 1)" >> "${GITHUB_OUTPUT}"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         id: cache-cargo
         with:
           path: |
@@ -392,7 +392,7 @@ jobs:
         id: stage-2
         with:
           node-version: 24.21.0
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         id: cache-npm
         with:
           path: ${{ github.workspace }}/.artifacts/npm-cache
@@ -445,7 +445,7 @@ jobs:
         id: stage-2
         with:
           node-version: 24.21.0
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         id: cache-npm
         with:
           path: ${{ github.workspace }}/.artifacts/npm-cache
@@ -523,7 +523,7 @@ jobs:
         id: stage-3
         with:
           node-version: 24.21.0
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         id: cache-npm
         with:
           path: ${{ github.workspace }}/.artifacts/npm-cache
@@ -570,7 +570,7 @@ jobs:
           fingerprint="$("${JAVA_HOME}/bin/java" -version 2>&1 | sha256sum | cut -d ' ' -f 1)"
           echo "jdk=${fingerprint}" >> "${GITHUB_OUTPUT}"
       # prebuild 会清 android，只缓存用户级依赖和 Gradle build-cache，不把签名/APK 当缓存。
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         id: cache-gradle
         with:
           path: |
@@ -580,7 +580,7 @@ jobs:
           restore-keys: |
             gradle-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-go${{ hashFiles('mobile/go.mod') }}-jdk${{ steps.android-tools.outputs.jdk }}-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'apps/mobile/android/*.gradle', 'apps/mobile/android/gradle.properties', 'apps/mobile/node_modules/react-native/gradle/libs.versions.toml', 'apps/mobile/plugins/**', 'apps/mobile/modules/**', 'mobile/**') }}-
       # Expo 在 CI 下不执行 RN 传来的 --reset-cache；Metro 自身按源码内容失效转换结果。
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         id: cache-metro
         with:
           path: |
@@ -641,7 +641,7 @@ jobs:
         id: stage-2
         with:
           node-version: 24.21.0
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         id: cache-npm
         with:
           path: ${{ github.workspace }}/.artifacts/npm-cache
