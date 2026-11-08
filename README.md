@@ -73,6 +73,10 @@ Computer Use、内置浏览器和 Chrome 控制拆成了独立的包，别的桌
 
 通用模块的源码已集成在 `third_party/litch-automation`，对应独立代码库 `slovx2/litch-automation`（MIT，尚未公开发布）：提供五个包的源码，以及 macOS Swift、Windows Rust 原生助手的源码和构建脚本。独立仓库不签名、公证、打包或发布预编译助手；Litch、WakeQora 等使用方从源码自行构建、签名并随自己的应用分发。npm 正式包名为 `@litch/*`，各包独立 semver，首版为 `0.x`；源码和包发布将与 Litch 版本解绑。构建、接入示例和限制见各包的 README。
 
+通用模块源码修改后正常重建 Litch 即可验证，无须先发布 npm。提交前将改动回写独立仓，并同步 `third_party/litch-automation.lock.json`；`npm run check:shared-modules` 验证提交 SHA 和源码文件哈希。原生 helper 的产品身份、组装、签名和公证仍由 Litch 构建脚本管理。
+
+回写时使用 `git subtree split --prefix=third_party/litch-automation` 导出提交；上游合入后用 `git subtree pull --prefix=third_party/litch-automation <上游仓库> main --squash` 更新，再执行 `node scripts/sync-shared-modules.mjs <上游完整提交SHA>`。首次安装运行 `npm run automation:setup`，只构建源码，不发布版本。
+
 ## 下载
 
 从[发布页](https://github.com/slovx2/litch/releases/latest)下载：
@@ -127,4 +131,3 @@ open apps/desktop/out/Litch-darwin-arm64/Litch.app
 
 适配器基于 [fuergaosi233/claude-codex](https://github.com/fuergaosi233/claude-codex)。[MIT](LICENSE) · [第三方许可](THIRD_PARTY_NOTICES.md)
 
-通用模块源码修改后正常重建 Litch 即可验证，无须先发布 npm。提交前将改动回写独立仓，并同步 `third_party/litch-automation.lock.json`；`npm run check:shared-modules` 验证提交 SHA 和源码文件哈希。原生 helper 的产品身份、组装、签名和公证仍由 Litch 构建脚本管理。
