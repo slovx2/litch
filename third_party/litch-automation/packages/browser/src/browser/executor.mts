@@ -515,7 +515,8 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
       return result
     } catch (error) {
       if (error instanceof SigningIn) return clientToolFailure('failed', SIGNING_IN)
-      if (error instanceof BadArgs) return clientToolFailure('invalid', error.message)
+      if (error instanceof BadArgs)
+        return clientToolFailure((error as { code?: string }).code ?? 'invalid', error.message)
       if (error instanceof CdpRefused) return clientToolFailure('failed', error.message)
       if (context.signal.aborted) return clientToolFailure('failed', 'the call was cancelled')
       return clientToolFailure('failed', error instanceof Error ? error.message : String(error))

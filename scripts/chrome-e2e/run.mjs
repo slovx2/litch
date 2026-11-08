@@ -127,7 +127,7 @@ try {
         ['bridge', 'installer', 'executor']
           .map((name) => `export * from './apps/desktop/src/chrome-browser/${name}.mts'`)
           .join('\n') +
-        `\nexport * as chromeLibrary from './packages/chrome-bridge/src/index.mts'; export {createCore,reduceSession} from './packages/core/src/index.mts'; export {sshOpener} from './apps/desktop/src/transport-ssh.mts'; export {createClientToolHost} from './apps/desktop/src/client-tools/host.mts';`,
+        `\nexport * as chromeLibrary from './third_party/litch-automation/packages/chrome-bridge/src/index.mts'; export {createCore,reduceSession} from './packages/core/src/index.mts'; export {sshOpener} from './apps/desktop/src/transport-ssh.mts'; export {createClientToolHost} from './apps/desktop/src/client-tools/host.mts';`,
       resolveDir: root,
     },
     outfile: join(work, 'driver.mjs'),
@@ -357,18 +357,18 @@ try {
     })
     await check('真实 ref 点击与输入', async () => {
       const value = text(await success('snapshot', { tabId }))
-      const ref = value.match(/button "0".*?\[ref=(e\d+)\]/)?.[1]
+      const ref = value.match(/button "0".*?\[ref=([^\]\s]+)\]/)?.[1]
       assert.ok(ref, value)
       await success('click', { tabId, ref })
       assert.match(text(await success('snapshot', { tabId })), /button "1"/)
-      const input = value.match(/textbox "Fixture input".*?\[ref=(e\d+)\]/)?.[1]
+      const input = value.match(/textbox "Fixture input".*?\[ref=([^\]\s]+)\]/)?.[1]
       assert.ok(input)
       await success('type', { tabId, ref: input, text: '中文 input', clear: true })
       assert.match(text(await success('snapshot', { tabId })), /中文 input/)
     })
     await check('重复 callId 不重复派发点击', async () => {
       const value = text(await success('snapshot', { tabId }))
-      const ref = value.match(/button "1".*?\[ref=(e\d+)\]/)?.[1]
+      const ref = value.match(/button "1".*?\[ref=([^\]\s]+)\]/)?.[1]
       assert.ok(ref)
       const repeated = { ...invocation, callId: unique(), tool: 'click', arguments: { tabId, ref } }
       const first = await executor.call(repeated, context)
@@ -689,7 +689,7 @@ try {
       await success('wait', { tabId, for: 'time', ms: 200 })
       await success('screenshot', { tabId })
       const value = text(await success('snapshot', { tabId }))
-      const ref = value.match(/button "0".*?\[ref=(e\d+)\]/)?.[1]
+      const ref = value.match(/button "0".*?\[ref=([^\]\s]+)\]/)?.[1]
       assert.ok(ref)
       await success('click', { tabId, ref })
       assert.match(text(await success('snapshot', { tabId })), /button "1"/)
@@ -747,13 +747,11 @@ try {
 
         throw error
       }
-      assert.equal((await call('snapshot', { tabId })).success, false)
       assert.equal((await active).success, false)
       await assertPresentationCleared(nativeTab)
-      const list = JSON.parse(text(await success('tabs', { action: 'list', targetId }))).tabs
-      const tab = list.find((tab) => tab.url.endsWith('/frames'))
-      tabId = JSON.parse(text(await success('claim', { claimToken: tab.claimToken }))).tabId
-      await success('snapshot', { tabId })
+      const recovered = await success('snapshot', { tabId })
+      assert.equal(JSON.parse(recovered.contentItems[0].text).tabId, tabId)
+      assert.equal(executor.pages.get(tabId).grant.tabId, nativeTab)
     })
     await check('worker 强停后的调试器清理与新握手', async () => {
       const nativeTab = executor.pages.get(tabId).grant.tabId
@@ -792,7 +790,7 @@ try {
           () => bridge.instances()[0]?.epoch && bridge.instances()[0].epoch !== epoch,
           'Stopped worker handshake',
         )
-        assert.equal((await call('snapshot', { tabId })).success, false)
+        assert.equal(executor.pages.get(tabId).valid, false)
         await assertPresentationCleared(nativeTab)
         const worker = await workerSession()
         const targets = await cdp.call(
@@ -824,17 +822,15 @@ try {
         () => bridge.instances()[0]?.epoch && bridge.instances()[0].epoch !== epoch,
         'Bridge reconnect',
       )
-      assert.equal((await call('snapshot', { tabId })).success, false)
+      assert.equal(executor.pages.get(tabId).valid, false)
       await assertPresentationCleared(nativeTab)
-      const tab = JSON.parse(text(await success('tabs', { action: 'list', targetId }))).tabs.find(
-        (tab) => tab.url.endsWith('/frames'),
-      )
-      tabId = JSON.parse(text(await success('claim', { claimToken: tab.claimToken }))).tabId
-      await success('snapshot', { tabId })
+      const recovered = await success('snapshot', { tabId })
+      assert.equal(JSON.parse(recovered.contentItems[0].text).tabId, tabId)
+      assert.equal(executor.pages.get(tabId).grant.tabId, nativeTab)
     })
     await check('输入前取消撤销租约且不点击', async () => {
       const value = text(await success('snapshot', { tabId }))
-      const match = value.match(/button "(\d+)".*?\[ref=(e\d+)\]/)
+      const match = value.match(/button "(\d+)".*?\[ref=([^\]\s]+)\]/)
       const count = match?.[1]
       const ref = match?.[2]
       assert.ok(ref)

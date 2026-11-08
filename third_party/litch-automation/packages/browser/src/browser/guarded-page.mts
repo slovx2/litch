@@ -19,12 +19,14 @@ export function guardedPage(
       const current = await stamp()
       if (
         (baseline !== undefined && current !== baseline) ||
-        (!observation && observed !== undefined && current !== observed)
+        (observed !== undefined && current !== observed)
       ) {
         changed()
-        throw new Error(
-          'The document changed. Take a fresh snapshot before acting; a previous action may have executed.',
-        )
+        if (observation && baseline === undefined) observed = current
+        if (!observation || baseline !== undefined)
+          throw new Error(
+            'The document changed. Take a fresh snapshot before acting; a previous action may have executed.',
+          )
       }
       baseline = current
     }

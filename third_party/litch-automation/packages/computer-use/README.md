@@ -58,3 +58,8 @@ Windows：在 `apps/computer-use-win` 用锁定工具链构建 `x86_64-pc-window
 - 使用方提供的原生集成夹具 只启动自己构建的第二宿主 helper，不请求系统授权、不输入用户应用；在隔离 HOME 下运行。
 - 取消经 `cancelAction`（按 `actionId`）转给原生助手；已经发出的输入不会撤回。
 - 正式签名/TCC、Windows 真机、WakeQora 安装包接线不由这些假宿主/隐藏窗口测试证明。
+
+### 紧凑状态
+
+get_app_state 新增可选 `detail:"compact"|"full"` 和 `offset`。默认将已去除空装饰容器的状态限制为 180 行、约 10K 字符；`full:true` 仍表示取消 diff，不取消紧凑限制。`detail:"full"` 返回原生助手已有上限内的全文；用 `next_offset` 分页读取当前可用树。原生采集上限之外仍需滚动、选择对应窗口再观察，不宣称可以读取未采集的节点。
+截断后强制下一次取完整基准，避免把从未展示的变化当作已知。run_actions 的最终状态共用压缩；保留截图和原生编号，坐标仍有对应图像，不改变输入和权限语义。失败附带 recovery JSON；未知输入失败仍标记可能已执行，不能据此重放整批。

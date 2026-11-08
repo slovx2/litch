@@ -197,7 +197,8 @@ void app.whenReady().then(async () => {
   const run = async (tool: string, args: Record<string, unknown> = {}, turnId?: string) =>
     textOf(await call(tool, args, turnId))
   const refOf = (snapshot: string, pattern: RegExp) =>
-    /\[ref=(e\d+)\]/.exec(snapshot.split('\n').find((line) => pattern.test(line)) ?? '')?.[1] ?? ''
+    /\[ref=([^\]\s]+)\]/.exec(snapshot.split('\n').find((line) => pattern.test(line)) ?? '')?.[1] ??
+    ''
   const waitFor = async <T,>(get: () => T | undefined | null, ms = 8000): Promise<T | null> => {
     const end = Date.now() + ms
     while (Date.now() < end) {

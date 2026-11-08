@@ -186,6 +186,7 @@ test('普通字段未获得焦点时明确拒绝，不派发文字', async () =>
   })
   assert.equal(result.success, false)
   assert.equal(receipt(result).dispatch, 'notDispatched')
+  assert.equal(receipt(result).recovery.may_have_executed, false)
   assert.equal(f.sent(), 0)
   assert.match(JSON.stringify(result), /could not receive focus/)
 })

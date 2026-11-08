@@ -78,7 +78,8 @@ export async function checkAgentSignIn(options: {
   const run = async (tool: string, args: Record<string, unknown> = {}) =>
     textOf(await call(tool, args))
   const refOf = (snapshot: string, pattern: RegExp) =>
-    /\[ref=(e\d+)\]/.exec(snapshot.split('\n').find((line) => pattern.test(line)) ?? '')?.[1] ?? ''
+    /\[ref=([^\]\s]+)\]/.exec(snapshot.split('\n').find((line) => pattern.test(line)) ?? '')?.[1] ??
+    ''
   const waitFor = async (test: () => boolean, ms = 8000) => {
     const end = Date.now() + ms
     while (Date.now() < end && !test()) await sleep(100)
@@ -315,7 +316,7 @@ export async function checkAgentSignIn(options: {
 
   // 代理自己输入新的一组再点登录：读页工具里都没有密码，导航完成后只给界面推一条保存提示
   const fresh = await run('snapshot')
-  const boxes = [...fresh.matchAll(/textbox[^\n]*\[ref=(e\d+)\]/g)].map((match) => match[1])
+  const boxes = [...fresh.matchAll(/textbox[^\n]*\[ref=([^\]\s]+)\]/g)].map((match) => match[1])
   await run('type', { ref: boxes[0], text: 'carol@example.com', clear: true })
   const typed = await run('type', { ref: boxes[1], text: 'carol-pass-9', clear: true })
   check('type 不回报密码框的值', !typed.includes('carol-pass-9'), typed)

@@ -29,6 +29,7 @@ interface Check {
   ok: boolean
   detail?: unknown
 }
+let frictionSizes: { full: number; compact: number; diff: number } | undefined
 const checks: Check[] = []
 const check = (name: string, ok: boolean, detail?: unknown) => {
   checks.push({ name, ok, ...(ok ? {} : { detail }) })
@@ -37,7 +38,7 @@ const textOf = (reply: ClientToolCallResponse) =>
   reply.contentItems.map((item) => (item.type === 'inputText' ? item.text : '')).join('\n')
 const refOf = (snapshot: string, pattern: RegExp): string => {
   const line = snapshot.split('\n').find((one) => pattern.test(one)) ?? ''
-  return /\[ref=(e\d+)\]/.exec(line)?.[1] ?? ''
+  return /\[ref=([^\]\s]+)\]/.exec(line)?.[1] ?? ''
 }
 
 void app.whenReady().then(async () => {
@@ -448,6 +449,44 @@ void app.whenReady().then(async () => {
       textOf(reply),
     )
 
+    // ---------- 复盘大页面：真实 CDP 观察的体积、分页与差异 ----------
+    await run('navigate', { url: `${pages.local}/form` })
+    await run('evaluate', {
+      expression:
+        "document.body.innerHTML = Array.from({length:500}, (_,i) => '<div><button>Fixture settings row '+i+' with a useful accessible name for permissions</button></div>').join('')",
+    })
+    const compact = textOf(await run('snapshot'))
+    const full = textOf(await run('snapshot', { detail: 'full' }))
+    check('大页面紧凑快照小于全文三分之一', compact.length < full.length / 3, {
+      compact: compact.length,
+      full: full.length,
+    })
+    const observation = JSON.parse(
+      compact.split('\n').find((line) => line.startsWith('{"observation":')) ?? '{}',
+    ).observation
+    const paged = textOf(await run('snapshot', { detail: 'full', offset: observation.next_offset }))
+    check('分页能读到长列表末尾', paged.includes('Fixture settings row 499'), paged.slice(-300))
+    await run('snapshot', { detail: 'full' })
+    await run('evaluate', {
+      expression: "document.querySelector('button').textContent = 'Saved fixture'",
+    })
+    const compactDiff = textOf(await run('snapshot', { diff: true }))
+    check(
+      '大页面只变一个按钮时返回紧凑 diff',
+      compactDiff.includes('Saved fixture') && compactDiff.length < full.length / 10,
+      { compact: compact.length, full: full.length, diff: compactDiff.length },
+    )
+    console.log(
+      'FRICTION_SIZE ' +
+        JSON.stringify({
+          browser: 'builtin',
+          full: full.length,
+          compact: compact.length,
+          diff: compactDiff.length,
+        }),
+    )
+    frictionSizes = { full: full.length, compact: compact.length, diff: compactDiff.length }
+
     // ---------- 回合收尾 ----------
     const keepTab = textOf(await run('tabs', { action: 'new', url: `${pages.local}/`, keep: true }))
     const keptId = /Tab (t\d+)/.exec(keepTab)?.[1] ?? ''
@@ -498,7 +537,7 @@ void app.whenReady().then(async () => {
   pages.close()
   const ok = checks.every((one) => one.ok)
   console.log(
-    `LITCH_BROWSER ${JSON.stringify({ ok, passed: checks.filter((one) => one.ok).length, checks: checks.filter((one) => !one.ok || process.env.LITCH_VERBOSE) })}`,
+    `LITCH_BROWSER ${JSON.stringify({ ok, passed: checks.filter((one) => one.ok).length, frictionSizes, checks: checks.filter((one) => !one.ok || process.env.LITCH_VERBOSE) })}`,
   )
   app.exit(ok ? 0 : 1)
 })

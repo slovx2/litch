@@ -149,7 +149,7 @@ export async function uploadChecks({
         .split('\n')
         .filter((line) => line.includes(`"${label}"`))
         .at(frame ? -1 : 0)
-        ?.match(/\[ref=(e\d+)\]/)?.[1]
+        ?.match(/\[ref=([^\]\s]+)\]/)?.[1]
       assert.ok(ref, snapshot)
       const response = await success('upload', { tabId, ref, paths, mode })
       const receipt = response.contentItems

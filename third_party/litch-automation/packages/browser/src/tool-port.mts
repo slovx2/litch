@@ -1,3 +1,4 @@
+import { automationRecovery } from '../../automation-contracts/src/recovery.mjs'
 // 浏览器的工具宿主端口：结构保持 Litch 接线形状，不依赖 core、device 或 Electron。
 export interface ClientToolCallParams {
   threadId: string
@@ -17,7 +18,10 @@ export interface ClientToolCallResponse {
 export function clientToolFailure(kind: string, message: string): ClientToolCallResponse {
   return {
     success: false,
-    contentItems: [{ type: 'inputText', text: `[litch:${kind}] ${message}` }],
+    contentItems: [
+      { type: 'inputText', text: `[litch:${kind}] ${message}` },
+      { type: 'inputText', text: JSON.stringify({ recovery: automationRecovery(kind, message) }) },
+    ],
   }
 }
 

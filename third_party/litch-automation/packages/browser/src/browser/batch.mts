@@ -150,7 +150,7 @@ export async function runBrowserActions(
       try {
         snapshot = await invoke(
           'snapshot',
-          { tabId: last.arguments.tabId },
+          { tabId: last.arguments.tabId, diff: true },
           final.signal,
           'snapshot',
         )
@@ -186,6 +186,14 @@ export async function runBrowserActions(
             firstFailedStep: results.find((step) => !step.success)?.step ?? null,
             mayHaveExecuted: results.some((step) => step.mayHaveExecuted),
             businessOutcome: 'unknown',
+            verification:
+              last?.tool === 'wait' &&
+              ['selector', 'text', 'url'].includes(String(last.arguments.for))
+                ? { status: actionsCompleted ? 'matched' : 'notConfirmed', for: last.arguments.for }
+                : {
+                    status: 'notRequested',
+                    hint: 'End the known batch with wait(for:"selector"/"text"/"url") for the expected result.',
+                  },
             cancelled: controller.signal.aborted,
             note: actionsCompleted
               ? snapshot?.success

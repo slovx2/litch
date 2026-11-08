@@ -19,6 +19,10 @@ export class ChromePage implements BrowserPage {
   readonly grant: ChromeGrant
   state: ChromeTabState
   valid = true
+  recoverable = true
+  /** Chrome 重启可能重用数字 tabId；重认领必须核对原 DevTools target。 */
+  targetId?: string
+  claimEpoch?: string
   paused = false
   scripted = false
   private dialogState: DialogInfo | null = null
@@ -193,6 +197,7 @@ export class ChromePage implements BrowserPage {
     await this.request('pointer', { x, y, width, height })
   }
   async release(close = false): Promise<void> {
+    this.recoverable = false
     if (!this.valid) return
     try {
       await this.request('release', { close }, false)

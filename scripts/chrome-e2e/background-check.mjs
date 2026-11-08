@@ -95,7 +95,7 @@ export async function backgroundChecks({
       const value = snapshot
         .split('\n')
         .find((line) => line.includes(`${role} "${name}"`))
-        ?.match(/\[ref=(e\d+)\]/)?.[1]
+        ?.match(/\[ref=([^\]\s]+)\]/)?.[1]
       assert.ok(value, snapshot)
       return value
     }
