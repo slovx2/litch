@@ -72,6 +72,24 @@ test('模型、强度、计划模式：先记下，下一回合前交给 agent�
   }
 })
 
+test('首次使用没有会话时，model/list 预热临时会话并返回模型与强度', async () => {
+  const s = await scene()
+  try {
+    const listed = await s.desktop.call('model/list', {})
+    assert.deepEqual(
+      listed.data.map((model: any) => model.id),
+      ['fake-small', 'fake-large'],
+    )
+    assert.deepEqual(
+      listed.data[0].supportedReasoningEfforts.map((entry: any) => entry.reasoningEffort),
+      ['low', 'high'],
+    )
+    assert.ok(s.server.latestCatalog())
+  } finally {
+    await dispose(s)
+  }
+})
+
 test('agent 起的标题、命令清单：标题转成改名通知，命令当技能列出来', async () => {
   const s = await scene()
   try {

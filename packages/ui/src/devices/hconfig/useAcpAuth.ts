@@ -1,15 +1,18 @@
-import type { AcpAuthView, CoreChannel } from '@litch/core'
+import type { AcpAuthLogin, AcpAuthView, CoreChannel } from '@litch/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 /** 两端共用，切设备或离开账号页后不接收旧请求；登录只由点击触发。 */
 export function useAcpAuth(channel: CoreChannel, deviceId: string, harness: string) {
   const [data, setData] = useState<AcpAuthView | null>(null)
-  const [busy, setBusy] = useState<'read' | 'login' | 'logout' | null>('read')
+  const [busy, setBusy] = useState<'read' | 'login' | 'continue' | 'cancel' | 'logout' | null>(
+    'read',
+  )
   const [error, setError] = useState<unknown>(null)
+  const [login, setLogin] = useState<AcpAuthLogin | null>(null)
   const generation = useRef(0)
   const lock = useRef(false)
   const run = useCallback(
-    async (action: 'read' | 'login' | 'logout', methodId?: string) => {
+    async (action: 'read' | 'login' | 'continue' | 'cancel' | 'logout', value?: string) => {
       if (lock.current) return
       lock.current = true
       const mine = generation.current
@@ -17,11 +20,28 @@ export function useAcpAuth(channel: CoreChannel, deviceId: string, harness: stri
       setError(null)
       try {
         const params = { deviceId, harness }
-        if (action === 'login' && methodId)
-          await channel.command('acp.auth.authenticate', { ...params, methodId })
+        if (action === 'login' && value) {
+          const result = await channel.command('acp.auth.authenticate', {
+            ...params,
+            methodId: value,
+          })
+          if (result?.login) {
+            setLogin(result.login)
+            return
+          }
+        }
+        if (action === 'continue' && login && value)
+          await channel.command('acp.auth.continue', {
+            ...params,
+            attemptId: login.attemptId,
+            authorizationCode: value,
+          })
+        if (action === 'cancel' && login)
+          await channel.command('acp.auth.cancel', { ...params, attemptId: login.attemptId })
         if (action === 'logout') await channel.command('acp.auth.logout', params)
         const next = await channel.command('acp.auth.read', params)
         if (mine === generation.current) setData(next)
+        if (action === 'continue' || action === 'cancel') setLogin(null)
       } catch (failure) {
         if (mine === generation.current) {
           setData(null)
@@ -34,12 +54,13 @@ export function useAcpAuth(channel: CoreChannel, deviceId: string, harness: stri
         }
       }
     },
-    [channel, deviceId, harness],
+    [channel, deviceId, harness, login],
   )
   useEffect(() => {
     generation.current++
     lock.current = false
     setData(null)
+    setLogin(null)
     void run('read')
     return () => {
       generation.current++
@@ -51,5 +72,5 @@ export function useAcpAuth(channel: CoreChannel, deviceId: string, harness: stri
       (method) =>
         method.type === 'agent' && ['oauth-personal', 'oauth-business'].includes(method.id),
     ) ?? []
-  return { data, busy, error, methods, run }
+  return { data, busy, error, methods, login, run }
 }

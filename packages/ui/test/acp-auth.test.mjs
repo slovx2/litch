@@ -18,11 +18,18 @@ async function component(path) {
     useChannel: '()=>({})',
     whyNot: '(error)=>error.message',
     useAcpAuth: '()=>globalThis.__acpAuthState',
+    useState: '(value)=>[value,()=>{}]',
+    openOutside: '()=>{}',
+    Linking: '{}',
+    Clipboard: '{setStringAsync:async()=>{}}',
     ScrollView: '"ScrollView"',
     View: '"View"',
     Note: '"Note"',
     Button: '"Button"',
     StyleSheet: '{create:x=>x}',
+  }
+  if (String(path).endsWith('AcpAccounts.tsx') && String(path).includes('apps/mobile')) {
+    imports.set('expo-clipboard', ['Clipboard'])
   }
   const out = await build({
     entryPoints: [path],

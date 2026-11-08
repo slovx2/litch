@@ -191,6 +191,15 @@ export type {
   JsonRpcResponse,
 } from './jsonrpc.mjs'
 export { isNotification, isRequest, isResponse } from './jsonrpc.mjs'
+// 经理 issue（litchManagerIssues）：公共 #n 外壳、旧别名、评论、时间线、过滤和通知
+export type * from './manager-issues.mjs'
+export {
+  MANAGER_ISSUE_METHOD,
+  MANAGER_ISSUE_NOTIFICATION,
+  MANAGER_ISSUES_EXTENSION,
+  managerIssueFixture,
+  managerIssueRefKind,
+} from './manager-issues.mjs'
 export type {
   ClientNotifications,
   ClientRequestMethod,

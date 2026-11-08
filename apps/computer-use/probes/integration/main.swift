@@ -62,5 +62,11 @@ let audit = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
 DispatchQueue.main.async {
   if environment["LITCH_CU_PROBE_NO_PRIVATE"] == "1" { BackgroundMouse.finish("unavailable") }
   else { BackgroundMouse.startSelfTest() }
+  // 故障注入只改探针的活动版本，不移动真实鼠标；核对污染不会永久禁用后台路径。
+  if environment["LITCH_CU_PROBE_INTERRUPT_SELFTEST"] == "1" {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+      UserActivity.note(.move, pid: 0)
+    }
+  }
 }
 app.run()

@@ -1,3 +1,4 @@
+import type { ChildProcess } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { appendFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -55,6 +56,11 @@ import { AcpRuntime, type AgentHandle } from './runtime.mjs'
 import { sessionOptions } from './session-options.mjs'
 import { AcpStore } from './store.mjs'
 import { echoContent, promptContent, withStopNoticeBlocks } from './turn.mjs'
+
+interface TerminalLoginAttempt {
+  child: ChildProcess
+  output: string
+}
 
 // 调试用：CHA_ACP_TRACE 指向文件时逐行记录与客户端往来的协议消息，默认关闭。
 const tracePath = process.env.CHA_ACP_TRACE
@@ -142,6 +148,7 @@ export class AcpServer {
   private closed = false
   private readonly loading = new Map<string, Promise<LiveThread>>()
   private readonly locks = new Map<string, Promise<unknown>>()
+  private readonly terminalLogins = new Map<string, TerminalLoginAttempt>()
   // 正在 session/load 回放的会话：这期间的更新归到这里
   private readonly replays = new Map<string, Projection>()
   /** ACP 草案的父子关联只在当前连接有效；子会话不能自行恢复或接收用户提示词。 */
@@ -597,6 +604,78 @@ export class AcpServer {
     }
   }
 
+  /** 设备无图形浏览器时，启动官方 agy 的终端登录并先把 URL 交给客户端。 */
+  async startTerminalLogin(methodId: string): Promise<{
+    attemptId: string
+    url: string
+    prompt: { id: 'authorizationCode'; title: string; secret: false }
+  }> {
+    if (this.agentId !== 'agy' || methodId !== 'oauth-personal')
+      throw new ProtocolError(-32602, '只有 agy 的 Google 登录支持复制链接')
+    if (this.terminalLogins.size) throw new ProtocolError(-32004, '已有 agy 登录正在进行')
+    const child = this.runtime.terminalLogin()
+    const attemptId = randomUUID()
+    const attempt: TerminalLoginAttempt = { child, output: '' }
+    this.terminalLogins.set(attemptId, attempt)
+    const take = (chunk: Buffer | string) => {
+      attempt.output = `${attempt.output}${chunk.toString()}`.slice(-12000)
+    }
+    child.stdout?.on('data', take)
+    child.stderr?.on('data', take)
+    const url = await new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('agy 登录链接生成超时')), 15_000)
+      const poll = setInterval(() => {
+        const match = /https:\/\/accounts\.google\.com\/[^\s]+/.exec(attempt.output)
+        if (match) {
+          clearTimeout(timer)
+          clearInterval(poll)
+          resolve(match[0].replace(/[),.]+$/, ''))
+        }
+      }, 50)
+      child.once('exit', (code) => {
+        if (code !== null && code !== 0) {
+          clearTimeout(timer)
+          clearInterval(poll)
+          reject(new Error(`agy 登录进程退出（${code}）`))
+        }
+      })
+    }).catch((error) => {
+      this.terminalLogins.delete(attemptId)
+      child.kill('SIGTERM')
+      throw error
+    })
+    return {
+      attemptId,
+      url,
+      prompt: { id: 'authorizationCode', title: '授权码或回调 URL', secret: false },
+    }
+  }
+
+  async continueTerminalLogin(attemptId: string, authorizationCode: string): Promise<void> {
+    const attempt = this.terminalLogins.get(attemptId)
+    if (!attempt) throw new ProtocolError(-32602, 'agy 登录已失效，请重新开始')
+    const { child } = attempt
+    child.stdin?.write(`${authorizationCode.trim()}\n`)
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        child.kill('SIGTERM')
+        reject(new Error('agy 登录等待超时'))
+      }, 150_000)
+      child.once('exit', (code) => {
+        clearTimeout(timer)
+        if (code === 0) resolve()
+        else reject(new Error(`agy 登录失败（退出码 ${String(code)}）`))
+      })
+    }).finally(() => this.terminalLogins.delete(attemptId))
+  }
+
+  cancelTerminalLogin(attemptId: string): void {
+    const attempt = this.terminalLogins.get(attemptId)
+    if (!attempt) return
+    this.terminalLogins.delete(attemptId)
+    attempt.child.kill('SIGTERM')
+  }
+
   // agent 进程退出了：在跑的回合按失败收尾，会话都要重新接上（下一回合时，见 attach）
   private agentClosed(error: Error, agent: AgentHandle): void {
     void this.terminals.closeAll()
@@ -785,6 +864,36 @@ export class AcpServer {
       )
       .sort((a, b) => b.projection.thread.updatedAt - a.projection.thread.updatedAt)[0]
     return opened?.projection ?? this.store.getMeta('catalog', '') ?? null
+  }
+
+  /** 首次还没有真实会话时，用一个临时 ACP 会话取得模型与强度目录。 */
+  async warmCatalog(): Promise<void> {
+    if (this.latestCatalog()) return
+    const agent = await this.attachable()
+    const response = await this.ask(agent, 'session/new', {
+      cwd: process.cwd(),
+      mcpServers: [],
+    })
+    const sessionId = typeof response?.sessionId === 'string' ? response.sessionId : null
+    if (!sessionId) return
+    const live = this.fresh({
+      id: `ephemeral-catalog-${sessionId}`,
+      cwd: process.cwd(),
+      name: null,
+      preview: '',
+      createdAt: 0,
+      updatedAt: 0,
+      forkedFromId: null,
+      ephemeral: true,
+    })
+    this.catalogFrom(live, response)
+    if (live.projection.configOptions || live.projection.models || live.projection.modes)
+      this.store.setMeta('catalog', '', {
+        configOptions: live.projection.configOptions,
+        models: live.projection.models,
+        modes: live.projection.modes,
+      })
+    if (agent.caps.close) await this.ask(agent, 'session/close', { sessionId }).catch(() => null)
   }
 
   saveTurns(live: LiveThread): void {
@@ -1353,6 +1462,8 @@ export class AcpServer {
   // signalled：是被结束信号要求退出的，交给 AcpRuntime.close 定怎么关 agent
   async close(signalled = false): Promise<void> {
     this.closed = true
+    for (const attempt of this.terminalLogins.values()) attempt.child.kill('SIGTERM')
+    this.terminalLogins.clear()
     this.requests.reject(() => true, '适配器正在关闭')
     await this.shells?.close()
     for (const live of this.live.values()) {

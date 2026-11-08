@@ -297,6 +297,22 @@ target exposing its composition range through accessibility; some applications d
 The preview indicates foreground visits. Chromium/Electron clicks still need foreground fallback;
 macOS text input uses per-character background events when the focused control accepts them.
 
+macOS 拖拽仍使用受保护的前台路径；代理按住鼠标期间，真实用户按下或松开鼠标会中止当前步骤。
+单次 Command 快捷键能唯一对应到可用的应用菜单项时，直接执行该菜单动作；没有匹配项、
+重复按键或跨进程的系统面板仍使用受保护的前台路径。工具结果会说明是否短暂用了前台，
+以及恢复已确认、因用户接管而让行，或无法确认恢复；输入已派发不等于业务成功。
+后台鼠标自测若被用户活动干扰会在下一次鼠标动作重测，重测未完成时不发送输入，
+不会把鼠标移动误判成后台能力永久失效。Windows 输入后的界面稳定等待在恢复前台后进行。
+
+On macOS, drags still use protected foreground input; a physical mouse press or release interrupts
+the current drag. A single Command shortcut invokes a uniquely matching enabled menu item
+through accessibility; unmatched shortcuts, repeated keys and cross-process system panels keep
+the protected foreground path. Results report foreground use and whether restoration succeeded,
+yielded to user activity or could not be confirmed. Dispatch does not confirm business success.
+Mouse self-tests interrupted by user activity are retried before mouse input; an unfinished retry
+sends no input instead of permanently disabling background control. On Windows, the post-input
+settling delay runs after focus restoration.
+
 Screen Recording's toggle can be on while first capture still needs a separate system confirmation.
 If macOS asks for screen/window access, the user clicks Allow; retry after handling it. Litch reports
 waiting, denial and capture failure separately, and only considers capture usable after a real image.
