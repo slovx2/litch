@@ -61,9 +61,10 @@ enum ForegroundExcursion {
     }
     let restorePreviewInput = FloatingPreview.passThroughDuringInput()
     defer { restorePreviewInput() }
-    notice("foreground")
-    raised = true
+    // 目标本来就在前台时，没有借用其他应用的焦点，也不该在结束时重置目标自己的焦点。
+    raised = previous.processIdentifier != app.processIdentifier
     try Apps.activate(app, window: window)
+    if raised { notice("foreground") }
     try check()
     guard UserActivity.targetRevision(pid: app.processIdentifier) == targetRevision,
       !UserActivity.hasHeldInput, !UserActivity.isComposing else {

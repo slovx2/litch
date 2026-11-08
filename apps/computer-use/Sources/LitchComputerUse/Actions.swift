@@ -41,16 +41,20 @@ extension Engine {
     context.accessibleWindow = axWindow
     let done: String
     do {
-      try BackgroundMouse.waitForSelfTest { try context.checkBase() }
       try context.checkBase()
       done = try body(context, params)
       context.notice("completed", "semantic", nil, context.usedForeground)
     } catch {
       context.notice("failed", "semantic", nil, context.usedForeground)
+      if context.usedForeground {
+        let failure = error as? RPCError
+        throw RPCError(failure?.kind ?? .failed,
+          (failure?.message ?? String(describing: error)) + context.foregroundNote)
+      }
       throw error
     }
     Thread.sleep(forTimeInterval: 0.4)
-    var text = done + (context.usedForeground ? "\nThe app was briefly brought to the foreground; restoration was attempted without overriding user activity." : "")
+    var text = done + context.foregroundNote
     do {
       let read = try AXReader().read(pid: app.processIdentifier)
       let current = try? NativeWindow.resolve(app.processIdentifier)
@@ -252,6 +256,17 @@ extension Engine {
         Thread.sleep(forTimeInterval: 0.03)
       }
     }
+    if times == 1, try KeyboardTarget.resolve(appPID: context.pid) == context.pid,
+      let menu = try MenuShortcut.find(pid: context.pid, combo: combo, check: context.checkBase) {
+      try context.checkBase()
+      let result = AXUIElementPerformAction(menu, kAXPressAction as CFString)
+      // 已投递的 AX 动作失败也不重发键盘事件：错误不证明没有业务副作用。
+      guard result == .success else {
+        throw RPCError(.failed, "The shortcut menu action returned AX error \(result.rawValue); it may have executed. Call get_app_state before continuing.")
+      }
+      context.notice("dispatched", "semantic", nil, false)
+      return "Invoked the menu action for \(keyText)."
+    }
     // 没有窗口接收按键时，让应用菜单处理快捷键；仍走输入冲突检查与焦点恢复。
     let remoteFocus = try KeyboardTarget.resolve(appPID: context.pid) != context.pid
     if InputPolicy.keyboardNeedsForeground(hasWindow: context.window != nil, flags: combo.flags, remoteFocus: remoteFocus) {
@@ -322,7 +337,9 @@ extension Engine {
       let to = try target(context, params, prefix: "to_", required: true)
     else { return "" }
     try context.mouse(kind: "drag", point: from.point) { _ in
-      try Input.drag(from: from.point, to: to.point, check: context.check)
+      try context.withPointerInput {
+        try Input.drag(from: from.point, to: to.point, check: context.check)
+      }
     }
     return "Dragged."
   }

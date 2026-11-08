@@ -343,7 +343,11 @@ impl Engine {
             }
             _ => input::enter_text(&text, &class, None),
         };
-        self.done_with_notes(note?)
+        let note = note?;
+        foreground::check_completion()?;
+        // 界面稳定等待不需要占前台；先恢复用户窗口，再等状态可读。
+        drop(_input);
+        self.done_with_notes(note)
     }
 
     fn press_key(&mut self, p: &Value) -> RpcResult<Value> {
@@ -353,6 +357,8 @@ impl Engine {
         let repeat = p.get("repeat").and_then(Value::as_u64).unwrap_or(1) as u32;
         let _input = foreground::Excursion::begin(hwnd, &req_str(p, "session")?, &app.app_id)?;
         input::press_key(&combo, repeat)?;
+        foreground::check_completion()?;
+        drop(_input);
         self.done()
     }
 
@@ -403,6 +409,8 @@ impl Engine {
         let _input = foreground::Excursion::begin(hwnd, &req_str(p, "session")?, &app.app_id)?;
         foreground::hit_ok(hwnd, from.0, from.1)?;
         input::drag(from, to)?;
+        foreground::check_completion()?;
+        drop(_input);
         self.done()
     }
 
