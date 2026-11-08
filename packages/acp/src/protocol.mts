@@ -231,6 +231,7 @@ export async function dispatch(s: AcpServer, peer: RpcPeer, method: string, p: a
       return { data: [mode('default'), ...(plan ? [mode('plan')] : [])] }
     }
     case 'model/list':
+      if (!s.latestCatalog()) await s.warmCatalog()
       return { data: models(s), nextCursor: null }
     case 'config/read': {
       const catalog: Catalog | null = s.latestCatalog()

@@ -1451,6 +1451,14 @@ export interface Commands {
   }
   'acp.auth.authenticate': {
     params: { deviceId: string; harness: string; methodId: string }
+    result: import('../../../protocol/src/acp-controls.mjs').AcpControlsRequests['litch/acp/auth/authenticate']['result']
+  }
+  'acp.auth.continue': {
+    params: { deviceId: string; harness: string; attemptId: string; authorizationCode: string }
+    result: Record<string, never>
+  }
+  'acp.auth.cancel': {
+    params: { deviceId: string; harness: string; attemptId: string }
     result: Record<string, never>
   }
   'acp.auth.logout': {

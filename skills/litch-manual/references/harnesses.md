@@ -199,7 +199,13 @@ OpenCode 启动或重启时重新连接当前 serve 进程，不沿用旧进程�
 比如 Gemini、Qwen 或自定义命令。它的内部标识仍为 `acp`，显示名调整不改变已有会话或协议字段。
 
 Antigravity 的订阅入口运行用户安装的官方 `agy acp`。在详情设置的“账号”页查看登录状态，点击“登录 Google 账号”或“登录 Gemini Enterprise”，由会话所在设备的 agy 发起登录；可在同页退出登录。
-未打开浏览器、远程设备无法显示浏览器或登录失败时，在该设备运行 `agy acp --login`，完成后点击“刷新状态”。
+设备无法打开浏览器时，账号页会提供登录链接；在桌面或手机复制链接到浏览器完成授权，再把授权码填回账号页并提交，也可取消本次登录。仍无法完成时，在该设备运行 `agy acp --login`，完成后点击“刷新状态”。
+首次使用且尚未创建会话时，新建页也会查询官方 ACP 提供的模型和思考强度；具体选项以该入口返回的目录为准。
+
+If the device cannot open a browser, Accounts shows a sign-in link. Copy it from desktop or mobile,
+authorize in a browser, then paste the authorization code back into Accounts and submit it, or cancel
+the attempt. Model and reasoning-effort options are also loaded before the first conversation;
+available choices come from the official ACP agent.
 订阅额度显示在桌面输入区的用量圆环弹层、手机的“用量与额度”页：按模型组列出 5 小时／每周
 已用百分比和重置时间（剩余量为 100% 减去已用量）。数据来自官方 `agy -p /usage --output-format json`，
 不会启动模型回合或消耗额度。查看时才查询，30 秒内复用缓存；已查到额度后在回合结束时按相同间隔刷新。
@@ -277,7 +283,7 @@ SDK 会话与 App/CLI 会话不可互相恢复。鉴权失效时更新 key；下
 不要关闭校验或换未经核验的二进制。
 
 Antigravity 默认使用订阅（官方 ACP）。只装 `agy`、未配置 API key 的用户无需下载 SDK runtime。
-登录按官方 `agy acp --login` 完成。订阅通过官方 ACP 使用 CLI 登录；第三方客户端在消费套餐下的
+登录可在账号页通过链接和授权码完成，也可手动运行官方 `agy acp --login`。订阅通过官方 ACP 使用 CLI 登录；第三方客户端在消费套餐下的
 适用范围仍需用户确认，存在账号限制风险。Litch 不读取或转存登录令牌。风险说明显示在“鉴权方式”
 设置项，不另弹确认。API key 模式为低优先级实验选项，只有用户主动选择后才使用 localharness。
 

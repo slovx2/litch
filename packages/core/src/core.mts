@@ -1590,6 +1590,18 @@ export function createCore(options: CoreOptions): Core {
           const p = params as Commands['acp.auth.authenticate']['params']
           return deviceOf(p.deviceId).acpAuth.authenticate(String(p.harness), String(p.methodId))
         }
+        case 'acp.auth.continue': {
+          const p = params as Commands['acp.auth.continue']['params']
+          return deviceOf(p.deviceId).acpAuth.continue(
+            String(p.harness),
+            String(p.attemptId),
+            String(p.authorizationCode),
+          )
+        }
+        case 'acp.auth.cancel': {
+          const p = params as Commands['acp.auth.cancel']['params']
+          return deviceOf(p.deviceId).acpAuth.cancel(String(p.harness), String(p.attemptId))
+        }
         case 'acp.auth.logout': {
           const p = params as Commands['acp.auth.logout']['params']
           return deviceOf(p.deviceId).acpAuth.logout(String(p.harness))

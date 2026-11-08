@@ -37,8 +37,22 @@ export async function control(s: AcpServer, method: string, params: any): Promis
         -32602,
         '只能 authenticate agent 已声明的 agent 类型鉴权方式；terminal 类型需用户在终端完成',
       )
+    // agy 的 authenticate 会尝试在设备上打开浏览器；无浏览器环境改用官方终端登录。
+    if (s.agentId === 'agy' && id === 'oauth-personal')
+      return { login: await s.startTerminalLogin(id) }
     // 不传 key、token 或任意用户附加字段；登录交给 agent 自己完成。
     await s.ask(agent, 'authenticate', { methodId: id })
+    return {}
+  }
+  if (method === 'litch/acp/auth/continue') {
+    if (s.agentId !== 'agy') throw new ProtocolError(-32601, '只有 agy 支持终端登录回填')
+    const attemptId = requiredString(params.attemptId, 'attemptId')
+    const code = requiredString(params.authorizationCode, 'authorizationCode')
+    await s.continueTerminalLogin(attemptId, code)
+    return {}
+  }
+  if (method === 'litch/acp/auth/cancel') {
+    if (s.agentId === 'agy') s.cancelTerminalLogin(requiredString(params.attemptId, 'attemptId'))
     return {}
   }
   if (method === 'litch/acp/auth/logout') {
