@@ -6,6 +6,7 @@ import { registerHooks } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { probeAppPath } from '../apps/computer-use/probes/integration/shared-probe.mjs'
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -22,10 +23,7 @@ const { MacLauncher } = await import(
   '../third_party/litch-automation/packages/computer-use/src/launcher-mac.mts'
 )
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const appPath = join(
-  root,
-  'apps/computer-use/.artifacts/integration/Litch Background Input Probe.app',
-)
+const appPath = probeAppPath()
 const work = mkdtempSync('/tmp/litch-cu-friction-')
 const out = join(root, '.local/automation-friction-cu')
 mkdirSync(out, { recursive: true })
