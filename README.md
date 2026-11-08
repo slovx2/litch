@@ -65,11 +65,11 @@ Android 和 iOS 内置 Tailscale，不占用系统 VPN，可与已有 VPN 共存
 
 ## 通用模块
 
-Computer Use、内置浏览器和 Chrome 控制拆成了独立的包，别的桌面应用也能嵌入。三者共用 [`packages/automation-contracts`](packages/automation-contracts) 里的工具定义和宿主接口（调用与取消、审批、状态存储等）；路径、身份、审批界面都由宿主传入，导入时不读个人目录，也不登记任何东西。
+Computer Use、内置浏览器和 Chrome 控制拆成了独立的包，别的桌面应用也能嵌入。三者共用 [`third_party/litch-automation/packages/automation-contracts`](third_party/litch-automation/packages/automation-contracts) 里的工具定义和宿主接口（调用与取消、审批、状态存储等）；路径、身份、审批界面都由宿主传入，导入时不读个人目录，也不登记任何东西。
 
-- **[Computer Use](packages/computer-use)。** 操作 macOS、Windows 普通应用的执行器，负责原生助手的启动、看护和通信。只需 Node 24，不依赖 Electron；原生助手由宿主自己构建、签名，随自己的应用分发。
-- **[内置浏览器](packages/browser)。** 基于 CDP 的浏览器工具执行器，带站点许可、代填登录和 Cookie、密码导入。Electron 宿主用 `/electron` 子入口直接接入；默认入口不加载 Electron，非 Electron 宿主提供自己的 CDP 页面宿主，或直接实现语义接口 `BrowserDriver`。
-- **Chrome 控制。** [扩展库](packages/chrome-extension)用来组装宿主自己的 MV3 扩展（自己的扩展 ID 和 host 名），提供标签租约和受限 CDP 执行器；[本机桥](packages/chrome-bridge)在 Node 进程里登记 Native Messaging、与扩展通信，并提供 AI 工具执行器，不依赖 Electron。
+- **[Computer Use](third_party/litch-automation/packages/computer-use)。** 操作 macOS、Windows 普通应用的执行器，负责原生助手的启动、看护和通信。只需 Node 24，不依赖 Electron；原生助手由宿主自己构建、签名，随自己的应用分发。
+- **[内置浏览器](third_party/litch-automation/packages/browser)。** 基于 CDP 的浏览器工具执行器，带站点许可、代填登录和 Cookie、密码导入。Electron 宿主用 `/electron` 子入口直接接入；默认入口不加载 Electron，非 Electron 宿主提供自己的 CDP 页面宿主，或直接实现语义接口 `BrowserDriver`。
+- **Chrome 控制。** [扩展库](third_party/litch-automation/packages/chrome-extension)用来组装宿主自己的 MV3 扩展（自己的扩展 ID 和 host 名），提供标签租约和受限 CDP 执行器；[本机桥](third_party/litch-automation/packages/chrome-bridge)在 Node 进程里登记 Native Messaging、与扩展通信，并提供 AI 工具执行器，不依赖 Electron。
 
 通用模块的源码已集成在 `third_party/litch-automation`，对应独立代码库 `slovx2/litch-automation`（MIT，尚未公开发布）：提供五个包的源码，以及 macOS Swift、Windows Rust 原生助手的源码和构建脚本。独立仓库不签名、公证、打包或发布预编译助手；Litch、WakeQora 等使用方从源码自行构建、签名并随自己的应用分发。npm 正式包名为 `@litch/*`，各包独立 semver，首版为 `0.x`；源码和包发布将与 Litch 版本解绑。构建、接入示例和限制见各包的 README。
 
