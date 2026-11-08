@@ -1,4 +1,4 @@
-// 控制台：统一的 issue 列表（60 号设计 5.6、6.1）。默认只看普通 issue；顶上一行是“新建 issue”和类型、状态、创建者、跟进、排序过滤。
+// 控制台按分类标签列 issue，默认决策；普通 issue 另有新建、创建者、未读和跟进过滤。
 // 特殊 issue 展开后先是原来的快速处理区；决策草稿的提交条只有一份，固定在列表底部。
 import { managerBoardPages } from '@litch/core'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -103,7 +103,8 @@ export function IssueConsole({
   const board = view.board
   const saved = remembered(manager.deviceId, manager.id)
   const [filters, setFiltersState] = useState(saved.filters)
-  const filter = filters[kind] ?? issueKindFilter(kind)
+  // 初次打开分类也保持条件引用，避免分页回包重渲染后重发首屏查询、覆盖已追加的页。
+  const filter = useMemo(() => filters[kind] ?? issueKindFilter(kind), [filters, kind])
   const [open, setOpenState] = useState<ManagerIssueId | null>(saved.open)
   const [linked, setLinked] = useState<ManagerIssueId | null>(null)
   const [creating, setCreating] = useState(false)

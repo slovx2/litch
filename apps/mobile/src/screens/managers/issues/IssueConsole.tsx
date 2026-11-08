@@ -1,4 +1,4 @@
-// 手机经理控制台的 issue 模式（60 号设计 6.2）：类别胶囊一行（普通 issue 默认）、行尾过滤和新建两个图标；
+// 手机经理控制台的 issue 模式：类别胶囊一行（默认决策）、行尾过滤和普通 issue 的新建图标；
 // 列表是一张张卡（编号加标题、一行小字、两行预览），点开拉起 IssueSheet 半屏抽屉；过滤和新建也是底部抽屉。
 // 屏幕只管摆放：useIssueConsole 给出 header（胶囊行）、body（列表）、overlays（抽屉）。
 import type {
@@ -7,7 +7,7 @@ import type {
   ManagerView,
   SuggestionView,
 } from '@litch/core'
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import {
   DEFAULT_MANAGER_ISSUE_FILTER,
@@ -96,7 +96,8 @@ export function useIssueConsole({
     () => memory.get(key) ?? { kind: 'decision' as ManagerIssueKind, filters: {} },
   )
   const kind = saved.kind
-  const filter = saved.filters[kind] ?? kindFilter(kind)
+  // 保持默认条件引用，分页结果不能触发 list effect 再读首屏。
+  const filter = useMemo(() => saved.filters[kind] ?? kindFilter(kind), [saved.filters, kind])
   const save = useCallback(
     (next: typeof saved) => {
       memory.set(key, next)

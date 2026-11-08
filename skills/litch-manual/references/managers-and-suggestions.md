@@ -26,7 +26,8 @@ the new issue tools; devices must advertise `litchManagerIssues` to support thes
 
 支持 issue 的设备上，控制台仍按页签分类：决策、建议、请你做、报告在前，末尾多一个“普通 issue”，默认打开决策。
 每个页签上方一行是状态切换（普通 issue 另有“未完成”），排序在右端；普通 issue 页签下另有“新建 issue”
-（标题必填、正文可空）和“我建的 / 经理建的 / 未读 / 跟进已暂停”几个开关。每页 30 条，以“加载更多”继续。
+（标题必填、正文可空）和“我建的 / 经理建的 / 未读 / 跟进已暂停”几个开关。每页 30 条，以“加载更多”继续追加；
+分页结果更新时保留已加载的条目。
 展开普通 issue 依次是原帖、状态分段与跟进开关、关联（I-n 写作“经理事项”，可点开）、评论和输入框；
 经理的新回复标未读，打开即已读。决策、请你做、建议、报告展开后先是原来的快速处理区，下面的“展开讨论”
 在底部抽屉里打开同一套讨论界面；抽屉和卡片里都有“打开完整讨论”，进入整页。概览的“普通 issue”一行给出
@@ -38,7 +39,8 @@ On devices that support issues, Console keeps its category tabs: Decisions, Sugg
 Reports first, then **Issues**; Decisions opens by default. Each tab has a status row (Issues adds
 **Not done**) with the order on the right. The Issues tab adds **New issue** (title required, body
 optional) and toggles for created by me, created by the manager, unread and paused follow-up. Lists
-load 30 at a time with **Load more**. An expanded issue shows the post, status and follow-up controls,
+load 30 at a time with **Load more**, keeping earlier entries when the next page arrives.
+An expanded issue shows the post, status and follow-up controls,
 links (I-n opens the manager item), comments and a composer; new manager replies are unread until you
 open the issue. Decisions, requests, suggestions and reports keep their quick actions on top;
 **Open discussion** shows the same discussion view in the bottom drawer, and **Open full discussion**
