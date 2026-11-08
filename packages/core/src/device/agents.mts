@@ -29,6 +29,8 @@ export interface AgentThreads {
   stamp(threadId: string): number
   /** 记着最近一个回合了没有 */
   knowsTurn(threadId: string): boolean
+  knowsPrompt(threadId: string): boolean
+  prompt(threadId: string, prompt: string | null): void
   /** 记着的回合在跑，会话状态却不在跑：回合结束的通知没收到，记着的不可信 */
   stale(threadId: string): boolean
   /** 记着的回合在跑的子线程（重连之后要重问：断开那阵结束了的、引擎进程换了停在半路的都收不到通知） */
@@ -49,6 +51,7 @@ export function createAgentThreads(
   const threads = new Map<string, Thread>()
   const turns = new Map<string, AgentTurnView>()
   const stamps = new Map<string, number>()
+  const prompts = new Map<string, string | null>()
   let seq = 0
 
   const isStale = (threadId: string): boolean =>
@@ -109,6 +112,12 @@ export function createAgentThreads(
 
     stamp: (threadId) => stamps.get(threadId) ?? 0,
     knowsTurn: (threadId) => turns.has(threadId),
+    knowsPrompt: (threadId) => typeof prompts.get(threadId) === 'string',
+    prompt(threadId, prompt) {
+      if (!threads.has(threadId)) return
+      prompts.set(threadId, prompt)
+      touch(threadId)
+    },
     stale: isStale,
     running: () => [...turns].filter(([, view]) => view.state === 'running').map(([id]) => id),
 
@@ -117,6 +126,7 @@ export function createAgentThreads(
       threads.delete(threadId)
       turns.delete(threadId)
       stamps.delete(threadId)
+      prompts.delete(threadId)
       const parent = thread ? parentOf(thread) : null
       if (parent) changed(parent)
     },
@@ -124,7 +134,15 @@ export function createAgentThreads(
     list(parentId) {
       return [...threads.values()]
         .filter((thread) => parentOf(thread) === parentId)
-        .map((thread) => projectAgentThread(thread, turns.get(thread.id) ?? null))
+        .map((thread) => {
+          const view = projectAgentThread(thread, turns.get(thread.id) ?? null)
+          const prompt = prompts.get(thread.id)
+          return {
+            ...view,
+            prompt: prompt ?? view.prompt,
+            promptIsPreview: prompts.has(thread.id) && prompt === null,
+          }
+        })
         .sort((a, b) => b.updatedAt - a.updatedAt)
     },
   }

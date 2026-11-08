@@ -62,6 +62,10 @@ sidebar location are in [Projects and sessions](sessions-and-projects.md).
 - **Info panel** (right of the conversation): small cards that appear only when there is something to
   show, such as the session's latest to-do list and its worktree. It stays out when the window is too
   narrow; when it is hidden or out, the to-do list is shown in the conversation instead.
+- 子代理页的“分派的任务”从首个回合读取原始正文，展开后可滚动查看全文。原文无法读取时保留任务摘要，并提示可能已截断；后续追问不会替换初始任务。
+- The subagent page loads the assigned task from its first turn. Expand and scroll to read the full text. If the original is unavailable, a notice identifies the potentially truncated preview. Follow-up messages do not replace the initial task.
+- 桌面上下文用量已上报、窗口大小未知时，输入框旁显示已用 token 数，提示窗口未知；知道窗口后才显示百分比。
+- When context usage is reported without a window size, the desktop composer shows the token count and identifies the unknown window. A percentage appears only when the window is known.
 - **Side panel** (right) with tabs **Files**, **Diff**, **Browser**, **Background tasks** (background commands and subagents), and **Side chat** (a temporary fork for side questions, Claude Code / Pi / Codex sessions only). It follows the
   current session's device and project. Each session remembers whether the panel is open and which tab it shows.
 - **Terminal panel** (below the conversation). Terminals belong to a project and keep running on the

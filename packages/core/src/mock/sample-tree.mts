@@ -183,7 +183,7 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
         role: 'explorer',
         description: '走一遍仓库的目录结构',
         prompt:
-          '把仓库的目录结构走一遍，说说每个包是干什么的。只读，不要改文件；每个包一两句话，给出入口文件的路径。',
+          '把仓库的目录结构走一遍，说说每个包是干什么的。只读，不要改文件；每个包一两句话，给出入口文件的路径。\n\n1. 从根目录的包清单开始，区分客户端、协议、设备和引擎。\n2. 说明客户端入口如何建立设备连接，并列出对应源文件。\n3. 追踪一条消息从输入框到设备的路径，注明模块边界。\n4. 找到消息返回客户端后如何进入状态存储和界面。\n5. 对照桌面和手机的入口，区分共享逻辑和平台逻辑。\n6. 检查侧栏与对话区订阅的数据是否来自相同核心。\n7. 列出测试目录，说明哪些是单测，哪些需要真实窗口。\n8. 留意后台任务与子代理的处理位置，只记录事实。\n9. 不运行模型，不读取用户配置，不修改任何文件。\n10. 最后给一份目录概览和可直接定位的代码引用。\n\n任务结束：提交结构概览与引用位置。',
         reply: '走完了：packages 下面是协议、核心、界面和各个引擎的入口，apps 下面是桌面和移动端。',
         canInput: true,
         outcome: 'completed',
@@ -333,7 +333,7 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
         role: 'explorer',
         description: 'Walk the repository layout',
         prompt:
-          'Walk the repository layout and say what each package does. Read only, change nothing; a sentence or two per package with its entry file.',
+          'Walk the repository layout and say what each package does. Read only, change nothing; a sentence or two per package with its entry file.\n\n1. Start with the root package list and distinguish client, protocol, device and engine code.\n2. Explain how the client entry connects to a device and name the source files.\n3. Trace a message from the composer to the device, noting module boundaries.\n4. Find where responses enter client state and the interface.\n5. Compare desktop and mobile entries, separating shared and platform logic.\n6. Check whether the sidebar and transcript subscribe to the same core.\n7. List test folders and distinguish unit tests from real-window checks.\n8. Locate background-task and subagent handling; record only verified facts.\n9. Do not call a model, read user configuration or change files.\n10. Finish with a directory overview and precise code references.\n\nEnd of task: deliver the overview and source locations.',
         reply:
           'Done: packages holds the protocol, the core, the UI and each engine entry; apps holds desktop and mobile.',
         canInput: true,

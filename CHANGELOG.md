@@ -5,6 +5,11 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 子代理详情从首个回合读取完整任务，修复展开后仍显示截断摘要及标题重叠；原文不可用时明确提示，桌面与手机支持滚动查看。
+- 桌面上下文用量在窗口大小未知时显示已报告的 token 数，并注明窗口未知，不再把已有用量显示为空环。
+
 ## 0.38.0（2026-11-08）
 
 ### 新增功能

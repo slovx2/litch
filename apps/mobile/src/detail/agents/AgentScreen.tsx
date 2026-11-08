@@ -5,7 +5,7 @@
 import { type AgentThreadView, agentRunState } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { acquireStore, releaseStore } from '../../core/store-cache'
 import { experiment } from '../../experiment'
@@ -63,8 +63,9 @@ export function AgentScreen({ route }: Props) {
   ].filter(Boolean)
   return (
     <Screen title={shownTitle} testID="agent">
-      <View
-        style={[styles.head, { borderBottomColor: c.line1, backgroundColor: c.panel }]}
+      <ScrollView
+        style={{ maxHeight: '50%', flexGrow: 0, flexShrink: 0, backgroundColor: c.panel }}
+        contentContainerStyle={[styles.head, { borderBottomColor: c.line1 }]}
         testID="agent:head"
       >
         <View style={styles.line}>
@@ -103,6 +104,9 @@ export function AgentScreen({ route }: Props) {
             >
               {prompt}
             </Text>
+            {agent?.promptIsPreview ? (
+              <Text style={[styles.label, { color: c.ink3 }]}>{t('agents.task.preview')}</Text>
+            ) : null}
             {long ? (
               <Pressable onPress={() => setOpen(!open)} hitSlop={8} accessibilityRole="button">
                 <Text style={[styles.more, { color: c.accent }]}>
@@ -126,7 +130,7 @@ export function AgentScreen({ route }: Props) {
             </Text>
           </View>
         ) : null}
-      </View>
+      </ScrollView>
       <View style={styles.list}>
         <Transcript store={store} bottomOffset={insets.bottom} markers={experiment.markers} />
       </View>

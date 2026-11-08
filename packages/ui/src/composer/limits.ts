@@ -1,11 +1,19 @@
 // 用量怎么写成字（AccountLimits.tsx、ContextMeter.tsx 和手机端用）：词元数写短、额度的窗口叫什么、多久之后重置。
 // 不碰界面，测试直接引用
-import type { AccountLimitWindow } from '@litch/core'
+import type { AccountLimitWindow, ContextUsage } from '@litch/core'
 import type { Translator } from '../i18n/index.ts'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
+
+/** 有占用但窗口未知时仍显示实报词元数，不把它误说成“尚未报告用量”。 */
+export function contextMeterText(usage: ContextUsage | null): string | null {
+  if (!usage) return null
+  return usage.windowTokens && usage.windowTokens > 0
+    ? `${Math.min(100, Math.round((usage.usedTokens / usage.windowTokens) * 100))}%`
+    : shortTokens(usage.usedTokens)
+}
 
 /** 窗口叫什么：5 小时、每周；对面没说多长就只写“额度” */
 export function windowLabel(window: AccountLimitWindow, t: Translator): string {

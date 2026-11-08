@@ -193,6 +193,77 @@ function agentsWorld() {
   return deviceWorld([codex])
 }
 
+test('任务：从首个回合取完整正文，不取 200 字摘要或最后一条追问；成功后不重复读取', async () => {
+  const full = `${'任务正文包含多段说明。\n'.repeat(70)}全文结束标记`
+  const child = thread({
+    id: 'child',
+    parentThreadId: 'p',
+    preview: full.slice(0, 200),
+    turns: [turn('first', [userText('u1', full)]), turn('followup', [userText('u2', '后续追问')])],
+  })
+  const world = deviceWorld([harness('claude-code', { threads: [thread({ id: 'p' }), child] })])
+  world.core.start()
+  await settle()
+  const read = () =>
+    world.command('session.agents', { sessionId: 'p' }) as Promise<{ agents: AgentThreadView[] }>
+  try {
+    const first = (await read()).agents[0]
+    assert.equal(first?.prompt, full)
+    assert.equal(first?.promptIsPreview, false)
+    assert.equal((await read()).agents[0]?.prompt, full)
+    assert.equal(world.sent('thread/turns/list').filter((p) => p.itemsView === 'full').length, 1)
+  } finally {
+    world.core.stop()
+  }
+})
+
+test('任务：首条原文不可用时保留摘要并标明，后来可读时恢复全文', async () => {
+  const child = thread({ id: 'child', parentThreadId: 'p', preview: '摘要' })
+  const world = deviceWorld([harness('claude-code', { threads: [thread({ id: 'p' }), child] })])
+  world.core.start()
+  await settle()
+  const read = () =>
+    world.command('session.agents', { sessionId: 'p' }) as Promise<{ agents: AgentThreadView[] }>
+  try {
+    const first = (await read()).agents[0]
+    assert.equal(first?.prompt, '摘要')
+    assert.equal(first?.promptIsPreview, true)
+    child.turns = [turn('first', [userText('u1', '完整任务')])]
+    assert.equal((await read()).agents[0]?.prompt, '完整任务')
+  } finally {
+    world.core.stop()
+  }
+})
+
+test('任务：父页已经列过空列表，后来派出的子代理在打开详情时仍补取全文', async () => {
+  const source = harness('claude-code', { threads: [thread({ id: 'p' })] })
+  const world = deviceWorld([source])
+  world.core.start()
+  await settle()
+  const parent = watchSession(world.core, 'p')
+  await settle()
+  await world.command('session.agents', { sessionId: 'p' })
+  const full = '首条任务内容。'.repeat(80)
+  const child = thread({
+    id: 'late',
+    parentThreadId: 'p',
+    preview: full.slice(0, 200),
+    turns: [turn('first', [userText('u', full)])],
+  })
+  source.threads.push(child)
+  world.peer.last().notify('thread/started', { thread: { ...child, turns: [] } })
+  const detail = watchSession(world.core, 'late')
+  await settle()
+  await settle()
+  try {
+    assert.equal(parent.seen.view?.agents.find((a) => a.id === 'late')?.prompt, full)
+  } finally {
+    detail.close()
+    parent.close()
+    world.core.stop()
+  }
+})
+
 test('设备：列子代理时问每个子线程最近的一个回合；子线程的回合开始、结束交给开着的父会话', async () => {
   const world = agentsWorld()
   world.core.start()
@@ -211,7 +282,10 @@ test('设备：列子代理时问每个子线程最近的一个回合；子线�
   )
   assert.equal(agents[0]?.turn?.error, 'PreToolUse:Agent hook error')
   assert.deepEqual(
-    world.sent('thread/turns/list').map((params) => [params.threadId, params.limit]),
+    world
+      .sent('thread/turns/list')
+      .filter((params) => params.itemsView === 'notLoaded')
+      .map((params) => [params.threadId, params.limit]),
     [
       ['ag1', 1],
       ['ag2', 1],
@@ -320,12 +394,14 @@ test('设备：状态变化也没收到（断开过），再列子代理时对�
   world.core.start()
   await settle()
   await world.command('session.agents', { sessionId: 'p' })
-  const asked = world.sent('thread/turns/list').length
+  const statusRequests = () =>
+    world.sent('thread/turns/list').filter((p) => p.itemsView === 'notLoaded').length
+  const asked = statusRequests()
   finishOnDevice(child)
   const { agents } = (await world.command('session.agents', { sessionId: 'p' })) as {
     agents: AgentThreadView[]
   }
-  assert.equal(world.sent('thread/turns/list').length, asked + 1, '同一个子线程只问一次')
+  assert.equal(statusRequests(), asked + 1, '同一个子线程的状态只问一次')
   assert.equal(agents[0]?.turn?.state, 'completed')
   assert.equal(agents[0]?.turn?.durationMs, 832_221)
 })

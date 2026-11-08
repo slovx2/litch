@@ -350,8 +350,10 @@ export interface AgentThreadView {
    * 第一句，截到 40 字上下。都没有是空的
    */
   description: string
-  /** 派给它的任务（会话对象上的第一句话；对面截过的就是截过的）。不知道是空的 */
+  /** 派给它的完整任务；原文取不到时退回会话摘要。 */
   prompt: string
+  /** 只有摘要，无法确认任务全文。 */
+  promptIsPreview?: boolean
   status: SessionStatus
   /** 它最近的一个回合。还没有回合、对面没给是 null */
   turn: AgentTurnView | null

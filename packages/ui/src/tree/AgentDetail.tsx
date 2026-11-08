@@ -158,6 +158,9 @@ export const AgentDetail = memo(function AgentDetail({
               {t('agents.task')}
             </div>
             <div className="agents-task-text">{prompt}</div>
+            {agent?.promptIsPreview ? (
+              <div className="agents-task-note">{t('agents.task.preview')}</div>
+            ) : null}
             {long ? (
               <button type="button" className="agents-task-more" onClick={() => setOpen(!open)}>
                 {t(open ? 'agents.task.less' : 'agents.task.more')}

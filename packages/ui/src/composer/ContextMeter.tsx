@@ -4,7 +4,7 @@ import { whyNot } from '../app/errors.ts'
 import { usePopover } from '../app/popover.ts'
 import { showToast } from '../app/toasts.tsx'
 import { AccountLimits, MeterRow, useAccountLimits } from './AccountLimits.tsx'
-import { shortTokens } from './limits.ts'
+import { contextMeterText, shortTokens } from './limits.ts'
 
 // 写短词元数的在 limits.ts（手机端也用），这里转一手，别处照旧从这里引
 export { shortTokens }
@@ -32,7 +32,7 @@ function OpenLimits({ deviceId, harness }: { deviceId: string; harness: string }
   return <AccountLimits rows={useAccountLimits(deviceId, harness)} />
 }
 
-function Ring({ percent }: { percent: number | null }) {
+function Ring({ percent, text }: { percent: number | null; text: string | null }) {
   return (
     <>
       <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -48,7 +48,7 @@ function Ring({ percent }: { percent: number | null }) {
           />
         )}
       </svg>
-      {percent === null ? null : <span className="mono">{percent}%</span>}
+      {text === null ? null : <span className="mono">{text}</span>}
     </>
   )
 }
@@ -74,11 +74,13 @@ export function ContextMeter({
     ? Math.min(100, Math.round((usage.usedTokens / usage.windowTokens) * 100))
     : null
   const quota = limits && QUOTA_HARNESSES.has(limits.harness)
-  if (percent === null && !compact && !quota) return null
+  if (usage === null && !compact && !quota) return null
   const level = percent === null ? '' : percent >= 90 ? ' full' : percent >= 70 ? ' high' : ''
   const label =
     percent === null || !usage?.windowTokens
-      ? t('context.unknown')
+      ? usage
+        ? t('context.windowUnknown', { used: shortTokens(usage.usedTokens) })
+        : t('context.unknown')
       : t('composer.context', {
           percent,
           used: shortTokens(usage.usedTokens),
@@ -87,7 +89,7 @@ export function ContextMeter({
   if (!compact && !quota) {
     return (
       <span className={`ctx${level}`} role="img" title={label} aria-label={label}>
-        <Ring percent={percent} />
+        <Ring percent={percent} text={contextMeterText(usage)} />
       </span>
     )
   }
@@ -123,7 +125,7 @@ export function ContextMeter({
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        <Ring percent={percent} />
+        <Ring percent={percent} text={contextMeterText(usage)} />
       </button>
       {open ? (
         <div
@@ -139,7 +141,9 @@ export function ContextMeter({
             detail={
               usage?.windowTokens
                 ? `${shortTokens(usage.usedTokens)} / ${shortTokens(usage.windowTokens)}`
-                : null
+                : usage
+                  ? `${shortTokens(usage.usedTokens)} / ?`
+                  : null
             }
           />
           {limits ? <OpenLimits deviceId={limits.deviceId} harness={limits.harness} /> : null}

@@ -3,13 +3,27 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-const { resetsIn, windowLabel } = await import('../src/composer/limits.ts')
+const { contextMeterText, resetsIn, windowLabel } = await import('../src/composer/limits.ts')
 const { translator } = await import('../src/i18n/index.ts')
 
 const zh = translator('zh-CN')
 const en = translator('en')
 const window = (windowMins) => ({ usedPercent: 10, windowMins, resetsAt: null })
 const MINUTE = 60_000
+
+test('上下文窗口未知时保留实报用量；有窗口才计算百分比，没有用量不虚构数值', () => {
+  assert.equal(contextMeterText(null), null)
+  assert.equal(contextMeterText({ usedTokens: 42_000, windowTokens: null }), '42k')
+  assert.equal(contextMeterText({ usedTokens: 0, windowTokens: null }), '0')
+  assert.equal(contextMeterText({ usedTokens: 42_000, windowTokens: 200_000 }), '21%')
+  assert.equal(contextMeterText({ usedTokens: 42_000, windowTokens: 1_000_000 }), '4%')
+  assert.equal(contextMeterText({ usedTokens: 300_000, windowTokens: 200_000 }), '100%')
+  assert.equal(zh('context.windowUnknown', { used: '42k' }), '已用 42k token，上下文窗口未知')
+  assert.equal(
+    en('context.windowUnknown', { used: '42k' }),
+    '42k tokens used; context window unknown',
+  )
+})
 
 test('LIMITS-UI-001 窗口按长短起名：5 小时额度、每周额度、整天的写天数，说不出的只写“额度”', () => {
   assert.equal(windowLabel(window(300), zh), '5 小时额度')

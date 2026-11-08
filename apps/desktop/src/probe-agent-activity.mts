@@ -68,8 +68,66 @@ async function probe() {
       document.querySelector(
         `.side .bg-row[data-entry="agent:${ids[0]}"][aria-selected="true"]`,
       ) !== null
+    // 展开长任务后不再裁剪；标题、按钮不与正文重叠，顶部自己滚动。覆盖三皮肤、明暗和窄面板。
+    const taskLayouts: boolean[] = []
+    const taskMeasurements: unknown[] = []
+    const view = document.querySelector<HTMLElement>('.side .agents-view')
+    const look = (
+      window as unknown as { __litchLook: { set(p: { skin?: string; theme?: string }): void } }
+    ).__litchLook
+    const was = {
+      skin: document.documentElement.dataset.skin,
+      theme: document.documentElement.dataset.theme,
+    }
+    document
+      .querySelector<HTMLElement>('.side .agents-task[data-open="false"] .agents-task-more')
+      ?.click()
+    await sleep(50)
+    if (view) {
+      for (const skin of ['standard', 'retro', 'human']) {
+        for (const theme of ['light', 'dark']) {
+          look.set({ skin, theme })
+          for (const width of [280, 560]) {
+            view.style.width = `${width}px`
+            await sleep(30)
+            const body = view.querySelector<HTMLElement>('.agents-task-text')!
+            const label = view.querySelector<HTMLElement>('.agents-task-label')!
+            const more = view.querySelector<HTMLElement>('.agents-task-more')!
+            const head = view.querySelector<HTMLElement>('.agents-head')!
+            const box = body.getBoundingClientRect()
+            taskMeasurements.push({
+              skin,
+              theme,
+              width,
+              bodyHeight: body.clientHeight,
+              bodyScroll: body.scrollHeight,
+              labelBottom: label.getBoundingClientRect().bottom,
+              bodyTop: box.top,
+              bodyBottom: box.bottom,
+              moreTop: more.getBoundingClientRect().top,
+              headHeight: head.clientHeight,
+              headScroll: head.scrollHeight,
+              open: body.parentElement?.dataset.open,
+              display: getComputedStyle(body).display,
+            })
+            taskLayouts.push(
+              (body.textContent?.includes('任务结束：提交结构概览与引用位置。') ?? false) &&
+                body.scrollHeight <= body.clientHeight + 1 &&
+                label.getBoundingClientRect().bottom <= box.top &&
+                more.getBoundingClientRect().top >= box.bottom &&
+                head.scrollHeight > head.clientHeight,
+            )
+          }
+        }
+      }
+      view.style.removeProperty('width')
+    }
+    look.set({
+      ...(was.skin ? { skin: was.skin } : {}),
+      ...(was.theme ? { theme: was.theme } : {}),
+    })
     document.querySelector<HTMLElement>('.side [data-tool="hide"]')?.click()
-    results.push({ prompt, uniform, restored, opens, descriptions })
+    results.push({ prompt, uniform, restored, opens, descriptions, taskLayouts, taskMeasurements })
   }
   return results
 }
@@ -79,10 +137,14 @@ export async function checkAgentActivity(window: BrowserWindow) {
   return {
     results,
     failed: results.every(
-      (row: { uniform: boolean; restored: boolean; opens: boolean }) =>
-        row.uniform && row.restored && row.opens,
+      (row: { uniform: boolean; restored: boolean; opens: boolean; taskLayouts: boolean[] }) =>
+        row.uniform &&
+        row.restored &&
+        row.opens &&
+        row.taskLayouts.length === 12 &&
+        row.taskLayouts.every(Boolean),
     )
       ? []
-      : ['子代理活动的统一行、恢复或详情跳转失败'],
+      : ['子代理活动的统一行、恢复、详情跳转或长任务布局失败'],
   }
 }

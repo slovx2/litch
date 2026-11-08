@@ -1208,6 +1208,7 @@ export const en: Record<MessageKey, Entry> = {
   'turn.edit.sendFailed':
     'The original message was removed, but the edited one wasn’t sent. Its text is back in the input: {reason}',
   'context.unknown': 'Context usage not reported yet',
+  'context.windowUnknown': '{used} tokens used; context window unknown',
   'context.label': 'Context',
   'context.compact': 'Compact context',
   'context.compactBusy': 'Available when the turn ends',
@@ -1470,6 +1471,7 @@ export const en: Record<MessageKey, Entry> = {
   'agents.none': 'Click a subagent in the conversation to view its progress here.',
   'agents.list': 'Subagents of this session',
   'agents.task': 'Assigned task',
+  'agents.task.preview': 'Only a task preview is available; it may be truncated.',
   'agents.task.more': 'Show all',
   'agents.task.less': 'Show less',
   'agents.meta.kind': 'Type',

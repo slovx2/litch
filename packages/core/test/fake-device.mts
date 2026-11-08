@@ -395,8 +395,14 @@ export function fakeDevice(harnesses: FakeHarness[]): {
     })),
     // 新的回合在前；要了 full 才带条目（子代理列表只问最近的一个回合、不带条目，系统通知要带）
     'thread/turns/list': byThread('thread/turns/list', (_entry, found, params) => {
-      const { limit, itemsView } = params as { limit?: number | null; itemsView?: string | null }
-      const turns = [...(found.turns ?? [])].reverse().slice(0, limit ?? undefined)
+      const { limit, itemsView, sortDirection } = params as {
+        limit?: number | null
+        itemsView?: string | null
+        sortDirection?: string | null
+      }
+      const ordered = [...(found.turns ?? [])]
+      if (sortDirection !== 'asc') ordered.reverse()
+      const turns = ordered.slice(0, limit ?? undefined)
       return {
         data: turns.map((entry) =>
           itemsView === 'full'

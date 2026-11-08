@@ -1141,6 +1141,32 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   )
   /** 正在问的子线程最近一个回合：同一个子线程同时只问一次 */
   const askingAgentTurn = new Map<string, Promise<void>>()
+  const askingAgentPrompt = new Map<string, Promise<void>>()
+  // preview 是列表摘要（Claude 只留 200 字）。首个回合里的用户消息才是原始任务，不能用最近追问替换。
+  const askAgentPrompt = (threadId: string): Promise<void> => {
+    if (agentThreads.knowsPrompt(threadId)) return Promise.resolve()
+    const asking = askingAgentPrompt.get(threadId)
+    if (asking) return asking
+    const job = link
+      .request('thread/turns/list', {
+        threadId,
+        limit: 1,
+        sortDirection: 'asc',
+        itemsView: 'full',
+      })
+      .then((page) => {
+        const user = page.data[0]?.items.find((item) => item.type === 'userMessage')
+        const prompt = user?.content
+          .filter((part) => part.type === 'text')
+          .map((part) => part.text)
+          .join('\n')
+        agentThreads.prompt(threadId, prompt || null)
+      })
+      .catch(() => agentThreads.prompt(threadId, null))
+      .finally(() => askingAgentPrompt.delete(threadId))
+    askingAgentPrompt.set(threadId, job)
+    return job
+  }
   /** 等着再看一眼的子线程（会话状态先到、回合结束的通知随后就到，隔一会儿还对不上才问） */
   const recheckingAgent = new Set<string>()
 
@@ -1228,6 +1254,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     }
     if (isAgentThread(thread)) {
       agentThreads.put(thread)
+      // 父会话打开后才派出的子代理，列表可能早已读过；打开详情时仍补取原始任务。
+      if (live.watched(thread.id)) void askAgentPrompt(thread.id)
       return
     }
     unspoken.delete(thread.id)
@@ -3391,6 +3419,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       // 不认识 parentThreadId 的引擎会把全部会话都回来：只留父会话确实是它的
       const own = listing.threads.filter((thread) => parentOf(thread) === sessionId)
       for (const thread of own) agentThreads.put(thread)
+      await Promise.all(own.map((thread) => askAgentPrompt(thread.id)))
       // 列表里不带回合：还不知道最近一个回合的、记着的对不上了的，问一下
       await Promise.all(
         own
