@@ -34,7 +34,11 @@ export function coverage(output) {
 export function isolatedEnvironment(env, home) {
   const result = { ...env }
   for (const key of Object.keys(result)) {
-    if (/^(LITCH_|ANTHROPIC_|OPENAI_|CLAUDE_CODE_|GH_|GITHUB_TOKEN$)/.test(key)) delete result[key]
+    if (
+      /^(LITCH_|ANTHROPIC_|OPENAI_|CLAUDE_CODE_|GH_|GITHUB_TOKEN$)/.test(key) ||
+      /(?:_API_KEY|_AUTH_TOKEN)$/.test(key)
+    )
+      delete result[key]
   }
   delete result.NODE_TEST_CONTEXT
   delete result.NODE_OPTIONS

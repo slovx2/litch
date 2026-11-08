@@ -11,6 +11,11 @@ export const MANAGER_ENDED = '经理已结束，未完成事项与决策保留�
 export const MANAGER_SPACE = {
   namespace: 'litch_manager',
   marks: {
+    issue_create: 'Create an issue for discussion and long-term follow-up.',
+    issue_get: 'Read an issue including id, comments, questions, relations and timeline.',
+    issue_comment: 'Append a manager comment after reading issue_get;',
+    issue_update: 'Update an issue with the current revision and a reason.',
+    issue_follow: 'Pause or resume issue follow-up with an audited reason.',
     report: 'Publish a longer update, release summary or limitations as a report',
     post_get: 'Read a decision, For you request, report or suggestion as a post,',
     post_reply: 'Respond on a post by updating its original content',
@@ -19,7 +24,8 @@ export const MANAGER_SPACE = {
       'Endorse a pending suggestion from your own workline subtree so it appears by default for the user.',
     dismiss: 'Dismiss a pending suggestion from your own workline subtree as manager-ignored.',
     reply: 'Reply to pending user follow-up questions on one decision.',
-    summary: 'Read current situation, open decisions, unfinished items and running lines.',
+    summary:
+      'Read current situation, recent issues, open decisions, unfinished items and running lines.',
     get: 'Read one decision or item with full fields and change history.',
     // add 的说明以事项定位提示开头；这段提示也出现在别的说明里，连同 add 自己的首句一起识别
     add: '事项（item）是经理自己的记录本，用户不会看；需要用户注意或处理的事，请提决策（decision）或发“请你做”（request）。 Items are the manager’s own notebook; the user will not read them. Use a decision or a For you request for anything requiring the user’s attention or action. Add a decision, item or request; returns its id and object.',

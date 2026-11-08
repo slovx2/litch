@@ -8,6 +8,7 @@ import {
   MANAGER_DEFAULT_DISPATCH,
   MANAGER_METHOD,
 } from '../../protocol/src/manager.mjs'
+import { resolveAutomationTools } from '../../shared/src/automation-tools.mjs'
 import { codexRig, sentTo } from './codex-kit.mjs'
 import { codexThread, FakeCodex } from './fake-codex.mjs'
 import { installConfig } from './fake-codex-config.mjs'
@@ -29,7 +30,7 @@ function fixture() {
     ...(resume(params, connection) as Record<string, unknown>),
     activePermissionProfile: ':workspace',
   })
-  const env = codexRig({ fake })
+  const env = codexRig({ fake, toolSettings: { 'tools.browser': true } })
   env.device.titles.setEnabled('codex', false)
   let callId = 0
   const tool = async (threadId: string, name: string, args: unknown, ns = 'litch_sessions') => {
@@ -48,11 +49,18 @@ function fixture() {
   }
   const checkTools = (threadId: string) => {
     const tools = env.device.sessionTree.store.tools(threadId)
-    // 原生线上的 instructions 会并入 developerInstructions，登记仍保留规则元数据。
+    assert.ok(tools, '子会话必须登记工具清单')
+    // 登记保留完整说明；原生发送前先投影到 skill/guide 短表，再提取开发者指令。
+    const sent = sentTo(fake, 'thread/start').at(-1).dynamicTools
     assert.deepEqual(
-      withDeveloperInstructions({ dynamicTools: tools }, null).dynamicTools,
-      sentTo(fake, 'thread/start').at(-1).dynamicTools,
+      withDeveloperInstructions(
+        { dynamicTools: resolveAutomationTools(tools, 'codex', { visiblePaths: new Set() }) },
+        null,
+      ).dynamicTools,
+      sent,
     )
+    const browser = sent.find((spec: { name: string }) => spec.name === 'litch_browser')
+    assert.match(browser.description, /Before use, read litch_automation\.guide/)
     assert.equal(env.device.nativeBackground.installed(threadId), true)
   }
   return { ...env, fake, tool, checkTools }

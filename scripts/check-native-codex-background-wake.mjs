@@ -17,6 +17,7 @@ import {
   MANAGER_DEFAULT_DISPATCH,
   MANAGER_METHOD,
 } from '../packages/device/dist/protocol/src/manager.mjs'
+import { resolveAutomationTools } from '../packages/device/dist/shared/src/automation-tools.mjs'
 import { codexConfig, startResponsesModel } from './client-fixture-responses.mjs'
 
 // --child-entry=start|accept|manager-line 同时验收派子会话的真实工具调用链。
@@ -34,6 +35,7 @@ let stage = 0
 let continued = false
 let parentStage = 0
 const sentStarts = []
+const completedTurns = new Set()
 const samples = []
 const respond = (body) => {
   const input = JSON.stringify(body.input)
@@ -181,7 +183,12 @@ const connect = async (handlers) => {
       await pause(50)
       continue
     }
-    ws.on('message', (data) => handlers.message(data.toString()))
+    ws.on('message', (data) => {
+      const raw = data.toString()
+      const frame = JSON.parse(raw)
+      if (frame.method === 'turn/completed') completedTurns.add(frame.params.threadId)
+      handlers.message(raw)
+    })
     ws.on('close', () => handlers.close('native closed'))
     return {
       send: (raw) => {
@@ -189,7 +196,11 @@ const connect = async (handlers) => {
         if (frame.method === 'thread/start') sentStarts.push(frame.params)
         ws.send(raw)
       },
-      close: () => ws.close(),
+      close: () => {
+        // 设备关闭后不能再把已排队的原生消息交给已释放的数据库。
+        ws.removeAllListeners('message')
+        ws.close()
+      },
     }
   }
   throw new Error(`isolated native app-server did not start: ${stderr}`)
@@ -220,7 +231,8 @@ try {
     const created = await client.call(MANAGER_METHOD.create, {
       cwd: dirs.work,
       harness: 'codex',
-      model: 'gpt-5.3-codex',
+      // 沿用隔离配置里的 fixture-gate，不依赖真实模型目录中的某个固定名字。
+      model: null,
       effort: null,
       permission: ':danger-full-access',
       name: '后台验收经理',
@@ -236,7 +248,7 @@ try {
     const created = await client.call('thread/start', {
       harness: 'codex',
       cwd: dirs.work,
-      model: 'gpt-5.3-codex',
+      model: 'fixture-gate',
       approvalPolicy: 'never',
       sandbox: 'danger-full-access',
       historyMode: 'paginated',
@@ -269,24 +281,48 @@ try {
     assert.ok(thread && thread.id !== parentId, '父会话通过动态工具创建了子会话')
     await client.call('thread/resume', { threadId: thread.id })
   }
-  // 子会话的首回合可能在客户端补订阅前结束，读原生状态同样能确认释放回合。
+  // 从原生连接记录完成事件，避免子会话结束早于客户端补订阅；首回合完成前 rollout 可能还是空文件。
   for (let i = 0; i < 400; i++) {
     assert.ifError(scriptError)
-    const history = await client.call('thread/read', { threadId: thread.id, includeTurns: true })
-    if (history.thread.turns.some((turn) => turn.status === 'completed')) break
-    if (i === 399)
-      throw new Error(
-        `回合未结束：${JSON.stringify(history)}; samples=${samples.length}; ${stderr}`,
-      )
+    if (completedTurns.has(thread.id)) break
+    if (i === 399) throw new Error(`回合未结束：${thread.id}; samples=${samples.length}; ${stderr}`)
     await pause(50)
   }
-  assert.ifError(scriptError)
-  assert.deepEqual(
-    withDeveloperInstructions({ dynamicTools: device.sessionTree.store.tools(thread.id) }, null)
-      .dynamicTools,
-    sentStarts.at(-1).dynamicTools,
-    '设备登记的工具清单与实际发给原生 Codex 的清单一致（规则已提取为开发者指令）',
+  const history = await client.call('thread/read', { threadId: thread.id, includeTurns: true })
+  assert.ok(
+    history.thread.turns.some((turn) => turn.status === 'completed'),
+    '原生历史确认首回合已完成',
   )
+  assert.ifError(scriptError)
+  // 本夹具直接建 DeviceServer，不走启动器的 skill 安装；原生发现为空时必须使用 guide 短表。
+  const discovered = await client.call('skills/list', {
+    harness: 'codex',
+    cwds: [dirs.work],
+    forceReload: true,
+  })
+  assert.ok(
+    !discovered.data.some((row) =>
+      row.skills.some((skill) =>
+        ['litch-browser-automation', 'litch-computer-automation'].includes(skill.name),
+      ),
+    ),
+    '未安装 skill 的隔离 HOME 不应发现个人自动化 skill',
+  )
+  const registeredTools = device.sessionTree.store.tools(thread.id)
+  assert.deepEqual(
+    withDeveloperInstructions(
+      {
+        dynamicTools: resolveAutomationTools(registeredTools, 'codex', { visiblePaths: new Set() }),
+      },
+      null,
+    ).dynamicTools,
+    sentStarts.at(-1).dynamicTools,
+    '登记清单经 skill/guide 投影并提取开发者指令后，必须与实际发送的清单逐字一致',
+  )
+  const browser = sentStarts.at(-1).dynamicTools.find((tool) => tool.name === 'litch_browser')
+  assert.match(browser.description, /Before use, read litch_automation\.guide\(topic: "browser"\)/)
+  assert.ok(browser.tools.every((tool) => tool.description.includes('litch_automation.guide')))
+  assert.ok(sentStarts.at(-1).dynamicTools.some((tool) => tool.name === 'litch_automation'))
   assert.equal(device.nativeBackground.installed(thread.id), true)
   const registered = await client.call('thread/read', { threadId: thread.id, includeTurns: true })
   const task = registered.thread.litchBackground.tasks.find((t) => t.litchWake === 'watching')
