@@ -1,6 +1,6 @@
 {
   "name": "@litch/chrome-bridge",
-  "version": "0.1.0",
+  "version": "0.38.0",
   "type": "module",
   "license": "MIT",
   "description": "可嵌入的 Chrome 桥与原生宿主登记",
