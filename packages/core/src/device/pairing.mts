@@ -445,7 +445,7 @@ export function createPairing(host: PairingHost): Pairing {
 
   /**
    * 手机要连的地址上的横幅。本机不读：电脑连自己的 tailnet 地址走的是回环，到的是系统的 sshd、不经 tailscaled，
-   * 读到的不算数（song-debian 上实测），只看设备自报
+   * 读到的不算数（linux-test 上实测），只看设备自报
    */
   const bannerOf = (
     platform: PairingPlatform,

@@ -604,7 +604,7 @@ function wired() {
       {
         id: 'local',
         name: '本机',
-        host: 'song@mac',
+        host: 'dev@mac',
         kind: 'local',
         target: null,
         wire: 'green',

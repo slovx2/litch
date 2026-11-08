@@ -547,13 +547,13 @@ test('parseTailnetStatus：取 Self 的 MagicDNS 名（去掉末尾的点）和�
   const status = (magic: unknown, self: unknown) =>
     JSON.stringify({ Self: self, CurrentTailnet: { Name: 'x', MagicDNSEnabled: magic } })
   const self = {
-    HostName: 'song-debian',
-    DNSName: 'song-debian.tail2e2f6a.ts.net.',
-    TailscaleIPs: ['100.124.139.97', 'fd7a:115c:a1e0::ba34:8b64'],
+    HostName: 'linux-test',
+    DNSName: 'linux-test.tail-example.ts.net.',
+    TailscaleIPs: ['100.64.0.42', 'fd7a:115c:a1e0::42'],
   }
   assert.deepEqual(parseTailnetStatus(status(true, self)), {
-    name: 'song-debian.tail2e2f6a.ts.net',
-    addresses: ['100.124.139.97', 'fd7a:115c:a1e0::ba34:8b64'],
+    name: 'linux-test.tail-example.ts.net',
+    addresses: ['100.64.0.42', 'fd7a:115c:a1e0::42'],
   })
   assert.equal(parseTailnetStatus(status(false, self)), null)
   assert.equal(parseTailnetStatus(status(true, { ...self, DNSName: '' })), null)

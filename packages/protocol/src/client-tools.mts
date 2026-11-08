@@ -224,6 +224,6 @@ export interface ClientToolDetachedCallParams {
 /** 握手时 Litch 连接在 capabilities.litchClientTools 里额外报的：这台桌面端的主机名（ambiguous 时列出、指定交给哪台时用） */
 export interface ClientToolsDesktopInfo {
   hostname: string
-  /** 给人看的名字，比如“Song 的 MacBook”。没有就用主机名 */
+  /** 给人看的名字，比如“开发者的 MacBook”。没有就用主机名 */
   name?: string
 }

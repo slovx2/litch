@@ -47,7 +47,7 @@ const runtime = createNodeComputerUse({
 
 macOS：独立代码库提供 `apps/computer-use/build.mjs` 的 `buildNative({arch, debug})`，只编译 Swift 并返回可执行文件路径。使用方自己生成 `.app` 的 Info.plist、写入 `ComputerUseHostIdentity`、选择图标、签名、公证和打包。Litch 自己的 `build-app.mjs`/`host-identity.mjs` 是产品组装代码，留在 Litch，不随独立代码库导出。原生源码和构建脚本从对应源码 Release 获取，npm 包只带 TS 运行时。
 
-正式宿主必须与 helper 同团队签名，且 identifier 在构建白名单中；开发 ad-hoc token 示例不证明正式签名集成通过。WakeQora 使用自己的 bundle ID、peer/team 和系统授权。
+正式宿主必须与 helper 同团队签名，且 identifier 在构建白名单中；开发 ad-hoc token 示例不证明正式签名集成通过。其他宿主使用自己的 bundle ID、peer/team 和系统授权。
 
 Windows：在 `apps/computer-use-win` 用锁定工具链构建 `x86_64-pc-windows-msvc`。构建必须显式提供 `CU_HELPER_VERSION`、`CU_HOST_PRODUCT`、`CU_HOST_REGISTRY_KEY`、`CU_HOST_EXECUTABLE`、`CU_HOST_ISOLATION_KEYS`；见 [原生协议](NATIVE-PROTOCOL.md)，宿主自己构建、签名（如适用）、打包并嵌入 exe；运行时只接受 stdio，mutex 保持跨宿主共享。macOS 两个独立 helper 没有全局输入仲裁，不能同时输入。
 
@@ -57,7 +57,7 @@ Windows：在 `apps/computer-use-win` 用锁定工具链构建 `x86_64-pc-window
 - 使用方的桌面端验收应运行实际共享实现；Swift/Rust 与 TypeScript 宿主同读黄金帧。
 - 使用方提供的原生集成夹具 只启动自己构建的第二宿主 helper，不请求系统授权、不输入用户应用；在隔离 HOME 下运行。
 - 取消经 `cancelAction`（按 `actionId`）转给原生助手；已经发出的输入不会撤回。
-- 正式签名/TCC、Windows 真机、WakeQora 安装包接线不由这些假宿主/隐藏窗口测试证明。
+- 正式签名/TCC、Windows 真机、其他宿主安装包接线不由这些假宿主/隐藏窗口测试证明。
 
 ### 紧凑状态
 

@@ -171,7 +171,7 @@ jobs:
           path: ${{ runner.temp }}/release
           if-no-files-found: error
 
-  # 给集成方（WakeQora）的 Claude 入口包 cha-v<版本>.tar.gz 和它的校验和清单。在钉了摘要的容器里出，
+  # 给集成方（其他宿主）的 Claude 入口包 cha-v<版本>.tar.gz 和它的校验和清单。在钉了摘要的容器里出，
   # 同一个提交在哪出都是同一个 sha256，集成方把清单里的值记进自己的锁文件
   cha:
     needs: candidate

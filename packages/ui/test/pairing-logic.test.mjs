@@ -135,12 +135,9 @@ test('Tailscale 方式：两种新的失败认得出、tailscale 那种摆原话
 
 test('主机下拉：认出 IP、MagicDNS 全名、短名，两种语言都有说法', () => {
   assert.deepEqual(
-    [
-      '100.124.139.97',
-      'fd7a:115c:a1e0::ba34:8b64',
-      'song-debian.tail2e2f6a.ts.net',
-      'song-debian',
-    ].map(hostKind),
+    ['100.64.0.42', 'fd7a:115c:a1e0::42', 'linux-test.tail-example.ts.net', 'linux-test'].map(
+      hostKind,
+    ),
     ['ip', 'ip', 'long', 'short'],
   )
   for (const lang of ['zh-CN', 'en']) {

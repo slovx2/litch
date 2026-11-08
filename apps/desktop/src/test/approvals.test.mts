@@ -65,7 +65,7 @@ function rig() {
     accounts: [{ ref: 'a1' }, { ref: 'a2' }],
     taskId: null,
     expiresAt: null,
-    deviceId: 'song-debian',
+    deviceId: 'linux-test',
     ...more,
   })
   return {
@@ -147,7 +147,7 @@ test('第一次批准：验过签名就记下（连同经哪台设备）、当�
     ])
     const [phone] = r.approvals.phones()
     assert.equal(phone?.source, 'firstApproval')
-    assert.equal(phone?.deviceId, 'song-debian')
+    assert.equal(phone?.deviceId, 'linux-test')
     assert.equal(phone?.lastApprovedAt, 1_800_000_000_000)
     // 认了但卡片没答上（比如人在桌面端先答了）：随机数不作废；答上了才作废，同一张卡片的答复再来就是重放
     assert.equal(r.approvals.verify(card, answerFor(card)).ok, true)
@@ -332,7 +332,7 @@ test('手机远程批准默认关：关着时没有桌面端号（卡片不发�
       nonce: randomBytes(16).toString('base64url'),
       origin: 'https://github.com',
       accounts: [{ ref: 'a1' }],
-      deviceId: 'song-debian',
+      deviceId: 'linux-test',
     }
     assert.deepEqual(verifyPhoneAnswer(card, answerFor(card)), { ok: false, why: 'disabled' })
     assert.equal(approvals.phones().length, 0)

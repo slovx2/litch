@@ -127,7 +127,7 @@ test('地址里带着密码：原样的、编码过的都认；重开时去掉�
 })
 
 test('打码的用户名', () => {
-  assert.equal(maskUsername('someone@gmail.com'), 'so•••@gmail.com')
+  assert.equal(maskUsername('someone@example.com'), 'so•••@example.com')
   assert.equal(maskUsername('ab@x.io'), 'a•••@x.io')
   assert.equal(maskUsername('alice'), 'al•••')
   assert.equal(maskUsername(''), '•••')

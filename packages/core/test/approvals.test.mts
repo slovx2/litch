@@ -39,7 +39,7 @@ const signInAsk = (more: Record<string, unknown> = {}) => ({
   site: 'GitHub',
   reason: 'Push the branch',
   accounts: [
-    { ref: 'a1', username: 'song@gmail.com', masked: 'so•••@gmail.com', lastUsed: 5 },
+    { ref: 'a1', username: 'sophie@example.com', masked: 'so•••@example.com', lastUsed: 5 },
     { ref: 'a2', username: 'work@corp.com', masked: 'wo•••@corp.com', lastUsed: null },
   ],
   fillBlocked: null,
@@ -67,7 +67,7 @@ test('自身访问卡通过设备转发三档签名答复，桌面完成后收�
   await w.ask({ kind: 'computerSelf', ...ticket })
   const [card] = w.seen('litch/approval/open') as unknown as ApprovalCard[]
   assert.equal(card?.kind, 'computerSelf')
-  assert.deepEqual(card?.summary, { origin: 'litch://computer-self', device: 'song-debian' })
+  assert.deepEqual(card?.summary, { origin: 'litch://computer-self', device: 'linux-test' })
   w.broadcast('litch/approval/answered', { ...answer, ref: 'always' })
   await settled()
   assert.equal(w.sent.filter((message) => message.op === 'phoneAnswer').length, 1)
@@ -117,10 +117,10 @@ function world(extensions = ['harness', 'clientApprovals']) {
     devices: [
       {
         id: 'dev',
-        name: 'song-debian',
-        host: 'song@debian',
+        name: 'linux-test',
+        host: 'dev@debian',
         kind: 'ssh',
-        target: { kind: 'alias', alias: 'song-debian' },
+        target: { kind: 'alias', alias: 'linux-test' },
         wire: 'green',
         open: peer.open,
       },
@@ -163,9 +163,9 @@ function phoneCard(): ApprovalCard {
       origin: 'https://github.com',
       site: 'GitHub',
       reason: 'Push the branch',
-      device: 'song-debian',
+      device: 'linux-test',
       accounts: [
-        { ref: 'a1', masked: 'so•••@gmail.com' },
+        { ref: 'a1', masked: 'so•••@example.com' },
         { ref: 'a2', masked: 'wo•••@corp.com' },
       ],
       task: null,
@@ -186,7 +186,7 @@ test('桌面端：带桌面端号的登录卡片挂到设备上，只有打码�
   await w.ask(signInAsk())
   const opened = w.seen('litch/approval/open')
   assert.deepEqual(opened, [phoneCard()])
-  assert.doesNotMatch(JSON.stringify(opened), /song@gmail\.com|work@corp\.com/)
+  assert.doesNotMatch(JSON.stringify(opened), /sophie@example\.com|work@corp\.com/)
 
   // 别的卡片的答复、形状不对的不交
   w.broadcast('litch/approval/answered', { ...answer, id: 'Other0card000000' })
@@ -239,7 +239,7 @@ test('桌面端：人在桌面端答了也收掉；没有桌面端号、不是�
   assert.equal(site?.kind, 'browserSite')
   assert.deepEqual(site?.summary, {
     origin: 'https://a.example',
-    device: 'song-debian',
+    device: 'linux-test',
     browser: 'builtin',
   })
   const phoneAnswers = w.sent.filter((message) => message.op === 'phoneAnswer').length

@@ -1,6 +1,6 @@
 // `app-server -c key=<TOML 值>`：照 codex 的命令行配置覆盖（codex-rs/utils/cli/src/config_override.rs、
 // codex-rs/config/src/overrides.rs）。键按 `.` 拆成路径，值按 TOML 解析，解析不了就当字符串；
-// 多次给同一个键后面的为准。只收白名单里的键，其余（WakeQora 这类调用方会顺手传 codex 专有的键）记日志后忽略。
+// 多次给同一个键后面的为准。只收白名单里的键，其余（其他宿主调用方会顺手传 codex 专有的键）记日志后忽略。
 // 收下的这一层叠在 config.json 上面（loadPersistedConfig），只在内存里，不写回 config.json。
 import { parse } from 'smol-toml'
 import { isConfigObject } from './config-store.mjs'

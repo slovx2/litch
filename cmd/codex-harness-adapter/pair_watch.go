@@ -33,7 +33,7 @@ func (s *pairSession) selfCheck(ctx context.Context, start pairStartResponse, pa
 		dir = os.TempDir()
 	}
 	if s.mode == pairModeTailscale {
-		// 本机连自己的 tailnet 地址走回环，到的是系统的 sshd、不经 tailscaled（song-debian 上实测），这时没法在本机自检
+		// 本机连自己的 tailnet 地址走回环，到的是系统的 sshd、不经 tailscaled（linux-test 上实测），这时没法在本机自检
 		banner := s.pio.banner(ctx, payload.Host, payload.Port)
 		if !strings.HasPrefix(banner, "SSH-2.0-Tailscale") {
 			if banner == "" {

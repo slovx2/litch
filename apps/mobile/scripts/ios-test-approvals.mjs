@@ -38,7 +38,7 @@ export function iosTestApprovals(socket, phone) {
             reason: '隔离登录批准测试',
             device: 'e2e-pair',
             accounts: [
-              { ref: 'a1', masked: 'so•••@gmail.com' },
+              { ref: 'a1', masked: 'so•••@example.com' },
               { ref: 'a2', masked: 'li•••@example.com' },
             ],
             task: null,

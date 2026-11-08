@@ -471,7 +471,7 @@ test('SKILLS-007：选的技能不论排在哪、来自额外目录还是插话�
   }
   try {
     await client.request('skills/extraRoots/set', { extraRoots: [root] })
-    // 技能排在话后面（WakeQora、Litch 的输入框都这么发）：CLI 不认，以前正文到不了模型
+    // 技能排在话后面（多个客户端的输入框都这么发）：CLI 不认，以前正文到不了模型
     const after = await send([text('按 Skill 执行'), skill])
     assert.ok(after.includes('EXTRA_INPUT_BODY'), '技能在后面时正文没交给模型')
     assert.ok(after.includes(`<skill>\\n<name>extra-input</name>\\n<path>${path}</path>`))

@@ -1,7 +1,7 @@
 // 编出 Claude 入口的守护进程（Go，cmd/claude-process-guard），各平台各一份，放进
 // packages/claude/dist/claude/src/process-guard/<系统>-<架构>/。`npm run build --prefix packages/claude` 在 tsc 之后跑它。
 //
-// 放在 dist/claude/src 下面、各平台都编：只拷 dist/<包>/src 的暂存脚本（WakeQora 的 stage-test-cha.sh）
+// 放在 dist/claude/src 下面、各平台都编：只拷 dist/<包>/src 的暂存脚本（其他宿主的 stage-test-cha.sh）
 // 拿到的同一份产物在 macOS 和 Linux 容器里都能用；litch 自己的打包（adapter-stage.mjs、package-claude-runtime.sh）
 // 只留目标平台那一份。入口按自己跑在哪个平台挑（packages/claude/src/native-process.mts）。
 // 只用标准库和 x/sys，关掉 cgo，不挑宿主的 C 库；没改过源码时 Go 有缓存，再编很快。

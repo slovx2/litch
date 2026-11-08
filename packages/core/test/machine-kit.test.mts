@@ -154,8 +154,8 @@ export class FakeMachine implements MachineTarget {
       name: info.name ?? `${id} machine`,
       hostname: info.hostname ?? `${id}.local`,
       system: info.system ?? 'macOS 26.5 arm64',
-      user: info.user ?? 'song',
-      home: info.home ?? '/Users/song',
+      user: info.user ?? 'dev',
+      home: info.home ?? '/Users/dev',
       shell: info.shell ?? '/bin/zsh',
     }
     this.fs.mkdirp(this.info.home)

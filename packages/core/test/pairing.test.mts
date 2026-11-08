@@ -118,7 +118,7 @@ function world(options: Options = {}) {
         hostKey: options.reported?.[0] ?? ED,
         hostKeys: options.reported ?? [ED, RSA],
         hostname: 'mac.lan',
-        user: 'song',
+        user: 'dev',
       }
       if (options.oldDevice) return { ...base, seed: 'c2VlZA' }
       const tailscaleSsh = options.tailscaleSsh ?? false
@@ -174,7 +174,7 @@ function world(options: Options = {}) {
       calls.localSsh++
       return options.sshOn ?? true
     },
-    localName: () => 'Song 的 MacBook',
+    localName: () => '开发者的 MacBook',
     banner: async (host, port) => {
       calls.banners.push(`${host}:${port}`)
       return options.banners?.[`${host}:${port}`] ?? null
@@ -402,12 +402,12 @@ test('本机失败后仍提供地址；改端口时自检使用用户填写的�
   await settled()
   const failure = await failureOf(w.command('pairing.start'))
   assert.deepEqual(failure.pairingAddress, {
-    name: 'Song 的 MacBook',
+    name: '开发者的 MacBook',
     host: 'mac.lan',
     port: 22,
-    user: 'song',
+    user: 'dev',
   })
-  const address = { host: 'mac.lan', port: 2224, user: 'song' }
+  const address = { host: 'mac.lan', port: 2224, user: 'dev' }
   await failureOf(w.command('pairing.start', { address }))
   assert.deepEqual(w.calls.tests.at(-1)?.address, address)
   assert.equal(w.calls.localSsh, 1)
@@ -440,14 +440,14 @@ test('本机：先探 SSH 服务，没开报 sshOff 且不建配对；开着时�
   await settled()
   const pairing = await started(on)
   assert.deepEqual(pairing.original, {
-    name: 'Song 的 MacBook',
+    name: '开发者的 MacBook',
     host: 'mac.lan',
     port: 22,
-    user: 'song',
+    user: 'dev',
   })
   const [tested] = on.calls.tests
   assert.equal(tested?.target, null)
-  assert.equal(tested?.user, 'song')
+  assert.equal(tested?.user, 'dev')
 })
 
 test('主题：订阅时去取已绑定的手机；只跟自己开的配对；手机的变化跟着通知；撤销先改', async () => {
@@ -545,7 +545,7 @@ test('记住的地址存进设备配置；读回来时只留认识的设备', as
     forget() {},
   }
   const w = world({ kind: 'local', store })
-  const address = { name: '我的 Mac', host: 'mac-ts', port: 22, user: 'song' }
+  const address = { name: '我的 Mac', host: 'mac-ts', port: 22, user: 'dev' }
   await w.command('pairing.rememberAddress', { address })
   assert.deepEqual(saved.pairing, { dev: address })
   await w.command('pairing.rememberAddress', { address: null })
@@ -771,7 +771,7 @@ test('设备服务太旧、不认 tailscale 方式：作废它建的配对，报
 })
 
 test('本机：不读自己 tailnet 地址的横幅（回环到的是系统的 sshd），按设备自报定方式，不要求开着 SSH 服务、跳过自检', async () => {
-  const address = { host: 'mac.tail1.ts.net', port: 22, user: 'song' }
+  const address = { host: 'mac.tail1.ts.net', port: 22, user: 'dev' }
   const w = world({
     kind: 'local',
     sshOn: false,

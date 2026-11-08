@@ -91,18 +91,18 @@ test('PROFILE-001：-c 照 codex 解析，只收白名单里的键，后给的�
     'approval_policy="never"',
     'model="gpt-5"',
     'features.hooks=true',
-    'default_permissions="wakeqora-saas"',
-    'permissions.wakeqora-saas.extends=":workspace"',
-    'permissions.wakeqora-saas.filesystem={ "/srv" = "deny" }',
-    'permissions.wakeqora-saas.network={ enabled = true, allow_local_binding = true }',
+    'default_permissions="example-saas"',
+    'permissions.example-saas.extends=":workspace"',
+    'permissions.example-saas.filesystem={ "/srv" = "deny" }',
+    'permissions.example-saas.network={ enabled = true, allow_local_binding = true }',
     'mcp_servers.docs={ command = "docs-mcp", args = ["--stdio"] }',
     'developer_instructions="照章办事"',
   ])
   assert.deepEqual(layer, {
     approval_policy: 'never',
-    default_permissions: 'wakeqora-saas',
+    default_permissions: 'example-saas',
     permissions: {
-      'wakeqora-saas': {
+      'example-saas': {
         extends: ':workspace',
         filesystem: { '/srv': 'deny' },
         network: { enabled: true, allow_local_binding: true },

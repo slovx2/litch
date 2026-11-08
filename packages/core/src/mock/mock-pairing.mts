@@ -106,7 +106,7 @@ const tailnetHostsOf = (device: DeviceView): string[] => {
   if (device.kind === 'local') return []
   const short =
     (device.target?.kind === 'alias' ? device.target.alias : device.id).split('.')[0] ?? device.id
-  return ['100.88.7.21', `${short}.tail5e1d.ts.net`, short]
+  return ['100.64.0.21', `${short}.tail-example.ts.net`, short]
 }
 
 interface DevicePairing {

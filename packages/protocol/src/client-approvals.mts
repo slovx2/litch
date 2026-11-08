@@ -103,7 +103,7 @@ export interface ComputerSelfSummary {
 /** 卡片上的一个账号：只给打码的用户名，用 ref 指（ref 是这张卡片里随机的不透明编号，不是密码库的条目号） */
 export interface ApprovalAccount {
   ref: string
-  /** 打码的用户名，比如 so•••@gmail.com */
+  /** 打码的用户名，比如 so•••@example.com */
   masked: string
 }
 

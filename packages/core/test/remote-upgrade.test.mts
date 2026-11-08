@@ -426,7 +426,7 @@ test('服务有别的东西管着：只装不换；认不出安装方式：不�
 
   const odd = world({
     prepare(device) {
-      device.service = facts('0.15.0', { root: '/opt/tyrs-hand/adapter' })
+      device.service = facts('0.15.0', { root: '/opt/example/adapter' })
     },
   })
   odd.core.start()

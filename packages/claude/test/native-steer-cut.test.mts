@@ -69,7 +69,7 @@ test('STEER-CUT-001：从插话那一行往前找切口', () => {
   )
 })
 
-// song-debian 上那次（CLI 2.1.287）：插话前 CLI 停了一下，插话记成一行普通的用户消息，标识是条目自己的。
+// linux-test 上那次（CLI 2.1.287）：插话前 CLI 停了一下，插话记成一行普通的用户消息，标识是条目自己的。
 // 原生会话用真的 SDK 复制两次（分叉、回退都这样复制）之后，照样找得到切口
 test('STEER-CUT-003：记成普通用户消息的插话，原生会话复制过之后照样找得到切口', async () => {
   const root = await mkdtemp(join(tmpdir(), 'steer-cut-fork-'))

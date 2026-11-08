@@ -21,7 +21,7 @@ const payload = {
   n: '家里的 Mac',
   h: 'mac.tail',
   p: 2222,
-  u: 'song',
+  u: 'dev',
   k: { t: 'ssh-ed25519', f: 'SHA256:abcdefg' },
   s: 'A'.repeat(43),
   i: 'Ab3dEf6hIj9kLm2n',
@@ -47,7 +47,7 @@ test('登记：用一次性钥匙、只协商二维码里那一种主机钥匙�
   assert.deepEqual(enrollTarget(payload, 'ignored'), {
     host: 'mac.tail',
     port: 2222,
-    user: 'song',
+    user: 'dev',
     privateKey: '',
     passphrase: '',
     seed: payload.s,
@@ -313,8 +313,8 @@ test('删设备时撤钥匙：按指纹找到自己、没连上不试、没登�
 
 const tailscale = {
   v: 1,
-  n: 'song-debian',
-  h: 'song-debian.tail2e2f6a.ts.net',
+  n: 'linux-test',
+  h: 'linux-test.tail-example.ts.net',
   p: 22,
   u: 'root',
   k: { t: 'ssh-ed25519', f: 'SHA256:abcdefg' },
@@ -329,7 +329,7 @@ test('Tailscale 方式的码：解得出；登记用手机自己的私钥、执�
   assert.equal(parsed.ok, true)
   assert.deepEqual(parsed.payload, tailscale)
   assert.deepEqual(enrollTarget(tailscale, 'PRIVATE'), {
-    host: 'song-debian.tail2e2f6a.ts.net',
+    host: 'linux-test.tail-example.ts.net',
     port: 22,
     user: 'root',
     passphrase: '',
