@@ -104,6 +104,7 @@ test('握手：没声明 harness 扩展的被拒绝并说明原因，声明了�
         subAgentActivityKinds: ['completed'],
         litchClientTools: {
           namespaces: [
+            'litch_automation',
             'litch_tasks',
             'litch_manager',
             'litch_repository',
@@ -114,7 +115,13 @@ test('握手：没声明 harness 扩展的被拒绝并说明原因，声明了�
           ],
           computerActions: true,
           browserActions: true,
-          anyThread: ['litch_tasks', 'litch_manager', 'litch_repository', 'litch_sessions'],
+          anyThread: [
+            'litch_automation',
+            'litch_tasks',
+            'litch_manager',
+            'litch_repository',
+            'litch_sessions',
+          ],
         },
       },
     })

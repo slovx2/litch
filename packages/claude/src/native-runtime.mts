@@ -40,6 +40,7 @@ applyPromptCacheTtl()
 // CLI 来自宿主安装；Worker 仍通过独立 CLAUDE_CONFIG_DIR 提供配置和认证。
 
 import type { OnElicitation, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import { resolveAutomationTools } from '../../shared/src/automation-tools.mjs'
 import { apiRetryOf } from './api-retry.mjs'
 import { type ApprovalPolicy, allowsApproval, toolApprovalFlow } from './approval-policy.mjs'
 import { deniedMessage } from './approval-request.mjs'
@@ -63,7 +64,11 @@ import {
   type RequestUsage,
 } from './context-usage.mjs'
 import { contextFilesScope } from './context-windows.mjs'
-import { dynamicToolCliNames, dynamicToolServer } from './dynamic-tools.mjs'
+import {
+  dynamicToolCliNames,
+  dynamicToolInstructions,
+  dynamicToolServer,
+} from './dynamic-tools.mjs'
 import { goalToolServer, isGoalTool } from './goal-tools.mjs'
 import {
   claudeBashTimeoutEnv,
@@ -915,6 +920,16 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         cli,
       )
       options.spawnClaudeCodeProcess = nativeProcess.spawn.bind(nativeProcess)
+      const automation = resolveAutomationTools(context.dynamicTools ?? [], 'claude', {
+        env: options.env as NodeJS.ProcessEnv,
+        ...(!(Array.isArray(options.settingSources) && options.settingSources.includes('user'))
+          ? { visiblePaths: new Set<string>() }
+          : {}),
+      })
+      const prompt = options.systemPrompt as { append?: string }
+      const previous = dynamicToolInstructions(context.dynamicTools)
+      const next = dynamicToolInstructions(automation)
+      if (previous && next && prompt.append) prompt.append = prompt.append.replace(previous, next)
       options.mcpServers = await mcp.connect(
         context.mcpServers,
         context.cwd,
@@ -929,7 +944,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
           ...(options.settings as Record<string, unknown>),
           deniedMcpServers: denied,
         }
-      this.addInternalServers(options, live, liveHandlers, abort)
+      this.addInternalServers(options, live, liveHandlers, abort, automation)
       const query =
         context.claudeBackend === 'tui'
           ? new TuiQuery(input, options)
@@ -1588,6 +1603,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     context: RuntimeTurnContext,
     handlers: RuntimeHandlers,
     abort: AbortController,
+    dynamicTools: unknown[] = context.dynamicTools ?? [],
   ): void {
     if (!context.dynamicTools?.length && !context.goalTools && !context.permissionTools) return
     const nativeIds = new Map<string, string[]>()
@@ -1605,17 +1621,13 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     })
     const servers = (options.mcpServers as Record<string, unknown>) ?? {}
     if (context.dynamicTools?.length)
-      servers.codex_harness_adapter = dynamicToolServer(
-        context.dynamicTools,
-        handlers,
-        (name, args) => {
-          const id = nativeIds
-            .get(`mcp__codex_harness_adapter__${name}:${submissionHash(args)}`)
-            ?.shift()
-          if (!id) throw new Error('缺少原生工具调用 ID，禁止执行副作用')
-          return id
-        },
-      )
+      servers.codex_harness_adapter = dynamicToolServer(dynamicTools, handlers, (name, args) => {
+        const id = nativeIds
+          .get(`mcp__codex_harness_adapter__${name}:${submissionHash(args)}`)
+          ?.shift()
+        if (!id) throw new Error('缺少原生工具调用 ID，禁止执行副作用')
+        return id
+      })
     if (context.goalTools) {
       if (servers.codex_harness_adapter_goal)
         throw new Error('codex_harness_adapter_goal 是内部目标服务保留名称')

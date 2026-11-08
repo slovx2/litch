@@ -19,8 +19,14 @@ test('ENGINE-LINK-001：openEngineLink 握手时声明设备注册的命名空�
     const greeting = [...pi.greetings.values()][0]
     assert.equal(greeting.clientInfo.name, 'litch-device')
     assert.deepEqual(greeting.capabilities.litchClientTools, {
-      namespaces: [...Object.values(CLIENT_TOOL_NAMESPACE), 'litch_repository'],
-      anyThread: ['litch_tasks', 'litch_manager', 'litch_repository', 'litch_sessions'],
+      namespaces: [...Object.values(CLIENT_TOOL_NAMESPACE), 'litch_automation', 'litch_repository'],
+      anyThread: [
+        'litch_automation',
+        'litch_tasks',
+        'litch_manager',
+        'litch_repository',
+        'litch_sessions',
+      ],
       computerActions: true,
       browserActions: true,
     })

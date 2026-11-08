@@ -6,9 +6,12 @@ import {
 } from '../../protocol/src/client-tools-settings.mjs'
 import { TASKS_TOOLS } from '../../protocol/src/client-tools-tasks.mjs'
 import { RESUME_TOOLS_CHANGED, RESUME_TOOLS_READ } from '../../protocol/src/resume-tools.mjs'
+import { installSharedAutomationSkills } from '../../shared/src/automation-skills.mjs'
+import { isAutomationSpec, withAutomationGuide } from '../../shared/src/automation-tools.mjs'
 import { isObject } from './wire.mjs'
 
 const refreshed = new Set<string>([
+  'litch_automation',
   CLIENT_TOOL_NAMESPACE.browser,
   CLIENT_TOOL_NAMESPACE.computer,
   CLIENT_TOOL_NAMESPACE.machine,
@@ -54,10 +57,11 @@ export class ResumeTools {
       null,
       deviceMachineEnabled(values),
     ).filter((tool) => isObject(tool) && managedNames.has(String(tool.name)))
-    return [
+    if (managed.some(isAutomationSpec)) installSharedAutomationSkills()
+    return withAutomationGuide([
       ...current.filter((tool) => !isObject(tool) || !managedNames.has(String(tool.name))),
       ...managed,
-    ]
+    ])
   }
 
   observe(method: string, params: unknown): void {

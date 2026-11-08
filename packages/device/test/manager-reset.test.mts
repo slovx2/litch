@@ -37,7 +37,13 @@ async function setup(harness = 'pi', values: Record<string, unknown> = {}) {
   return { ...env, client, engine, manager: result.manager, oldId: result.threadId as string }
 }
 
-const residentNames = ['litch_browser', 'litch_computer', 'litch_machine', 'litch_tasks']
+const residentNames = [
+  'litch_browser',
+  'litch_computer',
+  'litch_machine',
+  'litch_tasks',
+  'litch_automation',
+]
 const enabled = { 'tools.browser': true, 'tools.computer': true, 'tools.machine': true }
 
 function legacyTools(env: Awaited<ReturnType<typeof setup>>): unknown[] {
@@ -124,7 +130,10 @@ test('Claude 重置按最新设备和 harness 开关移除已有工具，保留�
     )
     assert.deepEqual(
       env.device.sessionTree.store.tools(env.oldId),
-      before.filter((tool: any) => !residentNames.slice(0, 3).includes(tool.name)),
+      before.filter(
+        (tool: any) =>
+          !residentNames.slice(0, 3).includes(tool.name) && tool.name !== 'litch_automation',
+      ),
     )
   } finally {
     await env.close()

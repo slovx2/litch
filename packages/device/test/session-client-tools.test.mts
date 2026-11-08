@@ -92,9 +92,9 @@ test('原生 Codex：手机离线建会话带三种常驻工具，不带空命�
     const sent = sentTo(env.codex, 'thread/start')[0]
     assert.deepEqual(
       new Set(names(sent.dynamicTools)),
-      new Set(['litch_browser', 'litch_computer', 'litch_machine']),
+      new Set(['litch_browser', 'litch_computer', 'litch_machine', 'litch_automation']),
     )
-    assert.equal(sent.dynamicTools.length, 3)
+    assert.equal(sent.dynamicTools.length, 4)
     assert.deepEqual(codexVerdict('thread/start', sent), { rejects: [], ignored: [] })
   } finally {
     await env.close()

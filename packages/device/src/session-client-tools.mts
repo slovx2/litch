@@ -8,6 +8,8 @@ import { clientToolSpecs } from '../../protocol/src/client-tools-specs.mjs'
 import { TASKS_TOOLS } from '../../protocol/src/client-tools-tasks.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
+import { installSharedAutomationSkills } from '../../shared/src/automation-skills.mjs'
+import { isAutomationSpec, withAutomationGuide } from '../../shared/src/automation-tools.mjs'
 import { managerTools, ruleSettings } from './manager-rules.mjs'
 import { isObject } from './wire.mjs'
 
@@ -62,5 +64,6 @@ export function prepareSessionTools(
     deviceMachineEnabled(values),
   )
   const { dynamicTools: _given, ...rest } = params
-  return dynamicTools.length ? { ...rest, dynamicTools } : rest
+  if (dynamicTools.some(isAutomationSpec)) installSharedAutomationSkills()
+  return dynamicTools.length ? { ...rest, dynamicTools: withAutomationGuide(dynamicTools) } : rest
 }

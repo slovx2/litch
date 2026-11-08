@@ -21,26 +21,33 @@ test('SESSION-TOOLS-NS-001：建会话带的 litch_ 命名空间挂在会话对�
       'litch_echo',
       SESSIONS,
       'litch_browser',
+      'litch_automation',
       'litch_presentation',
     ])
     const bare = await client.call('thread/start', { harness: 'pi', cwd: '/work/app' })
-    assert.deepEqual(bare.thread.litchToolNamespaces, ['litch_browser', 'litch_presentation'])
+    assert.deepEqual(bare.thread.litchToolNamespaces, [
+      'litch_browser',
+      'litch_automation',
+      'litch_presentation',
+    ])
     const listed = await client.call('thread/list', {})
     assert.deepEqual(listed.data.find((row: any) => row.id === id).litchToolNamespaces, [
       'litch_echo',
       SESSIONS,
       'litch_browser',
+      'litch_automation',
       'litch_presentation',
     ])
     assert.deepEqual(
       listed.data.find((row: any) => row.id === bare.thread.id).litchToolNamespaces,
-      ['litch_browser', 'litch_presentation'],
+      ['litch_browser', 'litch_automation', 'litch_presentation'],
     )
     const read = await client.call('thread/read', { threadId: id })
     assert.deepEqual(read.thread.litchToolNamespaces, [
       'litch_echo',
       SESSIONS,
       'litch_browser',
+      'litch_automation',
       'litch_presentation',
     ])
     // 没声明 sessionTree 的连接看不到

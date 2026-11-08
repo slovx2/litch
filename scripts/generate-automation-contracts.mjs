@@ -5,6 +5,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 export const automationRoot = fileURLToPath(new URL('../', import.meta.url))
 export const projections = [
+  ['litch/automation-skills.mts', 'automation-skills.mts'],
+  ['litch/automation-skill-files.mts', 'automation-skill-files.mts'],
   ['litch/client-tools-browser.mts', 'client-tools-browser.mts'],
   ['litch/client-tools-computer.mts', 'client-tools-computer.mts'],
   ['litch/client-tools-computer-portable.mts', 'client-tools-computer-portable.mts'],

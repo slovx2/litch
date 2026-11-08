@@ -22,6 +22,7 @@ import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
+import { resolveAutomationTools } from '../../shared/src/automation-tools.mjs'
 import {
   BACKGROUND_SHELL_NAMESPACE,
   type BackgroundShells,
@@ -67,6 +68,7 @@ const describe = (namespace: string | null, tool: string, about: string, text: s
 export function dynamicToolSpecs(raw: unknown): DynamicToolSpec[] {
   if (raw == null) return []
   if (!Array.isArray(raw)) throw new ProtocolError(-32602, 'dynamicTools 必须是数组')
+  raw = resolveAutomationTools(raw, process.env.CHA_ACP_AGENT ?? 'acp')
   const flat: Array<Omit<DynamicToolSpec, 'mcpName'>> = []
   const add = (value: any, namespace: string | null, about: string) => {
     if (value?.type !== 'function') throw new ProtocolError(-32602, '动态工具必须是 function')
@@ -115,6 +117,7 @@ export function dynamicToolSpecs(raw: unknown): DynamicToolSpec[] {
  */
 export function toolInstructions(raw: unknown): string {
   if (!Array.isArray(raw)) return ''
+  raw = resolveAutomationTools(raw, process.env.CHA_ACP_AGENT ?? 'acp')
   const sections: string[] = []
   for (const value of raw as any[]) {
     if (value?.type !== 'namespace' || typeof value.instructions !== 'string') continue

@@ -461,6 +461,7 @@ test('SESSION-TOOLS-005：设备进程替每条通往适配器的连接声明 li
     assert.deepEqual(namespaces, [
       [
         'litch_echo',
+        'litch_automation',
         'litch_tasks',
         'litch_manager',
         'litch_repository',
@@ -470,6 +471,7 @@ test('SESSION-TOOLS-005：设备进程替每条通往适配器的连接声明 li
         'litch_machine',
       ],
       [
+        'litch_automation',
         'litch_tasks',
         'litch_manager',
         'litch_repository',
@@ -487,6 +489,7 @@ test('SESSION-TOOLS-005：设备进程替每条通往适配器的连接声明 li
     )
     assert.deepEqual(own.capabilities.litchClientTools.namespaces, [
       ...Object.values(CLIENT_TOOL_NAMESPACE),
+      'litch_automation',
       'litch_repository',
     ])
     assert.deepEqual(SESSION_TOOLS.name, SESSIONS)

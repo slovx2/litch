@@ -14,6 +14,27 @@ Codex 已有会话保持创建时的工具清单。关闭开关后，执行路�
 
 ## Switches per device and harness
 
+### Automation instructions
+
+启用自动化工具的会话由所在设备服务准备 `litch-browser-automation`（含 Chrome）和
+`litch-computer-automation`。两份技能写入该设备用户的 `~/.agents/skills/` 与 `~/.claude/skills/`；
+本机和远程设备相同，不修改 HOME 或 harness 配置。只处理这两个固定名称，升级以随包原文覆盖其内容，
+包括手动修改；其他名称不受影响。请将自定义技能放在不同名称下。
+
+可发现的入口使用原生 skill；目录写入失败、环境路径不同或入口不支持发现时，使用只读
+`litch_automation.guide(topic: browser|computer)`。工具只作简短提醒，不因未读指引阻止动作。
+没有客户端工具能力的入口保持原行为。只连接原生 Codex、未装设备服务的远程不在此范围。
+
+如需显式清理，在执行会话的设备上运行（安装根指适配器的 `libexec`，源码开发则指仓库根）：
+
+```sh
+node <安装根>/packages/device/dist/shared/src/automation-skills-cli.mjs --remove
+```
+
+该命令只删除两个目录中这两个固定技能名，包括手动修改的内容。独立发布包可用
+`<安装根>/node/bin/node` 代替系统 Node。之后新建启用自动化的会话会再次准备技能。
+已有 Codex 会话保留创建时的工具表；重新建会话后使用新指引入口。
+
 The browser and Computer Use are switched per device and, below that, per harness (task cards too;
 see `sessions-and-projects.md`). A harness that was never switched on its own follows its device, and
 so does a harness installed later. The tree under Settings → Per-harness switches lists only the
