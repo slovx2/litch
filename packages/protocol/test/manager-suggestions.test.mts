@@ -35,7 +35,7 @@ test('通知摘要与卡片共用首句和短号规则，空背景取任务首�
 test('提卡规则只告知平台自动通知，经理必须查重审核，命名空间说明不超限', () => {
   const manager = managerRoleRules('测试范围')
   assert.match(manager, /landed commits and manager items for duplicates/)
-  assert.match(manager, /do not leave cards unreviewed/)
+  assert.match(manager, /Review every card/)
   const line = managerLineRules('经理', MANAGER_DEFAULT_DISPATCH, true)
   assert.match(line, /Litch notifies the manager/)
   assert.match(line, /do not .*send a separate message/)
