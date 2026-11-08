@@ -511,3 +511,82 @@ test('v6 连续升级保留 D/R/P/S/I、问答、关联、报告已阅；不建�
     else await env.close()
   }
 })
+
+test('issue 讨论过滤在计数和分页前生效；开启标记持久化且不改变快速动作', async () => {
+  const { env, client, managerId } = await setup()
+  try {
+    const decisions = Array.from(
+      { length: 3 },
+      (_, i) =>
+        env.device.managers.writer.tool(managerId, 'add', {
+          kind: 'decision',
+          decision: { title: `决策 ${i}`, background: '' },
+        }) as any,
+    )
+    const report = env.device.managers.posts.tool(managerId, 'report', {
+      title: '报告',
+      body: '报告正文',
+      why: '测试',
+    }).post
+    await client.call(M.create, { managerId, title: '议题', body: '' })
+    const query = {
+      managerId,
+      kinds: ['ordinary', 'decision', 'report'],
+      discussionsOnly: true,
+      order: 'oldest',
+      limit: 1,
+    }
+    assert.equal((await client.call(M.list, query)).page.total, 1)
+    const before = (await client.call(M.read, { managerId, id: decisions[0].id })).issue
+    const opened = (
+      await client.call(M.update, {
+        managerId,
+        id: before.id,
+        revision: before.revision,
+        patch: { discussionOpened: true },
+        why: '打开讨论',
+      })
+    ).issue
+    assert.equal(opened.discussion.opened, true)
+    assert.deepEqual(opened.quick, before.quick)
+    assert.equal(opened.status, before.status)
+    assert.equal(
+      (env.device.managers.store.issueMeta(managerId, before.id) as any).discussionOpened,
+      true,
+    )
+    await client.call(M.comment, { managerId, id: decisions[1].id, revision: 1, body: '已有评论' })
+    await client.call(M.update, {
+      managerId,
+      id: report.id,
+      revision: report.revision,
+      patch: { discussionOpened: true },
+      why: '打开讨论',
+    })
+    assert.equal((await client.call(M.read, { managerId, id: report.id })).issue.status, 'unread')
+    const page = (await client.call(M.list, query)).page
+    assert.equal(page.total, 4)
+    const ids = [page.entries[0].id]
+    let cursor = page.nextCursor
+    while (cursor) {
+      const next = (await client.call(M.list, { ...query, cursor })).page
+      ids.push(...next.entries.map((i: any) => i.id))
+      cursor = next.nextCursor
+    }
+    assert.deepEqual(new Set(ids), new Set(['X-1', decisions[0].id, decisions[1].id, report.id]))
+    assert.equal((await client.call(M.list, { ...query, discussionsOnly: false })).page.total, 5)
+    const denied = await client.fails(M.update, {
+      managerId,
+      id: opened.id,
+      revision: opened.revision,
+      patch: { discussionOpened: true, title: '不能绕过快速动作' },
+      why: '测试',
+    })
+    assert.equal(denied.data.litch, 'issueTypeMismatch')
+    assert.equal(
+      (await client.call(M.read, { managerId, id: opened.id })).issue.title,
+      before.title,
+    )
+  } finally {
+    await env.close()
+  }
+})

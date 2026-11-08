@@ -38,6 +38,7 @@ export const MANAGER_ISSUE_STATUSES: Record<ManagerIssueKind, readonly ManagerIs
 
 /** 界面上的过滤条件：ManagerIssueQuery 去掉经理与分页游标。kinds 为空表示全部类型。 */
 export interface ManagerIssueFilter {
+  discussionsOnly?: boolean
   kinds: ManagerIssueKind[]
   statuses: ManagerIssueStatus[]
   authors: ManagerIssueAuthorKind[]
@@ -66,6 +67,7 @@ export function managerIssueFilterKey(filter: ManagerIssueFilter): string {
     filter.followUp,
     filter.unread,
     filter.order,
+    filter.discussionsOnly ?? false,
   ])
 }
 
@@ -98,6 +100,7 @@ export function managerIssueQuery(
 ): ManagerIssueQuery {
   return {
     managerId,
+    ...(filter.discussionsOnly ? { discussionsOnly: true } : {}),
     kinds: filter.kinds.length
       ? inOrder(MANAGER_ISSUE_KINDS, filter.kinds)
       : [...MANAGER_ISSUE_KINDS],
@@ -127,10 +130,15 @@ export const MANAGER_ISSUE_ACTIVE: readonly ManagerIssueStatus[] = [
  * 各是一条只取一行的查询，数字用 total；点数字进控制台带上同一组条件。
  */
 export const MANAGER_ISSUE_SUMMARY_FILTERS = {
-  active: { ...DEFAULT_MANAGER_ISSUE_FILTER, statuses: [...MANAGER_ISSUE_ACTIVE] },
-  unread: { ...DEFAULT_MANAGER_ISSUE_FILTER, unread: true },
+  active: {
+    ...DEFAULT_MANAGER_ISSUE_FILTER,
+    discussionsOnly: true,
+    statuses: [...MANAGER_ISSUE_ACTIVE],
+  },
+  unread: { ...DEFAULT_MANAGER_ISSUE_FILTER, discussionsOnly: true, unread: true },
   paused: {
     ...DEFAULT_MANAGER_ISSUE_FILTER,
+    discussionsOnly: true,
     statuses: [...MANAGER_ISSUE_ACTIVE],
     followUp: 'off',
   },

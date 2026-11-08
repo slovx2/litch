@@ -107,6 +107,28 @@ export function createMockManagers(host: MockManagerHost) {
           : { managers: [], boards: [], sessions: [] }
       for (const board of value.boards) {
         if (board.managerId === 'm1') board.posts = [sampleReport(host.clock.now(), host.lang)]
+        if (host.issues !== false && ['m1', 'm3'].includes(board.managerId)) {
+          const at = host.clock.now()
+          board.posts = [
+            ...(board.posts ?? []),
+            {
+              id: 'S-preview-discussed',
+              kind: 'suggestion',
+              title: t('改进示例项目的错误提示', 'Improve error messages in the sample project'),
+              body: t(
+                '已有替代方案，保留讨论供后续参考。',
+                'An alternative is available; keep this discussion for reference.',
+              ),
+              revision: 1,
+              createdAt: at,
+              updatedAt: at,
+              fields: { status: 'dismissed' },
+              proposalId: 'preview-discussed',
+              discussion: { messages: [], light: false, summary: null, forwarded: 0 },
+              versions: [],
+            },
+          ]
+        }
         board.posts = mockPosts(board)
       }
       for (const manager of value.managers)

@@ -2,7 +2,7 @@
 // 依次是一行小字（类型、状态、创建者、跟进）、原帖、状态与跟进、关联、评论时间线；输入框是单独的 IssueComposer，
 // 抽屉里放在底部固定，完整页放在页尾。触控区不小于主题的 hit。
 import type { ManagerView } from '@litch/core'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import { MANAGER_ISSUE_STATUSES } from '../../../../../../packages/core/src/projection/manager-issue-list.mts'
 import type {
@@ -107,6 +107,26 @@ export function IssueThread({
   onOpenItem(id: string): void
 }) {
   const t = useT()
+  const [openingError, setOpeningError] = useState('')
+  const opened =
+    issue.discussion.opened ||
+    issue.discussion.comments.length > 0 ||
+    issue.discussion.questions.length > 0
+  useEffect(() => {
+    if (disabled || issue.kind === 'ordinary' || opened) return
+    void commands
+      .update({
+        id: issue.id,
+        revision: issue.revision,
+        patch: { discussionOpened: true },
+        why: t('issue.discuss.open'),
+      })
+      .then(
+        () => setOpeningError(''),
+        (error) => setOpeningError(error instanceof Error ? error.message : String(error)),
+      )
+  }, [disabled, issue.id, issue.kind, issue.revision, opened, commands, t])
+
   const { c, font, radius } = useTheme()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -166,6 +186,11 @@ export function IssueThread({
   const ordinary = issue.kind === 'ordinary'
   return (
     <View style={styles.thread} testID={`issue-thread:${issue.id}`}>
+      {openingError ? (
+        <Text accessibilityRole="alert" style={{ color: c.err }}>
+          {openingError}
+        </Text>
+      ) : null}
       {quick ??
         (issue.body ? (
           <Markdown text={issue.body} />

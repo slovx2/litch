@@ -95,12 +95,20 @@ export interface ManagerIssueTimelineEntry {
 }
 
 export interface ManagerIssueDiscussion {
+  /** 用户已开启讨论；关闭抽屉不会撤销。 */
+  opened?: boolean
   comments: ManagerIssueComment[]
   /** 旧“问经理/临时旁问”记录，保持与 ManagerDiscussion 相同的安全语义。 */
   questions: ManagerQuestion[]
   summary: string | null
   /** 旧字段只在 D/R/P/S 投影中存在，便于客户端渐进读取。 */
   legacy?: ManagerDiscussion
+}
+
+/** 是否已开启讨论：显式开启、公共评论或旧问答任一成立。 */
+export function managerIssueHasDiscussion(issue: Pick<ManagerIssue, 'discussion'>): boolean {
+  const d = issue.discussion
+  return d.opened === true || d.comments.length > 0 || d.questions.length > 0
 }
 
 export interface ManagerIssueQuickActions {
@@ -150,6 +158,8 @@ export interface ManagerIssueHead {
 export type ManagerIssueOrder = 'newest' | 'oldest' | 'pending' | 'updated'
 export interface ManagerIssueQuery {
   managerId: string
+  /** 只列 X-n 和已开启讨论或已有消息的特殊 issue；分页前应用。 */
+  discussionsOnly?: boolean
   kinds?: ManagerIssueKind[]
   statuses?: ManagerIssueStatus[]
   authors?: ManagerIssueAuthorKind[]
@@ -182,6 +192,8 @@ export interface ManagerIssueUpdateParams {
   id: ManagerIssueRef
   revision: number
   patch: {
+    /** 只允许置为 true，不改变特殊类型的快速处理状态。 */
+    discussionOpened?: true
     title?: string
     body?: string
     status?: ManagerOrdinaryStatus

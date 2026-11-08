@@ -364,6 +364,11 @@ export class ManagerStore {
       )
       .run(managerId, id, JSON.stringify(value))
   }
+  issueHasComments(managerId: string, issueId: string): boolean {
+    return !!this.db
+      .prepare('SELECT 1 FROM issue_comments WHERE manager_id=? AND issue_id=? LIMIT 1')
+      .get(managerId, issueId)
+  }
   issueComments(managerId: string, issueId: string): unknown[] {
     return this.db
       .prepare('SELECT body FROM issue_comments WHERE manager_id=? AND issue_id=? ORDER BY rowid')

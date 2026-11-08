@@ -16,7 +16,7 @@ export const MANAGER_ISSUE_TOOLS: ClientToolNamespaceSpec['tools'] = [
     type: 'function',
     name: 'issue_create',
     description:
-      'Create an ordinary issue for discussion and long-term follow-up. The author is manager; link its source. Does not create a decision or request.',
+      'Create an issue for discussion and long-term follow-up. The author is manager; link its source. Does not create a decision or request.',
     inputSchema: object(
       { title: string, body: string, followUp: follow, idempotencyKey: string, ...RELATION_INPUTS },
       ['title', 'body'],
@@ -52,7 +52,7 @@ export const MANAGER_ISSUE_TOOLS: ClientToolNamespaceSpec['tools'] = [
     type: 'function',
     name: 'issue_update',
     description:
-      'Update an ordinary issue with the current revision and a reason. Special types retain their quick actions and post_reply.',
+      'Update an issue with the current revision and a reason. Special types retain their quick actions and post_reply.',
     inputSchema: object(
       {
         id,

@@ -1,6 +1,6 @@
 {
   "extension": "litchManagerIssues",
-  "description": "经理公共 issue 外壳：普通 issue X-n，D/R/P/S 保持原编号；评论、时间线、跟进、查询和通知。类型在 packages/protocol/src/manager-issues.mts。",
+  "description": "经理公共 issue 外壳：issue X-n，D/R/P/S 保持原编号；评论、时间线、跟进、查询和通知。类型在 packages/protocol/src/manager-issues.mts。",
   "appliesTo": "设备聚合面。只向声明 litchManagerIssues 的连接发送这些方法的字段和通知；官方桌面端及未升级客户端继续使用 litchManager 与旧帖子方法。",
   "declaration": {
     "description": "客户端在 capabilities.litchExtensions 中声明 litchManagerIssues；设备 runtime/info.device.extensions 列出它表示支持。",
@@ -17,13 +17,13 @@
   },
   "undeclared": "方法返回 extensionRequired；issue 字段和 issue/changed、issue/activity 通知不发给未声明连接。未声明连接仍可使用旧 litch/manager/* 方法。",
   "rules": [
-    "普通 issue 使用按经理独立递增的 X-n；决策 D-n、请求 R-n、报告 P-n、建议 S-提案 id 和经理事项 I-n 保持原样。不重编号，不建立别名表。",
+    "issue 使用按经理独立递增的 X-n；决策 D-n、请求 R-n、报告 P-n、建议 S-提案 id 和经理事项 I-n 保持原样。不重编号，不建立别名表。",
     "所有 issue 方法和工具按经理上下文接收 X/D/R/P/S 编号；不存在或跨经理引用明确拒绝。I-n 不是 issue。",
-    "公共 issue 类型为 ordinary、decision、suggestion、request、report。普通 issue 状态为 open、in_progress、blocked、resolved、closed；其它类型沿用各自快速处理状态。报告属于 issue，但 unread/read 不计入待处理总数。",
-    "普通 issue 的评论与 manager question 分开保存和投影。评论不自动回答决策、交付请求、开始建议或标已阅；问题/回答保留原有只读旁问和 post_reply 安全边界。",
+    "公共 issue 类型为 ordinary、decision、suggestion、request、report。issue 状态为 open、in_progress、blocked、resolved、closed；其它类型沿用各自快速处理状态。报告属于 issue，但 unread/read 不计入待处理总数。",
+    "issue 的评论与 manager question 分开保存和投影。评论不自动回答决策、交付请求、开始建议或标已阅；问题/回答保留原有只读旁问和 post_reply 安全边界。",
     "followUp=off 时评论仍持久化并广播给用户端，但不唤醒经理；恢复后不回放暂停期间旧评论。followUp=on 的用户创建/评论产生稳定 activity event，设备自动送达或唤醒经理。",
     "issue/activity 是持久业务事件的摘要；issue/changed 是客户端失效通知。两者只发给声明 litchManagerIssues 的连接，设备重启和断线重连不得重复创建评论或重复唤醒。",
-    "issues/list 默认 kinds=[ordinary]；查询支持 kind、status、author、followUp、unread、order、cursor、limit。I-n 经理事项不属于 issue，不进入公共 issue 列表。",
+    "issues/list 默认 kinds=[ordinary]；查询支持 kind、status、author、followUp、unread、order、cursor、limit。discussionsOnly=true 在分页和计数前只保留 X-n 与已开启讨论的特殊条目；讨论开启由 discussion.opened=true、comments 非空或 questions 非空判断。issue/update 的 patch.discussionOpened=true 持久保存开启状态，不改变原类型、快速处理状态或未读。I-n 经理事项不属于 issue，不进入公共 issue 列表。",
     "quick.revision 为特殊类型原对象的快速操作版本；公共 revision 还包括跟进元数据变更。评论不修改原帖 revision；重复 idempotencyKey 返回原回执，不同内容复用同一 key 拒绝。",
     "issue/comment 可选 commentId 与 commentRevision 用于编辑本人评论；只递增评论 revision，记录旧正文审计。经理不能修改用户评论，旁问不能调用任何 issue 写入。"
   ],

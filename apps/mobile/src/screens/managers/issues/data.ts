@@ -47,7 +47,12 @@ export interface IssueCommands {
   update(params: {
     id: string
     revision: number
-    patch: { title?: string; body?: string; status?: ManagerOrdinaryStatus }
+    patch: {
+      title?: string
+      body?: string
+      status?: ManagerOrdinaryStatus
+      discussionOpened?: true
+    }
     why: string
   }): Promise<unknown>
   comment(params: { id: string; revision: number; body: string }): Promise<unknown>

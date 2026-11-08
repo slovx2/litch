@@ -198,7 +198,7 @@ export const zhManager = {
   'manager.feature.feedback': '决策追问、请你做的交付与回复',
   'manager.feature.posts': '议题追问、报告已阅、引用预览',
   'manager.feature.ignore': '忽略决策',
-  'manager.feature.issues': '统一 issue 列表与普通 issue',
+  'manager.feature.issues': '统一 issue 列表与讨论',
   'manager.feature.join': '、',
   'manager.unignore': '撤销忽略',
   'manager.reopenedBy': '经理重新打开',

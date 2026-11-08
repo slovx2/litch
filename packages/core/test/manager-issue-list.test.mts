@@ -96,3 +96,15 @@ test('完整 issue 收成列表行：预览取第一段非空文字', () => {
   assert.equal(head.author, 'user')
   assert.equal(head.followUp, 'off')
 })
+
+test('讨论页签与专属页签缓存分离；概览预设仍只选 X-n', () => {
+  const base = { ...DEFAULT_MANAGER_ISSUE_FILTER, kinds: ['decision'] as const }
+  const all = { ...base, kinds: [...base.kinds] }
+  const discussion = { ...all, discussionsOnly: true }
+  assert.notEqual(managerIssuePageKey('m1', all), managerIssuePageKey('m1', discussion))
+  assert.equal(managerIssueQuery('m1', discussion).discussionsOnly, true)
+  for (const filter of Object.values(MANAGER_ISSUE_SUMMARY_FILTERS)) {
+    assert.deepEqual(filter.kinds, ['ordinary'])
+    assert.equal(filter.discussionsOnly, true)
+  }
+})

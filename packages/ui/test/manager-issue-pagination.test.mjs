@@ -73,8 +73,10 @@ function fixture(platform) {
     },
   }
   const requests = []
+  const filters = []
   const commands = {
     list: (filter, options = {}) => {
+      filters.push(structuredClone(filter))
       requests.push({ kind: filter.kinds[0], cursor: options.cursor ?? null })
       return Promise.resolve()
     },
@@ -123,6 +125,7 @@ function fixture(platform) {
         list.managerIssuePageKey(manager.id, {
           ...list.DEFAULT_MANAGER_ISSUE_FILTER,
           kinds: [category],
+          ...(category === 'ordinary' ? { discussionsOnly: true } : {}),
         }),
         {
           entries: Array.from({ length: loaded }, (_, i) => ({
@@ -149,7 +152,36 @@ function fixture(platform) {
   }
   return {
     requests,
+    filters,
     render,
+    pickDecision() {
+      if (platform === 'desktop') kind = 'decision'
+      else
+        nodes(tree)
+          .find((node) => node.props?.testID === 'issue-capsule:decision')
+          .props.onPress()
+      render()
+    },
+    toggleType(type) {
+      if (platform === 'mobile') {
+        nodes(tree)
+          .find((node) => node.props?.testID === 'issue-filter-open')
+          .props.onPress()
+        render()
+      }
+      const control = nodes(tree).find(
+        (node) => typeof node.type === 'function' && node.props?.filter && node.props?.onChange,
+      )
+      const content = control.type(control.props)
+      const button = nodes(content).find((node) =>
+        platform === 'desktop'
+          ? node.props?.['data-issue-filter-kind'] === type
+          : node.props?.testID === `issue-filter-kind:${type}`,
+      )
+      assert.ok(button, '应有类型多选控件')
+      ;(button.props.onClick ?? button.props.onPress)()
+      render()
+    },
     pickOrdinary() {
       if (platform === 'desktop') kind = 'ordinary'
       else
@@ -190,5 +222,26 @@ for (const platform of Object.keys(sources)) {
       { kind: 'ordinary', cursor: null },
       { kind: 'ordinary', cursor: '30' },
     ])
+  })
+}
+
+for (const platform of Object.keys(sources)) {
+  test(`${platform}：issue 多选不切页签，与决策过滤独立记忆，可全选`, () => {
+    const f = fixture(platform)
+    f.render()
+    f.pickOrdinary()
+    assert.equal(f.filters.at(-1).discussionsOnly, true)
+    f.toggleType('report')
+    assert.deepEqual(f.filters.at(-1).kinds, ['ordinary', 'report'])
+    f.toggleType('ordinary')
+    assert.deepEqual(f.filters.at(-1).kinds, ['report'])
+    f.pickDecision()
+    assert.deepEqual(f.filters.at(-1).kinds, ['decision'])
+    assert.equal(f.filters.at(-1).discussionsOnly, undefined)
+    f.pickOrdinary()
+    assert.deepEqual(f.filters.at(-1).kinds, ['report'])
+    f.toggleType('all')
+    assert.deepEqual(f.filters.at(-1).kinds, [])
+    assert.equal(f.filters.at(-1).discussionsOnly, true)
   })
 }

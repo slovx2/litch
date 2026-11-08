@@ -25,6 +25,7 @@ import { managerNow } from './manager-store.mjs'
 import { fields, invalid, keys, ManagerError, text } from './manager-validate.mjs'
 
 interface Meta {
+  discussionOpened?: boolean
   followUp?: ManagerIssueFollowUpState
   revision: number
   updatedAt: number
@@ -159,6 +160,10 @@ export class ManagerIssues {
     issue.revision += meta?.revision ?? 0
     issue.updatedAt = Math.max(issue.updatedAt, meta?.updatedAt ?? 0)
     if (meta?.followUp) issue.followUp = meta.followUp
+    issue.discussion.opened =
+      meta?.discussionOpened === true ||
+      issue.discussion.questions.length > 0 ||
+      this.store.issueHasComments(managerId, id)
     issue.stateGroup =
       issue.kind === 'report'
         ? (issue.status as 'read' | 'unread')
@@ -276,6 +281,7 @@ export class ManagerIssues {
       .filter(
         (i) =>
           kinds.includes(i.kind) &&
+          (!query.discussionsOnly || i.kind === 'ordinary' || i.discussion.opened === true) &&
           (!query.statuses?.length || query.statuses.includes(i.status)) &&
           (!query.authors?.length || query.authors.includes(i.author.kind)) &&
           (!query.followUp || query.followUp === 'all' || query.followUp === i.followUp.state) &&
@@ -408,6 +414,7 @@ export class ManagerIssues {
       keys(p, [
         'managerId',
         'kinds',
+        'discussionsOnly',
         'statuses',
         'authors',
         'followUp',
@@ -454,6 +461,8 @@ export class ManagerIssues {
           invalid(`Invalid ${field}.`)
       if (p.followUp !== undefined && !['on', 'off', 'all'].includes(String(p.followUp)))
         invalid('Invalid followUp.')
+      if (p.discussionsOnly !== undefined && typeof p.discussionsOnly !== 'boolean')
+        invalid('discussionsOnly must be a boolean.')
       if (p.unread !== undefined && typeof p.unread !== 'boolean')
         invalid('unread must be a boolean.')
       if (
@@ -616,8 +625,19 @@ export class ManagerIssues {
           } else if (method === METHOD.update) {
             keys(p, ['managerId', 'id', 'revision', 'patch', 'why'])
             patch = fields(p.patch)
-            keys(patch, ['title', 'body', 'status', 'followUp', 'source', 'related'])
-            if (before.kind !== 'ordinary')
+            keys(patch, [
+              'title',
+              'body',
+              'status',
+              'followUp',
+              'source',
+              'related',
+              'discussionOpened',
+            ])
+            if (
+              before.kind !== 'ordinary' &&
+              Object.keys(patch).some((key) => key !== 'discussionOpened')
+            )
               fail(
                 'issueTypeMismatch',
                 'Use the special issue quick actions or post_reply to edit this issue.',
@@ -631,8 +651,17 @@ export class ManagerIssues {
             patch.status !== undefined &&
             !['open', 'in_progress', 'blocked', 'resolved', 'closed'].includes(String(patch.status))
           )
-            invalid('Invalid ordinary issue status.')
-          const after = { ...before }
+            invalid('Invalid issue status.')
+          if (patch.discussionOpened !== undefined && patch.discussionOpened !== true)
+            invalid('discussionOpened can only be true.')
+          if (patch.discussionOpened === true) meta.discussionOpened = true
+          const after = {
+            ...before,
+            discussion: {
+              ...before.discussion,
+              ...(meta.discussionOpened ? { opened: true } : {}),
+            },
+          }
           if (patch.title !== undefined) after.title = text(patch.title, 'title')
           if (patch.body !== undefined) after.body = text(patch.body, 'body', false)
           if (patch.status !== undefined) after.status = patch.status as ManagerIssue['status']

@@ -83,26 +83,64 @@ export async function managerIssuesProbe() {
   )
   assert(
     !one('[data-act="issue-new"]') && !one('[data-issue-chip]'),
-    '决策标签出现普通 issue 专属操作',
+    '决策标签出现X-n issue 专属操作',
   )
   passed.push('五类标签、默认决策、专属操作隔离')
   await click('[data-inbox-tab="issues"]')
-  await until('普通 issue 首屏 30/38', () => total() === '30/38' && cards().length === 30)
+  await until('X-n issue 首屏 30/38', () => total() === '30/38' && cards().length === 30)
   assert(
     cards().every((card) => card.dataset.issueType === 'ordinary'),
-    '普通 issue 标签混入特殊 issue',
+    'X-n issue 标签混入特殊 issue',
   )
   assert(
     one('[data-act="issue-new"]') && all('[data-issue-chip]').length === 4,
-    '普通 issue 缺少新建或过滤胶囊',
+    'X-n issue 缺少新建或过滤胶囊',
   )
   assert(one('[data-issue-more]'), '首屏没有加载更多')
-  passed.push('普通 issue 标签：30/38')
+  passed.push('X-n issue 标签：30/38')
   await click('[data-issue-more]')
   await until('全部 38 条', () => total() === '38/38' && cards().length === 38)
   assert(!one('[data-issue-more]'), '加载完仍有下一页')
   assert(new Set(cards().map((card) => card.dataset.issue)).size === 38, '分页出现重复卡片')
   passed.push('加载更多：38/38 且无重复')
+
+  // issue 页签的多选过滤只纳入已开启讨论的特殊条目；四类独立页签仍完整。
+  await click('[data-issue-filter-kind="all"]')
+  await until('已讨论的四类特殊 issue', () =>
+    ['decision', 'suggestion', 'request', 'report'].every((kind) =>
+      cards().some((card) => card.dataset.issueType === kind),
+    ),
+  )
+  const discussions = new Set(
+    cards()
+      .filter((card) => card.dataset.issueType !== 'ordinary')
+      .map((card) => card.dataset.issue),
+  )
+  await click('[data-inbox-tab="decisions"]')
+  await until(
+    '决策完整列表',
+    () => cards().length > 0 && cards().every((card) => card.dataset.issueType === 'decision'),
+  )
+  const unopened = cards().find((card) => !discussions.has(card.dataset.issue))
+  assert(unopened, '应有尚未讨论的决策用于验证入口')
+  const unopenedId = unopened?.dataset.issue
+  await click(`[data-issue="${unopenedId}"] [data-act="issue-toggle"]`)
+  await click(`[data-issue="${unopenedId}"] [data-act="issue-discuss"]`)
+  await until('开启讨论持久化', () => one('[data-issue-thread="pane"]'))
+  await click('[data-inbox-tab="issues"]')
+  await until(
+    '全选条件独立记忆且新讨论出现',
+    () =>
+      one('[data-issue-filter-kind="all"][aria-pressed="true"]') &&
+      cards().some((card) => card.dataset.issue === unopenedId),
+  )
+  // 恢复默认 X-n，后续计数以完整原始集合为准。
+  for (const kind of ['decision', 'suggestion', 'request', 'report'])
+    await click(`[data-issue-filter-kind="${kind}"]`)
+  await until('恢复默认 issue 首屏', () => total() === '30/38')
+  await click('[data-issue-more]')
+  await until('恢复完整 X-n 集合', () => total() === '38/38')
+  passed.push('类型多选、全选、独立记忆和开启讨论后纳入 issue')
 
   // 从完整列表的可见元信息得出期待集合，避免拿产品过滤函数给自身作断言。
   const samples = cards().map((card) => ({
@@ -123,7 +161,7 @@ export async function managerIssuesProbe() {
   // 两个标签各留不同的状态与排序，切换回来仍取自己的过滤条件。
   await click('[data-issue-filter-status="active"]')
   await select('[data-issue-filter="order"]', 'oldest')
-  await until('普通 issue 开放集合', () => sameIds(expectedSummary.active))
+  await until('X-n issue 开放集合', () => sameIds(expectedSummary.active))
   await click('[data-inbox-tab="decisions"]')
   await click('[data-issue-filter-status="open"]')
   await select('[data-issue-filter="order"]', 'updated')
@@ -139,7 +177,7 @@ export async function managerIssuesProbe() {
   )
   await click('[data-inbox-tab="issues"]')
   await until(
-    '普通 issue 独立记忆',
+    'X-n issue 独立记忆',
     () =>
       one('[data-issue-filter-status="active"][aria-pressed="true"]') &&
       one<HTMLSelectElement>('[data-issue-filter="order"]')?.value === 'oldest' &&
@@ -154,7 +192,7 @@ export async function managerIssuesProbe() {
   )
   passed.push('分类标签独立记忆状态与排序')
   for (const [key, expected] of Object.entries(expectedSummary)) {
-    // 从决策标签进入概览，数字应切到普通 issue 并覆盖它之前记住的过滤条件。
+    // 从决策标签进入概览，数字应切到X-n issue 并覆盖它之前记住的过滤条件。
     await click('[data-inbox-tab="decisions"]')
     await until(
       '切到决策列表',
@@ -178,7 +216,7 @@ export async function managerIssuesProbe() {
       cards().every((card) => card.dataset.issueType === 'ordinary'),
       `${key} 混入特殊 issue`,
     )
-    assert(one('[data-inbox-tab="issues"][aria-pressed="true"]'), '概览没有切到普通 issue 标签')
+    assert(one('[data-inbox-tab="issues"][aria-pressed="true"]'), '概览没有切到X-n issue 标签')
     assert(
       one<HTMLSelectElement>('[data-issue-filter="order"]')?.value === 'newest',
       '概览仍沿用先前排序',

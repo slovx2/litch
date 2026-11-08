@@ -1,4 +1,8 @@
-import type { ManagerIssue, ManagerIssueQuery } from '../../../protocol/src/manager-issues.mjs'
+import {
+  type ManagerIssue,
+  type ManagerIssueQuery,
+  managerIssueHasDiscussion,
+} from '../../../protocol/src/manager-issues.mjs'
 import { ChannelError } from '../channel/protocol.mjs'
 import type { ManagerBoardView } from '../model-manager.mjs'
 import { type ManagerIssuesView, managerIssueQueryKey } from '../model-manager-issues.mjs'
@@ -34,6 +38,7 @@ export class MockManagerIssues {
     const ordered = [...(board.posts ?? [])].sort(
       (a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id, 'en', { numeric: true }),
     )
+    const added: ManagerIssue[] = []
     for (const post of ordered) {
       const previous = records.get(post.id)
       const id = post.id
@@ -66,6 +71,7 @@ export class MockManagerIssues {
           changedBy: 'manager',
         },
         discussion: {
+          opened: previous?.discussion.opened === true,
           comments: previous?.discussion.comments ?? [],
           questions: post.discussion.messages,
           summary: post.discussion.summary,
@@ -109,9 +115,12 @@ export class MockManagerIssues {
             ? 'pending'
             : 'closed'
       records.set(id, issue)
+      if (!previous) added.push(issue)
     }
-    if (fresh && this.seed)
-      for (const issue of this.seed(key, [...records.values()])) records.set(issue.id, issue)
+    // 建议投影可能晚于经理首屏到达；补种新到的特殊条目，不重置已有讨论或 X-n。
+    if (this.seed && (fresh || added.length))
+      for (const issue of this.seed(key, added))
+        if (fresh || issue.kind !== 'ordinary') records.set(issue.id, issue)
     return records
   }
   /** 缓存里的页：加载过更多时保留从头到已加载处的全部条目（与核心缓存的合并结果同形）。 */
@@ -165,6 +174,7 @@ export class MockManagerIssues {
     const rows = [...records.values()].filter(
       (i) =>
         (q.kinds ?? ['ordinary']).includes(i.kind) &&
+        (!q.discussionsOnly || i.kind === 'ordinary' || managerIssueHasDiscussion(i)) &&
         (!q.statuses?.length || q.statuses.includes(i.status)) &&
         (!q.authors?.length || q.authors.includes(i.author.kind)) &&
         (!q.followUp || q.followUp === 'all' || q.followUp === i.followUp.state) &&
@@ -293,9 +303,13 @@ export class MockManagerIssues {
           commentId: id,
         })
       } else if (name === 'managers.issue.update') {
-        if (issue.kind !== 'ordinary')
+        if (
+          issue.kind !== 'ordinary' &&
+          Object.keys(p.patch).some((key) => key !== 'discussionOpened')
+        )
           throw new ChannelError('rejected', 'Use the special issue quick actions')
-        const { followUp, ...patch } = p.patch
+        const { followUp, discussionOpened, ...patch } = p.patch
+        if (discussionOpened === true) issue.discussion.opened = true
         Object.assign(issue, patch)
         if (followUp) issue.followUp = { state: followUp, changedAt: at, changedBy: 'user' }
         issue.revision++

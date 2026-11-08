@@ -2,20 +2,20 @@
 
 ## Managers
 
-### 普通议题与评论 / Ordinary issues and comments
+### issue 与评论 / Issues and comments
 
-普通议题使用经理内独立递增的 `X-n`，用于双方共同维护的长期讨论。决策 `D-n`、请你做 `R-n`、
-报告 `P-n` 和建议 `S-…` 保持原编号；`I-n` 仍是经理内部事项。用户和经理各自只能编辑自己的评论，旧正文保留审计。普通议题支持开放、进行中、受阻、
+issue 使用经理内独立递增的 `X-n`，用于双方共同维护的长期讨论。决策 `D-n`、请你做 `R-n`、
+报告 `P-n` 和建议 `S-…` 保持原编号；`I-n` 仍是经理内部事项。用户和经理各自只能编辑自己的评论，旧正文保留审计。issue 支持开放、进行中、受阻、
 已解决、已关闭五种状态。状态与跟进开关独立，评论不会自动回答决策、交付请求或标记报告已阅。
 
 用户新建或评论会自动通知经理：运行时插话，空闲时唤醒。暂停跟进时评论照存但不唤醒，恢复后
 不回放暂停期间的评论。已结束经理可留存评论和事件，但不会重新启动。经理回复形成持久未读，
 客户端重连后仍可查看；报告的已阅状态独立保留。设备须支持 `litchManagerIssues`，旧设备不提供
-普通议题写入。已有经理需要重置会话才能取得新增 `issue_create/get/comment/update/follow` 工具。
+issue 写入。已有经理需要重置会话才能取得新增 `issue_create/get/comment/update/follow` 工具。
 
-Ordinary issues use independent per-manager `X-n` numbers for shared, ongoing discussions. Decisions,
+Issues use independent per-manager `X-n` numbers for shared, ongoing discussions. Decisions,
 requests, reports and suggestions retain their D/R/P/S identifiers; I-n remains the manager's notebook.
-Ordinary states are open, in progress, blocked, resolved and closed. Follow-up is independent of status.
+X-n states are open, in progress, blocked, resolved and closed. Follow-up is independent of status.
 Comments do not answer decisions, deliver requests or mark reports read. User creation and comments
 automatically reach a running manager or wake an idle one. Pausing follow-up saves comments without
 waking the manager; resuming does not replay them. Ended managers retain comments without restarting.
@@ -24,30 +24,22 @@ the new issue tools; devices must advertise `litchManagerIssues` to support thes
 
 #### 控制台里的 issue 列表 / Issues in Console
 
-支持 issue 的设备上，控制台仍按页签分类：决策、建议、请你做、报告在前，末尾多一个“普通 issue”，默认打开决策。
-每个页签上方一行是状态切换（普通 issue 另有“未完成”），排序在右端；普通 issue 页签下另有“新建 issue”
-（标题必填、正文可空）和“我建的 / 经理建的 / 未读 / 跟进已暂停”几个开关。每页 30 条，以“加载更多”继续追加；
-分页结果更新时保留已加载的条目。
-展开普通 issue 依次是原帖、状态分段与跟进开关、关联（I-n 写作“经理事项”，可点开）、评论和输入框；
-经理的新回复标未读，打开即已读。决策、请你做、建议、报告展开后先是原来的快速处理区，下面的“展开讨论”
-在底部抽屉里打开同一套讨论界面；抽屉和卡片里都有“打开完整讨论”，进入整页。概览的“普通 issue”一行给出
-未完成、等我看、跟进已暂停三个数，点数字进入带同样条件的普通 issue 页签。手机上用类别胶囊切换（顺序相同，
-数字是待处理数），其余条件在过滤抽屉里；点一条拉起半屏抽屉，右上角可进完整讨论页。设备服务较旧时没有
-“普通 issue”页签，页顶提示去设备详情升级。
+支持 issue 的设备上，控制台页签为决策、建议、请你做、报告、issue，默认打开决策。
+issue 页签默认只选类型“issue”（X-n），类型过滤支持多选和全选。决策、建议、请求和报告只有
+开启过讨论或已经有评论、问答时，才会出现在这个页签；关闭讨论抽屉后仍保留。其他四个页签照常列出各自的所有条目。
+每个页签分别记住自己的过滤条件和排序。issue 页签还可按状态、创建者、未读和跟进筛选，支持新建。
+展开 X-n 可查看原帖、状态与跟进、关联、评论及输入框；其他类型保留快速处理按钮，可打开底部讨论或完整讨论页。
+概览的 issue 摘要仍统计 X-n 的未完成、等我看、跟进已暂停；点击数字会回到 issue 页签，恢复只选 issue 类型并套用相应过滤。
+手机的类别胶囊和过滤抽屉采用相同规则。设备不支持 issue 时仍显示原来的四类控制台，并提示升级设备服务。
 
-On devices that support issues, Console keeps its category tabs: Decisions, Suggestions, For you and
-Reports first, then **Issues**; Decisions opens by default. Each tab has a status row (Issues adds
-**Not done**) with the order on the right. The Issues tab adds **New issue** (title required, body
-optional) and toggles for created by me, created by the manager, unread and paused follow-up. Lists
-load 30 at a time with **Load more**, keeping earlier entries when the next page arrives.
-An expanded issue shows the post, status and follow-up controls,
-links (I-n opens the manager item), comments and a composer; new manager replies are unread until you
-open the issue. Decisions, requests, suggestions and reports keep their quick actions on top;
-**Open discussion** shows the same discussion view in the bottom drawer, and **Open full discussion**
-opens it as a page. Overview shows not-done, waiting-for-you and paused counts for issues; each opens
-the Issues tab with that filter. The phone uses capsules in the same order (with pending counts),
-other filters are in the filter drawer, and a tapped issue opens a half-height sheet that links to the
-full discussion page. Older device services have no Issues tab and show an upgrade note.
+The Console tabs are Decisions, Suggestions, For you, Reports and Issues. Decisions remains the default.
+The Issues tab initially selects only the Issue type (X-n). Its type filter supports multiple selections or all types.
+Decisions, suggestions, requests and reports appear here only after a discussion has been opened or has comments or questions;
+closing the discussion does not remove them. Their dedicated tabs continue to show all entries of that type.
+Each tab remembers its own filters and sorting. Issues also offers status, author, unread and follow-up filters, plus New issue.
+X-n opens its description, status, follow-up, links and comments; other types keep their quick actions and can open a discussion drawer or full page.
+Overview counts still cover X-n issues. Clicking a count selects the Issues tab and the Issue type with the corresponding filter.
+The phone uses the same rules in its category pills and filter drawer. Older devices keep the four-category Console and show an upgrade notice.
 
 用户要求过或已批准的范围内任务，经理直接开工作线；经理自行发现、用户尚未要求或批准的工作
 （如回报中顺带发现的问题、审查改进点、可选后续工作），会附完整简报放到「建议」页，由用户决定是否开始。

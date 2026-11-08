@@ -12,11 +12,13 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import {
   DEFAULT_MANAGER_ISSUE_FILTER,
   MANAGER_ISSUE_ATTENTION_FILTERS,
+  MANAGER_ISSUE_KINDS,
   MANAGER_ISSUE_LIST_ORDERS,
   type ManagerIssueFilter,
   managerIssueFilterKey,
   managerIssuePageKey,
   managerIssueStatusOptions,
+  withManagerIssueKinds,
 } from '../../../../../../packages/core/src/projection/manager-issue-list.mts'
 import type {
   ManagerIssueHead,
@@ -49,6 +51,7 @@ const TABS: readonly ManagerIssueKind[] = [
 const kindFilter = (kind: ManagerIssueKind): ManagerIssueFilter => ({
   ...DEFAULT_MANAGER_ISSUE_FILTER,
   kinds: [kind],
+  ...(kind === 'ordinary' ? { discussionsOnly: true } : {}),
 })
 /** 每个经理记住当前页签和每一类的过滤条件 */
 const memory = new Map<
@@ -107,12 +110,11 @@ export function useIssueConsole({
   )
   /** 换条件；条件里的类型就是页签 */
   const setFilter = useCallback(
-    (next: ManagerIssueFilter) => {
-      const one = next.kinds[0] ?? 'ordinary'
+    (next: ManagerIssueFilter, one = kind) => {
       const now = memory.get(key) ?? saved
       save({ kind: one, filters: { ...now.filters, [one]: next } })
     },
-    [key, save, saved],
+    [key, save, saved, kind],
   )
   const pickKind = (one: ManagerIssueKind) => save({ ...saved, kind: one })
   const [filtering, setFiltering] = useState(false)
@@ -136,8 +138,7 @@ export function useIssueConsole({
   useEffect(() => {
     if (!preset || preset.version === applied) return
     setApplied(preset.version)
-    const kinds = preset.patch.kinds ?? ['ordinary']
-    setFilter({ ...kindFilter(kinds[0] ?? 'ordinary'), ...preset.patch })
+    setFilter({ ...kindFilter('ordinary'), ...preset.patch, kinds: ['ordinary'] }, 'ordinary')
   }, [preset, applied, setFilter])
   const ordinary = kind === 'ordinary'
   const filtered = managerIssueFilterKey(filter) !== managerIssueFilterKey(kindFilter(kind))
@@ -150,7 +151,7 @@ export function useIssueConsole({
   const capsule = (one: ManagerIssueKind) => {
     const on = one === kind
     const count = attention?.[one] ?? 0
-    const label = t(`issue.kind.${one}`)
+    const label = t(one === 'ordinary' ? 'issue.tab' : `issue.kind.${one}`)
     return (
       <Pressable
         key={one}
@@ -297,7 +298,12 @@ export function useIssueConsole({
   const overlays = (
     <>
       {filtering ? (
-        <FilterDrawer filter={filter} onChange={setFilter} onClose={() => setFiltering(false)} />
+        <FilterDrawer
+          kind={kind}
+          filter={filter}
+          onChange={setFilter}
+          onClose={() => setFiltering(false)}
+        />
       ) : null}
       {creating ? (
         <NewIssueDrawer
@@ -445,17 +451,18 @@ export function IssueSheetDrawer({
 }
 
 function FilterDrawer({
+  kind,
   filter,
   onChange,
   onClose,
 }: {
+  kind: ManagerIssueKind
   filter: ManagerIssueFilter
   onChange(filter: ManagerIssueFilter): void
   onClose(): void
 }) {
   const t = useT()
   const { c, font } = useTheme()
-  const kind = filter.kinds[0] ?? 'ordinary'
   const ordinary = kind === 'ordinary'
   const section = (label: string, children: ReactNode) => (
     <View style={{ gap: 6 }}>
@@ -487,6 +494,34 @@ function FilterDrawer({
       }
     >
       <View style={{ gap: 14 }}>
+        {ordinary
+          ? section(
+              t('issue.filter.kind'),
+              <>
+                <Chip
+                  label={t('issue.kind.all')}
+                  testID="issue-filter-kind:all"
+                  on={!filter.kinds.length || filter.kinds.length === MANAGER_ISSUE_KINDS.length}
+                  onPress={() => onChange(withManagerIssueKinds(filter, []))}
+                />
+                {MANAGER_ISSUE_KINDS.map((one) => (
+                  <Chip
+                    key={one}
+                    label={t(`issue.kind.${one}`)}
+                    testID={`issue-filter-kind:${one}`}
+                    on={!filter.kinds.length || filter.kinds.includes(one)}
+                    onPress={() => {
+                      const selected = filter.kinds.length ? filter.kinds : [...MANAGER_ISSUE_KINDS]
+                      const next = selected.includes(one)
+                        ? selected.filter((k) => k !== one)
+                        : [...selected, one]
+                      if (next.length) onChange(withManagerIssueKinds(filter, next))
+                    }}
+                  />
+                ))}
+              </>,
+            )
+          : null}
         {section(
           t('issue.filter.status'),
           managerIssueStatusOptions(filter.kinds).map((status) => (

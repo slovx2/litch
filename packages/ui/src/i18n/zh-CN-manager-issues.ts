@@ -2,7 +2,7 @@
 import type { Entry } from './types.ts'
 
 export const zhManagerIssues = {
-  'issue.kind.ordinary': '普通 issue',
+  'issue.kind.ordinary': 'issue',
   'issue.kind.decision': '决策',
   'issue.kind.suggestion': '建议',
   'issue.kind.request': '请你做',
@@ -76,7 +76,7 @@ export const zhManagerIssues = {
   'issue.unread': '有新回复',
   'issue.empty': '没有符合条件的 issue。',
   'issue.emptyAll': '还没有 issue。',
-  'issue.summary': '普通 issue',
+  'issue.summary': 'issue',
   'issue.summary.active': '未完成',
   'issue.summary.unread': '等我看',
   'issue.summary.paused': '跟进已暂停',
@@ -104,5 +104,5 @@ export const zhManagerIssues = {
   'issue.emptyKind': '这一类没有内容。',
   'issue.follow.label': '跟进',
   'issue.follow.hint': '开着时，你的新建和评论会通知经理',
-  'issue.tab': '普通 issue',
+  'issue.tab': 'issue',
 } satisfies Record<string, Entry>

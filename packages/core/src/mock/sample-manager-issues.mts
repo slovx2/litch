@@ -251,9 +251,11 @@ export function sampleManagerIssues(
   lang: Lang,
 ): ManagerIssue[] {
   const t = (zh: string, en: string) => (lang === 'zh-CN' ? zh : en)
-  if (managerId === 'm3') return bulkIssues(now, t)
-  if (managerId !== 'm1') return []
-  const discussed = specials.slice(0, 3).map((issue, i): ManagerIssue => {
+  if (managerId !== 'm1' && managerId !== 'm3') return []
+  const selected = ['decision', 'suggestion', 'request', 'report'].flatMap(
+    (kind) => specials.find((issue) => issue.kind === kind) ?? [],
+  )
+  const discussed = selected.map((issue, i): ManagerIssue => {
     const at = issue.createdAt + HOUR
     const comment: ManagerIssueComment = {
       id: `sample-${issue.id}-c1`,
@@ -266,19 +268,22 @@ export function sampleManagerIssues(
     }
     return {
       ...issue,
-      discussion: { ...issue.discussion, comments: [comment] },
-      timeline: [
-        ...issue.timeline,
-        {
-          id: `comment:${comment.id}:1`,
-          kind: 'comment',
-          actor: 'user',
-          at: at + i,
-          summary: comment.body,
-          commentId: comment.id,
-        },
-      ],
+      discussion: { ...issue.discussion, opened: true, comments: i === 0 ? [] : [comment] },
+      timeline:
+        i === 0
+          ? issue.timeline
+          : [
+              ...issue.timeline,
+              {
+                id: `comment:${comment.id}:1`,
+                kind: 'comment',
+                actor: 'user',
+                at: at + i,
+                summary: comment.body,
+                commentId: comment.id,
+              },
+            ],
     }
   })
-  return [...discussed, ...richIssues(now, t)]
+  return [...discussed, ...(managerId === 'm3' ? bulkIssues(now, t) : richIssues(now, t))]
 }

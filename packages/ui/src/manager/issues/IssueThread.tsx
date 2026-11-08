@@ -1,6 +1,6 @@
 // 一条 issue 的讨论界面，三处共用同一套：卡片里展开（inline）、看板底部抽屉（pane）、完整讨论页（page）。
 // 内容依次是原帖、状态与跟进、关联、评论时间线和输入框。抽屉里原帖默认收成两行，另有“打开完整讨论”。
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import type { ManagerView } from '../../../../core/src/model-manager.mts'
 import {
   MANAGER_ISSUE_STATUSES,
@@ -197,6 +197,26 @@ export function IssueThread({
   postRevision,
 }: IssueThreadProps & { mode: 'inline' | 'pane' | 'page' }) {
   const t = useT()
+  const [openingError, setOpeningError] = useState('')
+  const opened =
+    issue.discussion.opened ||
+    issue.discussion.comments.length > 0 ||
+    issue.discussion.questions.length > 0
+  useEffect(() => {
+    if (disabled || issue.kind === 'ordinary' || opened) return
+    void commands
+      .update({
+        id: issue.id,
+        revision: issue.revision,
+        patch: { discussionOpened: true },
+        why: t('issue.discuss.open'),
+      })
+      .then(
+        () => setOpeningError(''),
+        (error) => setOpeningError(error instanceof Error ? error.message : String(error)),
+      )
+  }, [disabled, issue.id, issue.kind, issue.revision, opened, commands, t])
+
   const { channel } = useServices()
   const special = issue.kind !== 'ordinary'
   const [postOpen, setPostOpen] = useState(mode !== 'pane')
@@ -219,6 +239,11 @@ export function IssueThread({
       data-issue-thread={mode}
       data-issue={mode === 'inline' ? undefined : issue.id}
     >
+      {openingError ? (
+        <p role="alert" className="err">
+          {openingError}
+        </p>
+      ) : null}
       {mode === 'page' ? (
         <header className="mg-issue-page-head">
           <button
