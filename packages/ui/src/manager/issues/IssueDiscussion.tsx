@@ -1,0 +1,211 @@
+// issue 的讨论区：评论、旧“问经理”问答与状态变化按时间排成一条；底部是评论框。
+// 评论与问答分开：评论不回答决策、不交付请求（60 号设计 5.3）。草稿按 [设备, 经理, #n] 存在内存里，切卡不丢。
+import { useState } from 'react'
+import type { ManagerIssue } from '../../../../protocol/src/manager-issues.mts'
+import { useT } from '../../app/appearance.ts'
+import { reasonOf } from '../../app/errors.ts'
+import { Icon } from '../../app/icons.tsx'
+import { Stamp } from '../../transcript/Stamp.tsx'
+import { BoardMarkdown } from '../BoardMarkdown.tsx'
+
+const drafts = new Map<string, string>()
+
+type Row =
+  | { kind: 'comment'; at: number; id: string; author: 'user' | 'manager'; body: string }
+  | { kind: 'question'; at: number; id: string; question: string; answer: string | null }
+  | { kind: 'event'; at: number; id: string; text: string }
+
+export function IssueDiscussion({
+  issue,
+  draftKey,
+  disabled,
+  reason,
+  special,
+  onComment,
+  onAsk,
+}: {
+  issue: ManagerIssue
+  draftKey: string
+  disabled: boolean
+  /** 不能评论时写在评论框上的原因 */
+  reason: string
+  special: boolean
+  onComment(body: string): Promise<unknown>
+  /** 有它时输入框上多一个“问经理”：发的是旧帖子追问，不是评论 */
+  onAsk?: ((question: string) => Promise<unknown>) | undefined
+}) {
+  const t = useT()
+  const [text, setText] = useState(() => drafts.get(draftKey) ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [asking, setAsking] = useState(false)
+  const edit = (value: string) => {
+    setText(value)
+    if (value) drafts.set(draftKey, value)
+    else drafts.delete(draftKey)
+  }
+  const rows: Row[] = [
+    ...issue.discussion.comments.map(
+      (one): Row => ({
+        kind: 'comment',
+        at: one.createdAt,
+        id: one.id,
+        author: one.author.kind,
+        body: one.body,
+      }),
+    ),
+    ...issue.discussion.questions.map(
+      (one): Row => ({
+        kind: 'question',
+        at: one.at,
+        id: one.id,
+        question: one.question,
+        answer: one.answer,
+      }),
+    ),
+    ...issue.timeline.flatMap((entry): Row[] => {
+      // 评论、问答在上面单独画；创建写在卡头的元信息里
+      if (['comment', 'question', 'answer', 'created'].includes(entry.kind)) return []
+      const who = t(entry.actor === 'manager' ? 'issue.author.manager' : 'issue.author.user')
+      const what =
+        entry.kind === 'status'
+          ? t('issue.timeline.status', {
+              status: t(`issue.status.${entry.summary}` as Parameters<typeof t>[0]),
+            })
+          : entry.kind === 'followUp'
+            ? t(
+                entry.summary === 'off'
+                  ? 'issue.timeline.followUp.off'
+                  : 'issue.timeline.followUp.on',
+              )
+            : t(`issue.timeline.${entry.kind}` as Parameters<typeof t>[0])
+      return [{ kind: 'event', at: entry.at, id: entry.id, text: `${who} · ${what}` }]
+    }),
+  ].sort((a, b) => a.at - b.at)
+  const send = async () => {
+    const body = text.trim()
+    if (!body || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      await (asking && onAsk ? onAsk(body) : onComment(body))
+      edit('')
+    } catch (cause) {
+      setError(reasonOf(cause, t))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <section
+      className="mg-issue-talk"
+      data-issue-discussion={issue.id}
+      aria-label={t('issue.comments')}
+    >
+      {rows.length ? (
+        <ol className="mg-issue-timeline">
+          {rows.map((row) =>
+            row.kind === 'event' ? (
+              <li key={row.id} className="mg-issue-event" data-timeline="event">
+                <span className="ell">{row.text}</span> · <Stamp at={row.at} />
+              </li>
+            ) : row.kind === 'question' ? (
+              <li key={row.id} className="mg-issue-comment" data-timeline="question">
+                <p className="mg-issue-meta">
+                  {t('issue.timeline.question')} · <Stamp at={row.at} />
+                </p>
+                <BoardMarkdown text={row.question} />
+                {row.answer ? (
+                  <blockquote className="mg-issue-answer">
+                    <BoardMarkdown text={row.answer} />
+                  </blockquote>
+                ) : null}
+              </li>
+            ) : (
+              <li
+                key={row.id}
+                className="mg-issue-comment"
+                data-timeline="comment"
+                data-author={row.author}
+              >
+                <p className="mg-issue-meta">
+                  <b>
+                    {t(row.author === 'manager' ? 'issue.author.manager' : 'issue.author.user')}
+                  </b>{' '}
+                  · <Stamp at={row.at} />
+                </p>
+                <BoardMarkdown text={row.body} />
+              </li>
+            ),
+          )}
+        </ol>
+      ) : null}
+      {special ? <p className="mg-issue-note">{t('issue.comment.note')}</p> : null}
+      {issue.followUp.state === 'off' ? (
+        <p className="mg-issue-note" data-follow-note>
+          {t('issue.follow.pausedNote')}
+        </p>
+      ) : null}
+      {onAsk ? (
+        <div className="mg-issue-mode seg" role="toolbar" aria-label={t('issue.mode')}>
+          <button
+            type="button"
+            aria-pressed={!asking}
+            data-issue-mode="comment"
+            onClick={() => setAsking(false)}
+          >
+            {t('issue.comments')}
+          </button>
+          <button
+            type="button"
+            aria-pressed={asking}
+            data-issue-mode="ask"
+            onClick={() => setAsking(true)}
+          >
+            {t('issue.ask')}
+          </button>
+        </div>
+      ) : null}
+      <div className="mg-issue-compose">
+        <textarea
+          rows={2}
+          value={text}
+          disabled={disabled}
+          title={disabled ? reason : undefined}
+          placeholder={
+            disabled ? reason : t(asking ? 'issue.ask.placeholder' : 'issue.comment.placeholder')
+          }
+          aria-label={t('issue.comment.placeholder')}
+          data-issue-comment-input
+          onChange={(event) => edit(event.target.value)}
+          onKeyDown={(event) => {
+            if (
+              event.key === 'Enter' &&
+              (event.metaKey || event.ctrlKey) &&
+              !event.nativeEvent.isComposing
+            ) {
+              event.preventDefault()
+              void send()
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="ibtn"
+          data-act="issue-comment"
+          title={disabled ? reason : t(asking ? 'issue.ask.send' : 'issue.comment.send')}
+          aria-label={t(asking ? 'issue.ask.send' : 'issue.comment.send')}
+          disabled={disabled || busy || !text.trim()}
+          onClick={() => void send()}
+        >
+          <Icon name="send" small />
+        </button>
+      </div>
+      {error ? (
+        <p className="err" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </section>
+  )
+}

@@ -35,7 +35,12 @@ import { Decisions } from './Decisions.tsx'
 import { useAnswerDrafts } from './drafts.ts'
 import { IssueOrderSelect, useIssueOrder } from './issue-order.tsx'
 import { pinToTop } from './next-decision.ts'
-import { Overview, type OverviewCategory, type OverviewCounts } from './Overview.tsx'
+import {
+  Overview,
+  type OverviewCategory,
+  type OverviewCounts,
+  type OverviewIssues,
+} from './Overview.tsx'
 import { InlinePostContext } from './PostCard.tsx'
 import { usePostDrafts } from './post-drafts.ts'
 import { Reports } from './Reports.tsx'
@@ -59,6 +64,7 @@ export function PagedBoard({
   onSuggestionSource,
   overviewCounts,
   onInbox,
+  overviewIssues,
 }: {
   manager: ManagerView
   view: ManagerBoardTopicView & {
@@ -72,6 +78,7 @@ export function PagedBoard({
   onSuggestionSource(selection: Selection, archived: boolean): void
   overviewCounts: OverviewCounts
   onInbox(category: OverviewCategory): void
+  overviewIssues?: OverviewIssues | undefined
 }) {
   const t = useT()
   const { channel } = useServices()
@@ -396,6 +403,7 @@ export function PagedBoard({
           situation={paging.summary.situation}
           counts={overviewCounts}
           onOpen={onInbox}
+          issues={overviewIssues}
           refresh={{
             busy: paging.loading.includes('summary'),
             run: () => invoke(channel.command('managers.board.refresh', address)),

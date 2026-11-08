@@ -15,6 +15,7 @@ import { zhGoal } from './zh-CN-goal.ts'
 import { zhHconfig } from './zh-CN-hconfig.ts'
 import { zhLimits } from './zh-CN-limits.ts'
 import { zhManager } from './zh-CN-manager.ts'
+import { zhManagerIssues } from './zh-CN-manager-issues.ts'
 import { zhOnboard } from './zh-CN-onboard.ts'
 import { zhPairing } from './zh-CN-pairing.ts'
 import { zhPasswords } from './zh-CN-passwords.ts'
@@ -61,6 +62,7 @@ export const zhCN = {
 
   ...zhSearch,
   ...zhManager,
+  ...zhManagerIssues,
   ...zhCNPathPicker,
   ...zhPreviewDocx,
   ...zhPreviewXlsx,

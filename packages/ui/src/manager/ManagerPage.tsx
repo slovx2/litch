@@ -39,9 +39,17 @@ import { DiscussionPane } from './DiscussionPane.tsx'
 import { ManagerFeaturesContext, useManagerBoard } from './data.ts'
 import { DiscussionPaneContext } from './discussion-pane.ts'
 import { IssueOrderSelect } from './issue-order.tsx'
+import { useManagerIssues } from './issues/data.ts'
+import { IssueConsole, type IssuePreset } from './issues/IssueConsole.tsx'
 import { ManagerForm } from './ManagerForm.tsx'
 import { ManagerRules } from './ManagerRules.tsx'
-import { Overview, type OverviewCategory, type OverviewCounts } from './Overview.tsx'
+import {
+  Overview,
+  type OverviewCategory,
+  type OverviewCounts,
+  type OverviewIssueKey,
+  type OverviewIssues,
+} from './Overview.tsx'
 import { PagedBoard } from './PagedBoard.tsx'
 import { RelationsContext } from './Relations.tsx'
 import { Reports } from './Reports.tsx'
@@ -127,7 +135,26 @@ export function ManagerPage({
   const [requestTarget, setRequestTarget] = useState<{ id: ManagerRequestId } | null>(null)
   const [pagingTarget, setPagingTarget] = useState<BoardReference | null>(null)
   const requestLocated = useCallback(() => setRequestTarget(null), [])
-  const openReference = (id: BoardReference) => {
+  // issue 控制台（设备支持 litchManagerIssues 时）：编号跳转与概览摘要的过滤都交给它
+  const issues = useManagerIssues(manager, view?.board ?? null)
+  const issueMode = issues.supported === true
+  const [issueTarget, setIssueTarget] = useState<string | null>(null)
+  const issueLocated = useCallback(() => setIssueTarget(null), [])
+  const [issuePreset, setIssuePreset] = useState<IssuePreset | null>(null)
+  const presetIssues = (patch: IssuePreset['patch']) => {
+    setIssuePreset((now) => ({ patch, version: (now?.version ?? 0) + 1 }))
+    setBoardLayout({ open: true })
+    onLocation({ ...location, tab: 'inbox', narrow: 'board' })
+  }
+  const openReference = (ref: BoardReference | `#${number}`) => {
+    if (issueMode && !ref.startsWith('I-')) {
+      setBoardLayout({ open: true })
+      setIssueTarget(ref)
+      onLocation({ ...location, tab: 'inbox', narrow: 'board' })
+      return
+    }
+    // 没有 issue 控制台的设备不会发 #n
+    const id = ref as BoardReference
     if (view?.paging) setPagingTarget(id)
     if (boardBody.current && !view?.paging) boardBody.current.scrollTop = 0
     setBoardLayout({ open: true })
@@ -312,9 +339,42 @@ export function ManagerPage({
   }
   /** 概览跳到控制台某一类：和点控制台里的类别按钮是同一件事 */
   const openInbox = (kind: OverviewCategory) => {
+    if (issueMode) {
+      presetIssues({
+        kinds: [
+          (
+            {
+              decisions: 'decision',
+              requests: 'request',
+              reports: 'report',
+              suggestions: 'suggestion',
+            } as const
+          )[kind],
+        ],
+      })
+      return
+    }
     setInboxTab(kind)
     setTab(kind)
   }
+  const overviewIssues: OverviewIssues | undefined = issueMode
+    ? {
+        counts: {
+          active: issues.summary.ordinary.active,
+          unread: issues.summary.ordinary.unread,
+          paused: issues.summary.ordinary.paused,
+        },
+        onOpen: (key: OverviewIssueKey) =>
+          presetIssues(
+            key === 'active'
+              ? { statuses: ['open', 'in_progress', 'blocked'] }
+              : key === 'unread'
+                ? { unread: true }
+                : { followUp: 'off' },
+          ),
+      }
+    : undefined
+  const consoleTab = ['inbox', 'decisions', 'requests', 'suggestions', 'reports'].includes(tab)
   const readOnly = manager.status !== 'active'
   const readOnlyText = t(manager.status === 'ending' ? 'manager.endingNote' : 'manager.readOnly')
   const disabled = readOnly || device?.connection !== 'online'
@@ -485,7 +545,7 @@ export function ManagerPage({
             ))}
           </div>
         </div>
-        {['inbox', 'decisions', 'requests', 'suggestions', 'reports'].includes(tab) ? (
+        {consoleTab && !issueMode ? (
           <div className="mg-inbox-bar">
             <div className="mg-inbox-tabs seg">
               {(['decisions', 'suggestions', 'requests', 'reports'] as const).map((kind) => (
@@ -506,6 +566,10 @@ export function ManagerPage({
         ) : null}
         {disabled ? (
           <p className="mg-readonly">{readOnly ? readOnlyText : t('manager.offline')}</p>
+        ) : consoleTab && issues.supported === false ? (
+          <p className="mg-readonly" data-old-device="issues" role="note">
+            {t('issue.oldDevice')}
+          </p>
         ) : missing.length ? (
           <p className="mg-readonly" data-old-device role="note">
             {t('manager.oldDevice', {
@@ -604,7 +668,20 @@ export function ManagerPage({
                       open: openReference,
                     }}
                   >
-                    {view.paging ? (
+                    {issueMode && consoleTab ? (
+                      <IssueConsole
+                        manager={manager}
+                        view={{ ...view, board }}
+                        issues={issues}
+                        disabled={disabled}
+                        reason={t(readOnly ? 'issue.readOnly' : 'issue.offline')}
+                        target={issueTarget}
+                        preset={issuePreset}
+                        onLocated={issueLocated}
+                        onOpenItem={openReference}
+                        onSuggestionSource={onSuggestionSource}
+                      />
+                    ) : view.paging ? (
                       <PagedBoard
                         manager={manager}
                         view={{ ...view, board, paging: view.paging }}
@@ -615,6 +692,7 @@ export function ManagerPage({
                         onSuggestionSource={onSuggestionSource}
                         overviewCounts={overviewCounts}
                         onInbox={openInbox}
+                        overviewIssues={overviewIssues}
                       />
                     ) : (
                       <>
@@ -649,6 +727,7 @@ export function ManagerPage({
                             situation={pages.overview.situation}
                             counts={overviewCounts}
                             onOpen={openInbox}
+                            issues={overviewIssues}
                           />
                         ) : null}
                         {tab === 'items' || tab === 'lines' ? (
@@ -701,8 +780,9 @@ export function ManagerPage({
         </div>
         {talk ? (
           <DiscussionPane
-            id={talk}
+            id={talk.replace(/^issue:/, '')}
             title={
+              issues.details[talk.replace(/^issue:/, '') as keyof typeof issues.details]?.title ??
               board?.posts?.find((post) => post.id === talk)?.title ??
               board?.decisions.find((decision) => decision.id === talk)?.title ??
               board?.requests?.find((request) => request.id === talk)?.title ??
@@ -710,7 +790,11 @@ export function ManagerPage({
             }
             onHost={setTalkHost}
             onBack={() => {
-              const card = cardOf(talk)
+              const card =
+                cardOf(talk) ??
+                page.current?.querySelector<HTMLElement>(
+                  `[data-issue="${CSS.escape(talk.replace(/^issue:/, ''))}"]`,
+                )
               card?.scrollIntoView({ block: 'nearest' })
               card?.focus({ preventScroll: true })
             }}

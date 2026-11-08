@@ -5,6 +5,14 @@ import { Icon } from '../app/icons.tsx'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 
+/** 普通 issue 的摘要：开放、等我看、跟进已暂停；点了带着对应过滤进控制台 */
+export type OverviewIssueKey = 'active' | 'unread' | 'paused'
+export interface OverviewIssues {
+  counts: Record<OverviewIssueKey, number>
+  onOpen(key: OverviewIssueKey): void
+}
+const ISSUE_KEYS: readonly OverviewIssueKey[] = ['active', 'unread', 'paused']
+
 export type OverviewCategory = 'decisions' | 'requests' | 'reports' | 'suggestions'
 export type OverviewCounts = Record<OverviewCategory, { pending: number; total: number }>
 
@@ -15,10 +23,13 @@ export function Overview({
   counts,
   onOpen,
   refresh,
+  issues,
 }: {
   situation: { text: string; at: number } | null
   counts: OverviewCounts
   onOpen(category: OverviewCategory): void
+  /** 设备支持 issue 时才有 */
+  issues?: OverviewIssues | undefined
   /** 分页看板才有：重读摘要 */
   refresh?: { busy: boolean; run(): void }
 }) {
@@ -49,6 +60,23 @@ export function Overview({
           )
         })}
       </nav>
+      {issues ? (
+        <nav className="mg-overview-issues" aria-label={t('issue.summary')} data-overview="issues">
+          <span className="mg-overview-issues-title">{t('issue.summary')}</span>
+          {ISSUE_KEYS.map((key) => (
+            <button
+              type="button"
+              key={key}
+              data-overview-issues={key}
+              data-pending={(key === 'unread' && issues.counts.unread > 0) || undefined}
+              aria-label={`${t('issue.summary')} · ${t(`issue.summary.${key}`)} ${issues.counts[key]}`}
+              onClick={() => issues.onOpen(key)}
+            >
+              {t(`issue.summary.${key}`)} <b className="mg-overview-num">{issues.counts[key]}</b>
+            </button>
+          ))}
+        </nav>
+      ) : null}
       <article className="mg-situation" data-overview="situation">
         <header>
           <h3>{t('manager.situation')}</h3>
