@@ -17,6 +17,7 @@ export async function backgroundInputChecks({
   expectFixed,
   executor,
   cases,
+  foreground,
 }) {
   const text = (result) =>
     result.contentItems
@@ -74,16 +75,23 @@ export async function backgroundInputChecks({
       return window.width === width && window.height === height
     }, 'fixture window dimensions')
   }
-  for (const mode of [
+  const modes = [
     ...(shown ? ['foreground', 'occluded'] : []),
     'background-tab',
     'minimized',
+    'minimized-active-sequence',
     'no-animation-frames',
     'pointer-no-timers',
     'sign-in-return',
     'navigation',
     'frozen',
-  ]) {
+  ]
+  for (const { mode, iteration } of modes.flatMap((mode) =>
+    Array.from({ length: mode === 'minimized-active-sequence' ? 5 : 1 }, (_, index) => ({
+      mode,
+      iteration: index + 1,
+    })),
+  )) {
     if (cases && !cases.includes(mode)) continue
     const { targetId: pageTarget } = await cdp.call('Target.createTarget', {
       url: `${origin}/input`,
@@ -114,6 +122,56 @@ export async function backgroundInputChecks({
         `chrome.debugger.sendCommand({tabId:${tab.id}},${JSON.stringify(method)},${JSON.stringify(params)})`,
       )
     const { windowId } = await cdp.call('Browser.getWindowForTarget', { targetId: pageTarget })
+    const sequence = mode === 'minimized-active-sequence'
+    const checkpoints = []
+    let opened, activeBaseline
+    const activeTabs = () =>
+      extension(
+        `chrome.tabs.query({active:true}).then(tabs=>tabs.map(t=>({id:t.id,windowId:t.windowId})).sort((a,b)=>a.id-b.id))`,
+      )
+    const checkpoint = async (stage) => {
+      if (!sequence) return
+      const current = {
+        stage,
+        activeTabs: await activeTabs(),
+        tab: await extension(`chrome.tabs.get(${tab.id})`),
+        windows: await extension('chrome.windows.getAll({windowTypes:["normal"]})'),
+        events: await extension('globalThis.__litchSequenceEvents'),
+      }
+      assert.equal(current.tab.active, true, stage)
+      if (stage !== 'claimed')
+        assert.equal(current.tab.url, `${origin}/input?minimized-active-${iteration}`, stage)
+      assert.deepEqual(current.activeTabs, activeBaseline, stage)
+      assert.ok(
+        current.windows.every((w) => w.state === 'minimized' && !w.focused),
+        stage,
+      )
+      assert.deepEqual(current.events, [], `no transient activation during ${stage}`)
+      await foreground?.check(`minimized active sequence ${iteration}: ${stage}`)
+      checkpoints.push(current)
+    }
+    if (sequence) {
+      // fixture 始终是所在窗口的活动页；不能用额外参考标签把它变为后台页。
+      if (shown)
+        await extension(
+          `chrome.windows.getAll({windowTypes:['normal']}).then(windows=>Promise.all(windows.map(w=>chrome.windows.update(w.id,{state:'minimized'}))))`,
+        )
+      activeBaseline = await activeTabs()
+      await extension(
+        `globalThis.__litchSequenceEvents=[];globalThis.__litchSequenceActivated=t=>__litchSequenceEvents.push({tab:t.tabId,window:t.windowId});globalThis.__litchSequenceFocused=w=>{if(w>=0)__litchSequenceEvents.push({window:w})};chrome.tabs.onActivated.addListener(__litchSequenceActivated);chrome.windows.onFocusChanged.addListener(__litchSequenceFocused)`,
+      )
+      await checkpoint('claimed')
+      await success('navigate', { tabId, url: `${origin}/input?minimized-active-${iteration}` })
+      await checkpoint('navigate')
+      opened = JSON.parse(
+        text(
+          await success('navigate', { targetId, newTab: true, url: `${origin}/input?new-tab` }),
+        ).split('\n')[0],
+      )
+      assert.ok(opened.tabId)
+      assert.notEqual(opened.tabId, tabId)
+      await checkpoint('newTab')
+    }
     if (shown && ['foreground', 'background-tab', 'occluded'].includes(mode)) {
       await resize(tab.windowId, 100, 150, 800, 600)
       await extension(`chrome.tabs.update(${tab.id},{active:true})`)
@@ -153,7 +211,7 @@ export async function backgroundInputChecks({
     }
     if (mode === 'navigation')
       await success('navigate', { tabId, url: `${origin}/input?new-document` })
-    const snapshot = text(await success('snapshot', { tabId }))
+    let snapshot = text(await success('snapshot', { tabId }))
     const ref = (name) => {
       const value = snapshot
         .split('\n')
@@ -210,13 +268,31 @@ export async function backgroundInputChecks({
       assert.equal(before.bounds.windowState, 'minimized')
     // 不重试：保留第一次点击/输入的完整回执及错误。
     const click = await run('click', { tabId, ref: clickRef })
-    const typed = await run('type', { tabId, ref: inputRef, text: `value-${mode}`, clear: true })
+    await checkpoint('click')
+    // 沿用旧复现顺序：点击改变页面后重新取 ref，再输入。
+    if (sequence) snapshot = text(await success('snapshot', { tabId }))
+    const typed = await run('type', {
+      tabId,
+      ref: sequence ? ref('textbox "Fixture input"') : inputRef,
+      text: `value-${mode}`,
+      clear: true,
+    })
+    await checkpoint('type')
     const after = await state()
-    observations.push({ mode, before, pauseRefusal, click, typed, after })
-    console.log(`CASE ${mode}: ${text(click)}\nTYPE ${text(typed)}`)
+    observations.push({ mode, iteration, checkpoints, before, pauseRefusal, click, typed, after })
+    console.log(`CASE ${mode} #${iteration}: ${text(click)}\nTYPE ${text(typed)}`)
     if (expectFixed) {
       assert.equal(click.success, true, text(click))
       assert.equal(typed.success, true, text(typed))
+      if (sequence) {
+        const receipt = JSON.parse(
+          text(typed)
+            .split('\n')
+            .find((line) => line.startsWith('{"inputReceipt":')),
+        ).inputReceipt
+        assert.equal(receipt.dispatch, 'dispatched')
+        assert.equal(receipt.observation, 'changed')
+      }
       assert.equal(after.page.value, `value-${mode}`)
       assert.match(text(await success('snapshot', { tabId })), /button "1"/)
       assert.equal(after.tab.active, before.tab.active)
@@ -230,6 +306,13 @@ export async function backgroundInputChecks({
       }
     }
     if (mode === 'frozen') await send('Page.setWebLifecycleState', { state: 'active' })
+    if (sequence) {
+      await success('tabs', { action: 'close', tabId: opened.tabId })
+      await checkpoint('close newTab')
+      await extension(
+        'chrome.tabs.onActivated.removeListener(__litchSequenceActivated);chrome.windows.onFocusChanged.removeListener(__litchSequenceFocused)',
+      )
+    }
     await success('release', { tabId })
     await extension(`chrome.windows.remove(${tab.windowId})`)
   }

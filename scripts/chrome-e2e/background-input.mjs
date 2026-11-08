@@ -164,6 +164,7 @@ try {
     pid: child.pid,
     work,
     executor,
+    foreground,
     expectFixed: process.argv.includes('--expect-fixed'),
     cases: process.argv
       .find((arg) => arg.startsWith('--cases='))
