@@ -1,5 +1,5 @@
 // 经理 issue 的公共协议外壳。特殊 issue 的权威仍在 manager.mts、manager-posts.mts 和提案表；
-// 这里定义 canonical #n、历史别名、评论、时间线、过滤和设备通知，供设备与两端共用。
+// 这里定义 X-n 与现有类型编号、评论、时间线、过滤和设备通知，供设备与两端共用。
 import type { ManagerDecisionOption, ManagerDiscussion, ManagerQuestion } from './manager.mjs'
 import type { ManagerRelation } from './manager-posts.mjs'
 
@@ -20,9 +20,8 @@ export const MANAGER_ISSUE_NOTIFICATION = {
   activity: 'litch/manager/issue/activity',
 } as const
 
-export type ManagerIssueId = `#${number}`
-export type ManagerIssueAlias = `D-${number}` | `R-${number}` | `P-${number}` | `S-${string}`
-export type ManagerIssueRef = ManagerIssueId | ManagerIssueAlias
+export type ManagerIssueId = `X-${number}` | `D-${number}` | `R-${number}` | `P-${number}` | `S-${string}`
+export type ManagerIssueRef = ManagerIssueId
 export type ManagerIssueKind = 'ordinary' | 'decision' | 'suggestion' | 'request' | 'report'
 export type ManagerIssueAuthorKind = 'user' | 'manager'
 export type ManagerIssueActor = ManagerIssueAuthorKind | 'device' | 'question'
@@ -51,11 +50,6 @@ export type ManagerIssueStateGroup = 'open' | 'pending' | 'closed' | 'read' | 'u
 export interface ManagerIssueAuthor {
   kind: ManagerIssueAuthorKind
   name?: string
-}
-
-export interface ManagerIssueAliasRecord {
-  alias: ManagerIssueAlias
-  issueId: ManagerIssueId
 }
 
 export interface ManagerIssueFollowUpState {
@@ -112,10 +106,8 @@ export interface ManagerIssueQuickActions {
 }
 
 export interface ManagerIssue {
-  /** 新对象和新协议响应只使用 canonical #n。 */
+  /** 普通 issue 为 X-n；D/R/P/S 保持原编号，I-n 不属于 issue。 */
   id: ManagerIssueId
-  /** 历史 D/R/P/S 只作为解析别名，不是第二个主键。 */
-  aliases: ManagerIssueAlias[]
   kind: ManagerIssueKind
   title: string
   body: string
@@ -135,7 +127,6 @@ export interface ManagerIssue {
 
 export interface ManagerIssueHead {
   id: ManagerIssueId
-  aliases: ManagerIssueAlias[]
   kind: ManagerIssueKind
   title: string
   preview: string
@@ -269,19 +260,18 @@ export interface ManagerIssueRequests {
   }
 }
 
-export const managerIssueRefKind = (ref: string): 'canonical' | 'alias' | 'invalid' => {
-  if (/^#[1-9][0-9]*$/.test(ref)) return 'canonical'
-  if (/^(D|R|P)-[1-9][0-9]*$/.test(ref) || /^S-.+$/.test(ref)) return 'alias'
+export const managerIssueRefKind = (ref: string): 'ordinary' | 'special' | 'invalid' => {
+  if (/^X-[1-9][0-9]*$/.test(ref)) return 'ordinary'
+  if (/^(D|R|P)-[1-9][0-9]*$/.test(ref) || /^S-.+$/.test(ref)) return 'special'
   return 'invalid'
 }
 
 export const managerIssueFixture = {
   migratedDecision: {
-    id: '#1',
-    aliases: ['D-7'],
+    id: 'D-7',
     kind: 'decision',
     title: '保留旧链接',
-    body: '迁移后仍能打开。',
+    body: '原编号保持不变。',
     status: 'open',
     stateGroup: 'pending',
     author: { kind: 'manager' },
@@ -293,7 +283,7 @@ export const managerIssueFixture = {
     relations: [],
     timeline: [
       {
-        id: 'created:#1',
+        id: 'created:D-7',
         kind: 'created',
         actor: 'manager',
         at: 1_700_000_000,
@@ -304,8 +294,7 @@ export const managerIssueFixture = {
     unread: false,
   } satisfies ManagerIssue,
   newOrdinary: {
-    id: '#2',
-    aliases: [],
+    id: 'X-1',
     kind: 'ordinary',
     title: '用户跟进',
     body: '等待评论。',
@@ -319,7 +308,7 @@ export const managerIssueFixture = {
     discussion: { comments: [], questions: [], summary: null },
     relations: [],
     timeline: [
-      { id: 'created:#2', kind: 'created', actor: 'user', at: 1_700_000_001, summary: 'created' },
+      { id: 'created:X-1', kind: 'created', actor: 'user', at: 1_700_000_001, summary: 'created' },
     ],
     quick: {},
     unread: false,

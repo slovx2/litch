@@ -14,12 +14,10 @@ import {
 test('迁移后的旧对象和新普通 issue 使用同一公共快照外壳', () => {
   const migrated = managerIssueFixture.migratedDecision
   const ordinary = managerIssueFixture.newOrdinary
-  assert.equal(migrated.id, '#1')
-  assert.deepEqual(migrated.aliases, ['D-7'])
+  assert.equal(migrated.id, 'D-7')
   assert.equal(migrated.kind, 'decision')
   assert.equal(migrated.quick.decision?.answerable, true)
-  assert.equal(ordinary.id, '#2')
-  assert.deepEqual(ordinary.aliases, [])
+  assert.equal(ordinary.id, 'X-1')
   assert.equal(ordinary.kind, 'ordinary')
   assert.deepEqual(ordinary.status, 'open')
   assert.equal(ordinary.followUp.state, 'on')
@@ -32,14 +30,15 @@ test('迁移后的旧对象和新普通 issue 使用同一公共快照外壳', (
   assert.deepEqual(roundTrip.ordinary, ordinary)
 })
 
-test('issue ref 只接受 canonical #n 或明确的历史别名', () => {
-  assert.equal(managerIssueRefKind('#1'), 'canonical')
-  assert.equal(managerIssueRefKind('#20'), 'canonical')
-  assert.equal(managerIssueRefKind('D-7'), 'alias')
-  assert.equal(managerIssueRefKind('R-2'), 'alias')
-  assert.equal(managerIssueRefKind('P-1'), 'alias')
-  assert.equal(managerIssueRefKind('S-proposal-1'), 'alias')
-  assert.equal(managerIssueRefKind('#0'), 'invalid')
+test('issue ref 接受 X-n 和现有特殊类型编号，拒绝 I-n 和纯数字', () => {
+  assert.equal(managerIssueRefKind('X-1'), 'ordinary')
+  assert.equal(managerIssueRefKind('X-20'), 'ordinary')
+  assert.equal(managerIssueRefKind('D-7'), 'special')
+  assert.equal(managerIssueRefKind('R-2'), 'special')
+  assert.equal(managerIssueRefKind('P-1'), 'special')
+  assert.equal(managerIssueRefKind('S-proposal-1'), 'special')
+  assert.equal(managerIssueRefKind('#1'), 'invalid')
+  assert.equal(managerIssueRefKind('X-0'), 'invalid')
   assert.equal(managerIssueRefKind('D-0'), 'invalid')
   assert.equal(managerIssueRefKind('I-1'), 'invalid')
   assert.equal(managerIssueRefKind('not-an-issue'), 'invalid')
@@ -77,20 +76,20 @@ test('方法和通知属于新增 litchManagerIssues 能力，不改旧帖子方
 test('暂停跟进的评论事件仍可广播，但活动通知带 followUp=off', () => {
   const changed: ManagerIssueChangedNotification = {
     managerId: 'manager-1',
-    issueId: '#2',
+    issueId: 'X-1',
     revision: 2,
     change: 'commented',
   }
   const activity: ManagerIssueActivityNotification = {
     managerId: 'manager-1',
-    issueId: '#2',
+    issueId: 'X-1',
     eventId: 'event-2',
     kind: 'issue-comment',
     actor: 'user',
     followUp: 'off',
     unread: true,
   }
-  assert.equal(changed.issueId, '#2')
+  assert.equal(changed.issueId, 'X-1')
   assert.equal(activity.followUp, 'off')
   assert.equal(activity.unread, true)
 })
