@@ -731,6 +731,9 @@ woken to continue.
   sub-session (as in Claude's desktop app): its report waits until you next message the parent. A failed or interrupted turn's report carries its error and
   does not wake the parent (as in Claude's desktop app); it goes with your next message, or with a wake
   another sub-session's report brings. Nothing wakes while another sub-session is still running.
+  **Handle now** closes the report panel immediately and shows “Handling reports…” above the
+  composer on desktop and phone. You can switch sessions while it runs. A failed delivery stays
+  visible there with a retry action; reports remain queued until the device confirms delivery.
   Reports not yet handed over show as soon as they arrive as one small button above the parent's
   composer, next to Background tasks ("Report from …", or "Reports from N sub-sessions"); tap it to
   see them. "Handle now" there hands them over at once: into the running turn, or in a new turn when the

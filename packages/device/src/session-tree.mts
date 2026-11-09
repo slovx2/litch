@@ -1285,16 +1285,21 @@ export class SessionTree {
   /** 直接子会话里还在干活的有几个（在等用户答、挂满一阵的不算；回合停了、后台任务还在跑的算） */
   private async working(parentId: string): Promise<number> {
     let count = 0
-    for (const child of this.store.childrenOf(parentId)) {
-      if (!child.reportParent) continue
-      if (this.waitingOnUser(child.threadId)) continue
-      if (
-        (this.host.backgroundWorking?.(child.threadId) ??
-          this.host.backgroundRunning(child.threadId)) > 0 ||
-        !(await this.idle(child.threadId))
-      )
-        count++
-    }
+    const children = this.store.childrenOf(parentId)[Symbol.iterator]()
+    // 只读元数据，最多四个在途请求；子线多时不串行累加往返，也不一次压满引擎。
+    await Promise.all(
+      Array.from({ length: 4 }, async () => {
+        for (const child of children) {
+          if (!child.reportParent || this.waitingOnUser(child.threadId)) continue
+          if (
+            (this.host.backgroundWorking?.(child.threadId) ??
+              this.host.backgroundRunning(child.threadId)) > 0 ||
+            !(await this.idle(child.threadId))
+          )
+            count++
+        }
+      }),
+    )
     return count
   }
 
@@ -1313,13 +1318,20 @@ export class SessionTree {
   }
 
   /** 替父会话开一个唤醒回合，带着排着的全部回报。working 是还在干活的子会话数，写进给模型的话里 */
-  private async startWake(parentId: string, working: number, automatic = false): Promise<boolean> {
+  private async startWake(
+    parentId: string,
+    working: number,
+    automatic = false,
+    mark: (stage: string) => void = () => {},
+  ): Promise<boolean> {
     const harness = await this.owner(parentId)
     await this.watch(harness, parentId)
     const link = await this.link(harness)
+    mark('watch')
     // 订阅期间队列可能已被取走，避免为已取消的投递读取整段历史。
     if (this.store.notes(parentId).length === 0) return false
     const pendingQuestions = await this.unanswered(parentId)
+    mark('questions')
     if (this.closed || this.active.has(parentId)) return false
     const fresh = this.store.notes(parentId)
     if (fresh.length === 0) return false
@@ -1342,6 +1354,7 @@ export class SessionTree {
       threadId: parentId,
       input: [{ type: 'text', text, text_elements: [] }],
     })
+    mark('startAck')
     const turn = isObject(result) && isObject(result.turn) ? result.turn : null
     if (typeof turn?.id === 'string' && !this.active.has(parentId))
       this.active.set(parentId, turn.id)
@@ -1357,26 +1370,57 @@ export class SessionTree {
    * 返回怎么交出去的；队列空了、插不进去的是 none
    */
   async deliver(parentId: string): Promise<'steered' | 'woken' | 'none'> {
+    const startedAt = Date.now()
+    const started = performance.now()
+    let last = started
+    const stages: Record<string, number> = {}
+    const mark = (stage: string) => {
+      const now = performance.now()
+      stages[stage] = Math.round(now - last)
+      last = now
+    }
     let outcome: 'steered' | 'woken' | 'none' = 'none'
+    let ok = false
     const previous = this.checks.get(parentId) ?? Promise.resolve()
     const next = previous.then(async () => {
+      mark('queue')
       if (this.store.notes(parentId).length === 0) return
       if (this.store.wakes(parentId) > 0) this.store.setWakes(parentId, 0)
       this.cutShort.delete(parentId)
-      if (this.active.has(parentId) || !(await this.idle(parentId))) {
+      const active = this.active.has(parentId) || !(await this.idle(parentId))
+      mark('idle')
+      if (active) {
         await this.steerNotes(parentId)
+        mark('steerAck')
         if (this.store.notes(parentId).length === 0) outcome = 'steered'
         return
       }
-      if (await this.startWake(parentId, await this.working(parentId))) outcome = 'woken'
+      const working = await this.working(parentId)
+      mark('children')
+      if (await this.startWake(parentId, working, false, mark)) outcome = 'woken'
     })
     const settled = next.catch(() => {})
     this.checks.set(parentId, settled)
     void settled.finally(() => {
       if (this.checks.get(parentId) === settled) this.checks.delete(parentId)
     })
-    await next
-    return outcome
+    try {
+      await next
+      ok = true
+      return outcome
+    } finally {
+      // 只记标识、阶段和耗时，不记回报正文、问题或引擎配置。
+      this.host.log(
+        `queuedNotes.deliver.timing ${JSON.stringify({
+          startedAt,
+          parentId,
+          ok,
+          outcome,
+          totalMs: Math.round(performance.now() - started),
+          stages,
+        })}`,
+      )
+    }
   }
 
   /**

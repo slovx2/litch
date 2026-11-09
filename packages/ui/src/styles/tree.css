@@ -228,6 +228,9 @@ button.sev-title {
   background: var(--hover);
   color: var(--ink);
 }
+.qn-chip[data-failed="true"] {
+  color: var(--err);
+}
 .qn-chip:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

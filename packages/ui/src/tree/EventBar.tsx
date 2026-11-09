@@ -6,7 +6,7 @@
 // 浮窗里的“立即处理”让设备进程当场交出去（在跑就插进去，停着就开一个回合），不用用户打一句“收到了，你看看”。
 import type { SessionEventView, SessionNoteView, SessionSummary } from '@litch/core'
 import { keys } from '@litch/core'
-import { useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import { requestOpenSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { whyNot } from '../app/errors.ts'
@@ -19,6 +19,7 @@ import { CardMarkdown } from '../transcript/CardMarkdown.tsx'
 import { CompactRow } from '../transcript/CompactRow.tsx'
 import { FileLinksProvider, useSessionFileLinks } from '../transcript/FileLinks.tsx'
 import { useToggle } from '../transcript/state.ts'
+import { queuedNotesOperation } from './queued-notes-operation.ts'
 import { ReportText } from './ReportText.tsx'
 
 const HEAD_TEXT: Partial<Record<string, MessageKey>> = {
@@ -149,27 +150,24 @@ export function QueuedNotesChip({ deviceId, sessionId }: { deviceId: string; ses
   const { channel } = useServices()
   const summary = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
   const { open, setOpen, root, trigger, pop, onKeyDown } = usePopover()
-  const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<string | null>(null)
+  const operation = queuedNotesOperation(channel, deviceId, sessionId)
+  const { busy, error, notNow } = useSyncExternalStore(operation.subscribe, operation.snapshot)
+  const failure = error ? whyNot(error, t) : notNow ? t('tree.queued.notNow') : null
   const fileLinks = useSessionFileLinks(deviceId, summary)
-  const notes = summary?.queuedNotes
-  if (!notes?.length) return null
+  const notes = summary?.queuedNotes ?? []
+  if (!notes.length && !busy && !failure) return null
   const deliver = () => {
-    setBusy(true)
-    setFailure(null)
-    channel
-      .command('session.queuedNotes.deliver', { deviceId, sessionId })
-      .then(({ delivered }) => {
-        if (delivered === 'none') setFailure(t('tree.queued.notNow'))
-        else setOpen(false)
-      })
-      .catch((error: unknown) => setFailure(whyNot(error, t)))
-      .finally(() => setBusy(false))
+    void operation.start()
+    setOpen(false)
   }
   const only = notes.length === 1 ? notes[0] : undefined
-  const label = only
-    ? t('tree.queued.one', { title: only.title || only.threadId })
-    : t('tree.queued.many', { count: notes.length })
+  const label = busy
+    ? t('tree.queued.processing')
+    : failure
+      ? t('tree.queued.failed')
+      : only
+        ? t('tree.queued.one', { title: only.title || only.threadId })
+        : t('tree.queued.many', { count: notes.length })
   return (
     <div className="pick qn-pick" ref={root}>
       <button
@@ -177,7 +175,9 @@ export function QueuedNotesChip({ deviceId, sessionId }: { deviceId: string; ses
         type="button"
         className="qn-chip"
         data-queued={notes.length}
-        title={t('tree.queued.hint')}
+        data-failed={!!failure}
+        title={failure ?? (busy ? t('tree.queued.processing') : t('tree.queued.hint'))}
+        aria-busy={busy}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
@@ -202,10 +202,25 @@ export function QueuedNotesChip({ deviceId, sessionId }: { deviceId: string; ses
               disabled={busy}
               onClick={deliver}
             >
-              {t('tree.queued.deliver')}
+              {t(
+                busy
+                  ? 'tree.queued.processing'
+                  : failure
+                    ? 'tree.queued.retry'
+                    : 'tree.queued.deliver',
+              )}
             </button>
           </div>
-          {failure ? <p className="qn-failure">{failure}</p> : null}
+          {failure ? (
+            <p className="qn-failure" role="alert">
+              {failure}
+            </p>
+          ) : null}
+          {!notes.length && failure ? (
+            <button type="button" className="btn sm" onClick={operation.dismiss}>
+              {t('tree.queued.dismiss')}
+            </button>
+          ) : null}
           {/* 浮窗在对话区外面：正文里的文件链接要自己给出这个会话的路径怎么认 */}
           <FileLinksProvider value={fileLinks}>
             <ul className="sev-notes">

@@ -8,9 +8,10 @@
 import { keys, type SessionNoteView, type SessionSummary } from '@litch/core'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { memo, useMemo, useState, useSyncExternalStore } from 'react'
+import { memo, useMemo, useSyncExternalStore } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
+import { queuedNotesOperation } from '../../../../../packages/ui/src/tree/queued-notes-operation.ts'
 import { ReportText } from '../../../../../packages/ui/src/tree/report-text.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey } from '../../shell/services'
@@ -195,15 +196,22 @@ export function QueuedNotesChip({
   const theme = useTheme()
   const { c } = theme
   const notes = useQueuedNotes(deviceId, sessionId)
-  if (notes.length === 0) return null
+  const channel = useChannel()
+  const operation = queuedNotesOperation(channel, deviceId, sessionId)
+  const { busy, error, notNow } = useSyncExternalStore(operation.subscribe, operation.snapshot)
+  if (!notes.length && !busy && !error && !notNow) return null
   const only = notes.length === 1 ? notes[0] : undefined
-  const label = only
-    ? t('tree.queued.one', { title: only.title || only.threadId })
-    : t('tree.queued.many', { count: notes.length })
+  const label = busy
+    ? t('tree.queued.processing')
+    : error || notNow
+      ? t('tree.queued.failed')
+      : only
+        ? t('tree.queued.one', { title: only.title || only.threadId })
+        : t('tree.queued.many', { count: notes.length })
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ expanded: open }}
+      accessibilityState={{ expanded: open, busy }}
       accessibilityLabel={label}
       accessibilityHint={t('tree.queued.hint')}
       testID="queued-notes:chip"
@@ -217,7 +225,11 @@ export function QueuedNotesChip({
         },
       ]}
     >
-      <Icon name="info" size={15} color={c.ink3} />
+      {busy ? (
+        <ActivityIndicator size="small" color={c.accent} />
+      ) : (
+        <Icon name="info" size={15} color={error || notNow ? c.err : c.ink3} />
+      )}
       <Text numberOfLines={1} style={[styles.chipText, { color: c.ink }]}>
         {label}
       </Text>
@@ -243,24 +255,17 @@ export function QueuedNotesPanel({
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const channel = useChannel()
   const notes = useQueuedNotes(deviceId, sessionId)
-  const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<string | null>(null)
-  if (notes.length === 0) return null
+  const operation = queuedNotesOperation(channel, deviceId, sessionId)
+  const { busy, error, notNow } = useSyncExternalStore(operation.subscribe, operation.snapshot)
+  const failure = error ? whyNot(error, t) : notNow ? t('tree.queued.notNow') : null
+  if (!notes.length && !busy && !failure) return null
   const openSession = (id: string) => {
     onClose()
     navigation.push('Detail', { deviceId, sessionId: id })
   }
   const deliver = () => {
-    setBusy(true)
-    setFailure(null)
-    channel
-      .command('session.queuedNotes.deliver', { deviceId, sessionId })
-      .then(({ delivered }) => {
-        if (delivered === 'none') setFailure(t('tree.queued.notNow'))
-        else onClose()
-      })
-      .catch((error: unknown) => setFailure(whyNot(error, t)))
-      .finally(() => setBusy(false))
+    void operation.start()
+    onClose()
   }
   return (
     <View
@@ -287,7 +292,13 @@ export function QueuedNotesPanel({
           ]}
         >
           <Text style={{ color: c.onAccent, fontSize: font.size.meta, fontWeight: '600' }}>
-            {t('tree.queued.deliver')}
+            {t(
+              busy
+                ? 'tree.queued.processing'
+                : failure
+                  ? 'tree.queued.retry'
+                  : 'tree.queued.deliver',
+            )}
           </Text>
         </Pressable>
         <Pressable
@@ -303,7 +314,17 @@ export function QueuedNotesPanel({
         </Pressable>
       </View>
       {failure ? (
-        <Text style={[styles.failure, { color: c.err, fontSize: font.size.meta }]}>{failure}</Text>
+        <Text
+          accessibilityRole="alert"
+          style={[styles.failure, { color: c.err, fontSize: font.size.meta }]}
+        >
+          {failure}
+        </Text>
+      ) : null}
+      {!notes.length && failure ? (
+        <Pressable accessibilityRole="button" onPress={operation.dismiss} style={styles.close}>
+          <Text style={{ color: c.accent }}>{t('tree.queued.dismiss')}</Text>
+        </Pressable>
       ) : null}
       <ScrollView style={styles.list} contentContainerStyle={styles.listBody}>
         {notes.map((note) => (
