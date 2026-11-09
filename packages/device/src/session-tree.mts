@@ -48,6 +48,7 @@ import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { EngineLink } from './engine-link.mjs'
 import type { DeviceManagers } from './manager.mjs'
 import type { HarnessSource } from './session.mjs'
+import { SessionRecoveryBudget, sessionHistory } from './session-history.mjs'
 import { isUserRequest, pendingRequestExcerpt, SessionPending } from './session-pending.mjs'
 import { SessionQuestions } from './session-questions.mjs'
 import type { SessionStore } from './session-store.mjs'
@@ -196,7 +197,10 @@ export class SessionTree {
   private readonly cutShort = new Set<string>()
   /** 会话最近一个回合结束的时刻（毫秒）。设备进程重启后没有的，取引擎报的会话更新时刻 */
   private readonly turnEndedAt = new Map<string, number>()
-  /** 客户端用 turn/start 发起的回合（harness + 回合）：只有它们算用户发起的 */
+  /** 自动恢复预算按会话保留，不能在共享连接重建时归零。 */
+  private readonly recoveryBudget = new SessionRecoveryBudget()
+  private readonly rewatching = new Set<string>()
+  /** 客户端用 turn/start 发起回合（harness + 回合）：只有它们算用户发起的 */
   private readonly clientTurns = new Set<string>()
   /**
    * 用户亲手停下的子会话（客户端的 turn/interrupt、归档）：会话 → 怎么停的。它在跑的回合结束时取走，
@@ -321,7 +325,7 @@ export class SessionTree {
     await this.unsubscribing.get(threadId)
     const link = await this.link(harness)
     if (this.subscribed.get(harness)?.has(threadId)) return null
-    const result = await link.request('thread/resume', { threadId })
+    const result = await link.request('thread/resume', { threadId, excludeTurns: true })
     this.noteSubscribed(harness, threadId)
     return isObject(result) ? result : null
   }
@@ -419,13 +423,18 @@ export class SessionTree {
   async read(
     threadId: string,
     includeTurns: boolean,
+    latest?: number,
   ): Promise<{ harness: string; thread: Record<string, unknown> }> {
     const harness = await this.owner(threadId)
     const link = await this.link(harness)
-    const result = await link.request('thread/read', { threadId, includeTurns })
-    const thread = isObject(result) && isObject(result.thread) ? result.thread : null
-    if (!thread) throw new Error(`${harness} 没有给回会话 ${threadId}`)
-    return { harness, thread }
+    // 历史连接不订阅、不复用编排连接；单个回合过大或读取失败不能断掉其他线的 send/watch。
+    const reader = includeTurns && link.native ? await this.host.openEngineLink(harness) : link
+    try {
+      const thread = await sessionHistory(reader, threadId, includeTurns, latest)
+      return { harness, thread }
+    } finally {
+      if (reader !== link) reader.close()
+    }
   }
 
   // ---------- 回合与请求 ----------
@@ -1096,7 +1105,7 @@ export class SessionTree {
         // 先核对引擎状态，设备重启后不能把正在跑的经理误当空闲。
         const idle = await this.idle(threadId)
         if (!idle && !this.active.has(threadId)) {
-          const { thread } = await this.read(threadId, true)
+          const { thread } = await this.read(threadId, true, 1)
           const turns = Array.isArray(thread.turns) ? thread.turns : []
           const active = turns.findLast((turn) => isObject(turn) && turn.status === 'inProgress')
           if (isObject(active)) this.turnEvent(harness, 'turn/started', { threadId, turn: active })
@@ -1909,21 +1918,40 @@ export class SessionTree {
       .filter((child) => harness === undefined || child.harness === harness)
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, 50)
-    for (const child of recent) {
+    const restore = async (child: (typeof recent)[number]) => {
+      if (!this.recoveryBudget.begin(child.threadId)) return
       try {
-        const { harness, thread } = await this.read(child.threadId, true)
+        const { harness, thread } = await this.read(child.threadId, true, 1)
         if (busy(thread)) {
           await this.watch(harness, child.threadId)
-          continue
+          this.recoveryBudget.finish(child.threadId, true)
+          return
         }
         const turns = Array.isArray(thread.turns) ? thread.turns : []
         const last = turns.at(-1)
         if (isObject(last) && typeof last.id === 'string' && last.status !== 'inProgress')
           this.turnEvent(harness, 'turn/completed', { threadId: child.threadId, turn: last })
+        this.recoveryBudget.finish(child.threadId, true)
       } catch (error) {
-        this.host.log(`重新盯子会话 ${child.threadId} 没成：${String(error)}`)
+        const retry = this.recoveryBudget.finish(child.threadId, false)
+        this.host.log(
+          `重新盯子会话 ${child.threadId} 没成：${String(error)}${retry === null ? '；已达重试上限，停止自动恢复' : ''}`,
+        )
+        if (retry !== null)
+          this.later(retry, () => {
+            void this.recover(child.harness)
+          })
       }
     }
+    let next = 0
+    await Promise.all(
+      Array.from({ length: Math.min(4, recent.length) }, async () => {
+        while (next < recent.length && !this.closed) {
+          const child = recent[next++]
+          if (child) await restore(child)
+        }
+      }),
+    )
   }
 
   /**
@@ -1942,11 +1970,14 @@ export class SessionTree {
   /** 到这个 harness 的连接断了：隔一阵重开、把它上面的子会话重新盯上。运行时一时起不来就再等等，几次之后放弃 */
   private rewatch(harness: string, attempt: number): void {
     if (
+      this.rewatching.has(harness) ||
       attempt >= REWATCH_MS.length ||
       this.store.children().every((child) => child.harness !== harness)
     )
       return
+    this.rewatching.add(harness)
     this.later(REWATCH_MS[attempt] as number, () => {
+      this.rewatching.delete(harness)
       this.link(harness).then(
         () => this.recover(harness).then(() => this.checkAll()),
         () => this.rewatch(harness, attempt + 1),

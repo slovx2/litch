@@ -93,6 +93,18 @@ export class FakeCodex extends FakeUpstream {
     }
     this.handlers['permissionProfile/list'] = () => ({ data: this.profiles, nextCursor: null })
     this.handlers['thread/unsubscribe'] = () => ({ status: 'unsubscribed' })
+    this.handlers['thread/turns/list'] = (params, connection) => {
+      const read: any = this.handlers['thread/read']?.(
+        { threadId: params.threadId, includeTurns: true },
+        connection,
+      )
+      const turns = [...(read?.thread?.turns ?? [])]
+      if (params.sortDirection !== 'asc') turns.reverse()
+      const offset = Number(params.cursor ?? 0),
+        end = offset + (params.limit ?? 10)
+      return { data: turns.slice(offset, end), nextCursor: end < turns.length ? String(end) : null }
+    }
+
     for (const method of EXPERIMENTAL) {
       const inner = this.handlers[method] ?? (() => ({}))
       this.handlers[method] = (params, connection) => {

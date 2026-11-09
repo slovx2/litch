@@ -1148,7 +1148,7 @@ async function wait(
   }
   const sessions = []
   for (const id of threads) {
-    const state = await tree.read(id, true).catch(() => null)
+    const state = await tree.read(id, true, 1).catch(() => null)
     if (!state) continue
     const turns = Array.isArray(state.thread.turns) ? state.thread.turns.filter(isObject) : []
     const last = turns.at(-1)

@@ -1,3 +1,4 @@
+import { sessionTurn } from './session-history.mjs'
 // 设备进程自有的引擎连接（定时任务的运行、会话树的编排都用它）：不对应任何客户端连接，没有客户端在中间，
 // 设备进程自己对引擎建会话、发回合、读会话。和聚合面上的上游连接（upstream.mts，每条客户端连接一组、断了自己重连）
 // 不同，它断了就报 onClose，要再用由调用方重新开；和 side-link.mts（问几句就关）也不同，它一直听着。
@@ -267,7 +268,10 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
   }
 
   try {
-    wire = await options.connect({ message: receive, close: () => shut('连接断开了') })
+    wire = await options.connect({
+      message: receive,
+      close: (reason) => shut(reason || '连接断开了'),
+    })
   } catch (error) {
     throw new EngineUnavailable(harness, `could not connect to ${harness}: ${message(error)}`)
   }
@@ -557,12 +561,7 @@ export function watchTurn(link: EngineLink, threadId: string): TurnWatch {
 
   /** 通知里没见到回答（比如条目早于订阅就结束了）：读一遍会话 */
   const readAnswer = async (turnId: string): Promise<string | null> => {
-    const read = await link
-      .request('thread/read', { threadId, includeTurns: true })
-      .catch(() => null)
-    const thread = isObject(read) && isObject(read.thread) ? read.thread : null
-    const turns = Array.isArray(thread?.turns) ? thread.turns : []
-    const turn = turns.find((item) => isObject(item) && item.id === turnId)
+    const turn = await sessionTurn(link, threadId, turnId).catch(() => null)
     return isObject(turn) ? lastAnswerIn(turn) : null
   }
 

@@ -311,7 +311,7 @@ original flow. Delegated answers leave an audit record in the child conversation
 
 ### Folded turns and mid-turn input
 
-Long desktop conversations load their history progressively so the sidebar stays responsive.
+Long desktop conversations load their history progressively so the sidebar stays responsive. Manager reads of Codex worklines also fetch history in pages on a separate connection. A failing history read does not disconnect other worklines. Automatic recovery retries each failing session at most five times with increasing delays; explicit reads remain available. Responses exceeding the transport limit report a size error instead of an unexplained disconnect.
 When returning to an earlier reading position, the transcript briefly shows a loading message
 while restoring it. You can select another conversation during that time.
 切回长会话时，即使阅读位置落在部分露出的回合结尾、前面的长正文尚未排版，首个显示帧也保持离开前的位置。

@@ -86,7 +86,13 @@ export function wrapSocket(socket: WebSocket, options: WrapOptions = {}): Transp
     if (code === 1000) return finish(null)
     finish(options.reason?.() ?? (reason.toString() || phrase('connect.closed', { code })))
   })
-  socket.on('error', (error) => finish(options.reason?.() ?? error.message))
+  socket.on('error', (error) =>
+    finish(
+      (error as NodeJS.ErrnoException).code === 'WS_ERR_UNSUPPORTED_MESSAGE_LENGTH'
+        ? `Response exceeds the WebSocket ${MAX_PAYLOAD / 1024 / 1024} MiB limit; use paginated history.`
+        : error.message || options.reason?.() || phrase('connect.dropped'),
+    ),
+  )
   options.lost?.(() => {
     if (closed) return
     finish(options.reason?.() ?? phrase('connect.dropped'))

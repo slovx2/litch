@@ -49,6 +49,7 @@ export function unixConnector(path: string): Connector {
         createConnection: () => net.createConnection(path),
       })
       let opened = false
+      let failure: string | null = null
       ws.on('message', (data) => handlers.message(textOf(data)))
       ws.once('open', () => {
         opened = true
@@ -57,9 +58,14 @@ export function unixConnector(path: string): Connector {
       ws.on('error', (error) => {
         // 连上之前的错误就是“连不上”；连上之后的错误后面一定跟着 close，在那里报
         if (!opened) reject(error)
+        else
+          failure =
+            (error as NodeJS.ErrnoException).code === 'WS_ERR_UNSUPPORTED_MESSAGE_LENGTH'
+              ? '运行时响应超过 WebSocket 100 MiB 上限，请使用分页读取历史'
+              : error.message
       })
       ws.once('close', (code, reason) => {
-        if (opened) handlers.close(reason.toString('utf8') || `连接关闭（${code}）`)
+        if (opened) handlers.close(failure ?? (reason.toString('utf8') || `连接关闭（${code}）`))
       })
     })
 }
@@ -106,8 +112,16 @@ export async function listenUnix(
   wss.on('connection', (ws) => {
     const handlers = attach(wireOf(ws))
     ws.on('message', (data) => handlers.message(textOf(data)))
-    ws.once('close', () => handlers.close('客户端断开'))
-    ws.on('error', () => {})
+    let failure: string | null = null
+    ws.once('close', (code, reason) =>
+      handlers.close(failure ?? (reason.toString() || `客户端断开（${code}）`)),
+    )
+    ws.on('error', (error) => {
+      failure =
+        (error as NodeJS.ErrnoException).code === 'WS_ERR_UNSUPPORTED_MESSAGE_LENGTH'
+          ? '请求超过 WebSocket 100 MiB 上限'
+          : error.message
+    })
   })
   const listen = () =>
     new Promise<void>((resolve, reject) => {

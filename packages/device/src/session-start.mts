@@ -140,7 +140,8 @@ export async function parentSettings(
   const resumed = await tree.watch(parentHarness, parentId)
   const link = await tree.link(parentHarness)
   // 已经订阅着的 watch 不再恢复，给的是 null：设置照样要读
-  const config = resumed ?? (await link.request('thread/resume', { threadId: parentId }))
+  const config =
+    resumed ?? (await link.request('thread/resume', { threadId: parentId, excludeTurns: true }))
   tree.releaseLater(parentHarness, parentId)
   return { link, config: isObject(config) ? config : null }
 }
@@ -480,6 +481,7 @@ async function createChild(
       spec.kind === 'fork'
         ? await link.request('thread/fork', {
             threadId: parentId,
+            excludeTurns: true,
             ...(spec.handOffBefore ? { beforeTurnId: spec.handOffBefore } : {}),
             ...(tools ? { dynamicTools: tools } : {}),
             ...(made ? { cwd: where } : {}),
