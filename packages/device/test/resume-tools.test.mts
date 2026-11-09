@@ -9,6 +9,44 @@ import { ECHO_SPEC, litch, treeRig } from './tree-kit.mjs'
 
 const names = (tools: any[]) => tools.map((tool) => tool.name)
 
+test('I-306：关闭时尚未回来的工具快照与串行等待者不能再写库或发恢复', async () => {
+  let writes = 0
+  let requests = 0
+  let release = (_value: unknown) => {}
+  const waiting = new Promise<unknown>((resolve) => {
+    release = resolve
+  })
+  const coordinator = new ResumeTools(
+    () => ({ 'tools.browser': false, 'tools.machine': false }),
+    {
+      setTools() {
+        writes++
+      },
+    },
+    () => false,
+  )
+  const request = async () => {
+    requests++
+    return waiting
+  }
+  const first = coordinator.resume('pi', { threadId: 'fixture' }, request)
+  const second = coordinator.resume('pi', { threadId: 'fixture' }, request)
+  const rejected = [assert.rejects(first, /设备已关闭/), assert.rejects(second, /设备已关闭/)]
+  await Promise.resolve()
+  assert.equal(requests, 1)
+  coordinator.close()
+  coordinator.observe(RESUME_TOOLS_CHANGED, {
+    threadId: 'fixture',
+    dynamicTools: [],
+    instance: 'fixture',
+    revision: 2,
+  })
+  release({ dynamicTools: [], instance: 'fixture', revision: 1 })
+  await Promise.all(rejected)
+  assert.equal(requests, 1)
+  assert.equal(writes, 0)
+})
+
 test('经理定时任务随设备能力补齐或移除，其他角色定义不变', () => {
   let tasks = true
   const coordinator = new ResumeTools(

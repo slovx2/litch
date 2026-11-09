@@ -396,6 +396,7 @@ export class ClientSession implements ClientToolPeer {
 
   /** 客户端发来的一帧 */
   receive(raw: string): void {
+    if (this.state === 'closed') return
     let frame: unknown
     try {
       frame = JSON.parse(raw)

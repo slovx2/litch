@@ -1046,6 +1046,10 @@ export class DeviceServer {
 
   /** 聚合面上进来了一条客户端连接。返回值接在这条连接的接收端上 */
   attach(wire: Wire): WireHandlers {
+    if (this.closed) {
+      wire.close()
+      return { message() {}, close() {} }
+    }
     const session = new ClientSession(this.host, wire)
     this.sessions.add(session)
     return {
@@ -1154,6 +1158,7 @@ export class DeviceServer {
     })
     // 设备进程自己的连接上看到的也算：没有客户端连着时跑的定时任务、子会话，回报里也要数得出后台任务
     link.onNotification((method, params) => {
+      if (this.closed) return
       if (!params || typeof params !== 'object') return
       if (method === 'item/completed' && this.layer.toolImages?.enabled()) {
         // 无界面连接的定时任务、子会话也保存当时的图；不能改写交给编排器的原始帧。
@@ -1180,9 +1185,12 @@ export class DeviceServer {
     })
     const request = link.request.bind(link)
     link.onServerRequest((method, params) => {
+      if (this.closed) return
       if (isObject(params)) this.recovery.observe(link.harness, method, params)
     })
     link.request = async (method, params, options) => {
+      if (this.closed)
+        throw new EngineUnavailable(link.harness, 'the device service is shutting down')
       if (['turn/start', 'turn/steer', 'thread/queue/add'].includes(method))
         this.attachments.observe(link.harness, params)
       // 定时任务和设备工具也使用内部连接，结束后的经理不能从这里重新开工。
@@ -1254,6 +1262,8 @@ export class DeviceServer {
                   this.managers.resets.held(String(ready.threadId)),
               )
             : await request(method, ready, guarded)
+        if (this.closed)
+          throw new EngineUnavailable(link.harness, 'the device service is shutting down')
         if (token && threadId) this.restart.accepted(threadId, token, result)
         if (isObject(ready))
           this.sessionTree.store.rememberCreatedTools(method, ready, result, link.native)
@@ -1292,7 +1302,7 @@ export class DeviceServer {
   async close(): Promise<void> {
     if (this.closed) return
     this.closed = true
-    await this.attachments.close()
+    this.resumeTools.close()
     this.restart.close()
     this.nativeBackground.close()
     this.recovery.close()
@@ -1311,10 +1321,12 @@ export class DeviceServer {
     for (const link of [...this.engineLinks]) link.close()
     for (const session of [...this.sessions]) session.close()
     this.sessionTree.close()
+    this.deviceTools.close()
+    // 先同步关闭所有输入，再等待清理；不能在 await 期间继续接收引擎消息或新客户端。
+    await this.attachments.close()
     await this.managers.close()
     this.worktreeLife?.stop()
     this.titles.close()
-    this.deviceTools.close()
     await this.importer?.close()
     await this.layer.close()
     this.db.close()

@@ -20,6 +20,7 @@ type Request = (method: string, params: unknown) => Promise<unknown>
 
 /** 外部恢复、内部恢复和重启恢复共用；同会话的读、替换、确认串行执行。 */
 export class ResumeTools {
+  private closed = false
   private readonly pending = new Map<string, Promise<unknown>>()
   private readonly revisions = new Map<string, { instance: string; revision: number }>()
   constructor(
@@ -65,11 +66,13 @@ export class ResumeTools {
   }
 
   observe(method: string, params: unknown): void {
+    if (this.closed) return
     if (method !== RESUME_TOOLS_CHANGED || !isObject(params)) return
     if (typeof params.threadId === 'string') this.remember(params.threadId, params, false)
   }
 
   private remember(id: string, snapshot: Record<string, unknown>, read: boolean): void {
+    this.assertOpen()
     if (
       !Array.isArray(snapshot.dynamicTools) ||
       typeof snapshot.instance !== 'string' ||
@@ -98,6 +101,7 @@ export class ResumeTools {
     const previous = this.pending.get(key)
     const work = (async () => {
       await previous?.catch(() => {})
+      this.assertOpen()
       // 经理重置明确替换完整角色定义，也排在同一队列，不能和普通恢复互相覆盖。
       if (replaceTools) return request('thread/resume', params)
       const snapshot = await request(RESUME_TOOLS_READ, { threadId: id })
@@ -117,6 +121,7 @@ export class ResumeTools {
         return request('thread/resume', rest)
       const dynamicTools = this.tools(harness, snapshot.dynamicTools)
       const result = await request('thread/resume', { ...rest, dynamicTools })
+      this.assertOpen()
       // 活动回合只记待生效；这里读取实际值，不能把尚未生效的请求写进 thread_tools。
       const applied = await request(RESUME_TOOLS_READ, { threadId: id })
       if (isObject(applied)) this.remember(id, applied, true)
@@ -128,5 +133,14 @@ export class ResumeTools {
     } finally {
       if (this.pending.get(key) === work) this.pending.delete(key)
     }
+  }
+
+  /** 停止接收更新；已经排队或正在等待引擎的恢复在下一次续体中明确失败。 */
+  close(): void {
+    this.closed = true
+  }
+
+  private assertOpen(): void {
+    if (this.closed) throw new Error('设备已关闭，停止恢复工具清单')
   }
 }

@@ -193,6 +193,8 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
   }
 
   const receive = (raw: string) => {
+    // WebSocket.close 只发起关闭握手，缓冲里的 message 仍可能到达；逻辑关闭后不再分发。
+    if (closedWith !== null) return
     let frame: unknown
     try {
       frame = JSON.parse(raw)
@@ -222,7 +224,10 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
           typeof params.threadId === 'string'
         )
           options.clientTools?.turnBegan(harness, params.threadId, String(params.turn.id))
-        for (const listener of [...notified]) listener(frame.method, params)
+        for (const listener of [...notified]) {
+          if (closedWith !== null) return
+          listener(frame.method, params)
+        }
         return
       }
       const id = frame.id as RpcId
@@ -246,7 +251,11 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
         options.clientTools.offer(null, source, frame, id)
         return
       }
-      for (const listener of [...requested]) listener(frame.method, params, id)
+      for (const listener of [...requested]) {
+        if (closedWith !== null) return
+        listener(frame.method, params, id)
+      }
+      if (closedWith !== null) return
       if (claims?.(frame.method, params)) taken.add(idKey(id))
       else if (failsUnheld()) watchRequest(id)
       return
@@ -292,6 +301,9 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
     })
   const close = () => {
     if (shut('连接已经关了')) opened.close()
+  }
+  const assertOpen = () => {
+    if (closedWith !== null) throw new Error(closedWith)
   }
   try {
     const greeting = dialect.initializeParams(
@@ -344,6 +356,7 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
       return closedWith !== null
     },
     async request(method, params, requestOptions) {
+      assertOpen()
       const timeoutMs = requestOptions?.timeoutMs ?? options.requestTimeoutMs
       // 原生 codex 不保存速度：带了的记下来，恢复、分叉没带时补回（codex-speeds.mts）
       const sped =
@@ -358,6 +371,7 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
             : null
         const release = threadId ? await options.reserveTurn?.(threadId) : undefined
         try {
+          assertOpen()
           const questions = isObject(ready) ? options.prepareQuestionInput?.(method, ready) : null
           if (questions) ready = questions.params
           const outgoing = (isObject(ready) ? dialect.outgoing(method, ready) : null) ?? ready
@@ -369,6 +383,8 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
           const result = await (dialect === NATIVE_CODEX_DIALECT
             ? readCodexHistory(method, outgoing, timeoutMs, ask)
             : ask(timeoutMs))
+          // 应答可能刚刚 resolve，续体运行前已关闭；不能再记速度、工具或回合状态。
+          assertOpen()
           sped?.remember(result)
           questions?.accepted()
           if (
@@ -397,7 +413,9 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
           : null
       if (!prepared) return send(params)
       const { params: ready, remember } = await prepared
+      assertOpen()
       const result = await send(ready)
+      assertOpen()
       remember(result)
       return result
     },

@@ -102,6 +102,10 @@ export class DeviceTools implements DeviceToolRegistry {
    * 没注册的命名空间当场回 invalid
    */
   dispatch(harness: string, params: Record<string, unknown>, reply: DeviceToolReply): void {
+    if (this.closed) {
+      reply(clientToolFailure('failed', 'The device service is shutting down.'))
+      return
+    }
     if (!this.allowed(text(params.threadId), params.namespace, params.tool)) {
       reply(
         clientToolFailure(
@@ -139,7 +143,6 @@ export class DeviceTools implements DeviceToolRegistry {
       controller: new AbortController(),
       replies: [reply],
     }
-    if (this.closed) entry.controller.abort(new Error('设备进程关了'))
     this.running.set(key, entry)
     const finish = (response: ClientToolCallResponse) => {
       this.running.delete(key)
@@ -152,7 +155,11 @@ export class DeviceTools implements DeviceToolRegistry {
     }
     // 处理函数同步抛的也按失败答
     Promise.resolve()
-      .then(() => handler(call, { signal: entry.controller.signal }))
+      .then(() => {
+        // 收到工具请求后、微任务真正执行前也可能已经关闭，不能把取消的工作交给写库入口。
+        entry.controller.signal.throwIfAborted()
+        return handler(call, { signal: entry.controller.signal })
+      })
       .then(finish, (error: unknown) => {
         this.log(`设备工具 ${call.namespace}.${call.tool} 出错：${message(error)}`)
         finish(

@@ -25,6 +25,40 @@ const ok = (text: string): ClientToolCallResponse => ({
 const internal = (engine: TaskEngine): FakeConnection[] =>
   engine.live.filter((connection) => connection.raw[0]?.includes('"name":"litch-device"'))
 
+test('I-306：关闭后及关闭前刚排入微任务的设备工具，不进入策略查询或处理函数', async () => {
+  const tools = new DeviceTools()
+  let calls = 0
+  let checks = 0
+  tools.allowed = () => {
+    checks++
+    return true
+  }
+  tools.register('litch_fixture', async () => {
+    calls++
+    return ok('unexpected')
+  })
+  const replies: ClientToolCallResponse[] = []
+  const reply = (value: ClientToolCallResponse) => {
+    replies.push(value)
+    return true
+  }
+  const params = {
+    threadId: 't',
+    turnId: 'u',
+    namespace: 'litch_fixture',
+    tool: 'write',
+    callId: 'before',
+  }
+  tools.dispatch('pi', params, reply)
+  tools.close()
+  tools.dispatch('pi', { ...params, callId: 'after' }, reply)
+  await new Promise<void>((resolve) => setImmediate(resolve))
+  assert.equal(checks, 1, '关闭后的策略查询也可能读库，不能进入')
+  assert.equal(calls, 0)
+  assert.equal(replies.length, 2)
+  assert.ok(replies.every((value) => value.success === false))
+})
+
 test('原生专用设备工具只接管调用，不向适配器声明命名空间', async () => {
   const tools = new DeviceTools()
   tools.register('litch_native', async () => ok('native'), { declare: false })
