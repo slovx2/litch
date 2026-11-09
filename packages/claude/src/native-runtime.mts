@@ -526,9 +526,16 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
           throw new ProtocolError(-32009, '上一个 Claude CLI 尚未确认退出，无法唤醒')
         return this.startSession(key, context, handlers)
       }
-      // 那一轮已经被拒绝或超时放弃时，没有东西可接。
-      if (!existing || existing.closing || existing.turn || (!existing.attach && !context.wake))
+      if (!existing || existing.closing)
         throw new ProtocolError(-32009, 'Claude CLI 已退出，自行续跑的回合无法接上')
+      if (existing.turn)
+        throw new ProtocolError(-32009, 'Claude 已有活动回合，自行续跑不能重复接入')
+      // CLI 仍在时只可能是接入被拒绝/超时；不能把它误报为退出，更不能重启而杀掉后台工作。
+      if (!existing.attach && !context.wake)
+        throw new ProtocolError(
+          -32009,
+          '自行续跑的接入窗口已结束，Claude CLI 仍在运行；可发送消息继续',
+        )
       return this.runOnSession(existing, context, handlers)
     }
     let restarted: string | null = null
@@ -1268,10 +1275,20 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       }
     })
     const attach = session.attach
+    const startedAt = Date.now()
     const refuse = (): void => {
       if (session.attach === attach) this.abandonRound(session)
     }
-    timer = setTimeout(refuse, SPONTANEOUS_ATTACH_TIMEOUT_MS)
+    timer = setTimeout(() => {
+      if (session.attach !== attach) return
+      debugLog('native.spontaneous.attachTimeout', {
+        threadId: session.key,
+        elapsedMs: Date.now() - startedAt,
+        closing: session.closing,
+        hasTurn: session.turn !== null,
+      })
+      refuse()
+    }, SPONTANEOUS_ATTACH_TIMEOUT_MS)
     timer.unref()
     if (!this.sessionHandlers) refuse()
     else

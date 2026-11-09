@@ -1254,6 +1254,15 @@ export class SessionStore {
     return rows.map((row: unknown) => this.rowToTurn(row))
   }
 
+  /** 启动/续跑的互斥检查只读状态；不解析历史条目，也不为状态查询合并流式正文。 */
+  hasInProgressTurn(threadId: string): boolean {
+    return Boolean(
+      this.db
+        .prepare("SELECT 1 FROM turns WHERE thread_id = ? AND status = 'inProgress' LIMIT 1")
+        .get(threadId),
+    )
+  }
+
   /** 分页先定位标识，只解析本页的回合，不能为十个回合读出整份历史。 */
   listTurnIds(threadId: string): string[] {
     this.flushAll()

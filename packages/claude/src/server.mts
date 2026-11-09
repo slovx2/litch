@@ -3320,7 +3320,7 @@ export class CodexClaudeAppServer {
       this.interruptingByThread.has(threadId) ||
       this.nativeMutations.has(threadId) ||
       this.store.pendingContextInjection(threadId) ||
-      this.store.listTurns(threadId).some((turn) => turn.status === 'inProgress')
+      this.store.hasInProgressTurn(threadId)
     )
       return false
     // 这一轮不是哪条连接发起的，用占位连接代表它：通知和请求按线程当时的订阅连接送（见 recipients），
@@ -3416,7 +3416,7 @@ export class CodexClaudeAppServer {
       this.interruptingByThread.has(threadId) ||
       this.nativeMutations.has(threadId) ||
       this.store.pendingContextInjection(threadId) ||
-      this.store.listTurns(threadId).some((turn) => turn.status === 'inProgress')
+      this.store.hasInProgressTurn(threadId)
     )
       return null
     const thread = this.store.getThread(threadId)
@@ -4001,7 +4001,7 @@ export class CodexClaudeAppServer {
       this.activeTurnByThread.has(threadId) ||
       this.interruptingByThread.has(threadId) ||
       this.store.pendingContextInjection(threadId) ||
-      this.store.listTurns(threadId).some((turn) => turn.status === 'inProgress')
+      this.store.hasInProgressTurn(threadId)
     )
       throw new ProtocolError(-32009, '会话已有活动或结果尚未确认的 Turn')
     // 追问回合要恢复父会话；同一个 Claude 会话不能同时被两个 CLI 进程使用。

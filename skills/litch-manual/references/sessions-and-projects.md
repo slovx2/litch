@@ -545,6 +545,11 @@ explain it:
   "Background tasks" in the session's menu) opens a simpler page with the same list, where a subagent
   opens its own page and running commands can be stopped; the folded steps and the
   line at the start of a continuing turn look the same as on the desktop.
+  Claude 若提示“自行续跑的接入窗口已结束，CLI 仍在运行”，表示本次自动处理未接上，不代表进程或其他后台任务已退出。等当前回合结束后，可在原会话询问已完成任务的结果；先核对结果，不要直接重复执行命令。Litch 不会为这条错误重启 CLI。
+  If Claude reports that the continuation attachment window ended while its CLI is still running,
+  the automatic turn failed to attach; other background work is not declared stopped. Once the
+  current turn ends, ask in the same conversation to check the completed task's result before
+  repeating any command. Litch does not restart the CLI for this error.
 - **Messages Litch sends for you** show as cards, not as your own message: a scheduled task's run
   ("Scheduled task · <name>", tagged "Run manually" for Run now), a sub-session's first message ("Sub-session
   brief", "Fork brief" or "Handed-off task", with the session it came from, which opens it), and "Do it
