@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { once } from 'node:events'
+import { existsSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import net from 'node:net'
 import { tmpdir } from 'node:os'
@@ -28,8 +29,12 @@ for (const [name, request] of [
       await rm(root, { recursive: true, force: true })
     })
     await once(client, 'connect')
+    // Linux 主动销毁尚有 HTTP 数据的连接时会先报 ECONNRESET，再报 close。
+    // events.once(close) 会把 error 当成拒绝；单独等 close，并核对错误，不能吞掉其他故障。
+    const errors: NodeJS.ErrnoException[] = []
+    client.on('error', (error: NodeJS.ErrnoException) => errors.push(error))
+    const disconnected = new Promise<void>((resolve) => client.once('close', () => resolve()))
     if (request) client.write(request)
-    const disconnected = once(client, 'close')
     let timer: NodeJS.Timeout | undefined
     try {
       await Promise.race([
@@ -39,6 +44,8 @@ for (const [name, request] of [
         }),
       ])
       assert.equal(client.destroyed, true)
+      for (const error of errors) assert.equal(error.code, 'ECONNRESET', error.message)
+      assert.equal(existsSync(path), false, '关闭完成后不再留下监听套接字')
       await transport.close()
     } finally {
       clearTimeout(timer)
