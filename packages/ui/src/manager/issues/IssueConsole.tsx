@@ -12,6 +12,7 @@ import {
   managerIssueFilterKey,
   managerIssueHead,
   managerIssueKindFilter,
+  managerIssueLinkFilter,
   managerIssuePageKey,
   managerIssueStatusFilters,
   supportedManagerIssueFilter,
@@ -113,6 +114,7 @@ export function IssueConsole({
   )
   const [open, setOpenState] = useState<ManagerIssueId | null>(saved.open)
   const [linked, setLinked] = useState<ManagerIssueId | null>(null)
+  const [following, setFollowing] = useState(false)
   const [creating, setCreating] = useState(false)
   const [full, setFullState] = useState<ManagerIssueId | null>(saved.full)
   const pane = useDiscussionPane()
@@ -183,18 +185,37 @@ export function IssueConsole({
       // 还没读到：读一次详情，到了再定位；解析不了的编号直接放掉
       if (id && reading.current !== id) {
         reading.current = id
-        invoke(commands.read(id))
-      } else onLocated()
+        invoke(
+          commands.read(id).catch((error) => {
+            if (reading.current === id) {
+              reading.current = null
+              onLocated()
+            }
+            throw error
+          }),
+        )
+      }
       return
     }
     reading.current = null
     onLocated()
     saved.full = null
     setFullState(null)
+    setFilter(managerIssueLinkFilter(issue, saved.filters[issue.kind]), issue.kind)
     if (issue.kind !== kind) onKind(issue.kind)
     setLinked(issue.id)
+    setFollowing(true)
     setOpen(issue.id)
-  }, [target, issues, kind, onKind, onLocated, invoke, commands, setOpen, saved])
+  }, [target, issues, kind, onKind, onLocated, invoke, commands, setOpen, setFilter, saved])
+  const linkedIssue = linked ? issues.details[linked] : undefined
+  // 定位之后状态还可能改变（例如报告标为已阅）；继续按真实状态显示，直到用户主动改过滤。
+  useEffect(() => {
+    if (!following || !linkedIssue || linkedIssue.kind !== kind) return
+    const next = managerIssueLinkFilter(linkedIssue, filter)
+    if (managerIssueFilterKey(next) === managerIssueFilterKey(filter)) return
+    saved.filters = { ...saved.filters, [kind]: next }
+    setFiltersState(saved.filters)
+  }, [following, linkedIssue, kind, filter, saved])
   useLayoutEffect(() => {
     if (!linked) return
     const card = root.current?.querySelector<HTMLElement>(`[data-issue="${CSS.escape(linked)}"]`)
@@ -214,10 +235,10 @@ export function IssueConsole({
   // 特殊 issue 的旧对象操作（问经理）用对象自己的版本，不是 issue 的公共版本
   const postRevision = (id: ManagerIssueId) => issues.details[id]?.quick.revision
   const entries = page?.entries ?? []
-  const linkedHead =
-    linked && !entries.some((head) => head.id === linked) && issues.details[linked]
-      ? managerIssueHead(issues.details[linked])
-      : null
+  const linkedHead = linkedIssue && linkedIssue.kind === kind ? managerIssueHead(linkedIssue) : null
+  const visible = linkedHead
+    ? [linkedHead, ...entries.filter((head) => head.id !== linked)]
+    : entries
   const card = (head: (typeof entries)[number]) => {
     const issue = issues.details[head.id]
     const expanded = open === head.id
@@ -240,7 +261,7 @@ export function IssueConsole({
         onFull={() => setFull(head.id)}
         onOpenItem={onOpenItem}
         onToggle={() => {
-          setLinked(null)
+          if (head.id !== linked) setLinked(null)
           if (expanded) setOpen(null)
           else {
             setOpen(head.id)
@@ -344,6 +365,7 @@ export function IssueConsole({
           onDone={(id) => {
             setCreating(false)
             if (!id) return
+            setFollowing(false)
             setLinked(id as ManagerIssueId)
             setOpen(id as ManagerIssueId)
           }}
@@ -357,19 +379,18 @@ export function IssueConsole({
           </button>
         </p>
       ) : null}
-      {linkedHead ? card(linkedHead) : null}
-      {!page ? (
+      {!page && !linkedHead ? (
         error || issues.error ? null : (
           <p className="dim">{t('manager.loading')}</p>
         )
-      ) : entries.length ? (
+      ) : visible.length ? (
         <>
-          {entries.map(card)}
+          {visible.map(card)}
           <footer className="mg-issue-foot">
             <span data-issue-total>
-              {t('issue.loaded', { n: entries.length, total: page.total })}
+              {t('issue.loaded', { n: visible.length, total: page?.total ?? visible.length })}
             </span>
-            {page.nextCursor ? (
+            {page?.nextCursor ? (
               <button
                 type="button"
                 className="btn ghost"

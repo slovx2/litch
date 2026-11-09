@@ -77,6 +77,7 @@ function fixture(platform) {
   const requests = []
   const filters = []
   const commands = {
+    read: () => Promise.resolve(),
     list: (filter, options = {}) => {
       filters.push(structuredClone(filter))
       requests.push({ kind: filter.kinds[0], cursor: options.cursor ?? null })
@@ -114,6 +115,11 @@ function fixture(platform) {
   let kind = 'decision'
   let loaded = 30
   let preset = null
+  let target = null
+  let linkedIssue = null
+  let offPage = false
+  let details = {}
+  let result
   let tree
   const nodes = (node) => {
     if (Array.isArray(node)) return node.flatMap(nodes)
@@ -136,16 +142,36 @@ function fixture(platform) {
         },
       ]),
     )
+    if (linkedIssue) {
+      for (const filter of filters) {
+        pages[list.managerIssuePageKey(manager.id, filter)] = {
+          entries:
+            !offPage &&
+            filter.kinds.includes(linkedIssue.kind) &&
+            (!filter.statuses.length || filter.statuses.includes(linkedIssue.status))
+              ? [list.managerIssueHead(linkedIssue)]
+              : [],
+          total: 80,
+          nextCursor: 'next',
+        }
+      }
+    }
     const props = {
       manager,
       kind,
       view: { board: { decisions: [], changes: [] } },
-      issues: { supported: true, discussions, pages, details: {}, error: null },
+      issues: { supported: true, discussions, pages, details, error: null },
       disabled: false,
-      target: null,
+      target,
+      onKind: (value) => {
+        kind = value
+      },
+      onLocated: () => {
+        target = null
+      },
       preset,
     }
-    const result = renderConsole(props)
+    result = renderConsole(props)
     tree = platform === 'desktop' ? result : [result.header, result.body, result.overlays]
     for (const run of effects) run()
   }
@@ -169,6 +195,38 @@ function fixture(platform) {
     requests,
     filters,
     render,
+    link(issue, options = {}) {
+      linkedIssue = issue
+      offPage = options.offPage === true
+      details = options.delayed ? {} : { [issue.id]: issue }
+      if (platform === 'desktop') target = issue.id
+      else result.open(issue.id)
+      for (let i = 0; i < 4; i++) render()
+    },
+    deliverDetail() {
+      details = { [linkedIssue.id]: linkedIssue }
+      for (let i = 0; i < 4; i++) render()
+    },
+    changeStatus(status) {
+      linkedIssue = { ...linkedIssue, status }
+      details = { [linkedIssue.id]: linkedIssue }
+      for (let i = 0; i < 4; i++) render()
+    },
+    visible(id) {
+      return nodes(tree).some((node) =>
+        platform === 'desktop'
+          ? node.props?.head?.id === id
+          : node.props?.testID === `issue-card:${id}`,
+      )
+    },
+    close(id) {
+      const node = nodes(tree).find((node) =>
+        platform === 'desktop' ? node.props?.head?.id === id : node.props?.issueId === id,
+      )
+      assert.ok(node, '链接应已打开目标')
+      ;(node.props.onToggle ?? node.props.onClose)()
+      render()
+    },
     pickKind(category) {
       if (platform === 'desktop') kind = category
       else
@@ -275,6 +333,63 @@ function fixture(platform) {
 }
 
 for (const platform of Object.keys(sources)) {
+  for (const [kind, status, id] of [
+    ['decision', 'answered', 'D-901'],
+    ['decision', 'expired', 'D-902'],
+    ['request', 'delivered', 'R-901'],
+    ['report', 'read', 'P-901'],
+    ['suggestion', 'started', 'S-fixture'],
+    ['ordinary', 'closed', 'X-901'],
+  ]) {
+    test(`${platform}：链接 ${id} 切到 ${status}，收起后仍在列表（含后续页）`, () => {
+      const f = fixture(platform)
+      f.render()
+      const issue = {
+        id,
+        kind,
+        status,
+        title: '虚构的已处理事项',
+        body: '测试正文',
+        author: { kind: 'manager' },
+        followUp: { state: 'off' },
+        discussion: { comments: [] },
+        quick: {},
+        unread: false,
+      }
+      f.link(issue, { offPage: true })
+      assert.deepEqual(f.filters.at(-1).kinds, [kind])
+      assert.deepEqual(f.filters.at(-1).statuses, [status])
+      assert.equal(f.visible(id), true)
+      f.close(id)
+      assert.equal(f.visible(id), true, '不能因为收起取消临时展开而丢失目标')
+      f.pickStatus(kind === 'report' ? 'unread' : kind === 'suggestion' ? 'endorsed' : 'open')
+      assert.equal(f.visible(id), false, '用户主动改过滤时结束定位，不能强行保留目标')
+    })
+  }
+  test(`${platform}：详情延迟到达时不中途取消链接定位`, () => {
+    const f = fixture(platform)
+    f.render()
+    f.link(
+      {
+        id: 'D-999',
+        kind: 'decision',
+        status: 'withdrawn',
+        title: '虚构撤回决策',
+        body: '正文',
+        author: { kind: 'manager' },
+        followUp: { state: 'off' },
+        discussion: { comments: [] },
+        quick: {},
+      },
+      { delayed: true },
+    )
+    f.deliverDetail()
+    assert.deepEqual(f.filters.at(-1).statuses, ['withdrawn'])
+    assert.equal(f.visible('D-999'), true)
+    f.changeStatus('answered')
+    assert.deepEqual(f.filters.at(-1).statuses, ['answered'], '定位期间使用最新状态')
+    assert.equal(f.visible('D-999'), true)
+  })
   test(`${platform}：各类别首次进入只查开放、待开始或未读，选项在前，全部选择独立记忆`, () => {
     const f = fixture(platform)
     f.render()

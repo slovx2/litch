@@ -15,7 +15,9 @@ import {
   MANAGER_ISSUE_LIST_ORDERS,
   type ManagerIssueFilter,
   managerIssueFilterKey,
+  managerIssueHead,
   managerIssueKindFilter,
+  managerIssueLinkFilter,
   managerIssuePageKey,
   managerIssueStatusFilters,
   supportedManagerIssueFilter,
@@ -74,6 +76,7 @@ export function useIssueConsole({
   preset,
   onFull,
   onOpenItem,
+  onLocate,
 }: {
   manager: ManagerView
   board: ManagerBoardView | null
@@ -86,6 +89,7 @@ export function useIssueConsole({
   preset: IssuePreset | null
   onFull(id: string): void
   onOpenItem(id: string): void
+  onLocate?(): void
 }): { header: ReactNode; body: ReactNode; overlays: ReactNode; open(id: string): void } {
   const t = useT()
   const theme = useTheme()
@@ -96,6 +100,8 @@ export function useIssueConsole({
     () => memory.get(key) ?? { kind: 'decision' as ManagerIssueKind, filters: {} },
   )
   const kind = saved.kind
+  const [linked, setLinked] = useState<string | null>(null)
+  const located = useRef(false)
   // 保持默认条件引用，分页结果不能触发 list effect 再读首屏。
   const filter = useMemo(
     () =>
@@ -115,17 +121,40 @@ export function useIssueConsole({
   /** 换条件；条件里的类型就是页签 */
   const setFilter = useCallback(
     (next: ManagerIssueFilter, one = kind) => {
+      setLinked(null)
       const now = memory.get(key) ?? saved
       save({ kind: one, filters: { ...now.filters, [one]: next } })
     },
     [key, save, saved, kind],
   )
-  const pickKind = (one: ManagerIssueKind) => save({ ...saved, kind: one })
+  const pickKind = (one: ManagerIssueKind) => {
+    setLinked(null)
+    save({ ...saved, kind: one })
+  }
   const [filtering, setFiltering] = useState(false)
   const [creating, setCreating] = useState(false)
   const [sheet, setSheet] = useState<string | null>(null)
   const [error, setError] = useState('')
   const page = issues.pages[managerIssuePageKey(manager.id, filter)]
+  const linkedIssue = linked ? issues.details[linked as keyof typeof issues.details] : undefined
+  useEffect(() => {
+    if (!linkedIssue) return
+    const next = managerIssueLinkFilter(linkedIssue, saved.filters[linkedIssue.kind])
+    if (kind === linkedIssue.kind && managerIssueFilterKey(next) === managerIssueFilterKey(filter))
+      return
+    save({ kind: linkedIssue.kind, filters: { ...saved.filters, [linkedIssue.kind]: next } })
+  }, [linkedIssue, kind, filter, saved.filters, save])
+  const open = useCallback(
+    (id: string) => {
+      located.current = false
+      setLinked(id)
+      setSheet(id)
+      void commands
+        .read(id)
+        .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
+    },
+    [commands],
+  )
   const attention = useIssueCounts(manager, issues, MANAGER_ISSUE_ATTENTION_FILTERS)
   const list = useCallback(
     (cursor?: string) =>
@@ -223,7 +252,14 @@ export function useIssueConsole({
         key={head.id}
         accessibilityRole="button"
         testID={`issue-card:${head.id}`}
+        onLayout={() => {
+          if (head.id === linked && !located.current) {
+            located.current = true
+            onLocate?.()
+          }
+        }}
         onPress={() => {
+          if (head.id !== linked) setLinked(null)
           setSheet(head.id)
           void commands.read(head.id).catch(() => {})
         }}
@@ -260,6 +296,12 @@ export function useIssueConsole({
       </Pressable>
     )
   }
+  // 编号可能在后续分页；定位补入同一筛选结果，关抽屉不移除，翻页读到后自然去重。
+  const entries = page?.entries ?? []
+  const linkedHead = linkedIssue?.kind === kind ? managerIssueHead(linkedIssue) : null
+  const visible = linkedHead
+    ? [linkedHead, ...entries.filter((head) => head.id !== linked)]
+    : entries
   const body =
     error || issues.error ? (
       <View style={styles.note}>
@@ -268,15 +310,15 @@ export function useIssueConsole({
         </Text>
         <Button kind="plain" label={t('manager.paging.retry')} onPress={() => list()} />
       </View>
-    ) : !page ? (
+    ) : !page && !linkedHead ? (
       <Text style={[styles.note, { color: c.ink3 }]}>{t('manager.loading')}</Text>
-    ) : page.entries.length ? (
+    ) : visible.length ? (
       <View style={styles.list} testID="issue-list">
-        {page.entries.map(card)}
+        {visible.map(card)}
         <Text style={{ color: c.ink3, fontSize: font.size.meta, textAlign: 'center' }}>
-          {t('issue.loaded', { n: page.entries.length, total: page.total })}
+          {t('issue.loaded', { n: visible.length, total: page?.total ?? visible.length })}
         </Text>
-        {page.nextCursor ? (
+        {page?.nextCursor ? (
           <Button
             kind="plain"
             label={t('issue.loadMore')}
@@ -347,7 +389,7 @@ export function useIssueConsole({
       ) : null}
     </>
   )
-  return { header, body, overlays, open: setSheet }
+  return { header, body, overlays, open }
 }
 
 /** 打开一条 issue 的半屏抽屉：特殊 issue 先是原来的快速处理卡，点“讨论”再展开讨论；普通 issue 直接是讨论 */

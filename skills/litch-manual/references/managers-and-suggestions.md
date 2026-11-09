@@ -31,6 +31,7 @@ issue 页签默认只选类型“issue”（X-n），类型过滤支持多选和
 每个页签分别记住自己的过滤条件和排序。issue 页签还可按状态、创建者、未读和跟进筛选，支持新建。
 首次进入决策、请你做和 issue 页签默认“开放”；建议默认“待开始”（经理已推荐，不含待审核），报告默认“未读”。
 对应状态放在过滤选项第一位，“全部”在最后；用户选过的条件不重置，概览数字带入的条件优先。
+点击对话中的 D-n、R-n、P-n、S- 或 X-n 链接，会切到目标实际所属的类别和状态，保留排序，清除作者、未读和跟进等可能隐藏目标的过滤。目标置于当前列表顶部并展开，收起后仍保留；手动改过滤或打开其他条目时结束定位。
 展开 X-n 可查看原帖、状态与跟进、关联、评论及输入框；其他类型保留快速处理按钮，可打开底部讨论或完整讨论页。
 完整讨论页和讨论抽屉保留对应的处理入口：决策提交答复（可只选选项）、请你做交付或回复、建议开始或编辑后开始、报告标为已阅。评论不会代替这些操作。
 依据与关联默认只显示标题和数量，点击展开；重新进入页面时恢复收起。活动只显示经理对正文、选项、推荐等内容和状态的实质更新，不重复显示用户答复、关联或依据变更、讨论开关；没有有效时间的活动不显示，历史数据仍保留。
@@ -45,6 +46,7 @@ If the device service does not support discussion filtering yet, Issues lists on
 Each tab remembers its own filters and sorting. Issues also offers status, author, unread and follow-up filters, plus New issue.
 On first entry, Decisions, For you and Issues default to Open; Suggestions to Ready to start (endorsed by the manager, excluding those awaiting review), and Reports to Unread.
 That filter comes first and All comes last. Saved choices remain unchanged; filters from Overview counts take precedence.
+Conversation links to D-n, R-n, P-n, S- or X-n select the target's actual category and status, preserve sorting, and clear author, unread and follow-up filters that could hide it. The target opens at the top of the list and remains after collapsing. Changing filters or opening another entry ends this placement.
 X-n opens its description, status, follow-up, links and comments; other types keep their quick actions and can open a discussion drawer or full page.
 Full discussions and drawers retain the relevant action: submit a decision answer (an option alone is enough), deliver or reply to a request, start or edit a suggestion, and mark a report as read. Comments do not replace these actions.
 Evidence and links initially show only their title and count. Click to expand; reopening the page collapses them again. Activity shows substantive manager edits and status changes, omitting duplicate user responses, link or evidence changes, discussion toggles, and entries without a valid timestamp. The underlying history is retained.

@@ -488,6 +488,22 @@ export async function managerIssuesProbe() {
     await click('[data-act="issue-back"]')
   }
   passed.push('四类完整页主操作、活动过滤、依据和关联折叠')
+  await click('[data-inbox-tab="decisions"]')
+  await click('[data-issue-filter-status="open"]')
+  await click('[data-issue="D-15"] [data-act="issue-toggle"]')
+  await click('[data-issue="D-15"] [data-board-reference="D-13"]')
+  await until(
+    '已答复决策链接切到对应过滤',
+    () =>
+      one('[data-issue-filter-status="answered"][aria-pressed="true"]') &&
+      one('[data-issue="D-13"] [data-act="issue-toggle"][aria-expanded="true"]'),
+  )
+  await click('[data-issue="D-13"] [data-act="issue-toggle"]')
+  await until('收起后已答复决策仍在列表', () =>
+    one('[data-issue="D-13"] [data-act="issue-toggle"][aria-expanded="false"]'),
+  )
+  assert(!one('[data-issue-empty]'), '定位目标可见却显示空列表')
+  passed.push('正文决策链接使用真实状态过滤，收起后仍可见')
   return {
     passed,
     createdId: id,

@@ -376,6 +376,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
     preset: issuePreset,
     onFull: (id) => navigation.push('ManagerIssue', { deviceId, managerId, id }),
     onOpenItem: (id) => openIssue(id),
+    onLocate: () => scroll.current?.scrollTo({ y: 0, animated: false }),
   })
   issueOpen.current = issueMode ? issueUI.open : null
   const overviewIssues: OverviewIssues | undefined =

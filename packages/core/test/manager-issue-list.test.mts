@@ -9,12 +9,36 @@ import {
   managerIssueFilterKey,
   managerIssueHead,
   managerIssueKindFilter,
+  managerIssueLinkFilter,
   managerIssuePageKey,
   managerIssueQuery,
   managerIssueStatusFilters,
   managerIssueStatusOptions,
   withManagerIssueKinds,
 } from '../src/projection/manager-issue-list.mjs'
+
+test('编号定位按真实类型与状态查询，清除隐藏目标的过滤并保留排序', () => {
+  for (const kind of ['ordinary', 'decision', 'request', 'report', 'suggestion'] as const) {
+    for (const status of managerIssueStatusOptions([kind])) {
+      const previous = {
+        ...managerIssueKindFilter(kind),
+        authors: ['user'] as const,
+        followUp: 'on' as const,
+        unread: true,
+        order: 'oldest' as const,
+      }
+      const filter = managerIssueLinkFilter({ kind, status }, { ...previous, authors: ['user'] })
+      assert.deepEqual(filter.kinds, [kind])
+      assert.deepEqual(filter.statuses, [status])
+      assert.deepEqual(filter.authors, [])
+      assert.equal(filter.followUp, 'all')
+      assert.equal(filter.unread, false)
+      assert.equal(filter.order, 'oldest')
+      assert.equal(filter.discussionsOnly, kind === 'ordinary' ? true : undefined)
+      assert.equal(previous.unread, true, '不能改写传入的页签过滤')
+    }
+  }
+})
 
 test('类别首次默认只看开放、待开始或未读，全部最后；通用全量查询底子不变', () => {
   for (const [kind, statuses] of Object.entries({

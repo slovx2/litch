@@ -92,6 +92,18 @@ export function managerIssueKindFilter(kind: ManagerIssueKind): ManagerIssueFilt
   }
 }
 
+/** 编号定位采用目标的真实类型和状态，清掉可能隐藏它的条件，只保留该页签的排序。 */
+export function managerIssueLinkFilter(
+  issue: Pick<ManagerIssue, 'kind' | 'status'>,
+  previous?: ManagerIssueFilter,
+): ManagerIssueFilter {
+  return {
+    ...managerIssueKindFilter(issue.kind),
+    statuses: [issue.status],
+    order: previous?.order ?? DEFAULT_MANAGER_ISSUE_FILTER.order,
+  }
+}
+
 /** 两端共用选项顺序：开放／待开始／未读在前，全部在最后。 */
 export function managerIssueStatusFilters(kind: ManagerIssueKind, kinds: ManagerIssueKind[]) {
   const options = managerIssueStatusOptions(kinds).map((status) => ({
