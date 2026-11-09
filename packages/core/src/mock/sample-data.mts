@@ -113,6 +113,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       stale: false,
       organizable: true,
       manageable: true,
+      modelRanking: true,
       // 在跑的就是应用自带的那一份。别的情形由对话里的关键字来演（mock-service.mts）
       ...sampleLocalService(now),
       remoteUpgrade: null,

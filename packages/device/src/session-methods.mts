@@ -55,6 +55,7 @@ function overridesOf(value: unknown): ProposalOverrides {
     if (typeof given !== 'string') throw new ProtocolError(-32602, `overrides.${name} 必须是字符串`)
     out[name] = given
   }
+  if (value.modelSelected === true) out.modelSelected = true
   if (value.kind != null) out.kind = kindOf(value.kind)
   if (value.title != null) out.title = requiredString(value.title, 'overrides.title')
   if (value.prompt != null) out.prompt = requiredString(value.prompt, 'overrides.prompt')
@@ -184,7 +185,9 @@ export async function sessionTreeCall(
       if (settled?.status === 'started' && settled.startedThreadId)
         return { threadId: settled.startedThreadId }
       const overrides = overridesOf(fields.overrides)
-      const { threadId } = await refusedAsInvalid(() => acceptProposal(tree, id, overrides))
+      const { threadId } = await refusedAsInvalid(() =>
+        acceptProposal(tree, id, overrides, 'pending', 'user'),
+      )
       return { threadId }
     }
     case SESSION_TREE_METHOD.proposalDismiss: {

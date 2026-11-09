@@ -1,9 +1,11 @@
 // 进程内的假控制通道：扮演适配器主进程（Go 层）那一头。记着每个 harness 的状态和一份设置快照，
 // 按控制协议应答，状态变了就推给设备进程。应答可以由测试改。
+
 import type {
   DeviceSettingsSnapshot,
   ManagedHarnessState,
 } from '../../protocol/src/device-settings.mjs'
+import { emptyRanking, type ModelRankingConfig } from '../../protocol/src/model-ranking.mjs'
 import {
   type ControlChannel,
   ControlFailure,
@@ -31,6 +33,7 @@ export const failure = (detail: Partial<ControlFailureDetail>): ControlFailure =
   new ControlFailure({ reason: 'failed', text: { 'zh-CN': '没做成', en: 'It failed' }, ...detail })
 
 export class FakeControl implements ControlChannel {
+  ranking: ModelRankingConfig = emptyRanking()
   state: ControlState | null = null
   onState: ((state: ControlState) => void) | null = null
   onAsk: ((method: string) => Promise<unknown>) | null = null
@@ -63,6 +66,14 @@ export class FakeControl implements ControlChannel {
   constructor(harnesses: ManagedHarness[], announce = true) {
     this.harnesses = harnesses
     this.handlers = {
+      'modelRanking.read': () => this.ranking,
+      'modelRanking.write': (params) => this.writeRanking(params, 'custom'),
+      'modelRanking.merge': (params) => this.writeRanking(params, this.ranking.mode),
+      'modelRanking.reset': (params) =>
+        this.writeRanking(
+          { ...emptyRanking(), expectedRevision: params.expectedRevision },
+          'builtin',
+        ),
       'settings.read': () => ({
         schema: { groups: [], settings: [] },
         snapshot: this.snapshot,
@@ -171,6 +182,20 @@ export class FakeControl implements ControlChannel {
   patch(change: Partial<DeviceSettingsSnapshot>): void {
     this.snapshot = { ...this.snapshot, ...change }
     this.push()
+  }
+
+  private writeRanking(params: any, mode: 'builtin' | 'custom') {
+    if (params.expectedRevision !== this.ranking.revision) throw failure({ reason: 'conflict' })
+    this.ranking = {
+      schemaVersion: 1,
+      revision: this.ranking.revision + 1,
+      mode,
+      tiers: params.tiers,
+      unranked: params.unranked,
+      models: params.models,
+      manual: params.manual,
+    }
+    return this.ranking
   }
 
   request(method: string, params: unknown): Promise<unknown> {

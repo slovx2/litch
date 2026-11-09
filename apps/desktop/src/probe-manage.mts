@@ -216,6 +216,51 @@ export async function manageProbe(): Promise<ManageProbe> {
   one<HTMLButtonElement>('.devp-row', item)?.click()
   await until('管理数据', () => one('[data-manage-state="ready"]'))
   await piReady()
+  // 经真正的设备服务和 Go 配置文件读取、保存、重读、恢复；不运行真实模型。
+  const ranking = await until('模型等级入口', () => one('[data-model-ranking]'))
+  one<HTMLButtonElement>('button', ranking)?.click()
+  const rankingSelect = await until('设备型号清单', () =>
+    one<HTMLSelectElement>('[data-model-ranking] select'),
+  )
+  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(
+    rankingSelect,
+    'new',
+  )
+  rankingSelect.dispatchEvent(new Event('change', { bubbles: true }))
+  await frame()
+  const rankButton = (label: string) =>
+    all('[data-model-ranking] button').find((button) => text(button) === label)
+  rankButton('保存自定义排序')?.click()
+  await until(
+    '设备保存自定义等级',
+    () =>
+      text(one('[data-model-ranking]')).includes('自定义排序：所有引擎共同比较') &&
+      !text(one('[data-model-ranking]')).includes('有未保存'),
+  )
+  rankButton('重新读取')?.click()
+  await frame()
+  await until(
+    '自定义配置重读',
+    () =>
+      text(one('[data-model-ranking]')).includes('自定义排序：所有引擎共同比较') &&
+      !(rankButton('恢复内置排序') as HTMLButtonElement | undefined)?.disabled,
+  )
+  rankButton('恢复内置排序')?.click()
+  await frame()
+  await until(
+    '恢复等级确认按钮',
+    () =>
+      all('[data-model-ranking] button').filter((button) => text(button) === '恢复内置排序')
+        .length === 2,
+  )
+  all('[data-model-ranking] button')
+    .filter((button) => text(button) === '恢复内置排序')
+    .at(-1)
+    ?.click()
+  await until('设备恢复内置等级', () =>
+    text(one('[data-model-ranking]')).includes('内置排序：仅比较同一引擎的模型'),
+  )
+  rankButton('关闭')?.click()
   // 一打开只有 harness 各一行，设置项都收着
   const folded = `${all('[data-setting]').length}/${all('[data-harness-block] .mng-h-head').length}`
   await unfold()

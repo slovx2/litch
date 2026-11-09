@@ -275,6 +275,8 @@ export interface SessionProposalIdParams {
 
 /** 用户从卡片开始时改的东西。不给的照提案里的；和 litch/session/start 一样，访问权限不得宽于父会话，超限时拒绝 */
 export interface SessionProposalOverrides {
+  /** 用户实际选择了具体型号；预填不算。仅用户 RPC 入口采用。 */
+  modelSelected?: boolean
   harness?: string
   model?: string
   effort?: string

@@ -536,3 +536,27 @@ test('开不成的提案：父会话现在比目标 harness 最严的那一档�
   assert.equal(startBlocked('danger-full-access', 'custom:strict'), false)
   assert.equal(startBlocked('danger-full-access', null), false)
 })
+
+test('手机选择具体型号的单次例外不会由预填或修改标题产生', () => {
+  const parent = { harness: 'claude-code', workspaceId: null }
+  const proposal = {
+    model: 'fable',
+    harness: null,
+    title: '检查',
+    prompt: '检查',
+    background: '',
+    kind: 'fresh',
+    cwd: null,
+    wakeParent: true,
+    worktreeDefault: false,
+  }
+  const initial = fieldsFor(parent, proposal)
+  assert.equal(overridesFor(initial, parent, proposal, false).modelSelected, undefined)
+  assert.equal(
+    overridesFor({ ...initial, title: '改标题' }, parent, proposal, false).modelSelected,
+    undefined,
+  )
+  const chosen = overridesFor({ ...initial, modelSelected: true }, parent, proposal, false)
+  assert.equal(chosen.modelSelected, true)
+  assert.equal(chosen.model, 'fable')
+})

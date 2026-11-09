@@ -72,6 +72,7 @@ test('DECL-001：runtime/info 带结构化声明，原有字段原样保留', as
     assert.equal(wired.stopBackground, true)
     assert.equal(wired.stopAgent, true)
     assert.deepEqual(extensions, [
+      'modelRanking',
       'filePreview',
       'inputDelivery',
       'declineWithNote',
@@ -586,3 +587,27 @@ for (const background of [false, true])
       await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
     }
   })
+
+test('模型身份只发送给声明 modelRanking 的连接', async () => {
+  for (const enabled of [false, true]) {
+    const home = await mkdtemp(join(tmpdir(), 'declaration-model-ranking-'))
+    const client = await ProtocolClient.start(
+      home,
+      'http://127.0.0.1:1',
+      true,
+      'api-key',
+      {},
+      {
+        litchExtensions: enabled ? ['modelRanking'] : [],
+      },
+    )
+    try {
+      const result = await client.request('model/list', {})
+      assert.ok(result.data.length > 0)
+      for (const model of result.data) assert.equal('litchModelIdentity' in model, enabled)
+    } finally {
+      await client.close()
+      await rm(home, { recursive: true, force: true })
+    }
+  }
+})

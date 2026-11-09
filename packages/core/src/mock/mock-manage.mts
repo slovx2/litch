@@ -1,3 +1,10 @@
+import {
+  emptyRanking,
+  MODEL_RANKING_REVISION,
+  type ModelRankingSnapshot,
+  mergeRanking,
+  modelKey,
+} from '../../../protocol/src/model-ranking.mjs'
 // 模拟核心的设备与 harness 管理：订阅设置、改设置、重启 harness、诊断、日志、ssh 配置片段。
 // 行为照真的设备服务：一次写入全有或全无、版本号对不上就拒绝、改了要重启才生效的设置时
 // 那个 harness 有回合在跑就标成“待重启”。别的客户端的动静由模拟核心按对话里的关键字来演（见 mock-core.mts）。
@@ -72,6 +79,9 @@ export interface MockManagement {
 }
 
 const NAMES: readonly string[] = [
+  'device.modelRanking.read',
+  'device.modelRanking.write',
+  'device.modelRanking.reset',
   'device.settings.write',
   'device.harness.restart',
   'device.diagnostics.run',
@@ -81,6 +91,25 @@ const NAMES: readonly string[] = [
 
 export function createMockManagement(host: MockManageHost): MockManagement {
   const { clock } = host
+  const rankings = new Map<string, ModelRankingSnapshot>()
+  const rankingOf = (deviceId: string): ModelRankingSnapshot => {
+    const current = rankings.get(deviceId)
+    if (current) return current
+    const models = ['gpt-6-luna', 'gpt-6-sol', 'gpt-6-astra'].map((model) => ({
+      key: modelKey('codex', model),
+      harness: 'codex',
+      model,
+      name: model,
+      available: true,
+    }))
+    const initial = {
+      ...mergeRanking(emptyRanking(), models),
+      builtinRevision: MODEL_RANKING_REVISION,
+      errors: {},
+    }
+    rankings.set(deviceId, initial)
+    return initial
+  }
   const states = new Map<string, MockSettings>()
   const sinks = new Map<string, Set<HostSink>>()
   /** harness 一开始的样子：重启之后回到它（本来就用不了的，重启完还是用不了） */
@@ -154,6 +183,7 @@ export function createMockManagement(host: MockManageHost): MockManagement {
     powers.set(deviceId, JSON.stringify(power))
     return {
       deviceId,
+      modelRanking: rankingOf(deviceId),
       power,
       groups: state.groups,
       settings: state.settings,
@@ -368,6 +398,33 @@ export function createMockManagement(host: MockManageHost): MockManagement {
       if (!NAMES.includes(name)) return undefined
       // 这几个命令没做成时都以拒绝的方式结束，不在调用的地方当场抛出来
       return (async () => {
+        if (name.startsWith('device.modelRanking.')) {
+          const input = params as Commands['device.modelRanking.write']['params']
+          reach(input.deviceId)
+          const before = rankingOf(input.deviceId)
+          if (name.endsWith('.read')) return before
+          if (input.expectedRevision !== before.revision)
+            throw new ChannelError('conflict', 'Model ranking changed')
+          const next: ModelRankingSnapshot = name.endsWith('.reset')
+            ? {
+                ...mergeRanking(emptyRanking(), before.models),
+                revision: before.revision + 1,
+                builtinRevision: MODEL_RANKING_REVISION,
+                errors: {},
+              }
+            : {
+                ...before,
+                mode: 'custom',
+                tiers: input.tiers,
+                manual: input.manual ?? [],
+                unranked: input.unranked,
+                revision: before.revision + 1,
+              }
+          rankings.set(input.deviceId, next)
+          for (const sink of sinks.get(input.deviceId) ?? [])
+            sink.delta([{ op: 'ranking.set', value: next }])
+          return next
+        }
         if (name === 'device.settings.write') {
           return write(params as Commands['device.settings.write']['params'])
         }

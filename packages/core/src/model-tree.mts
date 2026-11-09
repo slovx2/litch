@@ -165,6 +165,8 @@ export function proposalShape(
  * 工作区是界面上的项目，核心按设备有没有项目换成对面的 projectId
  */
 export interface ProposalOverrides {
+  /** 用户实际选择了具体型号；预填不算。仅用户 RPC 入口采用。 */
+  modelSelected?: boolean
   harness?: HarnessId
   model?: string
   effort?: string

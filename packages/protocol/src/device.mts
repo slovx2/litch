@@ -56,6 +56,7 @@ export const EXTENSION = {
    * 设备信息的 `extensions` 里列了它才能用；声明了它的连接才会收到设置变化的通知。
    */
   deviceSettings: 'deviceSettings',
+  modelRanking: 'modelRanking',
   /**
    * 拒绝审批时附一句说明（harness-capabilities.mts、extensions.mts 的 DeclineWithNoteDecision）。
    * 哪个 harness 支持看它声明里的 `extensions`；声明了它的连接才会在审批请求里看到这种决定。

@@ -206,6 +206,7 @@ export interface SessionHost {
   /** 由设备进程自己执行的 litch_ 命名空间：替每条上游连接声明，调用落到哪条上就在那里拦（device-tools.mts） */
   deviceTools: DeviceTools
   /** 会话树（session-tree.mts） */
+  modelRanking?: import('./model-ranking.mjs').DeviceModelRanking
   sessionTree: SessionTree
   /** 设置里“会话编排”开着 */
   sessionTreeOn(): boolean
@@ -721,6 +722,11 @@ export class ClientSession implements ClientToolPeer {
         if (INSTRUCTIONS_METHODS.has(method)) return instructionsCall(method, frame.params)
         if (method === DEVICE_POWER_READ && !this.declared.has(EXTENSION.devicePower))
           throw new DeviceError('extensionRequired', `${method} requires devicePower`)
+        if (method.startsWith('litch/device/modelRanking/')) {
+          if (!this.declared.has(EXTENSION.modelRanking) || !this.host.modelRanking)
+            throw new DeviceError('extensionRequired', 'modelRanking must be declared')
+          return this.host.modelRanking.call(method, frame.params)
+        }
         if (method.startsWith(MANAGEMENT_PREFIX))
           return this.host.management.call(method, frame.params)
         if (method.startsWith('litch/manager/'))

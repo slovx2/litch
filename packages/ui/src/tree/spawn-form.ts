@@ -14,6 +14,7 @@ import { levelOf } from './sandbox.ts'
 export interface SpawnFields {
   harness: HarnessId
   model: string
+  modelSelected?: boolean
   effort: string
   workspaceId: string
   cwd: string
@@ -103,6 +104,10 @@ export function overridesOf(
   worktrees = false,
 ): ProposalOverrides {
   const overrides: ProposalOverrides = {}
+  if (fields.modelSelected && fields.model) {
+    overrides.modelSelected = true
+    overrides.model = fields.model
+  }
   const harnessChanged = fields.harness !== (proposal.harness ?? parent.harness)
   if (harnessChanged) overrides.harness = fields.harness
   if (fields.model && fields.model !== proposal.model) overrides.model = fields.model

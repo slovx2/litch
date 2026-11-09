@@ -59,6 +59,7 @@ import type { Workspaces } from './workspaces.mjs'
 import type { Worktrees } from './worktrees.mjs'
 
 export interface SessionTreeHost {
+  modelRanking?(): Promise<import('../../protocol/src/model-ranking.mjs').ModelRankingConfig>
   harnesses(): HarnessSource[]
   openEngineLink(harness: string): Promise<EngineLink>
   inheritClientTools?(parentId: string, childId: string): void

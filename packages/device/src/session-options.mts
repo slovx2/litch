@@ -31,6 +31,7 @@ export interface CatalogModel {
   isDefault: boolean
   efforts: string[]
   defaultEffort: string | null
+  identity?: { provider?: string; resolved?: string; trusted: boolean }
 }
 
 /** model/list 最多翻几页 */
@@ -50,6 +51,19 @@ function catalogRow(entry: Record<string, unknown>): CatalogModel | null {
         .filter((one): one is string => one !== null)
     : []
   return {
+    ...(isObject(entry.litchModelIdentity)
+      ? {
+          identity: {
+            ...(textOf(entry.litchModelIdentity.provider)
+              ? { provider: textOf(entry.litchModelIdentity.provider) as string }
+              : {}),
+            ...(textOf(entry.litchModelIdentity.resolved)
+              ? { resolved: textOf(entry.litchModelIdentity.resolved) as string }
+              : {}),
+            trusted: entry.litchModelIdentity.trusted === true,
+          },
+        }
+      : {}),
     id,
     alias: textOf(entry.id) ?? id,
     name: textOf(entry.displayName) ?? id,
@@ -61,10 +75,10 @@ function catalogRow(entry: Record<string, unknown>): CatalogModel | null {
 }
 
 /** 一个 harness 的型号清单（含隐藏的，按它报的顺序）。连不上、不支持 model/list 的抛出去 */
-export async function modelCatalog(link: EngineLink): Promise<CatalogModel[]> {
+export async function modelCatalog(link: EngineLink, pages = PAGES): Promise<CatalogModel[]> {
   const rows: CatalogModel[] = []
   let cursor: string | null = null
-  for (let page = 0; page < PAGES; page++) {
+  for (let page = 0; page < pages; page++) {
     const result = await link.request('model/list', {
       includeHidden: false,
       limit: 200,
@@ -77,6 +91,7 @@ export async function modelCatalog(link: EngineLink): Promise<CatalogModel[]> {
     }
     cursor = isObject(result) ? textOf(result.nextCursor) : null
     if (!cursor) break
+    if (page === pages - 1 && pages > PAGES) throw new Error('Model catalogue is incomplete')
   }
   return rows
 }

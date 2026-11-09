@@ -1215,7 +1215,10 @@ export class CodexClaudeAppServer {
       case 'configRequirements/read':
         return { requirements: null }
       case 'model/list':
-        return this.modelList(asRecord(params))
+        return this.modelList(
+          asRecord(params),
+          this.peerFeatures.get(peer)?.extensions.has(EXTENSION.modelRanking) === true,
+        )
       case 'modelProvider/capabilities/read':
         return {
           imageGeneration: false,
@@ -7244,7 +7247,7 @@ export class CodexClaudeAppServer {
     return providers
   }
 
-  private modelList(params: Record<string, unknown>): unknown {
+  private modelList(params: Record<string, unknown>, ranking = false): unknown {
     if (params.includeHidden != null && typeof params.includeHidden !== 'boolean')
       throw new ProtocolError(-32602, 'includeHidden 必须是布尔值')
     const defaultModel = this.configModel
@@ -7278,6 +7281,15 @@ export class CodexClaudeAppServer {
         .filter((effort) => Object.hasOwn(effortDescriptions, effort))
         .map((effort) => ({ reasoningEffort: effort, description: effortDescriptions[effort] }))
     const models = options.map((option) => ({
+      ...(ranking
+        ? {
+            litchModelIdentity: {
+              provider: option.provider ?? splitModelRef(option.id).provider,
+              resolved: option.resolved ?? option.sdkModel ?? undefined,
+              trusted: option.trusted === true,
+            },
+          }
+        : {}),
       id: option.id,
       model: option.id,
       upgrade: null,

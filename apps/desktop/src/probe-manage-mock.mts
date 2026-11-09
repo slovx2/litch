@@ -303,6 +303,41 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   // ---- 二、本机：一打开只露一眼要看的；点开之后是 harness、每种类型的控件、密钥、入口的状况 ----
   const page = await openDetail('local')
   await ready()
+  const ranking = await until('模型等级设置入口', () => one('[data-model-ranking]'))
+  one<HTMLButtonElement>('button', ranking)?.click()
+  await until('内置型号预排', () => all('[data-model-ranking] select').length === 3)
+  const transfer = new DataTransfer()
+  one('[data-model-ranking] [draggable="true"]')?.dispatchEvent(
+    new DragEvent('dragstart', { bubbles: true, dataTransfer: transfer }),
+  )
+  all('[data-model-ranking] fieldset')[2]?.dispatchEvent(
+    new DragEvent('drop', { bubbles: true, dataTransfer: transfer }),
+  )
+  await until(
+    '拖动到同级组',
+    () => all('[data-model-ranking] fieldset')[1]?.querySelectorAll('select').length === 2,
+  )
+  await frame()
+  const rankingButton = (label: string) =>
+    all('[data-model-ranking] button').find((button) => text(button) === label)
+  rankingButton('保存自定义排序')?.click()
+  await until(
+    '自定义模型排序保存',
+    () =>
+      text(one('[data-model-ranking]')).includes('自定义排序：所有引擎共同比较') &&
+      !text(one('[data-model-ranking]')).includes('有未保存'),
+  )
+  rankingButton('恢复内置排序')?.click()
+  await frame()
+  all('[data-model-ranking] button')
+    .filter((button) => text(button) === '恢复内置排序')
+    .at(-1)
+    ?.click()
+  await until('恢复内置排序', () =>
+    text(one('[data-model-ranking]')).includes('内置排序：仅比较同一引擎的模型'),
+  )
+  rankingButton('关闭')?.click()
+  await ready()
   deviceActs.push(actsOf(page))
   const foldedShown = [
     '[data-setting]',

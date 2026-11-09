@@ -25,6 +25,7 @@ import { adoptDrafts, draftsOf, dropDrafts, useDrafts } from './drafts.ts'
 import { InheritedEnv } from './EnvEditor.tsx'
 import { FoldSection } from './FoldSection.tsx'
 import { HarnessBlock } from './HarnessBlock.tsx'
+import { ModelRanking } from './ModelRanking.tsx'
 import { PowerSettings } from './PowerSettings.tsx'
 import { SaveBar, saveDrafts } from './SaveBar.tsx'
 import { LeadSwitch, SettingRow } from './SettingRow.tsx'
@@ -199,6 +200,7 @@ export function ManagePanel({
 
   return (
     <div className="mng" data-manage-state="ready" data-version={snapshot.version}>
+      {device.modelRanking && !harnessId && <ModelRanking deviceId={deviceId} />}
       <section className="mng-sec" data-sec="harnesses">
         <div className="mng-sec-head">
           <h2>{t('manage.harness.title')}</h2>

@@ -2,6 +2,7 @@ import { enPathPicker } from '../path-picker/messages.ts'
 import { enChrome } from './en-chrome.ts'
 import { enManager } from './en-manager.ts'
 import { enManagerIssues } from './en-manager-issues.ts'
+import { enModelRanking } from './en-model-ranking.ts'
 import { enSearch } from './en-search.ts'
 // 英文文案。键必须和 zh-CN.ts 完全一致，多一句少一句都编译不过。
 
@@ -76,6 +77,7 @@ export const en: Record<MessageKey, Entry> = {
   ...enPreviewCsv,
   ...enPreviewHtml,
   ...enPreviewMedia,
+  ...enModelRanking,
   ...enPower,
   ...enAutomation,
   ...enChrome,

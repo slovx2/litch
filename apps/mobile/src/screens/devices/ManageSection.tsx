@@ -30,6 +30,7 @@ import { Caret, Fold, Icon } from '../../ui/kit/Icon'
 import { Confirm } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { useLeaveGuard } from './hconfig/leave'
+import { ModelRanking } from './ModelRanking'
 import { PowerSettings } from './PowerSettings'
 import { type Draft, editOf, problemOf, SettingControl } from './SettingControl'
 
@@ -527,6 +528,7 @@ export function ManageSection({ device, harnessId }: { device: DeviceView; harne
   const loose = deviceSpecs.filter((spec) => !groups.some((group) => group.id === spec.group))
   return (
     <View testID="manage">
+      {device.modelRanking && <ModelRanking deviceId={deviceId} />}
       {device.harnesses.map((harness) => {
         const specs = schema.settings.filter((spec) => belongsTo(spec, harness.id))
         const enable =

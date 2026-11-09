@@ -1,4 +1,5 @@
 import type { AcpControlsRequests } from './acp-controls.mjs'
+import type { ModelRankingSnapshot, ModelRankingWrite } from './model-ranking.mjs'
 import type { SessionPendingChanged } from './session-pending.mjs'
 // 客户端实际会调用的方法、会处理的通知，各自的参数和应答类型。
 // 没列在这里的方法客户端不调用；没列在这里的通知客户端不处理（记日志后丢弃）。
@@ -325,6 +326,12 @@ export interface ClientRequests extends AcpControlsRequests {
   'litch/device/recovery/dismiss': {
     params: { harness: string; threadId: string; turnId: string }
     result: Record<string, never>
+  }
+  'litch/device/modelRanking/read': { params: Record<string, never>; result: ModelRankingSnapshot }
+  'litch/device/modelRanking/write': { params: ModelRankingWrite; result: ModelRankingSnapshot }
+  'litch/device/modelRanking/reset': {
+    params: { expectedRevision: number }
+    result: ModelRankingSnapshot
   }
   'litch/device/power/read': {
     params: Record<string, never>
@@ -726,6 +733,7 @@ export interface ClientNotifications {
 export interface ServerNotifications {
   'litch/turn/recovery/changed': RecoveryNotice
   'litch/device/power/changed': DevicePowerStatus
+  'litch/device/modelRanking/changed': ModelRankingSnapshot
   'thread/started': ThreadStartedNotification
   'thread/status/changed': ThreadStatusChangedNotification
   'thread/name/updated': ThreadNameUpdatedNotification

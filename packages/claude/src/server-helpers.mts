@@ -103,6 +103,8 @@ export type SelectableModelOption = {
   efforts?: string[]
   /** 这个别名眼下指向的完整型号（CLI 报的 resolvedModel，只有原生目录的行有） */
   resolved?: string
+  provider?: string
+  trusted?: boolean
 }
 
 // 一个供应商的原生目录取得前只提供默认项；默认项交由原生 SDK 解析 settings.json。
@@ -241,6 +243,8 @@ export function allSelectableModelOptions(): SelectableModelOption[] {
   const qualifyIds = !(usable.length === 1 && usable[0] === plainProvider())
   const qualify = (provider: string, option: SelectableModelOption): SelectableModelOption => ({
     ...option,
+    provider,
+    trusted: config.providers[provider]?.kind !== 'gateway',
     id: qualifyIds ? joinModelRef(provider, option.id) : option.id,
     displayName: prefix
       ? `[${providerLabel(provider, config)}] ${option.displayName}`
