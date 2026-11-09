@@ -102,7 +102,7 @@ export async function managerIssuesProbe() {
   passed.push('五类标签、默认决策、专属操作隔离')
   for (const [tab, selected, statuses] of [
     ['decisions', 'open', ['open']],
-    ['suggestions', 'pending-work', ['pending', 'endorsed']],
+    ['suggestions', 'endorsed', ['endorsed']],
     ['requests', 'open', ['open']],
     ['reports', 'unread', ['unread']],
     ['issues', 'open', ['open']],
@@ -118,7 +118,7 @@ export async function managerIssuesProbe() {
     )
     if (tab === 'suggestions') {
       // 预览此时只有一条已驳回建议：默认应为空，切全部才能看到它。
-      await until('待处理建议为空', () => one('[data-issue-empty]') && cards().length === 0)
+      await until('待开始建议为空', () => one('[data-issue-empty]') && cards().length === 0)
       await click('[data-issue-filter-status="all"]')
       await until('全部建议保留已驳回记录', () =>
         one('[data-issue-type="suggestion"] [data-issue-status="dismissed"]'),
@@ -137,7 +137,7 @@ export async function managerIssuesProbe() {
         ),
     )
   }
-  passed.push('五类默认开放／待处理／未读在前，全部在后')
+  passed.push('五类默认开放／待开始／未读在前，全部在后')
   // 完整集合的分页验收显式选全部，不能再依赖旧默认值。
   await click('[data-issue-filter-status="all"]')
   await click('[data-inbox-tab="issues"]')

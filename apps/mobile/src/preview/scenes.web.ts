@@ -102,7 +102,7 @@ export const SCENES: Scene[] = [
     id: 'manager-console',
     group: '经理',
     name: '控制台与 issue',
-    note: '默认决策；决策、请求和 X-n 默认开放，建议默认待处理、报告默认未读，全部在后。各页签记住选择，概览数字带入对应过滤；类型多选、过滤抽屉、新建、评论、快速处理与讨论',
+    note: '默认决策；决策、请求和 X-n 默认开放，建议默认待开始（不含待审核）、报告默认未读，全部在后。各页签记住选择，概览数字带入对应过滤；类型多选、过滤抽屉、新建、评论、快速处理与讨论',
     steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1' })],
   },
   {

@@ -275,12 +275,12 @@ function fixture(platform) {
 }
 
 for (const platform of Object.keys(sources)) {
-  test(`${platform}：各类别首次进入只查开放或待处理，选项在前，全部选择独立记忆`, () => {
+  test(`${platform}：各类别首次进入只查开放、待开始或未读，选项在前，全部选择独立记忆`, () => {
     const f = fixture(platform)
     f.render()
     for (const [kind, first, statuses] of [
       ['decision', 'open', ['open']],
-      ['suggestion', 'pending-work', ['pending', 'endorsed']],
+      ['suggestion', 'endorsed', ['endorsed']],
       ['request', 'open', ['open']],
       ['report', 'unread', ['unread']],
       ['ordinary', 'open', ['open']],
@@ -297,6 +297,23 @@ for (const platform of Object.keys(sources)) {
       f.pickKind(kind)
       assert.deepEqual(f.filters.at(-1).statuses, [], '明确选过全部不恢复默认')
     }
+  })
+  test(`${platform}：建议默认排除待审核，手动选择待审核后切页和重挂载仍保留`, () => {
+    const f = fixture(platform)
+    f.render()
+    f.pickKind('suggestion')
+    assert.deepEqual(f.filters.at(-1).statuses, ['endorsed'])
+    // 手机状态支持多选：先清空默认选择，再只选待审核。
+    f.pickStatus('all')
+    f.pickStatus('pending')
+    assert.deepEqual(f.filters.at(-1).statuses, ['pending'])
+    f.pickKind('decision')
+    assert.deepEqual(f.filters.at(-1).statuses, ['open'])
+    f.remount()
+    f.pickKind('suggestion')
+    assert.deepEqual(f.filters.at(-1).statuses, ['pending'])
+    assert.equal(f.statusChoices()[0], 'endorsed')
+    assert.equal(f.statusChoices().at(-1), 'all')
   })
   test(`${platform}：概览未读和未完成预设覆盖默认与记忆，不收窄成仅开放`, () => {
     const f = fixture(platform)

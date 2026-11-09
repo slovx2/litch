@@ -16,11 +16,11 @@ import {
   withManagerIssueKinds,
 } from '../src/projection/manager-issue-list.mjs'
 
-test('类别首次默认只看开放、待处理或未读，全部最后；通用全量查询底子不变', () => {
+test('类别首次默认只看开放、待开始或未读，全部最后；通用全量查询底子不变', () => {
   for (const [kind, statuses] of Object.entries({
     ordinary: ['open'],
     decision: ['open'],
-    suggestion: ['pending', 'endorsed'],
+    suggestion: ['endorsed'],
     request: ['open'],
     report: ['unread'],
   }) as [ManagerIssue['kind'], ManagerIssue['status'][]][]) {
@@ -33,6 +33,20 @@ test('类别首次默认只看开放、待处理或未读，全部最后；通�
   }
   assert.deepEqual(DEFAULT_MANAGER_ISSUE_FILTER.statuses, [])
   assert.deepEqual(MANAGER_ISSUE_SUMMARY_FILTERS.unread.statuses, [])
+})
+
+test('建议默认排除待审核，待开始在首位，待审核仍可单独选择', () => {
+  const filter = managerIssueKindFilter('suggestion')
+  const options = managerIssueStatusFilters('suggestion', ['suggestion'])
+  assert.deepEqual(filter.statuses, ['endorsed'])
+  assert.equal(filter.statuses.includes('pending'), false)
+  assert.deepEqual(options[0], {
+    key: 'endorsed',
+    label: 'issue.status.endorsed',
+    statuses: ['endorsed'],
+  })
+  assert.deepEqual(options[1]?.statuses, ['pending'])
+  assert.equal(options.at(-1)?.key, 'all')
 })
 
 test('大量 issue 预览在新的默认开放过滤下仍能翻页，并保留已完成样本供全部对照', () => {

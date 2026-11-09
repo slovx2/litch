@@ -34,7 +34,7 @@ export const MANAGER_ISSUE_STATUSES: Record<
 > = {
   ordinary: ['open', 'in_progress', 'blocked', 'resolved', 'closed'],
   decision: ['open', 'answered', 'expired', 'withdrawn', 'ignored'],
-  suggestion: ['pending', 'endorsed', 'started', 'dismissed', 'expired'],
+  suggestion: ['endorsed', 'pending', 'started', 'dismissed', 'expired'],
   request: ['open', 'delivered', 'replied', 'ignored', 'cancelled'],
   report: ['unread', 'read'],
 }
@@ -87,12 +87,12 @@ export function managerIssueKindFilter(kind: ManagerIssueKind): ManagerIssueFilt
   return {
     ...DEFAULT_MANAGER_ISSUE_FILTER,
     kinds: [kind],
-    statuses: kind === 'suggestion' ? ['pending', 'endorsed'] : [MANAGER_ISSUE_STATUSES[kind][0]],
+    statuses: [MANAGER_ISSUE_STATUSES[kind][0]],
     ...(kind === 'ordinary' ? { discussionsOnly: true } : {}),
   }
 }
 
-/** 两端共用选项顺序：开放／待处理／未读在前，全部在最后。 */
+/** 两端共用选项顺序：开放／待开始／未读在前，全部在最后。 */
 export function managerIssueStatusFilters(kind: ManagerIssueKind, kinds: ManagerIssueKind[]) {
   const options = managerIssueStatusOptions(kinds).map((status) => ({
     key: status as string,
@@ -104,12 +104,6 @@ export function managerIssueStatusFilters(kind: ManagerIssueKind, kinds: Manager
       key: 'active',
       label: 'issue.filter.active',
       statuses: [...MANAGER_ISSUE_ACTIVE],
-    })
-  if (kind === 'suggestion')
-    options.unshift({
-      key: 'pending-work',
-      label: 'manager.paging.pending',
-      statuses: ['pending', 'endorsed'],
     })
   options.push({ key: 'all', label: 'issue.filter.allStatus', statuses: [] })
   return options
