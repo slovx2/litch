@@ -361,6 +361,27 @@
         "reference": "docs/reference/ci-flaky.md#侧栏投影改为本地按需验收"
       },
       "issues": ["https://github.com/slovx2/litch/issues/34"]
+    },
+    {
+      "job": "unit-claude (2)",
+      "test": "命令在回合中途结束、通知随后面的请求送达：回合照常结束，不为通知多等",
+      "status": "active",
+      "events": [
+        {
+          "runId": 42559257177,
+          "attempt": 1,
+          "jobId": 128971842125,
+          "sha": "a1209ed51815b8aa4b2587a036d4b55ebd8201c2",
+          "date": "2026-11-09T03:58:56Z",
+          "trigger": "push",
+          "url": "https://github.com/slovx2/litch/actions/runs/42559257177/job/128971842125",
+          "failure": "CI push 的 unit-claude (2)：最后一次模型请求之后过了 2752 毫秒回合才结束，超出 1500 毫秒断言。",
+          "evidence": {
+            "kind": "pending",
+            "note": "经理已定点重跑失败作业；目前尚无该 SHA 的通过证据，先记 pending，待 attempt 2 通过后补齐确认。"
+          }
+        }
+      ]
     }
   ],
   "audit": {

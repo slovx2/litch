@@ -3,6 +3,7 @@
 账本在 [`docs/ci/flaky-ledger.json`](../ci/flaky-ledger.json)。经理或集成线分诊 Full 后运行
 `scripts/ci-flaky.mjs`，随修复或独立维护提交合入账目。使用版本管理文件，免去维护标签、
 issue 正文计数及 CI 写权限；原来的 `nightly-triage` issue 保留用途和格式。
+同一账本也记录 CI push 中的用例失败，保留真实作业名和触发方式；不伪装成 Full，也不跨作业合并计数。
 
 ## 认定和计数
 

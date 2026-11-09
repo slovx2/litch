@@ -68,7 +68,7 @@ export function validateEvent(event) {
     !positive(event.jobId) ||
     !sha(event.sha) ||
     !Number.isFinite(Date.parse(event.date)) ||
-    !['schedule', 'workflow_dispatch', 'workflow_call'].includes(event.trigger) ||
+    !['schedule', 'workflow_dispatch', 'workflow_call', 'push'].includes(event.trigger) ||
     !nonempty(event.failure) ||
     !nonempty(event.url)
   )
