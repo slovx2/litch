@@ -262,6 +262,7 @@ export class MockLLM {
   /** 先请真实 CLI 加载定义，收到实际 schema 后才执行原步骤，不伪造工具清单。 */
   enqueueWithTools(names: string[], step: ModelStep): void {
     let searched = false
+    let waitedForMcp = false
     const load: ModelStep = (request, headers) => {
       const referenced = new Set(
         (request.messages ?? []).flatMap((message: any) =>
@@ -283,6 +284,24 @@ export class MockLLM {
       )
       const missing = names.filter((name) => !offered.has(name))
       if (!missing.length) return step(request, headers)
+      // 项目 MCP 连接慢时，CLI 先向模型提供等待工具；不能调用尚未公布的工具，
+      // 否则本来要验的审批还没发生，假模型就因多出一轮请求而报错。
+      if (
+        !waitedForMcp &&
+        missing.some((name) => name.startsWith('mcp__')) &&
+        offered.has('WaitForMcpServers')
+      ) {
+        waitedForMcp = true
+        this.steps.unshift(load)
+        return [
+          {
+            type: 'tool_use',
+            id: `wait_mcp_${randomUUID()}`,
+            name: 'WaitForMcpServers',
+            input: {},
+          },
+        ]
+      }
       if (searched || !offered.has('ToolSearch'))
         throw new Error(`工具定义未加载：${missing.join(',')}`)
       searched = true

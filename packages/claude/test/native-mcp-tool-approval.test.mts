@@ -4,11 +4,13 @@
 //   bridge  会话配置里的服务：适配器自己连，再桥接给 Claude Code
 //   cli     项目目录里 .mcp.json 的服务：Claude Code 自己连
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import { setTimeout as delay } from 'node:timers/promises'
 import { inspect } from '../../shared/test/strict-wire.mjs'
+import { saveArtifact } from './fixtures/artifacts.mjs'
 import { countedServers, countServer } from './fixtures/mcp-count.mjs'
 import { MockLLM } from './fixtures/mock-llm.mjs'
 import { ProtocolClient } from './fixtures/protocol-client.mjs'
@@ -25,14 +27,21 @@ interface Stage {
   threadId: string
   /** 服务那一头真的收到的工具调用，按先后 */
   called(): Promise<string[]>
+  releaseTools(): Promise<void>
 }
 
-async function withStage(route: Route, run: (stage: Stage) => Promise<void>): Promise<void> {
+async function withStage(
+  route: Route,
+  run: (stage: Stage) => Promise<void>,
+  pendingTools = false,
+): Promise<void> {
   const home = await mkdtemp(join(tmpdir(), 'mcp-approve-'))
   const cwd = join(home, 'project')
   const log = join(home, 'gate.jsonl')
   await mkdir(cwd)
   const server = countServer(log, ['open', 'shut'])
+  const readyFile = join(home, 'tools-ready')
+  if (pendingTools) Object.assign(server.env, { FIXTURE_TOOLS_READY_FILE: readyFile })
   if (route === 'cli')
     await writeFile(
       join(cwd, '.mcp.json'),
@@ -53,8 +62,14 @@ async function withStage(route: Route, run: (stage: Stage) => Promise<void>): Pr
       model,
       threadId: thread.id,
       called: async () => (await countedServers(log)).flatMap((started) => started.called),
+      releaseTools: () => writeFile(readyFile, ''),
     })
   } finally {
+    if (process.env.PROTOCOL_ARTIFACT_DIR)
+      await saveArtifact(
+        'adapter-debug',
+        await readFile(join(home, 'adapter', 'debug.jsonl'), 'utf8').catch(() => ''),
+      )
     await client.close()
     await model.close()
     await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
@@ -71,7 +86,8 @@ const call = (id: string, name: string, input: Record<string, unknown> = {}) => 
 const toolResults = (request: any): any[] =>
   request.messages
     .flatMap((message: any) => (Array.isArray(message.content) ? message.content : []))
-    .filter((block: any) => block.type === 'tool_result')
+    // 等工具就绪、搜索工具的结果不属于这里要计数的 MCP 调用。
+    .filter((block: any) => block.type === 'tool_result' && block.tool_use_id.startsWith('toolu_'))
 
 const shown = (result: any): string => JSON.stringify(result.content)
 
@@ -149,7 +165,7 @@ for (const route of ['bridge', 'cli'] as const) {
           content: answer === 'accept' ? {} : null,
           _meta: null,
         }))
-        model.enqueue((request) => {
+        model.enqueueWithTools([OPEN], (request) => {
           assert.ok(
             request.tools.some((tool: any) => tool.name === OPEN),
             'MCP 服务的工具没有交给模型（CLI 等项目里的服务连上最多约两秒）',
@@ -191,7 +207,7 @@ for (const route of ['bridge', 'cli'] as const) {
           : { action: 'decline', content: null, _meta: null },
       )
       // 第一个回合：先调一次（问），同一个回合里换个参数再调一次（不问）
-      model.enqueue(() => [call('toolu_first', OPEN, { n: 1 })])
+      model.enqueueWithTools([OPEN, SHUT], () => [call('toolu_first', OPEN, { n: 1 })])
       model.enqueue(() => [call('toolu_second', OPEN, { n: 2 })])
       model.enqueue((request) => {
         assert.equal(toolResults(request).length, 2)
@@ -234,14 +250,63 @@ for (const route of ['bridge', 'cli'] as const) {
     await withStage(route, async (stage) => {
       const { client, model, threadId } = stage
       answering(stage, () => ({ action: 'cancel', content: null, _meta: null }))
-      model.enqueue(() => [call('toolu_cancel', OPEN)])
+      model.enqueueWithTools([OPEN], () => [call('toolu_cancel', OPEN)])
       const { turn } = await client.request('turn/start', {
         threadId,
         input: [{ type: 'text', text: '审批的时候取消' }],
       })
-      assert.equal((await client.completed(turn.id)).status, 'interrupted')
+      await assertCancelled(stage, turn.id)
       assertRequests(stage, [{ turnId: turn.id, tool: 'open', input: {} }])
-      assert.deepEqual(await stage.called(), [])
     })
   })
 }
+
+async function assertCancelled(stage: Stage, turnId: string): Promise<void> {
+  const completed = await stage.client.completed(turnId)
+  const events = stage.client.trace.filter((entry) =>
+    ['turn/started', 'turn/completed', 'error', REQUEST, 'serverRequest/resolved'].includes(
+      entry.method,
+    ),
+  )
+  assert.equal(completed.status, 'interrupted', JSON.stringify({ completed, events }))
+  assert.equal(completed.error, null)
+  assert.deepEqual(
+    events.filter((entry) => entry.method === 'turn/started').map((entry) => entry.params.turn.id),
+    [turnId],
+    '取消不能额外触发自行续跑',
+  )
+  assert.deepEqual(await stage.called(), [])
+  stage.model.assertConsumed()
+}
+
+test('MCP-023：项目 MCP 尚在连接时先等待真实清单，再审批取消，不能误报回合失败', {
+  timeout: 60_000,
+}, async () => {
+  await withStage(
+    'cli',
+    async (stage) => {
+      const { client, model, threadId } = stage
+      answering(stage, () => ({ action: 'cancel', content: null, _meta: null }))
+      model.enqueueWithTools([OPEN], () => [call('toolu_cancel', OPEN)])
+      const { turn } = await client.request('turn/start', {
+        threadId,
+        input: [{ type: 'text', text: '等待服务连接后，在审批时取消' }],
+      })
+      const deadline = Date.now() + 30_000
+      while (!model.requests.length) {
+        assert.ok(Date.now() < deadline, 'CLI 没有发出首个模型请求')
+        await delay(10)
+      }
+      const first = model.requests[0]
+      assert.ok(first)
+      const offered = first.tools.map((tool: any) => tool.name)
+      assert.ok(!offered.includes(OPEN), '闸门释放前不能公布 MCP 工具')
+      assert.ok(offered.includes('WaitForMcpServers'))
+      await stage.releaseTools()
+      await assertCancelled(stage, turn.id)
+      assertRequests(stage, [{ turnId: turn.id, tool: 'open', input: {} }])
+      assert.equal(model.requests.length, 2, '等待就绪后只调用一次目标工具')
+    },
+    true,
+  )
+})

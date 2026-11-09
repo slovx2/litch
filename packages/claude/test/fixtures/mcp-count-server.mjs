@@ -5,7 +5,9 @@
 // 工具的名字由 FIXTURE_TOOLS 给（一段 JSON 数组，缺省只有 echo），调用时把工具名原样回出去。
 // FIXTURE_LAZY_TOOLS 里的那几个（也是 JSON 数组）不声明常驻，交给 CLI 用到再找。
 import { appendFileSync } from 'node:fs'
+import { access } from 'node:fs/promises'
 import readline from 'node:readline'
+import { setTimeout as delay } from 'node:timers/promises'
 
 const record = (entry) =>
   appendFileSync(
@@ -33,6 +35,23 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'])
   })
 
 const lines = readline.createInterface({ input: process.stdin })
+// 慢连接回归用：由模型首次请求释放闸门，不依赖机器是否恰好慢过 CLI 的首屏等待时间。
+async function toolsReady() {
+  const path = process.env.FIXTURE_TOOLS_READY_FILE
+  if (!path) return
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
+    if (
+      await access(path).then(
+        () => true,
+        () => false,
+      )
+    )
+      return
+    await delay(10)
+  }
+  throw new Error('测试没有释放 MCP 工具清单闸门')
+}
 lines.on('close', () => record({ event: 'closed', by: 'stdin' }))
 lines.on('line', (line) => {
   if (!line.trim()) return
@@ -51,7 +70,11 @@ lines.on('line', (line) => {
       },
     })
   } else if (message.method === 'ping') send({ id: message.id, result: {} })
-  else if (message.method === 'tools/list') send({ id: message.id, result: { tools: TOOLS } })
+  else if (message.method === 'tools/list')
+    void toolsReady().then(
+      () => send({ id: message.id, result: { tools: TOOLS } }),
+      (error) => send({ id: message.id, error: { code: -32603, message: error.message } }),
+    )
   else if (message.method === 'tools/call') {
     record({ event: 'called', tool: message.params.name })
     send({
