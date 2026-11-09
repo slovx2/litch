@@ -1,17 +1,49 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { ManagerIssue } from '../../protocol/src/manager-issues.mjs'
+import { sampleManagerIssues } from '../src/mock/sample-manager-issues.mjs'
 import { managerIssueQueryKey } from '../src/model-manager-issues.mjs'
 import {
   DEFAULT_MANAGER_ISSUE_FILTER,
   MANAGER_ISSUE_SUMMARY_FILTERS,
   managerIssueFilterKey,
   managerIssueHead,
+  managerIssueKindFilter,
   managerIssuePageKey,
   managerIssueQuery,
+  managerIssueStatusFilters,
   managerIssueStatusOptions,
   withManagerIssueKinds,
 } from '../src/projection/manager-issue-list.mjs'
+
+test('类别首次默认只看开放、待处理或未读，全部最后；通用全量查询底子不变', () => {
+  for (const [kind, statuses] of Object.entries({
+    ordinary: ['open'],
+    decision: ['open'],
+    suggestion: ['pending', 'endorsed'],
+    request: ['open'],
+    report: ['unread'],
+  }) as [ManagerIssue['kind'], ManagerIssue['status'][]][]) {
+    const filter = managerIssueKindFilter(kind)
+    assert.deepEqual(managerIssueQuery('m1', filter).statuses, statuses)
+    assert.deepEqual(managerIssueStatusFilters(kind, [kind])[0]?.statuses, statuses)
+    assert.equal(managerIssueStatusFilters(kind, [kind]).at(-1)?.key, 'all')
+    filter.statuses.push('closed')
+    assert.deepEqual(managerIssueKindFilter(kind).statuses, statuses, '类别之间不共享可变数组')
+  }
+  assert.deepEqual(DEFAULT_MANAGER_ISSUE_FILTER.statuses, [])
+  assert.deepEqual(MANAGER_ISSUE_SUMMARY_FILTERS.unread.statuses, [])
+})
+
+test('大量 issue 预览在新的默认开放过滤下仍能翻页，并保留已完成样本供全部对照', () => {
+  const rows = sampleManagerIssues('m3', [], 1_800_000_000_000, 'zh-CN')
+  const filter = managerIssueKindFilter('ordinary')
+  const defaults = rows.filter((row) => filter.statuses.includes(row.status))
+  assert.equal(rows.length, 120)
+  assert.ok(defaults.length > 30 && defaults.length < rows.length)
+  assert.ok(rows.some((row) => row.status === 'resolved'))
+  assert.ok(rows.some((row) => row.status === 'closed'))
+})
 
 test('默认条件只查普通 issue，最新在前，不带未读与游标', () => {
   assert.deepEqual(managerIssueQuery('m1', DEFAULT_MANAGER_ISSUE_FILTER), {

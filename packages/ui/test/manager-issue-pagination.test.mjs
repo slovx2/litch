@@ -39,6 +39,7 @@ const compiled = Object.fromEntries(
   ),
 )
 
+let fixtureSeq = 0
 function fixture(platform) {
   let discussions = true
   const slots = []
@@ -107,11 +108,12 @@ function fixture(platform) {
       return {}
     },
   })
-  const manager = { deviceId: 'fixture', id: `manager-${platform}` }
+  const manager = { deviceId: 'fixture', id: `manager-${platform}-${++fixtureSeq}` }
   const renderConsole =
     platform === 'desktop' ? output.exports.IssueConsole : output.exports.useIssueConsole
   let kind = 'decision'
   let loaded = 30
+  let preset = null
   let tree
   const nodes = (node) => {
     if (Array.isArray(node)) return node.flatMap(nodes)
@@ -123,11 +125,7 @@ function fixture(platform) {
     effects = []
     const pages = Object.fromEntries(
       ['decision', 'ordinary'].map((category) => [
-        list.managerIssuePageKey(manager.id, {
-          ...list.DEFAULT_MANAGER_ISSUE_FILTER,
-          kinds: [category],
-          ...(category === 'ordinary' ? { discussionsOnly: true } : {}),
-        }),
+        list.managerIssuePageKey(manager.id, list.managerIssueKindFilter(category)),
         {
           entries: Array.from({ length: loaded }, (_, i) => ({
             id: `${category}-${i}`,
@@ -145,16 +143,59 @@ function fixture(platform) {
       issues: { supported: true, discussions, pages, details: {}, error: null },
       disabled: false,
       target: null,
-      preset: null,
+      preset,
     }
     const result = renderConsole(props)
     tree = platform === 'desktop' ? result : [result.header, result.body, result.overlays]
     for (const run of effects) run()
   }
+  function filterControl() {
+    if (platform === 'mobile') {
+      nodes(tree)
+        .find((node) => node.props?.testID === 'issue-filter-open')
+        .props.onPress()
+      render()
+    }
+    const control = nodes(tree).find(
+      (node) => typeof node.type === 'function' && node.props?.filter && node.props?.onChange,
+    )
+    return nodes(control.type(control.props))
+  }
+  const statusKey = (node) =>
+    platform === 'desktop'
+      ? node.props?.['data-issue-filter-status']
+      : node.props?.testID?.match(/^issue-filter-status:(.+)$/)?.[1]
   return {
     requests,
     filters,
     render,
+    pickKind(category) {
+      if (platform === 'desktop') kind = category
+      else
+        nodes(tree)
+          .find((node) => node.props?.testID === `issue-capsule:${category}`)
+          .props.onPress()
+      render()
+    },
+    statusChoices() {
+      return filterControl().map(statusKey).filter(Boolean)
+    },
+    pickStatus(key) {
+      const button = filterControl().find((node) => statusKey(node) === key)
+      assert.ok(button, `缺少状态选项 ${key}`)
+      ;(button.props.onClick ?? button.props.onPress)()
+      render()
+    },
+    preset(patch) {
+      preset = { patch, version: (preset?.version ?? 0) + 1 }
+      kind = 'ordinary'
+      render()
+      render()
+    },
+    remount() {
+      slots.length = 0
+      render()
+    },
     oldDevice() {
       discussions = false
       render()
@@ -231,6 +272,46 @@ function fixture(platform) {
       render()
     },
   }
+}
+
+for (const platform of Object.keys(sources)) {
+  test(`${platform}：各类别首次进入只查开放或待处理，选项在前，全部选择独立记忆`, () => {
+    const f = fixture(platform)
+    f.render()
+    for (const [kind, first, statuses] of [
+      ['decision', 'open', ['open']],
+      ['suggestion', 'pending-work', ['pending', 'endorsed']],
+      ['request', 'open', ['open']],
+      ['report', 'unread', ['unread']],
+      ['ordinary', 'open', ['open']],
+    ]) {
+      f.pickKind(kind)
+      assert.deepEqual(f.filters.at(-1).statuses, statuses)
+      assert.equal(f.statusChoices()[0], first)
+      assert.equal(f.statusChoices().at(-1), 'all')
+      f.pickStatus('all')
+      assert.deepEqual(f.filters.at(-1).statuses, [])
+    }
+    f.remount()
+    for (const kind of ['decision', 'suggestion', 'request', 'report', 'ordinary']) {
+      f.pickKind(kind)
+      assert.deepEqual(f.filters.at(-1).statuses, [], '明确选过全部不恢复默认')
+    }
+  })
+  test(`${platform}：概览未读和未完成预设覆盖默认与记忆，不收窄成仅开放`, () => {
+    const f = fixture(platform)
+    f.render()
+    f.preset({ unread: true })
+    assert.deepEqual(f.filters.at(-1).statuses, [])
+    assert.equal(f.filters.at(-1).unread, true)
+    f.preset({ statuses: ['open', 'in_progress', 'blocked'] })
+    assert.deepEqual(f.filters.at(-1).statuses, ['open', 'in_progress', 'blocked'])
+    assert.equal(f.filters.at(-1).unread, false)
+    f.pickKind('report')
+    assert.deepEqual(f.filters.at(-1).statuses, ['unread'])
+    f.pickKind('ordinary')
+    assert.deepEqual(f.filters.at(-1).statuses, ['open', 'in_progress', 'blocked'])
+  })
 }
 
 for (const platform of Object.keys(sources)) {

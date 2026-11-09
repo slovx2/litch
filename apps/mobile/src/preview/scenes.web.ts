@@ -102,14 +102,14 @@ export const SCENES: Scene[] = [
     id: 'manager-console',
     group: '经理',
     name: '控制台与 issue',
-    note: '统一 issue 列表（默认决策，issue 页签默认仅 X-n）、类型多选：已开启讨论的决策、建议、请求和报告可列入 issue 页签；过滤抽屉、新建、评论、改状态与跟进、特殊 issue 的快速处理与讨论、完整讨论页',
+    note: '默认决策；决策、请求和 X-n 默认开放，建议默认待处理、报告默认未读，全部在后。各页签记住选择，概览数字带入对应过滤；类型多选、过滤抽屉、新建、评论、快速处理与讨论',
     steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1' })],
   },
   {
     id: 'manager-issues-many',
     group: '经理',
     name: 'issue · 大量',
-    note: '经理“移动端体验打磨”有 120 条 issue：类型多选显示已开启讨论的特殊条目，过滤抽屉、每页 30 条加载更多',
+    note: '经理“移动端体验打磨”有 120 条 issue，默认开放集合超过一页；可切全部或其他状态、每页 30 条加载更多',
     steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm3' })],
   },
   {

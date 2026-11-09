@@ -100,6 +100,46 @@ export async function managerIssuesProbe() {
     '决策标签出现X-n issue 专属操作',
   )
   passed.push('五类标签、默认决策、专属操作隔离')
+  for (const [tab, selected, statuses] of [
+    ['decisions', 'open', ['open']],
+    ['suggestions', 'pending-work', ['pending', 'endorsed']],
+    ['requests', 'open', ['open']],
+    ['reports', 'unread', ['unread']],
+    ['issues', 'open', ['open']],
+  ] as const) {
+    await click(`[data-inbox-tab="${tab}"]`)
+    await until(`${tab} 首次默认待处理`, () =>
+      one(`[data-issue-filter-status="${selected}"][aria-pressed="true"]`),
+    )
+    assert(
+      all('[data-issue-filter-status]')[0]?.dataset.issueFilterStatus === selected &&
+        all('[data-issue-filter-status]').at(-1)?.dataset.issueFilterStatus === 'all',
+      `${tab} 过滤顺序错误`,
+    )
+    if (tab === 'suggestions') {
+      // 预览此时只有一条已驳回建议：默认应为空，切全部才能看到它。
+      await until('待处理建议为空', () => one('[data-issue-empty]') && cards().length === 0)
+      await click('[data-issue-filter-status="all"]')
+      await until('全部建议保留已驳回记录', () =>
+        one('[data-issue-type="suggestion"] [data-issue-status="dismissed"]'),
+      )
+      continue
+    }
+    await until(
+      `${tab} 只列待处理状态`,
+      () =>
+        cards().length &&
+        cards().every((card) =>
+          (statuses as readonly string[]).includes(
+            card.querySelector<HTMLElement>('[data-issue-meta] [data-issue-status]')?.dataset
+              .issueStatus ?? '',
+          ),
+        ),
+    )
+  }
+  passed.push('五类默认开放／待处理／未读在前，全部在后')
+  // 完整集合的分页验收显式选全部，不能再依赖旧默认值。
+  await click('[data-issue-filter-status="all"]')
   await click('[data-inbox-tab="issues"]')
   await until('X-n issue 首屏 30/38', () => total() === '30/38' && cards().length === 30)
   assert(

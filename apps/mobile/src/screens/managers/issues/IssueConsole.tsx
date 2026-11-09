@@ -10,14 +10,14 @@ import type {
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import {
-  DEFAULT_MANAGER_ISSUE_FILTER,
   MANAGER_ISSUE_ATTENTION_FILTERS,
   MANAGER_ISSUE_KINDS,
   MANAGER_ISSUE_LIST_ORDERS,
   type ManagerIssueFilter,
   managerIssueFilterKey,
+  managerIssueKindFilter,
   managerIssuePageKey,
-  managerIssueStatusOptions,
+  managerIssueStatusFilters,
   supportedManagerIssueFilter,
   withManagerIssueKinds,
 } from '../../../../../../packages/core/src/projection/manager-issue-list.mts'
@@ -49,11 +49,7 @@ const TABS: readonly ManagerIssueKind[] = [
   'report',
   'ordinary',
 ]
-const kindFilter = (kind: ManagerIssueKind): ManagerIssueFilter => ({
-  ...DEFAULT_MANAGER_ISSUE_FILTER,
-  kinds: [kind],
-  ...(kind === 'ordinary' ? { discussionsOnly: true } : {}),
-})
+const kindFilter = managerIssueKindFilter
 /** 每个经理记住当前页签和每一类的过滤条件 */
 const memory = new Map<
   string,
@@ -146,7 +142,10 @@ export function useIssueConsole({
   useEffect(() => {
     if (!preset || preset.version === applied) return
     setApplied(preset.version)
-    setFilter({ ...kindFilter('ordinary'), ...preset.patch, kinds: ['ordinary'] }, 'ordinary')
+    setFilter(
+      { ...kindFilter('ordinary'), statuses: [], ...preset.patch, kinds: ['ordinary'] },
+      'ordinary',
+    )
   }, [preset, applied, setFilter])
   const ordinary = kind === 'ordinary'
   const filtered = managerIssueFilterKey(filter) !== managerIssueFilterKey(kindFilter(kind))
@@ -537,20 +536,31 @@ function FilterDrawer({
           : null}
         {section(
           t('issue.filter.status'),
-          managerIssueStatusOptions(filter.kinds).map((status) => (
-            <Chip
-              key={status}
-              label={t(`issue.status.${status}` as Parameters<typeof t>[0])}
-              on={filter.statuses.includes(status)}
-              testID={`issue-filter-status:${status}`}
-              onPress={() =>
-                onChange({
-                  ...filter,
-                  statuses: toggle<ManagerIssueStatus>(filter.statuses, status),
-                })
-              }
-            />
-          )),
+          managerIssueStatusFilters(kind, filter.kinds).map((option) => {
+            const status = option.statuses[0]
+            return (
+              <Chip
+                key={option.key}
+                label={t(option.label as Parameters<typeof t>[0])}
+                on={
+                  option.statuses.length === 1 && status !== undefined
+                    ? filter.statuses.includes(status)
+                    : option.statuses.length === filter.statuses.length &&
+                      option.statuses.every((status) => filter.statuses.includes(status))
+                }
+                testID={`issue-filter-status:${option.key}`}
+                onPress={() =>
+                  onChange({
+                    ...filter,
+                    statuses:
+                      option.statuses.length === 1 && status !== undefined
+                        ? toggle<ManagerIssueStatus>(filter.statuses, status)
+                        : option.statuses,
+                  })
+                }
+              />
+            )
+          }),
         )}
         {ordinary
           ? section(

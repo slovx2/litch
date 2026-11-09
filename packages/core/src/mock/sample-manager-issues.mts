@@ -225,14 +225,14 @@ function richIssues(now: number, t: (zh: string, en: string) => string): Manager
   return list.map((input, i) => ordinary(i + 1, input))
 }
 
-/** 经理 m3：120 条批量 issue，看数量、过滤和“加载更多”。 */
+/** 经理 m3：120 条批量 issue；默认开放集合也超过一页，其余状态供过滤对照。 */
 function bulkIssues(now: number, t: (zh: string, en: string) => string): ManagerIssue[] {
   return Array.from({ length: 120 }, (_, i) =>
     ordinary(i + 1, {
       title: t(`批量议题 ${i + 1}：检查第 ${i + 1} 项`, `Bulk issue ${i + 1}: check item ${i + 1}`),
       body: t('用来看大量 issue 时的列表和“加载更多”。', 'Used to check long lists and Load more.'),
       author: i % 3 ? 'manager' : 'user',
-      status: STATES[i % STATES.length] ?? 'open',
+      status: i < 60 ? 'open' : (STATES[i % STATES.length] ?? 'open'),
       followUp: i % 4 ? 'on' : 'off',
       at: now - (120 - i) * HOUR,
       unread: i % 7 === 0,

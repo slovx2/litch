@@ -6,15 +6,14 @@ import { createPortal } from 'react-dom'
 import type { ManagerBoardTopicView, ManagerView } from '../../../../core/src/model-manager.mts'
 import { pagedDraftBoard } from '../../../../core/src/projection/manager-drafts.mts'
 import {
-  DEFAULT_MANAGER_ISSUE_FILTER,
-  MANAGER_ISSUE_ACTIVE,
   MANAGER_ISSUE_KINDS,
   MANAGER_ISSUE_LIST_ORDERS,
   type ManagerIssueFilter,
   managerIssueFilterKey,
   managerIssueHead,
+  managerIssueKindFilter,
   managerIssuePageKey,
-  managerIssueStatusOptions,
+  managerIssueStatusFilters,
   supportedManagerIssueFilter,
   withManagerIssueKinds,
 } from '../../../../core/src/projection/manager-issue-list.mts'
@@ -39,12 +38,7 @@ import { IssueThread } from './IssueThread.tsx'
 /** 底部抽屉用 issue: 前缀的编号，免得旧帖子讨论（同样的 D-n）也往抽屉里放内容 */
 export const ISSUE_PANE_PREFIX = 'issue:'
 
-/** 一类的默认条件：只看这一类，最新在前 */
-export const issueKindFilter = (kind: ManagerIssueKind): ManagerIssueFilter => ({
-  ...DEFAULT_MANAGER_ISSUE_FILTER,
-  kinds: [kind],
-  ...(kind === 'ordinary' ? { discussionsOnly: true } : {}),
-})
+export const issueKindFilter = managerIssueKindFilter
 
 /** 每个经理记住每一类的过滤条件与展开的那条，离开控制台再回来还在 */
 const memory = new Map<
@@ -174,7 +168,10 @@ export function IssueConsole({
     saved.preset = preset.version
     saved.full = null
     setFullState(null)
-    setFilter({ ...issueKindFilter('ordinary'), ...preset.patch, kinds: ['ordinary'] }, 'ordinary')
+    setFilter(
+      { ...issueKindFilter('ordinary'), statuses: [], ...preset.patch, kinds: ['ordinary'] },
+      'ordinary',
+    )
   }, [preset, saved, setFilter])
   const reading = useRef<string | null>(null)
   // 编号跳转：类型不在当前过滤里就切到那一类，展开并滚到它
@@ -432,17 +429,7 @@ function IssueFilters({
   const t = useT()
   const active = (list: readonly ManagerIssueStatus[]) =>
     list.length === filter.statuses.length && list.every((one) => filter.statuses.includes(one))
-  const options: { key: string; label: string; statuses: ManagerIssueStatus[] }[] = [
-    { key: 'all', label: t('issue.filter.allStatus'), statuses: [] },
-    ...(kind === 'ordinary'
-      ? [{ key: 'active', label: t('issue.filter.active'), statuses: [...MANAGER_ISSUE_ACTIVE] }]
-      : []),
-    ...managerIssueStatusOptions(filter.kinds).map((one) => ({
-      key: one,
-      label: t(`issue.status.${one}` as Parameters<typeof t>[0]),
-      statuses: [one],
-    })),
-  ]
+  const options = managerIssueStatusFilters(kind, filter.kinds)
   return (
     <div className="mg-decision-filter mg-issue-filters" data-issue-filters>
       {kind === 'ordinary' ? (
@@ -488,7 +475,7 @@ function IssueFilters({
             aria-pressed={active(one.statuses)}
             onClick={() => onChange({ ...filter, statuses: one.statuses })}
           >
-            {one.label}
+            {t(one.label as Parameters<typeof t>[0])}
           </button>
         ))}
       </fieldset>

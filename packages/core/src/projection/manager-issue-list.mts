@@ -28,7 +28,10 @@ export const MANAGER_ISSUE_LIST_ORDERS: readonly ManagerIssueOrder[] = [
 ]
 
 /** 每种类型在过滤器里可选的状态，次序即显示次序。 */
-export const MANAGER_ISSUE_STATUSES: Record<ManagerIssueKind, readonly ManagerIssueStatus[]> = {
+export const MANAGER_ISSUE_STATUSES: Record<
+  ManagerIssueKind,
+  readonly [ManagerIssueStatus, ...ManagerIssueStatus[]]
+> = {
   ordinary: ['open', 'in_progress', 'blocked', 'resolved', 'closed'],
   decision: ['open', 'answered', 'expired', 'withdrawn', 'ignored'],
   suggestion: ['pending', 'endorsed', 'started', 'dismissed', 'expired'],
@@ -77,6 +80,39 @@ export function managerIssueStatusOptions(
 ): ManagerIssueStatus[] {
   const list = kinds.length ? kinds : MANAGER_ISSUE_KINDS
   return [...new Set(list.flatMap((kind) => MANAGER_ISSUE_STATUSES[kind]))]
+}
+
+/** 首次进入类别时只看待处理状态；显式保存的过滤条件和概览预设不经过这里重置。 */
+export function managerIssueKindFilter(kind: ManagerIssueKind): ManagerIssueFilter {
+  return {
+    ...DEFAULT_MANAGER_ISSUE_FILTER,
+    kinds: [kind],
+    statuses: kind === 'suggestion' ? ['pending', 'endorsed'] : [MANAGER_ISSUE_STATUSES[kind][0]],
+    ...(kind === 'ordinary' ? { discussionsOnly: true } : {}),
+  }
+}
+
+/** 两端共用选项顺序：开放／待处理／未读在前，全部在最后。 */
+export function managerIssueStatusFilters(kind: ManagerIssueKind, kinds: ManagerIssueKind[]) {
+  const options = managerIssueStatusOptions(kinds).map((status) => ({
+    key: status as string,
+    label: `issue.status.${status}`,
+    statuses: [status],
+  }))
+  if (kind === 'ordinary')
+    options.splice(1, 0, {
+      key: 'active',
+      label: 'issue.filter.active',
+      statuses: [...MANAGER_ISSUE_ACTIVE],
+    })
+  if (kind === 'suggestion')
+    options.unshift({
+      key: 'pending-work',
+      label: 'manager.paging.pending',
+      statuses: ['pending', 'endorsed'],
+    })
+  options.push({ key: 'all', label: 'issue.filter.allStatus', statuses: [] })
+  return options
 }
 
 /** 换类型时丢掉新类型下不存在的状态，免得过滤出一片空白又看不出原因。 */

@@ -26,9 +26,11 @@ the new issue tools; devices must advertise `litchManagerIssues` to support thes
 
 支持 issue 的设备上，控制台页签为决策、建议、请你做、报告、issue，默认打开决策。
 issue 页签默认只选类型“issue”（X-n），类型过滤支持多选和全选。决策、建议、请求和报告只有
-开启过讨论或已经有评论、问答时，才会出现在这个页签；关闭讨论抽屉后仍保留。其他四个页签照常列出各自的所有条目。
+开启过讨论或已经有评论、问答时，才会出现在这个页签；关闭讨论抽屉后仍保留。其他四个页签列出各自类别的条目。
 设备服务尚不支持讨论过滤时，issue 页签只列 X-n，其他页签和讨论仍可照常使用。
 每个页签分别记住自己的过滤条件和排序。issue 页签还可按状态、创建者、未读和跟进筛选，支持新建。
+首次进入决策、请你做和 issue 页签默认“开放”；建议默认“待处理”（待审核与待开始），报告默认“未读”。
+对应状态放在过滤选项第一位，“全部”在最后；用户选过的条件不重置，概览数字带入的条件优先。
 展开 X-n 可查看原帖、状态与跟进、关联、评论及输入框；其他类型保留快速处理按钮，可打开底部讨论或完整讨论页。
 概览的 issue 摘要仍统计 X-n 的未完成、等我看、跟进已暂停；点击数字会回到 issue 页签，恢复只选 issue 类型并套用相应过滤。
 手机的类别胶囊和过滤抽屉采用相同规则。设备不支持 issue 时仍显示原来的四类控制台，并提示升级设备服务。
@@ -36,9 +38,11 @@ issue 页签默认只选类型“issue”（X-n），类型过滤支持多选和
 The Console tabs are Decisions, Suggestions, For you, Reports and Issues. Decisions remains the default.
 The Issues tab initially selects only the Issue type (X-n). Its type filter supports multiple selections or all types.
 Decisions, suggestions, requests and reports appear here only after a discussion has been opened or has comments or questions;
-closing the discussion does not remove them. Their dedicated tabs continue to show all entries of that type.
+closing the discussion does not remove them. Their dedicated tabs list entries of that type.
 If the device service does not support discussion filtering yet, Issues lists only X-n; other tabs and discussions still work.
 Each tab remembers its own filters and sorting. Issues also offers status, author, unread and follow-up filters, plus New issue.
+On first entry, Decisions, For you and Issues default to Open; Suggestions to Pending (awaiting review or ready to start), and Reports to Unread.
+That filter comes first and All comes last. Saved choices remain unchanged; filters from Overview counts take precedence.
 X-n opens its description, status, follow-up, links and comments; other types keep their quick actions and can open a discussion drawer or full page.
 Overview counts still cover X-n issues. Clicking a count selects the Issues tab and the Issue type with the corresponding filter.
 The phone uses the same rules in its category pills and filter drawer. Older devices keep the four-category Console and show an upgrade notice.
