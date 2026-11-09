@@ -17,6 +17,16 @@ const projection = await build({
 const list = await import(
   `data:text/javascript;base64,${Buffer.from(projection.outputFiles[0].text).toString('base64')}`
 )
+const memoryBundle = await build({
+  entryPoints: [new URL('../../core/src/manager-board-memory.mts', import.meta.url).pathname],
+  bundle: true,
+  write: false,
+  format: 'esm',
+  platform: 'node',
+})
+const boardMemory = await import(
+  `data:text/javascript;base64,${Buffer.from(memoryBundle.outputFiles[0].text).toString('base64')}`
+)
 const sources = {
   desktop: new URL('../src/manager/issues/IssueConsole.tsx', import.meta.url),
   mobile: new URL(
@@ -42,6 +52,9 @@ const compiled = Object.fromEntries(
 let fixtureSeq = 0
 function fixture(platform) {
   let discussions = true
+  let active = true
+  let load = 'normal'
+  const positions = []
   const slots = []
   let cursor = 0
   let effects = []
@@ -99,6 +112,7 @@ function fixture(platform) {
     require(name) {
       if (modules[name]) return modules[name]
       if (name.endsWith('/manager-issue-list.mts')) return list
+      if (name.endsWith('/manager-board-memory.mts')) return boardMemory
       if (name.endsWith('/appearance.ts') || name.endsWith('/i18n')) return { useT: () => t }
       if (name.endsWith('/theme'))
         return { useTheme: () => ({ c: {}, font: { size: {} }, radius: {} }) }
@@ -160,7 +174,22 @@ function fixture(platform) {
       manager,
       kind,
       view: { board: { decisions: [], changes: [] } },
-      issues: { supported: true, discussions, pages, details, error: null },
+      issues: {
+        supported: true,
+        discussions,
+        pages:
+          load === 'loading'
+            ? {}
+            : load === 'empty'
+              ? Object.fromEntries(
+                  Object.entries(pages).map(([key, value]) => [key, { ...value, entries: [] }]),
+                )
+              : pages,
+        details,
+        error: load === 'error' ? 'fixture failure' : null,
+      },
+      active,
+      onQuery: (memory, ready) => positions.push({ memory, ready }),
       disabled: false,
       target,
       onKind: (value) => {
@@ -194,6 +223,18 @@ function fixture(platform) {
   return {
     requests,
     filters,
+    positions,
+    setActive(value) {
+      active = value
+      render()
+    },
+    load(value) {
+      load = value
+      render()
+    },
+    has(id) {
+      return nodes(tree).some((node) => node.props?.testID === id)
+    },
     render,
     link(issue, options = {}) {
       linkedIssue = issue
@@ -331,6 +372,33 @@ function fixture(platform) {
     },
   }
 }
+
+test('手机 issue 控制台接入滚动恢复，加载/错误/空列表仍有可见反馈，离页不抢恢复位置', () => {
+  const f = fixture('mobile')
+  f.render()
+  assert.ok(f.positions.length)
+  assert.equal(f.positions.at(-1).ready, true)
+  const first = f.positions.at(-1).memory
+  first.y = 240
+  f.pickKind('request')
+  assert.notEqual(f.positions.at(-1).memory, first)
+  f.pickKind('decision')
+  assert.equal(f.positions.at(-1).memory.y, 240)
+  for (const [load, id] of [
+    ['loading', 'issue-loading'],
+    ['error', 'issue-load-error'],
+    ['empty', 'issue-empty'],
+  ]) {
+    f.load(load)
+    assert.equal(f.has('issue-status-row'), true)
+    assert.equal(f.has(id), true)
+    assert.equal(f.positions.at(-1).ready, true, '反馈本身不应等数据才显示')
+  }
+  f.setActive(false)
+  const count = f.positions.length
+  f.pickKind('ordinary')
+  assert.equal(f.positions.length, count)
+})
 
 for (const platform of Object.keys(sources)) {
   for (const [kind, status, id] of [

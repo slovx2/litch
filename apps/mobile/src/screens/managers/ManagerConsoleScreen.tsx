@@ -377,6 +377,8 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
     onFull: (id) => navigation.push('ManagerIssue', { deviceId, managerId, id }),
     onOpenItem: (id) => openIssue(id),
     onLocate: () => scroll.current?.scrollTo({ y: 0, animated: false }),
+    active: issueMode && tab === 'console',
+    onQuery: pagingQuery,
   })
   issueOpen.current = issueMode ? issueUI.open : null
   const overviewIssues: OverviewIssues | undefined =
@@ -630,7 +632,14 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
           <KeyboardFormScrollView
             testID="manager-board-scroll"
             ref={scroll}
-            style={[styles.fill, restoringBoard && { opacity: 0 }]}
+            style={[
+              styles.fill,
+              // 新控制台的加载、空状态和错误不能被旧分页位置恢复隐藏。
+              restoringBoard &&
+                board &&
+                !view?.loadError &&
+                !(issueMode && tab === 'console') && { opacity: 0 },
+            ]}
             onContentSizeChange={restoreBoard}
             onScroll={(event) => {
               rememberBoardScroll(

@@ -8,6 +8,7 @@ export async function installManagerBoardMobileFixture({
   consoleCards = false,
   drafts = false,
   links = false,
+  issues = false,
   port: fixed = 0,
 } = {}) {
   const boot = new URL('../apps/mobile/src/shell/boot.ts', import.meta.url)
@@ -28,7 +29,7 @@ export async function installManagerBoardMobileFixture({
     end,
     `...(controlled ? { scenarioClock: controlled.clock } : {}),
       }),
-      ${consoleCards || links ? '' : "await fetch('/__manager_board_data').then(r => r.json()),"}
+      ${consoleCards || links || issues ? '' : "await fetch('/__manager_board_data').then(r => r.json()),"}
     )
     ${drafts ? 'for (const [name, value] of Object.entries(fixture.drafts.mobile)) jsonFile(name).write(value)' : ''}
     Object.assign(globalThis, { __managerBoardFixture: fixture.state })
@@ -37,11 +38,13 @@ export async function installManagerBoardMobileFixture({
   )
   let helper = readFileSync(
     new URL(
-      links
-        ? '../packages/core/test/manager-link-fixture.mts'
-        : consoleCards
-          ? '../packages/core/test/console-cards-fixture.mts'
-          : '../packages/core/test/manager-board-fixture.mts',
+      issues
+        ? '../packages/core/test/mobile-console-fixture.mts'
+        : links
+          ? '../packages/core/test/manager-link-fixture.mts'
+          : consoleCards
+            ? '../packages/core/test/console-cards-fixture.mts'
+            : '../packages/core/test/manager-board-fixture.mts',
       import.meta.url,
     ),
     'utf8',

@@ -37,6 +37,7 @@ issue 页签默认只选类型“issue”（X-n），类型过滤支持多选和
 依据与关联默认只显示标题和数量，点击展开；重新进入页面时恢复收起。活动只显示经理对正文、选项、推荐等内容和状态的实质更新，不重复显示用户答复、关联或依据变更、讨论开关；没有有效时间的活动不显示，历史数据仍保留。
 概览的 issue 摘要仍统计 X-n 的未完成、等我看、跟进已暂停；点击数字会回到 issue 页签，恢复只选 issue 类型并套用相应过滤。
 手机的类别胶囊和过滤抽屉采用相同规则。设备不支持 issue 时仍显示原来的四类控制台，并提示升级设备服务。
+手机控制台的状态过滤行始终显示，可直接切换开放、已答复或全部等状态；更多条件仍在过滤抽屉。列表读取中、无匹配条目或读取失败时显示对应提示，失败可重试。切换类别或从对话返回时，按各自条件恢复阅读位置。
 
 The Console tabs are Decisions, Suggestions, For you, Reports and Issues. Decisions remains the default.
 The Issues tab initially selects only the Issue type (X-n). Its type filter supports multiple selections or all types.
@@ -52,6 +53,7 @@ Full discussions and drawers retain the relevant action: submit a decision answe
 Evidence and links initially show only their title and count. Click to expand; reopening the page collapses them again. Activity shows substantive manager edits and status changes, omitting duplicate user responses, link or evidence changes, discussion toggles, and entries without a valid timestamp. The underlying history is retained.
 Overview counts still cover X-n issues. Clicking a count selects the Issues tab and the Issue type with the corresponding filter.
 The phone uses the same rules in its category pills and filter drawer. Older devices keep the four-category Console and show an upgrade notice.
+The phone keeps status filters visible above the list. Loading, empty results and failures have explicit messages, with Retry for failures. Switching categories or returning from chat restores the reading position for the selected filters.
 
 用户要求过或已批准的范围内任务，经理直接开工作线；经理自行发现、用户尚未要求或批准的工作
 （如回报中顺带发现的问题、审查改进点、可选后续工作），会附完整简报放到「建议」页，由用户决定是否开始。

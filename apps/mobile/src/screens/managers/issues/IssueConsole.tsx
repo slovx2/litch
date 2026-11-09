@@ -7,8 +7,21 @@ import type {
   ManagerView,
   SuggestionView,
 } from '@litch/core'
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  type BoardPageMemory,
+  boardPageMemory,
+  managerBoardMemory,
+} from '../../../../../../packages/core/src/manager-board-memory.mts'
 import {
   MANAGER_ISSUE_ATTENTION_FILTERS,
   MANAGER_ISSUE_KINDS,
@@ -77,6 +90,8 @@ export function useIssueConsole({
   onFull,
   onOpenItem,
   onLocate,
+  active = true,
+  onQuery,
 }: {
   manager: ManagerView
   board: ManagerBoardView | null
@@ -90,6 +105,8 @@ export function useIssueConsole({
   onFull(id: string): void
   onOpenItem(id: string): void
   onLocate?(): void
+  active?: boolean
+  onQuery?(memory: BoardPageMemory, ready: boolean): void
 }): { header: ReactNode; body: ReactNode; overlays: ReactNode; open(id: string): void } {
   const t = useT()
   const theme = useTheme()
@@ -136,6 +153,15 @@ export function useIssueConsole({
   const [sheet, setSheet] = useState<string | null>(null)
   const [error, setError] = useState('')
   const page = issues.pages[managerIssuePageKey(manager.id, filter)]
+  const reading = boardPageMemory(
+    managerBoardMemory(manager.deviceId, manager.id),
+    `mobile-issues:${kind}`,
+    managerIssueFilterKey(filter),
+  )
+  useLayoutEffect(() => {
+    // issue 控制台替代了旧 PagedBoard，同样必须交还滚动恢复；加载/错误本身也是可显示的内容。
+    if (active) onQuery?.(reading, true)
+  }, [active, reading, onQuery])
   const linkedIssue = linked ? issues.details[linked as keyof typeof issues.details] : undefined
   useEffect(() => {
     if (!linkedIssue) return
@@ -217,32 +243,53 @@ export function useIssueConsole({
     )
   }
   const header = (
-    <View style={styles.categories}>
+    <View>
+      <View style={styles.categories}>
+        <ScrollView
+          ref={pills}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.fill}
+          contentContainerStyle={[styles.pills, narrow ? styles.pillsNarrow : null]}
+        >
+          {TABS.map(capsule)}
+        </ScrollView>
+        <IconButton
+          icon="list"
+          label={t('issue.filter.title')}
+          dot={filtered ? c.accent : undefined}
+          testID="issue-filter-open"
+          onPress={() => setFiltering(true)}
+        />
+        {ordinary ? (
+          <IconButton
+            icon="plus"
+            label={disabled ? reason : t('issue.new')}
+            disabled={disabled}
+            testID="issue-new"
+            onPress={() => setCreating(true)}
+          />
+        ) : null}
+      </View>
       <ScrollView
-        ref={pills}
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={styles.fill}
-        contentContainerStyle={[styles.pills, narrow ? styles.pillsNarrow : null]}
+        testID="issue-status-row"
+        contentContainerStyle={styles.pills}
       >
-        {TABS.map(capsule)}
+        {managerIssueStatusFilters(kind, filter.kinds).map((option) => (
+          <Chip
+            key={option.key}
+            label={t(option.label as never)}
+            testID={`issue-status:${option.key}`}
+            on={
+              option.statuses.length === filter.statuses.length &&
+              option.statuses.every((status) => filter.statuses.includes(status))
+            }
+            onPress={() => setFilter({ ...filter, statuses: option.statuses })}
+          />
+        ))}
       </ScrollView>
-      <IconButton
-        icon="list"
-        label={t('issue.filter.title')}
-        dot={filtered ? c.accent : undefined}
-        testID="issue-filter-open"
-        onPress={() => setFiltering(true)}
-      />
-      {ordinary ? (
-        <IconButton
-          icon="plus"
-          label={disabled ? reason : t('issue.new')}
-          disabled={disabled}
-          testID="issue-new"
-          onPress={() => setCreating(true)}
-        />
-      ) : null}
     </View>
   )
   const card = (head: ManagerIssueHead) => {
@@ -304,14 +351,16 @@ export function useIssueConsole({
     : entries
   const body =
     error || issues.error ? (
-      <View style={styles.note}>
+      <View style={styles.note} testID="issue-load-error">
         <Text accessibilityRole="alert" style={{ color: c.err }}>
           {error || issues.error}
         </Text>
         <Button kind="plain" label={t('manager.paging.retry')} onPress={() => list()} />
       </View>
     ) : !page && !linkedHead ? (
-      <Text style={[styles.note, { color: c.ink3 }]}>{t('manager.loading')}</Text>
+      <Text testID="issue-loading" style={[styles.note, { color: c.ink3 }]}>
+        {t('manager.loading')}
+      </Text>
     ) : visible.length ? (
       <View style={styles.list} testID="issue-list">
         {visible.map(card)}
