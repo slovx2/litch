@@ -1,11 +1,12 @@
 import { knownFileRef } from '@litch/core'
-import { useNavigation } from '@react-navigation/native'
+import { useIsFocused, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { Alert, Linking, Pressable, Text, View } from 'react-native'
 import type {
   ManagerBoardView,
   ManagerFeaturesView,
+  ManagerLink,
   ManagerView,
 } from '../../../../../packages/core/src/model-manager.mts'
 import { managerRelationGroups } from '../../../../../packages/core/src/projection/manager-relations.mts'
@@ -36,12 +37,17 @@ export const IssueContext = createContext<{
 export function IssueRelations({
   id,
   kind = 'issue',
+  basis,
 }: {
   id: string
   kind?: 'issue' | 'item' | 'thread'
+  basis?: ManagerLink[]
 }) {
+  const focused = useIsFocused()
   const context = useContext(IssueContext)
   const [expanded, setExpanded] = useState(false)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 切换条目或重新进入页面时恢复收起。
+  useEffect(() => setExpanded(false), [id, kind, focused])
   const [preview, setPreview] = useState('')
   const [error, setError] = useState('')
   const t = useT()
@@ -53,7 +59,9 @@ export function IssueRelations({
   // 提交、差异之类要向设备读原文（reference/read，属于 Posts）：比应用旧的设备服务读不了
   const unreadable = (target: ManagerRelationTarget) =>
     !features.posts && !['issue', 'item', 'thread', 'url', 'file'].includes(target.kind)
-  const groups = managerRelationGroups(board, { kind, target: id })
+  const groups = basis
+    ? { source: basis, derived: [], related: [] }
+    : managerRelationGroups(board, { kind, target: id })
   if (!Object.values(groups).some((g) => g.length)) return null
   const title = (target: ManagerRelationTarget) => {
     if (target.kind === 'thread')
@@ -121,12 +129,18 @@ export function IssueRelations({
     <View>
       <Fold
         open={expanded}
-        testID={`relations:${id}`}
+        testID={`${basis ? 'evidence' : 'relations'}:${id}`}
         onToggle={() => setExpanded(!expanded)}
         style={{ alignSelf: 'flex-start' }}
       >
         <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
-          {t(kind === 'issue' ? 'manager.relations' : 'manager.relatedIssues')}{' '}
+          {t(
+            basis
+              ? 'manager.basis'
+              : kind === 'issue'
+                ? 'manager.relations'
+                : 'manager.relatedIssues',
+          )}{' '}
           {Object.values(groups).flat().length}
         </Text>
       </Fold>

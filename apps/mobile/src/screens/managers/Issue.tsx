@@ -149,6 +149,7 @@ export function Issue({
   onPosition,
   bare = false,
   inline = false,
+  hideDiscussion = false,
 }: {
   manager: ManagerView
   post: ManagerPost
@@ -162,6 +163,7 @@ export function Issue({
   bare?: boolean
   /** 分页列表已提供可折叠的卡头，详情只显示正文和讨论入口。 */
   inline?: boolean
+  hideDiscussion?: boolean
 }) {
   const t = useT()
   const { c, font, radius, hit } = useTheme()
@@ -735,7 +737,7 @@ export function Issue({
             ) : null}
           </Pressable>
         ) : null}
-        {!pendingReview || unreviewed ? entry : null}
+        {!hideDiscussion && (!pendingReview || unreviewed) ? entry : null}
       </View>
       {pendingReview ? (
         <Button
@@ -773,6 +775,7 @@ export function Issue({
         <>
           {suggestion ? <SuggestionMeta row={suggestion} /> : null}
           <IssueRelations id={post.id} />
+          {decision?.basis.length ? <IssueRelations id={post.id} basis={decision.basis} /> : null}
           {post.kind === 'suggestion' ? (
             <SuggestionBrief
               prompt={suggestion?.proposal.prompt ?? post.body}

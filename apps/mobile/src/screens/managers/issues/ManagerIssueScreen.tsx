@@ -3,14 +3,15 @@
 import {
   keys,
   type ManagerBoardTopicView,
+  type ManagerObjectId,
   type ManagerView,
   type SuggestionView,
 } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import type { RootStackParamList } from '../../../nav/routes'
-import { useKey, useReplica } from '../../../shell/services'
+import { useChannel, useKey, useReplica } from '../../../shell/services'
 import { useT } from '../../../ui/i18n'
 import { Empty } from '../../../ui/kit/controls'
 import { KeyboardFormScrollView } from '../../../ui/kit/KeyboardForm'
@@ -28,6 +29,7 @@ export function ManagerIssueScreen({ route, navigation }: Props) {
   const t = useT()
   const { c, font } = useTheme()
   const replica = useReplica()
+  const channel = useChannel()
   useEffect(() => replica.openManagerBoard(deviceId, managerId), [replica, deviceId, managerId])
   const manager = useKey<ManagerView>(keys.manager(deviceId, managerId))
   const view = useKey<ManagerBoardTopicView>(keys.managerBoard(deviceId, managerId))
@@ -37,6 +39,25 @@ export function ManagerIssueScreen({ route, navigation }: Props) {
   const issues = useManagerIssues(view)
   const commands = useIssueCommands({ deviceId, id: managerId }, issues.discussions === true)
   const issue = issues.details[id as keyof typeof issues.details]
+  const [readError, setReadError] = useState('')
+  useEffect(() => {
+    let current = true
+    setReadError('')
+    void commands.read(id).catch((error) => {
+      if (current) setReadError(String(error))
+    })
+    return () => {
+      current = false
+    }
+  }, [commands, id])
+  const paged = Boolean(view?.paging)
+  const detailId = issue && issue.kind !== 'ordinary' ? issue.id : undefined
+  useEffect(() => {
+    if (!paged || !detailId) return
+    void channel
+      .command('managers.board.detail', { deviceId, managerId, id: detailId as ManagerObjectId })
+      .catch(() => {})
+  }, [channel, deviceId, managerId, paged, detailId])
   const offline = device?.connection !== 'online'
   const disabled = offline || manager?.status !== 'active'
   const reason = t(offline ? 'issue.offline' : 'issue.readOnly')
@@ -45,7 +66,7 @@ export function ManagerIssueScreen({ route, navigation }: Props) {
   if (!issue || !manager)
     return (
       <Screen title={t('issue.full.title')} testID="manager-issue">
-        <Empty busy title={t('manager.loading')} />
+        <Empty busy={!readError} title={readError || t('manager.loading')} />
       </Screen>
     )
   const post = board?.posts?.find((one) => one.id === (issue.id as string))
@@ -63,6 +84,7 @@ export function ManagerIssueScreen({ route, navigation }: Props) {
           onPosition={() => {}}
           bare
           inline
+          hideDiscussion
         />
       </IssueContext.Provider>
     ) : undefined
@@ -89,6 +111,8 @@ export function ManagerIssueScreen({ route, navigation }: Props) {
             </Text>
           ) : null}
           <IssueThread
+            key={issue.id}
+            changes={board?.changes ?? []}
             manager={manager}
             issue={issue}
             disabled={disabled}

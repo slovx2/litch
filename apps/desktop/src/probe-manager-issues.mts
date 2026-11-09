@@ -373,15 +373,17 @@ export async function managerIssuesProbe() {
   passed.push('评论、延迟经理回复、未读与打开后已读')
 
   await click(`${card} [data-issue-status-select] [data-issue-status="in_progress"]`)
-  await until('状态原因进时间线', () =>
-    all(`${card} [data-timeline="event"]`).some((event) =>
-      event.textContent?.includes('状态改为 进行中'),
-    ),
+  await until('状态元信息更新', () =>
+    one(`${card} [data-issue-meta] [data-issue-status="in_progress"]`),
   )
   assert(one(`${card} [data-issue-meta] [data-issue-status="in_progress"]`), '状态元信息未更新')
   await click(`${card} [data-act="issue-follow"]`)
-  await until('暂停跟进原因进时间线', () =>
-    all(`${card} [data-timeline="event"]`).some((event) => event.textContent?.includes('暂停跟进')),
+  await until('跟进状态更新', () => one(`${card} [data-follow="off"]`))
+  assert(
+    !all(`${card} [data-timeline="event"]`).some((event) =>
+      /状态改为|暂停跟进/.test(event.textContent ?? ''),
+    ),
+    '用户操作不应重复显示为活动',
   )
   assert(
     one(`${card} [data-follow="off"]`) && one(`${card} [data-follow-note]`),
@@ -391,7 +393,7 @@ export async function managerIssuesProbe() {
     one(`${card} [data-act="issue-follow"]`)?.getAttribute('aria-checked') === 'false',
     '跟进按钮仍在开启状态',
   )
-  passed.push('状态、暂停跟进与原因时间线')
+  passed.push('状态与跟进更新，用户操作不重复进活动')
 
   await click('[data-inbox-tab="decisions"]')
   await until(
@@ -418,6 +420,74 @@ export async function managerIssuesProbe() {
   )
   assert(!one('[data-issue-thread="page"]'), '返回后仍停在整页')
   passed.push('决策快速处理、抽屉、完整讨论与返回')
+  // 四种特殊 issue 完整页各有自己的主操作；关联/依据默认收起，可展开。
+  for (const [tab, kind, selector] of [
+    ['decisions', 'decision', '[data-act="manager-submit"]'],
+    ['requests', 'request', '[data-act="manager-request-deliver"]'],
+    ['reports', 'report', '[data-act="report-read"]'],
+    ['suggestions', 'suggestion', '[data-act="start"]'],
+  ] as const) {
+    if (kind === 'suggestion') {
+      await fill('.main .dock textarea.cmp-text', '提个子会话')
+      await enter('.main .dock textarea.cmp-text')
+      await until('经理生成建议卡', () => one('.main [data-card="proposal"]'))
+    }
+    await click(`[data-inbox-tab="${tab}"]`)
+    const chosen = await until(
+      `${kind}待处理卡`,
+      () =>
+        (kind === 'decision' ? cards().find((card) => card.dataset.issue === 'D-15') : undefined) ??
+        cards().find(
+          (card) =>
+            card.dataset.issueType === kind &&
+            card.querySelector(
+              '[data-issue-status="open"], [data-issue-status="unread"], [data-issue-status="endorsed"], [data-issue-status="pending"]',
+            ),
+        ),
+    )
+    const id = chosen.dataset.issue
+    if (
+      one(`[data-issue="${id}"] [data-act="issue-toggle"]`)?.getAttribute('aria-expanded') !==
+      'true'
+    )
+      await click(`[data-issue="${id}"] [data-act="issue-toggle"]`)
+    await click(`[data-issue="${id}"] [data-act="issue-full"]`)
+    const page = await until(`${kind}完整页主操作`, () => {
+      const root = one('[data-issue-thread="page"]')
+      return root?.querySelector(selector) ? root : null
+    })
+    assert(page.querySelector(selector)?.getBoundingClientRect().height, `${kind}主按钮被裁掉`)
+    if (kind === 'suggestion') assert(page.querySelector('[data-act="edit"]'), '建议缺少编辑后开始')
+    const activity = [...page.querySelectorAll('[data-timeline="event"]')]
+      .map((row) => row.textContent)
+      .join('\n')
+    if (kind === 'decision')
+      assert(activity.includes('经理补充方案与验证范围'), '过滤误删经理正文修订')
+    assert(
+      !/→|1970|展开讨论|Open discussion|\/Users\/|\/Volumes\//.test(activity),
+      '活动含关联、开关、路径或1970',
+    )
+    for (const details of page.querySelectorAll<HTMLDetailsElement>(
+      'details[data-relations], details[data-evidence], details[data-issue-relations]',
+    )) {
+      assert(!details.open, '依据/关联默认展开')
+      details.querySelector('summary')?.click()
+      assert(details.open, '依据/关联无法展开')
+      details.querySelector('summary')?.click()
+    }
+    if (kind === 'decision') {
+      const options = page.querySelectorAll<HTMLInputElement>('input[type="radio"]')
+      if (options.length) {
+        options[0]?.click()
+        await until(
+          '只选选项即可答复',
+          () => !page.querySelector<HTMLButtonElement>(selector)?.disabled,
+        )
+      }
+    }
+    await click('[data-act="issue-back"]')
+  }
+  passed.push('四类完整页主操作、活动过滤、依据和关联折叠')
   return {
     passed,
     createdId: id,

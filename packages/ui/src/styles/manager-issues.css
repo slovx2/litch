@@ -539,3 +539,44 @@ fieldset.mg-issue-status {
 .mg-issue.mg-card {
   padding: 10px 14px 12px;
 }
+
+/* 完整页和抽屉的快速处理有自己的留白；内嵌旧卡不再保留草稿描边。 */
+.mg-issue-thread > .mg-issue-quick {
+  padding: 16px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r2);
+  background: var(--raised);
+}
+.mg-issue-quick .mg-decision[data-draft="true"] {
+  border: 0;
+  outline: none;
+  box-shadow: none;
+}
+.mg-issue-quick .mg-post-body {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.mg-issue-quick .mg-post-body > * {
+  min-width: 0;
+}
+.mg-issue-relations-fold,
+.mg-evidence {
+  min-width: 0;
+}
+.mg-issue-relations-fold > summary,
+.mg-evidence > summary,
+.mg-relations > summary {
+  cursor: pointer;
+  color: var(--ink-3);
+  font-size: calc(12px * var(--fs));
+  padding-block: 5px;
+}
+.mg-issue-relations-fold[open] > .mg-issue-relations,
+.mg-evidence[open] > .mg-item-links {
+  margin-top: 8px;
+}
+
+.mg-issue-thread .mg-issue-quick .mg-decision:focus {
+  outline-offset: 6px;
+}

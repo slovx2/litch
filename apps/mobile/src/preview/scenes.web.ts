@@ -106,6 +106,13 @@ export const SCENES: Scene[] = [
     steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1' })],
   },
   {
+    id: 'manager-issue-discussion',
+    group: '经理',
+    name: 'issue · 完整讨论',
+    note: '决策有独立提交按钮；经理实质更新保留，关联、依据默认收起，活动不显示开关或缺失时间的记录',
+    steps: [nav('ManagerIssue', { deviceId: 'local', managerId: 'm1', id: 'D-15' })],
+  },
+  {
     id: 'manager-issues-many',
     group: '经理',
     name: 'issue · 大量',

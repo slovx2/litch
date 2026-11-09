@@ -1,7 +1,7 @@
 // 一条 issue 的讨论界面，三处共用同一套：卡片里展开（inline）、看板底部抽屉（pane）、完整讨论页（page）。
 // 内容依次是原帖、状态与跟进、关联、评论时间线和输入框。抽屉里原帖默认收成两行，另有“打开完整讨论”。
 import { type ReactNode, useEffect, useState } from 'react'
-import type { ManagerView } from '../../../../core/src/model-manager.mts'
+import type { ManagerChangeView, ManagerView } from '../../../../core/src/model-manager.mts'
 import {
   MANAGER_ISSUE_STATUSES,
   managerIssueHead,
@@ -24,6 +24,7 @@ import { IssueMeta } from './IssueMeta.tsx'
 export interface IssueThreadProps {
   manager: ManagerView
   issue: ManagerIssue
+  changes?: readonly ManagerChangeView[]
   disabled: boolean
   reason: string
   commands: IssueCommands
@@ -32,7 +33,7 @@ export interface IssueThreadProps {
   onFull?: (() => void) | undefined
   /** 完整讨论页的返回 */
   onBack?: (() => void) | undefined
-  /** 特殊 issue 的原帖位置：快速处理区（卡片里由卡片自己画，抽屉和完整页只放正文） */
+  /** 特殊 issue 的快速处理区：卡片里由卡片自己画，抽屉和完整页保留主操作。 */
   quick?: ReactNode
   /** 特殊 issue（报告、请你做、建议）的“问经理”：旧帖子追问，回答进时间线 */
   postRevision?: number | undefined
@@ -145,26 +146,34 @@ export function IssueRelationsRow({
   )
   if (!targets.length) return null
   return (
-    <div className="mg-issue-relations" data-issue-relations>
-      <span className="dim">{t('manager.relations')}</span>
-      {targets.map((target) =>
-        target.kind === 'item' ? (
-          // 经理事项用自己的记号，和 issue 编号区分开
-          <button
-            type="button"
-            className="mg-issue-item-link"
-            key={`${target.kind}:${target.target}`}
-            data-issue-item={target.target}
-            onClick={() => onOpenItem(target.target)}
-          >
-            <span className="mono">{target.target}</span> · {t('issue.itemTag')}
-            {target.label ? ` · ${target.label}` : ''}
-          </button>
-        ) : (
-          <RelationLink key={`${target.kind}:${target.target}`} target={target} manager={manager} />
-        ),
-      )}
-    </div>
+    <details className="mg-issue-relations-fold" data-issue-relations>
+      <summary>
+        {t('manager.relations')} {targets.length}
+      </summary>
+      <div className="mg-issue-relations">
+        {targets.map((target) =>
+          target.kind === 'item' ? (
+            // 经理事项用自己的记号，和 issue 编号区分开
+            <button
+              type="button"
+              className="mg-issue-item-link"
+              key={`${target.kind}:${target.target}`}
+              data-issue-item={target.target}
+              onClick={() => onOpenItem(target.target)}
+            >
+              <span className="mono">{target.target}</span> · {t('issue.itemTag')}
+              {target.label ? ` · ${target.label}` : ''}
+            </button>
+          ) : (
+            <RelationLink
+              key={`${target.kind}:${target.target}`}
+              target={target}
+              manager={manager}
+            />
+          ),
+        )}
+      </div>
+    </details>
   )
 }
 
@@ -195,6 +204,7 @@ export function IssueThread({
   onBack,
   quick,
   postRevision,
+  changes,
 }: IssueThreadProps & { mode: 'inline' | 'pane' | 'page' }) {
   const t = useT()
   const [openingError, setOpeningError] = useState('')
@@ -268,7 +278,7 @@ export function IssueThread({
           withKind
         />
       ) : null}
-      {special && quick && mode !== 'pane' ? (
+      {special && quick ? (
         quick
       ) : (
         <div className="mg-issue-post" data-collapsed={!postOpen || undefined}>
@@ -298,6 +308,7 @@ export function IssueThread({
       ) : null}
       <IssueDiscussion
         issue={issue}
+        changes={changes}
         draftKey={JSON.stringify([manager.deviceId, manager.id, issue.id])}
         disabled={disabled}
         reason={reason}

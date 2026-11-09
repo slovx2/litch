@@ -77,7 +77,9 @@ export class MockManagerIssues {
           summary: post.discussion.summary,
           legacy: post.discussion,
         },
-        relations: [],
+        relations: (board.relations ?? []).filter(
+          (edge) => edge.from.target === id || edge.to.target === id,
+        ),
         timeline: previous?.timeline ?? [],
         unread: post.unread ?? false,
         quick: {

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { runInNewContext } from 'node:vm'
 import { transform } from 'esbuild'
+import { managerIssueActivity } from '../../core/src/projection/manager-issue-activity.mts'
 import { submitQuestionOnEnter } from '../src/manager/post-presentation.ts'
 
 const compile = async (path) =>
@@ -37,6 +38,7 @@ test('评论真实组件：Enter 提交、IME/Shift 不发、空白与同步重�
   const slots = []
   let cursor = 0
   const react = {
+    useContext: () => null,
     useState: (initial) => {
       const at = cursor++
       slots[at] ??= { value: typeof initial === 'function' ? initial() : initial }
@@ -59,6 +61,7 @@ test('评论真实组件：Enter 提交、IME/Shift 不发、空白与同步重�
     module: output,
     require(name) {
       if (name === 'react') return react
+      if (name.endsWith('manager-issue-activity.mts')) return { managerIssueActivity }
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx }
       if (name.endsWith('post-presentation.ts')) return { submitQuestionOnEnter }
       if (name.endsWith('appearance.ts')) return { useT: () => (key) => key }
@@ -72,7 +75,17 @@ test('评论真实组件：Enter 提交、IME/Shift 不发、空白与同步重�
     issue: {
       id: 'X-1',
       discussion: { comments: [], questions: [] },
-      timeline: [],
+      timeline: [
+        { id: 'update', kind: 'edited', actor: 'manager', at: Date.now(), summary: '经理更新方案' },
+        {
+          id: 'noise',
+          kind: 'relation',
+          actor: 'manager',
+          at: 0,
+          summary: 'D-1 → /Users/dev/demo',
+        },
+        { id: 'switch', kind: 'edited', actor: 'user', at: Date.now(), summary: '展开讨论' },
+      ],
       followUp: { state: 'on' },
     },
     draftKey: 'keyboard-test',
@@ -89,6 +102,7 @@ test('评论真实组件：Enter 提交、IME/Shift 不发、空白与同步重�
     cursor = 0
     return nodes(output.exports.IssueDiscussion(props))
   }
+  assert.equal(render().filter((n) => n.props?.['data-timeline'] === 'event').length, 1)
   const input = () => render().find((n) => n.type === 'textarea')
   input().props.onChange({ target: { value: '中文草稿' } })
   for (const patch of [{ shiftKey: true }, { isComposing: true }, { keyCode: 229 }]) {
