@@ -2,8 +2,10 @@
 // 依次是一行小字（类型、状态、创建者、跟进）、原帖、状态与跟进、关联、评论时间线；输入框是单独的 IssueComposer，
 // 抽屉里放在底部固定，完整页放在页尾。触控区不小于主题的 hit。
 import type { ManagerView } from '@litch/core'
+import { useIsFocused } from '@react-navigation/native'
 import { type ReactNode, useEffect, useState } from 'react'
 import { StyleSheet, Switch, Text, TextInput, View } from 'react-native'
+import { managerIssueActivity } from '../../../../../../packages/core/src/projection/manager-issue-activity.mts'
 import { MANAGER_ISSUE_STATUSES } from '../../../../../../packages/core/src/projection/manager-issue-list.mts'
 import type {
   ManagerIssue,
@@ -13,7 +15,7 @@ import type {
 import { stamp } from '../../../../../../packages/ui/src/app/format.ts'
 import { useT } from '../../../ui/i18n'
 import { Chip } from '../../../ui/kit/controls'
-import { IconButton } from '../../../ui/kit/Icon'
+import { Fold, IconButton } from '../../../ui/kit/Icon'
 import { useTheme } from '../../../ui/theme'
 import { Byline } from '../Byline'
 import { Markdown } from '../IssueMarkdown'
@@ -91,6 +93,7 @@ export function IssueMetaLine({
 export function IssueThread({
   manager: _manager,
   issue,
+  changes,
   disabled,
   reason,
   commands,
@@ -102,12 +105,17 @@ export function IssueThread({
   disabled: boolean
   reason: string
   commands: IssueCommands
+  changes?: readonly { id: string; fields: readonly string[] }[]
   /** 特殊 issue 的快速处理区（原来那张卡）；给了就画在原帖位置 */
   quick?: ReactNode
   onOpenItem(id: string): void
 }) {
   const t = useT()
   const [openingError, setOpeningError] = useState('')
+  const focused = useIsFocused()
+  const [relationsOpen, setRelationsOpen] = useState(false)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 切换条目或重新进入页面时恢复收起。
+  useEffect(() => setRelationsOpen(false), [issue.id, focused])
   const opened =
     issue.discussion.opened ||
     issue.discussion.comments.length > 0 ||
@@ -171,8 +179,7 @@ export function IssueThread({
         answer: one.answer,
       }),
     ),
-    ...issue.timeline.flatMap((entry): Row[] => {
-      if (['comment', 'question', 'answer', 'created'].includes(entry.kind)) return []
+    ...managerIssueActivity(issue.timeline, changes).flatMap((entry): Row[] => {
       // 设备把操作原因写在 summary 里；没有就用通用说法（与桌面一致）
       const who =
         entry.actor === 'manager' || entry.actor === 'user'
@@ -254,34 +261,46 @@ export function IssueThread({
       {error ? <Text style={{ color: c.err }}>{error}</Text> : null}
       {disabled ? <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{reason}</Text> : null}
       {targets.length ? (
-        <View style={styles.wrap} testID="issue-relations">
-          <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{t('manager.relations')}</Text>
-          {targets.map((target) =>
-            target.kind === 'item' ? (
-              <Chip
-                key={`${target.kind}:${target.target}`}
-                label={`${target.target} · ${t('issue.itemTag')}`}
-                testID={`issue-item:${target.target}`}
-                onPress={() => onOpenItem(target.target)}
-              />
-            ) : (
-              <Text
-                key={`${target.kind}:${target.target}`}
-                style={[
-                  styles.relation,
-                  {
-                    color: c.ink2,
-                    fontSize: font.size.meta,
-                    borderColor: c.line2,
-                    backgroundColor: c.sunken,
-                  },
-                ]}
-              >
-                {t(`manager.relationKind.${target.kind}` as Parameters<typeof t>[0])} ·{' '}
-                {target.label ?? target.target}
-              </Text>
-            ),
-          )}
+        <View testID="issue-relations">
+          <Fold
+            open={relationsOpen}
+            onToggle={() => setRelationsOpen(!relationsOpen)}
+            testID="issue-relations-toggle"
+          >
+            <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
+              {t('manager.relations')} {targets.length}
+            </Text>
+          </Fold>
+          {relationsOpen ? (
+            <View style={styles.wrap}>
+              {targets.map((target) =>
+                target.kind === 'item' ? (
+                  <Chip
+                    key={`${target.kind}:${target.target}`}
+                    label={`${target.target} · ${t('issue.itemTag')}`}
+                    testID={`issue-item:${target.target}`}
+                    onPress={() => onOpenItem(target.target)}
+                  />
+                ) : (
+                  <Text
+                    key={`${target.kind}:${target.target}`}
+                    style={[
+                      styles.relation,
+                      {
+                        color: c.ink2,
+                        fontSize: font.size.meta,
+                        borderColor: c.line2,
+                        backgroundColor: c.sunken,
+                      },
+                    ]}
+                  >
+                    {t(`manager.relationKind.${target.kind}` as Parameters<typeof t>[0])} ·{' '}
+                    {target.label ?? target.target}
+                  </Text>
+                ),
+              )}
+            </View>
+          ) : null}
         </View>
       ) : null}
       {rows.length ? (
@@ -294,7 +313,7 @@ export function IssueThread({
           </Text>
           {rows.map((row) =>
             row.kind === 'event' ? (
-              <View key={row.id} style={styles.event}>
+              <View key={row.id} style={styles.event} testID={`issue-activity:${row.id}`}>
                 <View style={[styles.dot, { backgroundColor: c.line3 }]} />
                 <Text style={{ color: c.ink3, fontSize: font.size.meta, flexShrink: 1 }}>
                   {row.text} · {stamp(row.at, Date.now(), t.lang)}

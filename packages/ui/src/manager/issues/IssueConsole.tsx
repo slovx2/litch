@@ -268,7 +268,9 @@ export function IssueConsole({
     if (!issue) return null
     return (
       <IssueThread
+        key={`${id}:${mode}`}
         mode={mode}
+        changes={board.changes}
         manager={manager}
         issue={issue}
         disabled={disabled}
@@ -277,7 +279,7 @@ export function IssueConsole({
         onOpenItem={onOpenItem}
         postRevision={postRevision(id)}
         quick={
-          mode === 'page' && issue.kind !== 'ordinary' ? (
+          issue.kind !== 'ordinary' ? (
             <IssueQuick
               manager={manager}
               board={board}
@@ -285,6 +287,7 @@ export function IssueConsole({
               paged={Boolean(view.paging)}
               disabled={disabled}
               draftBoard={draftBoard}
+              standalone
               onSuggestionSource={onSuggestionSource}
             />
           ) : null

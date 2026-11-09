@@ -55,6 +55,7 @@ export function Decisions({
   onLocated,
   onlyId,
   part = 'all',
+  singleSubmit = false,
   draftBoard,
   next,
 }: {
@@ -72,6 +73,7 @@ export function Decisions({
   onlyId?: string | null
   /** 分页看板把卡片和提交条分开放：卡片在展开的卡里，提交条固定在列表底部 */
   part?: 'all' | 'cards' | 'send'
+  singleSubmit?: boolean
   /** 提交条上的“下一个”（分页看板的决策页签才有）：展开下一个待答的决策；没有时置灰 */
   next?: { go(): void; disabled: boolean } | undefined
   /** 分页看板只带点开过的详情，草稿状态改用补了卡头的判断面（core 的 pagedDraftBoard） */
@@ -91,9 +93,11 @@ export function Decisions({
   const drafts = refreshed.drafts
   const [clearedSelections, setClearedSelections] = useState<Set<string>>(new Set())
   const live = liveManagerDrafts(board, {
-    decisions: Object.values(drafts),
-    requests: Object.values(requestDrafts),
-    posts: Object.values(postDrafts),
+    decisions: Object.values(drafts).filter(
+      (draft) => !singleSubmit || draft.decisionId === onlyId,
+    ),
+    requests: singleSubmit ? [] : Object.values(requestDrafts),
+    posts: singleSubmit ? [] : Object.values(postDrafts),
   })
   // 比应用旧的设备服务：没宣告 Feedback 只交决策答复（核心改走 answers/submit），没宣告 Posts 不交议题追问；
   // 那些草稿留着，升级后再交
@@ -259,7 +263,7 @@ export function Decisions({
             }
       const next = { ...drafts }
       // 只接续正在看的待定列表，不改变分栏；失败项保留在原处，追问与其他类别提交不抢焦点。
-      if (visible && filter === 'open' && result.accepted.length)
+      if (!singleSubmit && visible && filter === 'open' && result.accepted.length)
         setSubmittedFocus({
           before: grouped.open.map((decision) => decision.id),
           accepted: result.accepted.map((decision) => decision.id),
@@ -610,11 +614,22 @@ export function Decisions({
                         onKeyDown={(event) => {
                           if (!submitQuestionOnEnter(event.nativeEvent)) return
                           event.preventDefault()
-                          if (draft?.text.trim()) void submit()
+                          if (draft?.optionId || draft?.text.trim()) void submit()
                         }}
                         onChange={(event) => change(decision, { text: event.target.value })}
                       />
                       <div className="mg-actions">
+                        {singleSubmit ? (
+                          <button
+                            type="button"
+                            className="btn primary"
+                            data-act="manager-submit"
+                            disabled={disabled || busy || conflict || asking || !pending.length}
+                            onClick={() => void submit()}
+                          >
+                            {t(busy ? 'manager.submitting' : 'manager.submit')}
+                          </button>
+                        ) : null}
                         {decision.status !== 'open' ? (
                           <button
                             type="button"
@@ -736,10 +751,14 @@ export function Decisions({
                 </div>
 
                 <footer className="mg-item-meta">
-                  <div className="mg-item-meta-row">
-                    <span className="mg-meta-label">{t('manager.basis')}</span>
-                    <BoardLinks links={decision.basis} />
-                  </div>
+                  {decision.basis.length ? (
+                    <details className="mg-evidence" data-evidence={decision.id} key={decision.id}>
+                      <summary>
+                        {t('manager.basis')} {decision.basis.length}
+                      </summary>
+                      <BoardLinks links={decision.basis} />
+                    </details>
+                  ) : null}
                   {decision.checked ? (
                     <div className="mg-item-meta-row">
                       <span className="mg-meta-label">{t('manager.verification')}</span>

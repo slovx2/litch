@@ -1163,18 +1163,6 @@
 .mg-board {
   container-type: inline-size;
 }
-/* 关联的展开与布局共用元素的 data-wide，由卡片实际宽度 >= 520px 决定。 */
-.mg-relations[data-wide="true"] {
-  float: right;
-  width: 176px;
-  margin-left: 16px;
-}
-.mg-request .mg-post-body:has(> .mg-relations[data-wide="true"]) {
-  display: block;
-}
-.mg-request .mg-post-body:has(> .mg-relations[data-wide="true"]) > * {
-  margin-bottom: 12px;
-}
 
 .mg-post-discussion {
   clear: both;

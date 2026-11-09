@@ -21,6 +21,9 @@ export const zhProposals = {
   'suggestions.close': '关闭建议',
 
   'proposal.kind': '建议任务',
+  'proposal.note': '补充说明（选填）',
+  'proposal.starting': '正在开始…',
+  'proposal.retry': '重试开始',
   'proposal.start': '开始',
   'proposal.edit': '编辑后开始',
   'proposal.edit.title': '编辑后开始',

@@ -263,14 +263,33 @@ export class Worktrees {
    * 建一半失败的删干净（目录、分支、记录）再抛
    */
   create(spec: { cwd: string; from?: WorktreeFrom; title?: string }): Promise<Worktree> {
-    return this.serial(() => this.build(spec))
+    const startedAt = new Date().toISOString()
+    const beganAt = performance.now()
+    const stages: Record<string, number> = {}
+    let checkpoint = beganAt
+    const mark = (phase: string) => {
+      const now = performance.now()
+      stages[phase] = Math.round(now - checkpoint)
+      checkpoint = now
+    }
+    return this.serial(() => {
+      mark('queue')
+      return this.build(spec, mark)
+    }).finally(() => {
+      this.host.log(
+        `worktree.create.timing ${JSON.stringify({ startedAt, cwd: spec.cwd, totalMs: Math.round(performance.now() - beganAt), stages })}`,
+      )
+    })
   }
 
-  private async build(spec: {
-    cwd: string
-    from?: WorktreeFrom
-    title?: string
-  }): Promise<Worktree> {
+  private async build(
+    spec: {
+      cwd: string
+      from?: WorktreeFrom
+      title?: string
+    },
+    mark: (phase: string) => void,
+  ): Promise<Worktree> {
     const settings = this.host.settings()
     const from = spec.from ?? { kind: 'default' }
     // 记在主仓库下（从另一个会话的工作树里再开也是）；起点、当前本地状态、被忽略的文件按 cwd 所在的检出算
@@ -302,6 +321,7 @@ export class Worktrees {
       updatedAt: stamp,
     }
     this.save(worktree)
+    mark('prepare')
     try {
       mkdirSync(dirname(worktree.path), { recursive: true })
       await git(main, [
@@ -313,8 +333,11 @@ export class Worktrees {
         worktree.path,
         start.commit,
       ])
+      mark('gitAdd')
       if (from.kind === 'working-tree') await this.carryWorkingTree(top, worktree.path)
+      mark('carryWorkingTree')
       await this.copyIgnored(top, worktree.path)
+      mark('copyIgnored')
       this.ownerFile(worktree)
     } catch (error) {
       await this.discard(worktree, true).catch(() => null)

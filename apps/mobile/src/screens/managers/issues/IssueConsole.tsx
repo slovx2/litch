@@ -443,6 +443,8 @@ export function IssueSheetDrawer({
           quick
         ) : (
           <IssueThread
+            key={issue.id}
+            changes={board?.changes ?? []}
             manager={manager}
             issue={issue}
             disabled={disabled}

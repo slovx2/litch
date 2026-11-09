@@ -20,8 +20,10 @@ import { useKey, useServices } from '../app/services.tsx'
 import { EFFORT_TEXT } from '../composer/efforts.ts'
 import { useComposeOptions } from '../composer/SettingsBar.tsx'
 import { useBoardFormKeys } from '../manager/form-submit-keys.ts'
+import { submitQuestionOnEnter } from '../manager/post-presentation.ts'
 import { PathPicker } from '../path-picker/PathPicker.tsx'
 import { WorktreeCheck } from '../worktrees/WorktreeCheck.tsx'
+import { proposalOperation, withProposalNote } from './proposal-operation.ts'
 import { SANDBOX_CHOICES, SANDBOX_LEVEL, widerLevel } from './sandbox.ts'
 import { fieldsFor, kindOf, overridesOf, type SpawnFields, spawnParams } from './spawn-form.ts'
 import { useProposalWorktree } from './useProposalWorktree.ts'
@@ -33,6 +35,7 @@ interface SpawnDialogProps {
   }
   /** 给了就是“改了再开始”这张提案 */
   proposal?: SessionProposalView
+  initialNote?: string
   /** 派出去（开始）了：子会话的标识。在关掉之前叫 */
   onSpawned?(sessionId: string): void
   onClose(): void
@@ -40,7 +43,14 @@ interface SpawnDialogProps {
 
 const NO_WORKSPACES: readonly WorkspaceView[] = []
 
-export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: SpawnDialogProps) {
+export function SpawnDialog({
+  deviceId,
+  parent,
+  proposal,
+  initialNote = '',
+  onSpawned,
+  onClose,
+}: SpawnDialogProps) {
   const { channel, replica } = useServices()
   useEffect(() => replica.openSession(deviceId, parent.id), [replica, deviceId, parent.id])
   const t = useT()
@@ -55,6 +65,7 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
   )
   const set = (patch: Partial<SpawnFields>) => setFields((now) => ({ ...now, ...patch }))
   const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState(initialNote)
   const [failure, setFailure] = useState<string | null>(null)
   const worktreeBlock = useProposalWorktree(
     channel,
@@ -101,18 +112,25 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
     if (!text || busy || permissionBlocked || worktreeBlock) return
     setBusy(true)
     setFailure(null)
-    const sent = proposal
-      ? channel.command('session.proposal.accept', {
-          deviceId,
-          sessionId: parent.id,
-          proposalId: proposal.id,
-          overrides: overridesOf(fields, parent, proposal, device?.worktrees === true),
-        })
-      : channel.command('session.spawn', {
-          deviceId,
-          parentId: parent.id,
-          ...spawnParams(fields, parent, device?.worktrees === true),
-        })
+    if (proposal) {
+      const operation = proposalOperation(channel, deviceId, parent.id, proposal.id)
+      const sent = operation.start(
+        withProposalNote(
+          proposal.prompt,
+          note,
+          overridesOf(fields, parent, proposal, device?.worktrees === true),
+        ),
+      )
+      onClose()
+      return sent.then((result) => {
+        if (result) onSpawned?.(result.sessionId)
+      })
+    }
+    const sent = channel.command('session.spawn', {
+      deviceId,
+      parentId: parent.id,
+      ...spawnParams(fields, parent, device?.worktrees === true),
+    })
     return sent
       .then(({ sessionId }) => {
         onSpawned?.(sessionId)
@@ -142,6 +160,25 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
           <span className="grow">{heading}</span>
         </div>
         <div className="modal-body">
+          {proposal ? (
+            <div className="form-field">
+              <label className="form-label" htmlFor="spawn-note">
+                {t('proposal.note')}
+              </label>
+              <textarea
+                id="spawn-note"
+                className="req-input"
+                rows={2}
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                onKeyDown={(event) => {
+                  if (!submitQuestionOnEnter(event.nativeEvent)) return
+                  event.preventDefault()
+                  void submit()
+                }}
+              />
+            </div>
+          ) : null}
           <div className="form-field">
             <span className="form-label">{t('tree.lineage.before')}</span>
             <span className="ell">{t.text(parent.title)}</span>

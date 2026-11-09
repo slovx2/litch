@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useContext } from 'react'
 import type { ManagerBoardView, ManagerView } from '../../../core/src/model-manager.mts'
 import { managerRelationGroups } from '../../../core/src/projection/manager-relations.mts'
 import type { ManagerRelationTarget } from '../../../protocol/src/manager-posts.mjs'
@@ -25,18 +25,6 @@ export function Relations({
   const features = useManagerFeatures()
   const unreadable = (target: ManagerRelationTarget) =>
     !features.posts && !['issue', 'item', 'thread', 'url', 'file'].includes(target.kind)
-  const [wide, setWide] = useState(false)
-  const root = useRef<HTMLDetailsElement>(null)
-  useEffect(() => {
-    if (!context || !id) return
-    // 按卡片的实际宽度判断；关联放在卡片正文里时，正文比卡片窄了内边距
-    const parent =
-      root.current?.closest<HTMLElement>('[data-post-card]') ?? root.current?.parentElement
-    if (!parent) return
-    const observer = new ResizeObserver(() => setWide(parent.getBoundingClientRect().width >= 520))
-    observer.observe(parent)
-    return () => observer.disconnect()
-  }, [context, id])
   if (!context) return null
   const { manager, board } = context
   const groups = managerRelationGroups(board, { kind, target: id })
@@ -62,10 +50,8 @@ export function Relations({
   }
   return (
     <details
-      ref={root}
       className={reverse ? 'mg-related-issues' : 'mg-relations'}
-      open={wide}
-      data-wide={wide}
+      key={`${kind}:${id}`}
       data-relations={id}
     >
       <summary>

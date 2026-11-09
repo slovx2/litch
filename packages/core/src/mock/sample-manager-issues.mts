@@ -253,7 +253,10 @@ export function sampleManagerIssues(
   const t = (zh: string, en: string) => (lang === 'zh-CN' ? zh : en)
   if (managerId !== 'm1' && managerId !== 'm3') return []
   const selected = ['decision', 'suggestion', 'request', 'report'].flatMap(
-    (kind) => specials.find((issue) => issue.kind === kind) ?? [],
+    (kind) =>
+      (kind === 'decision' ? specials.find((issue) => issue.id === 'D-15') : undefined) ??
+      specials.find((issue) => issue.kind === kind) ??
+      [],
   )
   const discussed = selected.map((issue, i): ManagerIssue => {
     const at = issue.createdAt + HOUR
@@ -269,20 +272,56 @@ export function sampleManagerIssues(
     return {
       ...issue,
       discussion: { ...issue.discussion, opened: true, comments: i === 0 ? [] : [comment] },
-      timeline:
-        i === 0
+      timeline: [
+        {
+          id: `sample-edit:${issue.id}`,
+          kind: 'edited',
+          actor: 'manager',
+          at,
+          summary: t('经理补充方案与验证范围', 'Manager updated the proposal and validation scope'),
+        },
+        {
+          id: `sample-relation:${issue.id}`,
+          kind: 'relation',
+          actor: 'manager',
+          at: 0,
+          summary: `${issue.id} → /Users/dev/example/README.md`,
+        },
+        {
+          id: `sample-link-edit:${issue.id}`,
+          kind: 'edited',
+          actor: 'manager',
+          at,
+          summary: `${issue.id} → feature/example`,
+        },
+        {
+          id: `sample-switch:${issue.id}`,
+          kind: 'edited',
+          actor: 'user',
+          at,
+          summary: t('展开讨论', 'Open discussion'),
+        },
+        {
+          id: `sample-no-time:${issue.id}`,
+          kind: 'edited',
+          actor: 'manager',
+          at: 0,
+          summary: t('缺少时间的记录', 'Record without timestamp'),
+        },
+        ...(i === 0
           ? issue.timeline
           : [
               ...issue.timeline,
               {
                 id: `comment:${comment.id}:1`,
-                kind: 'comment',
-                actor: 'user',
+                kind: 'comment' as const,
+                actor: 'user' as const,
                 at: at + i,
                 summary: comment.body,
                 commentId: comment.id,
               },
-            ],
+            ]),
+      ],
     }
   })
   return [...discussed, ...(managerId === 'm3' ? bulkIssues(now, t) : richIssues(now, t))]

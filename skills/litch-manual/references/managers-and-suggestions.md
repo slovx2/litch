@@ -32,6 +32,8 @@ issue 页签默认只选类型“issue”（X-n），类型过滤支持多选和
 首次进入决策、请你做和 issue 页签默认“开放”；建议默认“待开始”（经理已推荐，不含待审核），报告默认“未读”。
 对应状态放在过滤选项第一位，“全部”在最后；用户选过的条件不重置，概览数字带入的条件优先。
 展开 X-n 可查看原帖、状态与跟进、关联、评论及输入框；其他类型保留快速处理按钮，可打开底部讨论或完整讨论页。
+完整讨论页和讨论抽屉保留对应的处理入口：决策提交答复（可只选选项）、请你做交付或回复、建议开始或编辑后开始、报告标为已阅。评论不会代替这些操作。
+依据与关联默认只显示标题和数量，点击展开；重新进入页面时恢复收起。活动只显示经理对正文、选项、推荐等内容和状态的实质更新，不重复显示用户答复、关联或依据变更、讨论开关；没有有效时间的活动不显示，历史数据仍保留。
 概览的 issue 摘要仍统计 X-n 的未完成、等我看、跟进已暂停；点击数字会回到 issue 页签，恢复只选 issue 类型并套用相应过滤。
 手机的类别胶囊和过滤抽屉采用相同规则。设备不支持 issue 时仍显示原来的四类控制台，并提示升级设备服务。
 
@@ -44,6 +46,8 @@ Each tab remembers its own filters and sorting. Issues also offers status, autho
 On first entry, Decisions, For you and Issues default to Open; Suggestions to Ready to start (endorsed by the manager, excluding those awaiting review), and Reports to Unread.
 That filter comes first and All comes last. Saved choices remain unchanged; filters from Overview counts take precedence.
 X-n opens its description, status, follow-up, links and comments; other types keep their quick actions and can open a discussion drawer or full page.
+Full discussions and drawers retain the relevant action: submit a decision answer (an option alone is enough), deliver or reply to a request, start or edit a suggestion, and mark a report as read. Comments do not replace these actions.
+Evidence and links initially show only their title and count. Click to expand; reopening the page collapses them again. Activity shows substantive manager edits and status changes, omitting duplicate user responses, link or evidence changes, discussion toggles, and entries without a valid timestamp. The underlying history is retained.
 Overview counts still cover X-n issues. Clicking a count selects the Issues tab and the Issue type with the corresponding filter.
 The phone uses the same rules in its category pills and filter drawer. Older devices keep the four-category Console and show an upgrade notice.
 
@@ -490,6 +494,16 @@ Do it here, the other two are under ⋯). The brief shows the background and tas
 are in `sessions-and-projects.md`.
 
 ### Where and how to use them
+
+Before starting, use **Additional instructions (optional)** on the card or edit form to append
+instructions to the new session’s task. The original card’s brief stays unchanged. Leave it blank
+to start the original task. Enter starts from this field; Shift+Enter inserts a line break on desktop
+and phone web previews. The phone’s software keyboard provides a Send action.
+
+Starting closes the edit form immediately. The card shows **Starting…** while the device prepares
+the session, including remote worktrees. You can keep using the app. A successful start shows the
+child session link; a failed start stays on the card with **Retry start**, which resends the same
+edited task and additional instructions, even after leaving and returning to the page.
 
 The desktop sidebar's **Suggestions** entry shows pending suggestions across devices with
 a count, alongside Tasks, Appearance and Settings in the bottom row. Cards automatically form a

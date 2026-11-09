@@ -5,6 +5,11 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 桌面和手机建议卡支持开始前补充说明；编辑后开始立即关闭表单，卡片保留启动进度、失败原因及重试入口。
+- 修复经理完整讨论页缺少决策提交按钮、快速处理区拥挤的问题；桌面和手机的依据、关联默认折叠，活动仅展示经理实质更新，隐藏关联操作、讨论开关和无有效时间的记录。
+
 ## 0.38.1（2026-11-09）
 
 - 修复经理或工作线读取超长子会话历史时连接断开、无限重试，并导致新会话也无法连接的问题。

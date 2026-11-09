@@ -1,14 +1,15 @@
 // issue 的讨论区：评论、旧“问经理”问答与状态变化按时间排成一条；底部是评论框。
 // 评论与问答分开：评论不回答决策、不交付请求（60 号设计 5.3）。草稿按 [设备, 经理, #n] 存在内存里，切卡不丢。
-import { useRef, useState } from 'react'
+import { useContext, useRef, useState } from 'react'
+import { managerIssueActivity } from '../../../../core/src/projection/manager-issue-activity.mts'
 import type { ManagerIssue } from '../../../../protocol/src/manager-issues.mts'
 import { useT } from '../../app/appearance.ts'
 import { reasonOf } from '../../app/errors.ts'
 import { Icon } from '../../app/icons.tsx'
 import { Stamp } from '../../transcript/Stamp.tsx'
 import { BoardMarkdown } from '../BoardMarkdown.tsx'
-
 import { submitQuestionOnEnter } from '../post-presentation.ts'
+import { RelationsContext } from '../Relations.tsx'
 
 const drafts = new Map<string, string>()
 
@@ -19,6 +20,7 @@ type Row =
 
 export function IssueDiscussion({
   issue,
+  changes,
   draftKey,
   disabled,
   reason,
@@ -27,6 +29,7 @@ export function IssueDiscussion({
   onAsk,
 }: {
   issue: ManagerIssue
+  changes?: readonly { id: string; fields: readonly string[] }[] | undefined
   draftKey: string
   disabled: boolean
   /** 不能评论时写在评论框上的原因 */
@@ -37,6 +40,7 @@ export function IssueDiscussion({
   onAsk?: ((question: string) => Promise<unknown>) | undefined
 }) {
   const t = useT()
+  const relations = useContext(RelationsContext)
   const [text, setText] = useState(() => drafts.get(draftKey) ?? '')
   const [busy, setBusy] = useState(false)
   const inFlight = useRef(false)
@@ -66,18 +70,19 @@ export function IssueDiscussion({
         answer: one.answer,
       }),
     ),
-    ...issue.timeline.flatMap((entry): Row[] => {
-      // 评论、问答在上面单独画；创建写在卡头的元信息里
-      if (['comment', 'question', 'answer', 'created'].includes(entry.kind)) return []
-      // 设备把操作原因写在 summary 里（用户操作时由界面给出“状态改为 进行中”这样的话）；没有就用通用说法
-      const who =
-        entry.actor === 'manager' || entry.actor === 'user'
-          ? `${t(entry.actor === 'manager' ? 'issue.author.manager' : 'issue.author.user')} · `
-          : ''
-      const what =
-        entry.summary.trim() || t(`issue.timeline.${entry.kind}` as Parameters<typeof t>[0])
-      return [{ kind: 'event', at: entry.at, id: entry.id, text: `${who}${what}` }]
-    }),
+    ...managerIssueActivity(issue.timeline, changes ?? relations?.board.changes).flatMap(
+      (entry): Row[] => {
+        // 评论、问答在上面单独画；创建写在卡头的元信息里
+        // 设备把操作原因写在 summary 里（用户操作时由界面给出“状态改为 进行中”这样的话）；没有就用通用说法
+        const who =
+          entry.actor === 'manager' || entry.actor === 'user'
+            ? `${t(entry.actor === 'manager' ? 'issue.author.manager' : 'issue.author.user')} · `
+            : ''
+        const what =
+          entry.summary.trim() || t(`issue.timeline.${entry.kind}` as Parameters<typeof t>[0])
+        return [{ kind: 'event', at: entry.at, id: entry.id, text: `${who}${what}` }]
+      },
+    ),
   ].sort((a, b) => a.at - b.at)
   const send = async () => {
     const body = text.trim()

@@ -24,6 +24,7 @@ export function IssueQuick({
   paged,
   disabled,
   draftBoard,
+  standalone = false,
   onSuggestionSource,
 }: {
   manager: ManagerView
@@ -32,6 +33,7 @@ export function IssueQuick({
   paged: boolean
   disabled: boolean
   draftBoard: ManagerDraftBoard
+  standalone?: boolean
   onSuggestionSource(selection: Selection, archived: boolean): void
 }) {
   const t = useT()
@@ -93,6 +95,7 @@ export function IssueQuick({
             onLocated={() => {}}
             onBusy={() => {}}
             part="cards"
+            singleSubmit={standalone}
             draftBoard={draftBoard}
           />
         ) : null}

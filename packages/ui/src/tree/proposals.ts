@@ -3,16 +3,16 @@
 import {
   keys,
   type OfferChoice,
-  type ProposalOverrides,
   type ProposalStatus,
   proposalOpen,
   proposalStatus,
   type SessionProposalView,
 } from '@litch/core'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useT } from '../app/appearance.ts'
 import { whyNot } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
+import { proposalOperation } from './proposal-operation.ts'
 
 const NONE: readonly SessionProposalView[] = []
 
@@ -83,6 +83,8 @@ export const STATUS_TEXT = {
 export function useProposalAct(deviceId: string, sessionId: string, proposalId: string) {
   const { channel } = useServices()
   const t = useT()
+  const operation = proposalOperation(channel, deviceId, sessionId, proposalId)
+  const starting = useSyncExternalStore(operation.subscribe, operation.snapshot)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const run = (sent: Promise<unknown>) => {
@@ -93,17 +95,11 @@ export function useProposalAct(deviceId: string, sessionId: string, proposalId: 
       .finally(() => setBusy(false))
   }
   return {
-    busy,
-    failure,
-    accept: (overrides?: ProposalOverrides) =>
-      run(
-        channel.command('session.proposal.accept', {
-          deviceId,
-          sessionId,
-          proposalId,
-          ...(overrides ? { overrides } : {}),
-        }),
-      ),
+    busy: busy || starting.busy,
+    starting: starting.busy,
+    failure: starting.error ? t('proposal.failed', { reason: whyNot(starting.error, t) }) : failure,
+    retry: starting.error ? operation.retry : null,
+    accept: operation.start,
     dismiss: () =>
       run(channel.command('session.proposal.dismiss', { deviceId, sessionId, proposalId })),
     /** worktree：选新会话时卡上的工作树开关（设备能建工作树时才带） */

@@ -1186,3 +1186,11 @@ button.agent-row:hover {
 .card-md .md code {
   font-size: calc(11.5px * var(--fs));
 }
+
+/* 建议卡补充说明跟随卡片宽度，不撑开窄列。 */
+.prop-note {
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+  margin-top: 8px;
+}
