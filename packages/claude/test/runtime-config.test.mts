@@ -540,6 +540,8 @@ test('native SDK parent result does not cap workflow runtime at three seconds', 
     workflowTasks: new Map(),
     skippedWorkflowTaskIds: new Set<string>(),
     structuredBuffer: '',
+    // 与 attachTurn 一样显式初始化，普通成功结果不能被误判成安全拦截。
+    refusal: null,
     resolved: false,
     resolve: () => {
       resolved = true
