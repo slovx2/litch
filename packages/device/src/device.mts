@@ -697,11 +697,7 @@ export class DeviceServer {
         this.managers.resets.refusal(id) !== null ||
         this.sessionTree.pending.list(id).length > 0 ||
         this.approvals.list(id).length > 0,
-      background: (id) =>
-        this.background
-          .tasks(id)
-          .filter((task) => task.status === 'running')
-          .map((task) => `${task.id}: ${task.title}`),
+      background: (id) => this.nativeBackground.restartTasks(id, this.background.tasks(id)),
       resumed: (_harness, id) => this.sessionTree.restartContinuing(id),
       settled: () => this.sessionTree.checkAll(),
       event: (harness, method, params) => {

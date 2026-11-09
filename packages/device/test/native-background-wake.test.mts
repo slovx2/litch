@@ -131,6 +131,39 @@ function fixture(startIntervalMs = 0) {
   }
 }
 
+test('计划重启快照保留 watch 命令、目的和进程号，取消或用户停止的登记不纳入', async () => {
+  const f = fixture()
+  try {
+    f.command('job', '123')
+    const id = await f.watch('123')
+    assert.match(
+      f.wake.restartTasks('t')[0] ?? '',
+      /litch_background.watch.*session_id=123.*command=finite job.*purpose=report test result/,
+    )
+    await f.tool('cancel', { task_id: id })
+    assert.deepEqual(f.wake.restartTasks('t'), [])
+    assert.deepEqual(
+      f.wake.restartTasks('t', [
+        {
+          id: 'job',
+          itemId: 'job',
+          turnId: 'original',
+          kind: 'shell',
+          title: 'finite job',
+          status: 'running',
+        },
+      ]),
+      [],
+    )
+    f.command('next', '124')
+    await f.watch('124')
+    f.wake.block('t')
+    assert.deepEqual(f.wake.restartTasks('t'), [])
+  } finally {
+    f.close()
+  }
+})
+
 test('NATIVE-WAKE-011 原生 processId 重用按条目识别；登记等待中关闭设置不再登记', async () => {
   const f = fixture()
   try {

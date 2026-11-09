@@ -1,12 +1,15 @@
 import { restartMessage } from '../../protocol/src/system-messages.mjs'
 import type { EngineLink } from './engine-link.mjs'
 import type { RestartStore, RestartTurn } from './restart-store.mjs'
+import { sessionHistory } from './session-history.mjs'
 import { isObject } from './wire.mjs'
 
 const TTL = 24 * 60 * 60 * 1000
 const REQUEST_MS = 5000
 // 冷启动的原生会话可能需要读取较大的历史；此时尚未发送继续消息，不能用工具调用级的短时限放弃恢复。
 const RESTORE_HISTORY_MS = 60_000
+const PREPARE_CONCURRENCY = 4
+const RESTORE_BACKOFF = [100, 500, 1500]
 
 interface Sending {
   link: EngineLink
@@ -99,7 +102,7 @@ export class RestartResume {
 
   stop(): void {
     this.scopes.add('*')
-    for (const state of ['observed', 'preparing', 'ready'])
+    for (const state of ['observed', 'finished', 'preparing', 'ready'])
       for (const row of this.host.store.rows(state)) this.cancel(row.threadId)
   }
 
@@ -149,12 +152,8 @@ export class RestartResume {
     return link
   }
 
-  private read(link: EngineLink, row: RestartTurn, timeoutMs = REQUEST_MS): Promise<any> {
-    return link.request(
-      'thread/read',
-      { threadId: row.threadId, includeTurns: true },
-      { timeoutMs },
-    )
+  private async read(link: EngineLink, row: RestartTurn, timeoutMs = REQUEST_MS): Promise<any> {
+    return { thread: await sessionHistory(link, row.threadId, true, 1, timeoutMs) }
   }
 
   private eligible(row: RestartTurn, thread: any): boolean {
@@ -208,11 +207,20 @@ export class RestartResume {
     )
       throw new Error('重启准备已在进行')
     this.scopes.add(scope)
-    const rows = this.host.store
-      .rows('observed')
+    // finished 仍保留原工作 token：后台任务不凭空变成新的用户授权，也不重置一次恢复预算。
+    const rows = [...this.host.store.rows('observed'), ...this.host.store.rows('finished')]
       .filter((row) => !harness || row.harness === harness)
-    const results = await Promise.all(rows.map((row) => this.prepareTurn(row)))
-    const prepared = results.filter(Boolean).length
+      .filter((row) => row.state === 'observed' || this.host.background?.(row.threadId).length)
+    let prepared = 0
+    let next = 0
+    await Promise.all(
+      Array.from({ length: Math.min(PREPARE_CONCURRENCY, rows.length) }, async () => {
+        while (next < rows.length && !this.closed) {
+          const row = rows[next++]
+          if (row && (await this.prepareTurn(row))) prepared++
+        }
+      }),
+    )
     this.host.log(`计划重启准备（${scope}）：观察 ${rows.length}，可恢复 ${prepared}`)
     return { prepared }
   }
@@ -225,11 +233,14 @@ export class RestartResume {
       link = await this.open(row.harness)
       const before = (await this.read(link, row)).thread
       const last = before?.turns?.at(-1)
+      const background = this.host.background?.(row.threadId) ?? []
+      const idleBackground = last?.status === 'completed' && background.length > 0
       if (
         !this.eligible(row, before) ||
-        last?.id !== row.turnId ||
-        last.status !== 'inProgress' ||
-        (last.litchOrigin && last.litchOrigin !== 'user') ||
+        !last?.id ||
+        (last.id !== row.turnId && last.litchOrigin !== 'backgroundTask') ||
+        (!idleBackground && last.status !== 'inProgress') ||
+        (last.litchOrigin && !['user', 'backgroundTask'].includes(last.litchOrigin)) ||
         (await this.autonomous(link, row))
       )
         return false
@@ -238,15 +249,11 @@ export class RestartResume {
         this.host.excluded(row.threadId)
       )
         return false
-      if (
-        !this.host.store.prepare(
-          row,
-          this.host.service(),
-          this.now(),
-          this.host.background?.(row.threadId),
-        )
-      )
+      if (!this.host.store.prepare(row, this.host.service(), this.now(), background, last.id))
         return false
+      row.turnId = last.id
+      // 前台早已完成，只持久化后台工作清单；不对已结束回合发送 interrupt。
+      if (idleBackground) return this.move(row, 'preparing', 'ready')
       // 先明确结束旧回合，避免“快照后正常完成”也被重新续一次。未知工具结果由恢复消息提醒核实。
       await link.request(
         'turn/interrupt',
@@ -319,8 +326,25 @@ export class RestartResume {
         this.move(row, 'ready', 'skipped')
         return
       }
-      link = await this.open(row.harness)
-      let thread = (await this.read(link, row, RESTORE_HISTORY_MS)).thread
+      // 仅对发送之前的连接和只读探测退避；resume/start 有副作用，绝不因此重放。
+      let thread: any
+      for (let attempt = 0; ; attempt++) {
+        try {
+          link = await this.open(row.harness)
+          thread = (await this.read(link, row, RESTORE_HISTORY_MS)).thread
+          break
+        } catch (error) {
+          if (link) {
+            this.links.delete(link)
+            link.close()
+            link = null
+          }
+          const delay = RESTORE_BACKOFF[attempt]
+          if (delay === undefined || this.closed || this.host.store.state(row) !== 'ready')
+            throw error
+          await new Promise((resolve) => setTimeout(resolve, delay))
+        }
+      }
       if (
         !this.eligible(row, thread) ||
         thread.turns?.at(-1)?.id !== row.turnId ||
@@ -333,7 +357,7 @@ export class RestartResume {
       if (this.host.store.state(row) !== 'ready') return
       await link.request(
         'thread/resume',
-        { threadId: row.threadId },
+        { threadId: row.threadId, ...(link.native ? { excludeTurns: true } : {}) },
         { timeoutMs: RESTORE_HISTORY_MS },
       )
       // 各引擎的 resume 应答不一定包含回合历史，统一用 read 再核对。

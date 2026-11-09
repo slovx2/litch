@@ -217,6 +217,69 @@ try {
   assert.equal(readFileSync(harnessMarker, 'utf8'), 'ONCE')
   assert.equal(result.thread.turns.length, 4)
   assert.equal(model.requests.length, 6)
+  const backgroundChecks = []
+  let current = fresh
+  for (const scope of ['service', 'harness']) {
+    const effect = join(root, `background-${scope}.txt`)
+    const command = `printf ONCE >> '${effect}'; /bin/sleep 120`
+    model.enqueue(() => [
+      {
+        type: 'tool_use',
+        id: `background-${scope}`,
+        name: 'Bash',
+        input: { command, run_in_background: true },
+      },
+    ])
+    model.enqueue(() => [{ type: 'text', text: `BACKGROUND_WAITING_${scope}` }])
+    await current.call('turn/start', {
+      threadId,
+      input: [{ type: 'text', text: '启动后台看护，前台先结束' }],
+    })
+    await until(async () => {
+      const read = await current.call('thread/read', { threadId, includeTurns: true })
+      return (
+        read.thread.turns.at(-1)?.status === 'completed' &&
+        read.thread.litchBackground?.tasks.some((task) => task.status === 'running')
+      )
+    }, `${scope} 前台结束而后台仍在运行`)
+    assert.equal(readFileSync(effect, 'utf8'), 'ONCE')
+    const count = (await current.call('thread/read', { threadId, includeTurns: true })).thread.turns
+      .length
+    model.enqueue((request) => {
+      const text = JSON.stringify(request.messages.at(-1))
+      assert.match(text, /Automatic continuation after a planned service restart/)
+      assert.ok(text.includes(effect))
+      assert.match(text, /re-register watches or restart tasks only if still needed/)
+      return [
+        {
+          type: 'tool_use',
+          id: `verify-background-${scope}`,
+          name: 'Read',
+          input: { file_path: effect },
+        },
+      ]
+    })
+    model.enqueue(() => [{ type: 'text', text: `BACKGROUND_VERIFIED_${scope}` }])
+    if (scope === 'service') {
+      await cli('device-stop', ['--resume-after-restart'])
+      await cli('device-start', ['--ssh=off'])
+      current = await connect()
+    } else {
+      await current.call('litch/device/harness/restart', { harness: 'claude-code', force: true })
+    }
+    await until(async () => {
+      result = await current.call('thread/read', { threadId, includeTurns: true })
+      return (
+        result.thread.turns.at(-1)?.status === 'completed' &&
+        JSON.stringify(result.thread.turns.at(-1)).includes(`BACKGROUND_VERIFIED_${scope}`)
+      )
+    }, `${scope} 空闲后台会话自动核对`)
+    assert.equal(result.thread.turns.length, count + 1)
+    assert.equal(result.thread.turns.at(-2).status, 'completed')
+    assert.equal(readFileSync(effect, 'utf8'), 'ONCE')
+    backgroundChecks.push({ scope, turns: result.thread.turns.length, effect: 'ONCE' })
+  }
+  assert.equal(model.requests.length, 14)
   model.assertConsumed()
   const report = {
     root,
@@ -229,6 +292,7 @@ try {
     modelRequests: model.requests.length,
     effect: readFileSync(marker, 'utf8'),
     harnessEffect: readFileSync(harnessMarker, 'utf8'),
+    backgroundChecks,
     result: 'passed',
   }
   mkdirSync(join(repo, '.local'), { recursive: true })
