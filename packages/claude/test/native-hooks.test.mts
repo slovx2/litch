@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import test from 'node:test'
 import { setTimeout as delay } from 'node:timers/promises'
+import { saveArtifact } from './fixtures/artifacts.mjs'
 import { MockLLM } from './fixtures/mock-llm.mjs'
 import { ProtocolClient } from './fixtures/protocol-client.mjs'
 
@@ -345,10 +346,19 @@ test('HOOKS-002：真实 Hook 进度累计快照只保留一次输出和一个�
 })
 
 test('HOOKS-003：真实 Hook 超时停止命令且不伪装成功', { timeout: 60_000 }, async () => {
+  // 短 sleep 可能在繁忙 CLI 处理超时前正常结束；让命令等测试放行，才能确实走到超时路径。
+  // 原生 timeout 仍是 1 秒；夹具的自行退出保险必须被副作用断言识别为失败。
   const f = await fixture((effect) => ({
     SessionStart: [
       command(
-        `printf 'TIMEOUT_STARTED\\n' >> ${JSON.stringify(effect)}; sleep 3; printf 'AFTER_TIMEOUT\\n' >> ${JSON.stringify(effect)}`,
+        [
+          process.execPath,
+          resolve('packages/claude/test/fixtures/hook-timeout.mjs'),
+          effect,
+          `${effect}.release`,
+        ]
+          .map((value) => `'${value.replaceAll("'", "'\\''")}'`)
+          .join(' '),
         1,
       ),
     ],
@@ -365,13 +375,43 @@ test('HOOKS-003：真实 Hook 超时停止命令且不伪装成功', { timeout: 
     ).thread
     const hooks = hookItems(history.turns[0])
     assert.equal(hooks.length, 1)
-    assert.match(itemText(hooks[0]), /结果: (error|cancelled)/)
-    await delay(3200)
-    assert.equal(
-      await readFile(f.effect, 'utf8'),
-      'TIMEOUT_STARTED\n',
-      '超时后不能继续执行余下命令',
+    const pid = Number(await readFile(`${f.effect}.pid`, 'utf8'))
+    assert.ok(Number.isSafeInteger(pid) && pid > 0)
+    const isRunning = () => {
+      try {
+        process.kill(pid, 0)
+        return true
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
+        return false
+      }
+    }
+    const deadline = Date.now() + 5_000
+    while (isRunning() && Date.now() < deadline) await delay(10)
+    assert.equal(isRunning(), false, '原生超时必须回收 Hook 进程，不能只上报终态')
+    await writeFile(`${f.effect}.release`, '')
+    const effects = await readFile(f.effect, 'utf8')
+    await saveArtifact('hook-timeout', {
+      hooks,
+      effects,
+      debug: await readFile(join(f.home, 'adapter', 'debug.jsonl'), 'utf8'),
+    })
+    assert.match(itemText(hooks[0]), /结果: (error|cancelled)/, JSON.stringify({ hooks, effects }))
+    const starts = f.client.trace.filter(
+      (entry) => entry.method === 'item/started' && entry.params.item.type === 'hookPrompt',
     )
+    const ends = f.client.trace.filter(
+      (entry) => entry.method === 'item/completed' && entry.params.item.type === 'hookPrompt',
+    )
+    assert.equal(starts.length, 1)
+    assert.equal(ends.length, 1)
+    assert.equal(starts[0].params.item.id, ends[0].params.item.id)
+    assert.deepEqual(
+      hooks,
+      ends.map((entry) => entry.params.item),
+      '实时终态与重读历史必须一致',
+    )
+    assert.equal(effects, 'TIMEOUT_STARTED\n', '超时后不能继续执行余下命令')
     f.model.assertConsumed()
   } finally {
     await f.client.close()
