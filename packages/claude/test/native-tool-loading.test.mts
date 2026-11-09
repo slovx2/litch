@@ -6,7 +6,10 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { SESSION_TOOLS } from '../../protocol/src/client-tools-sessions.mjs'
 import { TASKS_TOOLS } from '../../protocol/src/client-tools-tasks.mjs'
+import { isVersionAtLeast } from '../../shared/src/min-version.mjs'
 import { dynamicToolName } from '../src/dynamic-tools.mjs'
+import { hostClaudeVersion } from '../src/host-claude.mjs'
+import { requiredClaudeCli } from './fixtures/claude-cli.mjs'
 import { MockLLM } from './fixtures/mock-llm.mjs'
 import { ProtocolClient } from './fixtures/protocol-client.mjs'
 
@@ -93,7 +96,7 @@ for (const search of ['true', 'false', 'default']) {
   })
 }
 
-for (const [mode, search, expectSearch] of [
+for (const [mode, search, supportsSearch] of [
   ['auto', 'true', true],
   ['auto', '', false],
   ['on', '', true],
@@ -102,6 +105,9 @@ for (const [mode, search, expectSearch] of [
   test(`Litch 默认分层端到端：${mode}/${search || '未设置'}，常驻工具直接调用，按需工具检索后调用`, {
     timeout: 100_000,
   }, async () => {
+    // CI 的旧 CLI 必须验证 auto 保守回退；on 不受自动识别门槛限制，仍验证真实检索。
+    const version = hostClaudeVersion(requiredClaudeCli(), '0.0.0').split(' ')[0]
+    const expectSearch = supportsSearch && (mode !== 'auto' || isVersionAtLeast(version, '2.1.305'))
     const home = await mkdtemp(join(tmpdir(), 'litch-defer-'))
     const model = new MockLLM()
     const client = await ProtocolClient.start(
@@ -161,6 +167,19 @@ for (const [mode, search, expectSearch] of [
       const first = model.requests[0]
       assert.ok(first)
       assert.ok(first.tools.some((tool: any) => tool.name === names[0] && !tool.defer_loading))
+      const taskTool = first.tools.find((tool: any) => tool.name === names[1])
+      if (expectSearch) {
+        assert.ok(first.tools.some((tool: any) => tool.name === 'ToolSearch'))
+        assert.ok(!taskTool || taskTool.defer_loading === true, '按需工具不能常驻首个请求')
+        assert.ok(
+          model.requests.some((request) =>
+            JSON.stringify(request.messages).includes('discover_tasks'),
+          ),
+          '模型必须收到检索结果后再调用按需工具',
+        )
+      } else {
+        assert.ok(taskTool && !taskTool.defer_loading, '回退和 off 模式的工具必须全部常驻')
+      }
       assert.equal(
         JSON.stringify(first.system).includes('Additional tools are available in: litch_tasks'),
         expectSearch,
