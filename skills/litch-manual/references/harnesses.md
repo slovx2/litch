@@ -184,6 +184,11 @@ check the harness Runtime tab and device logs before restarting.
 OpenCode 启动或重启时重新连接当前 serve 进程，不沿用旧进程的连接。请求失败会直接报告，不自动重复操作。
 若持续出现连接错误，先检查 harness 的 Runtime 页与设备日志，再重启。
 
+ACP（含 agy 订阅后端）回合慢时，设备日志目录的 `<harness>/rpc.jsonl` 中可按
+`threadId`、`turnId` 筛选 `acp.*` 事件，查看 attach/flush、prompt、首次思考/正文和
+工具起止。`promptMs` 是从 prompt 发出开始的毫秒数，工具 `durationMs` 包含审批等待。
+这些日志只含标识、时间和状态；首次块是 ACP 可见时间，不能当作模型服务端首 token 时间。
+
 1. Is it installed for the user's login shell? Run its version command in a login shell on that device
    (`claude --version`, `codex --version`, …); `scripts/litch harness list <device>` shows Litch's view.
 2. Installed somewhere unusual: set its command explicitly,

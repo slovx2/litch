@@ -30,10 +30,22 @@ export class HandlerError extends Error {
 }
 
 export interface ConnectionHandlers {
+  /** params 仅供定位会话；回调在应答写入或连接关闭时结束，不交应答正文。 */
+  requestTiming?(
+    id: string | number,
+    method: string,
+    params: any,
+  ): ((outcome: RequestOutcome) => void) | undefined
   /** agent 发来的请求。返回值就是应答的 result */
   request(method: string, params: any, signal: AbortSignal): Promise<unknown>
   /** agent 发来的通知（session/update 等）。同步处理：同一行之后的消息要等它处理完 */
   notification(method: string, params: any): void
+}
+
+export type RequestOutcome = 'ok' | 'error' | 'closed' | 'timeout'
+export interface RequestTiming {
+  sent(id: number): void
+  ended(outcome: RequestOutcome): void
 }
 
 interface Waiting {
@@ -41,13 +53,17 @@ interface Waiting {
   resolve: (value: any) => void
   reject: (error: Error) => void
   timer: NodeJS.Timeout | null
+  timing: RequestTiming | undefined
 }
 
 export class AcpConnection {
   private readonly output: Writable
   private readonly handlers: ConnectionHandlers
   private readonly waiting = new Map<number, Waiting>()
-  private readonly incoming = new Map<unknown, AbortController>()
+  private readonly incoming = new Map<
+    unknown,
+    { controller: AbortController; end: ((outcome: RequestOutcome) => void) | undefined }
+  >()
   private sequence = 0
   private buffer = ''
   private ended: Error | null = null
@@ -66,7 +82,12 @@ export class AcpConnection {
   }
 
   /** 向 agent 发一个请求。timeoutMs 不给就一直等（session/prompt 要等到回合结束） */
-  request<T = any>(method: string, params: unknown, timeoutMs?: number): Promise<T> {
+  request<T = any>(
+    method: string,
+    params: unknown,
+    timeoutMs?: number,
+    timing?: RequestTiming,
+  ): Promise<T> {
     if (this.ended) return Promise.reject(this.ended)
     const id = ++this.sequence
     return new Promise<T>((resolve, reject) => {
@@ -75,9 +96,12 @@ export class AcpConnection {
           ? null
           : setTimeout(() => {
               this.waiting.delete(id)
+              timing?.ended('timeout')
               reject(new AcpError(-32603, `ACP agent 没有在 ${timeoutMs} 毫秒内应答 ${method}`))
             }, timeoutMs)
-      this.waiting.set(id, { method, resolve, reject, timer })
+      this.waiting.set(id, { method, resolve, reject, timer, timing })
+      // 记录送往 stdin 的时刻；不把 drain 当作 agent 已开始推理。
+      timing?.sent(id)
       this.write({ jsonrpc: '2.0', id, method, params })
     })
   }
@@ -90,11 +114,16 @@ export class AcpConnection {
   close(reason: Error): void {
     if (this.ended) return
     this.ended = reason
-    for (const controller of this.incoming.values()) controller.abort()
+    for (const entry of this.incoming.values()) {
+      entry.end?.('closed')
+      entry.end = undefined
+      entry.controller.abort()
+    }
     this.incoming.clear()
     for (const [id, entry] of this.waiting) {
       if (entry.timer) clearTimeout(entry.timer)
       this.waiting.delete(id)
+      entry.timing?.ended('closed')
       entry.reject(reason)
     }
   }
@@ -131,7 +160,7 @@ export class AcpConnection {
     const hasId = message.id !== undefined && message.id !== null
     if (typeof message.method === 'string') {
       if (!hasId && message.method === '$/cancel_request') {
-        this.incoming.get(message.params?.requestId)?.abort()
+        this.incoming.get(message.params?.requestId)?.controller.abort()
         return
       }
       if (hasId) void this.answer(message.id, message.method, message.params)
@@ -146,6 +175,7 @@ export class AcpConnection {
     if (!entry) return
     this.waiting.delete(Number(message.id))
     if (entry.timer) clearTimeout(entry.timer)
+    entry.timing?.ended(message.error ? 'error' : 'ok')
     if (message.error)
       entry.reject(
         new AcpError(
@@ -159,14 +189,23 @@ export class AcpConnection {
 
   private async answer(id: unknown, method: string, params: unknown): Promise<void> {
     const controller = new AbortController()
-    this.incoming.set(id, controller)
+    const entry = {
+      controller,
+      end:
+        typeof id === 'string' || typeof id === 'number'
+          ? this.handlers.requestTiming?.(id, method, params)
+          : undefined,
+    }
+    this.incoming.set(id, entry)
     try {
       const result = await this.handlers.request(method, params ?? {}, controller.signal)
       this.write({ jsonrpc: '2.0', id, result: result ?? null })
+      entry.end?.('ok')
     } catch (error) {
       const code = error instanceof HandlerError ? error.code : -32603
       const message = error instanceof Error ? error.message : String(error)
       this.write({ jsonrpc: '2.0', id, error: { code, message } })
+      entry.end?.('error')
     } finally {
       this.incoming.delete(id)
     }

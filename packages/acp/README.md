@@ -59,6 +59,30 @@
 
 ## 运行与测试
 
+### 回合分段耗时
+
+设备日志目录下的 `<harness>/rpc.jsonl` 自动记录 `acp.*` 事件（可通过 `logs.tail` 的
+`rpc` 来源读取）。未配置 `LITCH_LOG_DIR` 时不写。只记标识、时间和状态，不记提示词、
+思考/正文、工具标题、参数、结果或错误原文。按 `pid + harness + threadId + turnId` 关联：
+
+- `turn.started`、`attach.started/ended`、`flush.started/ended`：接会话、提交设置的边界。
+- `prompt.sent/ended`：请求写入 agent 的 stdin 前、收到应答时；带请求编号、进程代次。
+  `prompt.ended.outcome` 区分 `ok/error/closed/timeout`，`turn.ended.outcome` 记录回合状态。
+- `first_thought`、`first_text`：本次 prompt 后首次非空文本思考/正文；历史回放不计入。
+- `tool.started/ended`：以 `toolCallId` 关联，`durationMs` 包含审批等待。
+  只有终态而没有开始帧时耗时为 `null`；回合结束仍缺终态的记 `tool.unfinished`。
+- `request.started/ended`：agent 反向请求（审批、文件、终端等）的实际收发边界，
+  以 `requestId` 关联，`durationMs` 是这一次请求的等待时间，不与工具耗时相加。
+
+`elapsedMs` 从回合开始、`promptMs` 从 prompt 发出开始，均用单调时钟；`ts` 是墙钟。
+ACP 可见 TTFT 为 `first_thought` 和 `first_text` 中较早的 `promptMs`，正文首块时间则
+单看 `first_text`。没有对应块时保留未知，不能用 prompt 结束时间代替。
+顺序工具之间的等待为下一条 `tool.started.promptMs` 减上一条 `tool.ended.promptMs`；
+并发工具先对活动区间取并集，再算空档，不能直接累加工具耗时。最后工具结束至
+`prompt.ended` 的差值是尾部等待。它们是 ACP 侧可见等待，包含 agent 调度/网络，
+不能据此断言是模型服务端推理时间。停止时若 agent 不应答，只见 `turn.ended`；
+之后迟到的 `prompt.ended` 仍归原回合。
+
 ```sh
 export PATH=/opt/homebrew/opt/node@24/bin:$PATH
 npm ci --prefix packages/acp
