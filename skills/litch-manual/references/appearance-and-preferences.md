@@ -49,7 +49,15 @@ there is no ongoing “follow system language” choice.
 Settings → Conversation chooses **Send now** (default) or **Queue**. Send now adds a message to the
 running turn; if that harness cannot take mid-turn input, the message queues instead. Queue waits
 until the turn ends. This also controls question replies and comments sent directly to the session.
-The queued message's own “Send now” action remains available where supported.
+The queued message's own “Send now” action remains available where supported. After reconnecting,
+Send now waits for a fresh session snapshot, then inserts into its current turn or starts a new turn
+if it has ended. The composer explains that it is syncing. Sending a held message during an active
+turn also inserts it where supported; repeated taps are disabled while the request is pending.
+Compaction and sessions without mid-turn input keep messages queued with an explanation. A complete
+disconnection returns an error and preserves the draft. A message already accepted by Claude's
+input queue may still wait for its current model/tool step; acceptance is not consumption.
+手机从后台返回重连时，“立即发送”的意图会保留到状态同步完成；不会用旧回合号插话。
+上箭头表示发送待发消息，回车箭头表示插入当前回合；同步中的消息和压缩期间的排队会显示原因。
 
 ```sh
 scripts/litch chat get

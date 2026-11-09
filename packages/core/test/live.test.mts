@@ -1875,7 +1875,7 @@ test('no active turn 核实失败：保留原文和图片，恢复发送先重�
   assert.equal(session.seen.view?.queued[0]?.delivery, 'held')
   assert.deepEqual(session.seen.view?.queued[0]?.images, images)
   assert.deepEqual(session.seen.view?.note, { key: 'session.steerHeld' })
-  await command('session.resumeQueue', where)
+  await assert.rejects(command('session.resumeQueue', where), { code: 'rejected' })
   assert.equal(sent('turn/start').length, 0, '核实仍失败不能解除暂停')
   unavailable = false
   world.threads[0] = thread({ id: 'a', status: { type: 'idle' }, turns: [finished('ghost')] })
@@ -1976,7 +1976,8 @@ for (const action of ['session.send', 'session.resumeQueue'] as const) {
     assert.ok(finish)
     await command('session.interrupt', where)
     finish({ thread: thread({ id: 'a', status: { type: 'idle' }, turns: [finished('ghost')] }) })
-    await retrying
+    if (action === 'session.resumeQueue') await assert.rejects(retrying, { code: 'rejected' })
+    else await retrying
     await settle()
     assert.equal(sent('turn/start').length, 0)
     assert.deepEqual(
@@ -2902,4 +2903,131 @@ test('唯一输入：无精确回执 harness 的本地暂停不登记原生撤�
     ).length,
     1,
   )
+})
+
+test('I-304 重连同步窗口保留立即插队意图，不等当前长回合结束', async () => {
+  const env = setup([thread({ id: 'a', turns: [started('remote-running')] })])
+  runtime(env.handlers, 'claude')
+  env.core.start()
+  await settle()
+  const session = watch(env.core)
+  await settle()
+  const resume = env.handlers['thread/resume']
+  assert.ok(resume)
+  let release!: (value: unknown) => void
+  env.handlers['thread/resume'] = () =>
+    new Promise((resolve) => {
+      release = resolve
+    })
+  env.peer.last().drop()
+  await settle()
+  env.time.advance(500)
+  await settle()
+  assert.ok(release)
+  await env.command('session.send', { ...where, text: '前台恢复时插队', now: true })
+  assert.equal(env.sent('turn/steer').length, 0, '旧快照不能作为插话目标')
+  assert.equal(session.seen.view?.queued.length, 1)
+  release(await resume({ threadId: 'a' }))
+  await settle()
+  await settle()
+  assert.equal(env.sent('turn/steer').length, 1, '同步后应补发插队请求')
+  assert.equal(env.sent('turn/start').length, 0, '仍在跑，不能另开回合')
+  env.core.stop()
+})
+
+test('I-304 活动回合中的待发点击发送应真正插话，不只是改成排队', async () => {
+  const env = await pendingDeliveryCase()
+  await env.send('被挂起的消息')
+  await env.receipt(0, 'held')
+  const queued = env.session.seen.view?.queued[0]
+  assert.ok(queued)
+  assert.equal(queued.delivery, 'held')
+  const before = env.sent('turn/steer').length
+  await env.command('session.resumeQueue', { ...where, messageId: queued.id })
+  await settle()
+  assert.equal(env.sent('turn/steer').length, before + 1)
+  env.core.stop()
+})
+
+for (const state of ['still-running', 'completed', 'remove', 'stop'] as const) {
+  test(`I-304 前台重同步期间手动发送：${state}，只采用新回合状态`, async () => {
+    const env = setup([thread({ id: 'a', turns: [started('before')] })])
+    runtime(env.handlers, 'claude')
+    env.core.start()
+    await settle()
+    const session = watch(env.core)
+    await settle()
+    await env.command('session.send', { ...where, text: '托盘里的消息' })
+    const id = session.seen.view?.queued[0]?.id
+    assert.ok(id)
+    const resume = env.handlers['thread/resume']
+    assert.ok(resume)
+    let release!: (value: unknown) => void
+    env.handlers['thread/resume'] = () =>
+      new Promise((resolve) => {
+        release = resolve
+      })
+    env.peer.last().drop()
+    await settle()
+    env.time.advance(500)
+    await settle()
+    await env.command('session.steer', { ...where, messageId: id })
+    assert.equal(env.sent('turn/steer').length, 0)
+    assert.deepEqual(session.seen.view?.note, { key: 'session.inputSyncing' })
+    if (state === 'remove') await env.command('session.unqueue', { ...where, messageId: id })
+    if (state === 'stop') await env.command('session.interrupt', where)
+    env.world.threads[0] = thread({
+      id: 'a',
+      turns: [finished('before'), ...(state === 'completed' ? [] : [started('after')])],
+    })
+    release(await resume({ threadId: 'a' }))
+    await settle()
+    await settle()
+    assert.equal(env.sent('turn/steer').length, state === 'still-running' ? 1 : 0)
+    assert.equal(env.sent('turn/start').length, state === 'completed' ? 1 : 0)
+    if (state === 'still-running')
+      assert.equal(
+        (env.sent('turn/steer')[0] as { expectedTurnId: string }).expectedTurnId,
+        'after',
+      )
+    if (state === 'stop') assert.equal(session.seen.view?.queued[0]?.delivery, 'held')
+    env.core.stop()
+  })
+}
+
+test('I-304 有待发时新发插队消息不再绕过 now；不含待发时其余消息仍保留', async () => {
+  const env = await pendingDeliveryCase()
+  await env.send('仍待发')
+  await env.receipt(0, 'held')
+  const before = env.sent('turn/steer').length
+  await env.command('session.send', { ...where, text: '只插这条', now: true, pending: 'only' })
+  assert.equal(env.sent('turn/steer').length, before + 1)
+  assert.equal(env.session.seen.view?.queued[0]?.text, '仍待发')
+  assert.equal(env.session.seen.view?.queued[0]?.delivery, 'held')
+  env.core.stop()
+})
+
+test('I-304 压缩期间的立即发送保留并说明原因；完成后只开一个新回合', async () => {
+  const env = setup([
+    thread({
+      id: 'a',
+      turns: [
+        turn('compact', [{ type: 'contextCompaction', id: 'c' } as ThreadItem], {
+          status: 'inProgress',
+        }),
+      ],
+    }),
+  ])
+  runtime(env.handlers, 'claude')
+  env.core.start()
+  await settle()
+  const session = watch(env.core)
+  await settle()
+  await env.command('session.send', { ...where, text: '压缩时输入', now: true })
+  assert.equal(env.sent('turn/steer').length, 0)
+  assert.deepEqual(session.seen.view?.note, { key: 'session.inputCompacting' })
+  env.peer.last().notify('turn/completed', { threadId: 'a', turn: finished('compact') })
+  await settle()
+  assert.equal(env.sent('turn/start').length, 1)
+  env.core.stop()
 })

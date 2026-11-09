@@ -306,6 +306,7 @@ interface Live {
   summarized: Set<string>
   requests: Map<string, Waiting>
   queued: QueuedMessage[]
+  immediate: Set<string>
   withdrawn: Set<string>
   paused: boolean
   /** 区分“点击恢复之前已暂停”和“等待对账期间发生的新暂停”。 */
@@ -581,6 +582,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
   }
 
   const pauseQueue = (live: Live) => {
+    live.immediate.clear()
     live.pauseRevision++
     live.paused = true
     // 先按插话原顺序占位，取消回执只改状态；否则后排的普通消息会跑到退回插话前面。
@@ -1786,8 +1788,10 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       if (
         thread.status.type === 'active' ||
         thread.turns.some((turn) => turn.status === 'inProgress')
-      )
+      ) {
+        live.needsTurnCheck = false
         return false
+      }
       if (isRunning(view)) return false
       live.needsTurnCheck = false
       remember(live)
@@ -1795,6 +1799,64 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     } catch (error) {
       host.log(`核实会话 ${live.id} 的回合状态失败：${failure(error).message}`)
       return false
+    }
+  }
+
+  /** 重连载入时记住的“现在发送”，只在新快照到达后使用真实回合号。每条只尝试一次。 */
+  const insertImmediate = async (live: Live): Promise<void> => {
+    if (
+      !live.immediate.size ||
+      live.stale ||
+      live.loading ||
+      live.paused ||
+      live.needsTurnCheck ||
+      !reachable(live)
+    )
+      return
+    if (!live.view?.live || !isRunning(live.view)) return
+    if (
+      live.compactSwitch ||
+      live.compacting > 0 ||
+      isRunning(live.view)?.itemIds.some(
+        (id) =>
+          live.view?.items[id]?.kind === 'compaction' &&
+          live.view?.items[id]?.status === 'inProgress',
+      )
+    ) {
+      setNote(live, phrase('session.inputCompacting'))
+      return
+    }
+    const starting = live.starting ? live.startingInput.get(live.starting) : undefined
+    if (starting) {
+      const revision = live.pauseRevision
+      const turnId = await starting.ready
+      if (!turnId) pauseQueue(live)
+      if (!turnId || revision !== live.pauseRevision || live.paused) return
+      if (live.loading || live.stale || !reachable(live) || !isRunning(live.view)) return
+    }
+    for (const id of [...live.immediate]) {
+      if (!live.immediate.delete(id)) continue
+      const message = live.queued.find((row) => row.id === id && !row.delivery)
+      if (!message) continue
+      if (!abilities(live.view.harness, live.id).steer) {
+        setNote(live, phrase('session.inputNoSteer'))
+        continue
+      }
+      try {
+        if (
+          live.view.note &&
+          typeof live.view.note !== 'string' &&
+          ['session.inputSyncing', 'session.inputCompacting', 'session.inputNoSteer'].includes(
+            live.view.note.key,
+          )
+        )
+          setNote(live, null)
+        await sessionsApi.steer(live.id, id)
+      } catch (error) {
+        const reason = failure(error)
+        setNote(live, reason.text ?? phrase('session.steerQueued', { message: reason.message }))
+      }
+      if (live.paused || live.loading || live.stale) return
     }
   }
 
@@ -1810,9 +1872,14 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       live.dispatching.length
     )
       return
-    if (!live.view?.live || !reachable(live) || isRunning(live.view)) return
+    if (!live.view?.live || !reachable(live)) return
+    if (isRunning(live.view)) {
+      void insertImmediate(live)
+      return
+    }
     const next = live.queued.find((entry) => !entry.delivery)
     if (!next) return
+    live.immediate.delete(next.id)
     const clientId = `litch-${host.deviceId}-${runMark}-${++localSeq}`
     const dispatch = { ...next, clientId, delivery: 'unknown' as const }
     live.dispatching.push(dispatch)
@@ -1913,6 +1980,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     startingInput: new Map(),
     pending: {},
     steered: new Map(),
+    immediate: new Set(),
     reverting: false,
     revertEchoed: false,
     revertEchoUntil: 0,
@@ -2462,20 +2530,19 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         setNote(live, phrase('session.steerHeld'))
         return
       }
+      const insert = now && (live.stale || live.loading !== null || !!isRunning(live.view))
       const held = live.queued.some((entry) => entry.delivery === 'held')
       if (held || live.paused) {
         live.paused = false
         if (pending === 'include')
-          live.queued = live.queued.map((entry) =>
-            entry.delivery === 'held' ? releaseInput(entry) : entry,
-          )
-        live.queued = [...live.queued, { id: `q${++localSeq}`, ...message }]
-        emit(live, [{ op: 'queue.set', queued: live.queued }])
-        pump(live)
-        return
+          live.queued = live.queued.map((entry) => {
+            if (entry.delivery !== 'held') return entry
+            if (insert) live.immediate.add(entry.id)
+            return releaseInput(entry)
+          })
       }
-      // 摆着旧的、正在载入的、回合在跑的、前面还有排着的：排上，载入完或者回合结束再发
       if (
+        held ||
         live.stale ||
         live.loading ||
         live.compactSwitch ||
@@ -2484,31 +2551,11 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       ) {
         const id = `q${++localSeq}`
         live.queued = [...live.queued, { id, ...message }]
+        if (insert) live.immediate.add(id)
         emit(live, [{ op: 'queue.set', queued: live.queued }])
+        if (now && (live.stale || live.loading)) setNote(live, phrase('session.inputSyncing'))
+        await insertImmediate(live)
         pump(live)
-        // 插不进去时 steer 已经把它放回了队列：消息照常排着，等这个回合结束再发，不算没发成。
-        // 它不会插话的（界面跟着退回排队，提示里写着）不用再说；别的原因写一句，不然只看得到消息躺在队列里
-        if (now && !live.stale && !live.loading && !live.compactSwitch && isRunning(live.view)) {
-          const starting = live.starting ? live.startingInput.get(live.starting) : undefined
-          if (starting) {
-            const pauseRevision = live.pauseRevision
-            const turnId = await starting.ready
-            if (!turnId) pauseQueue(live)
-            // 等回合号期间可能按了停止、移除了消息或回合已结束，不能再插入或自动续跑。
-            if (
-              live.paused ||
-              live.pauseRevision !== pauseRevision ||
-              !live.queued.some((entry) => entry.id === id && !entry.delivery) ||
-              !isRunning(live.view)
-            )
-              return
-          }
-          await sessionsApi.steer(sessionId, id).catch((error: unknown) => {
-            if (error instanceof ChannelError && error.code === 'unsupported') return
-            const reason = failure(error)
-            setNote(live, reason.text ?? phrase('session.steerQueued', { message: reason.message }))
-          })
-        }
         return
       }
       await startTurn(live, message)
@@ -2527,20 +2574,23 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
       mustReach(live)
       const pauseRevision = live.pauseRevision
-      if (
-        live.needsTurnCheck &&
-        (!(await reconcileTurns(live)) || live.pauseRevision !== pauseRevision)
-      ) {
+      if (live.needsTurnCheck) await reconcileTurns(live)
+      if (live.needsTurnCheck || live.pauseRevision !== pauseRevision) {
         setNote(live, phrase('session.steerHeld'))
-        return
+        throw new ChannelError('rejected', '状态尚未核实，消息仍待发', phrase('session.steerHeld'))
       }
-      live.queued = live.queued.map((entry) =>
-        entry.delivery === 'held' && (!messageId || messageId === entry.id)
-          ? releaseInput(entry)
-          : entry,
-      )
+      const insert = !!isRunning(live.view) || live.loading !== null || live.stale
+      live.queued = live.queued.map((entry) => {
+        if (entry.delivery !== 'unknown' && (!messageId || messageId === entry.id)) {
+          if (insert) live.immediate.add(entry.id)
+          return entry.delivery === 'held' ? releaseInput(entry) : entry
+        }
+        return entry
+      })
       live.paused = false
       emit(live, [{ op: 'queue.set', queued: live.queued }])
+      if (live.stale || live.loading) setNote(live, phrase('session.inputSyncing'))
+      await insertImmediate(live)
       pump(live)
     },
 
@@ -2550,6 +2600,31 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       if (!message) throw new ChannelError('rejected', '该消息已不在队列中')
       if (message.delivery)
         throw new ChannelError('rejected', '该消息已暂停，请使用待发消息的发送或编辑操作')
+      mustReach(live)
+      if (live.stale || live.loading) {
+        live.immediate.add(messageId)
+        setNote(live, phrase('session.inputSyncing'))
+        return
+      }
+      if (live.compactSwitch || live.compacting > 0)
+        throw new ChannelError('rejected', '压缩期间不能插话', phrase('session.inputCompacting'))
+      const starting = live.starting ? live.startingInput.get(live.starting) : undefined
+      if (starting) {
+        const revision = live.pauseRevision
+        setNote(live, phrase('session.inputSyncing'))
+        if (!(await starting.ready) || revision !== live.pauseRevision || live.paused)
+          throw new ChannelError(
+            'rejected',
+            '回合启动已取消，消息仍待发',
+            phrase('session.steerHeld'),
+          )
+        if (!live.queued.some((row) => row.id === messageId)) return
+        mustReach(live)
+        if (live.stale || live.loading) {
+          live.immediate.add(messageId)
+          return
+        }
+      }
       const running = isRunning(live.view)
       const turnId = running ? serverTurn(live, running.id) : null
       if (!running || !turnId) throw new ChannelError('rejected', '当前没有可插入消息的回合')
@@ -2721,6 +2796,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       const live = need(sessionId)
       const next = live.queued.filter((message) => message.id !== messageId)
       if (next.length === live.queued.length) return
+      live.immediate.delete(messageId)
       live.queued = next
       emit(live, [{ op: 'queue.set', queued: next }])
       release(live)

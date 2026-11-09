@@ -1473,6 +1473,7 @@ export const zhCN = {
   'composer.interruptFailed': '停止失败：{reason}',
   'composer.queued': '排队中的消息',
   'composer.pendingCount': '{n} 条待发',
+  'composer.queueSending': '正在发送…',
   'composer.pendingSendAll': '全部发送',
   'composer.pendingWith': '含 {n} 条待发',
   'composer.pendingWith.note': '开着：这条连同 {n} 条待发一起按顺序发；关着：只发这条，待发的留着',
@@ -1948,6 +1949,9 @@ export const zhCN = {
   'session.nativeOwned': '此会话正由另一个进程使用，当前只读',
   'session.archived': '此对话已归档，只读。恢复后即可继续。',
   'session.queueFailed': '排队的消息发送失败：{message}。发送下一条时会重试。',
+  'session.inputSyncing': '正在同步会话状态，消息已保留；同步完成后立即发送。',
+  'session.inputCompacting': '正在压缩上下文，消息已排队，压缩结束后发送。',
+  'session.inputNoSteer': '当前会话不支持插队，消息已排队，回合结束后发送。',
   'session.steerQueued': '没能插进正在进行的回合（{message}），已排队，回合结束后发送。',
   'session.steerHeld':
     '消息尚未发送，已保留为待发。请确认会话状态后点击“发送”；若状态仍未更新，请重新连接。',

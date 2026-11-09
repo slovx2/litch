@@ -17,7 +17,7 @@ import {
   type QueuedMessage,
   type SessionSummary,
 } from '@litch/core'
-import { type RefObject, useEffect, useState, useSyncExternalStore } from 'react'
+import { type RefObject, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { StyleSheet, type TextInput, View } from 'react-native'
 import { whyNot } from '../../../../packages/ui/src/app/errors.ts'
 import { useInterrupt } from '../../../../packages/ui/src/composer/useInterrupt'
@@ -151,14 +151,24 @@ export function Composer({
     : interrupt.slow
       ? t('composer.stopTimeout')
       : null
-  const steer = (message: QueuedMessage) => {
+  const [queueBusy, setQueueBusy] = useState<string | null>(null)
+  const queuePending = useRef(false)
+  const queueAction = (key: string, work: () => Promise<unknown>) => {
+    if (queuePending.current) return
+    queuePending.current = true
+    setQueueBusy(key)
     setError(null)
-    channel
-      .command('session.steer', { deviceId, sessionId, messageId: message.id })
-      .catch((reason: unknown) =>
-        setError(t('composer.steerFailed', { reason: whyNot(reason, t) })),
-      )
+    void work()
+      .catch((reason: unknown) => setError(whyNot(reason, t)))
+      .finally(() => {
+        queuePending.current = false
+        setQueueBusy(null)
+      })
   }
+  const steer = (message: QueuedMessage) =>
+    queueAction(message.id, () =>
+      channel.command('session.steer', { deviceId, sessionId, messageId: message.id }),
+    )
   const unqueue = (message: QueuedMessage, edit: boolean) => {
     if (
       edit &&
@@ -217,7 +227,7 @@ export function Composer({
         steerImages={meta?.can.steerImages !== false}
         blocked={blocked}
         imagesOff={imagesOff}
-        error={stopError ?? error}
+        error={stopError ?? error ?? (meta?.queued.length && meta.note ? t.text(meta.note) : null)}
         markers={markers}
         inputRef={inputRef}
         mentions={{ deviceId, sessionId }}
@@ -265,15 +275,16 @@ export function Composer({
               />
               <QueueTray
                 queued={meta.queued}
-                onResume={(messageId) => {
-                  channel
-                    .command('session.resumeQueue', {
+                busy={queueBusy}
+                onResume={(messageId) =>
+                  queueAction(messageId ?? 'all', () =>
+                    channel.command('session.resumeQueue', {
                       deviceId,
                       sessionId,
                       ...(messageId ? { messageId } : {}),
-                    })
-                    .catch((reason: unknown) => setError(whyNot(reason, t)))
-                }}
+                    }),
+                  )
+                }
                 running={running}
                 canSteer={meta.can.steer}
                 steerImages={meta.can.steerImages}

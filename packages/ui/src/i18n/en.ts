@@ -1537,6 +1537,7 @@ export const en: Record<MessageKey, Entry> = {
   'composer.interruptFailed': 'Couldn’t stop: {reason}',
   'composer.queued': 'Queued messages',
   'composer.pendingCount': '{n} pending',
+  'composer.queueSending': 'Sending…',
   'composer.pendingSendAll': 'Send all',
   'composer.pendingWith': 'With {n} pending',
   'composer.pendingWith.note':
@@ -2050,6 +2051,12 @@ export const en: Record<MessageKey, Entry> = {
   'session.archived': 'This conversation is archived and read-only. Restore it to continue.',
   'session.queueFailed':
     'Queued message not sent: {message}. It will be retried with your next message.',
+  'session.inputSyncing':
+    'Syncing session state. Your message is saved and will be sent after syncing.',
+  'session.inputCompacting':
+    'Compacting context. Your message is queued until compaction finishes.',
+  'session.inputNoSteer':
+    'This session cannot accept mid-turn messages. Your message is queued until the turn ends.',
   'session.steerQueued':
     'Couldn’t add the message to the running turn ({message}). It’s queued and will be sent when the turn ends.',
   'session.steerHeld':

@@ -17,18 +17,22 @@ function Act({
   onPress,
   testID,
   muted,
+  disabled,
 }: {
   icon: IconName
   label: string
   onPress(): void
   testID: string
   muted?: boolean
+  disabled?: boolean
 }) {
   const { c, radius } = useTheme()
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled, busy: !!disabled }}
+      disabled={disabled}
       testID={testID}
       hitSlop={4}
       onPress={onPress}
@@ -44,6 +48,7 @@ function Act({
 
 export function QueueTray({
   queued,
+  busy = null,
   running,
   canSteer,
   steerImages,
@@ -54,6 +59,7 @@ export function QueueTray({
   onResume,
 }: {
   queued: QueuedMessage[]
+  busy?: string | null
   running: boolean
   /** 会不会引导（声明了不会、或者试过对面不认识，就没有“立即插入”） */
   canSteer: boolean
@@ -83,12 +89,14 @@ export function QueueTray({
           <Pressable
             accessibilityRole="button"
             testID="queue:send"
+            disabled={busy !== null}
+            accessibilityState={{ disabled: busy !== null, busy: busy !== null }}
             hitSlop={{ left: 8, right: 8 }}
             onPress={() => onResume()}
             style={styles.link}
           >
             <Text style={[styles.headText, { color: c.accent }]}>
-              {t('composer.pendingSendAll')}
+              {t(busy === 'all' ? 'composer.queueSending' : 'composer.pendingSendAll')}
             </Text>
           </Pressable>
         </View>
@@ -133,17 +141,25 @@ export function QueueTray({
             {message.delivery === 'held' ? (
               <Act
                 testID={`queue:${index}:send`}
-                icon="send"
-                label={t('composer.send')}
+                icon={running && canSteer ? 'steer' : 'send'}
+                disabled={busy !== null}
+                label={t(
+                  busy === message.id
+                    ? 'composer.queueSending'
+                    : running && canSteer
+                      ? 'composer.steer'
+                      : 'composer.send',
+                )}
                 onPress={() => onResume(message.id)}
               />
             ) : null}
             {running && canSteer && !message.delivery ? (
               <Act
                 testID={`queue:${index}:steer`}
-                // 插进当前回合：拐进去的回车箭头，和待发那一行的“发送”（直箭头）分开（桌面同样）
+                // 插进当前回合用回车箭头；空闲时发送用直箭头（桌面同样）。
                 icon="steer"
-                label={t('composer.steer')}
+                disabled={busy !== null}
+                label={t(busy === message.id ? 'composer.queueSending' : 'composer.steer')}
                 muted={stuck}
                 onPress={() => (stuck ? onRefused() : onSteer(message))}
               />

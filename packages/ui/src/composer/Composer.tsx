@@ -739,12 +739,22 @@ export function Composer(props: ComposerProps) {
     addFiles(files, true, folders)
   }
 
-  const steer = (message: QueuedMessage) => {
+  const [queueBusy, setQueueBusy] = useState<string | null>(null)
+  const queuePending = useRef(false)
+  const queueAction = (id: string, work: () => Promise<unknown> | undefined) => {
+    if (queuePending.current) return
+    queuePending.current = true
+    setQueueBusy(id)
     setError(null)
-    onSteer?.(message.id).catch((reason: unknown) => {
-      setError(t('composer.steerFailed', { reason: reasonOf(reason, t) }))
-    })
+    void Promise.resolve()
+      .then(work)
+      .catch((reason: unknown) => setError(reasonOf(reason, t)))
+      .finally(() => {
+        queuePending.current = false
+        setQueueBusy(null)
+      })
   }
+  const steer = (message: QueuedMessage) => queueAction(message.id, () => onSteer?.(message.id))
 
   /** 这一条现在插不进去：它带着图，而这个 harness 引导的时候带不了图 */
   const stuck = (message: QueuedMessage) => props.steerImages === false && message.images.length > 0
@@ -778,8 +788,7 @@ export function Composer(props: ComposerProps) {
   // 有字、有图或带着东西的时候主按钮是发送（回合进行中就是排队）；什么都没写而回合在跑，主按钮是停止
   const mode = filled ? (queuing ? 'queue' : 'send') : running && onStop ? 'stop' : 'send'
   const heldCount = queued.filter((entry) => entry.delivery === 'held').length
-  const resume = (id?: string) =>
-    props.onResumeQueue?.(id).catch((error: unknown) => setError(String(error)))
+  const resume = (id?: string) => queueAction(id ?? 'all', () => props.onResumeQueue?.(id))
   return (
     <>
       {attaching ? <div role="status">{t('composer.file.uploading')}</div> : null}
@@ -792,8 +801,13 @@ export function Composer(props: ComposerProps) {
               <Icon name="pause" small />
               <span>{t('composer.pendingCount', { n: heldCount })}</span>
               <span aria-hidden="true">·</span>
-              <button type="button" className="link" disabled={!!blocked} onClick={() => resume()}>
-                {t('composer.pendingSendAll')}
+              <button
+                type="button"
+                className="link"
+                disabled={!!blocked || queueBusy !== null}
+                onClick={() => resume()}
+              >
+                {t(queueBusy === 'all' ? 'composer.queueSending' : 'composer.pendingSendAll')}
               </button>
             </div>
           ) : null}
@@ -832,12 +846,24 @@ export function Composer(props: ComposerProps) {
                     <button
                       type="button"
                       className="ibtn"
-                      title={t('composer.send')}
-                      aria-label={t('composer.send')}
-                      disabled={!!blocked}
+                      title={t(
+                        queueBusy === message.id
+                          ? 'composer.queueSending'
+                          : running && onSteer
+                            ? 'composer.steer'
+                            : 'composer.send',
+                      )}
+                      aria-label={t(
+                        queueBusy === message.id
+                          ? 'composer.queueSending'
+                          : running && onSteer
+                            ? 'composer.steer'
+                            : 'composer.send',
+                      )}
+                      disabled={!!blocked || queueBusy !== null}
                       onClick={() => resume(message.id)}
                     >
-                      <Icon name="send" small />
+                      <Icon name={running && onSteer ? 'steer' : 'send'} small />
                     </button>
                   ) : null}
                   {running && onSteer && !message.delivery ? (
@@ -845,6 +871,7 @@ export function Composer(props: ComposerProps) {
                     <button
                       type="button"
                       className="ibtn steer"
+                      disabled={!!blocked || queueBusy !== null}
                       title={t(stuck(message) ? 'composer.steer.noImages' : 'composer.steer.note')}
                       aria-label={t('composer.steer')}
                       aria-disabled={stuck(message) || undefined}
@@ -1250,7 +1277,16 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
             : t('composer.placeholder')
         }
         blocked={blocked}
-        lead={<PendingNotes deviceId={deviceId} sessionId={sessionId} />}
+        lead={
+          <>
+            <PendingNotes deviceId={deviceId} sessionId={sessionId} />
+            {queued.length > 0 && meta?.note ? (
+              <div className="cmp-hint" role="status">
+                {t.text(meta.note)}
+              </div>
+            ) : null}
+          </>
+        }
         below={
           switched ? (
             <div className="cmp-hint" data-provider-switch>

@@ -1,5 +1,5 @@
 // 选字回复时输入区上面的一行：说怎么选、怎么回复，右边“完成”退出选字。评论满了加不上时这一行改说满了。
-// 只在有回答正在选字（hub.selecting）时出现。
+// 有回答正在选字（hub.selecting），或整条评论达到上限时出现。
 import { MAX_COMMENTS } from '@litch/core'
 import { StyleSheet, Text, View } from 'react-native'
 import { useT } from '../../ui/i18n'
@@ -14,7 +14,7 @@ export function SelectBar({ hub }: { hub: CommentsHub }) {
   const { c } = theme
   const selecting = useHubValue(hub, (each) => each.selecting !== null, false)
   const full = useHubValue(hub, (each) => each.replyFull, false)
-  if (!selecting) return null
+  if (!selecting && !full) return null
   return (
     <View
       testID="select-bar"
