@@ -400,6 +400,13 @@
   font-size: calc(11px * var(--fs));
   color: var(--ink-3);
 }
+.errbox > strong {
+  flex-basis: 100%;
+}
+.errbox > span {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .turn-recovery {
   display: flex;
   flex-wrap: wrap;

@@ -17,6 +17,29 @@ import {
 } from '../src/index.mjs'
 import { agentText, project, thread, turn, userText } from './fixtures.mjs'
 
+test('Claude 安全拦截实时/历史采用同一失败投影，保留原文并让侧栏显示错误', () => {
+  const message =
+    'Blocked by Claude safety policy\n\nExample model safeguards flagged this message.'
+  const rejected = turn('refusal', [], {
+    status: 'failed',
+    error: { message, codexErrorInfo: 'other', additionalDetails: null, misalignment: null },
+  })
+  const history = projectThread(
+    thread({ id: 'refusal-thread', status: { type: 'systemError' }, turns: [rejected] }),
+    { deviceId: 'local', harness: 'claude-code' },
+  )
+  assert.equal(history.turns[0]?.status, 'failed')
+  assert.equal(history.turns[0]?.error, message)
+  assert.equal(projectTurn(rejected).turn.error, message)
+  assert.equal(
+    projectSummary(thread({ id: 'refusal-thread', status: { type: 'systemError' }, turns: [] }), {
+      harness: 'claude-code',
+      workspaceId: null,
+    }).status,
+    'error',
+  )
+})
+
 test('条目：用户消息把文字拼起来，别的输入变成附件', () => {
   const item = projectItem({
     type: 'userMessage',

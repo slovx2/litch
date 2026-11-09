@@ -411,7 +411,7 @@ export class RowBuilder {
     )
     const first = items[0]
     // 提醒收尾的回合对用户透明（照桌面端）：那是设备进程替用户提醒模型补调一次收尾，提醒、模型顺口说的话、过程、
-    // 状态行都不画，只留收尾带出来的卡片和问题（bucketItems 只给它留这些）
+    // 正常状态行不画，只留收尾带出来的卡片和问题；失败仍显示错误与失败状态。
     const remind = first?.kind === 'userMessage' && first.event?.kind === 'remind'
     // 别的会话发来消息、定时任务开的回合：开头那条消息自己写着来源，不再另写一行
     if (turn.origin && turn.origin !== 'peer' && turn.origin !== 'schedule' && !remind)
@@ -557,7 +557,7 @@ export class RowBuilder {
       if (row.type !== 'group') return
       out[index] = this.keep({ ...row, working: index === last && working && !row.running })
     })
-    if (remind) return out
+    if (remind && turn.status !== 'failed') return out
     if (turn.status === 'failed' && turn.error)
       out.push(this.keep({ type: 'error', key: `${turn.id}:error`, text: turn.error }))
     out.push(

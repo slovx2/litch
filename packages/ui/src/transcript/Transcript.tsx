@@ -1,4 +1,5 @@
 import type { SearchHit } from '@litch/core'
+import { claudeRefusalDetail, isClaudeRefusalError } from '../../../protocol/src/claude-refusal.mts'
 import { HistoryStatus, useOlderHistory } from './history.tsx'
 import { SearchPanel } from './search/SearchPanel.tsx'
 import { searchWindow } from './turn-window.ts'
@@ -332,8 +333,8 @@ const Turn = memo(function Turn({
   const hasTail = blocks.some((block) => block.type === 'tail')
   if (running) seen.current = { running: true, tail: seen.current.tail || hasTail }
   const freshTail = !running && seen.current.running && !seen.current.tail
-  // 提醒收尾的回合对用户透明（核心的 bucketItems 只给它留卡片）：没有卡片就整个不画，有卡片也不画开头、用时和结尾
-  if (!turn || (remind && blocks.length === 0)) return null
+  // 正常提醒收尾只留卡片；失败必须显示错误和失败状态，不能把安全拒答一起隐藏。
+  if (!turn || (remind && blocks.length === 0 && turn.status !== 'failed')) return null
   // 告一段落之后，每段的第一块过程显示摘要；没告一段落时过程照常摊开。
   const firstSegment = segments.values().next().value
   const divided = blocks.some((block) => block.type === 'user' && turnAddition(turn, block.itemId))
@@ -423,9 +424,10 @@ const Turn = memo(function Turn({
         })}
         {/* 回合级的出错框只给失败的回合（官方桌面端也是这样）：被打断的回合对面就算带了一句错误
           （旧版 Claude Code 入口带过 interrupted），也只在结尾写“已中断”，不画红框 */}
-        {turn.status === 'failed' && turn.error && !remind ? (
+        {turn.status === 'failed' && turn.error ? (
           <div className="errbox" data-search-item={`search-error:${turnId}`}>
-            <span>{turn.error}</span>
+            {isClaudeRefusalError(turn.error) ? <strong>{t('turn.claudeRefusal')}</strong> : null}
+            <span>{claudeRefusalDetail(turn.error)}</span>
           </div>
         ) : null}
         {running && turn.recovery ? <Recovery {...ref} turn={turn} /> : null}
@@ -435,7 +437,7 @@ const Turn = memo(function Turn({
           <TurnTail {...ref} turnId={turnId} itemIds={tail.itemIds} fresh={freshTail} />
         ) : null}
         {/* 正文出字且没有工作提示时不占行；实际高度变化由对话区的滚动锚点补偿。 */}
-        {remind ? null : running ? (
+        {remind && turn.status !== 'failed' ? null : running ? (
           <div
             className="running-line slot"
             data-anchor={`t:${turnId}`}

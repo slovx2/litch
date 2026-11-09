@@ -14,6 +14,7 @@ import {
   BACKGROUND_TASKS_NOTIFICATION,
   type LitchTurnOrigin,
 } from '../../protocol/src/background-tasks.mjs'
+import { isClaudeRefusalError } from '../../protocol/src/claude-refusal.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import { NATIVE_OWNER_NOTIFICATION, type NativeOwner } from '../../protocol/src/native-owner.mjs'
 import type { LitchPeer } from '../../protocol/src/peer-messages.mjs'
@@ -1846,6 +1847,17 @@ export class CodexClaudeAppServer {
       return
     }
     if (!redraw || this.stopped) return
+    const last = redraw.after.at(-1)
+    if (
+      last?.status === 'failed' &&
+      isClaudeRefusalError((last.error as { message?: string } | null)?.message)
+    )
+      this.setThreadStatus(null, threadId, { type: 'systemError' })
+    else if (
+      last?.status === 'completed' &&
+      this.store.getThread(threadId)?.status.type === 'systemError'
+    )
+      this.setThreadStatus(null, threadId, { type: 'idle' })
     this.announceRedraw(threadId, redraw.before, redraw.after)
     const facts = redraw.facts
     if (!facts) return
@@ -3570,7 +3582,9 @@ export class CodexClaudeAppServer {
       params: { threadId, turn: this.toLifecycleTurn(completed) },
     })
     this.clearActiveTurn(threadId)
-    this.setThreadStatus(peer, threadId, { type: 'idle' })
+    this.setThreadStatus(peer, threadId, {
+      type: isClaudeRefusalError(error.message) ? 'systemError' : 'idle',
+    })
   }
 
   // 与原生 load_thread 一致：会话必须存在且已加载（有连接订阅）。
@@ -7714,6 +7728,8 @@ export class CodexClaudeAppServer {
   }
 
   private toThread(thread: ThreadRecord, turns: TurnRecord[] = []): unknown {
+    const outcome = thread.status.type === 'idle' ? this.store.latestTurnOutcome(thread.id) : null
+    const refusal = outcome?.status === 'failed' && isClaudeRefusalError(outcome.error?.message)
     const agentNickname = nullIfEmpty(thread.agentNickname)
     const agentRole = nullIfEmpty(thread.agentRole)
     const parentThreadId = thread.threadSource === 'subagent' ? thread.forkedFromId : null
@@ -7755,7 +7771,7 @@ export class CodexClaudeAppServer {
       createdAt: thread.createdAt,
       updatedAt: thread.updatedAt,
       recencyAt: thread.updatedAt,
-      status: thread.status,
+      status: refusal ? { type: 'systemError' } : thread.status,
       path: null,
       cwd: thread.cwd,
       cliVersion: codexCliVersion(),

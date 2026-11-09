@@ -1,6 +1,10 @@
 # Projects and sessions
 
 侧栏运行标识会随已打开会话的实时回合更新，选中或清除未读不会隐藏运行、等待和后台任务标识。
+
+Claude 明确返回安全拒答时，对话区显示“被 Claude 安全策略拦截”和可取得的原文，回合标为失败，侧栏显示错误。重新打开仍保留该结果；新的成功回合会恢复正常状态。自动收尾提醒如果失败，也会显示错误。Litch 不会自动绕过拦截。
+
+When Claude reports a safety refusal, the conversation shows “Blocked by Claude safety policy” and any available original message. The turn is marked failed and the sidebar shows an error. Reopening preserves the result; a later successful turn clears the error state. Failed automatic wrap-up reminders also show their error. Litch does not bypass the refusal.
 回合结束后若仍有后台任务，继续显示后台任务标识。
 从经理建议卡开始的工作线遵循同样的规则；回合中收到追加消息不表示回合结束，运行标识保持到回合完成。
 切换到其他会话后，原会话的侧栏状态仍持续更新。

@@ -901,6 +901,29 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     degrade = { openBefore, forkStopped, compactStopped, othersKept, elsewhereKept }
   }
 
+  if (!real) {
+    await open(main)
+    await say('模拟 Claude 安全拦截')
+    await until('安全拦截标题与原文', () =>
+      all('.errbox').some(
+        (box) =>
+          box.textContent?.includes('被 Claude 安全策略拦截') &&
+          box.textContent.includes('Example model safeguards'),
+      ),
+    )
+    await until('安全拦截不再运行', () => !running())
+    const selected = one('.ss-row.sel')?.closest('[data-session]')?.getAttribute('data-session')
+    await until('安全拦截侧栏错误', () => !!one(`[data-session="${selected}"] .st.err`))
+    const other = all('.ss-row:not(.projection-group *)').find(
+      (row) => row.closest('[data-session]')?.getAttribute('data-session') !== selected,
+    )
+    other?.click()
+    await frame()
+    await open(main)
+    await until('重开后安全拦截仍显示', () =>
+      all('.errbox').some((box) => box.textContent?.includes('被 Claude 安全策略拦截')),
+    )
+  }
   return { declineNote, contextMenu, undo, peek, todo, fork, edit, compact, degrade }
 }
 

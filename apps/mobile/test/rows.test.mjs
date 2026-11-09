@@ -50,6 +50,20 @@ function viewOf(turns, items) {
 
 const types = (rows) => rows.map((row) => row.type)
 
+test('Claude 安全拦截保留错误与失败状态；透明收尾回合失败时也不能隐藏', () => {
+  const error = 'Blocked by Claude safety policy\n\nExample model safeguards flagged this message.'
+  for (const remind of [false, true]) {
+    const item = {
+      ...user('u', '虚构任务'),
+      ...(remind ? { event: { kind: 'remind', notes: [] } } : {}),
+    }
+    const view = viewOf([{ id: 't', itemIds: ['u'], status: 'failed', error }], [item])
+    const rows = new RowBuilder().build(view, 'all')
+    assert.equal(rows.find((row) => row.type === 'error')?.text, error)
+    assert.equal(rows.find((row) => row.type === 'status')?.status, 'failed')
+  }
+})
+
 for (const phase of ['unknown', 'commentary']) {
   test(`回合结束的文字与工具：${phase} 按原生阶段决定是否整段折叠`, () => {
     const builder = new RowBuilder()

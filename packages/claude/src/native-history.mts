@@ -15,6 +15,7 @@
 // 有字的 thinking 块里，签名标了旁白的（narration.mts）画成说明文字，其余的画成思考。
 // 条目的标识由消息的 uuid 和块的位置拼成：同一份记录再画一遍，标识不变。
 
+import { claudeRefusalOf } from '../../protocol/src/claude-refusal.mjs'
 import type { LitchPeer } from '../../protocol/src/peer-messages.mjs'
 import { isNarration } from './narration.mjs'
 import { peerFromOrigin } from './peer-message.mjs'
@@ -129,7 +130,7 @@ export function projectNativeHistory(
 
   const finish = (done: TurnRecord | null, final = false) => {
     if (!done) return
-    if (final && options.running) {
+    if (final && options.running && done.status !== 'failed') {
       // 对方还在跑这一轮：阶段等它说完再定，工具调用等结果
       done.status = 'inProgress'
       done.completedAt = null
@@ -274,6 +275,11 @@ export function projectNativeHistory(
     turn ??= begin(message, null)
     settled = true
     const current = turn
+    const refusal = claudeRefusalOf({ ...message })
+    if (refusal) {
+      current.status = 'failed'
+      current.error = { message: refusal, codexErrorInfo: 'other' }
+    }
     blocks.forEach((block, index) => {
       const id = `${message.uuid}:${index}`
       if (block.type === 'text') {

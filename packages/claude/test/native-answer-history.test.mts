@@ -13,6 +13,44 @@ test.after(() => rm(config, { recursive: true, force: true }))
 const { sdkNativeSessionSource } = await import('../src/native-sessions.mjs')
 const cwd = '/work/answer-history'
 const dir = join(config, 'projects', '-work-answer-history')
+
+test('SDK 重读虚构 refusal 原生记录后保留停止原因，历史投影为失败', async () => {
+  const sessionId = '1972ac1a-e630-4dde-b7ef-d46110598b2c'
+  const common = { sessionId, cwd, isSidechain: false, timestamp: '2026-01-01T00:00:00.000Z' }
+  const rows = [
+    {
+      ...common,
+      type: 'user',
+      uuid: 'sample-user',
+      parentUuid: null,
+      message: { role: 'user', content: '虚构任务' },
+    },
+    {
+      ...common,
+      type: 'assistant',
+      uuid: 'sample-refusal',
+      parentUuid: 'sample-user',
+      isApiErrorMessage: true,
+      error: 'invalid_request',
+      message: {
+        role: 'assistant',
+        stop_reason: 'refusal',
+        content: [{ type: 'text', text: 'API Error: Example safeguards flagged this message.' }],
+      },
+    },
+  ]
+  await mkdir(dir, { recursive: true })
+  await writeFile(
+    join(dir, `${sessionId}.jsonl`),
+    rows.map((row) => JSON.stringify(row)).join('\n'),
+  )
+  for (let i = 0; i < 2; i++) {
+    const messages = await sdkNativeSessionSource().messages(sessionId, cwd)
+    const result = projectNativeHistory(sessionId, messages, cwd)
+    assert.equal(result.turns.at(-1)?.status, 'failed')
+    assert.match(JSON.stringify(result.turns.at(-1)?.error), /Blocked by Claude safety policy/)
+  }
+})
 const answer = askReplyText([
   {
     questionItemId: '["wrap_up","old:question"]',

@@ -10,6 +10,7 @@ import {
 import { homedir } from 'node:os'
 import { join, relative } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { claudeRefusalOf } from '../../protocol/src/claude-refusal.mjs'
 import { isVersionAtLeast } from '../../shared/src/min-version.mjs'
 import { ToolObservation } from './tool-observation.mjs'
 
@@ -336,6 +337,7 @@ interface PendingTurn {
   subagentStreamAt: Map<string, number>
   // 主会话最近一条 API 出错的助手消息上 CLI 归的类（SDKAssistantMessageError），回合失败时拼 codexErrorInfo
   apiErrorCategory: string | null
+  refusal: string | null
   // CLI 在重试主会话的模型请求（api_retry 之后，新一次还没出内容）
   apiRetrying: boolean
 }
@@ -652,6 +654,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       resumedAgents: new Map(),
       subagentStreamAt: new Map(),
       apiErrorCategory: null,
+      refusal: null,
       apiRetrying: false,
     }
     this.turns.set(context.turnId, pending)
@@ -2795,6 +2798,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       if (!source && typeof inner?.model === 'string') pending.contextModel = inner.model
       mergeRequestUsage(pending.contextUsage, source, inner?.id, inner?.usage)
     } else if (eventType === 'message_delta') {
+      if (!source) pending.refusal = claudeRefusalOf(event, pending.refusal) ?? pending.refusal
       const id = pending.usageMessageIds.get(source)
       if (id) await this.goalUsage(pending, { id, usage: event.usage })
       await this.contextUsage(pending, source, id, event.usage)
@@ -2917,6 +2921,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     if (!inner) return
     await this.goalUsage(pending, inner)
     const nestedMessage = Boolean(message.parent_tool_use_id)
+    if (!nestedMessage)
+      pending.refusal = claudeRefusalOf(message, pending.refusal) ?? pending.refusal
     if (!nestedMessage && typeof inner.model === 'string' && !inner.model.startsWith('<'))
       pending.contextModel = inner.model
     await this.contextUsage(
@@ -3545,10 +3551,12 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       return
     if (pending.awaited && resultConfirms(message, pending.awaited)) pending.awaitedSeen = true
     const subtype = String(message.subtype ?? '')
+    pending.refusal = claudeRefusalOf(message, pending.refusal) ?? pending.refusal
     // 多个后台任务同时结束时 CLI 会先发一条空 result，真正的那条随后才到；
     // 适配器送入的静默消息也只产生空 result。它们不能盖掉已有的结果。
     if (
       pending.deferredResult &&
+      pending.refusal === null &&
       subtype === 'success' &&
       !message.is_error &&
       Number(message.num_turns) === 0 &&
@@ -3560,11 +3568,14 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     // 交了计划之后是入口让 CLI 停下的（planHandoff）：CLI 报的“执行中出错”就是这次停下
     const handedOff = pending.planHandoff && subtype === 'error_during_execution'
     let success =
-      (handedOff || (subtype === 'success' && !message.is_error)) && pending.workflowFailure == null
+      (handedOff || (subtype === 'success' && !message.is_error)) &&
+      pending.workflowFailure == null &&
+      pending.refusal === null
     let resultText = handedOff
       ? null
       : (pending.workflowFailure ?? (message.result == null ? null : String(message.result)))
     let structuredText: string | undefined
+    if (pending.refusal) resultText = pending.refusal
     if (success && pending.context.outputFormat) {
       try {
         if (message.structured_output === undefined) throw new Error('SDK 未返回 structured_output')

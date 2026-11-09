@@ -1,3 +1,4 @@
+import { claudeRefusalError, isClaudeRefusalError } from '../../../protocol/src/claude-refusal.mjs'
 import { assertArchiveChildrenStopped } from '../archive.mjs'
 import { matchTitles } from '../search/titles.mjs'
 import { OUTSIDE_FILE_REPLY } from './sample-file-links.mjs'
@@ -801,7 +802,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     // 没人开着它：和真的一样标成未读
     const watched = (sinks.get(sessionKey(view))?.size ?? 0) > 0
     updateSummary(view.deviceId, view.sessionId, {
-      status: 'idle',
+      status: status === 'failed' && isClaudeRefusalError(error) ? 'error' : 'idle',
       waitingFor: null,
       updatedAt: clock.now(),
       ...(watched ? {} : { unread: true }),
@@ -890,6 +891,11 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       { op: 'item.add', turnId, item: event ? { ...user, event } : user },
     ])
     updateSummary(view.deviceId, view.sessionId, { status: 'running', updatedAt: clock.now() })
+    if (message.text === '模拟 Claude 安全拦截') {
+      const error = claudeRefusalError('API Error: Example model safeguards flagged this message.')
+      clock.setTimer(() => endTurn(view, turnId, null, 'failed', error), 30)
+      return turnId
+    }
     if (tree.claim(view, turnId, message)) return turnId
     if (background.claim(view, turnId, message)) return turnId
     if (peerDemo.claim(view, turnId, message)) return turnId

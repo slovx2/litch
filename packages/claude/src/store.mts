@@ -561,6 +561,24 @@ export class SessionStore {
     return row ? this.rowToThread(row) : null
   }
 
+  /** 目录状态只读末回合的终态和错误，不能为了错误标记读整份历史或 items_json。 */
+  latestTurnOutcome(
+    threadId: string,
+  ): { status: string; error: { message?: string } | null } | null {
+    this.flushAll()
+    const row = this.db
+      .prepare(
+        'SELECT status, error_json FROM turns WHERE thread_id=? ORDER BY started_at DESC, rowid DESC LIMIT 1',
+      )
+      .get(threadId)
+    return row
+      ? {
+          status: String(row.status),
+          error: row.error_json ? JSON.parse(String(row.error_json)) : null,
+        }
+      : null
+  }
+
   // 标题恰好是 name 的顶层 Claude 会话（不含子代理线程、临时会话、归档的），最多 limit 个：
   // 别的会话按名字发消息时认对方用，调用方拿个数判断是不是唯一
   claudeThreadsNamed(name: string, limit: number): string[] {

@@ -23,6 +23,10 @@ import {
   View,
 } from 'react-native'
 import {
+  claudeRefusalDetail,
+  isClaudeRefusalError,
+} from '../../../../packages/protocol/src/claude-refusal.mts'
+import {
   duration,
   elapsed,
   retryText,
@@ -561,6 +565,7 @@ export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
 
 /** 失败的回合带的原因（对面的原话） */
 export const ErrorCell = memo(function ErrorCell({ row }: Props<'error'>) {
+  const t = useT()
   const theme = useTheme()
   const { c, font } = theme
   return (
@@ -570,7 +575,14 @@ export const ErrorCell = memo(function ErrorCell({ row }: Props<'error'>) {
         { borderColor: c.err, backgroundColor: c.raised, borderRadius: theme.radius.l },
       ]}
     >
-      <Text style={{ color: c.err, fontSize: font.size.meta, lineHeight: 19 }}>{row.text}</Text>
+      {isClaudeRefusalError(row.text) ? (
+        <Text style={{ color: c.err, fontWeight: '600', fontSize: font.size.meta }}>
+          {t('turn.claudeRefusal')}
+        </Text>
+      ) : null}
+      <Text style={{ color: c.err, fontSize: font.size.meta, lineHeight: 19 }}>
+        {claudeRefusalDetail(row.text)}
+      </Text>
     </View>
   )
 })
