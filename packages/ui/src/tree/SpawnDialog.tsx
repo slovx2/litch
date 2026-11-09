@@ -191,7 +191,9 @@ export function SpawnDialog({
               id="spawn-harness"
               className="req-input"
               value={fields.harness}
-              onChange={(event) => set({ harness: event.target.value, model: '', effort: '' })}
+              onChange={(event) =>
+                set({ harness: event.target.value, model: '', effort: '', modelSelected: false })
+              }
             >
               {/* 提案里写的 harness 现在不可用：照样列出来，选着它开始由设备进程说行不行 */}
               {ready.some((entry) => entry.id === fields.harness) ? null : (
@@ -224,7 +226,13 @@ export function SpawnDialog({
                 id="spawn-model"
                 className="req-input"
                 value={fields.model}
-                onChange={(event) => set({ model: event.target.value, effort: '' })}
+                onChange={(event) =>
+                  set({
+                    model: event.target.value,
+                    effort: '',
+                    modelSelected: Boolean(event.target.value),
+                  })
+                }
               >
                 <option value="">{t('tree.dialog.modelDefault')}</option>
                 {fields.model && !model ? (
@@ -236,6 +244,11 @@ export function SpawnDialog({
                   </option>
                 ))}
               </select>
+              {proposal && fields.model && !fields.modelSelected && (
+                <button type="button" onClick={() => set({ modelSelected: true })}>
+                  {t('ranking.choose', { model: fields.model })}
+                </button>
+              )}
             </div>
             <div className="form-field spawn-row">
               <label className="form-label" htmlFor="spawn-effort">

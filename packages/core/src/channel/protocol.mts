@@ -7,6 +7,10 @@ import type {
   ProjectPermission,
   ProjectPermissionSet,
 } from '../../../protocol/src/harness-project-permissions.mjs'
+import type {
+  ModelRankingSnapshot,
+  ModelRankingWrite,
+} from '../../../protocol/src/model-ranking.mjs'
 import type { TurnRecovery } from '../../../protocol/src/turn-recovery.mjs'
 import type { ProjectPermissionView } from '../device/project-permissions.mjs'
 // 界面与核心之间那条通道的约定：有哪些主题、增量长什么样、有哪些命令、线上发什么消息。
@@ -349,6 +353,7 @@ export type SessionOp =
  */
 export type ManageOp =
   | { op: 'settings.set'; snapshot: SettingsSnapshotView; keys: string[] }
+  | { op: 'ranking.set'; value: ModelRankingSnapshot }
   | { op: 'power.set'; value: DevicePowerView | null }
 
 /** 差异的概况整份换掉：它不大，而且每次重新取，变的往往是其中好几处 */
@@ -1042,6 +1047,15 @@ export interface Commands {
    * 别处先改过了（版本号对不上）就以 conflict 结束：什么都没写，最新的值已经经订阅到了界面，不会悄悄覆盖。
    * 哪一项的值不合规矩以 invalid 结束，错误里说是哪一项。
    */
+  'device.modelRanking.read': { params: { deviceId: string }; result: ModelRankingSnapshot }
+  'device.modelRanking.write': {
+    params: ModelRankingWrite & { deviceId: string }
+    result: ModelRankingSnapshot
+  }
+  'device.modelRanking.reset': {
+    params: { deviceId: string; expectedRevision: number }
+    result: ModelRankingSnapshot
+  }
   'device.settings.write': {
     params: { deviceId: string; expectedVersion: number; edits: SettingEditView[] }
     result: SettingsWriteResult

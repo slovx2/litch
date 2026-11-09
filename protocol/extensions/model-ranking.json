@@ -1,0 +1,222 @@
+{
+  "extension": "modelRanking",
+  "description": "执行设备的子会话模型等级。默认只在 Claude Code、Codex 各自内部比较；自定义后所有 harness 共用同一顺序。只限制 Litch 子会话，不限制原生子代理的模型。",
+  "appliesTo": "有 Go 控制进程的设备聚合面；Claude 单引擎连接声明后可读 litchModelIdentity 元数据。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "modelRanking"
+      }
+    }
+  },
+  "undeclared": "设备配置方法拒绝，不发送 changed；Claude model/list 不附加 litchModelIdentity。子会话上限属于设备策略，不因客户端不声明而跳过。",
+  "rules": [
+    "tiers 从低到高，同组并级；所有已知模型恰好出现一次，未分级放 unranked。",
+    "内置 Claude 家族为 Haiku、Sonnet、Opus、Fable；Codex 已知系列为 Luna、Sol、Astra。任意网关名称不自动信任。",
+    "模型身份键是 JSON 编码的 [harness,provider,canonicalModel]；Claude provider 与 resolved 由原生目录补充，界面不可伪造身份元数据。",
+    "相同有效身份沿用允许，未知身份间的切换拒绝；自定义模式也比较跨 harness。",
+    "设备创建入口先校验所有显式与继承模型。超限调用失败，返回允许模型列表，不自动降级。",
+    "litch/sessionProposal/accept 的用户 overrides 可带 modelSelected:true 和具体 model，表示用户亲自选择，只有这次允许例外；工具 accept 忽略此标记。预填模型和直接开始不算选择。权限上限不豁免。",
+    "配置持久化在执行设备 <home>/device/model-ranking.json，Go 独占原子写入，保留四份备份。expectedRevision 冲突拒绝。",
+    "发现新模型按可信系列插入唯一锚点或内置区间；不能推断则未分级；既有自定义次序与并级关系保留。",
+    "目录失败保留旧模型位置并标不可用；价格数据缺失时不猜。"
+  ],
+  "parts": [
+    {
+      "kind": "Method",
+      "name": "litch/device/modelRanking/read",
+      "params": {
+        "type": "object"
+      },
+      "result": {
+        "$ref": "#/definitions/Snapshot"
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/device/modelRanking/write",
+      "params": {
+        "$ref": "#/definitions/Write"
+      },
+      "result": {
+        "$ref": "#/definitions/Snapshot"
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/device/modelRanking/reset",
+      "params": {
+        "type": "object",
+        "required": ["expectedRevision"],
+        "properties": {
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "result": {
+        "$ref": "#/definitions/Snapshot"
+      }
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/device/modelRanking/changed",
+      "params": {
+        "$ref": "#/definitions/Snapshot"
+      }
+    },
+    {
+      "kind": "Field",
+      "where": "model/list.result.data[]",
+      "name": "litchModelIdentity",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "resolved": {
+            "type": "string"
+          },
+          "trusted": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "Model": {
+      "type": "object",
+      "required": ["key", "harness", "model", "name", "available"],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "harness": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "resolved": {
+          "type": "string"
+        },
+        "trusted": {
+          "type": "boolean"
+        },
+        "available": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Tiers": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "Write": {
+      "type": "object",
+      "required": ["expectedRevision", "tiers", "unranked", "models"],
+      "properties": {
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tiers": {
+          "$ref": "#/definitions/Tiers"
+        },
+        "unranked": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Model"
+          }
+        },
+        "manual": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "用户主动移动的模型，主动留在未分级的项不会自动归类"
+        }
+      }
+    },
+    "Snapshot": {
+      "type": "object",
+      "required": [
+        "revision",
+        "mode",
+        "tiers",
+        "unranked",
+        "models",
+        "builtinRevision",
+        "errors",
+        "schemaVersion"
+      ],
+      "properties": {
+        "revision": {
+          "type": "integer"
+        },
+        "mode": {
+          "enum": ["builtin", "custom"]
+        },
+        "tiers": {
+          "$ref": "#/definitions/Tiers"
+        },
+        "unranked": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Model"
+          }
+        },
+        "builtinRevision": {
+          "type": "string"
+        },
+        "errors": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "manual": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "用户主动移动的模型，主动留在未分级的项不会自动归类"
+        },
+        "schemaVersion": {
+          "const": 1
+        }
+      }
+    }
+  }
+}

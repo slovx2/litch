@@ -212,6 +212,7 @@ export interface ConnectFailureView {
 }
 
 export interface DeviceView {
+  modelRanking?: boolean
   toolImagesEnabled?: boolean
   id: string
   name: Text

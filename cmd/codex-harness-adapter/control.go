@@ -357,6 +357,8 @@ func decodeControlParams(params json.RawMessage, target any) *controlError {
 
 func (s *controlServer) handle(method string, params json.RawMessage) (any, *controlError) {
 	switch method {
+	case "modelRanking.read", "modelRanking.write", "modelRanking.reset", "modelRanking.merge":
+		return s.handleModelRanking(method, params)
 	case "power.read", "power.activity", "power.registerLocal":
 		return s.handlePower(method, params)
 	case "settings.read":

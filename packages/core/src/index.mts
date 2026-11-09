@@ -1,4 +1,10 @@
 export type { AcpAuthLogin, AcpAuthView } from '../../protocol/src/acp-controls.mjs'
+export {
+  type ModelRankingConfig,
+  type ModelRankingSnapshot,
+  type ModelRankingWrite,
+  moveRankedModel,
+} from '../../protocol/src/model-ranking.mjs'
 // 核心包的入口。界面和外壳只从这里引用。
 
 export type {

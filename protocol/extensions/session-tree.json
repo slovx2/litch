@@ -1,5 +1,6 @@
 {
   "extension": "sessionTree",
+  "modelCap": "所有创建入口执行设备型号上限。modelRanking 描述比较域；用户 proposal accept overrides.modelSelected=true 与具体 model 只授权本次选择，模型工具不读取这个标记；预填或直接开始不豁免。",
   "managerIssueEvents": "用户创建或评论 issue 时，以 manager-issue（notes 为空，manager.managerId 与 manager.text 含 issue-created/issue-comment 事件摘要）自动投递。保存评论和入队同事务完成；跟进关闭不入唤醒队列，结束经理不启动；失败与重启后重试使用原投递 ID。",
   "worklineProposals": "经理子树内工作线的普通建议在看板 pending 筛选包含待审核与已推荐卡；来源 threadId 不变。所有 accept 入口把新会话的 lineage.parentThreadId 指向当前经理，保留来源分叉上下文、权限与目录，首条简报写出提卡来源和经理归属。普通会话及 offer 行为不变，不迁移已开始的会话。",
   "archiveGuard": "所有 thread/archive、litch_sessions.archive（含 self 和回合结束时的复查）在归档副作用前检查完整后代树。活跃回合、等待用户、后台任务或待接续均阻止整次归档。协议错误 data.litch=archiveBlocked，blockingSessions 包含标题和 threadId；工具返回 blocked。全停后保持原有连带归档及置顶子树保留行为。",

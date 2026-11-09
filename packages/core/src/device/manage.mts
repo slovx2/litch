@@ -11,6 +11,7 @@ import type {
   DeviceSettingsChangedNotification,
   DeviceSettingsSnapshot,
 } from '../../../protocol/src/index.mjs'
+import type { ModelRankingSnapshot } from '../../../protocol/src/model-ranking.mjs'
 import { ChannelError, type ManageOp } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
 import { RpcError, type RpcRequestOptions } from '../connection/rpc.mjs'
@@ -66,6 +67,7 @@ export interface Management {
   /** 对面说设置、待重启的名单或者 SSH 入口的状况变了 */
   changed(note: DeviceSettingsChangedNotification): void
   powerChanged(note: DevicePowerStatus): void
+  rankingChanged(note: ModelRankingSnapshot): void
   write(expectedVersion: number, edits: readonly SettingEditView[]): Promise<SettingsWriteResult>
   restart(harness: HarnessId, force: boolean): Promise<HarnessRestartResult>
   diagnostics(harness: HarnessId | undefined): Promise<DiagnosticsView>
@@ -245,6 +247,11 @@ export function createManagement(host: ManagementHost): Management {
       else apply(note.snapshot, strings(note.keys))
     },
 
+    rankingChanged(note) {
+      if (view?.modelRanking && note.revision < view.modelRanking.revision) return
+      if (view) view.modelRanking = note
+      publish([{ op: 'ranking.set', value: note }])
+    },
     powerChanged(note) {
       powerSerial++
       power = projectPower(note)

@@ -1,3 +1,4 @@
+import type { ModelRankingSnapshot } from '../../protocol/src/model-ranking.mjs'
 // 设备与 harness 管理：界面看到的数据形状。
 // 设置有哪些、各是什么类型，由设备服务声明；核心原样转给界面，界面按类型画控件，哪一项都不认识。
 // 所以这里的形状和协议里的差不多是一对一的，差别只有两处：
@@ -126,6 +127,7 @@ export interface DevicePowerView {
 
 /** 一台设备的管理数据：设置的结构、现在的值、环境文件里的变量 */
 export interface ManageView {
+  modelRanking?: ModelRankingSnapshot | null
   deviceId: string
   /** 电源状态来自 devicePower；未登记本机或没有该扩展时不显示。 */
   power?: DevicePowerView | null

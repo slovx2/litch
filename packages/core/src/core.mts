@@ -1131,6 +1131,15 @@ export function createCore(options: CoreOptions): Core {
           }
           return await remote.check(checked, signal)
         }
+        case 'device.modelRanking.read':
+        case 'device.modelRanking.write':
+        case 'device.modelRanking.reset': {
+          const { deviceId, ...input } = params as Commands['device.modelRanking.write']['params']
+          return await deviceOf(deviceId).modelRanking(
+            name.endsWith('.read') ? 'read' : name.endsWith('.reset') ? 'reset' : 'write',
+            input,
+          )
+        }
         case 'device.settings.write': {
           const { deviceId, expectedVersion, edits } =
             params as Commands['device.settings.write']['params']

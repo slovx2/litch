@@ -220,8 +220,8 @@ function StartForm({
     }
   })()
   const pick = (id: string) => {
-    if (picking === 'harness') set({ harness: id, model: '', effort: '' })
-    else if (picking === 'model') set({ model: id, effort: '' })
+    if (picking === 'harness') set({ harness: id, model: '', effort: '', modelSelected: false })
+    else if (picking === 'model') set({ model: id, effort: '', modelSelected: Boolean(id) })
     else if (picking === 'effort') set({ effort: id })
     else if (picking === 'workspace') set({ workspaceId: id })
     else if (picking === 'sandbox') set({ sandbox: id as SpawnFields['sandbox'] })

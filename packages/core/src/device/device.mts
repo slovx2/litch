@@ -8,6 +8,7 @@ import type {
   DeviceSettingsReadResponse,
   DeviceSettingsSnapshot,
 } from '../../../protocol/src/device-settings.mjs'
+import { MODEL_RANKING, type ModelRankingSnapshot } from '../../../protocol/src/model-ranking.mjs'
 import { PATH_PICKER_EXTENSION } from '../../../protocol/src/path-picker.mjs'
 import {
   type ThreadCapabilities,
@@ -425,6 +426,8 @@ export interface Device {
    * 对面没有设置接口时抛 unsupported；设备还没连上时订阅照样成立，连上之后才有快照
    */
   openManage(sink: HostSink): () => void
+  /** 执行设备上的等级配置，读写后更新管理订阅。 */
+  modelRanking(action: 'read' | 'write' | 'reset', params?: unknown): Promise<ModelRankingSnapshot>
   /** 改设置。全有或全无；别处先改过了以 conflict 结束，什么都没写 */
   writeSettings(
     expectedVersion: number,
@@ -662,6 +665,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let fileDownloadSupported = false
   let filePreviewSupported = false
   let mediaImagesSupported = false
+  let modelRankingSupported = false
   let powerSupported = false
   let recoverySupported = false
   /** 对面有没有可重连的终端（deviceProcesses 扩展）。认出来之前、对面不是设备服务时都是没有 */
@@ -879,6 +883,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     stale,
     organizable,
     manageable,
+    modelRanking: modelRankingSupported,
     service,
     upgrade,
     remoteUpgrade: upgrader?.view() ?? null,
@@ -1937,6 +1942,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         for (const entry of info.harnesses) remember(entry.id, termsOf(entry))
         // 设置接口有没有，看它声明的扩展，不看版本号
         manageable = info.device.extensions?.includes(EXTENSION.deviceSettings) === true
+        modelRankingSupported = info.device.extensions?.includes(EXTENSION.modelRanking) === true
         powerSupported = info.device.extensions?.includes(EXTENSION.devicePower) === true
         recoverySupported = info.device.extensions?.includes(EXTENSION.turnRecovery) === true
         reattachable = info.device.extensions?.includes(EXTENSION.deviceProcesses) === true
@@ -2220,6 +2226,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (method === DEVICE_SETTINGS_CHANGED) {
         acceptToolSettings((params as DeviceSettingsChangedNotification).snapshot)
         manage.changed(params as DeviceSettingsChangedNotification)
+        return
+      }
+      if (method === MODEL_RANKING.changed) {
+        manage.rankingChanged(params as ModelRankingSnapshot)
         return
       }
       if (method === DEVICE_POWER_CHANGED) {
@@ -3334,6 +3344,14 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       )
     },
     openManage: (sink) => manage.open(sink),
+    modelRanking: async (action, params = {}) => {
+      const result = (await link.request(
+        MODEL_RANKING[action] as never,
+        params as never,
+      )) as ModelRankingSnapshot
+      manage.rankingChanged(result)
+      return result
+    },
     writeSettings: (expectedVersion, edits) => manage.write(expectedVersion, edits),
     async restartHarness(harness, force) {
       const result = await manage.restart(harness, force)

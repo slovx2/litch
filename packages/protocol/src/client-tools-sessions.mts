@@ -597,7 +597,7 @@ const WRAP_UP_TOOL: ClientToolFunctionSpec = {
             model: {
               type: 'string',
               description:
-                'Default: this session’s current model (the target harness’s default when the harness differs). To change it, pass a model id listed by options.',
+                'Default: this session’s current model (the target harness’s default when the harness differs). Children cannot exceed the parent model rank; custom device ranking also applies across harnesses. Unknown models may only inherit the same identity. An over-limit start fails with allowed models; choose one and retry. Pass a model id listed by options.',
             },
             permission: {
               type: 'string',

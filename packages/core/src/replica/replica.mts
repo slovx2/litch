@@ -178,6 +178,7 @@ export const keys = {
   manage: (deviceId: string) => `manage:${deviceId}:schema`,
   /** SettingsSnapshotView：设置现在的值、待重启的 harness、SSH 入口的状况 */
   manageSnapshot: (deviceId: string) => `manage:${deviceId}:snapshot`,
+  modelRanking: (deviceId: string) => `manage:${deviceId}:modelRanking`,
   managePower: (deviceId: string) => `manage:${deviceId}:power`,
   /** ManageRevisions：每个设置项的值从打开到现在被动过几次（自己写的、别处写的都算） */
   manageRevisions: (deviceId: string) => `manage:${deviceId}:revisions`,
@@ -875,6 +876,7 @@ export function createReplica(
 
   const applyManage = (deviceId: string, op: ManageOp) => {
     if (op.op === 'settings.set') setSnapshot(deviceId, op.snapshot, op.keys)
+    else if (op.op === 'ranking.set') store.set(keys.modelRanking(deviceId), op.value)
     else if (op.op === 'power.set') store.set(keys.managePower(deviceId), op.value)
   }
 
@@ -1447,6 +1449,7 @@ export function createReplica(
               if (!current()) return
               store.batch(() => {
                 store.set(keys.managePower(deviceId), view.power ?? null)
+                if (view.modelRanking) store.set(keys.modelRanking(deviceId), view.modelRanking)
                 store.delete(keys.manageError(deviceId))
                 // 重连之后重新读到的：和手上那份不一样的键，算被动过
                 const before = store.get<SettingsSnapshotView>(keys.manageSnapshot(deviceId))

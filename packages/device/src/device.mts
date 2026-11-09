@@ -8,6 +8,7 @@ import { THREAD_READ_STATE } from '../../protocol/src/thread-read-state.mjs'
 import { protectedAttachmentOwners } from './attachment-active.mjs'
 import { AttachmentRetention } from './attachment-retention.mjs'
 import { registerAutomationGuide } from './automation-guide.mjs'
+import { DeviceModelRanking } from './model-ranking.mjs'
 import { ResumeTools } from './resume-tools.mjs'
 import { reserveSessionWork } from './session-capacity.mjs'
 import { prepareSessionTools } from './session-client-tools.mjs'
@@ -298,6 +299,7 @@ export class DeviceServer {
   /** 由设备进程自己执行的 litch_ 命名空间（litch_tasks、litch_sessions），见 device-tools.mts */
   readonly deviceTools: DeviceTools
   /** 会话树：父子关系、提案、回报与唤醒（session-tree.mts） */
+  readonly modelRanking: DeviceModelRanking
   readonly sessionTree: SessionTree
   readonly managers: DeviceManagers
   /** 原生 codex 会话的自动起名 */
@@ -390,7 +392,7 @@ export class DeviceServer {
     this.recovery.resumed(this.control?.state?.wake)
     this.recovery.start()
     // 设置功能要有适配器主进程在管才有：客户端看这份列表决定出不出设置界面
-    if (this.control) info.extensions.push(EXTENSION.deviceSettings)
+    if (this.control) info.extensions.push(EXTENSION.deviceSettings, EXTENSION.modelRanking)
     if (this.control) info.extensions.push(EXTENSION.harnessRuntime)
     // 服务的来历也是主进程给的：有它在管，声明过的客户端才问得到“在跑的是哪一份”
     if (this.control) info.extensions.push(EXTENSION.serviceActivity)
@@ -502,6 +504,7 @@ export class DeviceServer {
     if (this.worktrees) info.extensions.push(EXTENSION.worktrees)
     this.orchestrating = this.sessionTreeOn()
     this.sessionTree = new SessionTree({
+      modelRanking: () => this.modelRanking.config(),
       toolsBusy: (threadId) => this.deviceTools.busy(threadId),
       clientRequests: (threadId) =>
         this.approvals.list(threadId).map((card) => ({
@@ -586,6 +589,7 @@ export class DeviceServer {
     )
     this.sessionTree.onTurnEnded((id) => this.nativeBackground.schedule(id))
     info.extensions.push(EXTENSION.nativeBackgroundWake)
+    this.modelRanking = new DeviceModelRanking(this.sessionTree, this.control)
     this.managers = new DeviceManagers(this.sessionTree, options.stateDir, (harness, thread) => {
       this.titles?.born(harness, thread)
     })
@@ -777,6 +781,7 @@ export class DeviceServer {
       tasks: this.tasks,
       managers: this.managers,
       deviceTools: this.deviceTools,
+      modelRanking: this.modelRanking,
       sessionTree: this.sessionTree,
       sessionTreeOn: () => this.sessionTreeOn(),
       pairing: this.pairing,

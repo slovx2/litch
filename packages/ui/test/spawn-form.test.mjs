@@ -209,3 +209,19 @@ test('沙箱：目标 harness 给得到的都比要的宽时说出会是哪一�
   // 认不出父会话的预设：不说
   assert.equal(widerLevel(null, [':danger-full-access']), null)
 })
+
+test('只有亲自选择型号才携带本次例外，预填和改其他项不算', () => {
+  const fields = fieldsFor(parent, proposal)
+  assert.equal(overridesOf(fields, parent, proposal).modelSelected, undefined)
+  assert.equal(
+    overridesOf({ ...fields, title: '改标题' }, parent, proposal).modelSelected,
+    undefined,
+  )
+  const explicit = overridesOf({ ...fields, modelSelected: true }, parent, proposal)
+  assert.equal(explicit.model, proposal.model)
+  assert.equal(explicit.modelSelected, true)
+  assert.equal(
+    overridesOf({ ...fields, model: '', modelSelected: true }, parent, proposal).modelSelected,
+    undefined,
+  )
+})

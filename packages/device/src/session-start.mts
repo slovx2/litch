@@ -1,6 +1,7 @@
+import { checkChildModel } from './model-ranking.mjs'
 // 派一个子会话（模型的 litch_sessions.start、用户的 litch/session/start、开始提案（acceptProposal）都走这里）。
 // fresh：在目标 harness 上 thread/start（目录缺省是父会话的），再 turn/start 发简报；fork：同 harness 的 thread/fork
-// 再 turn/start。访问权限继承父会话，显式提升或目标不支持时拒绝；模型、强度不限，没给的取开始那一刻父会话的
+// 再 turn/start。访问权限继承父会话，显式提升或目标不支持时拒绝；型号在设备层执行等级上限，强度不作父子比较；没给的取开始那一刻父会话的
 //（目标 harness 和父会话不同时用那边的默认；那个模型没有这一档强度的也用默认）。建好后记父子关系、登记进会话索引
 // 和设备级工作区（跟父会话在同一个工作区，除非指定了别的），给每条客户端连接发 thread/started 和父子关系的通知。
 // 目录：worktree 为真的在设备层新建一个工作树（从宿主分支的最新提交切），为假的共用父会话的目录；没定的看宿主——
@@ -50,6 +51,9 @@ import { repoOf } from './worktree-git.mjs'
 import { worktreeCwd } from './worktrees.mjs'
 
 export interface ChildSpec {
+  /** 仅设备 UI 提案入口设置，工具参数不可写。 */
+  userPickedModel?: boolean
+
   /** 设备解析出的归属父会话；工作线建议保留来源的分叉上下文和权限，但由经理接收回报。 */
   lineageParentId?: string
   /** 来源已归档时只保留设备记录的标识与标题，不恢复来源来取配置或上下文。 */
@@ -467,14 +471,22 @@ async function createChild(
         ? parentConfig
         : (await parentSettings(tree, manager.threadId, manager.harness)).config
       : null
-  const model =
+  let model =
     spec.model ||
     manager?.dispatch.model ||
     (manager
       ? harness === manager.harness
         ? (textOf(managerConfig?.model) ?? manager.model)
-        : null
+        : parentModel
       : parentModel)
+  model = await checkChildModel(
+    tree,
+    parentHarness,
+    textOf(parentConfig?.model),
+    harness,
+    model,
+    spec.userPickedModel === true,
+  )
   const wanted =
     spec.effort ||
     manager?.dispatch.effort ||
@@ -502,6 +514,15 @@ async function createChild(
   const where = made ? worktreeCwd(made) : cwd
   let created: unknown
   try {
+    const freshParent = (await parentSettings(tree, parentId, parentHarness)).config
+    model = await checkChildModel(
+      tree,
+      parentHarness,
+      textOf(freshParent?.model),
+      harness,
+      model,
+      spec.userPickedModel === true,
+    )
     created =
       spec.kind === 'fork'
         ? await link.request('thread/fork', {
@@ -596,6 +617,16 @@ async function createChild(
     text += `\n\n[Litch] Suggestion source: "${source}" (${sourceId}). This suggestion was started as a workline of manager "${manager.name}" (${manager.threadId}), alongside the source line. Report to the manager; the source line is not your parent.`
   }
   mark('briefing')
+  const actualModel = isObject(created) ? textOf(created.model) : null
+  const latestParent = (await parentSettings(tree, parentId, parentHarness)).config
+  await checkChildModel(
+    tree,
+    parentHarness,
+    textOf(latestParent?.model),
+    harness,
+    actualModel ?? model,
+    spec.userPickedModel === true && (actualModel === null || actualModel === model),
+  )
   const begun = await link.request(
     'turn/start',
     {
@@ -661,6 +692,8 @@ async function newWorktree(
 
 /** 从提案开始时改的东西（用户在卡片上改了再开始）。不给的照提案；空字符串是清掉提案里的值、用缺省（父会话的） */
 export interface ProposalOverrides {
+  modelSelected?: boolean
+
   harness?: string
   model?: string
   effort?: string
@@ -722,10 +755,25 @@ export async function acceptProposal(
   proposalId: string,
   overrides: ProposalOverrides = {},
   from: 'pending' | 'chosen' = 'pending',
+  actor: 'model' | 'user' = 'model',
 ): Promise<{ threadId: string; harness: string; branch: string | null }> {
   if (tree.accepting.has(proposalId)) throw new ProtocolError(-32602, `提案 ${proposalId} 正在开始`)
   const proposal = tree.pendingProposal(proposalId, from)
   const { manager, archivedSource, parentId } = proposalParent(tree, proposal)
+  if (archivedSource && !(actor === 'user' && overrides.modelSelected && overrides.model)) {
+    const config = await tree.host.modelRanking?.()
+    const sourceHarness = tree.host.index.lookup(proposal.threadId)
+    const target =
+      overrides.harness || proposal.harness || manager?.dispatch.harness || manager?.harness
+    if (
+      config?.mode === 'custom' ||
+      (sourceHarness === target && ['claude-code', 'codex'].includes(target ?? ''))
+    )
+      throw new ProtocolError(
+        -32602,
+        'Cannot compare the archived source model. Select a specific model on the proposal card before starting; the manager model is not an inherited ceiling.',
+      )
+  }
   const pick = (value: string | undefined, fallback: string | null) =>
     value === undefined ? fallback : value || null
   const started = startChild(
@@ -744,6 +792,8 @@ export async function acceptProposal(
             },
           }
         : {}),
+      userPickedModel:
+        actor === 'user' && overrides.modelSelected === true && Boolean(overrides.model),
       harness: pick(overrides.harness, proposal.harness),
       model: pick(overrides.model, proposal.model),
       effort: pick(overrides.effort, proposal.effort ?? null),
