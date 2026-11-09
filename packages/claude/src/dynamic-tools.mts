@@ -15,6 +15,8 @@ export interface DynamicTool {
   namespaceDescription?: string
   description: string
   inputSchema: Record<string, unknown>
+  deferLoading?: boolean
+  defer_loading?: boolean
 }
 
 /**
@@ -138,7 +140,10 @@ export function dynamicToolServer(
       name,
       description: toolDescription(tool),
       inputSchema: tool.inputSchema,
-      _meta: { 'anthropic/alwaysLoad': true },
+      // 延迟工具由 CLI 搜索发现；省略元信息，兼容尚不支持显式 false 的 CLI。
+      ...(tool.deferLoading === true || tool.defer_loading === true
+        ? {}
+        : { _meta: { 'anthropic/alwaysLoad': true } }),
     })),
   }))
   config.instance.server.setRequestHandler(CallToolRequestSchema, async (request) => {
