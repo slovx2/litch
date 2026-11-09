@@ -1,6 +1,6 @@
 // 只观察明确登记的原生终端；不运行 shell、不接管 Codex 的审批或沙箱。
 import { randomUUID } from 'node:crypto'
-import type { LitchBackground } from '../../protocol/src/background-tasks.mjs'
+import type { LitchBackground, LitchBackgroundTask } from '../../protocol/src/background-tasks.mjs'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import {
   NATIVE_BACKGROUND_OPTION,
@@ -451,6 +451,25 @@ export class NativeBackgroundWake {
       [...this.live.values()].filter((t) => t.threadId === threadId && t.state === 'watching')
         .length + Number(this.pending(threadId))
     )
+  }
+  /** 只快照仍有效的登记；重启后由恢复消息交给模型核对，绝不重放旧投递。 */
+  restartTasks(threadId: string, tasks: LitchBackgroundTask[] = []): string[] {
+    // 已取消／暂停的登记不能通过同一原生命令的派生集合重新取得唤醒资格。
+    const registered = this.host.store.list(threadId)
+    const unregistered = tasks
+      .filter(
+        (task) =>
+          task.status === 'running' &&
+          !registered.some((watch) => watch.itemId === task.itemId && watch.turnId === task.turnId),
+      )
+      .map((task) => `${task.kind} ${task.id}: ${task.title}`)
+    const watches = [...this.live.values()]
+      .filter((task) => task.threadId === threadId && ['watching', 'pending'].includes(task.state))
+      .map(
+        (task) =>
+          `litch_background.watch ${task.id} (session_id=${task.processId}, ${task.state}): ${task.title}; command=${task.command}; purpose=${task.purpose}`,
+      )
+    return [...unregistered, ...watches]
   }
   decorateBackground(threadId: string, base: LitchBackground | null): LitchBackground | null {
     if (!this.installed(threadId)) return base

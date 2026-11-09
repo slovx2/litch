@@ -26,13 +26,28 @@ function fixture() {
   const features = { goals: false, queue: false }
   let goal: unknown = null
   let queue: unknown[] = []
+  let background: string[] = []
+  let failures = 0
+  let opens = 0
+  let native = false
   const link: EngineLink = {
     harness: 'claude-code',
     runtime: { features },
-    native: false,
+    get native() {
+      return native
+    },
     closed: false,
     async request(method, params: any, options) {
       reads.push(method)
+      if (native && method === 'thread/read') {
+        assert.equal(params.includeTurns, false, '原生历史不能整份读回')
+        return { thread: { ...structuredClone(thread), turns: [] } }
+      }
+      if (native && method === 'thread/turns/list') {
+        assert.equal(params.limit, 1)
+        return { data: [structuredClone(thread.turns.at(-1))], nextCursor: 'older-history' }
+      }
+      if (native && method === 'thread/resume') assert.equal(params.excludeTurns, true)
       if (['thread/read', 'thread/resume'].includes(method) && historyMs > 0) {
         const timeout = options?.timeoutMs ?? 0
         if (timeout < historyMs) throw new Error(`${method} 等了 ${timeout} 毫秒没有应答`)
@@ -73,7 +88,12 @@ function fixture() {
       store,
       service: () => service,
       now: () => now,
-      open: async () => link,
+      open: async () => {
+        opens++
+        if (failures-- > 0) throw new Error('引擎尚未就绪')
+        return link
+      },
+      background: () => background,
       excluded: () => excluded,
       log() {},
     })
@@ -128,6 +148,24 @@ function fixture() {
     setQueue(value: unknown[]) {
       queue = value
     },
+    background(value: string[] = ['monitor job-1: watch events']) {
+      background = value
+    },
+    finished() {
+      thread.status = { type: 'idle' }
+      thread.turns.at(-1).status = 'completed'
+      resume.observe('turn/completed', { threadId: 'thread', turn: thread.turns.at(-1) })
+    },
+    failOpens(count: number) {
+      failures = count
+      opens = 0
+    },
+    get opens() {
+      return opens
+    },
+    native() {
+      native = true
+    },
     close() {
       resume.close()
       db.close()
@@ -135,6 +173,127 @@ function fixture() {
     },
   }
 }
+
+test('原生 Codex 空闲后台恢复只读最近一回合；恢复附着不携带整份历史', async () => {
+  const f = fixture()
+  try {
+    f.native()
+    f.userTurn()
+    f.background(['litch_background.watch test: command=wait for one event'])
+    f.finished()
+    assert.deepEqual(await f.resume.prepare(), { prepared: 1 })
+    f.reboot()
+    await f.resume.recover()
+    assert.equal(f.sent.length, 1)
+    assert.equal(f.reads.filter((method) => method === 'thread/turns/list').length, 3)
+  } finally {
+    f.close()
+  }
+})
+
+test('前台完成、看护仍在：持久化任务、保留完成状态且不重放 interrupt；工作只恢复一次', async () => {
+  const f = fixture()
+  try {
+    f.userTurn()
+    f.background()
+    f.finished()
+    assert.deepEqual(await f.resume.prepare(), { prepared: 1 })
+    assert.equal(f.reads.includes('turn/interrupt'), false)
+    assert.deepEqual(f.store.rows('ready')[0]?.background, ['monitor job-1: watch events'])
+    f.background([])
+    f.reboot()
+    await f.resume.recover()
+    assert.equal(f.sent.length, 1)
+    assert.match(f.sent[0].input[0].text, /monitor job-1: watch events/)
+    f.finished()
+    f.background()
+    f.reboot()
+    assert.deepEqual(await f.resume.prepare(), { prepared: 0 })
+  } finally {
+    f.close()
+  }
+})
+
+for (const mode of [
+  'none',
+  'stop',
+  'plain-stop',
+  'waiting',
+  'archived',
+  'failed',
+  'schedule',
+  'goal',
+  'queue',
+  'changed',
+  'scope',
+  'expired',
+] as const) {
+  test(`空闲后台恢复排除：${mode}`, async () => {
+    const f = fixture()
+    try {
+      f.userTurn()
+      f.background()
+      f.finished()
+      if (mode === 'none') f.background([])
+      if (mode === 'stop') f.resume.cancel('thread')
+      if (mode === 'plain-stop') f.resume.stop()
+      if (mode === 'waiting') f.thread.status.activeFlags = ['waitingOnUserInput']
+      if (mode === 'archived') f.thread.archived = true
+      if (mode === 'failed') f.thread.turns[0].status = 'failed'
+      if (['schedule', 'goal', 'queue'].includes(mode)) f.thread.turns[0].litchOrigin = mode
+      if (mode !== 'plain-stop') await f.resume.prepare(mode === 'scope' ? 'pi' : undefined)
+      if (mode === 'changed') f.thread.turns.push({ id: 'new-work', status: 'completed' })
+      if (mode === 'expired') f.setNow(1000 + 24 * 3600_000 + 1)
+      f.reboot()
+      await f.resume.recover()
+      assert.equal(f.sent.length, 0)
+    } finally {
+      f.close()
+    }
+  })
+}
+
+test('后台续做后仍有看护沿用原 token；没有经 Litch 授权的工作不新建恢复资格', async () => {
+  const f = fixture()
+  try {
+    f.background()
+    assert.deepEqual(await f.resume.prepare(), { prepared: 0 })
+    f.resume.release()
+    f.userTurn()
+    f.finished()
+    f.thread.turns.push({
+      id: 'background-turn',
+      status: 'completed',
+      litchOrigin: 'backgroundTask',
+    })
+    assert.deepEqual(await f.resume.prepare(), { prepared: 1 })
+    assert.equal(f.store.rows('ready')[0]?.turnId, 'background-turn')
+    f.reboot()
+    await f.resume.recover()
+    assert.equal(f.sent.length, 1)
+  } finally {
+    f.close()
+  }
+})
+
+test('只读恢复探测退避有上限；成功后只发送一次', async () => {
+  for (const failures of [2, 9]) {
+    const f = fixture()
+    try {
+      f.userTurn()
+      await f.resume.prepare()
+      f.reboot()
+      f.failOpens(failures)
+      await f.resume.recover()
+      assert.equal(f.sent.length, failures === 2 ? 1 : 0)
+      assert.equal(f.opens, failures === 2 ? 3 : 4)
+      await f.resume.recover()
+      assert.equal(f.opens, failures === 2 ? 3 : 4)
+    } finally {
+      f.close()
+    }
+  }
+})
 
 test('冷启动读取历史超过五秒仍恢复；发送结果不明不重试', async () => {
   const f = fixture()

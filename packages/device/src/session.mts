@@ -949,6 +949,8 @@ export class ClientSession implements ClientToolPeer {
         'thread/goal/set',
         'thread/queue/add',
         'thread/queue/start',
+        'thread/backgroundTerminals/terminate',
+        'thread/backgroundTerminals/clean',
       ].includes(method)
     )
       this.host.restart?.cancel(params.threadId, method === 'turn/interrupt')

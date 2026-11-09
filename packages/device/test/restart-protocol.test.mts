@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { parseSystemMessage } from '../../protocol/src/system-messages.mjs'
+import { codexRig, sentTo } from './codex-kit.mjs'
+import { codexThread, FakeCodex } from './fake-codex.mjs'
 import { FakeControl, managed } from './fake-control.mjs'
 import { FakeEngine } from './fake-engine.mjs'
 import { rig, settle } from './helpers.mjs'
 
 function control(pid: number, harness = 'pi'): FakeControl {
-  const value = new FakeControl([managed(harness)])
+  const value = new FakeControl([{ ...managed(harness), native: harness === 'codex' }])
   value.service = {
     pid,
     startedAt: `start-${pid}`,
@@ -16,6 +18,131 @@ function control(pid: number, harness = 'pi'): FakeControl {
   }
   value.push()
   return value
+}
+
+test('Codex watch：真实设备控制链保存登记，换代后只发一次核对回合，不重新登记旧进程', async () => {
+  const fake = new FakeCodex()
+  fake.cliVersion = '0.163.0'
+  const turns: { id: string; status: string; items: unknown[] }[] = []
+  const stored = codexThread(99, 400, { status: { type: 'idle' }, turns })
+  fake.threads.push(stored)
+  fake.handlers['thread/start'] = () => ({ thread: stored })
+  fake.handlers['thread/goal/get'] = () => ({ goal: null })
+  fake.handlers['thread/queue/list'] = () => ({ data: [] })
+  fake.handlers['thread/read'] = (params) => ({
+    thread: { ...stored, turns: params.includeTurns ? turns : [] },
+  })
+  const original = { id: 'original', status: 'inProgress', items: [] }
+  fake.handlers['turn/start'] = () => {
+    const turn = turns.length ? { id: 'restored', status: 'inProgress', items: [] } : original
+    turns.push(turn)
+    return { turn }
+  }
+  fake.handlers['thread/backgroundTerminals/list'] = () => ({
+    data: [{ itemId: 'cmd', processId: '123' }],
+  })
+  const ctl = control(1, 'codex')
+  let env = codexRig({ fake, device: { control: ctl, wrapUpReminder: false } })
+  try {
+    const client = env.connect()
+    await client.initialize(['harness', 'backgroundTasks', 'nativeBackgroundWake'])
+    const { thread } = await client.call('thread/start', { harness: 'codex', cwd: env.stateDir })
+    await client.call('turn/start', {
+      threadId: thread.id,
+      input: [{ type: 'text', text: '监听一次消息' }],
+    })
+    fake.notify('item/started', {
+      threadId: thread.id,
+      turnId: 'original',
+      item: {
+        type: 'commandExecution',
+        id: 'cmd',
+        command: 'watch --once',
+        processId: '123',
+        status: 'inProgress',
+      },
+    })
+    await settle()
+    const watch = await env.device.nativeBackground.tool({
+      harness: 'codex',
+      threadId: thread.id,
+      turnId: 'original',
+      callId: 'watch-original',
+      namespace: 'litch_background',
+      tool: 'watch',
+      arguments: { session_id: '123', purpose: '收到消息后核对结果' },
+    })
+    assert.equal(watch.success, true)
+    original.status = 'completed'
+    fake.notify('turn/completed', { threadId: thread.id, turn: original })
+    await settle()
+    assert.deepEqual(await ctl.onAsk?.('restart.prepare'), { prepared: 1 }, env.logs.join('\n'))
+    assert.equal(sentTo(fake, 'turn/interrupt').length, 0)
+    await env.device.close()
+    env = codexRig({
+      fake,
+      device: { stateDir: env.stateDir, control: control(2, 'codex'), wrapUpReminder: false },
+    })
+    for (let attempt = 0; attempt < 100 && sentTo(fake, 'turn/start').length !== 2; attempt++)
+      await settle()
+    const starts = sentTo(fake, 'turn/start')
+    assert.equal(starts.length, 2)
+    assert.match(
+      starts[1].input[0].text,
+      /litch_background.watch.*session_id=123.*watch --once.*收到消息后核对结果/,
+    )
+    assert.deepEqual(env.device.nativeBackground.restartTasks(thread.id), [])
+    await env.device.restart.recover()
+    assert.equal(sentTo(fake, 'turn/start').length, 2)
+  } finally {
+    await env.close()
+  }
+})
+
+for (const harness of ['claude-code', 'pi', 'opencode', 'acp', 'dsh', 'agy']) {
+  test(`${harness} 空闲后台会话：设备换代后恢复一次且保留原 completed 回合`, async () => {
+    const engine = new FakeEngine(harness)
+    const ctl = control(1, harness)
+    let env = rig({ [harness]: engine }, {}, { control: ctl, wrapUpReminder: false })
+    try {
+      const client = env.connect()
+      await client.initialize()
+      const { thread } = await client.call('thread/start', { harness, cwd: env.stateDir })
+      await client.call('turn/start', {
+        threadId: thread.id,
+        input: [{ type: 'text', text: '看护任务' }],
+      })
+      engine.notify('litch/thread/background/changed', {
+        threadId: thread.id,
+        tasks: [{ id: 'monitor', kind: 'monitor', title: 'watch --events', status: 'running' }],
+        wakesOnFinish: true,
+      })
+      engine.end(thread.id, 'completed', '后台继续看护')
+      await settle()
+      assert.deepEqual(await ctl.onAsk?.('restart.prepare'), { prepared: 1 })
+      assert.equal(
+        engine.seen.some((frame) => frame.method === 'turn/interrupt'),
+        false,
+      )
+      await env.device.close()
+      env = rig(
+        { [harness]: engine },
+        {},
+        { stateDir: env.stateDir, control: control(2, harness), wrapUpReminder: false },
+      )
+      for (let attempt = 0; attempt < 100 && engine.turns.get(thread.id)?.length !== 2; attempt++)
+        await settle()
+      const turns = engine.turns.get(thread.id) ?? []
+      assert.equal(turns.length, 2)
+      assert.equal(turns[0]?.status, 'completed')
+      const sent = engine.seen.filter((frame) => frame.method === 'turn/start')
+      assert.match(sent[1]?.params.input[0].text, /monitor monitor: watch --events/)
+      await env.device.restart.recover()
+      assert.equal(engine.seen.filter((frame) => frame.method === 'turn/start').length, 2)
+    } finally {
+      await env.close()
+    }
+  })
 }
 
 test('恢复占用时订阅和插话返回明确的暂态标记，释放后原会话仍能订阅', async () => {

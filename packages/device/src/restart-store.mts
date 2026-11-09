@@ -54,9 +54,9 @@ export class RestartStore {
   finished(threadId: string, turnId: string): void {
     this.db
       .prepare(
-        "UPDATE restart_turns SET state='finished' WHERE thread_id=? AND state='observed' AND (turn_id=? OR turn_id IS NULL)",
+        "UPDATE restart_turns SET state='finished',turn_id=? WHERE thread_id=? AND state='observed' AND (turn_id=? OR turn_id IS NULL)",
       )
-      .run(threadId, turnId)
+      .run(turnId, threadId, turnId)
   }
 
   rows(state: string): RestartTurn[] {
@@ -108,12 +108,19 @@ export class RestartStore {
     )
   }
 
-  prepare(row: RestartTurn, service: string, now: number, background: string[] = []): boolean {
+  prepare(
+    row: RestartTurn,
+    service: string,
+    now: number,
+    background: string[] = [],
+    turnId = row.turnId,
+  ): boolean {
     return (
       this.db
-        .prepare(`UPDATE restart_turns SET state='preparing',service=?,prepared_at=?,background=?
-      WHERE thread_id=? AND token=? AND state='observed'`)
-        .run(service, now, JSON.stringify(background), row.threadId, row.token).changes === 1
+        .prepare(`UPDATE restart_turns SET state='preparing',service=?,prepared_at=?,background=?,turn_id=?
+      WHERE thread_id=? AND token=? AND state=? AND state IN ('observed','finished')`)
+        .run(service, now, JSON.stringify(background), turnId, row.threadId, row.token, row.state)
+        .changes === 1
     )
   }
 
