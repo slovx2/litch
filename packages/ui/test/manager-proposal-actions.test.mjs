@@ -22,6 +22,17 @@ export const render=(sourceIsManager,inbox,worktree=false)=>renderToStaticMarkup
     {
       name: 'proposal-actions-fixture',
       setup(api) {
+        // 静态按钮夹具只取客户端外部状态的当前快照；订阅更新另由 operation 与窗口验收覆盖。
+        api.onResolve({ filter: /^react$/ }, (args) =>
+          args.importer.endsWith('/tree/proposals.ts')
+            ? { path: 'proposal-store-react', namespace: 'proposal-store' }
+            : undefined,
+        )
+        api.onLoad({ filter: /.*/, namespace: 'proposal-store' }, () => ({
+          resolveDir: new URL('../', import.meta.url).pathname,
+          contents: `export * from ${JSON.stringify(createRequire(import.meta.url).resolve('react'))};
+export const useSyncExternalStore=(_subscribe,getSnapshot)=>getSnapshot();`,
+        }))
         // 只验真实按钮组件；编辑弹窗和对话正文不在本用例的渲染范围。
         api.onResolve(
           { filter: /\/(SpawnDialog|TreeCards|CardMarkdown|actions)\.tsx$/ },

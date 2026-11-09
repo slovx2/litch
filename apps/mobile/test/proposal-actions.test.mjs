@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { transformSync } from '../../../node_modules/esbuild/lib/main.js'
+import { withProposalNote } from '../../../packages/ui/src/tree/proposal-operation.ts'
 
 // 执行真实动作 hook，替换原生 UI 和数据订阅，不加载 React 或模拟器。
 const { code } = transformSync(
@@ -16,8 +17,10 @@ function actions({
   online = true,
   worktree = false,
   block = null,
+  note = '',
 } = {}) {
   const navigations = []
+  const starts = []
   const stubs = {
     '@litch/core': {
       keys: { device: () => 'device', summary: () => 'summary' },
@@ -26,7 +29,7 @@ function actions({
     '@react-navigation/native': {
       useNavigation: () => ({ navigate: (...args) => navigations.push(args) }),
     },
-    react: { useState: (value) => [value, () => {}] },
+    react: { useState: (value) => [value === '' ? note : value, () => {}] },
     'react/jsx-runtime': {
       jsx: (type, props) => ({ type, props }),
       jsxs: (type, props) => ({ type, props }),
@@ -39,7 +42,11 @@ function actions({
         key === 'device' ? { connection: online ? 'online' : 'offline' } : { id: 'source' },
     },
     '../../ui/i18n': { useT: () => (key) => key },
-    './hooks': { useProposalAct: () => ({ busy, dismiss() {} }) },
+    './hooks': {
+      useProposalAct: () => ({ busy, dismiss() {}, accept: (value) => starts.push(value) }),
+    },
+    '../../../../../packages/ui/src/tree/proposal-operation.ts': { withProposalNote },
+    './ProposalNote': { ProposalNote: 'ProposalNote' },
     './WorktreeSwitch': { useWorktreesOn: () => true, WorktreeSwitch: 'WorktreeSwitch' },
     '../../../../../packages/ui/src/tree/useProposalWorktree.ts': {
       useProposalWorktree: () => block,
@@ -62,9 +69,10 @@ function actions({
   )
   return {
     // biome-ignore lint/correctness/useHookAtTopLevel: 单测用无 React 的 hook 替身直接检查菜单与导航。
-    acts: module.exports.useProposalActs('local', 'source', 'p', worktree, managerSource),
+    acts: module.exports.useProposalActs('local', 'source', 'p', worktree, managerSource, '原任务'),
     render: module.exports.ProposalActsRow,
     navigations,
+    starts,
   }
 }
 
@@ -98,10 +106,20 @@ for (const source of [{}, { manager: true }, { managerSource: true }]) {
     assert.equal(acts.menu[0].disabled, undefined)
     acts.menu[0].onPress()
     assert.deepEqual(navigations, [
-      ['ProposalStart', { deviceId: 'local', sessionId: 'source', proposalId: 'p' }],
+      ['ProposalStart', { deviceId: 'local', sessionId: 'source', proposalId: 'p', note: '' }],
     ])
   })
 }
+
+test('手机卡片的补充说明同时传给编辑页和开始请求', () => {
+  const { acts, navigations, starts } = actions({ note: '先检查现有实现' })
+  acts.menu[0].onPress()
+  assert.equal(navigations[0][1].note, '先检查现有实现')
+  acts.start()
+  assert.deepEqual(starts, [
+    { worktree: false, prompt: '原任务\n\n用户补充说明：\n先检查现有实现' },
+  ])
+})
 
 test('经理建议编辑仍受离线和正在提交的限制', () => {
   assert.equal(
