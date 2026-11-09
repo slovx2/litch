@@ -7,6 +7,7 @@ import { useChannel, useKey, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import type { SheetAction } from '../../ui/kit/overlays'
 import { archivedMenu, sessionMenu, workspaceMenu } from './menus'
+import { useReadMenu } from './read-menu'
 import { titleOf } from './rows'
 import type { WorkspaceEdit } from './WorkspaceDialog'
 
@@ -58,6 +59,11 @@ export function useSheet({
   const latest = useKey<SessionSummary>(
     keys.summary(deviceId, menu && 'summary' in menu ? menu.summary.id : ''),
   )
+  const readActions = useReadMenu(
+    menu?.kind === 'session' || menu?.kind === 'screen' ? deviceId : undefined,
+    menu?.kind === 'session' ? menu.summary.id : undefined,
+    act,
+  )
   if (!menu) return { actions: [] }
   const target = (summary: SessionSummary) => ({ deviceId, sessionId: summary.id })
   const askDelete = (summary: SessionSummary) =>
@@ -88,13 +94,16 @@ export function useSheet({
         archive: () => act(channel.command('session.archive', target(summary))),
         delete: () => askDelete(summary),
       }
-      const actions: SheetAction[] = entries.map((entry) => ({
-        label: entry.label,
-        danger: entry.danger,
-        disabled: entry.disabled,
-        testID: `menu:${entry.act}`,
-        onPress: run[entry.act],
-      }))
+      const actions: SheetAction[] = [
+        ...readActions,
+        ...entries.map((entry) => ({
+          label: entry.label,
+          danger: entry.danger,
+          disabled: entry.disabled,
+          testID: `menu:${entry.act}`,
+          onPress: run[entry.act],
+        })),
+      ]
       return { title: titleOf(summary, t), actions }
     }
     case 'move': {
@@ -170,6 +179,7 @@ export function useSheet({
     }
     case 'screen': {
       const actions: SheetAction[] = [
+        ...readActions,
         {
           label: t('sessions.new'),
           testID: 'menu:screen:new',

@@ -98,6 +98,9 @@ Chat and Managers are navigation trees. The content follows the last conversatio
 Only the clicked row is selected, including for keyboard navigation and screen readers. Other copies stay unselected.
 List updates preserve the selected location; removing that projection item selects the same conversation in the tree.
 未读沿用本机的新结果标记：未查看的对话从运行转为停止时标记，打开后清除；随侧栏缓存保存，重启保留。
+桌面右键设备可“全部标为已读”，右键会话可“标为已读”，后者包含其所有层级的子会话和工作线；经理行也支持。手机在设备、会话、经理及置顶/本机分组的长按菜单中提供对应入口，设备会话页的“更多”也可清整台设备。“未读”标题菜单可清当前客户端全部设备的未读。没有未读时不显示相应操作。标记不会打开会话，也不会清除运行或待处理状态；之后的新结果仍会重新标未读。
+
+On desktop, right-click a device to mark all its sessions as read, or a session to mark it and all descendants as read. Manager rows support the same action. On mobile, use the corresponding long-press menus or the device session page’s More menu. The Unread group menu clears unread marks across devices in this client. These actions appear only when there is unread content. They do not open sessions or clear running and pending states; new results can become unread again. Read state is local to each client and does not sync across devices.
 桌面和手机收起项目时，未读数按展开后的实际会话树汇总。跨项目的子会话计入它显示所在的父会话项目；父项被筛掉、子项单列时，计回子项所在项目。被筛掉、已归档及普通列表不显示的经理工作线不计入。未读后代所需的父链不会被子树折叠或“显示更多”藏住；打开未读子会话清除它自己的标记，打开父会话不会代清子会话。
 On desktop and phone, collapsed project unread counts follow the visible conversation tree. A nested child counts toward the parent's displayed project; if filtering leaves the child standalone, it counts toward its own project. Filtered, archived and manager workline rows absent from the ordinary list do not count. Unread descendants remain reachable through folded or paginated ancestors. Open the unread child to clear its mark; opening the parent does not clear its children.
 从未读组打开后，当前主项保留在原位置并恢复已读样式，切到其他主会话或离开对话后才移出，避免连续点击打开下一项。未读计数只计算仍未读的主项，最近组不显示总数。

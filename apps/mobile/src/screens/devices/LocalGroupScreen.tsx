@@ -21,6 +21,7 @@ import { Empty, ErrorBanner } from '../../ui/kit/controls'
 import { Sheet, type SheetAction } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
+import { useReadMenu } from '../sessions/read-menu'
 import { titleOf } from '../sessions/rows'
 import { useGroupMenu } from './GroupMenu'
 import { useLocalJoin } from './LocalJoin'
@@ -40,7 +41,7 @@ export function LocalGroupScreen({ navigation, route }: Props) {
   const organizer = useOrganizer()
   const devices = useKey<string[]>(keys.devices) ?? NO_IDS
   const [failure, setFailure] = useState<string | null>(null)
-  const [menu, setMenu] = useState<{ ref: SessionRef; title: string } | null>(null)
+  const [menu, setMenu] = useState<{ ref: SessionRef; title: string; readId?: string } | null>(null)
   const act = useCallback(
     (work: Promise<unknown>) => {
       setFailure(null)
@@ -51,6 +52,7 @@ export function LocalGroupScreen({ navigation, route }: Props) {
     [t],
   )
   const join = useLocalJoin(act)
+  const readActions = useReadMenu(menu?.ref.deviceId, menu?.readId ?? menu?.ref.sessionId, act)
   const groupMenu = useGroupMenu(act, () => navigation.goBack())
   const group = organizer?.groups.find((entry) => entry.id === groupId)
   const blocked = organizerBlocked(organizer)
@@ -67,9 +69,9 @@ export function LocalGroupScreen({ navigation, route }: Props) {
       )
     : -1
   const actions = (): SheetAction[] => {
-    if (!menu || blocked) return []
+    if (!menu || blocked) return readActions
     const { ref } = menu
-    const list: SheetAction[] = []
+    const list: SheetAction[] = [...readActions]
     if (at > 0)
       list.push({
         label: t('organizer.up'),
@@ -140,7 +142,9 @@ export function LocalGroupScreen({ navigation, route }: Props) {
                     title: titleOf(summary, t),
                   })
                 }
-                onMenu={(title) => setMenu({ ref: member, title })}
+                onMenu={(title, readId) =>
+                  setMenu({ ref: member, title, ...(readId ? { readId } : {}) })
+                }
                 onArchived={() => navigation.navigate('Sessions', { deviceId: member.deviceId })}
               />
             ))
@@ -174,7 +178,7 @@ function Member({
   member: SessionRef
   showDevice: boolean
   onOpen(summary: SessionSummary, deviceId: string): void
-  onMenu(title: string): void
+  onMenu(title: string, sessionId?: string): void
   onArchived(): void
 }) {
   const theme = useTheme()
@@ -200,7 +204,7 @@ function Member({
         showDevice={showDevice}
         testID="localGroup"
         onOpen={onOpen}
-        onMenu={(entry) => onMenu(titleOf(entry, t))}
+        onMenu={(entry) => onMenu(titleOf(entry, t), entry.id)}
       />
     )
   // 置顶了的成员上面已经滤掉，这里不会是 pinned

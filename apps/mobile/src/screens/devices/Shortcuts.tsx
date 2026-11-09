@@ -20,6 +20,7 @@ import { useT } from '../../ui/i18n'
 import { Icon } from '../../ui/kit/Icon'
 import { Sheet, type SheetAction } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
+import { useReadMenu } from '../sessions/read-menu'
 import { titleOf } from '../sessions/rows'
 import { useGroupMenu } from './GroupMenu'
 import { LocalGroupName, useLocalJoin } from './LocalJoin'
@@ -50,6 +51,11 @@ export function PinsGroup({
   const merged = useMergedPins()
   const devices = useKey<string[]>(keys.devices) ?? NONE
   const [menu, setMenu] = useState<PinMenu | null>(null)
+  const readActions = useReadMenu(
+    menu?.kind === 'session' ? menu.deviceId : undefined,
+    menu?.kind === 'session' ? menu.summary.id : undefined,
+    act,
+  )
   const join = useLocalJoin(act)
   const shown = merged.shown
   if (!organizer || shown.length === 0) return <>{join.overlays}</>
@@ -67,7 +73,7 @@ export function PinsGroup({
     store.get<DeviceView>(keys.device(deviceId))?.organizable === true
   const actions = (): SheetAction[] => {
     if (!menu) return []
-    const list: SheetAction[] = []
+    const list: SheetAction[] = [...readActions]
     const { ref } = menu
     if (ref && organizable(menu.deviceId)) {
       // 先让设备取消置顶，成了再清掉本机记着的位置（再置顶时当新的接在最后）

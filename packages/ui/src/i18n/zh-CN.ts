@@ -498,6 +498,8 @@ export const zhCN = {
   // ---- 设备详情：设备服务是哪一版，这次连接换没换版本 ----
   'service.batch.title': '升级设备服务',
   'service.batch.note': '应用已更新。为每台设备选择升级方式；空闲升级不会打断工作。',
+  'session.markRead': '标为已读',
+  'session.markAllRead': '全部标为已读',
   'service.batch.none': '不升级',
   'service.batch.idle': '空闲时自动升级',
   'service.batch.force': '强制升级',

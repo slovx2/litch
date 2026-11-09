@@ -522,6 +522,8 @@ export const en: Record<MessageKey, Entry> = {
   'service.batch.title': 'Upgrade device services',
   'service.batch.note':
     'The app has been updated. Choose how to upgrade each device. Idle upgrades do not interrupt work.',
+  'session.markRead': 'Mark as read',
+  'session.markAllRead': 'Mark all as read',
   'service.batch.none': 'Do not upgrade',
   'service.batch.idle': 'Upgrade when idle',
   'service.batch.force': 'Force upgrade',

@@ -1,16 +1,20 @@
 // 手机经理目录：按设备分组，每组先进行中、后已结束；新建、设置和调度仍在桌面。
 import { type DeviceView, keys, type ManagerView, type SessionSummary } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
 import { ago } from '../../../../../packages/ui/src/app/format.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Empty, Row, SectionLabel } from '../../ui/kit/controls'
+import { Empty, ErrorBanner, Row, SectionLabel } from '../../ui/kit/controls'
 import { StatusMark } from '../../ui/kit/marks'
+import { Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { plainLine } from '../../ui/plain-text'
 import { useTheme } from '../../ui/theme'
+import { useReadMenu } from '../sessions/read-menu'
 import { managerRowState } from './presentation'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Managers'>
@@ -22,6 +26,12 @@ function ManagerRow({
   navigation: Props['navigation']
 }) {
   const t = useT()
+  const [menu, setMenu] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const readActions = useReadMenu(manager.deviceId, manager.threadId, (work) => {
+    setError(null)
+    void work.catch((cause) => setError(reasonOf(cause, t)))
+  })
   const summary = useKey<SessionSummary>(keys.summary(manager.deviceId, manager.threadId))
   const { c, radius, font } = useTheme()
   const { mark, pending, text } = managerRowState(manager, summary)
@@ -32,35 +42,48 @@ function ManagerRow({
   const detail = [state, latest].filter(Boolean).join(' · ')
   const meta = manager.latestActivity ? ago(manager.latestActivity.at, Date.now(), t) : undefined
   return (
-    <Row
-      title={title}
-      detail={detail}
-      meta={meta}
-      // 胶囊只是一个数字，读屏要在整行名称里念出“N 待处理”
-      label={[title, pending > 0 ? t('manager.pending', { n: pending }) : '', detail, meta]
-        .filter(Boolean)
-        .join(' · ')}
-      left={<StatusMark status={mark} />}
-      trail="forward"
-      right={
-        pending > 0 ? (
-          <Text
-            testID={`manager:${manager.id}:pending`}
-            aria-label={t('manager.pending', { n: pending })}
-            style={[
-              styles.pill,
-              { color: c.wait, borderColor: c.wait, borderRadius: radius.l, fontFamily: font.mono },
-            ]}
-          >
-            {pending}
-          </Text>
-        ) : undefined
-      }
-      testID={`manager:${manager.id}`}
-      onPress={() =>
-        navigation.navigate('ManagerConsole', { deviceId: manager.deviceId, managerId: manager.id })
-      }
-    />
+    <>
+      {error ? <ErrorBanner text={error} onClose={() => setError(null)} /> : null}
+      <Row
+        title={title}
+        detail={detail}
+        meta={meta}
+        // 胶囊只是一个数字，读屏要在整行名称里念出“N 待处理”
+        label={[title, pending > 0 ? t('manager.pending', { n: pending }) : '', detail, meta]
+          .filter(Boolean)
+          .join(' · ')}
+        left={<StatusMark status={mark} />}
+        trail="forward"
+        right={
+          pending > 0 ? (
+            <Text
+              testID={`manager:${manager.id}:pending`}
+              aria-label={t('manager.pending', { n: pending })}
+              style={[
+                styles.pill,
+                {
+                  color: c.wait,
+                  borderColor: c.wait,
+                  borderRadius: radius.l,
+                  fontFamily: font.mono,
+                },
+              ]}
+            >
+              {pending}
+            </Text>
+          ) : undefined
+        }
+        testID={`manager:${manager.id}`}
+        onLongPress={readActions.length ? () => setMenu(true) : undefined}
+        onPress={() =>
+          navigation.navigate('ManagerConsole', {
+            deviceId: manager.deviceId,
+            managerId: manager.id,
+          })
+        }
+      />
+      <Sheet visible={menu} title={title} actions={readActions} onClose={() => setMenu(false)} />
+    </>
   )
 }
 function ManagerKey({

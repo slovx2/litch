@@ -44,6 +44,7 @@ import { reasonOf } from '../app/errors.ts'
 import { ago, stampFull } from '../app/format.ts'
 import { useHoverCard } from '../app/HoverCard.tsx'
 import { Back, Caret, Forward, Icon, Notice, Plus } from '../app/icons.tsx'
+import { markReadScope, unreadInScope } from '../app/read.ts'
 import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import { mentionInComposer } from '../composer/drafts.ts'
@@ -187,6 +188,8 @@ const SessionRow = memo(function SessionRow({
   const selected =
     selectedRow?.source === source && sameSession(selectedRow, { deviceId, sessionId })
   const summary = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
+  const catalogUnread = useKey<string[]>(keys.catalogUnread(deviceId)) ?? NO_IDS
+  const descendants = useKey<SessionChildren>(keys.children(deviceId)) ?? NO_CHILDREN
   const device = useKey<DeviceView>(keys.device(deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
   const sections = useKey<SectionView[]>(keys.sections(deviceId)) ?? NO_SECTIONS
@@ -311,6 +314,8 @@ const SessionRow = memo(function SessionRow({
   const organizable = device?.organizable === true
   const elsewhere = workspaces.filter((entry) => entry.id !== summary.workspaceId)
   const actions: RowAction[] = []
+  if (unreadInScope(catalogUnread, descendants, sessionId).length)
+    actions.push({ id: 'markRead', title: t('session.markRead') })
   if (summary.lineage && device?.reportControl)
     actions.push({
       id: 'report',
@@ -432,7 +437,9 @@ const SessionRow = memo(function SessionRow({
       })
   }
   const act = (id: string, choice?: string) => {
-    if (id === 'rename') {
+    if (id === 'markRead') {
+      void markReadScope(channel, replica.store, deviceId, sessionId).catch(failed)
+    } else if (id === 'rename') {
       settled.current = false
       setNaming(t.text(summary.title))
     } else if (id === 'quote') {
@@ -1268,7 +1275,8 @@ function PinnedWorkspaceHead({
 
 function DeviceGroup(props: GroupProps) {
   const { deviceId, selection, draft, onSelect, onCompose, focus, onFocus } = props
-  const { channel } = useServices()
+  const { channel, replica } = useServices()
+  const catalogUnread = useKey<string[]>(keys.catalogUnread(deviceId)) ?? NO_IDS
   const { request } = useSidebarReveal()
   const root = useRef<HTMLDivElement>(null)
   const revealed = useRef<Selection | null>(null)
@@ -2115,6 +2123,7 @@ function DeviceGroup(props: GroupProps) {
    */
   const restartItem = restartItemOf(device)
   const deviceActions: RowAction[] = [
+    ...(catalogUnread.length ? [{ id: 'markRead', title: t('session.markAllRead') }] : []),
     ...(device.organizable
       ? [
           { id: 'addWorkspace', title: t('workspace.add') },
@@ -2232,7 +2241,16 @@ function DeviceGroup(props: GroupProps) {
               label={t('sidebar.deviceMenu')}
               actions={deviceActions}
               onAction={(id) => {
-                if (id === 'pair') setPairing(true)
+                if (id === 'markRead')
+                  void markReadScope(channel, replica.store, deviceId).catch((error) =>
+                    showToast({
+                      id: 'mark-read',
+                      lifeMs: 6000,
+                      tone: 'err',
+                      text: () => reasonOf(error, t),
+                    }),
+                  )
+                else if (id === 'pair') setPairing(true)
                 else if (id === 'addSection') newSection()
                 else if (id === 'settings') requestDevice(deviceId)
                 else if (id === 'restart') restart.begin()

@@ -111,7 +111,59 @@ async function unreadSeen() {
     await fold(destination, false)
     await until('已读后组头归零', () => count(destination) === 0)
     if (count(source) !== 0) throw new Error('清未读后来源项目仍有计数')
+    const { sessionId: nested } = await command('session.spawn', {
+      deviceId: 'local',
+      parentId: 's6',
+      kind: 'fresh',
+      title: '菜单未读子线',
+      prompt: '完成',
+      wakeParent: false,
+    })
+    await until('菜单子线未读', () => sessions.get(nested)?.unread === true)
+    const { sessionId: grandchild } = await command('session.spawn', {
+      deviceId: 'local',
+      parentId: nested,
+      kind: 'fresh',
+      title: '菜单未读孙线',
+      prompt: '完成',
+      wakeParent: false,
+    })
+    await until('菜单孙线未读', () => sessions.get(grandchild)?.unread === true)
+    await fold(destination, true)
+    const selectionBefore = document
+      .querySelector('.ss-row.sel')
+      ?.closest('[data-session]')
+      ?.getAttribute('data-session')
+    const otherUnread = [...sessions.values()]
+      .filter((s) => s.unread && !['s6', nested, grandchild].includes(s.id))
+      .map((s) => s.id)
+    group(destination)
+      ?.querySelector('[data-session=s6] .ss-row')
+      ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 150, clientY: 200 }))
+    await until('父会话菜单标已读', () => !!document.querySelector('[data-action="markRead"]'))
+    document.querySelector<HTMLButtonElement>('[data-action="markRead"]')?.click()
+    await until(
+      '菜单清整棵树',
+      () => !sessions.get(nested)?.unread && !sessions.get(grandchild)?.unread,
+    )
+    if (otherUnread.some((id) => !sessions.get(id)?.unread)) throw new Error('清子树误清兄弟未读')
+    if (
+      document
+        .querySelector('.ss-row.sel')
+        ?.closest('[data-session]')
+        ?.getAttribute('data-session') !== selectionBefore
+    )
+      throw new Error('标已读不应打开会话')
+    const deviceHead = document.querySelector('.dev-group[data-device=local] .dev-row')
+    deviceHead?.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, clientX: 150, clientY: 150 }),
+    )
+    await until('设备菜单全部已读', () => !!document.querySelector('[data-action="markRead"]'))
+    document.querySelector<HTMLButtonElement>('[data-action="markRead"]')?.click()
+    await until('设备全部清零', () => [...sessions.values()].every((s) => !s.unread))
     return {
+      menuClearsDescendants: true,
+      deviceMenuClearsAll: true,
       crossProject: true,
       visibleOnExpand: true,
       parentDoesNotClear: true,

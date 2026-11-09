@@ -10,8 +10,11 @@ import {
 import { type ReactNode, useEffect, useId, useMemo, useState } from 'react'
 import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
+import { reasonOf } from '../app/errors.ts'
 import { Caret } from '../app/icons.tsx'
-import { useKey, useKeys } from '../app/services.tsx'
+import { markReadScope } from '../app/read.ts'
+import { useKey, useKeys, useServices } from '../app/services.tsx'
+import { showToast } from '../app/toasts.tsx'
 import { setProjectionSettings, useProjectionSettings } from './projection-state.ts'
 import { RowMenu } from './RowMenu.tsx'
 import { useSidebarReveal } from './reveal-context.ts'
@@ -64,6 +67,7 @@ function ProjectionGroup({
   selection: Selection | null
 }) {
   const t = useT()
+  const { channel, replica } = useServices()
   const headingId = useId()
   const settings = useProjectionSettings(kind)
   const [extra, setExtra] = useState(0)
@@ -126,6 +130,9 @@ function ProjectionGroup({
         <RowMenu
           label={t('sidebar.projection.settings', { name: t(`sidebar.projection.${kind}`) })}
           actions={[
+            ...(kind === 'unread' && rows.length
+              ? [{ id: 'markRead', title: t('session.markAllRead') }]
+              : []),
             {
               id: 'project',
               title: t('sidebar.projection.project'),
@@ -146,7 +153,21 @@ function ProjectionGroup({
             },
           ]}
           onAction={(id, choice) => {
-            if (id === 'project') setProjectionSettings(kind, { byProject: !settings.byProject })
+            if (id === 'markRead') {
+              void Promise.all(
+                [...new Set(rows.map((row) => row.deviceId))].map((deviceId) =>
+                  markReadScope(channel, replica.store, deviceId),
+                ),
+              ).catch((error) =>
+                showToast({
+                  id: 'mark-read',
+                  lifeMs: 6000,
+                  tone: 'err',
+                  text: () => reasonOf(error, t),
+                }),
+              )
+            } else if (id === 'project')
+              setProjectionSettings(kind, { byProject: !settings.byProject })
             else if (choice) {
               setProjectionSettings(kind, { first: Number(choice) })
               setExtra(0)

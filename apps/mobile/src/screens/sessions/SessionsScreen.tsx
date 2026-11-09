@@ -70,7 +70,8 @@ export function SessionsScreen({ navigation, route }: Props) {
   const online = device?.connection === 'online'
   // 工作区那一行的“＋”要设备连着；“⋯”里的事要连着或者能整理，一件都做不了就不出
   const organizable = device?.organizable === true
-  const canMenu = online || organizable
+  const catalogUnread = useKey<string[]>(keys.catalogUnread(deviceId)) ?? []
+  const canMenu = online || organizable || catalogUnread.length > 0
   /** 收起来的组（collapsed）和收起了子会话的父会话（folded），记在手机上（folds.ts）。没记着的展开 */
   const folds = useSyncExternalStore(subscribeFolds, () => foldsOf(deviceId))
   const collapsed = useMemo(() => new Set(folds.closed), [folds.closed])

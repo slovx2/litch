@@ -3,11 +3,70 @@
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 import { createReplica, keys } from '@litch/core'
-import { readWhileOpen } from '../../../packages/ui/src/app/read.ts'
+import { markReadScope, readWhileOpen, unreadInScope } from '../../../packages/ui/src/app/read.ts'
 import { acquireStore, releaseStore } from '../src/core/store-cache.ts'
 import { mockChannel, until } from './helpers.mjs'
 
 const cleanup = []
+
+test('批量已读范围包含任意层子会话和工作线；去重、防环，不清兄弟或父项', () => {
+  const unread = ['manager', 'line', 'grandchild', 'sibling', 'other', 'line']
+  const children = { manager: ['line', 'sibling'], line: ['grandchild'], grandchild: ['line'] }
+  assert.deepEqual(unreadInScope(unread, children, 'line'), ['line', 'grandchild'])
+  assert.deepEqual(unreadInScope(unread, children, 'manager'), [
+    'manager',
+    'line',
+    'grandchild',
+    'sibling',
+  ])
+  assert.deepEqual(unreadInScope(unread, children), [
+    'manager',
+    'line',
+    'grandchild',
+    'sibling',
+    'other',
+  ])
+  assert.deepEqual(unreadInScope(unread, children, 'read'), [])
+})
+
+test('本机和远程批量已读只发原有命令；不打开会话、不改另一设备、不追清后来新增的未读', async () => {
+  const store = new Map([
+    [keys.catalogUnread('local'), ['parent', 'child']],
+    [keys.children('local'), { parent: ['child'] }],
+    [keys.catalogUnread('remote'), ['parent', 'child', 'other']],
+    [keys.children('remote'), { parent: ['child'] }],
+  ])
+  const calls = []
+  const channel = {
+    command: async (name, params) => {
+      calls.push({ name, ...params })
+      store.set(keys.catalogUnread(params.deviceId), [
+        ...store.get(keys.catalogUnread(params.deviceId)),
+        'new',
+      ])
+    },
+  }
+  await markReadScope(channel, store, 'remote', 'parent')
+  assert.deepEqual(
+    calls,
+    ['parent', 'child'].map((sessionId) => ({
+      name: 'session.markRead',
+      deviceId: 'remote',
+      sessionId,
+    })),
+  )
+  assert.deepEqual(store.get(keys.catalogUnread('local')), ['parent', 'child'])
+  calls.length = 0
+  await markReadScope(channel, store, 'local')
+  assert.deepEqual(
+    calls,
+    ['parent', 'child'].map((sessionId) => ({
+      name: 'session.markRead',
+      deviceId: 'local',
+      sessionId,
+    })),
+  )
+})
 afterEach(() => {
   for (const done of cleanup.splice(0).reverse()) done()
 })
@@ -129,4 +188,26 @@ test('会话树：子会话、父会话的未读各记各的', async () => {
   enter(env, child)
   await until(() => env.summary(child).unread === false, { what: '子会话清掉' })
   assert.equal(env.summary('s3').unread, true, '父会话不跟着清')
+})
+
+test('菜单标已读清整棵子树并更新目录；新回合完成仍会重新未读', async () => {
+  const env = await setup()
+  const { sessionId: child } = await env.mock.channel.command('session.spawn', {
+    deviceId: 'local',
+    parentId: 's3',
+    kind: 'fresh',
+    title: '批量已读子会话',
+    prompt: '完成',
+    wakeParent: false,
+  })
+  await until(() => env.summary(child)?.unread, { what: '子会话未读' })
+  await markReadScope(env.mock.channel, env.replica.store, 'local', 's3')
+  await until(() => !env.summary('s3').unread && !env.summary(child).unread, { what: '子树清未读' })
+  assert.equal(env.summary('s7').unread, true, '兄弟项保留未读')
+  await env.turn(child, '新结果')
+  assert.equal(env.summary(child).unread, true)
+  await markReadScope(env.mock.channel, env.replica.store, 'local')
+  await until(() => env.replica.store.get(keys.catalogUnread('local')).length === 0, {
+    what: '设备全部清零',
+  })
 })

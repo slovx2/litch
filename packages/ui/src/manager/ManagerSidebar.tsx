@@ -17,8 +17,12 @@ import type { Selection } from '../app/App.tsx'
 import { requestManagerDrafts, requestManagers } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { badgeOf, nameOf, wireStyle } from '../app/device.ts'
+import { reasonOf } from '../app/errors.ts'
 import { Caret, Forward } from '../app/icons.tsx'
+import { markReadScope, unreadInScope } from '../app/read.ts'
 import { useKey, useKeys, useServices } from '../app/services.tsx'
+import { showToast } from '../app/toasts.tsx'
+import { RowMenu, type RowMenuHandle } from '../sidebar/RowMenu.tsx'
 import { containsSession, revealRow } from '../sidebar/reveal.ts'
 import { useSidebarReveal } from '../sidebar/reveal-context.ts'
 import { managerPendingTitle, managerStateText, sessionMark } from '../sidebar/session-mark.ts'
@@ -45,6 +49,9 @@ function ManagerRow({
   const t = useT()
   const { replica, channel } = useServices()
   const kids = useKey<SessionChildren>(keys.children(manager.deviceId))
+  const unread = useKey<string[]>(keys.catalogUnread(manager.deviceId)) ?? []
+  const readMenu = useRef<RowMenuHandle>(null)
+  const hasUnread = unreadInScope(unread, kids ?? {}, manager.threadId).length > 0
   const lines = kids?.[manager.threadId]?.length ?? 0
   // 和普通对话的父子树一样默认收起，下面一行“› N 个子会话”。展开了哪些照“最近 / 未读”的投影记在侧栏状态里
   // （folded 里的是展开的），切栏、重开都不丢；选中的是它的工作线时先展开，免得选中行藏着
@@ -157,6 +164,11 @@ function ManagerRow({
             type="button"
             className={picked ? 'ss-row mg-pick sel' : 'ss-row mg-pick'}
             aria-current={picked ? 'page' : undefined}
+            onContextMenu={(event) => {
+              if (!hasUnread) return
+              event.preventDefault()
+              readMenu.current?.openAt(event.clientX, event.clientY)
+            }}
             onClick={() => {
               const next = { deviceId: manager.deviceId, sessionId: manager.threadId }
               fromTree(next, 'tree')
@@ -215,6 +227,28 @@ function ManagerRow({
               ) : null}
             </small>
           </button>
+          {hasUnread ? (
+            <RowMenu
+              handle={readMenu}
+              label={t('session.menu')}
+              actions={[{ id: 'markRead', title: t('session.markRead') }]}
+              onAction={() => {
+                void markReadScope(
+                  channel,
+                  replica.store,
+                  manager.deviceId,
+                  manager.threadId,
+                ).catch((error) =>
+                  showToast({
+                    id: 'mark-read',
+                    lifeMs: 6000,
+                    tone: 'err',
+                    text: () => reasonOf(error, t),
+                  }),
+                )
+              }}
+            />
+          ) : null}
           {count ? (
             <button
               type="button"

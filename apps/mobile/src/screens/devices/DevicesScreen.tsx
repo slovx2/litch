@@ -24,6 +24,7 @@ import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { useUpdateSchedule } from '../../update/use-update'
 import { ManagersEntry } from '../managers/ManagersEntry'
+import { useReadMenu } from '../sessions/read-menu'
 import { reasonText, type ShownState, shownState } from './failure'
 import { forgetUnusedKey } from './forget'
 import { RecentGroup, SectionHead } from './RecentGroup'
@@ -178,6 +179,7 @@ export function DevicesScreen({ navigation }: Props) {
     [t],
   )
   useForegroundReconnect()
+  const readActions = useReadMenu(menu?.id, undefined, act)
   useUpdateSchedule()
   const add = () => navigation.navigate('AddDevice')
   return (
@@ -241,6 +243,7 @@ export function DevicesScreen({ navigation }: Props) {
         actions={
           menu
             ? [
+                ...readActions,
                 {
                   label: t('devices.menu.sessions'),
                   testID: 'menu:sessions',

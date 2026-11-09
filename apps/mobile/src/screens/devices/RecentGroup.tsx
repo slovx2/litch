@@ -7,6 +7,7 @@ import {
   type DeviceView,
   keys,
   pageSidebarProjection,
+  type SessionSummary,
   type SidebarProjectionBlock,
   type SidebarProjectionRow,
   type SidebarProjections,
@@ -14,11 +15,15 @@ import {
 } from '@litch/core'
 import { type ReactNode, useCallback, useRef, useState, useSyncExternalStore } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { useKey, useReplica } from '../../shell/services'
+import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
+import { markReadScope } from '../../../../../packages/ui/src/app/read.ts'
+import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { ErrorBanner } from '../../ui/kit/controls'
 import { Caret, Icon } from '../../ui/kit/Icon'
 import { Sheet } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
+import { useReadMenu } from '../sessions/read-menu'
 import { titleOf } from '../sessions/rows'
 import { FIRST_CHOICES, MORE_STEP } from './recent-settings'
 import { type ProjectionKind, setRecentSettings, useRecentSettings } from './recent-state'
@@ -125,6 +130,19 @@ export function RecentGroup({
   const rows = useRecentRows(kind)
   const [extra, setExtra] = useState(0)
   const [menu, setMenu] = useState(false)
+  const channel = useChannel()
+  const { store } = useReplica()
+  const [sessionMenu, setSessionMenu] = useState<{
+    deviceId: string
+    sessionId: string
+    title: string
+  } | null>(null)
+  const [failure, setFailure] = useState<string | null>(null)
+  const act = (work: Promise<unknown>) => {
+    setFailure(null)
+    void work.catch((error) => setFailure(reasonOf(error, t)))
+  }
+  const readActions = useReadMenu(sessionMenu?.deviceId, sessionMenu?.sessionId, act)
   const page = pageSidebarProjection(rows, settings.byProject, settings.first + extra)
   const showDevice = (useKey<string[]>(keys.devices)?.length ?? 0) > 1
   const name = t(`sidebar.projection.${kind}`)
@@ -133,6 +151,7 @@ export function RecentGroup({
   const set = (change: Parameters<typeof setRecentSettings>[0]) => setRecentSettings(change, kind)
   return (
     <View testID={kind}>
+      {failure ? <ErrorBanner text={failure} onClose={() => setFailure(null)} /> : null}
       <SectionHead
         label={name}
         testID={`${kind}:head`}
@@ -160,6 +179,9 @@ export function RecentGroup({
               byProject={settings.byProject}
               showDevice={showDevice}
               onOpen={onOpen}
+              onMenu={(summary, deviceId) =>
+                setSessionMenu({ deviceId, sessionId: summary.id, title: titleOf(summary, t) })
+              }
             />
           ))}
           {rows.length === 0 ? (
@@ -218,6 +240,22 @@ export function RecentGroup({
         title={t('sidebar.projection.settings', { name })}
         onClose={() => setMenu(false)}
         actions={[
+          ...(kind === 'unread'
+            ? [
+                {
+                  label: t('session.markAllRead'),
+                  testID: 'unread:markAllRead',
+                  onPress: () =>
+                    act(
+                      Promise.all(
+                        (store.get<string[]>(keys.devices) ?? []).map((deviceId) =>
+                          markReadScope(channel, store, deviceId),
+                        ),
+                      ),
+                    ),
+                },
+              ]
+            : []),
           {
             label: t('sidebar.projection.project'),
             testID: `${kind}:menu:project`,
@@ -235,6 +273,12 @@ export function RecentGroup({
           })),
         ]}
       />
+      <Sheet
+        visible={sessionMenu !== null}
+        title={sessionMenu?.title}
+        onClose={() => setSessionMenu(null)}
+        actions={readActions}
+      />
     </View>
   )
 }
@@ -246,12 +290,14 @@ function RecentBlock({
   byProject,
   showDevice,
   onOpen,
+  onMenu,
 }: {
   block: SidebarProjectionBlock
   kind: ProjectionKind
   byProject: boolean
   showDevice: boolean
   onOpen(row: SidebarProjectionRow, title: string): void
+  onMenu(summary: SessionSummary, deviceId: string): void
 }) {
   const theme = useTheme()
   const t = useT()
@@ -283,6 +329,7 @@ function RecentBlock({
           testID={kind}
           at={row.at}
           onOpen={(summary) => onOpen({ ...row, sessionId: summary.id }, titleOf(summary, t))}
+          onMenu={onMenu}
         />
       ))}
     </>
