@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 0.38.2
+
+- Claude 会话里，外部通过动态工具传入的工具，可以声明按需加载，不再一律常驻。
+
 ## 0.38.1（2026-11-09）
 
 - 修复经理或工作线读取超长子会话历史时连接断开、无限重试，并导致新会话也无法连接的问题。
