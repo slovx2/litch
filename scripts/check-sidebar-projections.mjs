@@ -264,17 +264,27 @@ try {
   await click(`${recent} .ss-more .more`)
   await until(async () => (await roots()).length === 15, '增加十个主项')
   checkpoint('主项归并、默认五项、展开子树、更多增加十项')
-  // 和置顶区、本机分组同一套设备标记：登记了多台设备（模拟核心如此）时，本机的行也写设备名
+  // 平铺会话行用设备色条及其悬停说明识别设备，读屏说明一致，不重复挤占标题宽度。
   assert.ok(
     await run(() =>
       ['unread', 'recent'].every((kind) => {
         const rows = [
           ...document.querySelectorAll(`[data-projection=${kind}] [data-depth="0"] .ss-row`),
         ]
-        return rows.length > 0 && rows.every((row) => !!row.querySelector('.projection-device'))
+        return (
+          rows.length > 0 &&
+          rows.every((row) => {
+            const hint = row.querySelector('.dev-tick')?.getAttribute('title')
+            return (
+              hint &&
+              hint === row.getAttribute('aria-description') &&
+              !row.querySelector('.projection-device')
+            )
+          })
+        )
       }),
     ),
-    '多台设备时平铺行都写设备名，本机行也写',
+    '多台设备的平铺行都有设备色条、悬停与读屏说明，不重复显示设备名',
   )
   assert.equal(
     await run(() => !!document.querySelector('[data-projection=recent] .projection-count')),
@@ -689,15 +699,17 @@ try {
       await option('按项目聚合')
       await until(
         () => run(() => !document.querySelector('[data-projection=recent] [data-workspace]')),
-        '取消聚合检查平铺设备名',
+        '取消聚合检查平铺设备标记',
       )
       assert.ok(
         await run(() =>
-          [...document.querySelectorAll('[data-projection=recent] .projection-device')].every(
-            (name) => name.scrollWidth <= name.clientWidth + 1,
+          [...document.querySelectorAll('[data-projection=recent] [data-depth="0"] .ss-row')].every(
+            (row) =>
+              row.querySelector('.dev-tick')?.getBoundingClientRect().width > 0 &&
+              !row.querySelector('.projection-device'),
           ),
         ),
-        '窄侧栏中的常见设备名完整可读',
+        '窄侧栏保留可见设备色条，不恢复重复的设备名',
       )
       // 离线不在行上写字：标题不被挤，“离线”留在悬停提示和读屏名称里
       const narrow = await run(() =>
@@ -705,10 +717,9 @@ try {
           (row) => ({
             title: row.querySelector('.title')?.getBoundingClientRect().width ?? 0,
             offline: !!row.querySelector('.dev-tick.off'),
-            name: row.textContent ?? '',
-            hint: row.querySelector('.projection-device')?.getAttribute('title') ?? '',
-            shown: row.querySelector('.projection-device')?.getBoundingClientRect().width ?? 0,
-            label: row.querySelector('.projection-device')?.firstChild?.textContent ?? '',
+            spoken: row.getAttribute('aria-description') ?? '',
+            hint: row.querySelector('.dev-tick')?.getAttribute('title') ?? '',
+            label: row.querySelector('.title')?.textContent ?? '',
           }),
         ),
       )
@@ -721,17 +732,20 @@ try {
       assert.ok(
         away.every(
           (row) =>
-            !row.label.includes('离线') && row.name.includes('离线') && row.hint.includes('离线'),
+            !row.label.includes('离线') && row.spoken.includes('离线') && row.hint.includes('离线'),
         ),
         `离线行不显示“离线”，读屏名称和悬停提示里有：${JSON.stringify(away)}`,
       )
       assert.ok(
         await run(() =>
           [...document.querySelectorAll('[data-projection=recent] [data-depth="0"] .ss-row')].every(
-            (row) => !!row.querySelector('.projection-device'),
+            (row) => {
+              const hint = row.querySelector('.dev-tick')?.getAttribute('title')
+              return hint && hint === row.getAttribute('aria-description')
+            },
           ),
         ),
-        '多台设备时平铺行都写设备名',
+        '多台设备时平铺行都有一致的悬停与读屏设备说明',
       )
       assert.equal(
         await run(() =>
