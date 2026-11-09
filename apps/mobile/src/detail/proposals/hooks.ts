@@ -3,11 +3,12 @@
 import type { SessionProposalView } from '@litch/core'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
+import { proposalOperation } from '../../../../../packages/ui/src/tree/proposal-operation.ts'
 import type { SessionStore } from '../../core/session-store'
 import { acquireStore, releaseStore } from '../../core/store-cache'
 import { useChannel, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { nextExpiry, type overridesFor } from './logic'
+import { nextExpiry } from './logic'
 
 /** 这个会话的会话存储（和详情页共用一份，见 store-cache）。用完自己放掉 */
 export function useSessionStore(deviceId: string, sessionId: string): SessionStore {
@@ -61,6 +62,8 @@ export function useProposalClock(
 export function useProposalAct(deviceId: string, sessionId: string, proposalId: string) {
   const channel = useChannel()
   const t = useT()
+  const operation = proposalOperation(channel, deviceId, sessionId, proposalId)
+  const starting = useSyncExternalStore(operation.subscribe, operation.snapshot)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const run = (sent: Promise<unknown>) => {
@@ -71,17 +74,11 @@ export function useProposalAct(deviceId: string, sessionId: string, proposalId: 
       .finally(() => setBusy(false))
   }
   return {
-    busy,
-    failure,
-    accept: (overrides?: ReturnType<typeof overridesFor>) =>
-      run(
-        channel.command('session.proposal.accept', {
-          deviceId,
-          sessionId,
-          proposalId,
-          ...(overrides ? { overrides } : {}),
-        }),
-      ),
+    busy: busy || starting.busy,
+    starting: starting.busy,
+    failure: starting.error ? t('proposal.failed', { reason: whyNot(starting.error, t) }) : failure,
+    retry: starting.error ? operation.retry : null,
+    accept: operation.start,
     dismiss: () =>
       run(channel.command('session.proposal.dismiss', { deviceId, sessionId, proposalId })),
     /** worktree：选新会话时卡上的工作树开关（设备能建工作树时才带） */

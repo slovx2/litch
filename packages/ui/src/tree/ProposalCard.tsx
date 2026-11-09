@@ -25,12 +25,14 @@ import { badgeOf, nameOf } from '../app/device.ts'
 import { Icon, More } from '../app/icons.tsx'
 import { usePopover } from '../app/popover.ts'
 import { useKey, useServices } from '../app/services.tsx'
+import { submitQuestionOnEnter } from '../manager/post-presentation.ts'
 import { useOpenSession } from '../transcript/actions.tsx'
 import { CardMarkdown } from '../transcript/CardMarkdown.tsx'
 import type { ItemRef } from '../transcript/messages.tsx'
 import { useToggle } from '../transcript/state.ts'
 import { useWorktreesOn, WorktreeCheck } from '../worktrees/WorktreeCheck.tsx'
 import { proposalSummary } from './proposal-brief.ts'
+import { withProposalNote } from './proposal-operation.ts'
 import { STATUS_TEXT, useProposalAct, useProposalClock, useProposalList } from './proposals.ts'
 import { SpawnDialog } from './SpawnDialog.tsx'
 import { SANDBOX_LEVEL } from './sandbox.ts'
@@ -63,6 +65,7 @@ export function ProposalActs({
   const parent = useKey<SessionSummary>(keys.summary(deviceId, sessionId)) ?? sourceParent
   const act = useProposalAct(deviceId, sessionId, proposal.id)
   const [editing, setEditing] = useState(false)
+  const [note, setNote] = useState('')
   // 卡上的工作树开关为准：设备按经理设置或普通会话规则给初值，用户仍可修改。
   const [worktree, setWorktree] = useState(proposal.worktree ?? proposal.worktreeDefault)
   const worktrees = useWorktreesOn(deviceId)
@@ -74,17 +77,35 @@ export function ProposalActs({
     worktrees && worktree,
   )
   const off = act.busy || device?.connection !== 'online'
+  const start = () => {
+    if (off || worktreeBlock) return
+    void act.accept(withProposalNote(proposal.prompt, note, worktrees ? { worktree } : {}))
+  }
   return (
     <>
+      <textarea
+        className="req-input prop-note"
+        aria-label={t('proposal.note')}
+        placeholder={t('proposal.note')}
+        rows={2}
+        value={note}
+        disabled={off}
+        onChange={(event) => setNote(event.target.value)}
+        onKeyDown={(event) => {
+          if (!submitQuestionOnEnter(event.nativeEvent)) return
+          event.preventDefault()
+          start()
+        }}
+      />
       <div className="prop-acts" data-small={small === true}>
         <button
           type="button"
           className="btn primary"
           data-act="start"
           disabled={off || worktreeBlock !== null}
-          onClick={() => act.accept(worktrees ? { worktree } : undefined)}
+          onClick={start}
         >
-          {t('proposal.start')}
+          {t(act.starting ? 'proposal.starting' : 'proposal.start')}
         </button>
         {!proposal.sourceIsManager ? (
           <button
@@ -124,12 +145,22 @@ export function ProposalActs({
         />
       </div>
       {worktreeBlock ? <p className="prop-err err">{t(worktreeBlock)}</p> : null}
-      {act.failure ? <p className="prop-err err">{act.failure}</p> : null}
+      {act.failure ? (
+        <p className="prop-err err" role="alert">
+          {act.failure}
+        </p>
+      ) : null}
+      {act.retry ? (
+        <button type="button" className="btn" disabled={off} onClick={() => act.retry?.()}>
+          {t('proposal.retry')}
+        </button>
+      ) : null}
       {editing && parent ? (
         <SpawnDialog
           deviceId={deviceId}
           parent={parent}
           proposal={proposal}
+          initialNote={note}
           onClose={() => setEditing(false)}
         />
       ) : null}

@@ -17,6 +17,7 @@ import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { type ReactNode, useState, useSyncExternalStore } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { withProposalNote } from '../../../../../packages/ui/src/tree/proposal-operation.ts'
 import { SANDBOX_LEVEL } from '../../../../../packages/ui/src/tree/sandbox.ts'
 import { useProposalWorktree } from '../../../../../packages/ui/src/tree/useProposalWorktree.ts'
 import type { RootStackParamList } from '../../nav/routes'
@@ -28,6 +29,7 @@ import { Sheet, type SheetAction } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { useProposalAct, useSessionStore } from './hooks'
 import { startBlocked } from './logic'
+import { ProposalNote } from './ProposalNote'
 import { useWorktreesOn, WorktreeSwitch } from './WorktreeSwitch'
 
 /** 一张等着的提案：发出去的状态、工作树开关、收进“⋯”的几项 */
@@ -38,6 +40,7 @@ export function useProposalActs(
   /** 工作树开关的初值：模型定的，没定是设备照父会话算的 */
   initial: boolean,
   managerSource = false,
+  prompt = '',
 ) {
   const t = useT()
   const channel = useChannel()
@@ -48,6 +51,7 @@ export function useProposalActs(
   const sourceIsManager =
     managerSource || (parent ? managerMark(parent)?.role === 'manager' : false)
   const act = useProposalAct(deviceId, sessionId, proposalId)
+  const [note, setNote] = useState('')
   const offline = device?.connection !== 'online'
   const off = act.busy || offline
   // 人没动过开关就跟着初值走：对话里的卡片先画、提案后到，初值会从“没有”变成设备算的缺省
@@ -71,7 +75,7 @@ export function useProposalActs(
               {
                 label: t('proposal.edit'),
                 onPress: () =>
-                  navigation.navigate('ProposalStart', { deviceId, sessionId, proposalId }),
+                  navigation.navigate('ProposalStart', { deviceId, sessionId, proposalId, note }),
                 testID: `proposal:${proposalId}:edit`,
                 ...gate,
               },
@@ -87,6 +91,12 @@ export function useProposalActs(
   return {
     deviceId,
     proposalId,
+    note,
+    setNote,
+    start: () => {
+      if (off || worktreeBlock) return
+      void act.accept(withProposalNote(prompt, note, worktrees ? { worktree } : {}))
+    },
     act,
     off,
     worktree,
@@ -137,17 +147,25 @@ export function ProposalActsRow({
 }) {
   const { c, font } = useTheme()
   const t = useT()
-  const { deviceId, proposalId, act, off, worktree, worktrees } = acts
+  const { deviceId, proposalId, act, off, worktree } = acts
   return (
     <>
+      <ProposalNote
+        value={acts.note}
+        onChange={acts.setNote}
+        disabled={off}
+        onStart={() => {
+          if (!blocked) acts.start()
+        }}
+      />
       <View style={styles.acts}>
         <Button
-          label={t('proposal.start')}
+          label={t(act.starting ? 'proposal.starting' : 'proposal.start')}
           kind={blocked ? 'plain' : 'solid'}
           disabled={off || blocked !== null || acts.worktreeBlock !== null}
           busy={act.busy}
           {...(blocked ? { spoken: t('proposals.start.blocked', { reason: blocked }) } : {})}
-          onPress={() => act.accept(worktrees ? { worktree } : undefined)}
+          onPress={acts.start}
           testID={`proposal:${proposalId}:start`}
         />
         {!acts.sourceIsManager ? (
@@ -178,6 +196,16 @@ export function ProposalActsRow({
         <Text style={[styles.failure, { color: c.wait, fontSize: font.size.meta }]}>
           {t(acts.worktreeBlock)}
         </Text>
+      ) : null}
+      {act.retry ? (
+        <Button
+          label={t('proposal.retry')}
+          kind="plain"
+          disabled={off}
+          onPress={() => {
+            void act.retry?.()
+          }}
+        />
       ) : null}
       {act.failure ? (
         <Text style={[styles.failure, { color: c.err, fontSize: font.size.meta }]}>
@@ -213,6 +241,7 @@ export function ProposalActs(props: {
   proposalId: string
   worktree: boolean
   sourceIsManager?: boolean
+  prompt: string
   /** 提案上的 widerSandbox：父会话现在比它严就开不成，原因写在按钮下面 */
   wider: SandboxLevel | null
 }) {
@@ -229,6 +258,7 @@ function WiderActs(props: {
   proposalId: string
   worktree: boolean
   sourceIsManager?: boolean
+  prompt: string
   wider: SandboxLevel
 }) {
   const blocked = useBlocked(props.deviceId, props.sessionId, props.wider)
@@ -242,15 +272,17 @@ function ListActs({
   worktree,
   blocked,
   sourceIsManager,
+  prompt,
 }: {
   deviceId: string
   sessionId: string
   proposalId: string
   worktree: boolean
   sourceIsManager?: boolean
+  prompt: string
   blocked: string | null
 }) {
-  const acts = useProposalActs(deviceId, sessionId, proposalId, worktree, sourceIsManager)
+  const acts = useProposalActs(deviceId, sessionId, proposalId, worktree, sourceIsManager, prompt)
   const [open, setOpen] = useState(false)
   return (
     <>

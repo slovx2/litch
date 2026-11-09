@@ -555,3 +555,41 @@ test('SESSION-PROPOSALS-008：答复提案带了 threadId 的核对提案所属�
     await env.close()
   }
 })
+
+test('提案附加说明沿已有 prompt 覆盖传进首回合，原简报不变，两条连接收到同一已开始状态', async () => {
+  const env = treeRig()
+  try {
+    const desktop = await litch(env)
+    const phone = await litch(env)
+    const { threadId } = await parent(desktop)
+    const proposalId = await propose(env, threadId, '补充说明测试')
+    const original = env.device.sessionTree.store.proposal(proposalId)
+    assert.ok(original)
+    const prompt = `${original.prompt}\n\n用户补充说明：\n检查远程设备\n保留现有分支`
+    const child = await phone.call('litch/sessionProposal/accept', {
+      proposalId,
+      overrides: { prompt },
+    })
+    assert.ok(
+      env.pi
+        .sent('turn/start')
+        .some((frame) => frame.threadId === child.threadId && frame.input[0].text.includes(prompt)),
+    )
+    assert.equal(env.device.sessionTree.store.proposal(proposalId)?.prompt, original.prompt)
+    assert.equal(env.device.sessionTree.store.proposal(proposalId)?.background, original.background)
+    await until(
+      () =>
+        [desktop, phone].every((client) =>
+          got(client, PROPOSALS).some((event) =>
+            event.changed?.some(
+              (entry: { id: string; status: string }) =>
+                entry.id === proposalId && entry.status === 'started',
+            ),
+          ),
+        ),
+      '两条连接收到已开始通知',
+    )
+  } finally {
+    await env.close()
+  }
+})

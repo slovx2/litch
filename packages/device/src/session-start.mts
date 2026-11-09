@@ -335,6 +335,15 @@ export async function startChild(
   origin: SessionLineageOrigin,
   directTurnId?: string,
 ): Promise<{ threadId: string; harness: string; branch: string | null }> {
+  const startedAt = new Date().toISOString()
+  const beganAt = performance.now()
+  let checkpoint = beganAt
+  const stages: Record<string, number> = {}
+  const mark = (phase: string) => {
+    const now = performance.now()
+    stages[phase] = Math.round(now - checkpoint)
+    checkpoint = now
+  }
   const lineageParentId = spec.lineageParentId ?? parentId
   const parentOf = sessionParents(tree)
   if (treePosition(lineageParentId, parentOf).depth >= SESSION_TREE_LIMITS.maxDepth)
@@ -343,6 +352,7 @@ export async function startChild(
       `Cannot start a child beyond depth ${SESSION_TREE_LIMITS.maxDepth}; the root is depth 0.`,
     )
   const reservation = await reserveSessionWork(tree, lineageParentId, null)
+  mark('capacity')
   let directReserved = false
   let createdId: string | null = null
   try {
@@ -362,11 +372,18 @@ export async function startChild(
         )
     }
     directReserved = directTurnId !== undefined
-    const child = await createChild(tree, parentId, spec, origin, (id) => {
-      createdId = id
-      reservation.bind(id)
-      tree.store.holdChildStart(id, lineageParentId)
-    })
+    const child = await createChild(
+      tree,
+      parentId,
+      spec,
+      origin,
+      (id) => {
+        createdId = id
+        reservation.bind(id)
+        tree.store.holdChildStart(id, lineageParentId)
+      },
+      mark,
+    )
     tree.store.dropChildStart(child.threadId)
     return child
   } catch (error) {
@@ -380,6 +397,9 @@ export async function startChild(
     throw error
   } finally {
     reservation.release()
+    tree.host.log(
+      `session.start.timing ${JSON.stringify({ startedAt, parentId, proposalId: spec.proposalId ?? null, threadId: createdId, origin, totalMs: Math.round(performance.now() - beganAt), stages })}`,
+    )
   }
 }
 
@@ -389,6 +409,7 @@ async function createChild(
   spec: ChildSpec,
   origin: SessionLineageOrigin,
   registered: (threadId: string) => void,
+  mark: (phase: string) => void,
 ): Promise<{ threadId: string; harness: string; branch: string | null }> {
   const title = spec.title.trim().slice(0, 120)
   if (!title) throw new StartRefused('invalid', 'title must not be empty.')
@@ -419,8 +440,10 @@ async function createChild(
     parentId,
     parentHarness,
   )
+  mark('parentSettings')
   const parentThread = isObject(parentConfig?.thread) ? parentConfig.thread : null
   const link = harness === parentHarness ? parentLink : await tree.link(harness)
+  mark('targetHarness')
   const permissions = childPermissions(parentConfig, spec, link)
   const managerFork = spec.kind === 'fork' && Boolean(tree.managers?.store.forThread(parentId))
   // Claude 的 thread/fork 经 saveRuntimeSettings 替换动态工具；其余现有引擎会原样继承，不能假装已经隔离。
@@ -470,10 +493,12 @@ async function createChild(
     (typeof parentThread?.cwd === 'string' ? parentThread.cwd : null)
   const worktree = spec.worktree ?? manager?.dispatch.worktree
   const place = placement(tree, parentId, cwd, worktree, Boolean(spec.cwd))
+  mark('settingsAndModel')
   const made =
     place.kind === 'worktree'
       ? await newWorktree(tree, cwd, place.from, title, worktree === true)
       : null
+  mark('worktree')
   const where = made ? worktreeCwd(made) : cwd
   let created: unknown
   try {
@@ -498,6 +523,7 @@ async function createChild(
     if (made) void tree.host.worktrees?.abandon(made.id)
     throw error
   }
+  mark('threadCreate')
   const thread = isObject(created) && isObject(created.thread) ? created.thread : null
   if (!thread || typeof thread.id !== 'string') {
     if (made) void tree.host.worktrees?.abandon(made.id)
@@ -528,6 +554,7 @@ async function createChild(
       `子会话 ${threadId} 起名失败：${error instanceof Error ? error.message : String(error)}`,
     )
   })
+  mark('nameAndRegister')
   const { index, workspaces, store } = tree.host
   index.see({ id: threadId, updatedAt: thread.updatedAt, ephemeral: thread.ephemeral }, harness)
   const projectId = spec.projectId || workspaces.projectOf(parentId)
@@ -568,6 +595,7 @@ async function createChild(
       sourceId
     text += `\n\n[Litch] Suggestion source: "${source}" (${sourceId}). This suggestion was started as a workline of manager "${manager.name}" (${manager.threadId}), alongside the source line. Report to the manager; the source line is not your parent.`
   }
+  mark('briefing')
   const begun = await link.request(
     'turn/start',
     {
@@ -577,6 +605,7 @@ async function createChild(
     },
     { restartable: true },
   )
+  mark('firstTurnAck')
   // 释放预占前采纳回合应答，避免通知稍迟时出现空档；turnEvent 自身去重且忽略已结束回合。
   if (isObject(begun) && isObject(begun.turn) && begun.turn.status === 'inProgress')
     tree.turnEvent(harness, 'turn/started', { threadId, turn: begun.turn })

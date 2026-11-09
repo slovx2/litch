@@ -59,6 +59,7 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
     proposalId,
     proposal?.worktree ?? proposal?.worktreeDefault ?? false,
     proposal?.sourceIsManager,
+    proposal?.prompt ?? spawned?.prompt ?? '',
   )
   const [menuOpen, setMenuOpen] = useState(false)
   const blocked = useBlocked(deviceId, sessionId, proposal?.widerSandbox)

@@ -20,6 +20,9 @@ export const enProposals: Record<keyof typeof zhProposals, Entry> = {
   'suggestions.close': 'Close suggestions',
 
   'proposal.kind': 'Suggested task',
+  'proposal.note': 'Additional instructions (optional)',
+  'proposal.starting': 'Starting…',
+  'proposal.retry': 'Retry start',
   'proposal.start': 'Start',
   'proposal.edit': 'Edit and start',
   'proposal.edit.title': 'Edit and start',

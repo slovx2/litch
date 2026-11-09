@@ -163,6 +163,7 @@ function ProposalRow({
             proposalId={proposal.id}
             sourceIsManager={proposal.sourceIsManager}
             worktree={proposal.worktree ?? proposal.worktreeDefault}
+            prompt={proposal.prompt}
             wider={proposal.widerSandbox}
           />
         </View>

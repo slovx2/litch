@@ -50,7 +50,7 @@ export type RootStackParamList = {
    */
   Background: { deviceId: string; sessionId: string; title?: string }
   /** 提案的“改了再开始”：照提案预填，harness、模型、强度、项目、目录、权限、全新还是带上下文、标题、简报、完成后唤醒都能改 */
-  ProposalStart: { deviceId: string; sessionId: string; proposalId: string }
+  ProposalStart: { deviceId: string; sessionId: string; proposalId: string; note?: string }
   /** 终端。root 是开在哪个目录（工作区的根或会话的工作目录）；terminalId 给了就直接打开那一个 */
   Terminal: { deviceId: string; root: string | null; terminalId?: string }
   /** 未提交的改动：文件列表和逐个文件的差异 */

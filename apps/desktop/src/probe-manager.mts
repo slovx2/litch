@@ -2059,7 +2059,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     one('.mg-title')?.textContent?.includes('结束中') &&
       one('.mg-readonly')?.textContent?.includes('正在收尾') &&
       !one('.mg-title button:not([data-act="manager-board-toggle"])') &&
-      !one('.mg-chat textarea') &&
+      !one('.mg-chat textarea.cmp-text') &&
       one('.mg-decision textarea:disabled') &&
       one('.mg-sidebar-group:first-child [data-manager-id="m1"]')?.textContent?.includes('结束中'),
   )
@@ -2075,7 +2075,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await click('[data-board-tab="decisions"]')
   const endCompleted = Boolean(
     one('.mg-title')?.textContent?.includes('已结束') &&
-      !one('.mg-chat textarea') &&
+      !one('.mg-chat textarea.cmp-text') &&
       one('.mg-decision textarea:disabled') &&
       !one('.mg-sidebar-group:first-child [data-manager-id="m1"]'),
   )

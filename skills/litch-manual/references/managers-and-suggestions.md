@@ -495,6 +495,16 @@ are in `sessions-and-projects.md`.
 
 ### Where and how to use them
 
+Before starting, use **Additional instructions (optional)** on the card or edit form to append
+instructions to the new session’s task. The original card’s brief stays unchanged. Leave it blank
+to start the original task. Enter starts from this field; Shift+Enter inserts a line break on desktop
+and phone web previews. The phone’s software keyboard provides a Send action.
+
+Starting closes the edit form immediately. The card shows **Starting…** while the device prepares
+the session, including remote worktrees. You can keep using the app. A successful start shows the
+child session link; a failed start stays on the card with **Retry start**, which resends the same
+edited task and additional instructions, even after leaving and returning to the page.
+
 The desktop sidebar's **Suggestions** entry shows pending suggestions across devices with
 a count, alongside Tasks, Appearance and Settings in the bottom row. Cards automatically form a
 multi-column grid when space allows and return to one column in narrow windows. They show the

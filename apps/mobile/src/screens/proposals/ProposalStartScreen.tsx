@@ -14,8 +14,8 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useState, useSyncExternalStore } from 'react'
 import { Keyboard, StyleSheet, Switch, Text, View } from 'react-native'
-import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { EFFORT_TEXT } from '../../../../../packages/ui/src/composer/efforts.ts'
+import { withProposalNote } from '../../../../../packages/ui/src/tree/proposal-operation.ts'
 import {
   SANDBOX_CHOICES,
   SANDBOX_LEVEL,
@@ -29,11 +29,12 @@ import {
 import { useProposalWorktree } from '../../../../../packages/ui/src/tree/useProposalWorktree.ts'
 import { useComposeOptions } from '../../detail/composer/options'
 import { type PickerOption, PickerSheet } from '../../detail/composer/PickerSheet'
-import { useProposalList, useSessionStore } from '../../detail/proposals/hooks'
+import { useProposalAct, useProposalList, useSessionStore } from '../../detail/proposals/hooks'
 import { overridesFor, STATUS_TEXT } from '../../detail/proposals/logic'
+import { ProposalNote } from '../../detail/proposals/ProposalNote'
 import { useWorktreesOn, WorktreeSwitch } from '../../detail/proposals/WorktreeSwitch'
 import type { RootStackParamList } from '../../nav/routes'
-import { useBusy, useChannel, useKey } from '../../shell/services'
+import { useChannel, useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Chip, Empty, Field, Row, ValueRow } from '../../ui/kit/controls'
 import { KeyboardArea, KeyboardFormFooter, KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
@@ -69,6 +70,7 @@ export function ProposalStartScreen({ route, navigation }: Props) {
       parent={parent}
       proposal={proposal}
       latest={latest}
+      initialNote={route.params.note ?? ''}
       onDone={() => navigation.goBack()}
     />
   )
@@ -79,12 +81,14 @@ function StartForm({
   parent,
   proposal,
   latest,
+  initialNote,
   onDone,
 }: {
   deviceId: string
   parent: SessionSummary
   proposal: SessionProposalView
   latest: SessionProposalView | undefined
+  initialNote: string
   onDone(): void
 }) {
   const t = useT()
@@ -111,8 +115,9 @@ function StartForm({
     fields.cwd.trim(),
   )
   const [picking, setPicking] = useState<Picking | null>(null)
-  const [failure, setFailure] = useState<string | null>(null)
-  const [busy, run] = useBusy()
+  const act = useProposalAct(deviceId, parent.id, proposal.id)
+  const busy = act.busy
+  const [note, setNote] = useState(initialNote)
   const options = useComposeOptions(deviceId, fields.harness)
   const models = options?.models ?? []
   const model = models.find((entry) => entry.id === fields.model)
@@ -140,23 +145,13 @@ function StartForm({
   }
   const workspaceName = workspaces.find((entry) => entry.id === fields.workspaceId)?.name
 
-  const start = async () => {
+  const start = () => {
+    if (!text || busy || blocked || wider || worktreeBlock) return
     Keyboard.dismiss()
-    if (!text || blocked || worktreeBlock) return
-    setFailure(null)
-    try {
-      await run(
-        channel.command('session.proposal.accept', {
-          deviceId,
-          sessionId: parent.id,
-          proposalId: proposal.id,
-          overrides: overridesFor(fields, parent, proposal, worktrees),
-        }),
-      )
-      onDone()
-    } catch (error) {
-      setFailure(t('proposal.failed', { reason: whyNot(error, t) }))
-    }
+    void act.accept(
+      withProposalNote(proposal.prompt, note, overridesFor(fields, parent, proposal, worktrees)),
+    )
+    onDone()
   }
 
   const picker = ((): { title: string; value: string; options: PickerOption[] } | null => {
@@ -372,14 +367,19 @@ function StartForm({
           {worktreeBlock ? (
             <Text style={[styles.note, { color: c.err }]}>{t(worktreeBlock)}</Text>
           ) : null}
-          {failure ? <Text style={[styles.note, { color: c.err }]}>{failure}</Text> : null}
+          <ProposalNote
+            value={note}
+            onChange={setNote}
+            disabled={busy || Boolean(blocked)}
+            onStart={start}
+          />
         </KeyboardFormScrollView>
         <KeyboardFormFooter>
           <Button
             label={t('proposal.start')}
             testID="proposal-start:go"
             busy={busy}
-            disabled={!text || blocked !== null || worktreeBlock !== null}
+            disabled={!text || blocked !== null || wider !== null || worktreeBlock !== null}
             onPress={() => void start()}
           />
         </KeyboardFormFooter>

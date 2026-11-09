@@ -830,6 +830,7 @@ export function Issue({
               proposalId={suggestion.proposal.id}
               sourceIsManager={suggestion.proposal.sourceIsManager}
               worktree={suggestion.proposal.worktree ?? false}
+              prompt={suggestion.proposal.prompt}
               wider={suggestion.proposal.widerSandbox}
             />
           ) : null}
