@@ -16,6 +16,7 @@ import {
 } from '../../shared/src/background-shell.mjs'
 import { FilesystemRpc } from '../../shared/src/filesystem-rpc.mjs'
 import { FuzzyFileSearch, FuzzySearchSessions } from '../../shared/src/fuzzy-session.mjs'
+import type { JsonlLog } from '../../shared/src/log-file.mjs'
 import { PowerObserver, powerThreads } from '../../shared/src/power-observer.mjs'
 import { ProcessRpc } from '../../shared/src/process-rpc.mjs'
 import { ProjectStore } from '../../shared/src/project-store.mjs'
@@ -46,7 +47,7 @@ import {
 } from './catalog.mjs'
 import { readTextFile, Terminals, writeTextFile } from './client-side.mjs'
 import { ClientTools } from './client-tools.mjs'
-import { AcpError, HandlerError } from './connection.mjs'
+import { AcpError, HandlerError, type RequestTiming } from './connection.mjs'
 import { present } from './declaration.mjs'
 import { elicit } from './elicitation.mjs'
 import { settings } from './envelope.mjs'
@@ -57,6 +58,7 @@ import { sessionOptions } from './session-options.mjs'
 import { AcpStore } from './store.mjs'
 import { TerminalLogin } from './terminal-login.mjs'
 import { echoContent, promptContent, withStopNoticeBlocks } from './turn.mjs'
+import { TurnTiming, turnTimingLog } from './turn-timing.mjs'
 
 // 调试用：CHA_ACP_TRACE 指向文件时逐行记录与客户端往来的协议消息，默认关闭。
 const tracePath = process.env.CHA_ACP_TRACE
@@ -95,6 +97,7 @@ export interface LiveThread {
 }
 
 interface Running {
+  timing: TurnTiming
   turn: AcpTurn
   sent: boolean
   stopped: boolean
@@ -169,8 +172,14 @@ export class AcpServer {
   private readonly requests = new ServerRequests((threadId, method, params) =>
     this.notify(threadId, method, params),
   )
+  private readonly timingLog: JsonlLog | null
 
-  constructor(home: string, env: NodeJS.ProcessEnv = process.env) {
+  constructor(
+    home: string,
+    env: NodeJS.ProcessEnv = process.env,
+    timingLog: JsonlLog | null = turnTimingLog,
+  ) {
+    this.timingLog = timingLog
     this.agentId = agentId(env)
     this.store = new AcpStore(home)
     this.projects = new ProjectStore(this.store.db, {
@@ -278,6 +287,12 @@ export class AcpServer {
     this.runtime = new AcpRuntime(
       home,
       {
+        requestTiming: (id, method, params, agent) => {
+          const live = this.live.get(params?.sessionId)
+          return live?.generation === agent.generation
+            ? live.running?.timing.request(id, method)
+            : undefined
+        },
         request: (method, params, agent, signal) =>
           this.agentRequest(method, params, agent, signal),
         notification: (method, params, agent) => this.agentNotification(method, params, agent),
@@ -497,9 +512,14 @@ export class AcpServer {
   // ---------- 发给 agent ----------
 
   /** 向 agent 发请求；agent 回的错误换成协议错误，带上是哪个 agent 说的 */
-  async ask(agent: AgentHandle, method: string, params: unknown): Promise<any> {
+  async ask(
+    agent: AgentHandle,
+    method: string,
+    params: unknown,
+    timing?: RequestTiming,
+  ): Promise<any> {
     try {
-      return await agent.connection.request(method, params)
+      return await agent.connection.request(method, params, undefined, timing)
     } catch (error) {
       throw this.failure(agent, error)
     }
@@ -562,6 +582,7 @@ export class AcpServer {
   private apply(live: LiveThread, update: unknown): void {
     const id = live.projection.thread.id
     const patch = update as any
+    live.running?.timing.update(patch)
     if (live.running) this.agyBackground?.observe(id, patch)
     // v1 没有自发回合的结束帧：仅对收到的正文/新工具建立回合，静默后收尾。
     // 元数据不触发回合；未来 v2 的 state_update/background 在此接显式状态，不靠静默判断。
@@ -1280,21 +1301,32 @@ export class AcpServer {
     const { projection } = live
     const threadId = projection.thread.id
     const notify = (method: string, value: any) => this.notify(threadId, method, value)
-    const running: Running = { turn, sent: false, stopped: false, done: Promise.resolve() }
+    const timing = new TurnTiming(this.timingLog, {
+      harness: this.agentId,
+      threadId,
+      turnId: turn.id,
+    })
+    const running: Running = { turn, timing, sent: false, stopped: false, done: Promise.resolve() }
     live.running = running
     running.done = (async () => {
       let endedNormally = false
       try {
+        timing.mark('attach.started')
         const agent = await this.attach(live)
+        timing.mark('attach.ended', { generation: agent.generation })
+        timing.mark('flush.started')
         await this.flush(live, agent)
+        timing.mark('flush.ended')
         const blocks = await prompt(agent)
         // 接上会话的这会儿被打断了：提示词不交
         if (running.stopped || projection.active !== turn) return
         running.sent = true
-        const response = await this.ask(agent, 'session/prompt', {
-          sessionId: threadId,
-          prompt: blocks,
-        })
+        const response = await this.ask(
+          agent,
+          'session/prompt',
+          { sessionId: threadId, prompt: blocks },
+          timing.prompt(agent.generation),
+        )
         endedNormally = response?.stopReason === 'end_turn'
         if (projection.active === turn)
           projection.finish(
@@ -1310,6 +1342,7 @@ export class AcpServer {
             notify,
           )
       } finally {
+        timing.finish(running.stopped ? 'interrupted' : turn.status)
         if (live.running === running) live.running = null
         this.save(live, true)
         this.saveTurns(live)
@@ -1505,6 +1538,7 @@ export class AcpServer {
     await within(running.done, INTERRUPT_WAIT_MS)
     // agent 迟迟不回 session/prompt 的，由适配器收尾
     if (live.projection.active === running.turn) {
+      running.timing.finish('interrupted')
       live.projection.finish({ interrupted: true }, (method, params) =>
         this.notify(id, method, params),
       )

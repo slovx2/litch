@@ -4,7 +4,7 @@ import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { takeLogDir } from '../../shared/src/log-file.mjs'
 import { type ResolvedAgent, resolveAgent } from './agent.mjs'
-import { AcpConnection, AcpError } from './connection.mjs'
+import { AcpConnection, AcpError, type RequestOutcome } from './connection.mjs'
 import { type AgentCapabilities, capabilitiesOf } from './declaration.mjs'
 import { versions } from './versions.mjs'
 
@@ -18,6 +18,12 @@ export interface AgentHandle {
 }
 
 export interface RuntimeEvents {
+  requestTiming?(
+    id: string | number,
+    method: string,
+    params: any,
+    agent: AgentHandle,
+  ): ((outcome: RequestOutcome) => void) | undefined
   /** agent 反过来问我们（权限、文件、终端） */
   request(method: string, params: any, agent: AgentHandle, signal: AbortSignal): Promise<unknown>
   /** agent 发来的通知（session/update） */
@@ -114,6 +120,8 @@ export class AcpRuntime {
     const generation = ++this.generations
     let handle: AgentHandle | null = null
     const connection = new AcpConnection(child.stdout as any, child.stdin as any, {
+      requestTiming: (id, method, params) =>
+        handle ? this.events.requestTiming?.(id, method, params, handle) : undefined,
       request: (method, params, signal) =>
         handle
           ? this.events.request(method, params, handle, signal)
