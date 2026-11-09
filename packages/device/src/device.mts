@@ -4,12 +4,14 @@ import {
   deviceToolSwitches,
 } from '../../protocol/src/client-tools-settings.mjs'
 import { PATH_PICKER_EXTENSION } from '../../protocol/src/path-picker.mjs'
+import { THREAD_READ_STATE } from '../../protocol/src/thread-read-state.mjs'
 import { protectedAttachmentOwners } from './attachment-active.mjs'
 import { AttachmentRetention } from './attachment-retention.mjs'
 import { registerAutomationGuide } from './automation-guide.mjs'
 import { ResumeTools } from './resume-tools.mjs'
 import { reserveSessionWork } from './session-capacity.mjs'
 import { prepareSessionTools } from './session-client-tools.mjs'
+import { ThreadReadStates } from './thread-read-state.mjs'
 // 设备进程的主体：一台机器上的多个 harness 运行时收在一个入口（聚合面）后面。
 // 这里只管各条客户端连接共用的东西；一条连接上的事在 session.mts。
 
@@ -267,6 +269,7 @@ export class DeviceServer {
   private readonly workspaces: Workspaces
   private readonly importer: WorkspaceImporter | null
   readonly attachments: AttachmentRetention
+  private readonly readStates: ThreadReadStates
   private readonly layer: DeviceLayer
   private readonly options: DeviceOptions
   private readonly control: ControlChannel | null
@@ -323,6 +326,30 @@ export class DeviceServer {
     this.db = openDeviceStore(options.stateDir)
     // 先建索引（它把上一次留下的临时会话清掉），再建工作区
     this.index = new ThreadIndex(this.db)
+    this.readStates = new ThreadReadStates(this.db, this.index, (state) =>
+      this.announce(THREAD_READ_STATE.changed, state, EXTENSION.threadReadState),
+    )
+    this.readStates.log = options.log ?? (() => {})
+    this.readStates.latest = async (harness, threadId) => {
+      const link = await this.openEngineLink(harness, {
+        handshakeTimeoutMs: 5000,
+        observeSnapshots: false,
+      })
+      try {
+        return await link.request(
+          'thread/turns/list',
+          {
+            threadId,
+            limit: 20,
+            sortDirection: 'desc',
+            itemsView: 'summary',
+          },
+          { timeoutMs: 5000 },
+        )
+      } finally {
+        link.close()
+      }
+    }
     this.workspaces = new Workspaces(this.db, (method, params, extension) =>
       this.announce(method, params, extension),
     )
@@ -336,7 +363,7 @@ export class DeviceServer {
     info.extensions.push(EXTENSION.fileDownload)
     info.extensions.push(EXTENSION.fileAttachments)
     info.extensions.push(EXTENSION.turnRecovery)
-    info.extensions.push(EXTENSION.turnNotices)
+    info.extensions.push(EXTENSION.turnNotices, EXTENSION.threadReadState)
     this.recovery = new TurnRecoveryObserver({
       check: async (harness, threadId, includeTurns) => {
         const deadline = Date.now() + 5000
@@ -625,6 +652,7 @@ export class DeviceServer {
       this.control?.state?.snapshot.values[SUGGESTION_RETENTION_SETTING],
     )
     this.sessionTree.started()
+    this.readStates.follow = (threadId) => this.sessionTree.follow(threadId)
     // 子会话的后台任务跑完了：引擎不会接着做的，会话树补一条回报（决 430）
     this.background.onSettled((threadId, tasks) =>
       this.sessionTree.backgroundSettled(threadId, tasks),
@@ -709,6 +737,7 @@ export class DeviceServer {
     this.host = {
       attachments: this.attachments,
       turnNotices: this.turnNotices,
+      readStates: this.readStates,
       restart: this.restart,
       power: () => this.power,
       recovery: this.recovery,
@@ -1130,6 +1159,7 @@ export class DeviceServer {
       this.resumeTools.observe(method, params)
       this.attachments.observe(link.harness, params)
       this.turnNotices.observe(method, params)
+      this.readStates.observe(link.harness, method, params)
       this.restart?.observe(method, params)
       if (link.native) {
         this.nativeBackground.observe(link.harness, method, params)
@@ -1231,8 +1261,10 @@ export class DeviceServer {
               result,
             )
         }
-        if (isObject(result) && isObject(result.thread))
+        if (isObject(result) && isObject(result.thread)) {
           this.attachments.observe(link.harness, result)
+          this.readStates.observe(link.harness, 'thread/snapshot', result)
+        }
         if (observeSnapshots && isObject(result) && isObject(result.thread))
           this.recovery.snapshot(link.harness, result.thread)
         return result
@@ -1267,6 +1299,7 @@ export class DeviceServer {
     }
     if (this.tasksWait) clearTimeout(this.tasksWait)
     // 先停任务、关内部连接：等着的回合当场醒来，运行留着 running，下次起来去查
+    this.readStates.close()
     this.tasks?.close()
     this.pairing?.close()
     this.approvals.shutdown()

@@ -13,6 +13,11 @@ import {
   type ThreadCapabilities,
   threadCapabilities,
 } from '../../../protocol/src/thread-capabilities.mjs'
+import {
+  THREAD_READ_BATCH,
+  THREAD_READ_STATE,
+  type ThreadReadState,
+} from '../../../protocol/src/thread-read-state.mjs'
 import { assertArchiveChildrenStopped } from '../archive.mjs'
 import type { TitleSearchResult } from '../search/model.mjs'
 import { matchTitles } from '../search/titles.mjs'
@@ -618,6 +623,8 @@ const backgroundDigest = (thread: Thread | undefined) => {
 export function createDevice(config: DeviceConfig, options: DeviceOptions): Device {
   const { hooks } = options
   const peeks = createPeekCache()
+  let readStateSupported = false
+  const readStates = new Map<string, ThreadReadState>()
   let turnNotices = false
   const log = (line: string) => options.log?.(`[${config.id}] ${line}`)
   const trace = options.trace ? traceWith(options.trace, { device: config.id }) : null
@@ -1265,6 +1272,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     threads.set(kept.id, kept)
     noteBackgroundDrop(kept.id, before, kept, changeCause)
     hooks.sidebarOps([{ op: 'session.upsert', session: summaryOf(kept) }])
+    if (readStateSupported && !readStates.has(kept.id))
+      void loadReadStates([kept.id]).catch((error: unknown) =>
+        log(`补取已读状态失败：${String(error)}`),
+      )
     saveSoon()
   }
 
@@ -1290,6 +1301,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     peeks.forget(threadId)
     agentThreads.forget(threadId)
     unread.delete(threadId)
+    readStates.delete(threadId)
     unspoken.delete(threadId)
     live.forget(threadId)
     noteBackgroundDrop(threadId, threads.get(threadId), undefined, `remove:${changeCause}`)
@@ -1485,6 +1497,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       noteBackgroundDrop(id, was, threads.get(id), 'thread/list')
     // 设备上已经没有了的会话，未读也不留
     for (const id of unread) if (!threads.has(id)) unread.delete(id)
+    for (const id of readStates.keys()) if (!threads.has(id)) readStates.delete(id)
     // 已归档的表还没取过时不知道它是不是归档了，先留着
     for (const id of speeds.keys())
       if (!threads.has(id) && archived && !archived.has(id)) speeds.delete(id)
@@ -1528,6 +1541,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       const shelved = archived ? await loadThreads(true, id) : null
       if (mine !== session) return
       setThreads(listing, id)
+      await loadReadStates([...threads.keys()])
+      if (mine !== session) return
       if (shelved) setArchived(shelved, id)
       hooks.sidebar(sidebar())
       saveSoon()
@@ -1585,7 +1600,46 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     saveSoon()
   }
 
+  const applyReadState = (incoming: ThreadReadState) => {
+    const previous = readStates.get(incoming.threadId)
+    // 查询/确认的应答可能晚于后续推送。两个游标各自只向前，不用应答到达顺序判新旧。
+    const state = previous
+      ? {
+          ...(previous.completedSequence > incoming.completedSequence ? previous : incoming),
+          readSequence: Math.max(previous.readSequence, incoming.readSequence),
+        }
+      : incoming
+    readStates.set(state.threadId, state)
+    if (state.completedSequence > state.readSequence) unread.add(state.threadId)
+    else unread.delete(state.threadId)
+    const thread = threads.get(state.threadId)
+    if (thread) hooks.sidebarOps([{ op: 'session.upsert', session: summaryOf(thread) }])
+    saveSoon()
+  }
+
+  const loadReadStates = async (ids: string[]) => {
+    if (!readStateSupported) return
+    const mine = session
+    for (let offset = 0; offset < ids.length; offset += THREAD_READ_BATCH) {
+      const { states } = await link.request(THREAD_READ_STATE.list, {
+        threadIds: ids.slice(offset, offset + THREAD_READ_BATCH),
+      })
+      if (mine !== session) return
+      for (const state of states) applyReadState(state)
+    }
+  }
+
   const routes: Routes = {
+    'litch/thread/readState/changed': (state) => {
+      if (!readStateSupported) return
+      applyReadState(state)
+      if (
+        state.completedSequence > state.readSequence &&
+        !threads.has(state.threadId) &&
+        !archived?.has(state.threadId)
+      )
+        void fetchThread(state.threadId)
+    },
     'litch/thread/turn/notice': (notice) => peeks.receive(notice),
     // 已在列表里的会话再收到一次（比如 Claude 入口重扫原生会话后重发）：通知里的会话对象只在集合不空时带
     // litchBackground，没带不等于空了（空了另有 litch/thread/background/changed），沿用已知的那份，
@@ -1627,7 +1681,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       // 重启时被打断的会话又开始了一个回合：末尾那句“发消息继续”不用再说了
       if (running) restarted.delete(threadId)
       // 从“在跑”变成“停了”，而界面上没人开着它：标成未读
-      if (was && !running && !live.watched(threadId)) unread.add(threadId)
+      if (!readStateSupported && was && !running && !live.watched(threadId)) unread.add(threadId)
       if (was === running) {
         patchThread(threadId, { status })
         return
@@ -1732,6 +1786,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (mine !== session) return
       setWorkspaces(projects, listed)
       setThreads(listing)
+      await loadReadStates([...threads.keys()])
+      if (mine !== session) return
       if (shelved) setArchived(shelved)
       catalogError = null
       hooks.sidebar(sidebar())
@@ -1847,6 +1903,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     filePreviewSupported = false
     mediaImagesSupported = false
     turnNotices = false
+    readStateSupported = false
+    readStates.clear()
     pathsSupported = false
     try {
       const info = await link.request(
@@ -1868,6 +1926,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         if (declares || mode !== 'full') hasProjects = null
         mode = 'full'
         turnNotices = info.device.extensions?.includes(EXTENSION.turnNotices) === true
+        readStateSupported = info.device.extensions?.includes(EXTENSION.threadReadState) === true
         fileAttachmentsSupported =
           info.device.extensions?.includes(EXTENSION.fileAttachments) === true
         fileDownloadSupported = info.device.extensions?.includes(EXTENSION.fileDownload) === true
@@ -2294,7 +2353,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (running) {
         peeks.forget(sessionId)
         restarted.delete(sessionId)
-      } else if (!live.watched(sessionId)) unread.add(sessionId)
+      } else if (!readStateSupported && !live.watched(sessionId)) unread.add(sessionId)
       patchThread(sessionId, {
         status: running ? { type: 'active', activeFlags: [] } : { type: 'idle' },
         updatedAt: Math.floor(options.clock.now() / 1000),
@@ -3200,6 +3259,21 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     clearGoal: (sessionId) => live.clearGoal(sessionId),
     markRead(sessionId) {
       if (!unread.delete(sessionId)) return
+      const state = readStates.get(sessionId)
+      if (readStateSupported && state && state.completedSequence > state.readSequence) {
+        const mine = session
+        void link
+          .request(THREAD_READ_STATE.mark, {
+            threadId: sessionId,
+            completedSequence: state.completedSequence,
+          })
+          .then(
+            (confirmed) => {
+              if (mine === session) applyReadState(confirmed)
+            },
+            (error: unknown) => log(`同步已读状态失败：${String(error)}`),
+          )
+      }
       const thread = threads.get(sessionId)
       if (thread) hooks.sidebarOps([{ op: 'session.upsert', session: summaryOf(thread) }])
       saveSoon()

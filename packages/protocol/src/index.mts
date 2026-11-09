@@ -267,6 +267,7 @@ export {
   validateTaskSchedule,
 } from './task-schedule.mjs'
 export * from './thread-capabilities.mjs'
+export { THREAD_READ_BATCH, THREAD_READ_STATE, type ThreadReadState } from './thread-read-state.mjs'
 export * from './tool-images.mjs'
 export { TURN_NOTICE, TURN_NOTICE_BODY_MAX, type TurnNotice } from './turn-notices.mjs'
 // 工作树（worktrees 扩展）：thread/start 上要一个新工作树、会话对象上的 litchWorktree、列出删除恢复

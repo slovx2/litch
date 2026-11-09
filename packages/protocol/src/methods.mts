@@ -302,6 +302,14 @@ type CutBeforeItem<T> = T & { beforeItemId?: string }
 import type { DevicePowerStatus } from './device-power.mjs'
 
 export interface ClientRequests extends AcpControlsRequests {
+  'litch/thread/readState/list': {
+    params: { threadIds: string[] }
+    result: { states: import('./thread-read-state.mjs').ThreadReadState[] }
+  }
+  'litch/thread/readState/mark': {
+    params: { threadId: string; completedSequence: number }
+    result: import('./thread-read-state.mjs').ThreadReadState
+  }
   'litch/media/readImage': {
     params: { source: string }
     result: import('./media-images.mjs').ImageReadResult
@@ -755,6 +763,7 @@ export interface ServerNotifications {
   'litch/manager/issue/activity': ManagerIssueActivityNotification
   /** 扩展，只发给握手时声明过 sessionTree 的连接：一个会话的回报队列变了 */
   'litch/thread/queuedNotes/updated': QueuedNotesUpdatedNotification
+  'litch/thread/readState/changed': import('./thread-read-state.mjs').ThreadReadState
   'litch/thread/turn/notice': import('./turn-notices.mjs').TurnNotice
   'litch/thread/questions/changed': { threadId: string; ignoredQuestions: string[] }
   'litch/thread/questionSettlements/changed': {

@@ -34,6 +34,7 @@ import { supportsNativeBackground } from '../../protocol/src/native-background-w
 import { SESSION_TREE_METHOD } from '../../protocol/src/session-tree.mjs'
 import { SUGGESTIONS_LIST } from '../../protocol/src/suggestion-inbox.mjs'
 import { localTaskTimeZone } from '../../protocol/src/task-schedule.mjs'
+import { THREAD_READ_STATE } from '../../protocol/src/thread-read-state.mjs'
 import {
   RECOVERY_CONTINUE,
   RECOVERY_DISMISS,
@@ -159,6 +160,7 @@ export interface SessionHost {
   ): Record<string, unknown>
 
   turnNotices?: import('./turn-notices.mjs').TurnNotices
+  readStates?: import('./thread-read-state.mjs').ThreadReadStates
   restart?: RestartResume
   recovery?: TurnRecoveryObserver
   recoveryActions?: RecoveryActions
@@ -309,6 +311,7 @@ export class ClientSession implements ClientToolPeer {
         this.host.resumeTools.observe(method, params)
         this.host.attachments?.observe(link.harness, params)
         this.host.turnNotices?.observe(method, params)
+        this.host.readStates?.observe(link.harness, method, params)
         this.host.restart?.observe(method, params)
         this.host.managers?.observe(method, params)
         if (method === 'thread/name/updated') this.host.sessionTree.suggestions.changed()
@@ -567,6 +570,13 @@ export class ClientSession implements ClientToolPeer {
       return this.host.pairing.call(method, frame.params)
     }
     if (this.state !== 'ready') throw new ProtocolError(-32600, 'Not initialized')
+    if (method === THREAD_READ_STATE.list || method === THREAD_READ_STATE.mark) {
+      if (!this.declared.has(EXTENSION.threadReadState) || !this.host.readStates)
+        throw new ProtocolError(-32601, 'Method not found')
+      return method === THREAD_READ_STATE.list
+        ? this.host.readStates.list(frame.params)
+        : this.host.readStates.mark(frame.params)
+    }
     if (method === 'litch/device/service/activity') {
       if (!this.declared.has(EXTENSION.serviceActivity) || !this.host.activity)
         throw new ProtocolError(-32601, 'Method not found')
@@ -731,6 +741,8 @@ export class ClientSession implements ClientToolPeer {
       case 'list':
         return listThreads(
           {
+            observe: (harness, thread) =>
+              this.host.readStates?.observe(harness, 'thread/snapshot', { thread }),
             // 歇着的（停用了、没装……）也交过去：它们的会话这一次列不出来，应答里要说明
             links: [...this.links.values()],
             link: (harness) => this.link(harness),
