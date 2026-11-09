@@ -5,6 +5,10 @@
 issue 正文计数及 CI 写权限；原来的 `nightly-triage` issue 保留用途和格式。
 同一账本也记录 CI push 中的用例失败，保留真实作业名和触发方式；不伪装成 Full，也不跨作业合并计数。
 
+本地执行的失败与同 SHA 复跑依据记在账本的 `localObservations`，保留日志摘要、哈希和环境。
+它们没有 GitHub run/job ID，不加入 `cases.events`，也不参与按独立 CI run 累计的三次阈值；
+`summary` 仍只汇总 CI 事件。本地观察次数按各用例的独立执行标识核对，不能充作 CI 次数。
+
 ## 认定和计数
 
 - 键是 **Full 中完整作业名 + 稳定用例名**。保留矩阵后缀和嵌套作业名，不将不同平台、

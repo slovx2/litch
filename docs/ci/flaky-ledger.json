@@ -465,5 +465,63 @@
         "failure": "ruby/setup-ruby: Unknown version 3.4.7 for ruby on macos-15"
       }
     ]
-  }
+  },
+  "localObservations": [
+    {
+      "id": "2026-11-09-main-3922a50e-mcp-form",
+      "source": "local",
+      "suite": "claude full, concurrency 1",
+      "test": "MCP-004：手写的真 MCP 服务发表单征询（cli），客户端答 decline，两头线上的内容对得上",
+      "sha": "3922a50ebbbd5c515c42abd2c2aa4003cf4c0576",
+      "startedAt": "2026-11-09T11:28:19.547Z",
+      "environment": {
+        "platform": "darwin-arm64",
+        "node": "24.19.0",
+        "claudeCli": "2.1.282",
+        "isolation": "独立 HOME、CLAUDE_CODE_TMPDIR 和回环假模型"
+      },
+      "failure": "回合失败：假模型断言 MCP 服务工具未出现在模型请求；CLI 等项目服务连接最多约两秒。",
+      "failureLog": {
+        "name": "post-0.38.2-integration/claude.log",
+        "sha256": "fe7df3e70b388c0901b7c4a4941a4bc3698445a642445d51d2409e93c20b1bec"
+      },
+      "evidence": {
+        "kind": "same-sha-local-rerun",
+        "command": "node --import ./packages/claude/dist/claude/test/fixtures/isolate-process.mjs --test --test-force-exit --test-concurrency=1 --test-timeout=600000 packages/claude/dist/claude/test/native-mcp-elicitation-form.test.mjs",
+        "result": "完整测试文件 9/9 通过，零跳过，源码未修改",
+        "log": "post-0.38.2-integration/triage/mcp-form.log",
+        "sha256": "80c07900cd862e03b4ab7050bdaaa366b34dcc3080d99c28a23d1ec8d0dcf876"
+      },
+      "countedInCiThreshold": false,
+      "note": "仅本地观察；没有 GitHub run/job ID，不伪造CI事件，不与独立CI run计数合并。"
+    },
+    {
+      "id": "2026-11-09-main-3922a50e-subagent-activity",
+      "source": "local",
+      "suite": "claude full, concurrency 1",
+      "test": "ACTIVITY-001：前台子代理一直有动静，总时长超过看门狗时限也照常完成",
+      "sha": "3922a50ebbbd5c515c42abd2c2aa4003cf4c0576",
+      "startedAt": "2026-11-09T11:28:19.547Z",
+      "environment": {
+        "platform": "darwin-arm64",
+        "node": "24.19.0",
+        "claudeCli": "2.1.282",
+        "isolation": "独立 HOME、CLAUDE_CODE_TMPDIR 和回环假模型"
+      },
+      "failure": "父回合完成，但子线程最后一回合为 failed，预期 completed。",
+      "failureLog": {
+        "name": "post-0.38.2-integration/claude.log",
+        "sha256": "fe7df3e70b388c0901b7c4a4941a4bc3698445a642445d51d2409e93c20b1bec"
+      },
+      "evidence": {
+        "kind": "same-sha-local-rerun",
+        "command": "node --import ./packages/claude/dist/claude/test/fixtures/isolate-process.mjs --test --test-force-exit --test-concurrency=1 --test-timeout=600000 packages/claude/dist/claude/test/native-subagent-activity.test.mjs",
+        "result": "完整测试文件 6/6 通过，零跳过，源码未修改",
+        "log": "post-0.38.2-integration/triage/subagent-activity.log",
+        "sha256": "ef491b64c62bd723e303c3376ced3bca1b600443bb290bc53dfceb9e8fcf37c5"
+      },
+      "countedInCiThreshold": false,
+      "note": "仅本地观察；没有 GitHub run/job ID，不伪造CI事件，不与独立CI run计数合并。"
+    }
+  ]
 }
