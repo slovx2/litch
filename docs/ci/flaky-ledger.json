@@ -377,8 +377,13 @@
           "url": "https://github.com/slovx2/litch/actions/runs/42559257177/job/128971842125",
           "failure": "CI push 的 unit-claude (2)：最后一次模型请求之后过了 2752 毫秒回合才结束，超出 1500 毫秒断言。",
           "evidence": {
-            "kind": "pending",
-            "note": "经理已定点重跑失败作业；目前尚无该 SHA 的通过证据，先记 pending，待 attempt 2 通过后补齐确认。"
+            "kind": "same-sha-pass",
+            "runId": 42559257177,
+            "attempt": 2,
+            "jobId": 128977059899,
+            "sha": "a1209ed51815b8aa4b2587a036d4b55ebd8201c2",
+            "reference": "https://github.com/slovx2/litch/actions/runs/42559257177/job/128977059899",
+            "note": "已读取 attempt 2 的 unit-claude (2) 原始日志，实际 checkout 同为 a1209ed5，完整同名用例明确通过；同 run 仅计 1 次。"
           }
         }
       ]
