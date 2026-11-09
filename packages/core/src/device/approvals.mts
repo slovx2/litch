@@ -1,14 +1,4 @@
-// 一台设备上的手机批准（协议扩展 clientApprovals）在客户端这一头：桌面端和手机两头的转运都在这里，验签不在这里。
-//
-// 桌面端（有外壳、执行内置浏览器的那一台）：执行器在会话的对话里出登录卡片时（kind 为 signIn、带着主进程的桌面端号 desktopId），
-// 把给人看的摘要（打码的用户名，没有明文）经会话所在的这台设备挂上去（litch/approval/open）；卡片答了、撤了就收掉
-// （litch/approval/close）。设备转来手机的答复（litch/approval/answered）原样交给主进程，主进程自己验签
-// （apps/desktop/src/approvals/verify.mts），验过了才算数、卡片两处一起收。
-//
-// 手机：订阅 approvals 主题（会话页开着时）拿这台设备上现在挂着的卡片（litch/approval/list，之后跟着 litch/approval/changed），
-// 答复由移动端的外壳签好名交过来（approval.answer），这里只转给设备。
-//
-// 连接断了设备那边就收掉这条连接挂的卡片；执行中的工具调用也会被取消（tool-calls.mts 的 offline），所以断线后不重挂。
+// 桌面与手机之间转发自身访问批准和网站待处理状态；旧代理代填卡片不再发布或显示。
 import {
   APPROVAL_ANSWER,
   APPROVAL_ANSWERED,
@@ -22,7 +12,6 @@ import {
   type ApprovalCardView,
   type ApprovalChangedNotification,
   isApprovalAnswer,
-  isApprovalRef,
   isApprovalToken,
 } from '../../../protocol/src/client-approvals.mjs'
 import type { ClientRequestMethod, ClientRequests } from '../../../protocol/src/index.mjs'
@@ -76,47 +65,17 @@ export interface Approvals {
  */
 export function phoneCardOf(place: ToolAskPlace, device: string): ApprovalCard | null {
   const ask = place.ask as unknown as Record<string, unknown>
-  if (ask.kind !== 'signIn' && ask.kind !== 'computerSelf') return null
+  if (ask.kind !== 'computerSelf') return null
   if (!isApprovalToken(ask.id) || !isApprovalToken(ask.nonce) || !isApprovalToken(ask.desktopId))
     return null
-  if (ask.kind === 'computerSelf')
-    return {
-      id: ask.id,
-      nonce: ask.nonce,
-      desktopId: ask.desktopId,
-      threadId: place.threadId,
-      kind: 'computerSelf',
-      summary: { origin: 'litch://computer-self', device },
-      expiresAt: null,
-    }
-  if (typeof ask.origin !== 'string' || !ask.origin) return null
-  const accounts: { ref: string; masked: string }[] = []
-  for (const account of Array.isArray(ask.accounts) ? ask.accounts : []) {
-    const { ref, masked } = (account ?? {}) as { ref?: unknown; masked?: unknown }
-    if (!isApprovalRef(ref) || typeof masked !== 'string') return null
-    accounts.push({ ref, masked })
-  }
-  const task = ask.task as { id?: unknown; name?: unknown } | null | undefined
-  const taskId = typeof task?.id === 'string' ? task.id : ask.taskId
   return {
     id: ask.id,
-    threadId: place.threadId,
-    kind: 'browserSignIn',
-    summary: {
-      origin: ask.origin,
-      site: typeof ask.site === 'string' ? ask.site : '',
-      reason: typeof ask.reason === 'string' ? ask.reason : '',
-      device,
-      accounts,
-      task:
-        typeof taskId === 'string' && taskId
-          ? { id: taskId, name: typeof task?.name === 'string' ? task.name : '' }
-          : null,
-      fillBlocked: typeof ask.fillBlocked === 'string' ? ask.fillBlocked : null,
-    },
-    desktopId: ask.desktopId,
     nonce: ask.nonce,
-    expiresAt: typeof ask.expiresAt === 'number' ? ask.expiresAt : null,
+    desktopId: ask.desktopId,
+    threadId: place.threadId,
+    kind: 'computerSelf',
+    summary: { origin: 'litch://computer-self', device },
+    expiresAt: null,
   }
 }
 
@@ -153,7 +112,7 @@ export function createApprovals(host: ApprovalsHost): Approvals {
       (listed) => {
         if (mine !== epoch) return
         const next = new Map<string, ApprovalCardView[]>()
-        for (const card of listed.data)
+        for (const card of listed.data.filter((card) => card.kind !== 'browserSignIn'))
           next.set(card.threadId, [...(next.get(card.threadId) ?? []), card])
         cards = next
         publishAll()
@@ -240,7 +199,11 @@ export function createApprovals(host: ApprovalsHost): Approvals {
         const changed = params as ApprovalChangedNotification
         if (typeof changed?.threadId !== 'string' || !Array.isArray(changed.data)) return true
         if (changed.data.length === 0) cards.delete(changed.threadId)
-        else cards.set(changed.threadId, changed.data)
+        else
+          cards.set(
+            changed.threadId,
+            changed.data.filter((card) => card.kind !== 'browserSignIn'),
+          )
         publishAll()
         return true
       }

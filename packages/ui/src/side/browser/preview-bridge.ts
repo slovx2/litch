@@ -1,14 +1,10 @@
-// 界面预览用的假外壳：普通浏览器里（模拟核心）没有 window.litchBrowser，浏览器标签和设置页只有一句说明。
-// 地址里带 ?browser=preview 时换成这个，看得到浏览器面板上的卡片和设置页里经外壳的那几块。没有真的网页。
-// 在面板里新开一个标签就出一张登录卡片，样子按 ?signIn= 选：accounts（有已存账号，默认）、none（库里没有）、
-// blocked（预检不过）、task（定时任务的回合）、phone（手机批准了、正在代填）。在桌面外壳里、地址里没带这一项时不起作用。
+// 手动登录面板预览：普通交接与 task 定时任务过期提示。
 import type {
   BrowserBridge,
   BrowserOwner,
   BrowserSavedPassword,
   BrowserSignInRequest,
   BrowserTabInfo,
-  BrowserTouchId,
 } from './bridge.ts'
 
 let made: BrowserBridge | null = null
@@ -18,7 +14,7 @@ export function previewBridge(): BrowserBridge | undefined {
   if (made) return made
   if (window.litchShell || new URLSearchParams(location.search).get('browser') !== 'preview')
     return undefined
-  made = createPreviewBridge(new URLSearchParams(location.search).get('signIn') ?? 'accounts')
+  made = createPreviewBridge(new URLSearchParams(location.search).get('signIn') ?? 'manual')
   return made
 }
 
@@ -45,7 +41,6 @@ const PASSWORDS: BrowserSavedPassword[] = [
 function createPreviewBridge(variant: string): BrowserBridge {
   let tabs: BrowserTabInfo[] = []
   let signIns: BrowserSignInRequest[] = []
-  let touchId: BrowserTouchId = { available: true, on: false }
   let seq = 0
   const stateListeners = new Set<(tabs: BrowserTabInfo[]) => void>()
   const signInListeners = new Set<(list: BrowserSignInRequest[]) => void>()
@@ -72,25 +67,13 @@ function createPreviewBridge(variant: string): BrowserBridge {
     reason: 'Need to open the repository settings.',
     state: 'waiting',
     at: Date.now(),
-    accounts:
-      variant === 'none'
-        ? []
-        : [
-            {
-              ref: `${tab.id}-a1`,
-              username: 'dev@example.com',
-              masked: 'so•••@example.com',
-              lastUsed: Date.now() - 3 * DAY,
-            },
-            { ref: `${tab.id}-a2`, username: 'ops-bot', masked: 'op•••', lastUsed: null },
-          ],
-    fillBlocked: variant === 'blocked' ? 'insecure' : null,
+    accounts: [],
+    fillBlocked: null,
     taskId: variant === 'task' ? 'task-nightly' : null,
     expiresAt: variant === 'task' ? Date.now() + 30 * 60_000 : null,
     nonce: `${tab.id}-nonce`,
-    // phone：手机已经批准、Litch 正在代填的样子
-    stage: variant === 'phone' ? 'filling' : 'choose',
-    by: variant === 'phone' ? { phoneId: 'phone-1', name: 'Pixel 9' } : null,
+    stage: 'choose',
+    by: null,
   })
 
   const open = async (owner: BrowserOwner, url: string) => {
@@ -157,19 +140,11 @@ function createPreviewBridge(variant: string): BrowserBridge {
           signInsChanged()
         }
         if (answer === 'self') swap({ ...one, stage: 'manual' })
-        else if (typeof answer === 'object') {
-          // 代填要一会儿：先看得到 filling 那一版
-          swap({ ...one, stage: 'filling', by: 'desktop' })
-          setTimeout(() => swap(null), 3000)
-        } else swap(null)
+        else if (typeof answer === 'object') return false
+        else swap(null)
         return true
       },
       onChanged: (handler) => listen(signInListeners, handler),
-      touchId: async () => touchId,
-      async setTouchId(on) {
-        touchId = { ...touchId, on }
-        return touchId
-      },
     },
     import: {
       sources: async () => [],

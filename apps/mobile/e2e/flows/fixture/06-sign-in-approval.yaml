@@ -1,17 +1,8 @@
-# 手机批准电脑上的代理登录，整条链是真的：扫码添加时码里带 a，手机登记带上批准公钥（确认码把它算进去）→
-# 新建会话 → 入口脚本演桌面端，经声明了 clientApprovals 的连接在这个会话上挂一张登录卡片 → 手机的会话页出卡片，
-# 换成第二个账号、点“用 … 登录”→ 系统验证框里输入锁屏密码 → 答复经设备服务到“桌面端”，用扫码时记下的批准公钥验签、
-# 核对选的账号 → 卡片收掉；再挂一张点“拒绝”（不弹验证），同样验得过 → 设置里的批准钥匙指纹和扫码时送来的一样 →
-# 移除设备、撤掉钥匙，清掉锁屏密码
+# 旧桌面发送代理代填卡片时，新设备和手机忽略它；批准钥匙保留用于自身访问。
 appId: dev.litch.app
-name: fixture-手机批准登录
+name: fixture-忽略旧代理代填卡
 tags: [fixture]
 ---
-- runScript:
-    file: ../_shared/lock.js
-    env:
-      ON: '1'
-- assertTrue: ${output.locked}
 - runFlow:
     file: ../_shared/pair.yaml
 - tapOn:
@@ -26,72 +17,11 @@ tags: [fixture]
       text: 收到：hello approval
     timeout: 60000
 
-# 批准：换成第二个账号，过系统验证
 - runScript:
     file: ../_shared/approval-open.js
 - assertTrue: ${output.opened}
-- extendedWaitUntil:
-    visible:
-      id: request:signIn
-    timeout: 30000
-- assertVisible:
-    text: .*so•••@gmail\.com.*
-# 320×640 上卡片的正文放不下，第二个账号在卡片里往下翻才看得到
-- scrollUntilVisible:
-    element:
-      id: request:signIn:account:a2
-    direction: DOWN
-- tapOn:
-    id: request:signIn:account:a2
-- tapOn:
-    id: request:signIn:approve
-# 系统的验证框（只设了锁屏密码时是输密码的那一版），它不让截图，按控件找
-- extendedWaitUntil:
-    visible:
-      id: .*lockPassword
-    timeout: 15000
-- tapOn:
-    id: .*lockPassword
-- inputText: '1111'
-- pressKey: Enter
-- runScript:
-    file: ../_shared/approval-answered.js
-- assertTrue: ${output.verified && output.ref == 'a2' && output.decision == 'approve'}
-- extendedWaitUntil:
-    notVisible:
-      id: request:signIn
-    timeout: 30000
-
-# 拒绝：不弹验证，签名照样验得过
-- runScript:
-    file: ../_shared/approval-open.js
-- assertTrue: ${output.opened}
-- extendedWaitUntil:
-    visible:
-      id: request:signIn
-    timeout: 30000
-# 新卡片从顶部开始，先在卡片内翻过固定夹具的说明和两个账号。
-# Android 会把被裁切的按钮错误报告为覆盖下方区域的大节点，不能拿这个“可见”结果提前结束滚动。
-- repeat:
-    times: 3
-    commands:
-      - swipe:
-          from:
-            id: request:signIn:body
-          direction: UP
-- tapOn:
-    id: request:signIn:decline
-    below:
-      id: request:signIn:head
-    above:
-      id: composer-input
-- runScript:
-    file: ../_shared/approval-answered.js
-- assertTrue: ${output.verified && output.ref == 'null' && output.decision == 'decline'}
-- extendedWaitUntil:
-    notVisible:
-      id: request:signIn
-    timeout: 30000
+- assertNotVisible:
+    id: request:signIn
 
 # 设置里的指纹和扫码时送来的批准公钥对得上
 - tapOn:
@@ -140,8 +70,3 @@ tags: [fixture]
 - runScript:
     file: ../_shared/pair-phones.js
 - assertTrue: ${output.phones == 0 && output.keyLines == 0}
-- runScript:
-    file: ../_shared/lock.js
-    env:
-      ON: '0'
-- assertTrue: ${output.locked}

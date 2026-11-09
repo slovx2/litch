@@ -1612,6 +1612,37 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     if (!device) return
     const itemId = toolKey(turnId)
     const requestId = `${turnId}-r`
+    // ClientAskDemo 只包含浏览器场景；CU 的模拟流程保持原样。
+    if (view.settings.permission === ':danger-full-access') {
+      const signIn = demo === 'chromeSignIn' || demo.startsWith('signIn')
+      const item = clientToolCall(demo, itemId, signIn ? 'declined' : 'shot')
+      if (signIn && item.type === 'dynamicToolCall')
+        item.contentItems = [
+          {
+            type: 'inputText',
+            text: 'Sign-in is required and has not been completed. Use an authorized API or report that the user must sign in and retry.',
+          },
+        ]
+      applySessionOps(view, [
+        { op: 'item.add', turnId, item: projectItem(item) },
+        ...(signIn
+          ? [
+              {
+                op: 'item.add',
+                turnId,
+                item: {
+                  id: `${itemId}-notice`,
+                  kind: 'notice',
+                  label: phrase('notice.signInRequired'),
+                  detail: null,
+                },
+              } satisfies SessionOp,
+            ]
+          : []),
+      ])
+      endTurn(view, turnId, null, 'completed')
+      return
+    }
     clientAsks.set(requestId, { demo, itemId })
     applySessionOps(view, [
       { op: 'item.add', turnId, item: projectItem(clientToolCall(demo, itemId, null)) },

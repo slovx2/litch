@@ -64,9 +64,9 @@ export async function checkSignInCard(options: {
       new URL(url).origin,
   )
   check(
-    '登录卡片：库里没有这个网站的账号时先让人选，写明没有已存账号，只有“我自己登录”“拒绝”，没有“用账号登录”',
+    '登录卡片：仅支持手动交接，只有“我自己登录”“拒绝”，没有“用账号登录”',
     (await page(
-      "(() => { const card = document.querySelector('.bw-signin'); return card?.dataset.stage === 'choose' && !!card.querySelector('[data-sign-in-none]') && !!card.querySelector('[data-act=\"sign-in-self\"]') && !card.querySelector('[data-act=\"sign-in-fill\"], [data-act=\"sign-in-done\"]') })()",
+      "(() => { const card = document.querySelector('.bw-signin'); return card?.dataset.stage === 'choose' && !!card.querySelector('[data-act=\"sign-in-self\"]') && !card.querySelector('[data-act=\"sign-in-fill\"], [data-act=\"sign-in-done\"]') })()",
     )) === true,
     await page("document.querySelector('.bw-signin')?.outerHTML ?? null"),
   )

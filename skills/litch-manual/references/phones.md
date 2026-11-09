@@ -295,31 +295,7 @@ messages arrived while you were away. Other board tabs retain their own scroll p
 Chrome instance and tab access need no separate approval when Chrome control is enabled. Website approval shows the origin; phones show a read-only notice to handle it in the controlling desktop conversation. Sign-in shows the website and reason.
 Chrome 总开关开启后不再逐个审批实例或标签。网站审批在手机上显示只读提示，请在控制端桌面的对应会话中处理。
 
-For Chrome sign-in, finish signing in on
-the computer and then choose **Sign-in complete**; this is separate from the built-in browser's
-saved-account sign-in flow below.
-
-When an agent asks to sign in to a site in the built-in browser (see `browser-and-computer-use.md`) and
-the session's device is paired with the phone, the card also shows in that session on the phone, above
-the input box. The phone only offers "Sign in as {account}" and Decline (the web page is on the computer,
-so signing in by hand happens there); whichever side answers first wins.
-
-- Usernames are masked on the phone (`so•••@example.com`); the password never goes through it. Litch on
-  the computer fills in and submits after it has checked the phone's signature.
-- Approving needs the phone's fingerprint, face or screen lock. Without any screen lock the phone cannot
-  approve.
-- The phone signs with its own **approval key** (separate from its SSH key, one per phone, whichever way
-  it connects, ordinary sshd or Tailscale SSH). Pairing by QR code with a current desktop sends it along
-  (covered by the confirmation code). Phones paired earlier do not need to pair again: the computer
-  remembers the key at the first approval and shows a notice; if that was not the user, remove the phone
-  in the desktop's settings.
-- Phone Settings → Sign-in approvals shows the approval key's fingerprint; the desktop's paired-phones
-  setting shows the same one. If the computer says the phone's key does not match, pair the phone again
-  by scanning.
-- Cards from scheduled-task turns expire after 30 minutes and can carry "Let this scheduled task use this
-  account for this site from now on".
-- The phone must have Litch open and be connected to that device to see the card (no background
-  notifications yet).
+浏览器登录由用户在电脑上完成；手机不再显示“用已存账号登录”或任务登录授权。完全访问会话请求登录时立即返回，不在手机或电脑上等待答复。手机仍可显示非完全访问会话的网站待处理状态和批准 Litch 自身访问；批准钥匙保留用于这些非登录操作。
 
 ## Tailscale SSH
 

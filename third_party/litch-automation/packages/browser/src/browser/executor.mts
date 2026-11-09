@@ -21,7 +21,6 @@ import { runBrowserActions } from './batch.mjs'
 import { CdpRefused } from './cdp-allow.mjs'
 import { guardedPage } from './guarded-page.mjs'
 import type { BrowserHost, BrowserPage, TabOwner } from './model.mjs'
-import type { FillFailure } from './passwords/fill-rules.mjs'
 import { type SiteBook, sessionKey } from './sites.mjs'
 import { TOOLS } from './tools.mjs'
 import { needsApproval, originOf } from './url.mjs'
@@ -97,27 +96,6 @@ export type SignInOutcome =
   | 'declined'
   | 'origin_changed'
   | 'expired'
-  | {
-      kind: 'filled'
-      /** 落定后页面的源 */
-      origin: string
-      /** 主框架换了文档 */
-      navigated: boolean
-      /** 自检不干净，关掉重开了：新标签的编号；没有是 null */
-      reopened: string | null
-      /** 落定后要验证码、二次验证 */
-      verification: boolean
-      /** 落定后页面上还有密码框（多半没登上） */
-      stillSignIn: boolean
-      /** 按定时任务的事先授权代填的（没出卡片） */
-      preauthorized: boolean
-    }
-  | {
-      kind: 'fillFailed'
-      why: FillFailure
-      /** 自检不干净，关掉重开了：新标签的编号；没有是 null */
-      reopened: string | null
-    }
 
 /** 代理请人登录时给的东西 */
 export interface SignInAsk {

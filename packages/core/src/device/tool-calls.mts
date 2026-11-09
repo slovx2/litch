@@ -81,6 +81,8 @@ export interface MachineCalls {
 }
 
 export interface ToolCallsHost {
+  /** 仅供浏览器读取会话实际权限；未知配置绝不免审。 */
+  fullAccess?(threadId: string): Promise<boolean>
   deviceId: string
   clock: Clock
   hub: ToolHub
@@ -286,54 +288,74 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
       }
       running.set(id, entry)
       startTimer(entry)
-      host.hub.call(invocation, {
-        result: (response) => finish(entry, response),
-        ask(askId, ask) {
-          if (running.get(id) !== entry) return
-          host.log(
-            `客户端工具等待审批：会话 ${params.threadId}，调用 ${params.callId}，卡片 ${askId}，类型 ${ask.kind}`,
-          )
-          // 等人答的时候不计时
-          entry.stopTimer?.()
-          entry.stopTimer = null
-          const place: ToolAskPlace = {
-            threadId: params.threadId,
-            turnId: params.turnId,
-            callId: params.callId,
-            askId,
-            namespace,
-            tool: params.tool,
-            ask,
-          }
-          const drop = host.showAsk(place, (answer) => {
+      const execute = () => {
+        if (running.get(id) !== entry) return
+        host.hub.call(invocation, {
+          result: (response) => finish(entry, response),
+          ask(askId, ask) {
+            if (running.get(id) !== entry) return
+            if (
+              namespace === CLIENT_TOOL_NAMESPACE.browser &&
+              invocation.fullAccess &&
+              ['site', 'browserDownload', 'chromeInstance', 'chromeTab'].includes(ask.kind)
+            ) {
+              host.hub.answer(askId, 'once')
+              return
+            }
             host.log(
-              `客户端工具审批已处理：会话 ${params.threadId}，卡片 ${askId}，答复 ${answer ?? 'cancelled'}`,
+              `客户端工具等待审批：会话 ${params.threadId}，调用 ${params.callId}，卡片 ${askId}，类型 ${ask.kind}`,
             )
-            entry.asks.delete(askId)
-            host.hub.answer(askId, answer)
-            resume(entry)
-          })
-          entry.asks.set(askId, drop)
-        },
-        askDone(askId) {
-          const drop = entry.asks.get(askId)
-          if (!drop) return
-          entry.asks.delete(askId)
-          drop()
-          resume(entry)
-        },
-        hold(held) {
-          if (running.get(id) !== entry) return
-          if (held) {
-            entry.holds++
+            // 等人答的时候不计时
             entry.stopTimer?.()
             entry.stopTimer = null
-          } else if (entry.holds > 0) {
-            entry.holds--
+            const place: ToolAskPlace = {
+              threadId: params.threadId,
+              turnId: params.turnId,
+              callId: params.callId,
+              askId,
+              namespace,
+              tool: params.tool,
+              ask,
+            }
+            const drop = host.showAsk(place, (answer) => {
+              host.log(
+                `客户端工具审批已处理：会话 ${params.threadId}，卡片 ${askId}，答复 ${answer ?? 'cancelled'}`,
+              )
+              entry.asks.delete(askId)
+              host.hub.answer(askId, answer)
+              resume(entry)
+            })
+            entry.asks.set(askId, drop)
+          },
+          askDone(askId) {
+            const drop = entry.asks.get(askId)
+            if (!drop) return
+            entry.asks.delete(askId)
+            drop()
             resume(entry)
-          }
-        },
-      })
+          },
+          hold(held) {
+            if (running.get(id) !== entry) return
+            if (held) {
+              entry.holds++
+              entry.stopTimer?.()
+              entry.stopTimer = null
+            } else if (entry.holds > 0) {
+              entry.holds--
+              resume(entry)
+            }
+          },
+        })
+      }
+      if (namespace === CLIENT_TOOL_NAMESPACE.browser && host.fullAccess) {
+        void host
+          .fullAccess(params.threadId)
+          .catch(() => false)
+          .then((fullAccess) => {
+            invocation.fullAccess = fullAccess
+            execute()
+          })
+      } else execute()
     })
   }
 

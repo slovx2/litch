@@ -93,7 +93,7 @@ command: `scripts/litch harness restart`, `scripts/litch devices reconnect`, or 
 | E7 | Irreversible changes without asking | Ask first, then the user confirms in Litch (rules 3 and 4) |
 | E8 | Keyboard shortcuts | Not configurable in Litch; you can only tell the user what they are |
 | E9 | Settings of the Litch app on a phone | The desktop cannot reach them; tell the user where they are in the phone app |
-| E10 | Import cookies/passwords, change biometric filling requirements or saved sign-in grants, or reveal secrets | There is no command. Tell the user where to click: Settings → Built-in browser → Import from another browser, or the Browser tab's menu (`references/browser-and-computer-use.md`). Manage saved accounts and Touch ID there; agent sign-in uses request_sign_in with user approval. Saved passwords cannot be shown or copied at all |
+| E10 | 导入 Cookie/密码或读取密码明文 | 用户在“设置 → 内置浏览器”管理保存的账号。用户自己的自动填充保留；Agent 登录只支持手动交接，完全访问时立即返回登录缺失。没有代理代填、Touch ID 代填设置或任务登录授权 |
 
 When you hit one of these, say plainly which step the user has to do, where, and what happens after.
 

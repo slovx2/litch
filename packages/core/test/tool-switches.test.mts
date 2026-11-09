@@ -155,7 +155,8 @@ test('M16：从未打开的跨 harness 子会话仍按自身 harness 的开关�
   const invocation = main.calls()[0] as Extract<ToolToMain, { op: 'call' }>
   assert.equal(invocation.invocation.harness, 'pi')
   assert.equal(invocation.invocation.cwd, '/work/child')
-  assert.equal(sent('thread/resume').length, 0)
+  // 执行前读取一次引擎实际权限，未打开的后台会话也不能靠界面缓存推断。
+  assert.equal(sent('thread/resume').length, 1)
 })
 
 test('显示数据：设备一级两个，加上每个 harness 三样；只改一个 harness 时设备一级和别的 harness 不动', async () => {
