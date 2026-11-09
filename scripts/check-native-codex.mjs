@@ -10,6 +10,7 @@
 // 隔离（都在一个短名字的临时目录里，跑完删掉）：
 // - 不碰用户真实的 codex 数据目录（~/.codex）和他正在运行的 codex 服务：HOME、CODEX_HOME 都指到临时目录，
 //   主进程和它起的 codex 用的是一份从零写的干净环境，不继承这个进程的环境变量；
+// - PATH 只暴露临时目录里的 node、npm 和系统命令，npm 全局前缀也指向临时空目录；
 // - 不用任何账号和密钥：模型是回环地址上的一个假的 Responses 接口，照 codex 自定义模型提供方的配置接进去；
 //   代理变量指到回环上一个没人听的端口，回环之外的请求一律连不出去；
 // - 只用 PATH 里的 codex，装在 /Applications 下的（官方桌面端自带的那一份）不用；
@@ -23,6 +24,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -71,8 +73,14 @@ const dirs = {
   tmp: join(root, 't'),
   adapterHome: join(root, 'a'),
   work: join(root, 'w'),
+  bin: join(root, 'bin'),
+  npmGlobal: join(root, 'npm-global'),
 }
 for (const directory of Object.values(dirs)) mkdirSync(directory, { recursive: true })
+// 不把 Node 安装目录整个放进 PATH：它旁边可能装着用户的 harness。
+symlinkSync(process.execPath, join(dirs.bin, 'node'))
+const npm = join(dirname(process.execPath), 'npm')
+if (existsSync(npm)) symlinkSync(realpathSync(npm), join(dirs.bin, 'npm'))
 const runtimeSocket = join(dirs.adapterHome, 'codex', 'runtime.sock')
 const deviceSocket = join(dirs.adapterHome, 'device', 'device.sock')
 
@@ -119,8 +127,9 @@ const isolated = {
   HOME: dirs.userHome,
   CODEX_HOME: dirs.codexHome,
   TMPDIR: dirs.tmp,
-  // 只有 node 和系统目录：codex 的路径在设置里写明，别的命令行（claude、dsh……）一概找不到
-  PATH: `${dirname(process.execPath)}:/usr/bin:/bin:/usr/sbin:/sbin`,
+  // codex 的路径在设置里写明；npm 的全局发现也只能查这次夹具的空目录。
+  PATH: `${dirs.bin}:/usr/bin:/bin:/usr/sbin:/sbin`,
+  npm_config_prefix: dirs.npmGlobal,
   HTTP_PROXY: DEAD_PROXY,
   HTTPS_PROXY: DEAD_PROXY,
   ALL_PROXY: DEAD_PROXY,
@@ -465,10 +474,10 @@ async function main() {
     (await client.call('runtime/info')).harnesses.find((item) => item.id === 'codex')
 
   const before = await codexInfo()
-  // 主进程的 PATH 里没有 codex：装了才默认启用，所以这时报的是没装
+  // PATH、HOME 和 npm 全局目录都没有 codex：装了才默认启用，所以这时报的是没装。
   expect(
     before?.unavailable?.kind === 'notInstalled',
-    `主进程的 PATH 里没有 codex，应报没装，实际 ${JSON.stringify(before)}`,
+    `隔离的 PATH、HOME 和 npm 全局目录里没有 codex，应报没装，实际 ${JSON.stringify(before)}`,
   )
   passed(`没写过设置、PATH 里找不到时不启用：${before.unavailable.message}`)
 
