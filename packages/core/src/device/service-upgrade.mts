@@ -3,7 +3,7 @@
 //   1. 用户点“升级”、确认之后，经 ssh 在那台机器上装应用的这一版（安装脚本 --version，或者 brew upgrade）；
 //   2. 装好了马上请服务空闲时停下（device-stop --if-idle）。停了就重连，重连时 device-start 起的就是新版；
 //   3. 不闲就留着旧的接着用，记下“装好了、等着换”：之后每次连上、以及连着时每 5 分钟再请一次，换上了就清掉；
-//   4. 新版已安装时可在确认中断影响后强制换上，也可取消等待。
+//   4. 确认强制升级后，先安装并核验新版，再强制换上；已经安装则直接换上。也可取消等待。
 // 服务由前台或者服务管理器管着的（detached 为 false），只替用户装，不替用户换。认不出是怎么装的，不给按钮。
 // “等着换”只记在应用里（这个对象里），不进设备；应用退出就不等了，下次打开时装着的已经不旧，按钮叫“换上新版”。
 // 在那台机器上动手的是外壳（RemoteUpgradePlatform）；用户没确认过，这里不会叫 install 和 stop。
@@ -54,7 +54,7 @@ export interface ServiceUpgradeSeen {
   guide: ConnectGuide | null
 }
 
-/** start 升级；retry 再检查空闲；force 强制换上已安装新版；cancel 取消等待。 */
+/** start 空闲升级；retry 再检查空闲；force 安装并强制换上新版；cancel 取消等待。 */
 export type UpgradeMode = 'start' | 'retry' | 'force' | 'cancel'
 
 export interface ServiceUpgrader {
@@ -230,7 +230,7 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
   }
 
   /** 装新版，装好了接着请服务空闲时停下（有别的东西管着它的，只装不换） */
-  const install = async (how: 'script' | 'brew'): Promise<void> => {
+  const install = async (how: 'script' | 'brew', force = false): Promise<void> => {
     if (!platform) return
     set({ step: 'installing' })
     let result: Awaited<ReturnType<RemoteUpgradePlatform['install']>>
@@ -260,7 +260,7 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
       set({ step: 'restart' })
       return
     }
-    await stop(true, false)
+    await stop(!force, false)
   }
 
   /** 问一遍那台机器上装着的那一份（只是看一眼）：按钮叫“升级”还是“换上新版”、没连上时认安装方式，都靠它 */
@@ -330,13 +330,17 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
       if (!platform) throw new ChannelError('rejected', '这一端不能替用户升级远程设备的服务')
       if (job) throw new ChannelError('rejected', '上一步还没有做完')
       if (mode === 'force') {
-        if (!seen.online || !seen.full || !older() || !swapOnly() || managed())
-          throw new ChannelError('rejected', '只有已连接且新版已安装的独立设备服务可以强制升级')
+        if (!seen.online || !seen.full || !older() || managed())
+          throw new ChannelError('rejected', '只有已连接且需要升级的独立设备服务可以强制升级')
         if (!['idle', 'waiting', 'failed'].includes(phase.step))
           throw new ChannelError('rejected', '当前阶段不能强制升级')
+        const how = method()
+        if (!swapOnly() && how === null)
+          throw new ChannelError('rejected', '认不出这台设备上的适配器是怎么装的')
         before = seen.service?.version ?? null
         stopRetry()
-        begin(() => stop(false, false))
+        if (swapOnly()) begin(() => stop(false, false))
+        else if (how) begin(() => install(how, true))
         return
       }
       if (mode === 'cancel') {

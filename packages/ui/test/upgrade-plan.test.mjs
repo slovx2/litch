@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { upgradeCandidate, upgradeChoices } from '../src/devices/upgrade-plan.ts'
+import {
+  DEFAULT_UPGRADE_CHOICE,
+  upgradeCandidate,
+  upgradeChoices,
+} from '../src/devices/upgrade-plan.ts'
 
 const local = {
   kind: 'local',
@@ -23,7 +27,8 @@ const remote = {
   },
 }
 
-test('本机忙时三选项；远程已安装新版才能强制', () => {
+test('默认空闲升级；远程可安装或已安装新版都提供强制，不受忙闲能力位影响', () => {
+  assert.equal(DEFAULT_UPGRADE_CHOICE, 'idle')
   assert.equal(upgradeCandidate(local, '1.0.0'), true)
   assert.deepEqual(upgradeChoices(local), ['none', 'idle', 'force'])
   assert.equal(
@@ -34,7 +39,11 @@ test('本机忙时三选项；远程已安装新版才能强制', () => {
     false,
   )
   assert.equal(upgradeCandidate(remote, '1.0.0'), true)
-  assert.deepEqual(upgradeChoices(remote), ['none', 'idle'])
+  assert.deepEqual(upgradeChoices(remote), ['none', 'idle', 'force'])
+  assert.deepEqual(
+    upgradeChoices({ ...remote, remoteUpgrade: { ...remote.remoteUpgrade, method: null } }),
+    ['none', 'idle'],
+  )
   const installed = { ...remote, remoteUpgrade: { ...remote.remoteUpgrade, action: 'swap' } }
   assert.deepEqual(upgradeChoices(installed), ['none', 'idle', 'force'])
   for (const patch of [{ capable: false }, { managed: true }, { phase: { step: 'installing' } }])

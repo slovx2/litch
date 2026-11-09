@@ -10,7 +10,12 @@ import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import { updateBridge } from '../settings/update-bridge.ts'
 import { busyLine } from './service.ts'
-import { type UpgradeChoice, upgradeCandidate, upgradeChoices } from './upgrade-plan.ts'
+import {
+  DEFAULT_UPGRADE_CHOICE,
+  type UpgradeChoice,
+  upgradeCandidate,
+  upgradeChoices,
+} from './upgrade-plan.ts'
 
 function UpgradeRow({
   device,
@@ -241,7 +246,7 @@ export function UpgradeDevices() {
       onYes={() => {
         close()
         for (const device of rows) {
-          const selected = choices[device.id] ?? 'none'
+          const selected = choices[device.id] ?? DEFAULT_UPGRADE_CHOICE
           const choice = upgradeChoices(device).includes(selected) ? selected : 'none'
           if (choice === 'none') continue
           const command =
@@ -276,7 +281,7 @@ export function UpgradeDevices() {
             key={device.id}
             device={device}
             initialBusy={activity[device.id] ?? null}
-            choice={choices[device.id] ?? 'none'}
+            choice={choices[device.id] ?? DEFAULT_UPGRADE_CHOICE}
             choose={(value) => setChoices((old) => ({ ...old, [device.id]: value }))}
           />
         ))}

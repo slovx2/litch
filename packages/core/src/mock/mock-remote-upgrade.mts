@@ -146,16 +146,18 @@ export function createMockRemoteUpgrade(host: MockRemoteUpgradeHost): MockRemote
           remote(deviceId)?.connection !== 'online' ||
           !view.capable ||
           view.managed ||
-          view.action !== 'swap' ||
+          (view.action !== 'swap' && view.method === null) ||
           !['idle', 'waiting', 'failed'].includes(view.phase.step)
         )
-          throw new ChannelError('rejected', '只有已连接且新版已安装的独立设备服务可以强制升级')
-        set(deviceId, { step: 'stopping', force: true })
-        later(() => swapIn(deviceId))
-        return
+          throw new ChannelError('rejected', '只有已连接且可安装新版的独立设备服务可以强制升级')
+        if (view.action === 'swap') {
+          set(deviceId, { step: 'stopping', force: true })
+          later(() => swapIn(deviceId))
+          return
+        }
       }
       const scene = scenes.get(deviceId) ?? 'swap'
-      if (mode !== 'start') {
+      if (mode !== 'start' && mode !== 'force') {
         if (view.phase.step !== 'waiting') throw new ChannelError('rejected', '没有在等服务空闲')
         set(deviceId, { step: 'waiting', busy: view.phase.busy, checking: true })
         later(() => {
@@ -188,11 +190,11 @@ export function createMockRemoteUpgrade(host: MockRemoteUpgradeHost): MockRemote
         }
         set(
           deviceId,
-          { step: 'stopping', force: false },
+          { step: 'stopping', force: mode === 'force' },
           { installed: SERVICE_VERSIONS.bundled, action: 'swap' },
         )
         later(() => {
-          if (scene === 'busy') {
+          if (scene === 'busy' && mode !== 'force') {
             set(deviceId, { step: 'waiting', busy: busyOf(deviceId), checking: false })
           } else swapIn(deviceId)
         })

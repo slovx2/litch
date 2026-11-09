@@ -33,7 +33,13 @@ app.whenReady().then(async () => {
       await read(
         'document.querySelector("[data-upgrade-device=remote-idle] select").options.length',
       ),
-      2,
+      3,
+    )
+    assert.equal(
+      await read(
+        '[...document.querySelectorAll("[data-upgrade-device] select")].every(s => s.value === "idle")',
+      ),
+      true,
     )
     assert.equal(
       await read(
@@ -69,14 +75,21 @@ app.whenReady().then(async () => {
         )
       }
     await read(
-      `for (const select of document.querySelectorAll('[data-upgrade-device] select')) { const id = select.closest('[data-upgrade-device]').dataset.upgradeDevice; select.value = id === 'local' ? 'none' : id === 'remote-busy' ? 'force' : 'idle'; select.dispatchEvent(new Event('change', { bubbles: true })) }`,
+      `for (const id of ['local', 'remote-idle']) { const select = document.querySelector('[data-upgrade-device="' + id + '"] select'); select.value = id === 'local' ? 'none' : 'force'; select.dispatchEvent(new Event('change', { bubbles: true })) }`,
     )
     await wait(
-      'document.querySelector("[data-upgrade-device=remote-busy]").textContent.includes("终止已检测到的 1 个后台任务")',
+      'document.querySelector("[data-upgrade-device=remote-idle]").textContent.includes("终止已检测到的 0 个后台任务")',
     )
     await read('document.querySelector(".confirm-yes").click()')
     await wait(
-      'window.upgradeFixture.calls.some(c => c.name === "device.upgradeService" && c.params.deviceId === "remote-busy" && c.params.mode === "force")',
+      'window.upgradeFixture.calls.some(c => c.name === "device.upgradeService" && c.params.deviceId === "remote-idle" && c.params.mode === "force")',
+    )
+    assert.equal(
+      await read(
+        'window.upgradeFixture.calls.some(c => c.name === "device.upgradeService" && c.params.deviceId === "remote-busy" && c.params.mode === "start")',
+      ),
+      true,
+      '未改选项时也必须执行默认空闲升级',
     )
     await wait('document.querySelector("[data-toast=upgrade-remote-fail]")')
     assert.equal(

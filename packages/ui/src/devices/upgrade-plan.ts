@@ -1,6 +1,7 @@
 import type { DeviceView } from '@litch/core'
 
 export type UpgradeChoice = 'none' | 'idle' | 'force'
+export const DEFAULT_UPGRADE_CHOICE: UpgradeChoice = 'idle'
 
 /** 只列当前能连上、需要换版本且应用能管理的服务。忙闲不由会话列表推断。 */
 export function upgradeCandidate(device: DeviceView, version: string): boolean {
@@ -35,7 +36,7 @@ export function upgradeChoices(device: DeviceView): UpgradeChoice[] {
       device.mode === 'full' &&
       up?.capable &&
       !up.managed &&
-      up.action === 'swap' &&
+      (up.action === 'swap' || up.method !== null) &&
       up.phase.step === 'idle')
   return force ? ['none', 'idle', 'force'] : ['none', 'idle']
 }

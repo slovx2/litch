@@ -223,12 +223,11 @@ test('不闲：装好了等着换，每次连上、连着时每 5 分钟再请�
   assert.equal(w.calls.stop.length, 4, '换上了：不再等')
 })
 
-test('远程未安装新版不能强制；取消等待后不再停止服务', async () => {
+test('取消等待后不再停止服务', async () => {
   const busy = { result: 'busy' as const, busy: [{ reason: 'clients', harnesses: [], count: 2 }] }
   const w = world({ stops: [busy] })
   w.core.start()
   await flush()
-  await assert.rejects(w.run('force'), /新版已安装/)
   await w.run('start')
   await flush()
   assert.equal(w.upgradeView()?.phase.step, 'waiting')
@@ -237,6 +236,73 @@ test('远程未安装新版不能强制；取消等待后不再停止服务', as
   await flush()
   assert.deepEqual(w.calls.stop, [true])
   assert.equal(w.upgradeView()?.phase.step, 'idle')
+  w.core.stop()
+})
+
+test('远程强制升级先安装核验再强制停止；安装中不打断且拒绝重复请求', async () => {
+  let finish!: (result: RemoteInstallResult) => void
+  const w = world({
+    install: () =>
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+  })
+  w.core.start()
+  await flush()
+  await w.run('force')
+  await flush()
+  assert.equal(w.upgradeView()?.phase.step, 'installing')
+  assert.deepEqual(w.calls.stop, [])
+  await assert.rejects(w.run('force'), /上一步/)
+  finish({ ok: true, installed: APP, said: null })
+  await flush()
+  assert.deepEqual(w.calls.install, [{ method: 'script', version: APP }])
+  assert.deepEqual(w.calls.stop, [false])
+  assert.equal(w.upgradeView()?.phase.step, 'done')
+  w.time.advance(SWAP_RETRY_MS * 2)
+  await flush()
+  assert.deepEqual(w.calls.stop, [false], '强制升级不留下空闲重试')
+  w.core.stop()
+})
+
+test('强制升级安装失败或版本未达标绝不停止旧服务，script 和 brew 一致', async () => {
+  for (const root of [
+    SCRIPT_ROOT('0.15.0'),
+    '/opt/homebrew/Cellar/codex-harness-adapter/0.15.0/libexec',
+  ]) {
+    for (const result of [
+      { ok: false as const, at: 'download' as const, code: 1, said: 'failed' },
+      { ok: true as const, installed: '0.15.0', said: null },
+    ]) {
+      const w = world({
+        prepare: (device) => {
+          device.service = facts('0.15.0', { root })
+        },
+        install: () => result,
+      })
+      w.core.start()
+      await flush()
+      await w.run('force')
+      await flush()
+      assert.equal(w.upgradeView()?.phase.step, 'failed')
+      assert.deepEqual(w.calls.stop, [])
+      w.core.stop()
+    }
+  }
+})
+
+test('远程强制安装拒绝未知安装方式', async () => {
+  const w = world({
+    prepare: (device) => {
+      device.service = facts('0.15.0', { root: '/home/dev/manual' })
+    },
+  })
+  w.core.start()
+  await flush()
+  await assert.rejects(w.run('force'), /认不出/)
+  assert.deepEqual(w.calls.install, [])
+  assert.deepEqual(w.calls.stop, [])
+  w.core.stop()
 })
 
 test('远程等待中和已安装新版本的空闲状态都能明确强制换上', async () => {
