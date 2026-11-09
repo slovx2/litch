@@ -7,6 +7,7 @@ import { nativeWirePaths } from './native-path.mjs'
 import { rpcTrace } from './rpc-log.mjs'
 import type { RpcPeer, WireMessage } from './types.mjs'
 import { defaultSocketPath, ensureParent, newId, sleep } from './util.mjs'
+import { websocketShutdown } from './websocket-shutdown.mjs'
 
 export type MessageHandler = (peer: RpcPeer, message: WireMessage) => void | Promise<void>
 export type CloseHandler = (peer: RpcPeer) => void
@@ -109,6 +110,7 @@ export async function startWebSocketTransport(
   const parsed = parseListenUrl(listenUrl)
   const server = http.createServer()
   const wss = new WebSocketServer({ server })
+  const shutdown = websocketShutdown(server, wss)
 
   wss.on('connection', (ws) => {
     const peer = new WebSocketPeer(ws)
@@ -158,14 +160,7 @@ export async function startWebSocketTransport(
 
   return {
     async close() {
-      // server.close 会等全部现有连接结束；Worker Hub 的上游连接常驻，
-      // 不主动断开客户端时退出会永久挂起，旧运行时收到 SIGTERM 后无法退出。
-      for (const client of wss.clients) client.terminate()
-      await new Promise<void>((resolve) => {
-        wss.close(() => {
-          server.close(() => resolve())
-        })
-      })
+      await shutdown()
       if (parsed.kind === 'unix' && existsSync(parsed.path)) {
         rmSync(parsed.path, { force: true })
       }

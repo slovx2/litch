@@ -55,6 +55,14 @@ started elsewhere" for how to make it let go. Litch picks up the change by itsel
 **A harness is "Unavailable" or "Not installed".** See `harnesses.md` → "Not installed or Unavailable".
 After fixing, `scripts/litch harness restart <device> <id>`.
 
+**停止设备服务或重启引擎时卡住。** 关闭监听端会同时断开已建立的 WebSocket 和尚未完成 HTTP 升级的连接，
+不等待客户端继续发送请求或回应关闭握手。若仍无法结束，请保留设备日志和对应引擎日志中的首个错误。
+
+**Stopping a device service or restarting a harness stalls.** Shutdown closes both established
+WebSockets and connections that have not completed the HTTP upgrade, without waiting for the client
+to send more data or finish the closing handshake. If shutdown still stalls, retain the first error
+in the device and harness logs.
+
 **A Claude Code turn shows "Retrying 2/10 · Connection lost" (or "Retrying (attempt 2)").** The model
 request failed (dropped connection, overload, server error) and Claude Code is retrying it by itself, up
 to 10 times by default; the turn keeps going and the line disappears once the request goes through. Text

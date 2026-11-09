@@ -8,6 +8,7 @@ import http from 'node:http'
 import net from 'node:net'
 import { type RawData, WebSocket, WebSocketServer } from 'ws'
 import { ensureParent } from '../../shared/src/util.mjs'
+import { websocketShutdown } from '../../shared/src/websocket-shutdown.mjs'
 import type { Connector, Wire, WireHandlers } from './wire.mjs'
 
 function textOf(data: RawData): string {
@@ -109,6 +110,7 @@ export async function listenUnix(
   }
   const server = http.createServer()
   const wss = new WebSocketServer({ server, perMessageDeflate: false })
+  const shutdown = websocketShutdown(server, wss)
   wss.on('connection', (ws) => {
     const handlers = attach(wireOf(ws))
     ws.on('message', (data) => handlers.message(textOf(data)))
@@ -142,11 +144,7 @@ export async function listenUnix(
   }
   return {
     async close() {
-      // server.close 会等现有连接结束，先把它们断开
-      for (const client of wss.clients) client.terminate()
-      await new Promise<void>((resolve) => {
-        wss.close(() => server.close(() => resolve()))
-      })
+      await shutdown()
       if (!pipe) rmSync(path, { force: true })
     },
   }
