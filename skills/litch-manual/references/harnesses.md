@@ -155,6 +155,28 @@ exception described below. Guide the user to Accounts to sign in and complete br
 still store it in that harness's environment on that device:
 `scripts/litch settings set <device> harness.<id>.env=…` (value syntax: `scripts/litch settings --help`).
 
+## Claude on-demand tools
+
+设备详情 → Claude Code → 设置提供 **工具按需加载**（`harness.claude-code.toolLoading`，默认 `auto`）和 **工具加载覆盖**（`harness.claude-code.toolLoadingOverrides`，默认空）。两项修改后需重启 Claude Code；不修改真实 Claude 用户配置。
+
+- `auto`：仅已确认的 CLI（至少 2.1.305）、Claude 模型及搜索环境启用分层。官方 API 或明确设置有效 `ENABLE_TOOL_SEARCH` 才启用；未知网关、云路由、模型和版本，以及关闭实验能力时，未声明的工具全部常驻。
+- `on`：用户明确启用分层。未设置 `ENABLE_TOOL_SEARCH` 时补 `true`；已设置的值不变。CLI 自身限制仍优先。
+- `off`：关闭自动分层，未声明工具全部常驻。
+- 覆盖格式：逗号分隔 `namespace=always` 或 `namespace.tool=defer`。具体工具优先；重复键取最后一项。`auto` 无法确认或 `off` 时不应用覆盖。
+- 默认按需：`litch_browser`、`litch_computer`、`litch_tasks`、`litch_repository`、`litch_config`。其余常驻，包括 `litch_sessions`、`litch_manager`、`litch_machine`、`litch_automation`、后台命令工具、目标工具和权限工具。
+- 目标/权限也可覆盖：`goal-tools.get_goal=defer`、`permission-tools.request_permissions=defer`。调用方逐工具的布尔 `deferLoading` / `defer_loading` 优先于模式和覆盖，`false` 常驻；两者都写时以 `deferLoading` 为准。
+
+设置方法：
+
+```sh
+scripts/litch settings set local harness.claude-code.toolLoading=on
+scripts/litch settings set local 'harness.claude-code.toolLoadingOverrides=litch_browser=always,litch_tasks.list=always'
+```
+
+独立 CHA 或 harness 环境变量表可用 `CHA_CLAUDE_TOOL_LOADING=auto|on|off` 和 `CHA_CLAUDE_TOOL_LOADING_OVERRIDES=namespace=always,namespace.tool=defer`。明确的设备设置优先于环境变量。原生 `ENABLE_TOOL_SEARCH` 可在同一环境变量表透传，默认不设置；`false` 会让 CLI 全量加载，`true` 启用搜索，`auto`/`auto:N` 使用 CLI 的阈值模式。需要彻底禁用搜索（包括调用方显式按需工具）时设 `ENABLE_TOOL_SEARCH=false`。自动分层不修改第三方 MCP 的元信息。
+
+Deferred tools are listed by namespace in the system prompt and can be discovered with ToolSearch. Browser/computer skill and guide instructions still apply. Search disabled means tools load upfront, not that tools disappear. A custom gateway may need `ENABLE_TOOL_SEARCH=true` after its tool-search support is verified; Automatic deliberately keeps unverified gateways upfront.
+
 ## Enabling, disabling, restarting
 
 `scripts/litch harness auto-title <device>` reads Litch's automatic naming switch for new Codex

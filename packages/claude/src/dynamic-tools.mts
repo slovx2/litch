@@ -6,6 +6,7 @@ import { resolveAutomationTools } from '../../shared/src/automation-tools.mjs'
 import { dynamicToolResult } from './dynamic-tool-result.mjs'
 import { jsonSchemaValidator } from './json-schema.mjs'
 import { ProtocolError, requiredString } from './protocol-contract.mjs'
+import { declaredToolLoading, type ToolLoading, toolLoadingMeta } from './tool-loading.mjs'
 import type { RuntimeHandlers } from './types.mjs'
 
 export interface DynamicTool {
@@ -115,6 +116,7 @@ export function dynamicToolServer(
   raw: unknown[],
   handlers: RuntimeHandlers,
   callIdentity: (name: string, args: unknown) => string,
+  loading?: ToolLoading,
 ) {
   const tools = new Map<string, DynamicTool>()
   const schemas = new Map<string, ValidateFunction>()
@@ -140,10 +142,9 @@ export function dynamicToolServer(
       name,
       description: toolDescription(tool),
       inputSchema: tool.inputSchema,
-      // 延迟工具由 CLI 搜索发现；省略元信息，兼容尚不支持显式 false 的 CLI。
-      ...(tool.deferLoading === true || tool.defer_loading === true
-        ? {}
-        : { _meta: { 'anthropic/alwaysLoad': true } }),
+      ...toolLoadingMeta(
+        loading ? loading(tool.namespace, tool.name, tool) : (declaredToolLoading(tool) ?? false),
+      ),
     })),
   }))
   config.instance.server.setRequestHandler(CallToolRequestSchema, async (request) => {

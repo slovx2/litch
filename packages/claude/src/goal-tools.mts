@@ -1,6 +1,7 @@
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { Ajv } from 'ajv'
+import { type ToolLoading, toolLoadingMeta } from './tool-loading.mjs'
 import type { RuntimeHandlers } from './types.mjs'
 
 const schemas: Record<string, Record<string, unknown>> = {
@@ -35,6 +36,7 @@ export function isGoalTool(name: string): boolean {
 export function goalToolServer(
   handlers: RuntimeHandlers,
   identity: (name: string, args: unknown) => string,
+  loading?: ToolLoading,
 ) {
   const config = createSdkMcpServer({ name: 'codex_harness_adapter_goal', version: '1.0.0' })
   const ajv = new Ajv({ strict: false })
@@ -45,9 +47,9 @@ export function goalToolServer(
   config.instance.server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: Object.entries(schemas).map(([name, inputSchema]) => ({
       name,
-      description: descriptions[name],
+      description: `[goal-tools.${name}] ${descriptions[name]}`,
       inputSchema,
-      _meta: { 'anthropic/alwaysLoad': true },
+      ...toolLoadingMeta(loading?.('goal-tools', name) ?? false),
     })),
   }))
   config.instance.server.setRequestHandler(CallToolRequestSchema, async (request) => {

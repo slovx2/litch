@@ -25,6 +25,33 @@ HTTPS_PROXY=http://127.0.0.1:7890
 
 Pi 默认不询问。打开设置 `harness.pi.approvals`（或者在环境文件里写 `CHA_PI_APPROVALS=1`）后，主会话里的命令走 `item/commandExecution/requestApproval`，写文件、改文件和其余有副作用的工具调用走 `item/fileChange/requestApproval`，差异在条目的 `changes` 上；等待时会话状态带 `waitingOnApproval`。读文件、搜索、计划模式自己的工具、客户端执行的工具不问。子代理里的操作不问，Pi 也没有沙箱，所以这不是安全边界。被否决的调用，模型收到 `denied by user`。
 
+## Claude 动态工具按需加载
+
+Litch 的设备详情 → Claude Code → 设置中提供“工具按需加载”和“工具加载覆盖”。也可用 `litch config settings set <device>` 写下面两个设置；修改后通过 Litch 重启 Claude Code 生效。独立 CHA 可以在自己的启动环境/环境文件中设置同名变量，不需要修改 Claude 的用户配置。
+
+| 设置 | 环境变量 | 默认 | 含义 |
+|---|---|---|---|
+| `harness.claude-code.toolLoading` | `CHA_CLAUDE_TOOL_LOADING` | `auto` | `auto` 保守判断搜索可用性；`on` 显式选择按需加载；`off` 关闭自动分层，未声明工具全部常驻 |
+| `harness.claude-code.toolLoadingOverrides` | `CHA_CLAUDE_TOOL_LOADING_OVERRIDES` | 空 | 逗号分隔 `namespace=always`、`namespace.tool=defer`；具体工具优先于命名空间，重复键以最后一个为准 |
+| Claude harness 的环境变量表 | `ENABLE_TOOL_SEARCH` | 不设置，沿用 CLI | 原样传给 CLI，可用 `true`、`false`、`auto`、`auto:N`；`on` 仅在未设置时补 `true` |
+
+显式设备设置覆盖 harness 环境变量表和启动环境。调用方 `dynamicTools` 工具上的布尔 `deferLoading`（或 `defer_loading`）优先于上述分层，包括 `off`，不会被改写；`false` 表示常驻。两种拼法同时存在时以 `deferLoading` 为准。省略的工具才按“逐工具覆盖 → 命名空间覆盖 → 默认层级”处理。`auto` 无法确认或 `off` 时不应用覆盖，未声明工具都常驻。第三方 MCP 服务原有 `_meta` 不受此策略修改。
+
+默认按需命名空间：`litch_browser`、`litch_computer`、`litch_tasks`、`litch_repository`、`litch_config`。其余默认常驻，包括 `litch_sessions`、`litch_manager`、`litch_machine`、`litch_automation`、后台命令工具，以及目标和权限工具。目标工具使用覆盖键 `goal-tools`（例如 `goal-tools.get_goal`），权限工具使用 `permission-tools`（例如 `permission-tools.request_permissions`）；它们也没有不可覆盖的常驻标记。
+
+```sh
+litch config settings set local harness.claude-code.toolLoading=on
+litch config settings set local 'harness.claude-code.toolLoadingOverrides=litch_browser=always,litch_tasks.list=always,goal-tools.get_goal=defer'
+# 独立 CHA 的等效环境变量
+export CHA_CLAUDE_TOOL_LOADING=auto
+export CHA_CLAUDE_TOOL_LOADING_OVERRIDES='litch_browser=always,litch_tasks.list=always'
+export ENABLE_TOOL_SEARCH=true
+```
+
+`auto` 采用保守识别：CLI 至少 2.1.305、已知 Claude 模型、官方 API 地址或明确有效的 `ENABLE_TOOL_SEARCH`；关闭实验能力、未知版本/模型、未显式启用搜索的自定义网关和云路由保持常驻。它不额外请求模型探测网关。`on` 用于用户已验证的环境，不能覆盖 CLI 自身的模型/组织限制；明确的 `ENABLE_TOOL_SEARCH=false` 仍由 CLI 全量加载。这个安全门槛不改变支持的最低 CLI 版本。
+
+[Claude 官方工具搜索说明](https://code.claude.com/docs/en/mcp#configure-tool-search)指出：搜索关闭时工具全量加载；自定义 `ANTHROPIC_BASE_URL` 从 2.1.304 起默认开启搜索，2.1.305 起改进网关拒绝后的回退。Litch 的 `auto` 比 CLI 默认保守；确认网关支持后可以显式设置 `ENABLE_TOOL_SEARCH=true` 或选择 `on`。按需工具的命名空间会在系统提示里列出，浏览器和 Computer Use 的 skill/guide 与审批要求保持生效。
+
 ## DeepSeek Harness（实验性）
 
 用 Codex 桌面驱动 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）。目前是实验性入口：覆盖线程列表、发消息、逐字流式输出、提权审批、向你提问、中断和重新打开后的历史，其余能力见下方"尚未支持"。

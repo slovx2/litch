@@ -69,6 +69,7 @@ import {
   dynamicToolCliNames,
   dynamicToolInstructions,
   dynamicToolServer,
+  dynamicToolSpecs,
 } from './dynamic-tools.mjs'
 import { goalToolServer, isGoalTool } from './goal-tools.mjs'
 import {
@@ -141,6 +142,12 @@ import {
   runtimePermissionOptions,
   sandboxedBashInput,
 } from './runtime-permissions.mjs'
+import {
+  deferredToolHint,
+  type ToolLoading,
+  toolLoadingMode,
+  toolLoadingPolicy,
+} from './tool-loading.mjs'
 import { claudeBackendMode } from './tui-config.mjs'
 import { TuiQuery } from './tui-query.mjs'
 import type { RuntimeTurnSettings } from './turn-settings.mjs'
@@ -947,7 +954,52 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
           ...(options.settings as Record<string, unknown>),
           deniedMcpServers: denied,
         }
-      this.addInternalServers(options, live, liveHandlers, abort, automation)
+      // 按最终提供给 CLI 的环境判定；设置层可覆盖进程变量，供应商命令行设置再覆盖文件。
+      const effectiveEnv = { ...(options.env as NodeJS.ProcessEnv) }
+      const settings = options.settings as { env?: Record<string, string> }
+      for (const key of [
+        'ENABLE_TOOL_SEARCH',
+        'ANTHROPIC_BASE_URL',
+        'CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS',
+        'CLAUDE_CODE_USE_BEDROCK',
+        'CLAUDE_CODE_USE_VERTEX',
+        'CLAUDE_CODE_USE_FOUNDRY',
+      ]) {
+        const fileValue = settingsEnvValue(context.cwd, key)
+        if (fileValue !== undefined) effectiveEnv[key] = fileValue
+        if (settings.env?.[key] !== undefined) effectiveEnv[key] = settings.env[key]
+      }
+      // on 是显式选择；有 ENABLE_TOOL_SEARCH 时照传，不篡改用户的 false/auto 阈值。
+      if (toolLoadingMode(effectiveEnv) === 'on' && !effectiveEnv.ENABLE_TOOL_SEARCH?.trim()) {
+        effectiveEnv.ENABLE_TOOL_SEARCH = 'true'
+        ;(options.env as NodeJS.ProcessEnv).ENABLE_TOOL_SEARCH = 'true'
+        settings.env = { ...settings.env, ENABLE_TOOL_SEARCH: 'true' }
+      }
+      let version: string | null = null
+      try {
+        version = hostClaudeVersion(cli, '0.0.0', effectiveEnv).split(' ')[0] ?? null
+      } catch {}
+      const loading = toolLoadingPolicy(
+        version,
+        effectiveEnv,
+        context.model ?? effectiveEnv.ANTHROPIC_MODEL ?? null,
+      )
+      const deferred = dynamicToolSpecs(automation).filter((tool) =>
+        loading(tool.namespace, tool.name, tool),
+      )
+      if (context.goalTools)
+        for (const name of ['get_goal', 'create_goal', 'update_goal'])
+          if (loading('goal-tools', name))
+            deferred.push({ namespace: 'goal-tools', name, description: '', inputSchema: {} })
+      if (context.permissionTools && loading('permission-tools', 'request_permissions'))
+        deferred.push({
+          namespace: 'permission-tools',
+          name: 'request_permissions',
+          description: '',
+          inputSchema: {},
+        })
+      prompt.append = (prompt.append ?? '') + deferredToolHint(deferred)
+      this.addInternalServers(options, live, liveHandlers, abort, automation, loading)
       const query =
         context.claudeBackend === 'tui'
           ? new TuiQuery(input, options)
@@ -1607,6 +1659,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     handlers: RuntimeHandlers,
     abort: AbortController,
     dynamicTools: unknown[] = context.dynamicTools ?? [],
+    loading?: ToolLoading,
   ): void {
     if (!context.dynamicTools?.length && !context.goalTools && !context.permissionTools) return
     const nativeIds = new Map<string, string[]>()
@@ -1624,13 +1677,18 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     })
     const servers = (options.mcpServers as Record<string, unknown>) ?? {}
     if (context.dynamicTools?.length)
-      servers.codex_harness_adapter = dynamicToolServer(dynamicTools, handlers, (name, args) => {
-        const id = nativeIds
-          .get(`mcp__codex_harness_adapter__${name}:${submissionHash(args)}`)
-          ?.shift()
-        if (!id) throw new Error('缺少原生工具调用 ID，禁止执行副作用')
-        return id
-      })
+      servers.codex_harness_adapter = dynamicToolServer(
+        dynamicTools,
+        handlers,
+        (name, args) => {
+          const id = nativeIds
+            .get(`mcp__codex_harness_adapter__${name}:${submissionHash(args)}`)
+            ?.shift()
+          if (!id) throw new Error('缺少原生工具调用 ID，禁止执行副作用')
+          return id
+        },
+        loading,
+      )
     if (context.goalTools) {
       if (servers.codex_harness_adapter_goal)
         throw new Error('codex_harness_adapter_goal 是内部目标服务保留名称')
@@ -1650,6 +1708,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
           if (!id) throw new Error('缺少原生目标工具调用 ID，禁止执行')
           return id
         },
+        loading,
       )
     }
     if (context.permissionTools) {
@@ -1671,6 +1730,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
           if (!id) throw new Error('缺少原生权限工具调用 ID，禁止申请授权')
           return id
         },
+        loading,
       )
     }
     options.mcpServers = servers

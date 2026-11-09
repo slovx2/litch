@@ -5,6 +5,7 @@ import {
   type PermissionProposal,
   parsePermissionProposal,
 } from './permission-grants.mjs'
+import { type ToolLoading, toolLoadingMeta } from './tool-loading.mjs'
 
 const pathList = {
   anyOf: [{ type: 'array', items: { type: 'string', minLength: 1 } }, { type: 'null' }],
@@ -31,6 +32,7 @@ const profileSchema = {
 export function permissionToolServer(
   request: (proposal: PermissionProposal, callId: string) => Promise<PermissionGrant>,
   identity: (args: unknown) => string,
+  loading?: ToolLoading,
 ) {
   const config = createSdkMcpServer({ name: 'codex_harness_adapter_permissions', version: '1.0.0' })
   config.instance.server.registerCapabilities({ tools: {} })
@@ -39,14 +41,14 @@ export function permissionToolServer(
       {
         name: 'request_permissions',
         description:
-          '权限申请：向用户明确请求新增的现有绝对路径读写权限或网络权限。等待返回后仅使用实际获准范围；拒绝不代表成功。session 仅在当前运行代的同一会话跨回合有效，重启后失效。不能替代退出计划确认。',
+          '[permission-tools.request_permissions] 权限申请：向用户明确请求新增的现有绝对路径读写权限或网络权限。等待返回后仅使用实际获准范围；拒绝不代表成功。session 仅在当前运行代的同一会话跨回合有效，重启后失效。不能替代退出计划确认。',
         inputSchema: {
           type: 'object',
           additionalProperties: false,
           required: ['permissions'],
           properties: { permissions: profileSchema, reason: { type: ['string', 'null'] } },
         },
-        _meta: { 'anthropic/alwaysLoad': true },
+        ...toolLoadingMeta(loading?.('permission-tools', 'request_permissions') ?? false),
       },
     ],
   }))

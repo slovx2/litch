@@ -146,6 +146,7 @@ func (c configuration) forHarness(id string) configuration {
 // 设置里只给这个 harness 的环境变量，加上落到环境变量上的那几项设置。
 func (c configuration) harnessEnvironment(id string) map[string]string {
 	values := c.environmentTable(id)
+	c.toolLoadingEnvironment(id, values)
 	// 审批开关写过才给变量：开是 1，关是 0，盖过更低几层里的同名变量。没写过就不给，由那几层说了算。
 	var approvals bool
 	if raw, written := c.settings.lookup(piApprovalsKey); id == "pi" && written && json.Unmarshal(raw, &approvals) == nil {
@@ -206,7 +207,9 @@ func (c configuration) runtimeFingerprint(id string, enabled bool) string {
 	if id == claudeHarness {
 		inbox, _ := c.settings.lookup(claudeInboxKey)
 		idle, _ := c.settings.lookup(claudeIdleKey)
-		settings = append(settings, c.claudeCacheTTL(), string(inbox), string(idle))
+		loading, _ := c.settings.lookup(claudeToolLoadingKey)
+		overrides, _ := c.settings.lookup(claudeToolOverridesKey)
+		settings = append(settings, c.claudeCacheTTL(), string(inbox), string(idle), string(loading), string(overrides))
 	}
 	payload, _ := json.Marshal(settings)
 	sum := sha256.Sum256(payload)
@@ -215,6 +218,9 @@ func (c configuration) runtimeFingerprint(id string, enabled bool) string {
 
 // 写入之后的整份值要守的规矩：这次写了端口的入口，不能和别的入口撞。
 func (c configuration) validateSettings(lookup func(string) (json.RawMessage, bool)) *settingsProblem {
+	if problem := validateToolLoading(lookup); problem != nil {
+		return problem
+	}
 	port := func(id string) int {
 		var value int
 		if raw, written := lookup(sshPortKey(id)); written && json.Unmarshal(raw, &value) == nil {
@@ -369,6 +375,7 @@ func buildSettingsSchema(c configuration) settingsSchema {
 			schema.Settings = append(schema.Settings, backgroundShellSetting(c, id, group))
 		}
 		if id == claudeHarness {
+			schema.Settings = append(schema.Settings, claudeToolLoadingSettings(c, group)...)
 			schema.Settings = append(schema.Settings, claudeBackendSetting(group), claudeCacheTTLSetting(c, group), claudeInboxSetting(c, group), claudeIdleSetting(c, group))
 		}
 	}
