@@ -156,69 +156,35 @@ function world(extensions = ['harness', 'clientApprovals']) {
 
 function phoneCard(): ApprovalCard {
   return {
-    id: ticket.id,
+    ...ticket,
     threadId: 'p1',
-    kind: 'browserSignIn',
-    summary: {
-      origin: 'https://github.com',
-      site: 'GitHub',
-      reason: 'Push the branch',
-      device: 'linux-test',
-      accounts: [
-        { ref: 'a1', masked: 'so•••@example.com' },
-        { ref: 'a2', masked: 'wo•••@corp.com' },
-      ],
-      task: null,
-      fillBlocked: null,
-    },
-    desktopId: ticket.desktopId,
-    nonce: ticket.nonce,
+    kind: 'computerSelf',
+    summary: { origin: 'litch://computer-self', device: 'linux-test' },
     expiresAt: null,
   }
 }
 
-test('桌面端：带桌面端号的登录卡片挂到设备上，只有打码的用户名；答复交给主进程；主进程撤了卡片就收掉', async () => {
+test('代理代填卡片不再转给手机，旧签名答复不交主进程', async () => {
   const w = world()
   w.core.start()
   await settled()
-  const init = w.seen('initialize')[0] as { capabilities: { litchExtensions: string[] } }
-  assert.ok(init.capabilities.litchExtensions.includes('clientApprovals'))
   await w.ask(signInAsk())
-  const opened = w.seen('litch/approval/open')
-  assert.deepEqual(opened, [phoneCard()])
-  assert.doesNotMatch(JSON.stringify(opened), /sophie@example\.com|work@corp\.com/)
-
-  // 别的卡片的答复、形状不对的不交
-  w.broadcast('litch/approval/answered', { ...answer, id: 'Other0card000000' })
-  w.broadcast('litch/approval/answered', { ...answer, signature: 'x' })
+  assert.deepEqual(w.seen('litch/approval/open'), [])
   w.broadcast('litch/approval/answered', answer)
   await settled()
   assert.deepEqual(
     w.sent.filter((message) => message.op === 'phoneAnswer'),
-    [{ type: CLIENT_TOOL, op: 'phoneAnswer', answer }],
+    [],
   )
-  // 主进程验过、答完了：askDone 撤掉卡片，设备上一起收
-  w.reply({ op: 'askDone', askId: 'k1' })
-  await settled()
-  assert.deepEqual(w.seen('litch/approval/close'), [{ id: ticket.id }])
-  // 收掉之后再来的答复不交
-  w.broadcast('litch/approval/answered', answer)
-  await settled()
-  assert.equal(w.sent.filter((message) => message.op === 'phoneAnswer').length, 1)
 })
 
 test('桌面端：人在桌面端答了也收掉；没有桌面端号、不是登录卡片、设备没列 clientApprovals 都不挂', async () => {
   const w = world()
   w.core.start()
   await settled()
-  await w.ask(signInAsk({ taskId: 'task-1', expiresAt: 99 }))
+  await w.ask({ kind: 'computerSelf', ...ticket })
   const [card] = w.seen('litch/approval/open') as unknown as ApprovalCard[]
-  assert.equal(card?.kind, 'browserSignIn')
-  assert.deepEqual(card?.kind === 'browserSignIn' ? card.summary.task : null, {
-    id: 'task-1',
-    name: '',
-  })
-  assert.equal(card?.expiresAt, 99)
+  assert.equal(card?.kind, 'computerSelf')
   // 在对话里答这张卡片（界面的 session.respond）
   await w.core.command(
     'session.respond',

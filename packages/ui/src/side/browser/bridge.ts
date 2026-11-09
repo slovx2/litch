@@ -81,13 +81,6 @@ export interface BrowserSavePrompt {
 
 export type BrowserSaveAnswer = 'save' | 'dismiss' | 'never'
 
-/** 代填前的 Touch ID 开关 */
-export interface BrowserTouchId {
-  /** 这台电脑能用（macOS 且有指纹） */
-  available: boolean
-  on: boolean
-}
-
 /** 已保存的密码和保存提示：只能列、删、答，看不到明文 */
 export interface BrowserPasswordsBridge {
   list(): Promise<BrowserSavedPassword[]>
@@ -179,10 +172,6 @@ export interface BrowserSignInBridge {
   answer(id: string, answer: BrowserSignInAnswer): Promise<boolean>
   /** 变了，带着现在所有的 */
   onChanged(handler: (requests: BrowserSignInRequest[]) => void): () => void
-  /** Litch 代填前要不要过 Touch ID。只有 macOS 有（available 为假时设置里不显示这个开关），默认关 */
-  touchId(): Promise<BrowserTouchId>
-  /** 开关，回新的样子 */
-  setTouchId(on: boolean): Promise<BrowserTouchId>
 }
 
 export interface BrowserBridge {

@@ -1,14 +1,4 @@
-// “代理请你登录”的登记（request_sign_in）：代理把一个标签交给人登录，这里记着哪些标签在人手里、给界面的卡片
-// 长什么样、人答了什么。卡片只给界面（浏览器面板、对话里的卡片、经设备转到手机上的那份），不给代理；
-// 里面没有任何人输入的东西，也没有密码。
-// 卡片醒目的是主进程取到的真实来源（随导航更新），代理填的站点名和原因只作附注。
-// 卡片先让人选（stage: choose）：用密码库里这个源的某个账号由 Litch 代填（fill）、自己登录（self，转成
-// manual，等人点“完成，交还”）、拒绝（cancel）。选了代填之后是 filling，代填完撤掉。
-// 账号用这张卡片里随机的 ref 指，ref 背后的条目号只在这里，不出主进程。
-// 定时任务的回合（taskId）卡片有过期时间，到点按 expired 结束。
-// 代理不等了（回合打断、结束、断线）时卡片不悄悄消失：变成“代理已收回”，等人看到点“知道了”。
-// 这一页没能安全地重新载入、标签被关掉时，卡片变成“标签已关掉”，不再指向哪个标签，同样等人点“知道了”。
-// 不引 electron，单元测试在 test/passwords-signin.test.mts；真的交接（冻结、代填、清框）在 handover.mts。
+// 手动登录登记；旧代填字段仅保留形状，账号和代填回答一律忽略。
 import { randomBytes, randomUUID } from 'node:crypto'
 import type { TabOwner } from '../model.mjs'
 
@@ -100,8 +90,6 @@ export type SignInBy = 'desktop' | { phoneId: string; name?: string }
 export type SignInResolution =
   | { kind: 'done' }
   | { kind: 'cancel'; by: SignInBy }
-  /** 用 entryId 那一条代填；entryId 只在主进程 */
-  | { kind: 'fill'; ref: string; entryId: string; remember: boolean; by: SignInBy }
   /** 定时任务的回合，到点没人答 */
   | { kind: 'expired' }
 
@@ -114,16 +102,6 @@ export interface SignInEntry {
 
 /** “代理已收回”“标签已关掉”的卡片没人点也只挂这么久 */
 const WITHDRAWN_LIFE_MS = 10 * 60_000
-
-/** 打码的用户名：@ 前留头两个字（不到三个字只留一个），其余换成 •••；没有 @ 的同样只留开头 */
-export function maskUsername(username: string): string {
-  const at = username.lastIndexOf('@')
-  const local = at > 0 ? username.slice(0, at) : username
-  const domain = at > 0 ? username.slice(at) : ''
-  const chars = [...local]
-  const keep = chars.length > 2 ? 2 : Math.min(1, chars.length)
-  return `${chars.slice(0, keep).join('')}•••${domain}`
-}
 
 export interface SignIns {
   /** 交出一个标签：出卡片，等人答。同一个标签同时只能有一张在等 */
@@ -142,8 +120,6 @@ export interface SignIns {
   }): { id: string; answered: Promise<SignInResolution> } | null
   /** 标签导航了：卡片上的来源跟着换 */
   setOrigin(id: string, origin: string): void
-  /** 重新预检了：能不能代填跟着换 */
-  setBlocked(id: string, block: SignInBlock | null): void
   /** 人答了（by 不给是桌面端）。回答没答到（已经没了、状态不对、ref 不在卡片上） */
   answer(id: string, answer: SignInAnswer, by?: SignInBy): boolean
   /** 现在的这张；没了是 null */
@@ -171,8 +147,6 @@ export interface SignIns {
 
 interface Open {
   request: SignInRequest
-  /** ref → 条目号 */
-  entries: Map<string, string>
   settle(resolution: SignInResolution): void
 }
 
@@ -239,18 +213,6 @@ export function createSignIns(
       // 同一个标签上一张“代理已收回”的不用再留
       for (const [id, one] of open) if (one.request.tabId === input.tabId) open.delete(id)
       const request = card(input, 'waiting')
-      const entries = new Map<string, string>()
-      for (const entry of input.accounts ?? []) {
-        const ref = `a${randomBytes(6).toString('hex')}`
-        entries.set(ref, entry.entryId)
-        request.accounts.push({
-          ref,
-          username: entry.username,
-          masked: maskUsername(entry.username),
-          lastUsed: entry.lastUsed,
-        })
-      }
-      request.fillBlocked = input.fillBlocked ?? null
       request.taskId = input.taskId ?? null
       const life = request.taskId ? (input.expiresInMs ?? null) : null
       request.expiresAt = life === null ? null : request.at + life
@@ -258,7 +220,7 @@ export function createSignIns(
       const answered = new Promise<SignInResolution>((resolve) => {
         settle = resolve
       })
-      const one: Open = { request, entries, settle }
+      const one: Open = { request, settle }
       open.set(request.id, one)
       // 定时任务的回合：到点还在等人选就过期（人已经选了自己登录、正在代填的不算）
       if (life !== null) {
@@ -277,12 +239,6 @@ export function createSignIns(
       const one = open.get(id)
       if (!one || one.request.origin === origin) return
       one.request.origin = origin
-      changed()
-    },
-    setBlocked(id, block) {
-      const one = open.get(id)
-      if (!one || one.request.fillBlocked === block) return
-      one.request.fillBlocked = block
       changed()
     },
     answer(id, answer, by = 'desktop') {
@@ -310,21 +266,8 @@ export function createSignIns(
         changed()
         return true
       }
-      if (request.stage !== 'choose' || request.fillBlocked !== null) return false
-      const entryId = one.entries.get(answer.fill)
-      if (!entryId) return false
-      // 卡片留着（filling，没有按钮），代填完由 handover.mts 撤掉
-      request.stage = 'filling'
-      request.by = by === 'desktop' ? 'desktop' : { ...by }
-      one.settle({
-        kind: 'fill',
-        ref: answer.fill,
-        entryId,
-        remember: request.taskId !== null && answer.remember === true,
-        by,
-      })
-      changed()
-      return true
+      // 旧客户端的代填字段安全忽略，任何入口都不能触发密码库读取。
+      return false
     },
     get(id) {
       const one = open.get(id)
@@ -345,7 +288,7 @@ export function createSignIns(
     },
     closed(input) {
       for (const [id, one] of open) if (one.request.tabId === input.tabId) open.delete(id)
-      const one: Open = { request: card(input, 'closed'), entries: new Map(), settle: () => {} }
+      const one: Open = { request: card(input, 'closed'), settle: () => {} }
       open.set(one.request.id, one)
       changed()
       expire(one.request.id, one)

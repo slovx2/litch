@@ -94,7 +94,7 @@ export function clientToolCall(
                       ? 'The user finished signing in; the page reloaded. Claim the tab again.'
                       : demo === 'app'
                         ? 'Safari · 1 window'
-                        : 'Litch filled the account the user approved and submitted; the page loaded https://github.com. Take a fresh snapshot to check you are signed in.',
+                        : 'The user finished manual sign-in. Take a fresh snapshot to check you are signed in.',
             },
             { type: 'inputImage', imageUrl: SAMPLE_SHOT },
           ]
@@ -146,18 +146,6 @@ export function clientAskRequest(
 
 /** 登录卡片的样例：两个已存账号（一个用过），库里没有时是空的；预检不过的是 http 页面；定时任务的 30 分钟后过期 */
 function signInAsk(demo: SignInDemo, id: string): ClientAskView {
-  const accounts =
-    demo === 'signInNone'
-      ? []
-      : [
-          {
-            ref: `${id}-a1`,
-            username: 'dev@example.com',
-            masked: 'so•••@example.com',
-            lastUsed: Date.now() - 3 * 86_400_000,
-          },
-          { ref: `${id}-a2`, username: 'ops-bot', masked: 'op•••', lastUsed: null },
-        ]
   const task = demo === 'signInTask'
   return {
     kind: 'signIn',
@@ -165,8 +153,8 @@ function signInAsk(demo: SignInDemo, id: string): ClientAskView {
     origin: demo === 'signInBlocked' ? 'http://login.example.com' : 'https://accounts.github.com',
     site: 'GitHub',
     reason: 'Need to open the repository settings.',
-    accounts,
-    fillBlocked: demo === 'signInBlocked' ? 'insecure' : null,
+    accounts: [],
+    fillBlocked: null,
     taskId: task ? 'task-nightly' : null,
     expiresAt: task ? Date.now() + 30 * 60_000 : null,
     nonce: `${id}-nonce`,

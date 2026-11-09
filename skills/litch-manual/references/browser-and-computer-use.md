@@ -167,41 +167,15 @@ one, delete all. Below it, **Never save passwords for** lists the sites marked "
 removing one makes Litch ask again there. Passwords cannot be shown or copied. "Clear browsing data"
 keeps them.
 
-### When an agent needs the user signed in
+### Agent 请求登录
 
-Agents never ask for passwords, one-time codes or other secrets in the chat and never type them. When
-a page needs signing in, the agent asks Litch (`litch_browser` → `request_sign_in`, with the site and
-a short reason). Until the request is over, the agent cannot touch that tab; if it had run scripts on
-that page, the page is reloaded first.
+`request_sign_in` 只请求用户手动登录，Litch 不再替 Agent 读取已存账号、代填或提交。用户自己的保存密码、点击账号自动填充功能保留。
 
-- A card shows in the Browser panel and in the conversation (and on a paired phone, see phones.md):
-  the real site, the agent's reason, and the saved accounts for exactly that site.
-- **Sign in with {account}**: Litch fills that saved account and submits the form itself. The agent
-  never sees the password or the user name; while Litch fills and until the page has moved on, the
-  agent sees nothing of that tab (console, dialogs, popups, title). If the page still holds the
-  password afterwards, Litch closes the tab and opens the same address in a new one. Litch's own
-  fill does not ask to save the password. Sites that need a popup, a one-time code or a second step
-  after the password are handed to the user.
-- **Sign in myself**: the user signs in on the page (saved passwords work as in their own tabs) and
-  clicks **Done, hand back**; password fields are cleared before the tab goes back.
-- **Decline**: the agent is told not to try another way; it cannot ask again for that site in the
-  same turn.
-- Filling is greyed out, with the reason, when the page is not https (loopback excepted), sends the
-  password with GET or to another site, or the sign-in form cannot be found or is hidden.
-- There is no time limit, except in scheduled-task turns (30 minutes). There the card can also be
-  ticked "Use this account for this task from now on"; next time that task signs in to that site
-  with that account without asking (see scheduled-tasks.md).
-- Optional: Settings → Built-in browser → Saved passwords → **Require Touch ID before filling**
-  (macOS only, off by default).
+完全访问会话会立即收到“需要登录，尚未登录”的结果，不冻结标签、不等待按钮；桌面显示非阻塞通知，用户可在方便时打开登录页。Agent 应继续使用已经授权的 API、已配置凭据等途径，或在回报中说明用户登录后才能重试，不能把结果当成登录成功。
 
-代理撤回登录请求后，Litch 会继续清理登录页；“代理已收回”提示可点“知道了”关闭。只有页面确实无法安全重新打开时，才关闭标签并显示“标签已关掉”；“知道了”关闭对应提示，不会重新开始登录。
+其他权限模式保持手动交接：对话和浏览器面板显示“我自己登录 / 拒绝”，用户登录完成后点击“完成，交还”；交接期间暂停观察，交还前清空输入。普通会话不限时，定时任务 30 分钟后过期。手机不能批准代理代填，任务也没有已存账号事先授权。
 
-After an agent withdraws a sign-in request, Litch still cleans up the page. Dismiss the withdrawn
-notice with **Got it**. A **Tab closed** notice appears only when the page cannot be safely
-reopened; **Got it** dismisses that notice without starting another sign-in.
-
-If the user asks you (as the agent) to sign in somewhere, use `request_sign_in` rather than asking
-for their password.
+完全访问下，普通网站访问和下载不再弹批准卡，也不会自动添加永久白名单。明确拒绝、黑名单、用户停止、标签租约冲突仍会立即返回失败。Computer Use、系统权限及其他功能的审批规则不变。
 
 Preferences (Settings → Built-in browser):
 

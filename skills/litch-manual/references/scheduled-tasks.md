@@ -69,11 +69,7 @@ Exact flags: `scripts/litch tasks --help`.
 
 ## Common problems
 
-Browser sign-in during a task still uses the user approval flow. A sign-in card may offer
-“Use this account for this task from now on”; only the user grants it. It applies to that task,
-device, website and saved account, not arbitrary future sign-ins. The desktop must be connected to
-perform browser work even though the scheduled turn itself can run without it. Login details are in
-`browser-and-computer-use.md`; there is no configuration command for granting saved-account access.
+定时任务不再有已存账号的登录事先授权。完全访问任务遇到网页登录会立即返回“需要用户登录”，Agent 可以继续已授权的 API 等路径；其他权限模式保留手动登录卡及 30 分钟超时。浏览器操作仍需要有桌面执行端连接。
 
 A task does not fire: read it with tasks list, check its time zone, state, device connection and
 `scripts/litch settings get <device> tasks.enabled`. The device must be awake; the desktop need not

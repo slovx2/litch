@@ -28,7 +28,7 @@ test('浏览器精简说明保留批量、结果核实、结构化恢复与授�
       'structured recovery',
       'never blindly replay input',
       'untrusted',
-      'Ask first',
+      'only when not already authorized',
       'request_sign_in',
       'never bypass a denial or block',
     ])

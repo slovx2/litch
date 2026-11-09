@@ -63,6 +63,8 @@ function fakeMain(namespaces: string[]) {
 function setup(
   options: {
     managed?: boolean
+    fullAccess?: boolean
+    permissionProfile?: string
     namespaces?: string[] | null
     engine?: string
     /** runtime/info 里声明的扩展；不给就是没有声明的旧适配器 */
@@ -91,12 +93,25 @@ function setup(
     }),
     'thread/resume': (params) => {
       const found = threads.find((entry) => entry.id === (params as { threadId: string }).threadId)
-      return { thread: found, model: 'm', reasoningEffort: null, sandbox: { type: 'readOnly' } }
+      return {
+        thread: found,
+        model: 'm',
+        reasoningEffort: null,
+        sandbox: { type: options.fullAccess ? 'dangerFullAccess' : 'readOnly' },
+        ...(options.permissionProfile
+          ? { activePermissionProfile: options.permissionProfile }
+          : {}),
+      }
     },
     'thread/start': () => {
       const created = thread({ id: 'new', preview: '', turns: [] })
       threads.push(created)
-      return { thread: created, model: 'm', reasoningEffort: null, sandbox: { type: 'readOnly' } }
+      return {
+        thread: created,
+        model: 'm',
+        reasoningEffort: null,
+        sandbox: { type: options.fullAccess ? 'dangerFullAccess' : 'readOnly' },
+      }
     },
     'turn/start': () => ({ turn: turn('srv-1', [], { status: 'inProgress' }) }),
     'turn/interrupt': () => ({}),
@@ -776,6 +791,11 @@ test('模拟核心：“用浏览器”出一张网站卡片，答应了工具�
   }
   const local = watch('local', 's3')
   await settle()
+  await channel.command('session.configure', {
+    deviceId: 'local',
+    sessionId: 's3',
+    settings: { permission: ':workspace' },
+  })
   await channel.command('session.send', { deviceId: 'local', sessionId: 's3', text: '用浏览器' })
   time.advance(20)
   await settle()
@@ -814,4 +834,87 @@ test('模拟核心：“用浏览器”出一张网站卡片，答应了工具�
     (item): item is ToolCallItem => item.kind === 'toolCall' && item.source === 'litch_computer',
   )
   assert.equal(used?.status, 'completed')
+})
+
+for (const kind of ['local', 'ssh'] as const)
+  test(`完全访问标志来自 ${kind} 引擎配置，不取模型参数`, async () => {
+    for (const fullAccess of [true, false]) {
+      const { core, main, call } = setup({ kind, fullAccess, namespaces: ['litch_browser'] })
+      core.start()
+      await settle()
+      const pending = call({
+        namespace: 'litch_browser',
+        fullAccess: !fullAccess,
+        arguments: { fullAccess: !fullAccess },
+      })
+      await settle()
+      const sent = main?.of('call')[0]
+      assert.ok(sent)
+      assert.equal(sent.invocation.fullAccess, fullAccess)
+      main?.reply({
+        op: 'result',
+        id: sent.invocation.id,
+        response: { success: true, contentItems: [] },
+      })
+      await pending
+      core.stop()
+    }
+  })
+
+test('完全访问模拟会话：请求登录返回未登录，留下通知，回合不等待卡片', async () => {
+  const time = fakeClock()
+  const core = createMockCore({ clock: time.clock })
+  const session = watchSession(core, 's3', 'local')
+  await settle()
+  await core.command(
+    'session.configure',
+    { deviceId: 'local', sessionId: 's3', settings: { permission: ':danger-full-access' } },
+    never,
+  )
+  await core.command(
+    'session.send',
+    { deviceId: 'local', sessionId: 's3', text: '登录网站' },
+    never,
+  )
+  time.advance(100)
+  await settle()
+  assert.deepEqual(session.seen.view?.requests, [])
+  const items = Object.values(session.seen.view?.items ?? {})
+  assert.ok(
+    items.some(
+      (item) =>
+        item.kind === 'notice' &&
+        typeof item.label === 'object' &&
+        item.label.key === 'notice.signInRequired',
+    ),
+  )
+  assert.ok(
+    items.some(
+      (item) =>
+        item.kind === 'toolCall' && item.source === 'litch_browser' && item.status === 'failed',
+    ),
+  )
+  assert.equal(session.seen.view?.turns.at(-1)?.status, 'completed')
+})
+
+test('自定义权限名称不能仅凭底层沙箱是完全访问就免审', async () => {
+  const { core, main, call } = setup({
+    fullAccess: true,
+    permissionProfile: 'custom-restricted',
+    namespaces: ['litch_browser'],
+  })
+  core.start()
+  await settle()
+  const pending = call({ namespace: 'litch_browser' })
+  await settle()
+  const sent = main?.of('call')[0]
+  assert.ok(sent)
+  assert.equal(sent.invocation.fullAccess, false)
+  main?.reply({
+    op: 'result',
+    id: sent.invocation.id,
+    response: { success: true, contentItems: [] },
+  })
+  await pending
+  core.stop()
 })

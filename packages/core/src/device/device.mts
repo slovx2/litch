@@ -2426,6 +2426,18 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
 
   /** 这台桌面执行客户端工具（内置浏览器、Computer Use）的调用：开关、交给主进程、卡片、收尾（tool-calls.mts） */
   const toolCalls = createToolCalls({
+    async fullAccess(threadId) {
+      // 恢复响应是引擎的权威设置；后台会话和远程调用不能靠界面当前选中的预设判断。
+      try {
+        const settings = await link.request('thread/resume', { threadId, excludeTurns: true })
+        const profile = settings.activePermissionProfile
+        const named = typeof profile === 'string' ? profile : profile?.id
+        if (named) return named === ':danger-full-access'
+        return settings.sandbox?.type === 'dangerFullAccess'
+      } catch {
+        return false
+      }
+    },
     deviceId: config.id,
     clock: options.clock,
     hub: options.tools ?? {

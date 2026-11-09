@@ -12,6 +12,7 @@ import {
   type ClientToolAsk,
   type ClientToolContext,
   type ClientToolExecutor,
+  type ClientToolInvocation,
   type ClientToolToCore,
   type ClientToolToMain,
 } from './types.mjs'
@@ -40,6 +41,7 @@ export function createClientToolHost(
   executors: readonly ClientToolExecutor[],
   post: (message: ClientToolToCore) => void,
   log: (line: string) => void = (line) => console.error(`[client-tools] ${line}`),
+  signInRequired?: (invocation: ClientToolInvocation) => void,
 ): ClientToolHost {
   const byNamespace = new Map<string, ClientToolExecutor>()
   const add = (executor: ClientToolExecutor) => {
@@ -88,6 +90,27 @@ export function createClientToolHost(
   const run = async (executor: ClientToolExecutor, message: ClientToolToMain & { op: 'call' }) => {
     const { invocation } = message
     const { id } = invocation
+    if (
+      invocation.fullAccess &&
+      invocation.namespace === 'litch_browser' &&
+      invocation.tool === 'request_sign_in'
+    ) {
+      try {
+        signInRequired?.(invocation)
+      } catch (error) {
+        log(`登录提示未显示：${String(error)}`)
+      }
+      post({
+        type: CLIENT_TOOL,
+        op: 'result',
+        id,
+        response: clientToolFailure(
+          'failed',
+          'Sign-in is required and has not been completed. Full access does not wait for user login. No tab was frozen. Use another authorized method, such as an API or configured credentials, or report that the user must sign in and retry. Never ask for passwords or one-time codes in chat.',
+        ),
+      })
+      return
+    }
     const turn = {
       deviceId: invocation.device.id,
       threadId: invocation.threadId,
@@ -101,6 +124,12 @@ export function createClientToolHost(
       signal,
       ask(ask: ClientToolAsk) {
         if (signal.aborted || running.get(id) !== entry) return Promise.resolve(null)
+        if (
+          invocation.namespace === 'litch_browser' &&
+          invocation.fullAccess &&
+          ['site', 'browserDownload', 'chromeInstance', 'chromeTab'].includes(ask.kind)
+        )
+          return Promise.resolve('once')
         const askId = `${id}#${++askSeq}`
         entry.asks.add(askId)
         return new Promise<ClientToolAnswer | null>((resolve) => {
@@ -112,6 +141,14 @@ export function createClientToolHost(
         })
       },
       show(ask: ClientToolAsk, onAnswer?: (answer: ClientToolAnswer | null) => void) {
+        if (
+          invocation.namespace === 'litch_browser' &&
+          invocation.fullAccess &&
+          ['site', 'browserDownload', 'chromeInstance', 'chromeTab'].includes(ask.kind)
+        ) {
+          queueMicrotask(() => onAnswer?.(signal.aborted ? null : 'once'))
+          return () => {}
+        }
         if (signal.aborted || running.get(id) !== entry) return () => {}
         const askId = `${id}#${++askSeq}`
         entry.asks.add(askId)

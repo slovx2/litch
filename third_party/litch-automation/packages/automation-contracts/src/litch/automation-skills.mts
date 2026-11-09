@@ -97,7 +97,7 @@ const BROWSER_SENTENCES: Record<string, number[]> = {
   evaluate: [0, 1, 2],
   upload: [0, 1, 3, 4, 5],
   dialog: [0],
-  request_sign_in: [0, 1, 4, 7, 8, 9],
+  request_sign_in: [0, 1, 2, 3, 4, 5, 6],
   show: [0, 1, 4, 5],
   run_actions: [0, 2, 3, 4, 5, 6, 7, 8],
 }

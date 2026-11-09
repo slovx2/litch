@@ -16,6 +16,7 @@ import {
   ipcMain,
   Menu,
   MessageChannelMain,
+  Notification,
   nativeTheme,
   protocol,
   screen,
@@ -281,6 +282,45 @@ const clientTools = createClientToolHost(
     ...(computerUse ? [computerUse.executor] : []),
   ],
   (message) => core?.postMessage(message),
+  undefined,
+  (invocation) => {
+    // 仅通知，不冻结、不暂停调用；用户点击后在自己的标签中登录。
+    if (!Notification.isSupported()) return
+    const args = invocation.arguments as {
+      origin?: unknown
+      tabId?: unknown
+      site?: unknown
+    } | null
+    const page = typeof args?.tabId === 'string' ? browser?.host.page(args.tabId) : undefined
+    const candidate = page?.info().url ?? (typeof args?.origin === 'string' ? args.origin : '')
+    let url: URL | null = null
+    try {
+      url = new URL(candidate)
+    } catch {
+      /* 没有可打开的地址时仍提示登录。 */
+    }
+    if (url && !['https:', 'http:'].includes(url.protocol)) url = null
+    const zh = (menuLang ?? forcedLang ?? app.getLocale()).startsWith('zh')
+    const notice = new Notification({
+      title: zh ? '需要登录' : 'Sign-in required',
+      body: zh
+        ? `${url?.host ?? ''}：Agent 已继续。可在方便时登录后重试。`
+        : `${url?.host ?? ''}: The agent continued. Sign in when convenient, then retry.`,
+    })
+    notice.on('click', () => {
+      if (url && page && browser) {
+        const tab = browser.host.open(
+          { deviceId: invocation.device.id, threadId: invocation.threadId },
+          'user',
+        )
+        void tab.load(url.href, 30_000)
+        browser.host.show(tab.id)
+      } else if (url) void openInChrome(url.href).catch(() => {})
+      const window = BrowserWindow.getAllWindows()[0]
+      window?.show()
+    })
+    notice.show()
+  },
 )
 /** 核心连续几次刚起来就退出了。用来拉开重启的间隔，免得出错时原地打转 */
 let quickExits = 0

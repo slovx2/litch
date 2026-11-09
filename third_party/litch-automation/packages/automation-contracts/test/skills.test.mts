@@ -85,7 +85,7 @@ test('技能逐字承载原说明；短表保留 schema 与安全语义，不要
       )
       assert.match(
         brief.tools.find((t) => t.name === 'request_sign_in')!.description,
-        /never ask the user for credentials/,
+        /Never ask for passwords or one-time codes/,
       )
     } else if (!full.description.startsWith('Control apps on')) {
       assert.match(brief.description, /On explicit Stop\/Esc/)
