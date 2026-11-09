@@ -1,0 +1,30 @@
+{
+  "extension": "threadReadState",
+  "declaration": "设备 runtime/info.device.extensions 声明；客户端 initialize.capabilities.litchExtensions 声明后才能调用和接收通知。",
+  "methods": {
+    "litch/thread/readState/list": {
+      "params": { "threadIds": "string[]，最多 500 项" },
+      "result": { "states": "ThreadReadState[]" }
+    },
+    "litch/thread/readState/mark": {
+      "params": { "threadId": "string", "completedSequence": "非负安全整数，必须属于该会话" },
+      "result": "ThreadReadState"
+    }
+  },
+  "notifications": { "litch/thread/readState/changed": "ThreadReadState" },
+  "types": {
+    "ThreadReadState": {
+      "threadId": "string",
+      "turnId": "string | null",
+      "completedSequence": "number",
+      "readSequence": "number"
+    }
+  },
+  "semantics": [
+    "设备持久化完成回合去重索引和已读游标；相同回合只计一次。序号由设备生成，不按客户端时钟排序。",
+    "确认仅推进到客户端给定的已完成序号；多端取 max，旧确认不能清掉后来的回合。",
+    "归档视作读到当时最新回合；归档期间完成也保持已读。删除会话清理记录，临时会话不计。",
+    "列表和通知返回完整状态。客户端按完成序号和已读序号单调合并，重连重新对账。",
+    "初次启用只追踪设备观察到的完成回合，不扫描引擎历史。未声明的客户端不收到本扩展；旧设备维持客户端本地行为。"
+  ]
+}

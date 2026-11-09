@@ -15,6 +15,7 @@ export interface ListContext {
   links: UpstreamLink[]
   /** 按标识取上游；没配置这个 harness 时抛错 */
   link(harness: string): UpstreamLink
+  observe?(harness: string, row: Record<string, unknown>): void
   index: ThreadIndex
   workspaces: Workspaces
   timeoutMs: number
@@ -128,6 +129,7 @@ export async function listThreads(context: ListContext, params: unknown): Promis
       context.index.see(row, String(row.harness), fields.archived === true)
   })
   for (const row of merged.data) {
+    context.observe?.(String(row.harness), row)
     context.workspaces.decorate(row.id, row)
     context.adopt?.(row)
     context.decorate?.(row)

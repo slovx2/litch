@@ -101,7 +101,7 @@ Chat and Managers are navigation trees. The content follows the last conversatio
 刷新列表、排序或新增副本不会转移选择；选中的投影项移除后，选择回到同一会话的对话树行。
 Only the clicked row is selected, including for keyboard navigation and screen readers. Other copies stay unselected.
 List updates preserve the selected location; removing that projection item selects the same conversation in the tree.
-未读沿用本机的新结果标记：未查看的对话从运行转为停止时标记，打开后清除；随侧栏缓存保存，重启保留。
+未查看的完成回合显示未读，打开对话或标为已读后清除。支持已读同步的设备会保存读到的回合：桌面或手机查看后，连着同一设备的其他客户端同步清除；重连时补齐。之后的新结果会重新显示未读。
 桌面右键设备可“全部标为已读”，右键会话可“标为已读”，后者包含其所有层级的子会话和工作线；经理行也支持。手机在设备、会话、经理及置顶/本机分组的长按菜单中提供对应入口，设备会话页的“更多”也可清整台设备。“未读”标题菜单可清当前客户端全部设备的未读。没有未读时不显示相应操作。标记不会打开会话，也不会清除运行或待处理状态；之后的新结果仍会重新标未读。
 
 On desktop, right-click a device to mark all its sessions as read, or a session to mark it and all descendants as read. Manager rows support the same action. On mobile, use the corresponding long-press menus or the device session page’s More menu. The Unread group menu clears unread marks across devices in this client. These actions appear only when there is unread content. They do not open sessions or clear running and pending states; new results can become unread again. Read state is local to each client and does not sync across devices.
@@ -110,7 +110,7 @@ On desktop and phone, collapsed project unread counts follow the visible convers
 从未读组打开后，当前主项保留在原位置并恢复已读样式，切到其他主会话或离开对话后才移出，避免连续点击打开下一项。未读计数只计算仍未读的主项，最近组不显示总数。
 这条规则也适用于子会话：父会话已打开、子会话完成后才进入未读时，读完子会话仍保留整棵树和展开状态；在同棵树内切换不移出。切到其他树、新建对话、设置页或经理模式后释放暂留；清未读不会移除「最近」中的主项。
 Opening a child keeps its whole tree in the Unread group, at the same position and with its expansion unchanged, even when the child finishes after the parent was opened. Read rows use the normal style. The tree stays while you browse within it and leaves when you switch trees or leave the conversation. Marking it read does not remove it from Recent.
-这不是逐条消息的已读计数，客户端离线期间结束的回合不保证标记；不同电脑和手机的已读状态不互相同步。
+这是按完成回合记录的已读状态，不是逐条消息的计数。设备服务运行时观察到的完成回合会保留，客户端离线后重连也能补齐；设备服务没有观察到的外部历史不倒推未读。连接旧设备时仍使用各客户端的本地标记。离线标记先在本机清除，重连后以设备保存的状态为准。
 
 最近的空状态提示为“查看满 5 秒或有过操作的对话会出现在这里”（Conversations you view for 5 seconds or interact with appear here）。
 最近按本机最后一次查看或操作倒序排列。打开、切换或查看会话，须在当前可见窗口连续停留满 5 秒才更新，时间记录为满 5 秒的时刻；同一段连续停留只记一次。

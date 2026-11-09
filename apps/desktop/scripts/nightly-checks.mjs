@@ -1,6 +1,7 @@
 // Full窗口域的固定检查身份与命令；普通夜间与合并Mac作业共用，不能各自删项。
 const desktop = 'apps/desktop/scripts/'
 export const nightlyChecks = [
+  ['unread-sync', '--import', 'tsx', '--test', 'scripts/check-unread-sync.mjs'],
   ['smoke', `${desktop}smoke.mjs`],
   ['browser:persistence', `${desktop}check-browser-persistence.mjs`],
   ['scroll', `${desktop}smoke.mjs`, '--scroll'],

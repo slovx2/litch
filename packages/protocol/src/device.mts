@@ -178,6 +178,7 @@ export const EXTENSION = {
   /** 执行设备的唤醒与无进展提醒；只提示，显式请求中断确认后才继续。 */
   turnRecovery: 'turnRecovery',
   turnNotices: 'turnNotices',
+  threadReadState: 'threadReadState',
   /** 当前这轮启动实际选择的 CLI 入口、版本与来源，不代表下次启动的设置。 */
   harnessRuntime: 'harnessRuntime',
 } as const

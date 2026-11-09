@@ -184,6 +184,7 @@ export class SessionTree {
   private readonly links = new Map<string, Promise<EngineLink>>()
   /** 每条引擎连接订阅了哪些会话 */
   private readonly subscribed = new Map<string, Set<string>>()
+  private readonly watching = new Map<string, Promise<Record<string, unknown> | null>>()
   /** 等着看要不要退订的会话 → 计时器 */
   private readonly releasing = new Map<string, NodeJS.Timeout>()
   /** 正在退订的会话：这时要再订阅的先等它退完，免得引擎把两个请求倒过来处理 */
@@ -325,9 +326,20 @@ export class SessionTree {
     await this.unsubscribing.get(threadId)
     const link = await this.link(harness)
     if (this.subscribed.get(harness)?.has(threadId)) return null
-    const result = await link.request('thread/resume', { threadId, excludeTurns: true })
-    this.noteSubscribed(harness, threadId)
-    return isObject(result) ? result : null
+    const key = JSON.stringify([harness, threadId])
+    const pending = this.watching.get(key)
+    if (pending) return pending
+    // 未读观察与编排可能同时订阅；复用正在进行的恢复，不能发两次 thread/resume。
+    const work = link.request('thread/resume', { threadId, excludeTurns: true }).then((result) => {
+      this.noteSubscribed(harness, threadId)
+      return isObject(result) ? result : null
+    })
+    this.watching.set(key, work)
+    try {
+      return await work
+    } finally {
+      if (this.watching.get(key) === work) this.watching.delete(key)
+    }
   }
 
   /**

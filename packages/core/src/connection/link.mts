@@ -232,6 +232,7 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.serviceActivity,
                 EXTENSION.devicePower,
                 EXTENSION.turnNotices,
+                EXTENSION.threadReadState,
                 // planConfirmation：声明了，Claude Code 和 Pi 的引擎在交计划时自己在回合里问要不要执行，
                 // 界面不再问（plan-ask.ts）；不声明的话它们和原生 codex 一样回合带着计划结束，由客户端来问
                 EXTENSION.planConfirmation,

@@ -1,6 +1,6 @@
 // 开着会话就算读过了（桌面 App.tsx 选中的会话、手机详情页共用）：摘要上的未读一出现就清掉，
-// 打开之前就有的、摘要比打开晚到的都算。开着的时候核心自己不会再标（会话有人订阅着），
-// 离开以后回合再结束才重新标。不依赖 React，手机直接引用
+// 打开之前就有的、摘要比打开晚到的都算。设备同步来的新完成回合也走同一命令确认；
+// 离开以后不再自动确认。不依赖 React，手机直接引用
 import type { CoreChannel, KeyedStore, SessionChildren, SessionSummary } from '@litch/core'
 import { keys } from '@litch/core'
 
