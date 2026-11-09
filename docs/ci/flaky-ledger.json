@@ -387,6 +387,28 @@
           }
         }
       ]
+    },
+    {
+      "job": "unit",
+      "test": "端到端（Pi）：没有客户端连着时到点跑出会话，模型在任务的回合里调 litch_tasks；客户端回合里调的也由设备答",
+      "status": "active",
+      "events": [
+        {
+          "runId": 42619876586,
+          "attempt": 1,
+          "jobId": 129168950415,
+          "sha": "f74b673c91440208a47eecd818129a1f8cbf89db",
+          "date": "2026-11-09T12:47:05Z",
+          "trigger": "push",
+          "url": "https://github.com/slovx2/litch/actions/runs/42619876586/job/129168950415",
+          "failure": "device 分片在关闭期间收到晚到的引擎消息，ResumeTools.observe → SessionStore.setTools 报 ERR_INVALID_STATE: statement has been finalized；经理安排 I-306 修复。",
+          "evidence": {
+            "kind": "local-rerun",
+            "reference": "local-evidence:i306-flaky-ledger/rerun-proof.json",
+            "note": "从失败SHA f74b673c91440208a47eecd818129a1f8cbf89db 导出未改源码，独立重建device/Pi/Go；2026-11-09 UTC在macOS arm64、Node24.19.0、隔离HOME及回环假模型下，以node --import isolate-process --test --test-concurrency=1 --test-timeout=300000单独执行tasks-e2e.test.mjs，同名用例通过，日志和命令保留于报告。另核对下一SHA 053f9509的CI42620732809/unit job129171884096通过同名用例，此不同SHA结果仅作补充，不冒充同SHA证明。"
+          }
+        }
+      ]
     }
   ],
   "audit": {
