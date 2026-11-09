@@ -155,7 +155,13 @@ test('检出 SHA 不能被调度 SHA 或多份 checkout 猜测替代', () => {
   assert.throws(() => checkoutSha(checkout + checkout.replaceAll(sha, 'b'.repeat(40))))
 })
 
-function fakeApi({ passSha = sha, passLog = '✔ 测试 (1ms)', path = workflow, pages = false } = {}) {
+function fakeApi({
+  passSha = sha,
+  passLog = '✔ 测试 (1ms)',
+  path = workflow,
+  trigger = 'schedule',
+  pages = false,
+} = {}) {
   return (endpoint) => {
     const run = /actions\/runs\/(\d+)\/attempts\/(\d+)$/.exec(endpoint)
     if (run)
@@ -163,7 +169,7 @@ function fakeApi({ passSha = sha, passLog = '✔ 测试 (1ms)', path = workflow,
         id: Number(run[1]),
         run_attempt: Number(run[2]),
         path,
-        event: 'schedule',
+        event: trigger,
         repository: { full_name: repository },
       }
     const jobs = /actions\/runs\/(\d+)\/attempts\/(\d+)\/jobs\?per_page=100&page=(\d+)/.exec(
@@ -191,7 +197,18 @@ function fakeApi({ passSha = sha, passLog = '✔ 测试 (1ms)', path = workflow,
 
 test('GitHub 按指定 attempt 分页，不接受别的工作流', () => {
   assert.equal(loadRun(1, 1, fakeApi({ pages: true })).jobs.length, 2)
-  assert.throws(() => loadRun(1, 1, fakeApi({ path: '.github/workflows/ci.yml' })))
+  assert.throws(() => loadRun(1, 1, fakeApi({ path: '.github/workflows/unrelated.yml' })))
+})
+
+test('CI push 保留真实触发方式，重跑同用例通过前不计入偶发次数', () => {
+  const api = fakeApi({ path: '.github/workflows/ci.yml', trigger: 'push' })
+  const options = { run: '1', job: 'native / checks' }
+  const pending = prepareRecord(options, api)
+  assert.equal(pending.event.trigger, 'push')
+  const data = recordEvent(ledger(), pending)
+  assert.deepEqual(counts(data.cases[0]), { count: 0, pending: 1 })
+  const confirmed = prepareRecord({ ...options, 'pass-run': '2' }, api)
+  assert.deepEqual(counts(recordEvent(data, confirmed).cases[0]), { count: 1, pending: 0 })
 })
 
 test('自动认出唯一用例；同 SHA 的用例通过即可，不要求后续无关用例也绿', () => {

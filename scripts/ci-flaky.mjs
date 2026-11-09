@@ -13,7 +13,7 @@ import {
 } from './ci/flaky-ledger.mjs'
 
 const defaultLedger = fileURLToPath(new URL('../docs/ci/flaky-ledger.json', import.meta.url))
-const help = `Full 偶发失败账（只读 GitHub，不触发重跑、不修改工作流或 issue）
+const help = `Full 偶发失败账（同时记录 CI；只读 GitHub，不触发重跑、不修改工作流或 issue）
   node scripts/ci-flaky.mjs summary
   node scripts/ci-flaky.mjs scan --run ID [--attempt 1] [--job 'native / checks']
   node scripts/ci-flaky.mjs record --run ID --job 'native / checks' --case 'client:projections'
@@ -53,10 +53,10 @@ export function loadRun(runId, attempt, api = github) {
   if (
     run.id !== runId ||
     run.run_attempt !== attempt ||
-    run.path !== workflow ||
+    ![workflow, '.github/workflows/ci.yml'].includes(run.path) ||
     run.repository?.full_name !== repository
   )
-    throw new Error('不是指定仓库的 Full run/attempt')
+    throw new Error('不是指定仓库的 Full 或 CI run/attempt')
   const jobs = []
   for (let page = 1; ; page++) {
     const result = api(`actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100&page=${page}`)
