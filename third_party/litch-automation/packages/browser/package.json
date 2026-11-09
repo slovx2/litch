@@ -1,6 +1,6 @@
 {
   "name": "@litch/browser",
-  "version": "0.38.0",
+  "version": "0.38.1",
   "type": "module",
   "license": "MIT",
   "description": "可嵌入浏览器运行时：语义驱动、CDP、Electron 与导入",
