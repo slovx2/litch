@@ -26,6 +26,28 @@
       "issues": ["https://github.com/slovx2/litch/issues/16"]
     },
     {
+      "job": "gate / tests / native / checks",
+      "test": "工作区：建、读、改、重排、删都在设备层，变了通知所有连接，一个请求都不转给引擎",
+      "status": "active",
+      "events": [
+        {
+          "runId": 42827516748,
+          "attempt": 1,
+          "jobId": 129877721781,
+          "sha": "5a8e742a9d6075f6fcb3994627d349ac99d066e2",
+          "date": "2026-11-10T14:02:49Z",
+          "trigger": "workflow_dispatch",
+          "url": "https://github.com/slovx2/litch/actions/runs/42827516748/job/129877721781",
+          "failure": "adapters:macos的设备工作区测试在created通知断言收到[]，预期两条通知；adapters/report仅上游连带失败。",
+          "evidence": {
+            "kind": "local-rerun",
+            "reference": "local-evidence:release-prep-0.40.0/workspaces-triage/results.json",
+            "note": "2026-11-10 Mac arm64，官方Node24.21.0（tar与官方SHASUMS256核验），候选5a8e742a源码未改、git干净；重编device后，每次独立HOME执行node --test --test-timeout=300000 packages/device/dist/device/test/workspaces.test.mjs，完整文件连续30/30通过，逐次日志及SHA256在results.json；未修改断言/超时。不能由此确认CI失败的具体调度原因。"
+          }
+        }
+      ]
+    },
+    {
       "job": "gate / tests / real-engines / checks",
       "test": "manager-fixture",
       "status": "active",
