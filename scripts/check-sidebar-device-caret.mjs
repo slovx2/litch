@@ -202,7 +202,118 @@ try {
   assert.equal(await has(`${pin} [data-session="s2"]`), false, '箭头仍可收起子树')
   await click(`${pin} [data-session="s1"] > .tree-fold`)
   await until(() => has(`${pin} [data-session="s2"]`), '箭头仍可展开子树')
+  await treeColumns()
   console.log('SIDEBAR_DEVICE_CARET_PASS')
+
+  /** 箭头与记号共用一列：设备树里箭头在项目缩进之内，聚合区不留空列、选中行不画分接线、“N 个子会话”对齐 */
+  async function treeColumns() {
+    await call('Page.navigate', { url: `${base}/test/sidebar-tree-fixture.html?lang=zh-CN` })
+    await until(
+      () => has('[data-projection=recent] [data-session="s4"] > .tree-fold'),
+      '夹具子会话',
+    )
+    await read('window.__sidebarTree.seeded.then(() => true)')
+    if (await has('[data-act=onboard-later]')) await click('[data-act=onboard-later]')
+    const recent = '[data-projection=recent]'
+    await click(`${recent} [data-session="s4"] > .tree-fold`)
+    await until(() => has(`${recent} [data-parent="s4"]`), '最近区展开子树')
+    await click(`${recent} [data-session="s1"] > .ss-row`)
+    for (const skin of ['standard', 'human', 'retro'])
+      for (const theme of ['light', 'dark']) {
+        await read(`(async()=>{
+      window.__litchLook.set(${JSON.stringify({ skin, theme })})
+      await document.fonts.ready
+      await new Promise(resolve => requestAnimationFrame(()=>requestAnimationFrame(resolve)))
+    })()`)
+        const seen = await run(() => {
+          const box = (e) => e.getBoundingClientRect()
+          const mid = (e) => box(e).left + box(e).width / 2
+          const folds = [...document.querySelectorAll('.row-line:has(> .tree-fold)')].map((e) => ({
+            id: e.dataset.session,
+            offset: mid(e.querySelector(':scope > .tree-fold')) - mid(e.querySelector('.st')),
+          }))
+          const local = '.dev-group[data-device="local"]'
+          const project = Math.max(
+            ...[...document.querySelectorAll(`${local} .ws-row .caret-ic`)].map(
+              (e) => box(e).right,
+            ),
+          )
+          // 会话箭头图标的中心在项目箭头图标的右边
+          const deviceFolds = [
+            ...document.querySelectorAll(`${local} .row-line > .tree-fold .caret-ic`),
+          ].map(mid)
+          const tops = [
+            ...document.querySelectorAll(
+              '[data-projection] .tree-node[data-depth="0"] > .row-line > .ss-row, [data-shortcuts] .tree-node[data-depth="0"] > .row-line > .ss-row',
+            ),
+          ].map((row) => ({
+            tick: box(row.querySelector('.dev-tick')).left,
+            tickEnd: box(row.querySelector('.dev-tick')).right,
+            st: box(row.querySelector('.st')).left,
+            title: box(row.querySelector('.title')).left,
+          }))
+          const parent = document.querySelector('[data-projection=recent] [data-session="s4"]')
+          const kid = parent.closest('.tree-node').querySelector('.tree-kids .tree-node')
+          const sum = kid.querySelector(':scope > .tree-kids > .tree-sum')
+          const kidRow = kid.querySelector(':scope > .row-line > .ss-row')
+          const selected = (area) =>
+            getComputedStyle(document.querySelector(`${area} .ss-row.sel`), '::before').content
+          return {
+            folds,
+            project,
+            deviceFolds,
+            tops,
+            sum: sum && {
+              caret: mid(sum.querySelector('.caret-ic')) - (mid(kidRow.querySelector('.st')) + 20),
+              text:
+                box(sum.querySelector('.ell')).left -
+                (box(kidRow.querySelector('.title')).left + 20),
+            },
+            recentSel: selected('[data-projection=recent]'),
+          }
+        })
+        const tag = `${skin}/${theme}`
+        assert.ok(seen.folds.length >= 4, `${tag} 覆盖带子会话的行`)
+        for (const fold of seen.folds)
+          assert.ok(Math.abs(fold.offset) <= 1, `${tag} 箭头和记号同一列：${JSON.stringify(fold)}`)
+        assert.ok(seen.deviceFolds.length >= 2, `${tag} 设备树项目里有带箭头的会话`)
+        for (const left of seen.deviceFolds)
+          assert.ok(
+            left >= seen.project,
+            `${tag} 设备树箭头在项目缩进之内：${left} < ${seen.project}`,
+          )
+        const title = seen.tops[0].title
+        for (const top of seen.tops) {
+          assert.ok(Math.abs(top.title - title) < 1, `${tag} 聚合区标题同列`)
+          assert.ok(top.tickEnd <= top.st, `${tag} 色条不压记号：${JSON.stringify(top)}`)
+          assert.ok(top.title - top.tick <= 28, `${tag} 色条到标题不留空列：${JSON.stringify(top)}`)
+        }
+        assert.ok(seen.sum, `${tag} 有收起的子会话行`)
+        assert.ok(Math.abs(seen.sum.caret) <= 1, `${tag} “N 个子会话”箭头在记号列`)
+        assert.ok(Math.abs(seen.sum.text) <= 1, `${tag} “N 个子会话”文字在标题列`)
+        assert.equal(seen.recentSel, 'none', `${tag} 聚合区选中行不画分接线`)
+      }
+    // 有记号的父会话：平时露记号，鼠标停上去换成箭头
+    const marked = `${recent} [data-session="s1"]`
+    const state = () =>
+      run((s) => {
+        const line = document.querySelector(s)
+        return {
+          fold: getComputedStyle(line.querySelector(':scope > .tree-fold')).opacity,
+          st: getComputedStyle(line.querySelector('.st')).visibility,
+        }
+      }, marked)
+    await call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1200, y: 800 })
+    assert.deepEqual(await state(), { fold: '0', st: 'visible' }, '平时露记号')
+    const point = await run((s) => {
+      const r = document.querySelector(`${s} .title`).getBoundingClientRect()
+      return { x: r.left + 10, y: r.top + r.height / 2 }
+    }, marked)
+    await call('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point })
+    await until(async () => (await state()).fold === '1', '悬停换出箭头')
+    assert.equal((await state()).st, 'hidden', '悬停时记号让位')
+    console.log('箭头与记号同列、设备树箭头在项目缩进内、聚合区无空列与分接线、子会话汇总行对齐')
+  }
 } finally {
   cdp?.ws.close()
   browser.kill()

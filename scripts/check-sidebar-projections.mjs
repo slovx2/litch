@@ -1270,7 +1270,7 @@ try {
     const style = document.createElement('style')
     style.id = 'old-shortcut-layout'
     style.textContent =
-      '.sc-item > .tree-node,.sc-ws > .tree-node,.projection-block.ticked > .tree-node{padding-inline-start:0}'
+      '.sc-item > .tree-node,.sc-ws > .tree-node,.projection-block.ticked > .tree-node{padding-inline-start:0;--tick-at:-5px}'
     document.head.append(style)
   })
   report.beforeAlignment = await alignment()
