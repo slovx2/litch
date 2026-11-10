@@ -542,3 +542,35 @@ test('工作目录的记号：工作区有几个根；没有根可比的不出',
   assert.equal(cwdMark('/work/app/web', ['']), null)
   assert.equal(cwdMark('', roots), null)
 })
+
+test('聚合项目默认收起，明确展开/收起持久化，设备和投影互不影响', async () => {
+  const { groupClosed, NO_DEVICE_FOLDS, toggleFold, readFolds, pruneFolds } = await import(
+    '../src/sidebar/folds.ts'
+  )
+  assert.equal(groupClosed(NO_DEVICE_FOLDS, 'project', true), true)
+  assert.equal(groupClosed(NO_DEVICE_FOLDS, 'project'), false, '普通设备目录默认不变')
+  let state = {}
+  for (const scope of [':shortcuts', ':projection:recent:local', ':projection:unread:local']) {
+    state = toggleFold(state, scope, 'closed', 'project', true)
+    state = readFolds(JSON.parse(JSON.stringify(state)))
+    assert.equal(groupClosed(state[scope], 'project', true), false)
+    assert.equal(groupClosed(state[scope], 'new-project', true), true)
+    state = toggleFold(state, scope, 'closed', 'project', true)
+    assert.equal(groupClosed(readFolds(state)[scope], 'project', true), true)
+  }
+  assert.equal(state.local, undefined)
+  const opened = toggleFold({}, 'local', 'closed', 'project', true)
+  assert.equal(
+    pruneFolds(opened, 'local', { closed: new Set(['project']), folded: new Set() }),
+    opened,
+  )
+  assert.deepEqual(pruneFolds(opened, 'local', { closed: new Set(), folded: new Set() }), {})
+  assert.equal(
+    groupClosed(
+      readFolds({ local: { closed: ['project'], opened: ['project'], folded: [] } }).local,
+      'project',
+      true,
+    ),
+    true,
+  )
+})

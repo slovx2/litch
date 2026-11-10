@@ -1,5 +1,5 @@
 // 手机首页「最近」组的正式页面预览；隔离无头浏览器，先在 apps/mobile 里运行 npm run preview。
-// 查：两台设备的主动操作按时间倒序、跨设备写设备名、按项目聚合、显示更多/收起、短暂查看不进最近、满 5 秒进最近；
+// 查：两台设备的主动操作按时间倒序、跨设备行不重复写设备名、项目默认收起及开合记忆、显示更多/收起、查看时长；
 // 三种皮肤明暗均检查；仅显式设置 LITCH_RECENT_SHOTS 时保存截图。
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -118,19 +118,43 @@ try {
       )
       // 等动作单淡出
       await sleep(500)
+      assert.equal((await recentIds()).length, 0, '按项目聚合后项目初次默认收起')
+      assert.ok(
+        await read(
+          `[...document.querySelectorAll('[data-testid^="recent:project:"]')].every(e=>e.getAttribute('aria-expanded')==='false')`,
+        ),
+      )
       await shot(`recent-project-${skin}-${theme}`)
+      const firstProject = await read(
+        `document.querySelector('[data-testid^="recent:project:"]').dataset.testid`,
+      )
+      await tap(firstProject)
+      assert.ok((await recentIds()).length > 0, '点击项目展开会话')
+      await tap('recent:menu')
+      await tap('recent:menu:project')
+      await tap('recent:menu')
+      await tap('recent:menu:project')
+      assert.equal(
+        await read(
+          `document.querySelector(${JSON.stringify(sel(firstProject))}).getAttribute('aria-expanded')`,
+        ),
+        'true',
+        '切换聚合仍记住手动展开',
+      )
+      await tap(firstProject)
+      assert.equal((await recentIds()).length, 0, '收起后不画会话')
       await tap('recent:menu')
       await tap('recent:menu:project')
     }
 
-  // 跨设备时第二行写设备名；“显示更多 / 收起”；收起整组
+  // 有设备色条的会话不重复写设备名，读屏信息仍保留；“显示更多 / 收起”；收起整组
   await call('Page.navigate', { url: scene({ skin: 'standard', theme: 'light' }) })
   await until(async () => (await recentIds()).length === 3, '三条最近')
   assert.ok(
     await read(
-      `document.querySelector('[data-testid="recent:build:b2"]').innerText.includes('build-01 · ')`,
+      `!document.querySelector('[data-testid="recent:build:b2"]').innerText.includes('build-01 · ')`,
     ),
-    '跨设备时远程设备写设备名',
+    '有设备色条时远程设备名不重复挤占行宽',
   )
   assert.ok(
     await read(

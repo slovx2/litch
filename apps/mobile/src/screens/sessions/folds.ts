@@ -43,8 +43,13 @@ export const subscribeFolds = (listener: () => void) => {
 /** 这台设备上收起了的组和父会话 */
 export const foldsOf = (deviceId: string): DeviceFolds => current()[deviceId] ?? NO_DEVICE_FOLDS
 
-export function toggleFolded(deviceId: string, kind: FoldKind, id: string): void {
-  publish(toggleFold(current(), deviceId, kind, id))
+export function toggleFolded(
+  deviceId: string,
+  kind: FoldKind,
+  id: string,
+  defaultClosed = false,
+): void {
+  publish(toggleFold(current(), deviceId, kind, id, defaultClosed))
 }
 
 /** 只留还在的组和父会话的记录。没有要去掉的就不写 */

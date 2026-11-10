@@ -43,9 +43,10 @@ import {
   onDragChange,
   startDrag,
 } from './drop.ts'
+import { groupClosed } from './folds.ts'
 import { LocalGroupDialog } from './LocalGroupDialog.tsx'
 import { RowMenu } from './RowMenu.tsx'
-import { revealRow } from './reveal.ts'
+import { containsSession, revealRow } from './reveal.ts'
 import { useSidebarReveal } from './reveal-context.ts'
 import { organize, useCovers, useMergedPins, useOrganizer } from './shortcuts.ts'
 import { toggleSidebarFold, useSidebarFolds } from './state.ts'
@@ -440,13 +441,22 @@ function PinnedWorkspace({
   const children = useKey<SessionChildren>(keys.children(deviceId)) ?? NO_CHILDREN
   const folds = useSidebarFolds(SCOPE)
   const key = `${deviceId}\n${workspaceId}`
-  const expanded = !folds.closed.includes(key)
+  const expanded = !groupClosed(folds, key, true)
+  const { request } = useSidebarReveal()
+  const revealed = useRef<unknown>(null)
   const ids = groups?.[workspaceId] ?? NO_IDS
   // 挂在别的会话下面的子会话跟着父会话画，不在项目里单独占一行
   const nested = new Set(
     ids.flatMap((id) => (children[id] ?? []).filter((kid) => ids.includes(kid))),
   )
   const top = ids.filter((id) => !nested.has(id) && !explicit.has(`${deviceId}\n${id}`))
+  useEffect(() => {
+    if (!request || request.deviceId !== deviceId || revealed.current === request) return
+    if (!top.some((id) => containsSession(children, id, request.sessionId))) return
+    // 默认收起不能挡住从搜索/通知来的定位；同一请求只处理一次，之后仍尊重手动收起。
+    revealed.current = request
+    if (!expanded) toggleSidebarFold(SCOPE, 'closed', key, true)
+  }, [request, deviceId, top, children, expanded, key])
   return (
     <div className="sc-ws" data-device={deviceId}>
       {renderWorkspace({
@@ -454,7 +464,7 @@ function PinnedWorkspace({
         workspaceId,
         count: top.length,
         expanded,
-        onToggle: () => toggleSidebarFold(SCOPE, 'closed', key),
+        onToggle: () => toggleSidebarFold(SCOPE, 'closed', key, true),
         place,
       })}
       {expanded

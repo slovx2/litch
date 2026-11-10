@@ -10,6 +10,7 @@ import {
 } from '@litch/core'
 import { useSyncExternalStore } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { groupClosed } from '../../../../../packages/ui/src/sidebar/folds.ts'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Caret } from '../../ui/kit/Icon'
@@ -191,7 +192,7 @@ export function ShortcutWorkspace({
     ids.flatMap((id) => (children[id] ?? []).filter((kid) => ids.includes(kid))),
   )
   const top = ids.filter((id) => !nested.has(id) && !explicit.has(`${deviceId}\n${id}`))
-  const open = !folds.closed.includes(workspaceId)
+  const open = !groupClosed(folds, workspaceId, true)
   const testID = `pins:ws:${deviceId}:${workspaceId}`
   return (
     <>
@@ -202,7 +203,7 @@ export function ShortcutWorkspace({
           .filter(Boolean)
           .join(' · ')}
         testID={testID}
-        onPress={() => toggleFolded(`pins:${deviceId}`, 'closed', workspaceId)}
+        onPress={() => toggleFolded(`pins:${deviceId}`, 'closed', workspaceId, true)}
         onLongPress={() => onMenu(workspace, deviceId)}
         style={({ pressed }) => [
           styles.head,

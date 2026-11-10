@@ -17,12 +17,14 @@ import { type ReactNode, useCallback, useRef, useState, useSyncExternalStore } f
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
 import { markReadScope } from '../../../../../packages/ui/src/app/read.ts'
+import { groupClosed } from '../../../../../packages/ui/src/sidebar/folds.ts'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { ErrorBanner } from '../../ui/kit/controls'
 import { Caret, Icon } from '../../ui/kit/Icon'
 import { Sheet } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
+import { foldsOf, subscribeFolds, toggleFolded } from '../sessions/folds'
 import { useReadMenu } from '../sessions/read-menu'
 import { titleOf } from '../sessions/rows'
 import { FIRST_CHOICES, MORE_STEP } from './recent-settings'
@@ -305,33 +307,66 @@ function RecentBlock({
   const device = useKey<DeviceView>(keys.device(block.deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(block.deviceId))
   const deviceName = useDeviceNote(device, showDevice)
+  const scope = `${kind}:${block.deviceId}`
+  const folds = useSyncExternalStore(subscribeFolds, () => foldsOf(scope))
+  const projectKey = block.workspaceId ?? ':loose'
+  const open = !byProject || !groupClosed(folds, projectKey, true)
   const project = block.workspaceId
     ? (workspaces?.find((entry) => entry.id === block.workspaceId)?.name ?? '')
     : t('workspace.none')
   return (
     <>
       {byProject ? (
-        <Text
-          numberOfLines={1}
+        <Pressable
+          accessibilityRole="button"
+          aria-expanded={open}
+          aria-label={[project, deviceName, t('organizer.count', { count: block.rows.length })]
+            .filter(Boolean)
+            .join(' · ')}
           testID={`${kind}:project:${block.key}`}
-          style={[styles.project, { color: c.ink3, fontFamily: theme.font.mono }]}
+          onPress={() => toggleFolded(scope, 'closed', projectKey, true)}
+          style={({ pressed }) => [
+            styles.project,
+            {
+              minHeight: theme.hit,
+              backgroundColor: pressed ? c.press : c.panel,
+              borderBottomColor: c.line1,
+            },
+          ]}
         >
-          {[project, deviceName].filter(Boolean).join(' · ')}
-        </Text>
+          <View
+            style={[
+              styles.projectWire,
+              { backgroundColor: device ? c.wire[device.wire] : c.line2 },
+            ]}
+          />
+          <View style={styles.chevron}>
+            <Caret open={open} size={12} />
+          </View>
+          <Text
+            numberOfLines={1}
+            style={[styles.grow, { color: c.ink3, fontFamily: theme.font.mono, fontSize: 11 }]}
+          >
+            {[project, deviceName].filter(Boolean).join(' · ')}
+          </Text>
+          <Text style={{ color: c.ink3, fontSize: 11 }}>{block.rows.length}</Text>
+        </Pressable>
       ) : null}
-      {block.rows.map((row) => (
-        <ShortcutSession
-          key={row.sessionId}
-          deviceId={row.deviceId}
-          sessionId={row.sessionId}
-          scope={kind}
-          showDevice={showDevice}
-          testID={kind}
-          at={row.at}
-          onOpen={(summary) => onOpen({ ...row, sessionId: summary.id }, titleOf(summary, t))}
-          onMenu={onMenu}
-        />
-      ))}
+      {open
+        ? block.rows.map((row) => (
+            <ShortcutSession
+              key={row.sessionId}
+              deviceId={row.deviceId}
+              sessionId={row.sessionId}
+              scope={kind}
+              showDevice={showDevice}
+              testID={kind}
+              at={row.at}
+              onOpen={(summary) => onOpen({ ...row, sessionId: summary.id }, titleOf(summary, t))}
+              onMenu={onMenu}
+            />
+          ))
+        : null}
     </>
   )
 }
@@ -354,7 +389,15 @@ const styles = StyleSheet.create({
   chevron: { width: 14, alignItems: 'center' },
   headName: { flexShrink: 1, fontSize: 13, fontWeight: '600' },
   headAction: { width: 44, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
-  project: { paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 4, fontSize: 11 },
+  project: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingLeft: 12,
+    paddingRight: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  projectWire: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3 },
   grow: { flex: 1 },
   empty: { paddingHorizontal: 16, paddingVertical: 14, fontSize: 13 },
   more: {

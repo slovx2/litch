@@ -174,3 +174,20 @@ test('经理、工作线和普通子对话都打开所点会话的详情', () =>
     ])
   }
 })
+
+test('置顶、最近、未读项目默认收起，用户选择跨重载保留且分区隔离', async () => {
+  const { groupClosed, NO_DEVICE_FOLDS } = await import('../../../packages/ui/src/sidebar/folds.ts')
+  const first = await import('../src/screens/sessions/folds.ts?project-fold-first')
+  for (const scope of ['device', 'pins:device', 'recent:device', 'unread:device']) {
+    assert.equal(groupClosed(first.foldsOf(scope), 'project', true), true)
+    first.toggleFolded(scope, 'closed', 'project', true)
+    assert.equal(groupClosed(first.foldsOf(scope), 'project', true), false)
+  }
+  const again = await import('../src/screens/sessions/folds.ts?project-fold-reloaded')
+  assert.equal(groupClosed(again.foldsOf('device'), 'project', true), false)
+  again.toggleFolded('recent:device', 'closed', 'project', true)
+  const third = await import('../src/screens/sessions/folds.ts?project-fold-third')
+  assert.equal(groupClosed(third.foldsOf('recent:device'), 'project', true), true)
+  assert.equal(groupClosed(third.foldsOf('unread:device'), 'project', true), false)
+  assert.equal(groupClosed(NO_DEVICE_FOLDS, 'project'), false)
+})

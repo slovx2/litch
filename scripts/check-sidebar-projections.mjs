@@ -600,6 +600,16 @@ try {
   )
   assert.ok(await run(() => !!document.querySelector('[data-choice="5"] svg')))
   await option('10')
+  await until(async () => {
+    await run(() =>
+      document
+        .querySelectorAll('[data-projection=recent] .ws-row[aria-expanded="false"]')
+        .forEach((e) => {
+          e.click()
+        }),
+    )
+    return (await roots()).length === 10
+  }, '明确展开项目后检查默认条数')
   await until(async () => (await roots()).length === 10, '默认条数设置')
   await click(`${unread} .projection-head .dev-row`)
   await cdp.call('Page.reload')
@@ -761,6 +771,9 @@ try {
     }
   }
   // 新的一份活动记录只含经理与工作线，验证主项归并及跨模式入口。
+  // 这里验证平铺主项；项目现在默认收起，不能依赖新出现的项目自动展开。
+  await click(`${recent} .projection-head .row-more button`)
+  await option('按项目聚合')
   stage('重载活动记录，等待经理与工作线归并')
   await run(() =>
     localStorage.setItem(
@@ -1130,6 +1143,169 @@ try {
     )
     checkpoint('普通子树晚到未读：原位暂留、已读样式、展开保持、树内切换；离开释放：' + leave)
   }
+  assert.deepEqual(errors, [])
+  // 独立的虚构场景：默认收起、记住用户选择，以及三种聚合区的设备色条。
+  stage('聚合项目默认收起与设备色条对齐')
+  await run(() => localStorage.clear())
+  await cdp.call('Page.reload')
+  await until(
+    () =>
+      run(() => !!document.querySelector('.dev-group[data-device=local] [data-workspace=litch]')),
+    '新夹具',
+  )
+  await modules()
+  await run(() => window.__projectionProbe.state.setSidebarWidth(320))
+  const pins = '[data-shortcuts=pins]'
+  const pinnedHead = `${pins} [data-workspace=litch] .ws-row`
+  const pinProject = async () => {
+    await click('.dev-group[data-device=local] [data-workspace=litch] .row-more button')
+    await click('.pick-pop [data-action=pin]')
+    await until(() => run((s) => !!document.querySelector(s), pinnedHead), '虚构置顶项目')
+  }
+  await pinProject()
+  assert.equal(
+    await run((s) => document.querySelector(s).getAttribute('aria-expanded'), pinnedHead),
+    'false',
+  )
+  assert.equal(
+    await run(() => document.querySelectorAll('[data-shortcuts=pins] .sc-ws .ss-row').length),
+    0,
+  )
+  await click(pinnedHead)
+  await until(
+    () => run(() => document.querySelectorAll('[data-shortcuts=pins] .sc-ws .ss-row').length > 0),
+    '展开置顶项目',
+  )
+  await cdp.call('Page.reload')
+  await until(
+    () =>
+      run(() => !!document.querySelector('.dev-group[data-device=local] [data-workspace=litch]')),
+    '重新加载',
+  )
+  await pinProject()
+  assert.equal(
+    await run((s) => document.querySelector(s).getAttribute('aria-expanded'), pinnedHead),
+    'true',
+    '置顶项目展开选择跨重载保留',
+  )
+  await click(pinnedHead)
+  await cdp.call('Page.reload')
+  await until(
+    () =>
+      run(() => !!document.querySelector('.dev-group[data-device=local] [data-workspace=litch]')),
+    '再次加载',
+  )
+  await pinProject()
+  assert.equal(
+    await run((s) => document.querySelector(s).getAttribute('aria-expanded'), pinnedHead),
+    'false',
+    '置顶项目收起选择跨重载保留',
+  )
+  await modules()
+  const projectX = {}
+  await run(() =>
+    window.__projectionProbe.actions.requestOpenSession({ deviceId: 'local', sessionId: 's1' }),
+  )
+  await until(
+    () =>
+      run((s) => document.querySelector(s).getAttribute('aria-expanded') === 'true', pinnedHead),
+    '外部定位展开置顶项目',
+  )
+  await click(pinnedHead)
+  await run(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+  assert.equal(
+    await run((s) => document.querySelector(s).getAttribute('aria-expanded'), pinnedHead),
+    'false',
+    '定位后仍可手动收起',
+  )
+  for (const kind of ['recent', 'unread']) {
+    const group = `[data-projection=${kind}]`
+    await click(`${group} .projection-head .row-more button`)
+    await click('.pick-pop [data-action=project]')
+    await until(() => run((s) => !!document.querySelector(s + ' .ws-row'), group), '聚合项目标题')
+    assert.ok(
+      await run(
+        (s) =>
+          [...document.querySelectorAll(s + ' .ws-row')].every(
+            (e) => e.getAttribute('aria-expanded') === 'false',
+          ),
+        group,
+      ),
+      `${kind}项目初次默认收起`,
+    )
+    assert.equal(await run((s) => document.querySelectorAll(s + ' .ss-row').length, group), 0)
+    await click(`${group} .ws-row`)
+    await until(
+      () => run((s) => document.querySelectorAll(s + ' .ss-row').length > 0, group),
+      '展开聚合项目',
+    )
+    projectX[kind] = await run(
+      (s) => document.querySelector(s + ' .ws-row .dev-tick').getBoundingClientRect().x,
+      group,
+    )
+    await click(`${group} .projection-head .row-more button`)
+    await click('.pick-pop [data-action=project]')
+  }
+  const alignment = () =>
+    run(() => {
+      const head = document.querySelector('[data-shortcuts=pins] .ws-row .dev-tick')
+      return {
+        project: head.getBoundingClientRect().x,
+        groups: [
+          '[data-shortcuts=pins]',
+          '[data-projection=recent]',
+          '[data-projection=unread]',
+        ].map((s) => ({
+          group: s,
+          ticks: [
+            ...document.querySelectorAll(
+              s + ' .tree-node[data-depth="0"] > .row-line .ss-row > .dev-tick',
+            ),
+          ].map((e) => e.getBoundingClientRect().x),
+        })),
+      }
+    })
+  // 临时还原旧的会话树缩进，直接记录旧布局的偏差；不改产品数据。
+  await run(() => {
+    const style = document.createElement('style')
+    style.id = 'old-shortcut-layout'
+    style.textContent =
+      '.sc-item > .tree-node,.sc-ws > .tree-node,.projection-block.ticked > .tree-node{padding-inline-start:0}'
+    document.head.append(style)
+  })
+  report.beforeAlignment = await alignment()
+  assert.ok(
+    report.beforeAlignment.groups.every(
+      (g) => g.ticks.length && g.ticks.some((x) => report.beforeAlignment.project - x > 20),
+    ),
+  )
+  await screenshot('sidebar-groups-before.png')
+  await run(() => document.getElementById('old-shortcut-layout').remove())
+  for (const skin of ['standard', 'human', 'retro']) {
+    for (const theme of ['light', 'dark']) {
+      await run((skin, theme) => window.__litchLook.set({ skin, theme }), skin, theme)
+      await run(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+      await click(pinnedHead)
+      const measured = await alignment()
+      assert.ok(
+        measured.groups.every(
+          (g) => g.ticks.length && g.ticks.every((x) => Math.abs(x - measured.project) < 1),
+        ),
+        JSON.stringify({ skin, theme, measured }),
+      )
+      assert.ok(
+        await run(() =>
+          [...document.querySelectorAll('.sc-body,.projection-body')].every(
+            (e) => e.scrollWidth <= e.clientWidth + 1,
+          ),
+        ),
+      )
+      report.checks.push({ skin, theme, sidebarGroupAlignment: measured })
+      await click(pinnedHead)
+      await screenshot(`sidebar-groups-${skin}-${theme}.png`)
+    }
+  }
+  checkpoint('置顶项目默认收起且用户开合跨重载保留；最近/未读项目默认收起；三组色条六套外观对齐')
   assert.deepEqual(errors, [])
   report.success = true
 } catch (error) {

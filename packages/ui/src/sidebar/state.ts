@@ -175,8 +175,13 @@ export const useSidebarFolds = (deviceId: string): DeviceFolds =>
   useSyncExternalStore(subscribe, () => sidebar.folds[deviceId] ?? NO_DEVICE_FOLDS)
 
 /** 收起或展开一个组（closed）、一个父会话的子会话（folded） */
-export function toggleSidebarFold(deviceId: string, kind: FoldKind, id: string): void {
-  publish({ ...sidebar, folds: toggleFold(sidebar.folds, deviceId, kind, id) })
+export function toggleSidebarFold(
+  deviceId: string,
+  kind: FoldKind,
+  id: string,
+  defaultClosed = false,
+): void {
+  publish({ ...sidebar, folds: toggleFold(sidebar.folds, deviceId, kind, id, defaultClosed) })
 }
 
 /** 只留还在的组和父会话的记录（keep 见 folds.ts 的 foldsKeep）。没有要去掉的就不写 */

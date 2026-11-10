@@ -21,7 +21,11 @@ import { FlashList, type ListRenderItem } from '@shopify/flash-list'
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
-import { foldsKeep, foldsSettled } from '../../../../../packages/ui/src/sidebar/folds.ts'
+import {
+  foldsKeep,
+  foldsSettled,
+  groupClosed,
+} from '../../../../../packages/ui/src/sidebar/folds.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -72,9 +76,18 @@ export function SessionsScreen({ navigation, route }: Props) {
   const organizable = device?.organizable === true
   const catalogUnread = useKey<string[]>(keys.catalogUnread(deviceId)) ?? []
   const canMenu = online || organizable || catalogUnread.length > 0
-  /** 收起来的组（collapsed）和收起了子会话的父会话（folded），记在手机上（folds.ts）。没记着的展开 */
+  /** 开合记在手机上；普通目录默认展开，置顶项目默认收起。 */
   const folds = useSyncExternalStore(subscribeFolds, () => foldsOf(deviceId))
-  const collapsed = useMemo(() => new Set(folds.closed), [folds.closed])
+  const collapsed = useMemo(
+    () =>
+      new Set([
+        ...folds.closed,
+        ...workspaces
+          .filter((workspace) => workspace.pinned && groupClosed(folds, workspace.id, true))
+          .map((workspace) => workspace.id),
+      ]),
+    [folds, workspaces],
+  )
   const folded = useMemo(() => new Set(folds.folded), [folds.folded])
   const [archivedOpen, setArchivedOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -148,8 +161,14 @@ export function SessionsScreen({ navigation, route }: Props) {
     [],
   )
   const toggleGroup = useCallback(
-    (key: string) => toggleFolded(deviceId, 'closed', key),
-    [deviceId],
+    (key: string) =>
+      toggleFolded(
+        deviceId,
+        'closed',
+        key,
+        workspaces.some((workspace) => workspace.id === key && workspace.pinned),
+      ),
+    [deviceId, workspaces],
   )
   const newIn = useCallback(
     (head: GroupHead) =>

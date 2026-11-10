@@ -52,6 +52,13 @@
   inset-inline-start: -5px;
   margin-inline: 0;
 }
+/* 项目色条在 4px 内边距、12px 箭头和 6px 间距之后。整个会话树一起缩进，
+   把行外 5px 的色条对齐到同一列，并保留子会话相对父项的缩进与箭头热区。 */
+.sc-item > .tree-node,
+.sc-ws > .tree-node,
+.projection-block.ticked > .tree-node {
+  padding-inline-start: calc(15px + 12px * var(--fs));
+}
 /* 本机组里另有几个在置顶区：一行淡字，不占按钮 */
 .sc-note {
   padding: 2px 6px 4px 28px;

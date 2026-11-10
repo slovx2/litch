@@ -75,7 +75,7 @@ import {
   startDrag,
 } from './drop.ts'
 import { dropNativeChildren, keepSessions, keptAnyway, workspaceShown } from './filter.ts'
-import { foldsKeep, foldsSettled } from './folds.ts'
+import { foldsKeep, foldsSettled, groupClosed } from './folds.ts'
 import { HarnessFilter } from './HarnessFilter.tsx'
 import { DeviceInfo, SessionInfo, WorkspaceInfo } from './InfoCards.tsx'
 import { LocalGroupDialog } from './LocalGroupDialog.tsx'
@@ -1024,8 +1024,8 @@ function ProjectedDeviceBlock({
   if (!device) return null
   const workspace = workspaces.find((entry) => entry.id === block.workspaceId)
   const projectKey = block.workspaceId ?? LOOSE
-  const expanded = !byProject || !folds.closed.includes(projectKey)
-  const toggle = () => toggleSidebarFold(scope, 'closed', projectKey)
+  const expanded = !byProject || !groupClosed(folds, projectKey, true)
+  const toggle = () => toggleSidebarFold(scope, 'closed', projectKey, true)
   const add =
     device.connection === 'online' ? (
       <button

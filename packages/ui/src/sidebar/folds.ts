@@ -1,5 +1,5 @@
 // 会话列表里收起了什么，按设备记：收起的组（closed：设备那一行是 ''，其余的键和 SessionGroups 的一样），
-// 和收起了子会话的父会话（folded）。没记着的都是展开的，新出现的父会话、组也就照旧展开。
+// 和收起了子会话的父会话（folded）。普通目录默认展开；聚合项目默认收起，opened 记用户明确展开的项目。
 // 只管数，不碰存储：桌面侧栏记在 litch.sidebar（state.ts），手机记在自己的文件里（apps/mobile 的 sessions/folds.ts）。
 // 会话删了、归档了，工作区、组删了，对应的记录在设备的会话目录对过账之后清掉（pruneFolds），免得越记越多。
 import type { DeviceView, SessionGroups } from '@litch/core'
@@ -7,12 +7,13 @@ import type { DeviceView, SessionGroups } from '@litch/core'
 export interface DeviceFolds {
   closed: readonly string[]
   folded: readonly string[]
+  opened?: readonly string[]
 }
 
-/** 设备标识 → 这台设备上收起了的。什么都没收起的设备不在里面 */
+/** 设备或投影标识 → 对应的开合记录。没有任何记录时不保留这一项。 */
 export type Folds = Readonly<Record<string, DeviceFolds>>
 
-export type FoldKind = keyof DeviceFolds
+export type FoldKind = 'closed' | 'folded'
 
 export const NO_FOLDS: Folds = {}
 export const NO_DEVICE_FOLDS: DeviceFolds = { closed: [], folded: [] }
@@ -28,9 +29,15 @@ export function readFolds(raw: unknown): Folds {
   const folds: Record<string, DeviceFolds> = {}
   for (const [deviceId, entry] of Object.entries(raw)) {
     if (!entry || typeof entry !== 'object') continue
-    const { closed, folded } = entry as Partial<Record<FoldKind, unknown>>
-    const next = { closed: ids(closed), folded: ids(folded) }
-    if (next.closed.length > 0 || next.folded.length > 0) folds[deviceId] = next
+    const { closed, folded, opened } = entry as Partial<Record<keyof DeviceFolds, unknown>>
+    const explicitOpen = ids(opened).filter((id) => !ids(closed).includes(id))
+    const next = {
+      closed: ids(closed),
+      folded: ids(folded),
+      ...(explicitOpen.length ? { opened: explicitOpen } : {}),
+    }
+    if (next.closed.length > 0 || next.folded.length > 0 || explicitOpen.length > 0)
+      folds[deviceId] = next
   }
   return folds
 }
@@ -38,12 +45,36 @@ export function readFolds(raw: unknown): Folds {
 const withDevice = (folds: Folds, deviceId: string, next: DeviceFolds): Folds => {
   const rest = { ...folds }
   delete rest[deviceId]
-  return next.closed.length === 0 && next.folded.length === 0 ? rest : { ...rest, [deviceId]: next }
+  return next.closed.length === 0 && next.folded.length === 0 && !next.opened?.length
+    ? rest
+    : { ...rest, [deviceId]: next }
 }
 
+/** 同一份开合记录支持两种默认值；明确收起优先，明确展开不会被默认收起覆盖。 */
+export const groupClosed = (entry: DeviceFolds, id: string, defaultClosed = false): boolean =>
+  entry.closed.includes(id) || (defaultClosed && !entry.opened?.includes(id))
+
 /** 收起的展开，展开的收起 */
-export function toggleFold(folds: Folds, deviceId: string, kind: FoldKind, id: string): Folds {
+export function toggleFold(
+  folds: Folds,
+  deviceId: string,
+  kind: FoldKind,
+  id: string,
+  defaultClosed = false,
+): Folds {
   const entry = folds[deviceId] ?? NO_DEVICE_FOLDS
+  if (kind === 'closed' && defaultClosed) {
+    const shut = groupClosed(entry, id, true)
+    const opened = (entry.opened ?? []).filter((other) => other !== id)
+    const closed = entry.closed.filter((other) => other !== id)
+    if (shut) opened.push(id)
+    else closed.push(id)
+    return withDevice(folds, deviceId, {
+      closed,
+      folded: entry.folded,
+      ...(opened.length ? { opened } : {}),
+    })
+  }
   const list = entry[kind]
   const next = list.includes(id) ? list.filter((other) => other !== id) : [...list, id]
   return withDevice(folds, deviceId, { ...entry, [kind]: next })
@@ -59,8 +90,14 @@ export function pruneFolds(
   if (!entry) return folds
   const closed = entry.closed.filter((id) => keep.closed.has(id))
   const folded = entry.folded.filter((id) => keep.folded.has(id))
-  if (closed.length === entry.closed.length && folded.length === entry.folded.length) return folds
-  return withDevice(folds, deviceId, { closed, folded })
+  const opened = entry.opened?.filter((id) => keep.closed.has(id))
+  if (
+    closed.length === entry.closed.length &&
+    folded.length === entry.folded.length &&
+    opened?.length === entry.opened?.length
+  )
+    return folds
+  return withDevice(folds, deviceId, { closed, folded, ...(opened?.length ? { opened } : {}) })
 }
 
 /**

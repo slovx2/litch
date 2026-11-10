@@ -95,6 +95,8 @@ After you pick one, the composer shows the mention as a session chip (icon and t
 ## 侧栏「未读 / 最近」
 
 桌面「对话」视图在各设备前显示「未读」「最近」，两组可独立收起。
+桌面和手机在「最近」「未读」按项目聚合时，项目初次出现默认收起。桌面「置顶」里的项目、手机设备列表里的置顶项目也默认收起。点击项目标题展开或收起，选择保存在当前客户端，重开后保留；不同设备和分组分别记忆。直属会话与项目行的设备色条按同一列对齐。
+Projects start collapsed in Pinned and in Recent or Unread when grouped by project. On mobile this also applies to pinned projects inside a device's session list. Tap a project heading to expand or collapse it; this client remembers the choice separately for each device and group, including after reopening. Device markers on standalone conversation and project rows align in the same column.
 点击会话时只高亮实际点击的那一行；同一会话在其他投影和对话树中的副本不高亮。上下方向键与读屏当前项跟随这一行。
 对话与经理是两棵导航树，右侧只显示最后点开的会话。切树不换会话、不关闭侧面板或看板，也不取消正在等待身份确认的打开；再点另一个会话才替换上次选择。两棵树各自记住行来源，切回同一会话时不会把最近或未读中的选中行移到设备树。
 Chat and Managers are navigation trees. The content follows the last conversation you opened. Switching trees keeps the conversation, panels and pending open request. Selecting another conversation replaces the previous request. Each tree preserves the selected row's source.
