@@ -45,6 +45,8 @@ import {
 } from './drop.ts'
 import { groupClosed } from './folds.ts'
 import { LocalGroupDialog } from './LocalGroupDialog.tsx'
+import { MoreRows } from './MoreRows.tsx'
+import { MORE_ROWS, moreToReveal, pageRows } from './paging.ts'
 import { RowMenu } from './RowMenu.tsx'
 import { containsSession, revealRow } from './reveal.ts'
 import { useSidebarReveal } from './reveal-context.ts'
@@ -93,7 +95,7 @@ interface ShortcutsProps {
 /** 快捷区里子会话、项目收起的记录（和投影一样默认收起子会话） */
 const SCOPE = ':shortcuts'
 /** 每一层子会话往里缩多少（和 Sidebar.tsx 的 INDENT 一致） */
-const INDENT = 20
+const INDENT = 18
 const NO_CHILDREN: SessionChildren = {}
 const NO_IDS: readonly string[] = []
 
@@ -450,13 +452,19 @@ function PinnedWorkspace({
     ids.flatMap((id) => (children[id] ?? []).filter((kid) => ids.includes(kid))),
   )
   const top = ids.filter((id) => !nested.has(id) && !explicit.has(`${deviceId}\n${id}`))
+  // 和设备树的项目一样分页：点“显示更多”多出来的个数，只记在这一处、这一次打开里
+  const [more, setMore] = useState(0)
+  const page = pageRows(top, more)
   useEffect(() => {
     if (!request || request.deviceId !== deviceId || revealed.current === request) return
-    if (!top.some((id) => containsSession(children, id, request.sessionId))) return
-    // 默认收起不能挡住从搜索/通知来的定位；同一请求只处理一次，之后仍尊重手动收起。
+    const index = top.findIndex((id) => containsSession(children, id, request.sessionId))
+    if (index < 0) return
+    // 默认收起、分页都不能挡住从搜索/通知来的定位；同一请求只处理一次，之后仍尊重手动收起。
     revealed.current = request
     if (!expanded) toggleSidebarFold(SCOPE, 'closed', key, true)
-  }, [request, deviceId, top, children, expanded, key])
+    const need = moreToReveal(index)
+    if (need > more) setMore(need)
+  }, [request, deviceId, top, children, expanded, key, more])
   return (
     <div className="sc-ws" data-device={deviceId}>
       {renderWorkspace({
@@ -467,8 +475,9 @@ function PinnedWorkspace({
         onToggle: () => toggleSidebarFold(SCOPE, 'closed', key, true),
         place,
       })}
-      {expanded
-        ? top.map((id) => (
+      {expanded ? (
+        <>
+          {page.visible.map((id) => (
             <SessionTree
               key={id}
               deviceId={deviceId}
@@ -478,8 +487,14 @@ function PinnedWorkspace({
               origin={{ kind: 'pins' }}
               render={renderSession}
             />
-          ))
-        : null}
+          ))}
+          <MoreRows
+            page={page}
+            onMore={() => setMore(more + MORE_ROWS)}
+            onLess={() => setMore(0)}
+          />
+        </>
+      ) : null}
     </div>
   )
 }

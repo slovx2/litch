@@ -34,6 +34,7 @@
 /* 最近、未读：和置顶区一样每行行首一个设备色块，不再画整块的竖线 */
 .projection-block.ticked {
   border-inline-start: none;
+  margin-block: 1px;
   padding-inline-start: 0;
 }
 .projection-empty {

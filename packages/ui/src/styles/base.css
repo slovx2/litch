@@ -205,7 +205,8 @@ svg.ic.s14 {
   color: var(--err);
 }
 /* 经理会话：记号列里多一个细框（::after），状态记号照常画在框里，叠在同一格。
-   侧栏经理一节和“未读 / 最近”里的经理主项同一画法，不占宽、不加行高 */
+   侧栏经理一节和“未读 / 最近”里的经理主项同一画法，不占宽、不加行高。
+   框比记号列窄 2·fs（12），左右各让出 1·fs：聚合区里不贴色条、也不贴标题，标题列不动 */
 .st.mgr::before,
 .st.mgr::after {
   grid-area: 1 / 1;
@@ -213,8 +214,8 @@ svg.ic.s14 {
 .st.mgr::after {
   content: "";
   box-sizing: border-box;
-  width: calc(14px * var(--fs));
-  height: calc(14px * var(--fs));
+  width: calc(12px * var(--fs));
+  height: calc(12px * var(--fs));
   border: 1px solid var(--ink-3);
   border-radius: var(--r1);
 }

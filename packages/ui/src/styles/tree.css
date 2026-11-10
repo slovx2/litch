@@ -633,16 +633,16 @@ button.sysm-from {
 }
 
 /* ---------- 侧栏里的嵌套 ---------- */
-/* 子会话往里缩得比工作区下面的会话多一截（和 Sidebar.tsx 的 INDENT 一致），一眼看得出不是平级的 */
+/* 子会话往里缩一个记号加间距（和 Sidebar.tsx、Shortcuts.tsx 的 INDENT 一致）：子会话的记号落在父会话标题那一列 */
 .tree-kids {
   position: relative;
-  padding-left: 20px;
+  padding-left: 18px;
 }
 /* 一根竖线从父会话的状态点下面拉下来，把子会话和父会话连起来。用实线、深一档，淡了分不清层级 */
 .tree-kids::before {
   content: "";
   position: absolute;
-  left: 19px;
+  left: calc(var(--row-lead, 12px) + 7px * var(--fs));
   top: 0;
   bottom: 6px;
   border-left: 1px solid var(--ink-3);
@@ -653,10 +653,10 @@ button.sysm-from {
 .tree-sum {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
   height: round(calc(22px * var(--fs)), 1px);
-  padding: 0 6px 0 12px;
+  padding: 0 6px 0 var(--row-lead, 12px);
   border: 0;
   border-radius: var(--r1);
   background: none;
@@ -670,22 +670,27 @@ button.sysm-from {
   color: var(--ink);
   background: var(--hover);
 }
+/* 箭头占满记号列（14 宽），文字落在子会话标题那一列 */
 .tree-sum .caret-ic {
-  width: 10px;
-  height: 10px;
+  flex: none;
+  width: calc(10px * var(--fs));
+  height: calc(10px * var(--fs));
+  margin-inline: calc(2px * var(--fs));
 }
 /* 选中的子会话：连到设备竖线上的那一小段跨过缩进 */
 .tree-kids .ss-row.sel::before {
   left: calc(-10px - var(--indent, 0px));
   width: calc(10px + var(--indent, 0px));
 }
-/* 父会话行首左边的小箭头：收起、展开下面的子会话。压在行的左边距里，不挤开状态点 */
+/* 父会话的小箭头：收起、展开下面的子会话。和状态记号共用记号列（.ss-row 行首内边距 --row-lead 之后那一格），
+   行首不另留一列：有无箭头、有无记号，标题都在同一列；设备树里箭头落在项目缩进之内。
+   没有记号的父会话一直画箭头；有记号的平时画记号，鼠标停在这一行或键盘落在箭头上时换成箭头 */
 .tree-fold {
   position: absolute;
-  left: 0;
+  left: var(--row-lead, 12px);
   top: 50%;
   transform: translateY(-50%);
-  width: calc(12px * var(--fs));
+  width: calc(14px * var(--fs));
   height: calc(18px * var(--fs));
   padding: 0;
   display: grid;
@@ -703,6 +708,19 @@ button.sysm-from {
 .tree-fold .caret-ic {
   width: calc(10px * var(--fs));
   height: calc(10px * var(--fs));
+}
+.row-line:has(> .ss-row > .st:is(.run, .wait, .err, .bg, .unread, .mgr)) > .tree-fold {
+  opacity: 0;
+}
+.row-line:has(> .ss-row > .st:is(.run, .wait, .err, .bg, .unread, .mgr)):is(
+    :hover,
+    :has(> .tree-fold:focus-visible)
+  )
+  > .tree-fold {
+  opacity: 1;
+}
+:where(.row-line:has(> .tree-fold):is(:hover, :has(> .tree-fold:focus-visible))) > .ss-row > .st {
+  visibility: hidden;
 }
 
 /* ---------- 派一个子会话 ---------- */

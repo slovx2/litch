@@ -574,3 +574,35 @@ test('聚合项目默认收起，明确展开/收起持久化，设备和投影�
     true,
   )
 })
+
+const { FIRST_ROWS, MORE_ROWS, moreToReveal, pageRows } = await import('../src/sidebar/paging.ts')
+
+test('分页：先露出前几个，显示更多每次多一批，只剩一个时直接全露', () => {
+  const ids = Array.from({ length: 12 }, (_, index) => `s${index}`)
+  assert.deepEqual(pageRows(ids, 0), {
+    visible: ids.slice(0, FIRST_ROWS),
+    hidden: 12 - FIRST_ROWS,
+    shrinkable: false,
+  })
+  // 5 + 10 盖过了 12：全露，能收起
+  assert.deepEqual(pageRows(ids, MORE_ROWS), { visible: ids, hidden: 0, shrinkable: true })
+  // 6 个时第 6 个不值得一个按钮
+  assert.deepEqual(pageRows(ids.slice(0, 6), 0), {
+    visible: ids.slice(0, 6),
+    hidden: 0,
+    shrinkable: false,
+  })
+  // 选中、等人、未读的超出这一页也露出，不算进“还有 N 个”
+  const page = pageRows(ids, 0, FIRST_ROWS, (id) => id === 's9')
+  assert.deepEqual(page.visible, [...ids.slice(0, FIRST_ROWS), 's9'])
+  assert.equal(page.hidden, 12 - FIRST_ROWS - 1)
+})
+
+test('分页：定位到第几行要多露出几个', () => {
+  assert.equal(moreToReveal(0), 0)
+  assert.equal(moreToReveal(FIRST_ROWS - 1), 0)
+  assert.equal(moreToReveal(11), 12 - FIRST_ROWS)
+  // 多露出这么多以后，那一行确实在页里
+  const ids = Array.from({ length: 30 }, (_, index) => `s${index}`)
+  assert.ok(pageRows(ids, moreToReveal(20)).visible.includes('s20'))
+})

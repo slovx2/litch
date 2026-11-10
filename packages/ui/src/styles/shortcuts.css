@@ -45,19 +45,32 @@
 .ws-row > .dev-tick {
   margin-inline-start: 0;
 }
-/* 色块放在列表已有的 8px 外边距内，给行首的展开按钮留完整热区。
-   不参与行内排版：有无色块或箭头都不改变状态点、标题和父子缩进的位置。 */
+/* 色块不参与行内排版：有无色块都不改变状态点、标题和父子缩进的位置。
+   默认画在行外，聚合区与经理一节画在行首内边距里、状态记号前面。 */
 .ss-row > .dev-tick {
   position: absolute;
-  inset-inline-start: -5px;
+  inset-inline-start: var(--tick-at, -5px);
   margin-inline: 0;
 }
-/* 项目色条在 4px 内边距、12px 箭头和 6px 间距之后。整个会话树一起缩进，
-   把行外 5px 的色条对齐到同一列，并保留子会话相对父项的缩进与箭头热区。 */
+/* 项目色条在 4px 内边距、12px 箭头和 6px 间距之后（x = 18 + 12·fs）。会话树缩进到行首 5px 的色块
+   正好落在这一列；行首内边距收到 10，色块和记号（展开箭头共用这一列，tree.css 的 .tree-fold）之间只隔 2px。 */
 .sc-item > .tree-node,
 .sc-ws > .tree-node,
+.mg-sidebar-manager > .tree-node,
 .projection-block.ticked > .tree-node {
-  padding-inline-start: calc(15px + 12px * var(--fs));
+  --tick-at: 5px;
+  --row-lead: 10px;
+  padding-inline-start: calc(5px + 12px * var(--fs));
+}
+/* 置顶项目的“显示更多”：和设备树里一样，起点在会话标题左边 2px（树缩进 + 行首 10 + 记号 14 + 4 − 2） */
+.sc-ws > .ss-more {
+  padding-inline-start: calc(5px + 12px * var(--fs) + 26px);
+}
+/* 聚合区和经理一节没有设备竖线：选中行不画连到竖线的分接线，免得和色块叠成十字 */
+.sc-body .ss-row.sel::before,
+.projection-block .ss-row.sel::before,
+.mg-sidebar-manager .ss-row.sel::before {
+  content: none;
 }
 /* 本机组里另有几个在置顶区：一行淡字，不占按钮 */
 .sc-note {
@@ -65,6 +78,14 @@
   font-size: calc(11px * var(--fs));
 }
 /* 画不了的成员（未加载、已删除、设备没了）：一行占位，只能移出 */
+/* 没有状态记号，标题照样让出记号列，和别的会话行同列 */
+.sc-item > .sc-ghost {
+  --tick-at: 5px;
+  padding-inline-start: calc(5px + 12px * var(--fs));
+}
+.sc-item > .sc-ghost > .ss-row {
+  padding-inline-start: calc(14px + 14px * var(--fs));
+}
 .sc-ghost .ss-row:disabled {
   cursor: default;
   opacity: 1;
