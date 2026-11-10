@@ -76,7 +76,7 @@ const executor = createBrowserExecutor({
 
 1. `createPasswordStore({ file, cipher })` 建自己的密码库；文件路径与加密器显式传入。密码明文只在可信主进程中短暂使用，不进工具结果。
 2. `createSignIns`、`createSavePrompts` 建卡片状态。可信 UI 订阅并回答；账户编号只在当次卡片有效。若接手机，必须由宿主验签与验证设备身份。
-3. `createHandover({ host, signIns, ... })` 组装手动登录交接、清框和重载；传给工具 executor 的 `handover`。具体依赖见导出的 `HandoverOptions`。未装 handover 时登录工具返回不支持，不会改用模型填密码。
+3. `createHandover({ host, signIns, ... })` 组装手动登录交接、清框和重载；传给工具 executor 的 `handover`。具体依赖见导出的 `HandoverOptions`。任务已有可用凭据时，代理可用输入工具直接登录；只有缺少凭据或需要用户本人操作时才请求交接。未装 handover 时登录交接工具返回不支持。
 4. `installAutofill(store, prompts, menuWords?)` 安装网页 IPC 与原生菜单；第三个参数可返回宿主自己的标题和空用户名文案。默认保留 Litch 文案。当前每个 Electron 主进程只安装一次密码服务，并使用一个浏览器标签宿主；不要为不同密码库重复注册同名 IPC。纯页面分区可独立创建与销毁。
 5. `createImporter` 完全注入 `env`、reader、CookieJar、密码 sink、状态 book 和日志。`assembleImporter` 是采用 `userData/browser` 状态布局的便捷组装；需要其他布局时使用 `createImportStateBook(file)` 和 `createImporter`。导入只能从用户明确选择的资料读取，包不会在 import 时自动扫描个人目录。
 

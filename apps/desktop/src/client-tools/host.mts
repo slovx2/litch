@@ -106,7 +106,7 @@ export function createClientToolHost(
         id,
         response: clientToolFailure(
           'failed',
-          'Sign-in is required and has not been completed. Full access does not wait for user login. No tab was frozen. Use another authorized method, such as an API or configured credentials, or report that the user must sign in and retry. Never ask for passwords or one-time codes in chat.',
+          'Sign-in is required and has not been completed. Full access does not wait for user login. No tab was frozen. Sign in directly if authorized credentials are available, including those provided in the task or chat; otherwise use an authorized API or report that the user must sign in and retry.',
         ),
       })
       return

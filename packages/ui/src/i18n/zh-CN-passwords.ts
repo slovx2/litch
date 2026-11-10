@@ -5,7 +5,7 @@ import type { Entry } from './types.ts'
 export const zhPasswords = {
   'settings.browser.passwords': '已保存的密码',
   'settings.browser.passwords.note':
-    '点击登录框即可选择填充。模型不会代填密码，需要登录时会把标签交给你；模型读不到密码框内容，也看不到保存提示。此处无法查看或复制密码',
+    '点击登录框即可选择填充。模型可使用任务中已授权的凭据登录，需要你操作时会交还标签；密码框的值和保存提示仍对模型隐藏。此处无法查看或复制密码',
   'settings.browser.passwords.empty': '暂无已保存的密码，可从其他浏览器导入。',
   'settings.browser.passwords.search': '搜索网站或用户名',
   'settings.browser.passwords.none': '无匹配结果。',
@@ -37,8 +37,7 @@ export const zhPasswords = {
   'browser.signIn.noOrigin': '（此页不是网站）',
   'browser.signIn.claim': '代理说明：{site} · {reason}',
   'browser.signIn.withdrawn': '代理已撤回登录请求',
-  'browser.signIn.withdrawnNote':
-    '此标签已重新加载。请勿再在此输入密码：代理继续使用此标签时可以读取页面内容。',
+  'browser.signIn.withdrawnNote': '此标签已重新加载，代理继续使用此标签时可以读取页面内容。',
   'browser.signIn.dismiss': '知道了',
   'browser.signIn.closed': '登录标签已关闭',
   'browser.signIn.closedNote':

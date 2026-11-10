@@ -22,7 +22,9 @@ void app
   .then(async () => {
     const server = createServer((_request, response) => {
       response.setHeader('content-type', 'text/html')
-      response.end('<title>Host injection</title><button>Owned fixture</button>')
+      response.end(
+        '<title>Host injection</title><button>Owned fixture</button><label>Nebula password<input id="password" type="password" autocomplete="current-password"></label><label>Nebula code<input id="code" autocomplete="one-time-code"></label><label>Nebula card<input id="card" autocomplete="cc-number"></label>',
+      )
     })
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
     const address = server.address()
@@ -63,6 +65,37 @@ void app
     const snapshot = await driver.snapshot(id, false, operation)
     assert.match(snapshot.text, /Owned fixture/)
     await driver.act(snapshot.observation, { kind: 'press', key: 'Tab' }, operation)
+    // 只用虚构值验真实 password/验证码/支付输入框；类型规则不应替任务授权增加限制。
+    for (const [field, label, text] of [
+      ['password', 'Nebula password', 'example-nebula-secret'],
+      ['code', 'Nebula code', '123456'],
+      ['card', 'Nebula card', '4111111111111111'],
+    ]) {
+      const observed = await driver.snapshot(id, false, operation)
+      const line = observed.text
+        .split('\n')
+        .find((line) => line.includes(`"${label}"`) && line.includes('[ref='))
+      const ref = line?.match(/\[ref=([^\]]+)\]/)?.[1]
+      assert.ok(ref, `${label} 必须能获得输入引用`)
+      await driver.act(
+        observed.observation,
+        { kind: 'type', target: { kind: 'element', ref }, text, clear: true, submit: false },
+        operation,
+      )
+      const page = first.page(id)
+      assert.ok(page)
+      const result = await page.cdp<{ result: { value: boolean } }>('Runtime.evaluate', {
+        expression: `document.getElementById(${JSON.stringify(field)}).value === ${JSON.stringify(text)}`,
+        returnByValue: true,
+      })
+      assert.equal(result.result.value, true, `${label} 必须实际收到输入`)
+    }
+    const afterTyping = await driver.snapshot(id, false, operation)
+    assert.equal(
+      afterTyping.text.includes('example-nebula-secret'),
+      false,
+      '允许填写不改变密码观察遮罩',
+    )
     await session
       .fromPartition('persist:external-one')
       .cookies.set({ url, name: 'isolated', value: 'fixture' })
@@ -86,6 +119,7 @@ void app
     assert.throws(() => first.open({ deviceId: 'd', threadId: 's' }, 'agent'), /disposed/)
     server.close()
     console.log('BROWSER_PACKAGE_ELECTRON_OK')
+    console.log('BROWSER_AUTHORIZED_CREDENTIAL_INPUT_OK')
     app.exit(0)
   })
   .catch((error) => {
