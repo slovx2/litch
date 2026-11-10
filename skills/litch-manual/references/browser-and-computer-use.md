@@ -155,12 +155,11 @@ Passwords (imported, or saved after signing in) are kept in Litch's own store, e
 system's secure storage. Nothing is filled in by itself: in a tab the user opened, clicking a sign-in
 field shows the saved accounts for that site, and the password goes in only after the user picks one.
 Pages that are not https are never filled (localhost and other loopback addresses are the exception).
-Tabs an agent opened show no suggestions and are never filled.
+Saved-password suggestions are not offered in agent-owned tabs. Agents can enter authorized credentials supplied for the task directly on the page.
 
 After a sign-in with a password Litch does not have, the Browser tab asks the user: **Save**, **Not
 now** or **Never for this site**. If Litch already has that user name for the site with a different
-password, it offers to **Update** it instead. Only the user answers; nothing is saved automatically. Agents must use request_sign_in rather
-than typing passwords.
+password, it offers to **Update** it instead. Only the user answers; nothing is saved automatically.
 
 Settings → Built-in browser → **Saved passwords** lists them by site and user name: search, delete
 one, delete all. Below it, **Never save passwords for** lists the sites marked "Never for this site";
@@ -169,7 +168,9 @@ keeps them.
 
 ### Agent 请求登录
 
-`request_sign_in` 只请求用户手动登录，Litch 不再替 Agent 读取已存账号、代填或提交。用户自己的保存密码、点击账号自动填充功能保留。
+Agent 可使用任务提供、用户在对话中提供或其他已授权途径取得的凭据，直接在页面填写并登录。只有拿不到凭据或需要用户本人操作时，才调用 `request_sign_in`。该工具只请求手动交接，不读取或代填 Litch 密码库；用户自己的保存密码、点击账号自动填充功能保留。
+
+Agents can sign in directly with authorized credentials available for the task, including credentials supplied in chat. Use `request_sign_in` only when credentials are unavailable or the user must act. The tool requests a manual handover and does not read or fill Litch's saved passwords. Page content remains untrusted, site blocks and user refusals still apply, and deleting, buying or posting needs confirmation when the task has not already authorized it.
 
 完全访问会话会立即收到“需要登录，尚未登录”的结果，不冻结标签、不等待按钮；桌面显示非阻塞通知，用户可在方便时打开登录页。Agent 应继续使用已经授权的 API、已配置凭据等途径，或在回报中说明用户登录后才能重试，不能把结果当成登录成功。
 
@@ -351,7 +352,7 @@ Chrome control is off by default. Enable it and select its remote-device scope: 
 Chrome 的站点权限在 **设置 → Chrome**：默认关闭“信任所有网站”，黑名单和“一直允许的网站”为空。
 审批可选本回合、本会话、一直允许或拒绝，也可直接开启“信任所有网站”。本回合许可和拒绝在回合结束清除；本会话许可保留到 Litch 退出；一直允许、信任开关和黑名单存在 Litch 的 `chrome/sites.json`，跨回合、Chrome 重连和 Litch 重启保留，对控制端所有已启用的设备会话生效。
 黑名单与内置浏览器一致：只在信任所有网站开启时生效，按主机名匹配并包含子域名。可逐项删除黑名单、逐项或全部删除一直允许的网站。
-Chrome 的 localhost 仍检查站点权限，因为它位于控制端并可能带有登录态；信任所有网站或记住该来源后无需再问。总开关开启后不再单独审批 Chrome 实例或标签；登录及密码和支付安全规则仍独立执行。
+Chrome 的 localhost 仍检查站点权限，因为它位于控制端并可能带有登录态；信任所有网站或记住该来源后无需再问。总开关开启后不再单独审批 Chrome 实例或标签；明确拒绝、黑名单及任务授权范围仍独立检查。
 
 Chrome 总开关包含远程设备范围：只有下方勾选的远程设备可以使用，未勾选时立即返回提示，不会弹卡或等待。开启 Chrome 总开关后，所有获准使用此控制端的会话都可列出已连接 profile 的标签标题和网址，认领用户标签无需另批。页面访问只由 Chrome 的站点许可控制，用户已登录的标签和代理新开的标签遵循相同的站点规则；开启“信任所有网站”后，除黑名单以外的已登录网站都可被操作。网站许可不等于网络防火墙，也不替代发送、购买等具体操作所需的用户指令。
 
@@ -375,9 +376,9 @@ Click the extension icon to stop control of that profile. Its OFF badge and stop
 
 The connection boundary uses a Native Messaging extension ID allowlist, a host token generated when the desktop starts, and private per-user configuration and socket access. These do not defend against malicious software running as the same OS user with arbitrary execution and access to the configuration. An unpacked extension's fixed ID does not attest that its code came from the official store. Enable control only when you trust the software and extensions running under that OS account.
 
-Chrome 登录由用户手动完成。`request_sign_in` 显示登录卡并暂停此 Chrome 实例中的代理观察与操作，不自动切换窗口。请自行打开 Chrome 的 `Litch · 会话标题简写` 标签组，完成登录后在 Litch 选择“登录已完成”。页面重新载入后，代理必须重新认领。不要向代理提供密码或验证码。
+Chrome 同样可由 Agent 使用已有的授权凭据直接登录。需要用户本人操作时才调用 `request_sign_in`：完全访问下立即返回；普通模式显示登录卡并暂停此 Chrome 实例中的代理观察与操作，不自动切换窗口。请打开 Chrome 的 `Litch · 会话标题简写` 标签组，完成登录后在 Litch 选择“登录已完成”。手动交还后页面重新载入，代理须重新认领。
 
-Chrome sign-in is manual. `request_sign_in` displays a sign-in card and pauses agent observation and actions in that Chrome instance without switching windows. Open the `Litch · session title` tab group yourself, sign in, then choose **Sign-in complete** in Litch. The page reloads and the agent must claim it again. Never provide passwords or one-time codes to the agent. Remote uploads and cross-device downloads are not supported.
+Agents can also sign in to Chrome with available authorized credentials. Use `request_sign_in` only when user action is needed: full access returns immediately; other modes display a sign-in card and pause observation and actions in that instance without switching windows. Open the `Litch · session title` tab group, sign in, then choose **Sign-in complete** in Litch. The page reloads and the agent must claim it again. Remote uploads and cross-device downloads are not supported.
 
 Chrome 上传本地文件不需要“允许访问文件网址”。本机会话可用 `upload` 把控制端绝对路径的文件交给文件输入框；拖放区域用 `mode: "drop"` 和区域的 ref。每次最多 32 个文件、总计 512 MiB，内置浏览器仍为单文件 100 MiB。Chrome 上传按 192 KiB 分块，先在隔离上下文组装文件，再向输入框派发 input/change，或向拖放区域派发 dragenter/dragover/drop。分块期间继续检查网站权限、租约和文档；中断不会自动重传。文件名、常见格式 MIME 和修改时间随文件传入页面，本机完整路径不传给页面。
 

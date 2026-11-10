@@ -5,7 +5,7 @@ import type { zhPasswords } from './zh-CN-passwords.ts'
 export const enPasswords: Record<keyof typeof zhPasswords, Entry> = {
   'settings.browser.passwords': 'Saved passwords',
   'settings.browser.passwords.note':
-    'Click a sign-in field to fill one. The model never fills passwords; when it needs you signed in, it hands you the tab. It can’t read password fields or see save prompts. Passwords can’t be shown or copied here',
+    'Click a sign-in field to fill one. Agents can sign in with authorized credentials provided for the task and hand you the tab when your action is needed. Password field values and save prompts remain hidden from agents. Passwords can’t be shown or copied here',
   'settings.browser.passwords.empty':
     'No saved passwords. You can import them from another browser.',
   'settings.browser.passwords.search': 'Search sites or usernames',
@@ -41,7 +41,7 @@ export const enPasswords: Record<keyof typeof zhPasswords, Entry> = {
   'browser.signIn.claim': 'Agent’s note: {site} · {reason}',
   'browser.signIn.withdrawn': 'The agent withdrew its sign-in request',
   'browser.signIn.withdrawnNote':
-    'This tab was reloaded. Don’t type passwords here: the agent can read the page when it uses this tab again.',
+    'This tab was reloaded. The agent can read the page when it uses this tab again.',
   'browser.signIn.dismiss': 'OK',
   'browser.signIn.closed': 'Sign-in tab closed',
   'browser.signIn.closedNote':
