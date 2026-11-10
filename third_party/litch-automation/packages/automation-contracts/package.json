@@ -1,6 +1,6 @@
 {
   "name": "@litch/automation-contracts",
-  "version": "0.38.1",
+  "version": "0.39.0",
   "type": "module",
   "license": "MIT",
   "description": "自动化公共合同；内部标识不代表最终发布包名",

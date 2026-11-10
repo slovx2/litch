@@ -1,6 +1,6 @@
 {
   "name": "@litch/computer-use",
-  "version": "0.38.1",
+  "version": "0.39.0",
   "type": "module",
   "license": "MIT",
   "description": "可嵌入的 Computer Use 执行器及原生组件传输",
