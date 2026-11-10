@@ -124,6 +124,16 @@ test('在想的时候：汇总行不写动词，只有思考的头一行（“�
   assert.deepEqual(nowOf(think, null, en), { label: '', target: '先拆两步' })
 })
 
+test('推理汇总不留下空标题：空摘要兜底为思考，摘要开头空行不吞掉实际标题', () => {
+  const item = { id: 'r', kind: 'reasoning', text: '', status: 'inProgress' }
+  assert.deepEqual(nowOf(item, null, zh), { label: '思考', target: '' })
+  assert.deepEqual(nowOf(item, null, en), { label: 'Thinking', target: '' })
+  assert.deepEqual(nowOf({ ...item, text: '\n  检查星云项目\n更多细节' }, null, zh), {
+    label: '',
+    target: '检查星云项目',
+  })
+})
+
 test('整段过程收成的一行：已处理多久、几段说明、几步、几个子代理；被拒、出错另列，失败的步骤不数', () => {
   const full = { notes: 3, steps: 18, agents: 2, failed: 1, declined: 2, agentsFailed: 1 }
   assert.deepEqual(processSummary(full, '4 分 12 秒', zh, null), {

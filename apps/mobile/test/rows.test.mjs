@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { askQuestionId, askReplyText, projectItem } from '@litch/core'
+import { emptyReasoning } from '../../../packages/core/test/empty-reasoning-fixture.mts'
 import { formatSessionEvent } from '../../../packages/protocol/src/session-tree.mts'
 import { recoverMessage, restartMessage } from '../../../packages/protocol/src/system-messages.mts'
 import { RowBuilder } from '../src/core/rows.ts'
@@ -49,6 +50,59 @@ function viewOf(turns, items) {
 }
 
 const types = (rows) => rows.map((row) => row.type)
+
+test('Codex 空摘要推理和压缩相邻：两种开合状态都不生成空步骤或空思考汇总', () => {
+  for (const streaming of [false, true]) {
+    const reason = projectItem(emptyReasoning, streaming)
+    const compact = projectItem({ type: 'contextCompaction', id: 'compact' }, true)
+    const items = [user('u', '检查虚构项目'), reason, compact]
+    const view = viewOf(
+      [{ id: 't', status: 'running', itemIds: items.map((item) => item.id) }],
+      items,
+    )
+    assert.deepEqual(types(new RowBuilder().build(view, 'all')), ['user', 'compaction', 'status'])
+    // 混在命令之间、仍在运行的空推理，不能顶替汇总中的命令标题。
+    const mixed = [items[0], { ...command('c'), status: 'completed' }, reason, compact]
+    const mixedView = viewOf(
+      [{ id: 't', status: 'running', itemIds: mixed.map((item) => item.id) }],
+      mixed,
+    )
+    const builder = new RowBuilder()
+    const rows = builder.build(mixedView, 'all')
+    const group = rows.find((row) => row.type === 'group')
+    assert.ok(group)
+    assert.equal(group.running, false)
+    assert.equal(group.current, null)
+    assert.equal(group.count, 1)
+    builder.toggle(group.key, 't')
+    const opened = builder.build(mixedView, 'all')
+    assert.equal(
+      opened.some((row) => row.type === 'reasoning'),
+      false,
+    )
+    assert.equal(opened.filter((row) => row.type === 'step').length, 1)
+    // 隐藏不丢事件；后续收到摘要，照常恢复有文字的思考。
+    mixedView.items[reason.id] = { ...reason, text: '检查星云项目' }
+    assert.equal(
+      new RowBuilder().build(mixedView, 'all').some((row) => row.type === 'reasoning'),
+      false,
+    )
+    const only = viewOf(
+      [{ id: 't', status: 'running', itemIds: ['u', reason.id] }],
+      [items[0], mixedView.items[reason.id]],
+    )
+    assert.equal(
+      new RowBuilder()
+        .build(only, 'all')
+        .some(
+          (row) =>
+            (row.type === 'group' && row.current === '检查星云项目') ||
+            (row.type === 'reasoning' && row.text === '检查星云项目'),
+        ),
+      true,
+    )
+  }
+})
 
 test('Claude 安全拦截保留错误与失败状态；透明收尾回合失败时也不能隐藏', () => {
   const error = 'Blocked by Claude safety policy\n\nExample model safeguards flagged this message.'

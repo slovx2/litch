@@ -4,6 +4,10 @@
 
 The new conversation project picker searches names and full paths locally, ignoring case. All space-separated words must match, with name matches first. Search is focused when opened; on desktop, use arrow keys to browse, Enter to select and Esc to close. Filtering preserves the current project. Desktop and phone use the same rules for local and remote devices.
 
+Codex 等引擎只提供加密推理、没有可显示摘要时，桌面和手机均不显示空白思考步骤，也不让它覆盖步骤组的汇总标题。回合仍在运行时继续显示工作状态；上下文压缩单独显示。后续收到可读摘要时，思考内容正常出现。
+
+Desktop and phone omit empty reasoning steps when an engine provides no readable summary, including encrypted-only Codex reasoning. Empty reasoning does not replace the step-group title. Working status and context compaction remain visible separately; readable reasoning appears when it arrives.
+
 侧栏运行标识会随已打开会话的实时回合更新，选中或清除未读不会隐藏运行、等待和后台任务标识。
 
 Claude 明确返回安全拒答时，对话区显示“被 Claude 安全策略拦截”和可取得的原文，回合标为失败，侧栏显示错误。重新打开仍保留该结果；新的成功回合会恢复正常状态。自动收尾提醒如果失败，也会显示错误。Litch 不会自动绕过拦截。

@@ -1186,6 +1186,7 @@ export const zhCN = {
   'activity.ask': '提出 {n} 个问题',
   'activity.join': '，',
   'activity.thought': '已思考',
+  'activity.now.thought': '思考',
   'activity.declined': '{n} 条被拒',
   'activity.now.read': '正在读取',
   'activity.now.search': '正在搜索',

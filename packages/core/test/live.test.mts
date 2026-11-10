@@ -18,8 +18,10 @@ import {
   type SidebarOp,
   type SidebarView,
   shownEffort,
+  thoughtShown,
   type UserMessageItem,
 } from '../src/index.mjs'
+import { emptyReasoning } from './empty-reasoning-fixture.mjs'
 import { fakeOpener, type Handler, RpcFailure } from './fake-server.mjs'
 import { agentText, thread, turn, userText } from './fixtures.mjs'
 import { fakeClock, settle, withoutTools } from './helpers.mjs'
@@ -27,6 +29,65 @@ import { watchSession } from './wire.mjs'
 
 const never = { aborted: false, addEventListener() {} }
 const where = { deviceId: 'local', sessionId: 'a' }
+
+test('真实 Codex 事件形状：空 reasoning 与 compaction 独立投影，空白摘要不显示，后续可读摘要不丢失', async () => {
+  const { core, peer, handlers } = setup([
+    thread({ id: 'a', turns: [turn('t1', [], { status: 'inProgress' })] }),
+  ])
+  runtime(handlers, 'codex')
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  const base = { threadId: 'a', turnId: 't1' }
+  peer.last().notify('item/started', { ...base, item: emptyReasoning, startedAtMs: 1000 })
+  await settle()
+  const reason = () => {
+    const item = session.seen.view?.items[`t1:${emptyReasoning.id}`]
+    assert.ok(item)
+    return item
+  }
+  assert.equal(reason()?.kind, 'reasoning')
+  assert.equal(thoughtShown(reason()), false)
+  peer.last().notify('item/started', {
+    ...base,
+    item: { type: 'contextCompaction', id: 'compact' },
+    startedAtMs: 2000,
+  })
+  peer.last().notify('item/reasoning/summaryTextDelta', {
+    ...base,
+    itemId: emptyReasoning.id,
+    summaryIndex: 0,
+    delta: '\n \t',
+  })
+  await settle()
+  assert.equal(thoughtShown(reason()), false)
+  assert.equal(session.seen.view?.items['t1:compact']?.kind, 'compaction')
+  peer.last().notify('item/completed', {
+    ...base,
+    item: emptyReasoning,
+    startedAtMs: 1000,
+    completedAtMs: 3000,
+  })
+  await settle()
+  assert.equal(thoughtShown(reason()), false)
+  // 下一条 reasoning 开始时内容未知，不能因此丢掉它之后的文本增量。
+  peer.last().notify('item/started', {
+    ...base,
+    item: { ...emptyReasoning, id: 'rs_readable' },
+    startedAtMs: 4000,
+  })
+  peer.last().notify('item/reasoning/summaryTextDelta', {
+    ...base,
+    itemId: 'rs_readable',
+    summaryIndex: 0,
+    delta: '\n检查星云项目',
+  })
+  await settle()
+  const readable = session.seen.view?.items['t1:rs_readable']
+  assert.ok(readable)
+  assert.equal(thoughtShown(readable), true)
+})
 
 test('未打开的原生子代理提问显示在已打开父会话，父回合完成不误撤回', async () => {
   const parent = thread({ id: 'a', turns: [turn('t1', [], { status: 'inProgress' })] })

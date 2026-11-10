@@ -803,8 +803,8 @@ export class RowBuilder {
    */
   private steps(out: Row[], turn: TurnView, items: GroupItem[]): void {
     const live = turn.status === 'running'
-    const current = live ? items.findLast(isRunning) : undefined
     const shown = items.filter(thoughtShown)
+    const current = live ? shown.findLast(isRunning) : undefined
     if (!current && shown.length === 0) return
     if (!current && shown.every((item) => item.kind === 'reasoning')) {
       for (const item of shown) if (item.kind === 'reasoning') out.push(this.reasoning(turn, item))

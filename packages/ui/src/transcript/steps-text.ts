@@ -62,7 +62,10 @@ export function nowOf(
   kind: StepKind | null,
   t: Translator,
 ): { label: string; target: string } {
-  if (item.kind === 'reasoning') return { label: '', target: item.text.split('\n', 1)[0] ?? '' }
+  if (item.kind === 'reasoning') {
+    const target = item.text.trim().split('\n', 1)[0] ?? ''
+    return { label: target ? '' : t('activity.now.thought'), target }
+  }
   const label = kind ? t(NOW_KEYS[kind]) : t('activity.now.notice')
   switch (item.kind) {
     case 'command':

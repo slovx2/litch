@@ -98,7 +98,7 @@ const firstLine = (text: string): string => text.split('\n', 1)[0] ?? ''
 /**
  * 思考：一行次要的浅字（头一行），点开看全文；不写“想了一下”这类动词。
  * 没有可显示的字（引擎只给了加密的、空的推理）就不画（thoughtShown）。
- * 在想的时候只有运行记号和思考的字：“正在工作”只写在回合末尾那一行
+ * 空摘要即使还在思考也不占一行：“正在工作”只写在回合末尾那一行。
  */
 const Reasoning = memo(function Reasoning(ref: ItemRef) {
   const item = useItem<ReasoningItem>(ref)
@@ -641,9 +641,9 @@ export const Steps = memo(function Steps({
     [values],
   )
   const tally = useMemo(() => stepsTally(items), [items])
-  const current = live ? items.findLast(running) : undefined
-  const now = current ? nowOf(current, stepKindOf(current), t) : null
   const shown = items.filter(thoughtShown)
+  const current = live ? shown.findLast(running) : undefined
+  const now = current ? nowOf(current, stepKindOf(current), t) : null
   // 什么都不剩（只有想完了、没字的思考）：不占地方
   if (!current && shown.length === 0) return null
   // 只有思考：不收成“想了一下”，每条一行浅字，点开看全文

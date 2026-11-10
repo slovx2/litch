@@ -1,7 +1,7 @@
 // 隐藏窗口、隔离配置，使用正式 Transcript 验证插话、压缩、继续输出和收尾；不保留截图或验收目录。
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -24,6 +24,9 @@ if (!process.versions.electron) {
       CODEX_HOME: join(scratch, 'codex'),
       LITCH_PROCESS_PROFILE: join(scratch, 'profile'),
       LITCH_PROCESS_URL: server.resolvedUrls.local[0],
+      ...(process.env.LITCH_PROCESS_SHOT
+        ? { LITCH_PROCESS_SHOT: process.env.LITCH_PROCESS_SHOT }
+        : {}),
     },
     stdio: 'inherit',
   })
@@ -85,6 +88,19 @@ if (!process.versions.electron) {
           )
         }
       }
+      await win.loadURL(`${process.env.LITCH_PROCESS_URL}test/live-process-fixture.html?lang=zh-CN`)
+      const empty = await win.webContents.executeJavaScript(`(${emptyReasoningProbe})()`)
+      assert.equal(empty.blankRows, 0, '展开步骤不允许只有图标和耗时')
+      assert.equal(empty.blankHeads, 0, '收起汇总不能被空推理替换成空标题')
+      assert.equal(empty.steps, 1, '纯空推理组不占一行')
+      assert.equal(empty.compaction, true, '压缩保留自己的状态行')
+      assert.equal(empty.readable, true, '后续可读摘要正常显示')
+      if (process.env.LITCH_PROCESS_SHOT) {
+        const image = await win.webContents.capturePage()
+        mkdirSync(join(process.env.LITCH_PROCESS_SHOT, '..'), { recursive: true })
+        writeFileSync(process.env.LITCH_PROCESS_SHOT, image.toPNG())
+      }
+      console.log('LITCH_EMPTY_REASONING', JSON.stringify(empty))
     } catch (error) {
       console.error(error)
       process.exitCode = 1
@@ -93,6 +109,41 @@ if (!process.versions.electron) {
       app.exit(process.exitCode ?? 0)
     }
   })
+}
+
+async function emptyReasoningProbe() {
+  const wait = async (test) => {
+    for (let frame = 0; frame < 120; frame++) {
+      if (test()) return
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+    }
+    throw new Error('空推理过程验收超时')
+  }
+  window.liveProcess.emptyReasoning()
+  await wait(() => document.querySelector('.compaction'))
+  const heads = () => [...document.querySelectorAll('.steps-head')]
+  const blankHeads = heads().filter(
+    (head) =>
+      !head.querySelector('.sum')?.textContent.trim() &&
+      !head.querySelector('.now')?.textContent.trim(),
+  ).length
+  const steps = heads().length
+  heads()[0]?.click()
+  await wait(() => document.querySelector('.steps-body .item-head'))
+  const blankRows = [...document.querySelectorAll('.item-head')].filter(
+    (head) =>
+      !head.querySelector('.verb')?.textContent.trim() &&
+      !head.querySelector('.tgt')?.textContent.trim(),
+  ).length
+  const compaction =
+    document.querySelector('.compaction')?.textContent.includes('正在压缩上下文') === true
+  window.liveProcess.readableReasoning()
+  await wait(() =>
+    [...document.querySelectorAll('.steps-head')].some((head) =>
+      head.textContent.includes('检查星云项目的测试结果'),
+    ),
+  )
+  return { blankRows, blankHeads, steps, compaction, readable: true }
 }
 
 // 高度改变的帧在应用尺寸补偿之后取样，不把尚未上屏的中间排版算作跳动。

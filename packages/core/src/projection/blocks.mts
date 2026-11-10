@@ -536,11 +536,11 @@ export function stepsTally(items: ItemView[]): StepsTally {
 
 /**
  * 思考条目画不画：有可显示的字才画（一行次要的浅字，点开看全文）。引擎只给了加密的、空的推理，
- * 想完了就不画、不算；还在想的照样占一行（汇总行上写“正在工作”）
+ * 无论是否正在思考，空摘要都不占步骤行；回合状态行负责表示仍在工作，压缩使用独立状态行。
  */
 export function thoughtShown(item: { kind: string; text?: string; status?: string }): boolean {
   if (item.kind !== 'reasoning') return true
-  return (item.text ?? '').trim() !== '' || item.status === 'inProgress'
+  return (item.text ?? '').trim() !== ''
 }
 
 export interface ProcessTally {

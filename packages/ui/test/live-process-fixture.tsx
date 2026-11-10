@@ -8,12 +8,14 @@ import {
   createReplica,
   type HostSink,
   type ItemView,
+  projectItem,
   projectThread,
   reduceSession,
   type SessionOp,
   serveChannel,
 } from '@litch/core'
 import { createRoot } from 'react-dom/client'
+import { emptyReasoning } from '../../core/test/empty-reasoning-fixture.mts'
 import type { Thread } from '../../protocol/src/index.mts'
 import { ServicesProvider } from '../src/app/services.tsx'
 import { Transcript } from '../src/transcript/Transcript.tsx'
@@ -96,6 +98,30 @@ const command = (id: string, status: 'completed' | 'inProgress') =>
   })
 Object.assign(window, {
   liveProcess: {
+    emptyReasoning() {
+      user('u0')
+      message('intro', '检查虚构的星云项目，核对测试与构建结果。')
+      command('nebula-check', 'completed')
+      add({
+        ...projectItem(emptyReasoning, true),
+        span: { from: Date.now() - 1_073_000, to: null },
+      })
+      add({ id: 'compact', kind: 'compaction', status: 'inProgress', source: 'automatic' })
+      add(projectItem({ ...emptyReasoning, id: 'rs_after_compact' }, true))
+    },
+    readableReasoning() {
+      add(
+        projectItem(
+          {
+            type: 'reasoning',
+            id: 'rs_after_compact',
+            summary: ['\n检查星云项目的测试结果'],
+            content: [],
+          },
+          true,
+        ),
+      )
+    },
     start() {
       user('u0')
       message('n0', '第一段说明')

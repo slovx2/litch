@@ -11,6 +11,7 @@ import {
   processFolded,
   processSettled,
   processTally,
+  projectItem,
   spanFrom,
   spanOp,
   stepKindOf,
@@ -20,6 +21,22 @@ import {
   toolKind,
   workingShown,
 } from '../src/index.mjs'
+import { emptyReasoning } from './empty-reasoning-fixture.mjs'
+
+test('Codex 原生空摘要推理：开始、完成及空白增量都不产生空过程步骤，文字到达后恢复显示', () => {
+  for (const streaming of [false, true]) {
+    const item = projectItem(emptyReasoning, streaming)
+    assert.equal(item.kind, 'reasoning')
+    assert.equal(thoughtShown(item), false)
+    assert.equal(stepsTally([item]).thoughts, 0)
+    assert.equal(workingShown(true, [item], 0), true, '空推理由回合工作状态表示')
+    const compact = projectItem({ type: 'contextCompaction', id: 'compact' }, true)
+    assert.equal(workingShown(true, [item, compact], 0), false, '压缩有自己的状态行')
+    if (item.kind !== 'reasoning') throw new Error('应投影成推理')
+    assert.equal(thoughtShown({ ...item, text: '\n \t\n' }), false)
+    assert.equal(thoughtShown({ ...item, text: '\n检查虚构项目\n' }), true)
+  }
+})
 
 test('分块：说明把工具调用切成几组，final 留在过程之外', () => {
   const blocks = bucketItems([
@@ -548,9 +565,9 @@ test('汇总：没字的思考不算；收尾的建议和问题只记个数、�
     { id: 'r3', kind: 'reasoning', text: '', status: 'inProgress' },
     thought('r4'),
   ])
-  assert.equal(tally.thoughts, 2)
+  assert.equal(tally.thoughts, 1)
   assert.equal(thoughtShown(thought('r', '')), false)
-  assert.equal(thoughtShown({ kind: 'reasoning', text: '', status: 'inProgress' }), true)
+  assert.equal(thoughtShown({ kind: 'reasoning', text: '', status: 'inProgress' }), false)
   assert.equal(thoughtShown(thought('r', '看一下')), true)
   const wrap = (suggestions: number, ask?: string): ItemView =>
     tool('w', 'wrap_up', {

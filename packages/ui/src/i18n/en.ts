@@ -1244,6 +1244,7 @@ export const en: Record<MessageKey, Entry> = {
   'activity.ask': ({ n }) => `asked ${plural(n, 'question', 'questions')}`,
   'activity.join': ', ',
   'activity.thought': 'Thought',
+  'activity.now.thought': 'Thinking',
   'activity.declined': '{n} declined',
   'activity.now.read': 'Reading',
   'activity.now.search': 'Searching',
