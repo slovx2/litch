@@ -106,15 +106,23 @@ async function probe() {
       turns: document.querySelectorAll('[data-search-turn]').length,
     })
   }
+  const editAllowed = () =>
+    document.querySelector('.act-edit')?.getAttribute('aria-disabled') === 'false'
+  let enabledDuringMount = false
+  // 轮询可能错过首次提交后很短的可编辑窗口；记录首屏挂载期间的每次 DOM 提交。
+  const mounting = new MutationObserver(() => {
+    if (document.querySelector('.send.stop') && editAllowed()) enabledDuringMount = true
+  })
+  mounting.observe(document.body, { subtree: true, childList: true, attributes: true })
   await wait(
     () =>
       document.querySelector('.send.stop') &&
+      document.querySelector('.act-edit') &&
       document.querySelectorAll('[data-search-turn]').length >= 4,
     '初始内容',
   )
-  const editAllowed = () =>
-    document.querySelector('.act-edit')?.getAttribute('aria-disabled') === 'false'
-  if (editAllowed()) throw new Error('运行中不能编辑历史')
+  mounting.disconnect()
+  if (enabledDuringMount || editAllowed()) throw new Error('运行中不能编辑历史')
   await measure(
     '.send.stop',
     () => !!document.querySelector('.composer-stopping'),
