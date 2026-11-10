@@ -80,7 +80,8 @@ final class UIRegressionTests: XCTestCase {
   func testWorktreeDefaultsAndSheet() {
     tap("device:local")
     tap("sessions:new")
-    tap("new:where:litch")
+    tap("new:project")
+    tap("picker:option:litch")
     tap("new:place:worktree")
     tap("new:from")
     let branch = app.descendants(matching: .any)["picker:option:branch:release/0.18"]

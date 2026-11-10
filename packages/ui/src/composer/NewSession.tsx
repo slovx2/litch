@@ -140,12 +140,14 @@ function PlaceBar({
     ...(workspaces ?? []).map((entry) => ({
       id: entry.id,
       title: entry.name,
+      searchText: entry.roots.join('\n'),
       ...(entry.color ? { lead: <i className="ws-dot" style={wireStyle(entry.color)} /> } : {}),
       ...(entry.roots[0] ? { note: entry.roots[0] } : {}),
     })),
     {
       id: LOOSE,
       title: t('workspace.none'),
+      searchText: '',
       ...(device && harness
         ? {
             note: t('newSession.looseNote', {
@@ -179,6 +181,8 @@ function PlaceBar({
           label={t('newSession.workspace.label')}
           value={workspaceId ?? LOOSE}
           options={workspaceOptions}
+          search={t('newSession.workspace.search')}
+          projectSearch
           onPick={(id) => {
             if (id === ADD_WORKSPACE) setAdding(true)
             else onPlace({ deviceId, workspaceId: id === LOOSE ? null : id })

@@ -20,7 +20,9 @@ tags: [mock]
       id: new-input
     timeout: 15000
 - tapOn:
-    id: new:where:litch
+    id: new:project
+- tapOn:
+    id: picker:option:litch
 # 工作区根是 git 仓库：问到分支才出“位置”
 - scrollUntilVisible:
     element:

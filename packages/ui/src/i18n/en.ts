@@ -1562,6 +1562,7 @@ export const en: Record<MessageKey, Entry> = {
   'composer.steerFailed': 'Couldn’t insert; still queued: {reason}',
   'composer.model': 'Model',
   'composer.modelSearch': 'Filter models',
+  'newSession.workspace.search': 'Search projects by name or path',
   'picker.noMatch': 'No matches',
   'composer.effort': 'Reasoning effort',
   'composer.speed': 'Speed',

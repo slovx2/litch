@@ -1,5 +1,9 @@
 # Projects and sessions
 
+新对话页的项目选择器支持按项目名或完整路径搜索，不区分大小写；空格分开的词需全部匹配，名称命中排在路径命中之前。打开后搜索框自动获得焦点，桌面可用上下键浏览、回车选择、Esc 关闭。筛选不会更改当前项目。桌面和手机、本机和远程设备使用相同规则，搜索在客户端完成。
+
+The new conversation project picker searches names and full paths locally, ignoring case. All space-separated words must match, with name matches first. Search is focused when opened; on desktop, use arrow keys to browse, Enter to select and Esc to close. Filtering preserves the current project. Desktop and phone use the same rules for local and remote devices.
+
 侧栏运行标识会随已打开会话的实时回合更新，选中或清除未读不会隐藏运行、等待和后台任务标识。
 
 Claude 明确返回安全拒答时，对话区显示“被 Claude 安全策略拦截”和可取得的原文，回合标为失败，侧栏显示错误。重新打开仍保留该结果；新的成功回合会恢复正常状态。自动收尾提醒如果失败，也会显示错误。Litch 不会自动绕过拦截。

@@ -3,7 +3,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-const { matchOptions, SEARCH_FROM } = await import('../src/composer/picker-search.ts')
+const { matchOptions, matchProjects, SEARCH_FROM } = await import(
+  '../src/composer/picker-search.ts'
+)
 
 const option = (id, title, note) => ({ id, title, ...(note ? { note } : {}) })
 const MODELS = [
@@ -35,4 +37,42 @@ test('筛选框：按空白拆成几段，每段都要对得上，先后不变�
   assert.deepEqual(ids(matchOptions(MODELS, 'opus sonnet')), [])
   const withAction = [...MODELS, { id: ':add', title: '添加…', action: true }]
   assert.deepEqual(ids(matchOptions(withAction, 'gpt')), ['gpt-5.6-sol', ':add'])
+})
+
+test('项目搜索：名称优先，多根路径、大小写和混合词匹配，同类保持原顺序', () => {
+  const projects = [
+    { id: 'path', title: 'Orion', note: '/srv/nebula/tools' },
+    { id: 'mixed', title: 'Nebula Lab', note: '/srv/shared/tools' },
+    { id: 'name', title: 'Nebula Tools', note: '/srv/kit' },
+    { id: 'other-name', title: 'Nebula Tools Demo', note: '/srv/demo' },
+    { id: 'second-root', title: 'Atlas', searchText: '/srv/atlas\nD:\\Nebula\\Tools' },
+    { id: 'nebula-tools-id-only', title: 'Lyra', note: '/srv/lyra' },
+    { id: ':add', title: '添加项目', action: true },
+  ]
+  const before = structuredClone(projects)
+  assert.deepEqual(ids(matchProjects(projects, 'NEBULA tools')), [
+    'name',
+    'other-name',
+    'mixed',
+    'path',
+    'second-root',
+    ':add',
+  ])
+  assert.deepEqual(ids(matchProjects(projects, '  ')), ids(projects))
+  assert.deepEqual(ids(matchProjects(projects, 'D:\\nebula')), ['second-root', ':add'])
+  assert.deepEqual(ids(matchProjects(projects, 'not-found')), [':add'])
+  assert.deepEqual(projects, before, '过滤不改原始选项或选中项目的数据')
+})
+
+test('项目搜索：大量远程项目在本地线性过滤，保留名称命中和路径命中', (context) => {
+  const projects = Array.from({ length: 20_000 }, (_, index) => ({
+    id: `project-${index}`,
+    title: `Orion ${index}`,
+    searchText: `/srv/work/nebula-${index}`,
+  }))
+  projects.push({ id: 'named', title: 'Nebula 19999', searchText: '/srv/kit' })
+  const start = performance.now()
+  const shown = matchProjects(projects, 'NEBULA 19999')
+  context.diagnostic(`20,001 个项目过滤耗时 ${(performance.now() - start).toFixed(2)}ms`)
+  assert.deepEqual(ids(shown), ['named', 'project-19999'])
 })

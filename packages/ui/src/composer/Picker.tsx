@@ -1,14 +1,15 @@
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Caret } from '../app/icons.tsx'
 import { usePopover } from '../app/popover.ts'
-import { matchOptions, SEARCH_FROM } from './picker-search.ts'
+import { matchOptions, matchProjects, SEARCH_FROM } from './picker-search.ts'
 
 export interface PickerOption {
   id: string
   title: string
   /** 标题下面的一行小字。只放“为什么选不了”、主机名、路径这类分辨用的，不放解释这一项是什么的 */
   note?: string
+  searchText?: string
   /** 解释这一项是什么的话：不占地方，鼠标停在上面才出来 */
   hint?: string
   /** 标题前面的小记号（设备的线色、工作区挑过的颜色）。按钮上和选项里都带着 */
@@ -38,10 +39,21 @@ interface PickerProps {
    * 不给就没有筛选框：只有几项的选择器用不着（模型清单有的 harness 能列出上百个）
    */
   search?: string
+  /** 项目始终显示搜索框，按名称优先、路径其次匹配。 */
+  projectSearch?: boolean
 }
 
 /** 底栏上的一个选择器：一个显示当前值的按钮，点开是往上弹的选项列表 */
-export function Picker({ kind, label, value, fallback, options, onPick, search }: PickerProps) {
+export function Picker({
+  kind,
+  label,
+  value,
+  fallback,
+  options,
+  onPick,
+  search,
+  projectSearch,
+}: PickerProps) {
   const t = useT()
   /** 正在等用户确认的那一项 */
   const [asking, setAsking] = useState<PickerOption | null>(null)
@@ -49,8 +61,11 @@ export function Picker({ kind, label, value, fallback, options, onPick, search }
   const { open, setOpen, close, root, trigger, pop, onKeyDown } = usePopover(asking)
   const field = useRef<HTMLInputElement>(null)
   const current = options.find((option) => option.id === value)
-  const searching = search !== undefined && options.length >= SEARCH_FROM
-  const shown = searching ? matchOptions(options, query) : options
+  const searching = search !== undefined && (projectSearch || options.length >= SEARCH_FROM)
+  const shown = useMemo(
+    () => (searching ? (projectSearch ? matchProjects : matchOptions)(options, query) : options),
+    [searching, projectSearch, options, query],
+  )
 
   // 收起之后，下次点开回到列表那一屏，筛选框是空的
   useEffect(() => {
@@ -137,7 +152,7 @@ export function Picker({ kind, label, value, fallback, options, onPick, search }
                   }}
                 />
               ) : null}
-              {searching && shown.length === 0 ? (
+              {searching && !shown.some((option) => !option.action) ? (
                 <div className="pick-none">{t('picker.noMatch')}</div>
               ) : null}
               {shown.map((option) => {

@@ -73,6 +73,7 @@ export function NewSessionScreen({ navigation, route }: Props) {
     return id ? { kind: 'workspace', id } : { kind: 'loose' }
   })
   const [asking, setAsking] = useState(false)
+  const [pickingProject, setPickingProject] = useState(false)
   const [chosenHarness, setChosenHarness] = useState<string | undefined>(undefined)
   const [harnessNote, setHarnessNote] = useState<{ id: string; text: string } | null>(null)
   const [own, setOwn] = useState<{ slot: string; picks: Partial<SessionSettings> }>({
@@ -291,37 +292,15 @@ export function NewSessionScreen({ navigation, route }: Props) {
               </>
             ) : null}
             <SectionLabel>{t('compose.new.where')}</SectionLabel>
-            {missing ? (
-              <Row testID="new:where:gone" title={t('newSession.workspaceGone.title')} selected />
-            ) : null}
-            {(workspaces ?? []).map((entry) => (
-              <Row
-                key={entry.id}
-                testID={`new:where:${entry.id}`}
-                title={entry.name}
-                detail={entry.roots[0]}
-                left={
-                  entry.color ? (
-                    <View style={[styles.swatch, { backgroundColor: c.wire[entry.color] }]} />
-                  ) : undefined
-                }
-                selected={where.kind === 'workspace' && where.id === entry.id}
-                onPress={() => pickWhere({ kind: 'workspace', id: entry.id })}
-              />
-            ))}
-            <Row
-              testID="new:where:loose"
-              title={t('workspace.none')}
-              detail={
-                device && harness
-                  ? t('newSession.looseNote', {
-                      device: t.text(device.name),
-                      harness: t.harness(harness.id, harness.name),
-                    })
-                  : undefined
+            <ValueRow
+              testID="new:project"
+              title={t('newSession.workspace')}
+              value={
+                missing
+                  ? t('newSession.workspaceGone.title')
+                  : (workspace?.name ?? t('workspace.none'))
               }
-              selected={where.kind === 'loose'}
-              onPress={() => pickWhere({ kind: 'loose' })}
+              onPress={() => setPickingProject(true)}
             />
             <Row
               testID="new:where:dir"
@@ -412,6 +391,40 @@ export function NewSessionScreen({ navigation, route }: Props) {
         onClose={() => setPickingFrom(false)}
         testID="new:from:picker"
       />
+      <PickerSheet
+        visible={pickingProject}
+        title={t('newSession.workspace.label')}
+        value={where.kind === 'dir' ? null : (workspaceId ?? ':loose')}
+        options={[
+          ...(missing && workspaceId
+            ? [{ id: workspaceId, title: t('newSession.workspaceGone.title'), disabled: true }]
+            : []),
+          ...(workspaces ?? []).map((entry) => ({
+            id: entry.id,
+            title: entry.name,
+            note: entry.roots[0],
+            searchText: entry.roots.join('\n'),
+          })),
+          {
+            id: ':loose',
+            title: t('workspace.none'),
+            searchText: '',
+            ...(device && harness
+              ? {
+                  note: t('newSession.looseNote', {
+                    device: t.text(device.name),
+                    harness: t.harness(harness.id, harness.name),
+                  }),
+                }
+              : {}),
+          },
+        ]}
+        search={t('newSession.workspace.search')}
+        projectSearch
+        onPick={(id) => pickWhere(id === ':loose' ? { kind: 'loose' } : { kind: 'workspace', id })}
+        onClose={() => setPickingProject(false)}
+        testID="new:project:picker"
+      />
       <Prompt
         visible={asking}
         title={t('compose.new.dirTitle')}
@@ -428,7 +441,6 @@ export function NewSessionScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   body: { flex: 1 },
   clip: { flex: 1, overflow: 'hidden' },
-  swatch: { width: 4, alignSelf: 'stretch' },
   harnesses: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 4 },
   harnessNote: { paddingHorizontal: 16, paddingTop: 2, lineHeight: 17 },
   blocked: { paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, lineHeight: 20 },

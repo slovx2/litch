@@ -1494,6 +1494,7 @@ export const zhCN = {
   'composer.steerFailed': '插入失败，消息仍在排队：{reason}',
   'composer.model': '模型',
   'composer.modelSearch': '筛选模型',
+  'newSession.workspace.search': '搜索项目名称或路径',
   'picker.noMatch': '无匹配项',
   'composer.effort': '思考强度',
   'composer.speed': '速度',

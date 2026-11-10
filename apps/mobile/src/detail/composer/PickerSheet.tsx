@@ -1,13 +1,16 @@
 // 从底下升起来的单选清单：设置条上的模型、强度、权限，新建会话页的 harness、项目都用它。
 // 现在选着的那一项反白（复古皮肤的选中态）；不能选的灰着、带一句为什么。选项多的（模型）顶上有筛选框，
-// 按空白拆开的每一段都要在标题、标识或说明里出现。从几个起出筛选框用桌面的 composer/picker-search.ts；
-// 那边的 matchOptions 要的说明是 string | undefined，这里的选项说明可以是 null，筛的那几行留在这边。
+// 模型按标题、标识或说明匹配；项目按名称、路径匹配并将名称命中排在前面，两端共用搜索逻辑。
 // 底下留出系统手势条的高度；键盘弹着时手势条被键盘盖住，清单直接贴在键盘上，不再留这一截。
-import { useEffect, useMemo, useState } from 'react'
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useKeyboardState } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { SEARCH_FROM } from '../../../../../packages/ui/src/composer/picker-search.ts'
+import {
+  matchOptions,
+  matchProjects,
+  SEARCH_FROM,
+} from '../../../../../packages/ui/src/composer/picker-search.ts'
 import { useT } from '../../ui/i18n'
 import { sectionFont } from '../../ui/kit/controls'
 import { ModalKeyboardArea } from '../../ui/kit/ModalKeyboardArea'
@@ -18,12 +21,8 @@ export interface PickerOption {
   id: string
   title: string
   note?: string | null
+  searchText?: string
   disabled?: boolean
-}
-
-const matches = (option: PickerOption, words: string[]): boolean => {
-  const hay = `${option.title}\n${option.id}\n${option.note ?? ''}`.toLowerCase()
-  return words.every((word) => hay.includes(word))
 }
 
 export function PickerSheet({
@@ -32,6 +31,7 @@ export function PickerSheet({
   value,
   options,
   search,
+  projectSearch = false,
   onPick,
   onClose,
   testID,
@@ -43,6 +43,8 @@ export function PickerSheet({
   options: PickerOption[]
   /** 筛选框的提示语。不给就不出筛选框 */
   search?: string
+  /** 项目始终提供搜索，名称命中在路径命中之前。 */
+  projectSearch?: boolean
   onPick(id: string): void
   onClose(): void
   testID?: string
@@ -55,16 +57,25 @@ export function PickerSheet({
   const t = useT()
   const { c } = theme
   const [query, setQuery] = useState('')
+  const field = useRef<TextInput>(null)
   useEffect(() => {
     if (visible) setQuery('')
   }, [visible])
-  const searchable = search !== undefined && options.length >= SEARCH_FROM
-  const shown = useMemo(() => {
-    const words = query.toLowerCase().split(/\s+/).filter(Boolean)
-    return words.length ? options.filter((option) => matches(option, words)) : options
-  }, [options, query])
+  const searchable = search !== undefined && (projectSearch || options.length >= SEARCH_FROM)
+  const shown = useMemo(
+    () => (projectSearch ? matchProjects : matchOptions)(options, query),
+    [options, query, projectSearch],
+  )
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      onShow={() => {
+        if (projectSearch && searchable) field.current?.focus()
+      }}
+    >
       <Pressable style={styles.scrim} onPress={onClose} testID="picker:scrim" />
       <ModalKeyboardArea style={styles.bottom}>
         <View
@@ -83,12 +94,26 @@ export function PickerSheet({
           <Text style={[styles.title, sectionFont(theme), { color: c.ink2 }]}>{title}</Text>
           {searchable ? (
             <TextInput
+              ref={field}
+              autoFocus={projectSearch}
+              accessibilityLabel={search}
               value={query}
               onChangeText={setQuery}
               placeholder={search}
               placeholderTextColor={c.ink3}
               autoCapitalize="none"
               autoCorrect={false}
+              returnKeyType="done"
+              onSubmitEditing={
+                projectSearch
+                  ? () => {
+                      const first = shown.find((option) => !option.disabled)
+                      if (!first) return
+                      onClose()
+                      if (first.id !== value || reselect) onPick(first.id)
+                    }
+                  : undefined
+              }
               testID="picker:search"
               style={[
                 styles.search,
@@ -102,8 +127,18 @@ export function PickerSheet({
               ]}
             />
           ) : null}
-          <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
-            {shown.map((option) => {
+          <FlatList
+            style={styles.list}
+            keyboardShouldPersistTaps="handled"
+            data={shown}
+            extraData={value}
+            keyExtractor={(option) => option.id}
+            ListEmptyComponent={
+              searchable ? (
+                <Text style={[styles.row, { color: c.ink3 }]}>{t('picker.noMatch')}</Text>
+              ) : null
+            }
+            renderItem={({ item: option }) => {
               const selected = option.id === value
               const ink = selected ? c.selFg : option.disabled ? c.ink3 : c.ink
               return (
@@ -141,8 +176,8 @@ export function PickerSheet({
                   ) : null}
                 </Pressable>
               )
-            })}
-          </ScrollView>
+            }}
+          />
           <Pressable
             accessibilityRole="button"
             onPress={onClose}
