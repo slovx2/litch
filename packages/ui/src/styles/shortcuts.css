@@ -46,19 +46,20 @@
   margin-inline-start: 0;
 }
 /* 色块不参与行内排版：有无色块都不改变状态点、标题和父子缩进的位置。
-   默认画在行外，聚合区与经理一节画在行首 12 像素内边距里、状态记号前面。 */
+   默认画在行外，聚合区与经理一节画在行首内边距里、状态记号前面。 */
 .ss-row > .dev-tick {
   position: absolute;
   inset-inline-start: var(--tick-at, -5px);
   margin-inline: 0;
 }
 /* 项目色条在 4px 内边距、12px 箭头和 6px 间距之后（x = 18 + 12·fs）。会话树缩进到行首 5px 的色块
-   正好落在这一列；展开箭头和状态记号共用一列（tree.css 的 .tree-fold），色块和记号之间只隔 4px。 */
+   正好落在这一列；行首内边距收到 10，色块和记号（展开箭头共用这一列，tree.css 的 .tree-fold）之间只隔 2px。 */
 .sc-item > .tree-node,
 .sc-ws > .tree-node,
 .mg-sidebar-manager > .tree-node,
 .projection-block.ticked > .tree-node {
   --tick-at: 5px;
+  --row-lead: 10px;
   padding-inline-start: calc(5px + 12px * var(--fs));
 }
 /* 聚合区和经理一节没有设备竖线：选中行不画连到竖线的分接线，免得和色块叠成十字 */
@@ -79,7 +80,7 @@
   padding-inline-start: calc(5px + 12px * var(--fs));
 }
 .sc-item > .sc-ghost > .ss-row {
-  padding-inline-start: calc(18px + 14px * var(--fs));
+  padding-inline-start: calc(14px + 14px * var(--fs));
 }
 .sc-ghost .ss-row:disabled {
   cursor: default;

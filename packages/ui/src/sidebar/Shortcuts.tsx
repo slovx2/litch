@@ -93,7 +93,7 @@ interface ShortcutsProps {
 /** 快捷区里子会话、项目收起的记录（和投影一样默认收起子会话） */
 const SCOPE = ':shortcuts'
 /** 每一层子会话往里缩多少（和 Sidebar.tsx 的 INDENT 一致） */
-const INDENT = 20
+const INDENT = 18
 const NO_CHILDREN: SessionChildren = {}
 const NO_IDS: readonly string[] = []
 

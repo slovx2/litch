@@ -184,7 +184,7 @@ try {
           seen.columns.every((x) => Math.abs(x - seen.columns[0]) < 1),
           '带箭头与不带箭头的标题同列',
         )
-        assert.deepEqual(seen.indent, [20, 40], '子孙缩进保持一致')
+        assert.deepEqual(seen.indent, [18, 36], '子孙缩进保持一致')
         assert.ok(Math.abs(seen.guide - seen.point) <= 1, '父状态点与子树竖线对齐')
         if (process.env.LITCH_CARET_SHOTS) {
           const shot = await call('Page.captureScreenshot', {
@@ -256,6 +256,17 @@ try {
           const kid = parent.closest('.tree-node').querySelector('.tree-kids .tree-node')
           const sum = kid.querySelector(':scope > .tree-kids > .tree-sum')
           const kidRow = kid.querySelector(':scope > .row-line > .ss-row')
+          const parentRow = parent.closest('.row-line').querySelector(':scope > .ss-row')
+          // 设备树项目下的顶层会话：标题同列；子会话记号落在父标题那一列
+          const deviceTops = [
+            ...document.querySelectorAll(
+              `${local} .tree-node[data-depth="0"] > .row-line > .ss-row`,
+            ),
+          ].map((row) => box(row.querySelector('.title')).left)
+          const deviceParent = document.querySelector(`${local} [data-session="s4"] > .ss-row`)
+          const deviceKid = deviceParent
+            .closest('.tree-node')
+            .querySelector('.tree-kids .tree-node > .row-line > .ss-row')
           const selected = (area) =>
             getComputedStyle(document.querySelector(`${area} .ss-row.sel`), '::before').content
           return {
@@ -264,12 +275,21 @@ try {
             deviceFolds,
             tops,
             sum: sum && {
-              caret: mid(sum.querySelector('.caret-ic')) - (mid(kidRow.querySelector('.st')) + 20),
+              caret: mid(sum.querySelector('.caret-ic')) - (mid(kidRow.querySelector('.st')) + 18),
               text:
                 box(sum.querySelector('.ell')).left -
-                (box(kidRow.querySelector('.title')).left + 20),
+                (box(kidRow.querySelector('.title')).left + 18),
             },
             recentSel: selected('[data-projection=recent]'),
+            deviceTops,
+            kidUnderTitle: [
+              [parentRow, kidRow],
+              [deviceParent, deviceKid],
+            ].map(
+              ([up, down]) =>
+                box(down.querySelector('.st')).left - box(up.querySelector('.title')).left,
+            ),
+            gap: box(kidRow.querySelector('.title')).left - box(kidRow.querySelector('.st')).right,
           }
         })
         const tag = `${skin}/${theme}`
@@ -286,12 +306,19 @@ try {
         for (const top of seen.tops) {
           assert.ok(Math.abs(top.title - title) < 1, `${tag} 聚合区标题同列`)
           assert.ok(top.tickEnd <= top.st, `${tag} 色条不压记号：${JSON.stringify(top)}`)
-          assert.ok(top.title - top.tick <= 28, `${tag} 色条到标题不留空列：${JSON.stringify(top)}`)
+          assert.ok(top.title - top.tick <= 23, `${tag} 色条到标题不留空列：${JSON.stringify(top)}`)
         }
         assert.ok(seen.sum, `${tag} 有收起的子会话行`)
         assert.ok(Math.abs(seen.sum.caret) <= 1, `${tag} “N 个子会话”箭头在记号列`)
         assert.ok(Math.abs(seen.sum.text) <= 1, `${tag} “N 个子会话”文字在标题列`)
         assert.equal(seen.recentSel, 'none', `${tag} 聚合区选中行不画分接线`)
+        assert.ok(
+          seen.deviceTops.every((x) => Math.abs(x - seen.deviceTops[0]) < 1),
+          `${tag} 设备树顶层会话标题同列`,
+        )
+        for (const offset of seen.kidUnderTitle)
+          assert.ok(Math.abs(offset) <= 1, `${tag} 子会话记号在父标题列：${offset}`)
+        assert.ok(Math.abs(seen.gap - 4) <= 0.5, `${tag} 记号到标题 4px：${seen.gap}`)
       }
     // 有记号的父会话：平时露记号，鼠标停上去换成箭头
     const marked = `${recent} [data-session="s1"]`

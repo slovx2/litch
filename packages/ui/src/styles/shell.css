@@ -731,6 +731,8 @@
   color: var(--ink-3);
   letter-spacing: 0.06em;
 }
+/* 行首内边距 --row-lead：状态记号（及父会话的展开箭头，tree.css 的 .tree-fold）从这里起。
+   设备树 12，聚合区 10（shortcuts.css）；子树竖线、“N 个子会话”都跟着它走 */
 .ss-row {
   position: relative;
   display: flex;
@@ -738,9 +740,13 @@
   gap: 6px;
   width: 100%;
   height: var(--row-h);
-  padding: 0 6px 0 12px;
+  padding: 0 6px 0 var(--row-lead, 12px);
   border-radius: var(--r1);
   text-align: left;
+}
+/* 记号到标题只隔 4px（其余各项之间仍是 6px）：子会话缩进 18 = 记号 14 + 4，子会话记号正好落在父标题那一列 */
+.ss-row > .st {
+  margin-inline-end: -2px;
 }
 .ss-row:hover {
   background: var(--hover);

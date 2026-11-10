@@ -947,7 +947,7 @@ const NO_IDS: readonly string[] = []
 const NO_CHILDREN: SessionChildren = {}
 const NO_GROUPS: SessionGroups = {}
 /** 子会话每一层往里缩多少像素（和 tree.css 的 .tree-kids 一致） */
-const INDENT = 20
+const INDENT = 18
 
 /** 一处放东西的地方（置顶、组、“项目”、工作区、无项目）接拖放的那几个事件 */
 interface Zone {
