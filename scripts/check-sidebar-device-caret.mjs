@@ -251,9 +251,24 @@ try {
             tickEnd: box(row.querySelector('.dev-tick')).right,
             st: box(row.querySelector('.st')).left,
             title: box(row.querySelector('.title')).left,
+            // 经理框（::after）居中画在记号列里：量出框的左右边
+            frame: row.querySelector('.st.mgr')
+              ? (() => {
+                  const st = box(row.querySelector('.st'))
+                  const width = parseFloat(
+                    getComputedStyle(row.querySelector('.st'), '::after').width,
+                  )
+                  return {
+                    left: st.left + (st.width - width) / 2,
+                    right: st.right - (st.width - width) / 2,
+                  }
+                })()
+              : null,
           }))
           const parent = document.querySelector('[data-projection=recent] [data-session="s4"]')
-          const kid = parent.closest('.tree-node').querySelector('.tree-kids .tree-node')
+          const kid = parent
+            .closest('.tree-node')
+            .querySelector('.tree-kids .tree-node:has(> .tree-kids > .tree-sum)')
           const sum = kid.querySelector(':scope > .tree-kids > .tree-sum')
           const kidRow = kid.querySelector(':scope > .row-line > .ss-row')
           const parentRow = parent.closest('.row-line').querySelector(':scope > .ss-row')
@@ -307,6 +322,18 @@ try {
           assert.ok(Math.abs(top.title - title) < 1, `${tag} 聚合区标题同列`)
           assert.ok(top.tickEnd <= top.st, `${tag} 色条不压记号：${JSON.stringify(top)}`)
           assert.ok(top.title - top.tick <= 23, `${tag} 色条到标题不留空列：${JSON.stringify(top)}`)
+        }
+        const framed = seen.tops.filter((top) => top.frame)
+        assert.ok(framed.length >= 1, `${tag} 覆盖带框记号的行`)
+        for (const top of framed) {
+          assert.ok(
+            top.frame.left - top.tickEnd >= 2.5,
+            `${tag} 框和色条留空：${JSON.stringify(top)}`,
+          )
+          assert.ok(
+            top.title - top.frame.right >= 2.5,
+            `${tag} 框和标题留空：${JSON.stringify(top)}`,
+          )
         }
         assert.ok(seen.sum, `${tag} 有收起的子会话行`)
         assert.ok(Math.abs(seen.sum.caret) <= 1, `${tag} “N 个子会话”箭头在记号列`)
