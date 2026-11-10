@@ -203,7 +203,44 @@ try {
   await click(`${pin} [data-session="s1"] > .tree-fold`)
   await until(() => has(`${pin} [data-session="s2"]`), '箭头仍可展开子树')
   await treeColumns()
+  await pinnedPaging()
   console.log('SIDEBAR_DEVICE_CARET_PASS')
+
+  /** 置顶的项目和设备树的项目一样分页：前 5 个、显示更多、收起；外部定位到收着的那部分会露出来 */
+  async function pinnedPaging() {
+    const pins = '[data-shortcuts=pins]'
+    const head = `${pins} [data-workspace=docs] .ws-row`
+    await click('.dev-group[data-device=local] [data-workspace=docs] .row-more button')
+    await click('.pick-pop [data-action=pin]')
+    await until(() => has(head), '置顶项目')
+    if (
+      (await run((s) => document.querySelector(s).getAttribute('aria-expanded'), head)) !== 'true'
+    )
+      await click(head)
+    const area = `${pins} .sc-ws[data-device=local]`
+    const seen = () =>
+      run(
+        (s) => ({
+          rows: document.querySelectorAll(`${s} .tree-node[data-depth="0"]`).length,
+          hidden: document.querySelector(`${s} .ss-more .dim`)?.textContent ?? null,
+          less: !!document.querySelector(`${s} .ss-more .less`),
+        }),
+        area,
+      )
+    await until(async () => (await seen()).rows > 0, '展开置顶项目')
+    const first = await seen()
+    assert.equal(first.rows, 5, '置顶项目先露出 5 个')
+    assert.match(first.hidden ?? '', /7/, '写出还收着几个')
+    await click(`${area} .ss-more .more`)
+    await until(async () => (await seen()).rows === 12, '显示更多')
+    assert.equal((await seen()).less, true, '显示更多之后能收起')
+    await click(`${area} .ss-more .less`)
+    await until(async () => (await seen()).rows === 5, '收起')
+    // 从搜索、通知打开收着的最后一个：分页让开
+    await read("window.__sidebarTree.open({ deviceId: 'local', sessionId: 'd9' })")
+    await until(() => has(`${area} [data-session="d9"]`), '定位露出分页里收着的会话')
+    console.log('置顶项目分页：前 5 个、显示更多、收起、外部定位露出')
+  }
 
   /** 箭头与记号共用一列：设备树里箭头在项目缩进之内，聚合区不留空列、选中行不画分接线、“N 个子会话”对齐 */
   async function treeColumns() {

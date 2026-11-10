@@ -13,6 +13,7 @@ import {
 } from '@litch/core'
 import { createRoot } from 'react-dom/client'
 import { App } from '../src/app/App.tsx'
+import { requestOpenSession } from '../src/app/actions.ts'
 import { ServicesProvider } from '../src/app/services.tsx'
 import { browserClock } from '../src/boot/channel.ts'
 
@@ -54,7 +55,9 @@ async function seed(): Promise<void> {
   await spawn(first, '按大小切分日志文件')
 }
 const seeded = seed()
-Object.assign(window, { __sidebarTree: { store: replica.store, keys, seeded } })
+Object.assign(window, {
+  __sidebarTree: { store: replica.store, keys, seeded, open: requestOpenSession },
+})
 
 const root = document.getElementById('root')
 if (!root) throw new Error('缺少夹具挂载点')

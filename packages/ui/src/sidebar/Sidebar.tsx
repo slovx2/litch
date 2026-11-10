@@ -79,7 +79,9 @@ import { foldsKeep, foldsSettled, groupClosed } from './folds.ts'
 import { HarnessFilter } from './HarnessFilter.tsx'
 import { DeviceInfo, SessionInfo, WorkspaceInfo } from './InfoCards.tsx'
 import { LocalGroupDialog } from './LocalGroupDialog.tsx'
+import { MoreRows } from './MoreRows.tsx'
 import { type ProjectedBlock, ProjectionGroups } from './ProjectionGroups.tsx'
+import { FIRST_ROWS, MORE_ROWS, moreToReveal, pageRows } from './paging.ts'
 import { type RowAction, RowMenu, type RowMenuHandle } from './RowMenu.tsx'
 import { revealPath, revealRow } from './reveal.ts'
 import { SidebarReveal, useSidebarReveal } from './reveal-context.ts'
@@ -937,12 +939,8 @@ function WorkspaceHead(props: WorkspaceHeadProps) {
   )
 }
 
-/** 一个工作区里先露出几个会话 */
-const FIRST_ROWS = 5
 /** 单独查看一组时先露出几个 */
 const FOCUS_ROWS = 50
-/** 点一次“展示更多”多露出几个 */
-const MORE_ROWS = 10
 const NO_IDS: readonly string[] = []
 const NO_CHILDREN: SessionChildren = {}
 const NO_GROUPS: SessionGroups = {}
@@ -1466,7 +1464,7 @@ function DeviceGroup(props: GroupProps) {
         closed: new Set(folds.closed.filter((id) => !opening.includes(id))),
         folded: new Set(folds.folded.filter((id) => !parents.includes(id))),
       })
-    const more = path.rootIndex + 1 - FIRST_ROWS
+    const more = moreToReveal(path.rootIndex)
     if (!props.managerRoot && more > (extra[path.group] ?? 0)) {
       setExtra((was) => ({ ...was, [path.group]: more }))
       changed = true
@@ -1558,42 +1556,15 @@ function DeviceGroup(props: GroupProps) {
     // 挂在父会话下面的不在组里单独占一行
     const list = all.filter((id) => !nested.has(id))
     const more = extra[groupId] ?? 0
-    let limit = first + more
-    // 只剩一个没露出来，不值得为它多一个按钮
-    if (list.length - limit <= 1) limit = list.length
-    const visible = list.filter((id, index) => index < limit || unfolded(id))
-    const hidden = list.length - visible.length
-    const shrinkable = more > 0 && list.length > first + 1
+    const page = pageRows(list, more, first, unfolded)
     return (
       <>
-        {visible.map((sessionId) => tree(sessionId, 0))}
-        {hidden > 0 || shrinkable ? (
-          <div className="ss-more">
-            {hidden > 0 ? (
-              <>
-                <button
-                  type="button"
-                  className="mini more"
-                  onClick={() => setExtra({ ...extra, [groupId]: more + MORE_ROWS })}
-                >
-                  {t('sidebar.showMore')}
-                </button>
-                <span className="dim grow">{t('sidebar.hiddenCount', { count: hidden })}</span>
-              </>
-            ) : (
-              <span className="grow" />
-            )}
-            {shrinkable ? (
-              <button
-                type="button"
-                className="mini less"
-                onClick={() => setExtra(({ [groupId]: _gone, ...rest }) => rest)}
-              >
-                {t('sidebar.showLess')}
-              </button>
-            ) : null}
-          </div>
-        ) : null}
+        {page.visible.map((sessionId) => tree(sessionId, 0))}
+        <MoreRows
+          page={page}
+          onMore={() => setExtra({ ...extra, [groupId]: more + MORE_ROWS })}
+          onLess={() => setExtra(({ [groupId]: _gone, ...rest }) => rest)}
+        />
       </>
     )
   }

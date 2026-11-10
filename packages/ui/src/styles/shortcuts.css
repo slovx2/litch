@@ -62,6 +62,10 @@
   --row-lead: 10px;
   padding-inline-start: calc(5px + 12px * var(--fs));
 }
+/* 置顶项目的“显示更多”：和设备树里一样，起点在会话标题左边 2px（树缩进 + 行首 10 + 记号 14 + 4 − 2） */
+.sc-ws > .ss-more {
+  padding-inline-start: calc(5px + 12px * var(--fs) + 26px);
+}
 /* 聚合区和经理一节没有设备竖线：选中行不画连到竖线的分接线，免得和色块叠成十字 */
 .sc-body .ss-row.sel::before,
 .projection-block .ss-row.sel::before,
