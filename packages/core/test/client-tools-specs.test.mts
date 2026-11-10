@@ -78,9 +78,26 @@ test('litch_browser 的命名空间说明不超过 1024 个字（codex 的上限
     browser.description.length <= 1024,
     `litch_browser 的说明有 ${browser.description.length} 个字`,
   )
-  // 要登录就调 request_sign_in（Litch 代填人批准的账号，或人自己登录）的那一条在里面
-  assert.match(browser.description, /call `request_sign_in`: the user signs in manually/)
+  // 浏览器可使用任务已授权的凭据直接登录；需要用户本人操作时仍保留手动登录入口。
+  assert.match(browser.description, /Sign in directly with available authorized credentials/)
+  assert.match(browser.description, /including those provided in the task or chat/)
+  assert.match(
+    browser.description,
+    /Use `request_sign_in` only when credentials are unavailable or the user must act/,
+  )
+  assert.match(browser.description, /other modes request manual sign-in/)
   assert.ok(browser.tools.some((tool) => tool.name === 'request_sign_in'))
+  // 直接登录规则只适用于浏览器，不能改变两个平台的 Computer Use 敏感操作审批。
+  for (const desktopPlatform of ['darwin', 'win32'] as const) {
+    const [computer] = clientToolSpecs([CLIENT_TOOL_NAMESPACE.computer], {
+      machine: null,
+      desktopPlatform,
+    })
+    assert.ok(computer)
+    assert.match(computer.description, /Ask the user before anything irreversible or sensitive/)
+    assert.match(computer.description, /entering passwords or personal data/)
+    assert.doesNotMatch(computer.description, /Sign in directly/)
+  }
 })
 
 test('request_sign_in 只增不改：原有的 tabId、site、reason 和必填照旧，新加的提示都是可选的平铺字符串', () => {
