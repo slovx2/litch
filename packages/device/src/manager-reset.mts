@@ -247,7 +247,11 @@ export class ManagerResets {
       if (!oldTools) throw new Error('The installed manager tool snapshot is unavailable.')
       // 重启时看到 applying 表示此前尚未确认，先恢复旧定义，不能把写过文件当作成功。
       if (record.phase === 'applying') {
-        await link.request('thread/resume', { threadId: manager.threadId, dynamicTools: oldTools })
+        await link.request('thread/resume', {
+          threadId: manager.threadId,
+          excludeTurns: true,
+          dynamicTools: oldTools,
+        })
         tree.store.setTools(manager.threadId, oldTools)
         record.phase = 'failed'
         throw new Error(
@@ -259,7 +263,11 @@ export class ManagerResets {
       this.owner.store.saveReset(record)
       this.owner.changed(manager.id)
       try {
-        await link.request('thread/resume', { threadId: manager.threadId, dynamicTools: tools })
+        await link.request('thread/resume', {
+          threadId: manager.threadId,
+          excludeTurns: true,
+          dynamicTools: tools,
+        })
         tree.store.setTools(manager.threadId, tools)
         this.owner.store.transaction(() => {
           this.owner.store.saveReset({
@@ -281,6 +289,7 @@ export class ManagerResets {
         try {
           await link.request('thread/resume', {
             threadId: manager.threadId,
+            excludeTurns: true,
             dynamicTools: oldTools,
           })
         } catch (restoreError) {

@@ -122,6 +122,8 @@ contextBridge.exposeInMainWorld('litchShell', {
     subtitle?: string
     body: string
     urgent?: boolean
+    /** 失败原因可以写入诊断日志，成功回答正文不记。 */
+    failure?: boolean
   }) => ipcRenderer.send(NOTIFY, notice),
   closeNotice: (id: string) => ipcRenderer.send(NOTIFY_CLOSE, id),
   onNotifyClick(handler: (id: string) => void) {

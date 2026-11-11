@@ -22,6 +22,7 @@ import {
   turnResult,
   watchTurn,
 } from './engine-link.mjs'
+import { sessionTurn } from './session-history.mjs'
 import type { GuardedTurn } from './task-approvals.mjs'
 import type { TaskRow } from './task-store.mjs'
 import type { TaskTurns } from './task-turns.mjs'
@@ -303,7 +304,7 @@ export async function executeRun(
       if (threadId === null) throw new RunFailure('internal', 'the run has no thread')
       let resumed: unknown
       try {
-        resumed = await link.request('thread/resume', { threadId })
+        resumed = await link.request('thread/resume', { threadId, excludeTurns: true })
       } catch (error) {
         if (threadMissing(error))
           throw new RunFailure('threadMissing', `the thread ${threadId} is gone: ${message(error)}`)
@@ -441,16 +442,11 @@ export async function recoverRun(host: RunHost, run: DeviceTaskRun): Promise<Run
   host.guardApprovals(link, run, () => turn)
   const watch = watchTurn(link, run.threadId)
   try {
-    const read = await link
-      .request('thread/read', { threadId: run.threadId, includeTurns: true })
-      .catch(() => null)
-    const thread = isObject(read) && isObject(read.thread) ? read.thread : null
-    const turns = Array.isArray(thread?.turns) ? thread.turns : []
-    const turn = turns.find((item) => isObject(item) && item.id === run.turnId)
+    const turn = await sessionTurn(link, run.threadId, run.turnId)
     if (!isObject(turn)) return interrupted('the turn could not be found in the thread')
     if (turn.status !== 'inProgress') return outcomeOf(turnResult(turn, lastAnswerIn(turn)))
     // 还在跑：订阅这个会话，接着等
-    await link.request('thread/resume', { threadId: run.threadId })
+    await link.request('thread/resume', { threadId: run.threadId, excludeTurns: true })
     const startedAt = (run.startedAt ?? Math.floor(host.now() / 1000)) * 1000
     const left = startedAt + host.timing.turnTimeoutMs - host.now()
     return outcomeOf(

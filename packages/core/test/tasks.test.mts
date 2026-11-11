@@ -21,6 +21,7 @@ import {
   type TasksView,
   type TaskView,
 } from '../src/index.mjs'
+import { projectRun } from '../src/projection/tasks.mjs'
 import { type FakeHarness, fakeDevice, harness } from './fake-device.mjs'
 import { fakeOpener } from './fake-server.mjs'
 import { fakeTasks, rawRun, rawTask } from './fake-tasks.mjs'
@@ -556,4 +557,33 @@ test('数据副本：未读合计、按设备的任务键；打开运行记录�
   assert.deepEqual(finished, ['r6:任务 a'])
   close()
   assert.equal(replica.store.get(keys.taskRuns('local', 'a')), undefined)
+})
+
+test('任务投影保留回合编号：启动前失败与已启动回合在两端可区分', () => {
+  const before = projectRun(
+    'remote',
+    rawRun('before', 'task', {
+      status: 'failed',
+      threadId: 'large',
+      turnId: null,
+      startedAt: null,
+      error: { code: 'internal', message: 'payload limit' },
+    }),
+  )
+  assert.equal(before.threadId, 'large')
+  assert.equal(before.turnId, null)
+  assert.equal(before.startedAt, null)
+  assert.equal(before.error?.message, 'payload limit')
+  const after = projectRun(
+    'remote',
+    rawRun('after', 'task', {
+      status: 'failed',
+      threadId: 'large',
+      turnId: 'turn',
+      startedAt: 123,
+      error: { code: 'turnFailed', message: 'model failed' },
+    }),
+  )
+  assert.equal(after.turnId, 'turn')
+  assert.equal(after.startedAt, 123000)
 })

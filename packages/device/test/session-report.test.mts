@@ -240,18 +240,22 @@ test('REPORT-005：结束后补读历史期间关闭再恢复，不会把迟到�
     const client = await litch(env)
     const { threadId } = await parent(client)
     const id = await child(env, threadId)
-    const link = await env.device.sessionTree.link('claude-code')
-    const request = link.request.bind(link)
+    const open = env.device.sessionTree.host.openEngineLink.bind(env.device.sessionTree.host)
     let reading = false
     const barrier = new Promise<void>((resolve) => {
       release = resolve
     })
-    link.request = async (method, params: any, options) => {
-      if (method === 'thread/read' && params.threadId === id && params.includeTurns) {
-        reading = true
-        await barrier
+    env.device.sessionTree.host.openEngineLink = async (harness) => {
+      const link = await open(harness)
+      const request = link.request.bind(link)
+      link.request = async (method, params: any, options) => {
+        if (method === 'thread/read' && params.threadId === id && params.includeTurns) {
+          reading = true
+          await barrier
+        }
+        return request(method, params, options)
       }
-      return request(method, params, options)
+      return link
     }
     const turn = env.claude.current(id)
     assert.ok(turn)
@@ -313,23 +317,27 @@ test('REPORT-007：唤醒准备期间关闭其中一个子会话，重新核对�
     env.claude.end(second, 'completed', '继续投递')
     await until(() => env.device.sessionTree.queuedNotes(threadId).length === 2, '两个结果排队')
     const tree = env.device.sessionTree
-    const link = await tree.link('pi')
-    const request = link.request.bind(link)
+    const open = tree.host.openEngineLink.bind(tree.host)
     const barrier = new Promise<void>((resolve) => {
       release = resolve
     })
     let reading = false
-    link.request = async (method, params: any, options) => {
-      if (
-        method === 'thread/read' &&
-        params.threadId === threadId &&
-        params.includeTurns &&
-        !reading
-      ) {
-        reading = true
-        await barrier
+    tree.host.openEngineLink = async (harness) => {
+      const link = await open(harness)
+      const request = link.request.bind(link)
+      link.request = async (method, params: any, options) => {
+        if (
+          method === 'thread/read' &&
+          params.threadId === threadId &&
+          params.includeTurns &&
+          !reading
+        ) {
+          reading = true
+          await barrier
+        }
+        return request(method, params, options)
       }
-      return request(method, params, options)
+      return link
     }
     env.pi.end(threadId)
     await until(() => reading, '唤醒准备挂起')

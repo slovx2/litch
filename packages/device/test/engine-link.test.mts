@@ -121,3 +121,40 @@ test('DEVICE-TOOLS-001：命名空间要以 litch_ 开头、不能注册两次�
   await new Promise((resolve) => setTimeout(resolve, 10))
   assert.equal(aborted, true)
 })
+
+test('内部历史连接断开：结构化日志记录 harness、方法、会话与原因，不记录正文', async () => {
+  const pi = new FakeEngine('pi')
+  const original = pi.connector
+  Object.defineProperty(pi, 'connector', {
+    value: async (handlers: import('../src/wire.mjs').WireHandlers) => {
+      const wire = await original(handlers)
+      return {
+        ...wire,
+        send(text: string) {
+          if (JSON.parse(text).method !== 'thread/read') wire.send(text)
+        },
+      }
+    },
+  })
+  const events: Array<{ event: string; fields: Record<string, unknown> }> = []
+  const env = rig({ pi }, {}, { trace: (event, fields) => events.push({ event, fields }) })
+  try {
+    const link = await env.device.openEngineLink('pi')
+    const pending = assert.rejects(
+      link.request('thread/read', { threadId: 'large', input: 'fixture-private-body' }),
+      /假上游断开/,
+    )
+    await new Promise((resolve) => setImmediate(resolve))
+    pi.crash()
+    await pending
+    const failure = events.find((row) => row.event === 'engine.request.failed')
+    assert.ok(failure)
+    assert.equal(failure.fields.harness, 'pi')
+    assert.equal(failure.fields.method, 'thread/read')
+    assert.equal(failure.fields.threadId, 'large')
+    assert.equal(failure.fields.error, '假上游断开')
+    assert.doesNotMatch(JSON.stringify(events), /fixture-private-body/)
+  } finally {
+    await env.close()
+  }
+})

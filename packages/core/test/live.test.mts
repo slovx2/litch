@@ -626,9 +626,24 @@ const finished = (id: string, fields: Partial<Turn> = {}): Turn =>
 test('发送提到会话的消息：当前会话没带 litch_sessions 时替模型读那个会话，附上最后一个回合的摘录', async () => {
   const other = thread({
     id: 'b',
-    turns: [turn('t-b', [userText('ub', '构建为什么慢'), agentText('ab', '因为没开缓存')])],
+    turns: [
+      ...Array.from({ length: 120 }, (_, i) =>
+        turn(`old-${i}`, [agentText(`old-item-${i}`, 'x'.repeat(1024 * 1024))]),
+      ),
+      turn('t-b', [userText('ub', '构建为什么慢'), agentText('ab', '因为没开缓存')]),
+    ],
   })
-  const { core, command, sent } = setup([thread({ id: 'a', turns: [] }), other])
+  const { core, command, sent, world, handlers } = setup([thread({ id: 'a', turns: [] }), other])
+  world.lastTurn.b = other.turns.at(-1) ?? null
+  const originalRead = handlers['thread/read']!
+  handlers['thread/read'] = (params) => {
+    const request = params as { threadId: string; includeTurns?: boolean }
+    if (request.threadId === 'b') {
+      assert.equal(request.includeTurns, false, '超过100MiB的会话摘录不整读')
+      return { thread: { ...other, turns: [] } }
+    }
+    return originalRead(params)
+  }
   core.start()
   await settle()
   watch(core)
@@ -643,6 +658,13 @@ test('发送提到会话的消息：当前会话没带 litch_sessions 时替模�
   const text = params?.input[0]?.text ?? ''
   assert.ok(text.startsWith('参考 ＠[构建]\n\n<litch-session-mentions>\n'))
   assert.match(text, /You cannot open these sessions/)
+  assert.ok(
+    sent('thread/turns/list').some(
+      (params) =>
+        (params as { threadId: string; limit: number }).threadId === 'b' &&
+        (params as { limit: number }).limit === 1,
+    ),
+  )
   assert.match(text, /<session index="1" thread_id="b" title="构建" harness="[^"]+"/)
   assert.match(
     text,

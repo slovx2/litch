@@ -39,15 +39,16 @@ function fixture() {
     closed: false,
     async request(method, params: any, options) {
       reads.push(method)
-      if (native && method === 'thread/read') {
+      if (method === 'thread/read') {
         assert.equal(params.includeTurns, false, '原生历史不能整份读回')
         return { thread: { ...structuredClone(thread), turns: [] } }
       }
-      if (native && method === 'thread/turns/list') {
+      if (method === 'thread/turns/list') {
+        if (historyMs > 0 && (options?.timeoutMs ?? 0) < historyMs) throw new Error('历史读取超时')
         assert.equal(params.limit, 1)
         return { data: [structuredClone(thread.turns.at(-1))], nextCursor: 'older-history' }
       }
-      if (native && method === 'thread/resume') assert.equal(params.excludeTurns, true)
+      if (method === 'thread/resume') assert.equal(params.excludeTurns, true)
       if (['thread/read', 'thread/resume'].includes(method) && historyMs > 0) {
         const timeout = options?.timeoutMs ?? 0
         if (timeout < historyMs) throw new Error(`${method} 等了 ${timeout} 毫秒没有应答`)

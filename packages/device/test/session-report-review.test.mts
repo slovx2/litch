@@ -74,15 +74,19 @@ test('REPORT-010：立即处理读历史期间切换孩子开关，仍投递最�
     await until(() => tree.queuedNotes(threadId).length === 2, '两个结果排队')
     env.pi.end(threadId, 'interrupted')
     await until(() => !tree.isActive(threadId), '父会话停下')
-    const link = await tree.link('pi')
-    const request = link.request.bind(link)
+    const open = tree.host.openEngineLink.bind(tree.host)
     let reading = false
-    link.request = async (method, params: any, options) => {
-      if (method === 'thread/read' && params.threadId === threadId && params.includeTurns) {
-        reading = true
-        await barrier.waiting
+    tree.host.openEngineLink = async (harness) => {
+      const link = await open(harness)
+      const request = link.request.bind(link)
+      link.request = async (method, params: any, options) => {
+        if (method === 'thread/read' && params.threadId === threadId && params.includeTurns) {
+          reading = true
+          await barrier.waiting
+        }
+        return request(method, params, options)
       }
-      return request(method, params, options)
+      return link
     }
     const delivery = tree.deliver(threadId)
     await until(() => reading, '手动投递读历史挂起')
@@ -158,15 +162,19 @@ test('REPORT-012：脱离再派出的 epoch 单调增加，旧关系补读不能
     const tree = env.device.sessionTree
     const row = tree.store.parentOf(id)
     assert.ok(row)
-    const link = await tree.link('claude-code')
-    const request = link.request.bind(link)
+    const open = tree.host.openEngineLink.bind(tree.host)
     let reading = false
-    link.request = async (method, params: any, options) => {
-      if (method === 'thread/read' && params.threadId === id && params.includeTurns) {
-        reading = true
-        await barrier.waiting
+    tree.host.openEngineLink = async (harness) => {
+      const link = await open(harness)
+      const request = link.request.bind(link)
+      link.request = async (method, params: any, options) => {
+        if (method === 'thread/read' && params.threadId === id && params.includeTurns) {
+          reading = true
+          await barrier.waiting
+        }
+        return request(method, params, options)
       }
-      return request(method, params, options)
+      return link
     }
     env.claude.end(id, 'completed', '旧关系结果')
     await until(() => reading, '旧关系补读挂起')

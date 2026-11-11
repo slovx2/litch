@@ -243,7 +243,13 @@ export function createMockTasks(host: MockTasksHost): MockTasks {
               workspaceId: task.target.workspaceId,
               title: `${task.name} · ${stamp(run.scheduledFor)}`,
             })
-      const running: TaskRunView = { ...run, status: 'running', threadId, startedAt: clock.now() }
+      const running: TaskRunView = {
+        ...run,
+        status: 'running',
+        threadId,
+        turnId: `${run.id}-turn`,
+        startedAt: clock.now(),
+      }
       putRun(deviceId, state, running, false)
       later(() => {
         if (!state.tasks.has(task.id)) return
@@ -406,6 +412,7 @@ export function createMockTasks(host: MockTasksHost): MockTasks {
         status: 'queued',
         harness: task.target.harness,
         threadId: null,
+        turnId: null,
         startedAt: null,
         finishedAt: null,
         summary: null,

@@ -200,3 +200,17 @@ export function runTone(status: TaskRunView['status']): 'ok' | 'err' | 'run' | '
       return 'off'
   }
 }
+
+/** 无回合编号的失败仍展示原因，不能因为已有目标会话而看起来像已经执行。 */
+export function runErrorText(run: TaskRunView, t: Translator): string {
+  if (!run.error) return ''
+  const cause = errorText(run.error, t)
+  const text = run.turnId === null ? t('tasks.run.notStarted', { text: cause }) : cause
+  return /WebSocket.*(?:MiB|limit)/i.test(run.error.message)
+    ? t('tasks.run.payloadRetry', { text })
+    : text
+}
+
+/** 失败通知回任务详情查看运行记录；等待审批和成功通知仍可打开对应会话。 */
+export const taskNoticeDestination = (run: TaskRunView): 'task' | 'session' =>
+  run.status === 'failed' || !run.threadId ? 'task' : 'session'

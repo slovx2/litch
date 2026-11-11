@@ -357,7 +357,7 @@ export class RestartResume {
       if (this.host.store.state(row) !== 'ready') return
       await link.request(
         'thread/resume',
-        { threadId: row.threadId, ...(link.native ? { excludeTurns: true } : {}) },
+        { threadId: row.threadId, excludeTurns: true },
         { timeoutMs: RESTORE_HISTORY_MS },
       )
       // 各引擎的 resume 应答不一定包含回合历史，统一用 read 再核对。

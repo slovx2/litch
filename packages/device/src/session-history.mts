@@ -1,7 +1,7 @@
 import type { EngineLink } from './engine-link.mjs'
-import { isObject } from './wire.mjs'
+import { isObject, UpstreamRpcError } from './wire.mjs'
 
-/** 默认只读元数据；确需历史时按页消费，禁止退回整份 thread/read。 */
+/** 默认只读元数据；确需历史时按页消费，只有旧适配器明确缺少分页方法才保留整读。 */
 export async function* historyPages(
   link: Pick<EngineLink, 'request'>,
   threadId: string,
@@ -33,6 +33,8 @@ export async function* historyPages(
   } while (cursor !== null && (latest === undefined || count < latest))
 }
 
+const lacksPages = (error: unknown) => error instanceof UpstreamRpcError && error.code === -32601
+
 export async function sessionHistory(
   link: Pick<EngineLink, 'request' | 'native'>,
   threadId: string,
@@ -42,14 +44,31 @@ export async function sessionHistory(
 ): Promise<Record<string, any>> {
   const result = await link.request(
     'thread/read',
-    { threadId, includeTurns: includeTurns && !link.native },
+    { threadId, includeTurns: false },
     timeoutMs === undefined ? undefined : { timeoutMs },
   )
   const thread = isObject(result) && isObject(result.thread) ? result.thread : null
   if (!thread) throw new Error(`没有给回会话 ${threadId}`)
-  if (!includeTurns || !link.native) return thread
+  if (!includeTurns) return thread
   const turns: Record<string, unknown>[] = []
-  for await (const page of historyPages(link, threadId, latest, timeoutMs)) turns.push(...page)
+  let paged = false
+  try {
+    for await (const page of historyPages(link, threadId, latest, timeoutMs)) {
+      paged = true
+      turns.push(...page)
+    }
+  } catch (error) {
+    // 旧对端明确没有分页方法才沿用整读；断线、坏页和超限不能触发更大的请求。
+    if (link.native || paged || !lacksPages(error)) throw error
+    const full = await link.request(
+      'thread/read',
+      { threadId, includeTurns: true },
+      timeoutMs === undefined ? undefined : { timeoutMs },
+    )
+    if (!isObject(full?.thread)) throw new Error(`没有给回会话 ${threadId}`)
+    if (latest === undefined) return full.thread
+    return { ...full.thread, turns: (full.thread.turns ?? []).slice(-latest) }
+  }
   return { ...thread, turns: turns.reverse() }
 }
 
@@ -59,16 +78,20 @@ export async function sessionTurn(
   threadId: string,
   turnId: string,
 ) {
-  if (!link.native) {
+  let paged = false
+  try {
+    for await (const page of historyPages(link, threadId)) {
+      paged = true
+      const turn = page.find((entry) => entry.id === turnId)
+      if (turn) return turn
+    }
+  } catch (error) {
+    if (link.native || paged || !lacksPages(error)) throw error
     const thread = await sessionHistory(link, threadId, true)
     return (
       (Array.isArray(thread.turns) ? thread.turns : []).find((turn: any) => turn.id === turnId) ??
       null
     )
-  }
-  for await (const page of historyPages(link, threadId)) {
-    const turn = page.find((entry) => entry.id === turnId)
-    if (turn) return turn
   }
   return null
 }

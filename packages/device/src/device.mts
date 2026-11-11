@@ -72,6 +72,7 @@ import {
   type UpstreamConfig,
 } from './session.mjs'
 import { SessionArchives } from './session-archive.mjs'
+import { sessionHistory } from './session-history.mjs'
 import { openSessionDatabase, SessionStore } from './session-store.mjs'
 import { sessionToolsHandler } from './session-tools.mjs'
 import { SessionTree } from './session-tree.mjs'
@@ -374,11 +375,15 @@ export class DeviceServer {
           observeSnapshots: false,
         })
         try {
-          return await link.request(
-            'thread/read',
-            { threadId, includeTurns },
-            { timeoutMs: Math.max(1, deadline - Date.now()) },
-          )
+          return {
+            thread: await sessionHistory(
+              link,
+              threadId,
+              includeTurns,
+              1,
+              Math.max(1, deadline - Date.now()),
+            ),
+          }
         } finally {
           link.close()
         }
@@ -1099,6 +1104,7 @@ export class DeviceServer {
               handshakeTimeoutMs: options.handshakeTimeoutMs ?? this.taskTiming.handshakeTimeoutMs,
               requestTimeoutMs: this.taskTiming.requestTimeoutMs,
               tools: this.deviceTools,
+              ...(this.options.trace ? { trace: this.options.trace } : {}),
               clientTools: this.host.clientTools,
               prepareQuestionInput: (method, params) =>
                 this.sessionTree.prepareQuestionInput(method, params),

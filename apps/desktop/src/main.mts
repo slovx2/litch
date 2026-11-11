@@ -613,7 +613,16 @@ ipcMain.on(NOTIFY, (event, value: unknown) => {
   const frame = event.senderFrame
   if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return
   const notice = parseTaskNotice(value)
-  if (notice) showTaskNotice(notice, event.sender, NOTIFY_CLICK)
+  if (notice) {
+    if (notice.failure)
+      mainLog.write('notice.failed', {
+        id: notice.id,
+        title: notice.title,
+        subtitle: notice.subtitle ?? null,
+        body: notice.body,
+      })
+    showTaskNotice(notice, event.sender, NOTIFY_CLICK)
+  }
 })
 
 // 收回一条：会话里的事处理掉了、人已经在看那个会话了

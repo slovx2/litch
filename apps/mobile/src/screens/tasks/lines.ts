@@ -4,7 +4,7 @@ import type { TaskRunView, TaskView } from '@litch/core'
 import {
   askLine,
   askStateText,
-  errorText,
+  runErrorText,
   runStatusText,
   scheduleLine,
   triggerText,
@@ -88,9 +88,7 @@ export function runLines(run: TaskRunView, now: number, t: Translator): RunLines
             ? 'idle'
             : 'unread'
   // 摘要是模型写的 Markdown：只留文字
-  const lines = [run.error ? errorText(run.error, t) : plainPreview(run.summary ?? '')].filter(
-    Boolean,
-  )
+  const lines = [run.error ? runErrorText(run, t) : plainPreview(run.summary ?? '')].filter(Boolean)
   for (const entry of run.approvals)
     lines.push(`${askLine(entry, t)} · ${askStateText(entry, now, t)}`)
   return {

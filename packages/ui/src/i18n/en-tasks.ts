@@ -233,4 +233,7 @@ export const enTasks: Record<keyof typeof zhTasks, Entry> = {
   'settings.notify.failures': 'Always notify on failure',
   'settings.notify.success': 'Also notify on success',
   'settings.notify.browser': 'System notifications are only available in the desktop app.',
+  'tasks.run.notStarted': 'No turn start was recorded: {text}',
+  'tasks.run.payloadRetry': '{text}. Later runs may fail again until this cause is resolved.',
+  'tasks.notice.bodyAt': '{device} · {time} · {text}',
 }

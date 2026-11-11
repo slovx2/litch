@@ -441,7 +441,7 @@ export class SessionTree {
     const harness = await this.owner(threadId)
     const link = await this.link(harness)
     // 历史连接不订阅、不复用编排连接；单个回合过大或读取失败不能断掉其他线的 send/watch。
-    const reader = includeTurns && link.native ? await this.host.openEngineLink(harness) : link
+    const reader = includeTurns ? await this.host.openEngineLink(harness) : link
     try {
       const thread = await sessionHistory(reader, threadId, includeTurns, latest)
       return { harness, thread }

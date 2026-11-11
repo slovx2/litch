@@ -173,6 +173,7 @@ import {
   createHarnessConfig,
   type HarnessConfig,
 } from './harness-config.mjs'
+import { lacksPaging } from './history.mjs'
 import { createInstall, type Install } from './install.mjs'
 import { createLiveSessions } from './live.mjs'
 import type { MachineFacts } from './machine/types.mjs'
@@ -2286,12 +2287,30 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       return thread ? summaryOf(thread) : undefined
     },
     async read(threadId) {
+      const deadline = options.clock.now() + MENTION_READ_MS
+      const timeout = () => ({ timeoutMs: Math.max(1, deadline - options.clock.now()) })
       const { thread } = await link.request(
         'thread/read',
-        { threadId, includeTurns: true },
-        { timeoutMs: MENTION_READ_MS },
+        { threadId, includeTurns: false },
+        timeout(),
       )
-      return thread
+      try {
+        const page = await link.request(
+          'thread/turns/list',
+          {
+            threadId,
+            limit: 1,
+            sortDirection: 'desc',
+            itemsView: 'full',
+          },
+          timeout(),
+        )
+        return { ...thread, turns: [...page.data].reverse() }
+      } catch (error) {
+        if (!lacksPaging(error)) throw error
+        return (await link.request('thread/read', { threadId, includeTurns: true }, timeout()))
+          .thread
+      }
     },
     log,
   }
