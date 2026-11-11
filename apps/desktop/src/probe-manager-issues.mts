@@ -100,16 +100,17 @@ export async function managerIssuesProbe() {
     '决策标签出现X-n issue 专属操作',
   )
   passed.push('五类标签、默认决策、专属操作隔离')
+  // 状态是跨类型的统一分组（单选），各页签首次进入都是“待处理”
   for (const [tab, selected, statuses] of [
-    ['decisions', 'open', ['open']],
-    ['suggestions', 'endorsed', ['endorsed']],
-    ['requests', 'open', ['open']],
-    ['reports', 'unread', ['unread']],
-    ['issues', 'open', ['open']],
+    ['decisions', 'todo', ['open']],
+    ['suggestions', 'todo', ['endorsed']],
+    ['requests', 'todo', ['open']],
+    ['reports', 'todo', ['unread']],
+    ['issues', 'todo', ['open']],
   ] as const) {
     await click(`[data-inbox-tab="${tab}"]`)
     await until(`${tab} 首次默认待处理`, () =>
-      one(`[data-issue-filter-status="${selected}"][aria-pressed="true"]`),
+      one(`[data-issue-filter-status="${selected}"][aria-checked="true"]`),
     )
     assert(
       all('[data-issue-filter-status]')[0]?.dataset.issueFilterStatus === selected &&
@@ -137,7 +138,7 @@ export async function managerIssuesProbe() {
         ),
     )
   }
-  passed.push('五类默认开放／待开始／未读在前，全部在后')
+  passed.push('五类默认待处理分组在前，全部在后')
   // 完整集合的分页验收显式选全部，不能再依赖旧默认值。
   await click('[data-issue-filter-status="all"]')
   await click('[data-inbox-tab="issues"]')
@@ -213,11 +214,11 @@ export async function managerIssuesProbe() {
       .map((sample) => sample.id),
   }
   // 两个标签各留不同的状态与排序，切换回来仍取自己的过滤条件。
-  await click('[data-issue-filter-status="active"]')
+  await click('[data-issue-filter-status="unfinished"]')
   await select('[data-issue-filter="order"]', 'oldest')
   await until('X-n issue 开放集合', () => sameIds(expectedSummary.active))
   await click('[data-inbox-tab="decisions"]')
-  await click('[data-issue-filter-status="open"]')
+  await click('[data-issue-filter-status="todo"]')
   await select('[data-issue-filter="order"]', 'updated')
   await until(
     '决策待处理集合',
@@ -233,7 +234,7 @@ export async function managerIssuesProbe() {
   await until(
     'X-n issue 独立记忆',
     () =>
-      one('[data-issue-filter-status="active"][aria-pressed="true"]') &&
+      one('[data-issue-filter-status="unfinished"][aria-checked="true"]') &&
       one<HTMLSelectElement>('[data-issue-filter="order"]')?.value === 'oldest' &&
       sameIds(expectedSummary.active),
   )
@@ -241,7 +242,7 @@ export async function managerIssuesProbe() {
   await until(
     '决策独立记忆',
     () =>
-      one('[data-issue-filter-status="open"][aria-pressed="true"]') &&
+      one('[data-issue-filter-status="todo"][aria-checked="true"]') &&
       one<HTMLSelectElement>('[data-issue-filter="order"]')?.value === 'updated',
   )
   passed.push('分类标签独立记忆状态与排序')
@@ -276,7 +277,7 @@ export async function managerIssuesProbe() {
       '概览仍沿用先前排序',
     )
     if (key === 'unread')
-      assert(one('[data-issue-chip="unread"][aria-pressed="true"]'), '未读过滤没有提示')
+      assert(one('[data-issue-chip="unread"][aria-checked="true"]'), '未读过滤没有提示')
     passed.push(`概览 ${key}：${expected.length} 条与列表一致`)
   }
   await click('[data-issue-filter-status="all"]')
@@ -490,13 +491,13 @@ export async function managerIssuesProbe() {
   }
   passed.push('四类完整页主操作、活动过滤、依据和关联折叠')
   await click('[data-inbox-tab="decisions"]')
-  await click('[data-issue-filter-status="open"]')
+  await click('[data-issue-filter-status="todo"]')
   await click('[data-issue="D-15"] [data-act="issue-toggle"]')
   await click('[data-issue="D-15"] [data-board-reference="D-13"]')
   await until(
     '已答复决策链接切到对应过滤',
     () =>
-      one('[data-issue-filter-status="answered"][aria-pressed="true"]') &&
+      one('[data-issue-filter-status="done"][aria-checked="true"]') &&
       one('[data-issue="D-13"] [data-act="issue-toggle"][aria-expanded="true"]'),
   )
   await click('[data-issue="D-13"] [data-act="issue-toggle"]')

@@ -1,61 +1,203 @@
 /* 经理 issue 控制台：按类别分页签的列表、过滤、详情与讨论。颜色、圆角都用皮肤变量；
    视觉沿用看板原有的部件：状态行用文字切换（同决策的状态行），评论块同答复块（浅底加左侧线），输入区同追问区。 */
 
-/* ---------- 过滤：状态一行文字切换，排序在右端 ---------- */
-.mg-issue-filters {
-  align-items: center;
-}
-.mg-issue-statuses {
+/* ---------- 筛选栏：左列标签、右列控件对齐；多选是带方框的勾选项，单选是分段 ---------- */
+.mg-issue-toolbar {
   display: flex;
-  flex-wrap: wrap;
-  gap: 2px 16px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
+  align-items: flex-start;
+  gap: 8px 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line-1);
 }
-
-/* 普通 issue 页签的第二行：新建 + 几个开关 */
-.mg-issue-subbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
+.mg-issue-toolbar-act {
+  flex: none;
 }
-.mg-issue-new {
+.mg-issue-toolbar-act .btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  flex: none;
 }
-.mg-issue-chips {
+.mg-issue-fields {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 14px;
+}
+.mg-issue-fields.stacked {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  padding: 6px 8px 8px;
+}
+/* 标签和它那一行的第一排控件对齐（控件折行时也不跑到中间） */
+.mg-issue-flabel {
+  display: flex;
+  align-items: center;
+  align-self: start;
+  min-height: calc(26px * var(--fs));
+  color: var(--ink-2);
+  font-size: calc(12px * var(--fs));
+  white-space: nowrap;
+}
+.mg-issue-fields.stacked .mg-issue-flabel {
+  min-height: 0;
+  margin-top: 8px;
+}
+.mg-issue-fields.stacked .mg-issue-flabel:first-child {
+  margin-top: 0;
+}
+.mg-issue-fields.stacked .mg-issue-flabel.sub {
+  display: none;
+}
+.mg-issue-fctl {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
 }
-.mg-issue-chip {
-  height: calc(24px * var(--fs));
-  padding: 0 10px;
+/* 最后一行右端：清除筛选和排序 */
+.mg-issue-fend {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+.mg-issue-fnote {
+  color: var(--ink-3);
+  font-size: calc(12px * var(--fs));
+  font-variant-numeric: tabular-nums;
+}
+/* 文字按钮：全选、细分、清除筛选 */
+.mg-issue-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--accent);
+  font-size: calc(12px * var(--fs));
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mg-issue-link:hover:not(:disabled) {
+  background: var(--hover);
+}
+.mg-issue-link:disabled {
+  color: var(--ink-3);
+  cursor: default;
+}
+
+/* 多选：方框 + 勾 */
+.mg-issue-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: calc(26px * var(--fs));
+  padding: 0 9px 0 6px;
   border: 1px solid var(--line-2);
-  border-radius: 999px;
+  border-radius: var(--r1);
   background: transparent;
   color: var(--ink-2);
   font-size: calc(12px * var(--fs));
   white-space: nowrap;
   cursor: pointer;
 }
-.mg-issue-chip:hover {
+.mg-issue-check:hover {
   background: var(--hover);
   color: var(--ink);
 }
-.mg-issue-chip[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--accent) 60%, var(--line-2));
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
+.mg-issue-check[aria-checked="true"] {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line-2));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--ink);
+}
+.mg-issue-box {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: calc(13px * var(--fs));
+  height: calc(13px * var(--fs));
+  border: 1px solid var(--line-3);
+  border-radius: min(var(--r1), 3px);
+  background: var(--raised);
+}
+.mg-issue-box svg.ic {
+  width: calc(11px * var(--fs));
+  height: calc(11px * var(--fs));
+  stroke-width: 2;
+}
+.mg-issue-check[aria-checked="true"] .mg-issue-box {
+  border-color: var(--accent-solid);
+  background: var(--accent-solid);
+  color: var(--on-accent);
+}
+
+/* 单选：分段，凹下去的槽里选中的一段浮起来 */
+.mg-issue-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--sunken);
+}
+.mg-issue-seg > [role="radio"] {
+  height: calc(20px * var(--fs));
+  padding: 0 10px;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: calc(12px * var(--fs));
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mg-issue-seg > [role="radio"]:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+.mg-issue-seg > [role="radio"][aria-checked="true"] {
+  background: var(--raised);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px var(--line-2);
+}
+.mg-issue-seg.small > [role="radio"] {
+  height: calc(18px * var(--fs));
+  padding: 0 8px;
+  font-size: calc(11.5px * var(--fs));
+}
+
+/* 窄屏：一个“筛选”按钮，点开浮层 */
+.mg-issue-compact {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mg-issue-ftoggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mg-issue-fcount {
+  color: var(--on-accent);
+  background: var(--accent-solid);
+  font-variant-numeric: tabular-nums;
+}
+/* 浮层不超出筛选栏（看板最窄 360） */
+.pick-pop.down.mg-issue-pop {
+  left: 0;
+  right: auto;
+  width: min(420px, 100%);
+  max-width: 100%;
+  max-height: min(520px, 70vh);
+  color: var(--ink);
 }
 
 /* 列表尾：已显示几条 + 加载更多 */
@@ -584,4 +726,21 @@ fieldset.mg-issue-status {
 
 .mg-issue-thread .mg-issue-quick .mg-decision:focus {
   outline-offset: 6px;
+}
+.mg-issue-fields.stacked .mg-issue-order {
+  margin-left: 0;
+}
+/* 类别分段右端：issue 页签的新建按钮 */
+.mg-inbox-act {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+.mg-inbox-act:empty {
+  display: none;
+}
+.mg-issue-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }

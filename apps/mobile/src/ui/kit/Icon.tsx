@@ -32,6 +32,8 @@ const PATHS = {
   stop: 'M4.5 4.5h7v7h-7z',
   close: 'M4 4l8 8M12 4l-8 8',
   check: 'M3.5 8.5l3 3 6-7',
+  /** 筛选：漏斗 */
+  filter: 'M2.5 3.5h11L9.5 8.5v4.5l-3-1.5v-3z',
   plus: 'M8 3.5v9M3.5 8h9',
   minus: 'M3.5 8h9',
   /** 更多：横着三个点（方头短线画成点） */

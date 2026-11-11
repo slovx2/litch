@@ -156,6 +156,8 @@ export function ManagerPage({
   const [issueTarget, setIssueTarget] = useState<string | null>(null)
   const issueLocated = useCallback(() => setIssueTarget(null), [])
   const [issuePreset, setIssuePreset] = useState<IssuePreset | null>(null)
+  /** 类别分段右端的位置：issue 页签的“新建 issue”放进来，和筛选分开 */
+  const [issueAction, setIssueAction] = useState<HTMLDivElement | null>(null)
   const presetIssues = (patch: IssuePreset['patch']) => {
     reading.ordinary = true
     renderCategory((value) => value + 1)
@@ -603,6 +605,9 @@ export function ManagerPage({
                 </button>
               ) : null}
             </div>
+            {issueMode ? (
+              <div className="mg-inbox-act" ref={setIssueAction} data-inbox-action />
+            ) : null}
           </div>
         ) : null}
         {disabled ? (
@@ -721,6 +726,7 @@ export function ManagerPage({
                         reason={t(readOnly ? 'issue.readOnly' : 'issue.offline')}
                         target={issueTarget}
                         preset={issuePreset}
+                        actionSlot={issueAction}
                         onLocated={issueLocated}
                         onOpenItem={openReference}
                         onSuggestionSource={onSuggestionSource}

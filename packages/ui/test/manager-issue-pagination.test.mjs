@@ -27,6 +27,16 @@ const memoryBundle = await build({
 const boardMemory = await import(
   `data:text/javascript;base64,${Buffer.from(memoryBundle.outputFiles[0].text).toString('base64')}`
 )
+const groupsBundle = await build({
+  entryPoints: [new URL('../src/manager/issues/filter-groups.ts', import.meta.url).pathname],
+  bundle: true,
+  write: false,
+  format: 'esm',
+  platform: 'node',
+})
+const groups = await import(
+  `data:text/javascript;base64,${Buffer.from(groupsBundle.outputFiles[0].text).toString('base64')}`
+)
 const sources = {
   desktop: new URL('../src/manager/issues/IssueConsole.tsx', import.meta.url),
   mobile: new URL(
@@ -34,18 +44,30 @@ const sources = {
     import.meta.url,
   ),
 }
+// 筛选栏拆在单独的文件里：同样执行真实代码
+const filterSources = {
+  desktop: new URL('../src/manager/issues/IssueFilterBar.tsx', import.meta.url),
+  mobile: new URL(
+    '../../../apps/mobile/src/screens/managers/issues/IssueFilters.tsx',
+    import.meta.url,
+  ),
+}
+const compile = async (path) =>
+  (
+    await transform(readFileSync(path, 'utf8'), {
+      loader: 'tsx',
+      format: 'cjs',
+      jsx: 'automatic',
+    })
+  ).code
 const compiled = Object.fromEntries(
   await Promise.all(
-    Object.entries(sources).map(async ([platform, path]) => [
-      platform,
-      (
-        await transform(readFileSync(path, 'utf8'), {
-          loader: 'tsx',
-          format: 'cjs',
-          jsx: 'automatic',
-        })
-      ).code,
-    ]),
+    Object.entries(sources).map(async ([platform, path]) => [platform, await compile(path)]),
+  ),
+)
+const compiledFilters = Object.fromEntries(
+  await Promise.all(
+    Object.entries(filterSources).map(async ([platform, path]) => [platform, await compile(path)]),
   ),
 )
 
@@ -108,23 +130,33 @@ function fixture(platform) {
     'react-native': { StyleSheet: { create: (styles) => styles } },
     '@litch/core': { managerBoardPages: () => ({ decisions: [] }) },
   }
-  const output = { exports: {} }
-  runInNewContext(compiled[platform], {
-    module: output,
-    require(name) {
-      if (modules[name]) return modules[name]
-      if (name.endsWith('/manager-issue-list.mts')) return list
-      if (name.endsWith('/manager-board-memory.mts')) return boardMemory
-      if (name.endsWith('/appearance.ts') || name.endsWith('/i18n')) return { useT: () => t }
-      if (name.endsWith('/theme'))
-        return { useTheme: () => ({ c: {}, font: { size: {} }, radius: {} }) }
-      if (name.endsWith('/discussion-pane.ts')) return { useDiscussionPane: () => null }
-      if (name === './data.ts' || name === './data')
-        return { useIssueCommands: () => commands, useIssueCounts: () => null }
-      // 子组件只保留 JSX 节点，不运行无关绘制。
-      return {}
-    },
+  const filterOutput = { exports: {} }
+  function require(name) {
+    if (modules[name]) return modules[name]
+    if (name.endsWith('/filter-groups.ts')) return groups
+    if (name === './IssueFilterBar.tsx' || name === './IssueFilters') return filterOutput.exports
+    if (name.endsWith('/popover.ts'))
+      return {
+        usePopover: () => ({ open: false, setOpen() {}, root: {}, trigger: {}, pop: {} }),
+      }
+    if (name.endsWith('/manager-issue-list.mts')) return list
+    if (name.endsWith('/manager-board-memory.mts')) return boardMemory
+    if (name.endsWith('/appearance.ts') || name.endsWith('/i18n')) return { useT: () => t }
+    if (name.endsWith('/theme'))
+      return { useTheme: () => ({ c: {}, font: { size: {} }, radius: {} }) }
+    if (name.endsWith('/discussion-pane.ts')) return { useDiscussionPane: () => null }
+    if (name === './data.ts' || name === './data')
+      return { useIssueCommands: () => commands, useIssueCounts: () => null }
+    // 子组件只保留 JSX 节点，不运行无关绘制。
+    return {}
+  }
+  runInNewContext(compiledFilters[platform], {
+    module: filterOutput,
+    exports: filterOutput.exports,
+    require,
   })
+  const output = { exports: {} }
+  runInNewContext(compiled[platform], { module: output, require })
   const manager = { deviceId: 'fixture', id: `manager-${platform}-${++fixtureSeq}` }
   const renderConsole =
     platform === 'desktop' ? output.exports.IssueConsole : output.exports.useIssueConsole
@@ -141,6 +173,27 @@ function fixture(platform) {
     if (Array.isArray(node)) return node.flatMap(nodes)
     if (!node || typeof node !== 'object') return []
     return [node, ...nodes(node.props?.children)]
+  }
+  // 筛选栏的几个组件展开成真实节点（它们自己的 useState 也走上面的假调度）
+  const FILTER_PARTS = new Set([
+    'IssueFilterBar',
+    'IssueFilterFields',
+    'CompactFilters',
+    'CheckOption',
+    'ClearFilters',
+    'IssueStatusRow',
+    'IssueFilterDrawer',
+    'Segmented',
+    'CheckChip',
+  ])
+  const expand = (node) => {
+    if (Array.isArray(node)) return node.flatMap(expand)
+    if (!node || typeof node !== 'object') return []
+    const inner =
+      typeof node.type === 'function' && FILTER_PARTS.has(node.type.name)
+        ? expand(node.type(node.props))
+        : []
+    return [node, ...expand(node.props?.children), ...expand(node.props?.footer), ...inner]
   }
   function render() {
     cursor = 0
@@ -206,22 +259,24 @@ function fixture(platform) {
     tree = platform === 'desktop' ? result : [result.header, result.body, result.overlays]
     for (const run of effects) run()
   }
+  /** 筛选控件展开后的全部节点；手机先打开筛选抽屉 */
   function filterControl() {
+    // 先重绘一次，让展开时的假 hook 位置和上次一致（细分的展开状态存在那里）
+    render()
     if (platform === 'mobile') {
       nodes(tree)
         .find((node) => node.props?.testID === 'issue-filter-open')
         .props.onPress()
       render()
     }
-    const control = nodes(tree).find(
-      (node) => typeof node.type === 'function' && node.props?.filter && node.props?.onChange,
-    )
-    return nodes(control.type(control.props))
+    return expand(tree)
   }
+  const tid = (node) => (typeof node.props?.testID === 'string' ? node.props.testID : '')
+  const press = (node) => (node.props.onClick ?? node.props.onPress ?? node.props.onToggle)()
   const statusKey = (node) =>
     platform === 'desktop'
       ? node.props?.['data-issue-filter-status']
-      : node.props?.testID?.match(/^issue-filter-status:(.+)$/)?.[1]
+      : tid(node).match(/^issue-filter-status:(.+)$/)?.[1]
   return {
     requests,
     listOptions,
@@ -236,7 +291,7 @@ function fixture(platform) {
       render()
     },
     has(id) {
-      return nodes(tree).some((node) => node.props?.testID === id)
+      return expand(tree).some((node) => node.props?.testID === id)
     },
     render,
     link(issue, options = {}) {
@@ -285,7 +340,7 @@ function fixture(platform) {
     pickStatus(key) {
       const button = filterControl().find((node) => statusKey(node) === key)
       assert.ok(button, `缺少状态选项 ${key}`)
-      ;(button.props.onClick ?? button.props.onPress)()
+      press(button)
       render()
     },
     preset(patch) {
@@ -303,22 +358,29 @@ function fixture(platform) {
       render()
     },
     typeChoices() {
-      if (platform === 'mobile') {
-        nodes(tree)
-          .find((node) => node.props?.testID === 'issue-filter-open')
-          .props.onPress()
-        render()
-      }
-      const control = nodes(tree).find(
-        (node) => typeof node.type === 'function' && node.props?.filter && node.props?.onChange,
-      )
-      return nodes(control.type(control.props)).flatMap((node) => {
+      return filterControl().flatMap((node) => {
         const value =
           platform === 'desktop'
             ? node.props?.['data-issue-filter-kind']
-            : node.props?.testID?.match(/^issue-filter-kind:(.+)$/)?.[1]
+            : tid(node).match(/^issue-filter-kind:(.+)$/)?.[1]
         return value ? [value] : []
       })
+    },
+    /** 点筛选里的一个控件：桌面按 data 属性、手机按 testID */
+    tap(desktop, mobile) {
+      const [key, value] = desktop
+      const button = filterControl().find((node) =>
+        platform === 'desktop' ? node.props?.[key] === value : tid(node) === mobile,
+      )
+      assert.ok(button, `缺少控件 ${platform === 'desktop' ? desktop.join('=') : mobile}`)
+      press(button)
+      render()
+    },
+    present(desktop, mobile) {
+      const [key, value] = desktop
+      return filterControl().some((node) =>
+        platform === 'desktop' ? node.props?.[key] === value : tid(node) === mobile,
+      )
     },
     pickDecision() {
       if (platform === 'desktop') kind = 'decision'
@@ -329,23 +391,13 @@ function fixture(platform) {
       render()
     },
     toggleType(type) {
-      if (platform === 'mobile') {
-        nodes(tree)
-          .find((node) => node.props?.testID === 'issue-filter-open')
-          .props.onPress()
-        render()
-      }
-      const control = nodes(tree).find(
-        (node) => typeof node.type === 'function' && node.props?.filter && node.props?.onChange,
-      )
-      const content = control.type(control.props)
-      const button = nodes(content).find((node) =>
+      const button = filterControl().find((node) =>
         platform === 'desktop'
           ? node.props?.['data-issue-filter-kind'] === type
           : node.props?.testID === `issue-filter-kind:${type}`,
       )
       assert.ok(button, '应有类型多选控件')
-      ;(button.props.onClick ?? button.props.onPress)()
+      press(button)
       render()
     },
     pickOrdinary() {
@@ -363,7 +415,7 @@ function fixture(platform) {
           : node.props?.testID === 'issue-more',
       )
       assert.ok(button, '控制台应提供加载更多按钮')
-      ;(button.props.onClick ?? button.props.onPress)()
+      press(button)
     },
     retry() {
       const button = nodes(tree).find((node) =>
@@ -442,7 +494,7 @@ for (const platform of Object.keys(sources)) {
       assert.equal(f.visible(id), true)
       f.close(id)
       assert.equal(f.visible(id), true, '不能因为收起取消临时展开而丢失目标')
-      f.pickStatus(kind === 'report' ? 'unread' : kind === 'suggestion' ? 'endorsed' : 'open')
+      f.pickStatus('todo')
       assert.equal(f.visible(id), false, '用户主动改过滤时结束定位，不能强行保留目标')
     })
   }
@@ -470,15 +522,15 @@ for (const platform of Object.keys(sources)) {
     assert.deepEqual(f.filters.at(-1).statuses, ['answered'], '定位期间使用最新状态')
     assert.equal(f.visible('D-999'), true)
   })
-  test(`${platform}：各类别首次进入只查开放、待开始或未读，选项在前，全部选择独立记忆`, () => {
+  test(`${platform}：各类别首次进入只查待处理分组（开放、待开始或未读），分组在前，全部选择独立记忆`, () => {
     const f = fixture(platform)
     f.render()
     for (const [kind, first, statuses] of [
-      ['decision', 'open', ['open']],
-      ['suggestion', 'endorsed', ['endorsed']],
-      ['request', 'open', ['open']],
-      ['report', 'unread', ['unread']],
-      ['ordinary', 'open', ['open']],
+      ['decision', 'todo', ['open']],
+      ['suggestion', 'todo', ['endorsed']],
+      ['request', 'todo', ['open']],
+      ['report', 'todo', ['unread']],
+      ['ordinary', 'todo', ['open']],
     ]) {
       f.pickKind(kind)
       assert.deepEqual(f.filters.at(-1).statuses, statuses)
@@ -493,21 +545,19 @@ for (const platform of Object.keys(sources)) {
       assert.deepEqual(f.filters.at(-1).statuses, [], '明确选过全部不恢复默认')
     }
   })
-  test(`${platform}：建议默认排除待审核，手动选择待审核后切页和重挂载仍保留`, () => {
+  test(`${platform}：建议默认排除待审核（归进行中），选进行中后切页和重挂载仍保留`, () => {
     const f = fixture(platform)
     f.render()
     f.pickKind('suggestion')
     assert.deepEqual(f.filters.at(-1).statuses, ['endorsed'])
-    // 手机状态支持多选：先清空默认选择，再只选待审核。
-    f.pickStatus('all')
-    f.pickStatus('pending')
+    f.pickStatus('doing')
     assert.deepEqual(f.filters.at(-1).statuses, ['pending'])
     f.pickKind('decision')
     assert.deepEqual(f.filters.at(-1).statuses, ['open'])
     f.remount()
     f.pickKind('suggestion')
     assert.deepEqual(f.filters.at(-1).statuses, ['pending'])
-    assert.equal(f.statusChoices()[0], 'endorsed')
+    assert.equal(f.statusChoices()[0], 'todo')
     assert.equal(f.statusChoices().at(-1), 'all')
   })
   test(`${platform}：概览未读和未完成预设覆盖默认与记忆，不收窄成仅开放`, () => {
@@ -583,12 +633,93 @@ for (const platform of Object.keys(sources)) {
     f.toggleType('all')
     assert.ok(f.typeChoices().includes('report'))
     f.oldDevice()
-    assert.deepEqual(f.typeChoices(), ['ordinary'])
+    assert.deepEqual(f.typeChoices(), [], '只有一种类型时不出类型行')
     assert.deepEqual(f.filters.at(-1).kinds, ['ordinary'])
     f.pickDecision()
     assert.deepEqual(f.filters.at(-1).kinds, ['decision'])
     assert.equal(f.filters.at(-1).discussionsOnly, undefined)
     f.pickOrdinary()
     assert.deepEqual(f.filters.at(-1).kinds, ['ordinary'])
+  })
+}
+
+for (const platform of Object.keys(sources)) {
+  test(`${platform}：多选三种类型后状态仍是固定分组，单选一组、不随类型膨胀`, () => {
+    const f = fixture(platform)
+    f.render()
+    f.pickOrdinary()
+    f.toggleType('decision')
+    f.toggleType('request')
+    assert.deepEqual(f.filters.at(-1).kinds, ['ordinary', 'decision', 'request'])
+    const choices = f.statusChoices()
+    assert.deepEqual(choices, ['todo', 'doing', 'unfinished', 'done', 'dropped', 'all'])
+    f.pickStatus('done')
+    assert.deepEqual(f.filters.at(-1).statuses, [
+      'resolved',
+      'closed',
+      'answered',
+      'delivered',
+      'replied',
+    ])
+    f.toggleType('decision')
+    assert.deepEqual(
+      f.filters.at(-1).statuses,
+      ['resolved', 'closed', 'delivered', 'replied'],
+      '换类型保留分组',
+    )
+  })
+  test(`${platform}：只选一种类型时细分默认收起，展开后可选单个状态`, () => {
+    const f = fixture(platform)
+    f.render()
+    f.pickOrdinary()
+    f.pickStatus('doing')
+    assert.equal(
+      f.present(['data-issue-filter-detail', 'blocked'], 'issue-filter-detail:blocked'),
+      false,
+    )
+    f.tap(['data-act', 'issue-filter-detail'], 'issue-filter-detail-toggle')
+    f.tap(['data-issue-filter-detail', 'blocked'], 'issue-filter-detail:blocked')
+    assert.deepEqual(f.filters.at(-1).statuses, ['blocked'])
+    // 选着细分时细分行一直在；选“不限”回到整组
+    f.tap(['data-issue-filter-detail', 'any'], 'issue-filter-detail:any')
+    assert.deepEqual(f.filters.at(-1).statuses, ['in_progress', 'blocked'])
+    // 多选类型时没有细分
+    f.toggleType('suggestion')
+    assert.equal(
+      f.present(['data-act', 'issue-filter-detail'], 'issue-filter-detail-toggle'),
+      false,
+    )
+  })
+  test(`${platform}：清除筛选回到页签默认、保留排序`, () => {
+    const f = fixture(platform)
+    f.render()
+    f.pickOrdinary()
+    f.toggleType('report')
+    f.tap(['data-issue-chip', 'unread'], 'issue-filter-only:unread')
+    f.pickStatus('all')
+    assert.equal(f.filters.at(-1).unread, true)
+    f.tap(['data-act', 'issue-filter-clear'], 'issue-filter-reset')
+    const last = f.filters.at(-1)
+    assert.deepEqual(
+      { kinds: last.kinds, statuses: last.statuses, unread: last.unread, authors: last.authors },
+      { kinds: ['ordinary'], statuses: ['open'], unread: false, authors: [] },
+    )
+    assert.equal(
+      f.present(['data-act', 'issue-filter-clear'], 'issue-filter-reset'),
+      platform === 'mobile',
+      '桌面没有生效的筛选时不出清除；手机抽屉里的清除只是变灰',
+    )
+  })
+  test(`${platform}：记住的旧状态组合读不成分组时回到待处理`, () => {
+    const f = fixture(platform)
+    f.render()
+    f.preset({ statuses: ['open', 'resolved'] })
+    assert.deepEqual(f.filters.at(-1).statuses, ['open'])
+    f.preset({ statuses: ['open', 'in_progress', 'blocked'] })
+    assert.deepEqual(f.filters.at(-1).statuses, ['open', 'in_progress', 'blocked'])
+    assert.equal(
+      f.present(['data-issue-filter-status', 'unfinished'], 'issue-filter-status:unfinished'),
+      true,
+    )
   })
 }

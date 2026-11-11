@@ -25,37 +25,39 @@ the new issue tools; devices must advertise `litchManagerIssues` to support thes
 #### 控制台里的 issue 列表 / Issues in Console
 
 支持 issue 的设备上，控制台页签为决策、建议、请你做、报告、issue，默认打开决策。
-issue 页签默认只选类型“issue”（X-n），类型过滤支持多选和全选。决策、建议、请求和报告只有
+issue 页签默认只勾类型“issue”（X-n）；类型是多选，带勾的方框，旁边显示已选几种和“全选”。决策、建议、请求和报告只有
 开启过讨论或已经有评论、问答时，才会出现在这个页签；关闭讨论抽屉后仍保留。其他四个页签列出各自类别的条目。
 设备服务尚不支持讨论过滤时，issue 页签只列 X-n，其他页签和讨论仍可照常使用。
-每个页签分别记住自己的过滤条件和排序。issue 页签还可按状态、创建者、未读和跟进筛选，支持新建。
-首次进入决策、请你做和 issue 页签默认“开放”；建议默认“待开始”（经理已推荐，不含待审核），报告默认“未读”。
-对应状态放在过滤选项第一位，“全部”在最后；用户选过的条件不重置，概览数字带入的条件优先。
+每个页签分别记住自己的筛选和排序。筛选栏左列是标签、右列是控件：类型（只在 issue 页签）、状态、只看（我建的、经理建的、未读、跟进已暂停，只在 issue 页签），清除筛选和排序在最后一行右端；“新建 issue”在类别分段右端。
+状态是单选分段，所有类型共用一套分组：待处理（开放、待开始、未读）、进行中（进行中、受阻、建议待审核）、未完成（前两组合起来）、已完成（已解决、已关闭、已答复、已交付、已回复、建议已开始、已读）、已撤销（已过期、已撤回、已忽略、已驳回、已取消）、全部。所选类型里没有的分组不出现，选项不随类型增多。只勾一种类型时可点“细分”选该类型的单个状态，默认收起。
+每个页签首次进入都是“待处理”：决策、请你做和 issue 即开放，建议即待开始（待审核归进行中），报告即未读。用户选过的条件不重置，概览数字带入的条件优先；记住的旧状态组合对不上分组时回到“待处理”。
+看板较窄时筛选栏收成“筛选”按钮，按钮上显示生效的筛选数，点开是同样的几项，旁边有“清除筛选”。清除筛选回到页签默认条件，保留排序。
 点击对话中的 D-n、R-n、P-n、S- 或 X-n 链接，会切到目标实际所属的类别和状态，保留排序，清除作者、未读和跟进等可能隐藏目标的过滤。目标置于当前列表顶部并展开，收起后仍保留；手动改过滤或打开其他条目时结束定位。
 展开 X-n 可查看原帖、状态与跟进、关联、评论及输入框；其他类型保留快速处理按钮，可打开底部讨论或完整讨论页。
 桌面讨论抽屉只显示标题、讨论消息、问题和回复框，不重复上方已显示的正文与选项。标题行的“查看正文”会在上方列表定位并展开议题；当前列表没有该议题时，正文与对应操作在抽屉内按需展开，默认收起。完整讨论页保留原帖和处理入口。手机切到讨论后正文默认收起，可用“查看正文”展开；完整讨论页也先折叠正文。
 决策提交答复（可只选选项）、请你做交付或回复、建议开始或编辑后开始、报告标为已阅仍在正文区域，评论不会代替这些操作。
 依据与关联默认只显示标题和数量，点击展开；重新进入页面时恢复收起。活动只显示经理对正文、选项、推荐等内容和状态的实质更新，不重复显示用户答复、关联或依据变更、讨论开关；没有有效时间的活动不显示，历史数据仍保留。
 概览的 issue 摘要仍统计 X-n 的未完成、等我看、跟进已暂停；点击数字会回到 issue 页签，恢复只选 issue 类型并套用相应过滤。
-手机的类别胶囊和过滤抽屉采用相同规则。设备不支持 issue 时仍显示原来的四类控制台，并提示升级设备服务。
-手机控制台的状态过滤行始终显示，可直接切换开放、已答复或全部等状态；更多条件仍在过滤抽屉。列表读取中、无匹配条目或读取失败时显示对应提示，失败可重试。切换类别或从对话返回时，按各自条件恢复阅读位置。
+手机的类别胶囊和底部筛选抽屉采用相同规则：胶囊行右侧的筛选按钮显示生效数，抽屉里依次是类型、状态（含细分）、只看和排序，底部有“清除筛选”。设备不支持 issue 时仍显示原来的四类控制台，并提示升级设备服务。
+手机控制台在胶囊行下方始终显示状态分组的分段，可直接切换。列表读取中、无匹配条目或读取失败时显示对应提示，失败可重试。切换类别或从对话返回时，按各自条件恢复阅读位置。
 
 The Console tabs are Decisions, Suggestions, For you, Reports and Issues. Decisions remains the default.
-The Issues tab initially selects only the Issue type (X-n). Its type filter supports multiple selections or all types.
+The Issues tab initially checks only the Issue type (X-n). Types are checkboxes, with a selected count and **Select all**.
 Decisions, suggestions, requests and reports appear here only after a discussion has been opened or has comments or questions;
 closing the discussion does not remove them. Their dedicated tabs list entries of that type.
 If the device service does not support discussion filtering yet, Issues lists only X-n; other tabs and discussions still work.
-Each tab remembers its own filters and sorting. Issues also offers status, author, unread and follow-up filters, plus New issue.
-On first entry, Decisions, For you and Issues default to Open; Suggestions to Ready to start (endorsed by the manager, excluding those awaiting review), and Reports to Unread.
-That filter comes first and All comes last. Saved choices remain unchanged; filters from Overview counts take precedence.
+Each tab remembers its own filters and sorting. The filter bar aligns labels on the left with controls on the right: Type (Issues only), Status, and Only (Created by me, Created by manager, Unread, Follow-up paused; Issues only). **Clear filters** and Sort sit at the end of the last row; **New issue** sits at the right end of the category tabs.
+Status is a single-choice segmented control with groups shared by every type: To do (Open, Ready to start, Unread), In progress (In progress, Blocked, suggestions Awaiting review), Not done (both), Done (Resolved, Closed, Answered, Delivered, Replied, suggestion Started, Read), Dropped (Expired, Withdrawn, Ignored, Dismissed, Cancelled) and All. Groups with no status in the selected types are hidden, so options do not grow with more types. With a single type, **Refine** picks one of its statuses; it starts collapsed.
+Every tab starts on To do: Open for Decisions, For you and Issues, Ready to start for Suggestions (Awaiting review counts as In progress), and Unread for Reports. Saved choices remain unchanged; filters from Overview counts take precedence. Saved status combinations that match no group fall back to To do.
+On a narrow board the bar collapses into a **Filter** button showing how many filters apply; it opens the same controls, with **Clear filters** beside it. Clearing returns to the tab's defaults and keeps the sort order.
 Conversation links to D-n, R-n, P-n, S- or X-n select the target's actual category and status, preserve sorting, and clear author, unread and follow-up filters that could hide it. The target opens at the top of the list and remains after collapsing. Changing filters or opening another entry ends this placement.
 X-n opens its description, status, follow-up, links and comments; other types keep their quick actions and can open a discussion drawer or full page.
 Desktop discussion drawers show the title, messages, questions and reply field without repeating the description or options above. **View description** locates and expands the issue in the list; if it is absent from that list, the description and its actions can be expanded inside the drawer and start collapsed. Full discussion pages retain the original content and actions. On phones, descriptions start collapsed in discussion drawers and full discussion pages.
 The description retains the relevant action: submit a decision answer (an option alone is enough), deliver or reply to a request, start or edit a suggestion, and mark a report as read. Comments do not replace these actions.
 Evidence and links initially show only their title and count. Click to expand; reopening the page collapses them again. Activity shows substantive manager edits and status changes, omitting duplicate user responses, link or evidence changes, discussion toggles, and entries without a valid timestamp. The underlying history is retained.
 Overview counts still cover X-n issues. Clicking a count selects the Issues tab and the Issue type with the corresponding filter.
-The phone uses the same rules in its category pills and filter drawer. Older devices keep the four-category Console and show an upgrade notice.
-The phone keeps status filters visible above the list. Loading, empty results and failures have explicit messages, with Retry for failures. Switching categories or returning from chat restores the reading position for the selected filters.
+The phone uses the same rules in its category pills and bottom filter sheet: the filter button shows how many filters apply, and the sheet lists Type, Status (with Refine), Only and Sort, with **Clear filters** at the bottom. Older devices keep the four-category Console and show an upgrade notice.
+The phone keeps the status groups visible as a segmented row above the list. Loading, empty results and failures have explicit messages, with Retry for failures. Switching categories or returning from chat restores the reading position for the selected filters.
 
 用户要求过或已批准的范围内任务，经理直接开工作线；经理自行发现、用户尚未要求或批准的工作
 （如回报中顺带发现的问题、审查改进点、可选后续工作），会附完整简报放到「建议」页，由用户决定是否开始。
