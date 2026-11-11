@@ -112,6 +112,6 @@ ref 含文档代次（如 `e3g12`）；同一文档保留稳定编号，文档�
 
 `upload` 接受文件框、上传按钮或可点击上传区域的 ref。隐藏文件框在快照中仍有 ref，并标注 `hidden`。按钮路径先拦截 `Page.fileChooserOpened`，再点击一次；没有选择器事件时，仅使用 label、form 或最近祖先中唯一的文件框。拦截结束或调用取消时撤订阅并关闭拦截，不修改页面 DOM/样式。多文件、目录、禁用和 accept 不符会明确报错。
 
-内置 Electron 用 `DOM.setFileInputFiles`；Chrome 扩展可用选择器拦截，但设置路径受文件网址权限限制，因此沿用有界分块通道，组装 File 并派发事件。工具回执只证明派发，调用方须核对站点反馈。上传限额仍为内置单文件 100 MiB、Chrome 每次 32 个文件总计 512 MiB。
+本机会话的内置 Electron 用 `DOM.setFileInputFiles`；Chrome 扩展可用选择器拦截，但设置路径受文件网址权限限制，因此沿用有界分块通道，组装 File 并派发事件。工具回执只证明派发，调用方须核对站点反馈。上传限额仍为内置单文件 100 MiB、Chrome 每次 32 个文件总计 512 MiB。
 
-远程会话暂不支持上传：路径属于会话设备，不能读取控制端同路径文件。若系统原生窗口已弹出且浏览器工具无法关闭，可结合 `litch-computer-automation`；网页操作仍使用 `litch-browser-automation`。
+远程会话通过宿主提供的 `ClientToolContext.prepareUpload(paths, { fileBytes, totalBytes })` 读取会话设备上的源，返回 `{ paths, dispose }`。宿主须绑定本次调用的设备、在可靠大小预检后有界分块物化到控制端私有目录，不能读取控制端同路径文件。执行器在 `finally` 调用 `dispose`。远程内置上传和 Chrome 共用隔离 world 的 File 构造，字节独立于暂存路径，清理后仍可供网页延迟读取和提交；这条路使用合成事件，须验证站点反馈。取消时仅清理已持有的对象，未提交的分块不会进入 input；无法向失效文档清理时另有 30 秒空闲回收。没有远程源端口的宿主明确拒绝，不回退读取本机。若系统原生窗口已弹出且浏览器工具无法关闭，可结合 `litch-computer-automation`；网页操作仍使用 `litch-browser-automation`。
