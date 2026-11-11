@@ -106,17 +106,7 @@ export const ProcessCell = memo(function ProcessCell({ row }: Props<'process'>) 
   )
 })
 
-/** 有一步在跑时摘要后半：在跑的是什么、到现在的累计用时。在想的时候不写动词，只写思考的第一行（照桌面端） */
-function runningTail(
-  row: Extract<Row, { type: 'group' }>,
-  t: Translator,
-  spent: number | null,
-): string {
-  const label = row.current === null ? '' : t.text(row.current)
-  const now = row.thinking ? label : t('detail.group.running', { label })
-  return `${now ? ` · ${now}` : ''}${spent !== null && spent >= 1000 ? ` · ${elapsed(spent, t)}` : ''}`
-}
-
+/** 活动摘要用图标表示状态，命令只占剩余宽度，用时保持可见。 */
 /** 一组过程的摘要。点了展开收起；展开的步骤在它下面，最后一行“收起”，它自己原地不动 */
 export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
   const { c, font } = useTheme()
@@ -132,13 +122,11 @@ export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
   const working = useLasting(row.working)
   const busy = useTicking(working ? row.turnStartedAt : null)
   // 失败的条数不写（每一步自己的退出码、失败照写）；跑完了写这一组从第一条开始到最后一条结束的用时
-  const tail = row.running
-    ? runningTail(row, t, spent)
-    : working
-      ? ` · ${t('detail.group.working')}${busy !== null && busy >= 1000 ? ` · ${elapsed(busy, t)}` : ''}`
-      : row.durationMs
-        ? ` · ${duration(row.durationMs, t)}`
-        : ''
+  const tail = working
+    ? ` · ${t('detail.group.working')}${busy !== null && busy >= 1000 ? ` · ${elapsed(busy, t)}` : ''}`
+    : row.durationMs
+      ? ` · ${duration(row.durationMs, t)}`
+      : ''
   return (
     <View style={styles.group}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -153,24 +141,47 @@ export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
           ]}
           testID="process-toggle"
         >
-          {!row.ended && (row.running || working) ? <StatusMark status="running" /> : null}
+          {!row.ended && (row.running || working) ? (
+            <View
+              accessibilityRole="image"
+              accessibilityLabel={t('command.running')}
+              style={styles.statusMark}
+            >
+              <StatusMark status="running" />
+            </View>
+          ) : null}
           <Caret open={row.expanded} size={12} />
-          <Text
-            style={{
-              flex: 1,
-              fontSize: font.size.meta,
-              color: c.ink3,
-            }}
-            numberOfLines={1}
-          >
-            {t('detail.activity')} · {steps}
-            {tail}
-            {inBackground > 0 ? (
-              <Text style={{ color: c.accent }}>
-                {` · ${t('background.inTurn', { count: inBackground })}`}
+          {row.running ? (
+            <>
+              <Text
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                style={[styles.current, { color: c.ink3, fontSize: font.size.meta }]}
+              >
+                {row.current === null ? '' : t.text(row.current)}
               </Text>
-            ) : null}
-          </Text>
+              {spent !== null && spent >= 1000 ? (
+                <Text style={[styles.stepState, { color: c.ink3 }]}>{elapsed(spent, t)}</Text>
+              ) : null}
+            </>
+          ) : (
+            <Text
+              style={{
+                flex: 1,
+                fontSize: font.size.meta,
+                color: c.ink3,
+              }}
+              numberOfLines={1}
+            >
+              {t('detail.activity')} · {steps}
+              {tail}
+              {inBackground > 0 ? (
+                <Text style={{ color: c.accent }}>
+                  {` · ${t('background.inTurn', { count: inBackground })}`}
+                </Text>
+              ) : null}
+            </Text>
+          )}
         </Pressable>
         {!row.expanded && row.images ? <ToolImages images={row.images} /> : null}
       </View>
@@ -226,9 +237,9 @@ function stateText(
       : t('command.running')
   if (row.state === 'declined') return t('detail.step.declined')
   if (row.item.kind === 'command' && row.exitCode !== null && row.exitCode !== 0)
-    return t('command.exitCode', { code: row.exitCode })
+    return `${t('detail.step.failed')} · ${t('command.exitCode', { code: row.exitCode })}`
   if (row.state === 'failed') return t('detail.step.failed')
-  return row.durationMs == null ? '' : duration(row.durationMs, t)
+  return t('command.passed')
 }
 
 const stateColor = (state: StepState, c: Palette): string =>
@@ -280,6 +291,14 @@ export const StepCell = memo(function StepCell({ row }: Props<'step'>) {
       : undefined
   const spent = useTicking(row.state === 'running' ? startOf(item) : null)
   const state = stateText(row, t, spent)
+  const time =
+    row.state === 'running'
+      ? spent !== null && spent >= 1000
+        ? elapsed(spent, t)
+        : null
+      : row.durationMs == null
+        ? null
+        : duration(row.durationMs, t)
   return (
     <View style={[styles.step, { borderLeftColor: c.line2 }]}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -294,17 +313,18 @@ export const StepCell = memo(function StepCell({ row }: Props<'step'>) {
           ]}
           testID={`step:${item.kind}`}
         >
-          <View style={styles.mark}>
+          <View style={styles.mark} accessibilityRole="image" accessibilityLabel={state}>
             <Icon name={MARK[row.state]} size={13} color={stateColor(row.state, c)} />
           </View>
           <Text
             style={[cellStyles.grow, styles.stepLabel, { color: c.ink, fontFamily: font.mono }]}
-            numberOfLines={row.expanded ? 6 : 2}
+            numberOfLines={1}
+            ellipsizeMode="tail"
           >
             {label}
           </Text>
-          {state ? (
-            <Text style={[styles.stepState, { color: stateColor(row.state, c) }]}>{state}</Text>
+          {time ? (
+            <Text style={[styles.stepState, { color: stateColor(row.state, c) }]}>{time}</Text>
           ) : null}
         </Pressable>
         {!row.expanded && item.kind === 'toolCall' && item.images ? (
@@ -370,14 +390,15 @@ function CommandDetail({ row }: Props<'step'>) {
   if (row.item.kind !== 'command') return null
   const elided = row.item.elided
   const source = (elided ? row.tail : row.output).replace(/\s+$/, '')
-  if (!source && !elided)
-    return <Text style={[styles.note, { color: c.ink3 }]}>{t('detail.step.noOutput')}</Text>
   const lines = source.split('\n')
   const shown = lines.slice(-OUTPUT_LINES)
   const earlier = lines.length - shown.length
   const mono = { color: c.ink2, fontFamily: font.mono }
   return (
     <View>
+      <Text selectable testID="command-source" style={[styles.code, mono]}>
+        {row.item.command}
+      </Text>
       {elided ? (
         <Text style={[styles.note, { color: c.ink3 }]}>
           {t('command.elided', { size: sizeOf(elided.bytes) })}
@@ -388,9 +409,13 @@ function CommandDetail({ row }: Props<'step'>) {
           {t('detail.step.earlier', { n: earlier })}
         </Text>
       ) : null}
-      <Well>
-        <Text style={[styles.code, mono]}>{shown.join('\n')}</Text>
-      </Well>
+      {source || elided ? (
+        <Well>
+          <Text selectable style={[styles.code, mono]}>
+            {shown.join('\n')}
+          </Text>
+        </Well>
+      ) : null}
     </View>
   )
 }
@@ -597,9 +622,11 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   // 记号和第一行字对齐（字行高 18）
-  mark: { height: 18, width: 14, justifyContent: 'center' },
+  mark: { height: 18, width: 14, flexShrink: 0, justifyContent: 'center' },
+  statusMark: { flexShrink: 0 },
+  current: { flex: 1, minWidth: 0 },
   stepLabel: { fontSize: 13, lineHeight: 18 },
-  stepState: { fontSize: 11, lineHeight: 18 },
+  stepState: { fontSize: 11, lineHeight: 18, flexShrink: 0 },
   note: { fontSize: 11, lineHeight: 16, marginTop: 2 },
   well: { borderWidth: 1, marginTop: 4, marginBottom: 4 },
   wellInner: { padding: 8 },

@@ -19,7 +19,7 @@ import { useT } from '../app/appearance.ts'
 import { useElapsed } from '../app/clock.ts'
 import { duration, elapsed } from '../app/format.ts'
 import { ImageViewer } from '../app/ImageViewer.tsx'
-import { Caret, Icon, type IconName } from '../app/icons.tsx'
+import { Caret, Check, Close, Icon, type IconName, Slash } from '../app/icons.tsx'
 import { useKey, useKeys } from '../app/services.tsx'
 import { openDiffAt } from '../diff/state.ts'
 import { byteSize } from '../files/lines.ts'
@@ -44,6 +44,7 @@ interface RowProps {
   media?: ReactNode
   /** 还在进行：行首显示转动的记号 */
   busy?: boolean
+  mark?: ReactNode
   /** 没有详情的行不能点开 */
   detail?: (() => ReactNode) | null
   /** quiet：次要的浅色字（思考） */
@@ -51,7 +52,7 @@ interface RowProps {
 }
 
 /** 步骤组里的一行：动词、对象、右边的元信息；有详情时点一下展开 */
-function Row({ itemRef, icon, verb, target, meta, media, busy, detail, tone }: RowProps) {
+function Row({ itemRef, icon, verb, target, meta, media, busy, mark, detail, tone }: RowProps) {
   const [open, setOpen] = useFold(sessionKeyOf(itemRef), `i:${itemRef.itemId}`, false)
   const head = useRef<HTMLButtonElement | null>(null)
   const pin = usePin()
@@ -72,7 +73,7 @@ function Row({ itemRef, icon, verb, target, meta, media, busy, detail, tone }: R
             setOpen(!open)
           }}
         >
-          {busy ? <i className="st run" /> : <Icon name={icon} small />}
+          {mark ?? (busy ? <i className="st run" /> : <Icon name={icon} small />)}
           {verb ? <span className="verb">{verb}</span> : null}
           <span className="tgt ell">{target}</span>
           {meta ? <span className="meta">{meta}</span> : null}
@@ -144,25 +145,47 @@ const Suggest = memo(function Suggest(ref: ItemRef) {
 const startOf = (item: ItemView): number | null =>
   (item.kind === 'command' ? item.startedAt : null) ?? item.span?.from ?? null
 
-/**
- * 还在跑的命令右边那几个字。等批准的写“待审批”，不写“运行中”；
- * 看着它开始的带上已经跑了多久——对面不增量给输出的时候，这是唯一看得出它还活着的东西。
- * 单独一个组件：每秒重画的只有这几个字，命令结束了它就不在了。
- */
-function Running({ item, deviceId, sessionId }: ItemRef & { item: CommandItem }) {
+/** 命令的运行、待审批和终态复用现有图标；文字保留在悬停提示与读屏标签中。 */
+function CommandMark({ item, deviceId, sessionId }: ItemRef & { item: CommandItem }) {
   const t = useT()
   const pending = useKey<RequestView[]>(keys.requests(deviceId, sessionId))
   const waiting =
+    item.status === 'inProgress' &&
     pending?.some((request) => request.kind === 'approval' && request.itemId === item.id) === true
-  const spent = useElapsed(
-    waiting ? null : seenSince(`${deviceId}:${sessionId}:${item.id}`, startOf(item)),
-  )
-  if (waiting) return <span data-state="waiting">{t('command.waiting')}</span>
   return (
-    <>
-      {spent === null || spent < 1000 ? null : <span data-elapsed="">{elapsed(spent, t)}</span>}
-      <span>{t('command.running')}</span>
-    </>
+    <StepMark
+      status={waiting ? 'waiting' : item.status}
+      label={
+        waiting
+          ? t('command.waiting')
+          : item.status === 'failed'
+            ? `${t('status.failed')} · ${commandState(item, t)}`
+            : commandState(item, t)
+      }
+    />
+  )
+}
+
+function StepMark({ status, label }: { status: string; label: string }) {
+  return (
+    <span
+      className={status === 'failed' ? 'step-mark minus' : 'step-mark'}
+      role="img"
+      aria-label={label}
+      title={label}
+    >
+      {status === 'inProgress' ? (
+        <i className="st run" />
+      ) : status === 'waiting' ? (
+        <i className="st wait" />
+      ) : status === 'failed' ? (
+        <Close />
+      ) : status === 'declined' ? (
+        <Slash />
+      ) : (
+        <Check />
+      )}
+    </span>
   )
 }
 
@@ -187,30 +210,38 @@ export function OutputWell({ item }: { item: CommandItem }) {
   )
 }
 
+export function CommandDetail({ item }: { item: CommandItem }) {
+  return (
+    <>
+      <pre className="command-source" data-command-source>
+        {item.command}
+      </pre>
+      {item.output || item.elided ? <OutputWell item={item} /> : null}
+    </>
+  )
+}
+
 const Command = memo(function Command(ref: ItemRef) {
   const item = useItem<CommandItem>(ref)
   const t = useT()
   if (item?.kind !== 'command') return null
-  const shown = item.output !== '' || item.elided !== null
   const look = commandLook(item)
   return (
     <Row
       itemRef={ref}
       icon="term"
-      verb={t('command.verb')}
+      verb=""
+      mark={<CommandMark {...ref} item={item} />}
       target={item.command}
       busy={item.status === 'inProgress'}
       meta={
         item.status === 'inProgress' ? (
-          <Running {...ref} item={item} />
+          <NowTime {...ref} item={item} />
         ) : (
-          <>
-            {look.durationMs === null ? null : <span>{duration(look.durationMs, t)}</span>}
-            <span className={look.failed ? 'minus' : undefined}>{commandState(item, t)}</span>
-          </>
+          <>{look.durationMs === null ? null : <span>{duration(look.durationMs, t)}</span>}</>
         )
       }
-      detail={shown ? () => <OutputWell item={item} /> : null}
+      detail={() => <CommandDetail item={item} />}
     />
   )
 })
@@ -238,10 +269,22 @@ const FileChange = memo(function FileChange(ref: ItemRef) {
         )
       }
       busy={item.status === 'inProgress'}
+      mark={
+        <StepMark
+          status={item.status}
+          label={t(
+            item.status === 'inProgress'
+              ? 'command.running'
+              : item.status === 'declined'
+                ? 'status.declined'
+                : item.status === 'failed'
+                  ? 'status.failed'
+                  : 'command.passed',
+          )}
+        />
+      }
       meta={
         <>
-          {item.status === 'declined' ? <span>{t('status.declined')}</span> : null}
-          {item.status === 'failed' ? <span className="minus">{t('status.failed')}</span> : null}
           <span className="plus">+{added}</span>
           <span className="minus">−{removed}</span>
         </>
@@ -386,13 +429,22 @@ const ToolCall = memo(function ToolCall(ref: ItemRef) {
         message ? messageTarget(item, t) : item.source ? `${t.text(item.source)} · ${tool}` : tool
       }
       busy={item.status === 'inProgress'}
+      mark={
+        <StepMark
+          status={error ? 'failed' : item.status}
+          label={t(
+            item.status === 'inProgress'
+              ? 'command.running'
+              : item.status === 'failed' || error
+                ? 'status.failed'
+                : 'command.passed',
+          )}
+        />
+      }
       meta={
         <>
           {item.status === 'inProgress' ? <NowTime {...ref} item={item} /> : null}
           {item.durationMs === null ? null : <span>{duration(item.durationMs, t)}</span>}
-          {item.status === 'failed' || error ? (
-            <span className="minus">{t('status.failed')}</span>
-          ) : null}
         </>
       }
       detail={
@@ -598,7 +650,7 @@ function NowTime({
     pending?.some((request) => request.kind === 'approval' && request.itemId === item.id) === true
   const since = given ?? seenSince(`${deviceId}:${sessionId}:${item.id}`, startOf(item))
   const spent = useElapsed(waiting ? null : since)
-  if (waiting) return <span data-state="waiting">{t('command.waiting')}</span>
+  if (waiting) return null
   return spent === null || spent < 1000 ? null : <span data-elapsed="">{elapsed(spent, t)}</span>
 }
 
@@ -674,8 +726,12 @@ export const Steps = memo(function Steps({
               setOpen(!open)
             }}
           >
-            {now ? <i className="st run" /> : <Caret />}
-            <span className="sum">{now ? now.label : stepsSummary(tally, t)}</span>
+            {now ? (
+              <StepMark status="inProgress" label={now.label || t('command.running')} />
+            ) : (
+              <Caret />
+            )}
+            {now ? null : <span className="sum">{stepsSummary(tally, t)}</span>}
             {now?.target ? <span className="now ell">{now.target}</span> : null}
             <span className="meta">
               {tally.declined > 0 ? (

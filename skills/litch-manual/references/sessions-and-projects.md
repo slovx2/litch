@@ -172,6 +172,10 @@ in the current window and other drafts are never automatically evicted.
 
 ## 过程开合
 
+命令行的运行、完成、失败和拒绝状态使用图标，桌面悬停或读屏可获知含义。命令标题占剩余宽度，过长时省略；运行中也能展开，查看可换行、可选中复制的完整命令。引擎提供过程输出时在下方持续显示，尚无输出时只显示命令。桌面和手机相同。
+
+Command rows use icons for running, completed, failed and declined states, with accessible labels and desktop hover text. Long command titles use an ellipsis. Expand a command even while it runs to see and copy its full, wrapped text. Live output appears below when supplied by the engine; otherwise only the command is shown. This works on desktop and phone.
+
 桌面和手机只把 harness 原生标明为过程说明（commentary）的文字随过程收起，Codex 保持这一行为。
 Claude、Pi、OpenCode、ACP、DSH 等入口推断的阶段不用于隐藏文字；未标明阶段的文字始终按原序显示，中间的工具步骤组各自收起。
 回合结束仍可显示“已处理”的用时与步数摘要。桌面详细视图仍默认展开过程和工具详情。
