@@ -98,6 +98,27 @@ for (const lang of ['zh-CN', 'en'])
       )
       clicked('later-success')
       assert.deepEqual(opened, [{ deviceId: 'remote', sessionId: 'large' }])
+      finished(
+        {
+          ...run,
+          id: 'recovery-failed',
+          turnId: 'started-turn',
+          error: { code: 'interrupted', message: 'history read fixture failed' },
+        },
+        { name: '恢复任务' },
+      )
+      const recovery = notices.at(-1)
+      assert.ok(recovery.body.includes('history read fixture failed'))
+      assert.ok(
+        recovery.body.includes(lang === 'zh-CN' ? '设备服务已退出' : 'Device service exited'),
+      )
+      assert.ok(
+        !recovery.body.includes(
+          lang === 'zh-CN' ? '未记录到回合启动' : 'No turn start was recorded',
+        ),
+      )
+      clicked('recovery-failed')
+      assert.equal(routes.at(-1).view, 'detail')
     } finally {
       for (const fn of cleanup) fn?.()
       globalThis.window = previous

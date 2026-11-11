@@ -105,3 +105,43 @@ for (const pending of [false, true])
       rmSync(stateDir, { recursive: true, force: true })
     }
   })
+
+test('恢复分页读取失败保留 interrupted 种类和底层原因，不再发送回合', async () => {
+  const { RpcFailure } = await import('./fake-upstream.mjs')
+  const engine = new TaskEngine()
+  engine.threads.push({ id: 'existing', updatedAt: 1 })
+  engine.script = () => ({ status: null })
+  const first = taskRig({ pi: engine })
+  let second: ReturnType<typeof taskRig> | undefined
+  try {
+    const client = await tasksClient(first)
+    const { task } = await client.call('litch/task/create', {
+      ...intervalTask(first.stateDir),
+      target: { kind: 'thread', harness: 'pi', threadId: 'existing' },
+    })
+    await client.call('litch/task/runNow', { id: task.id })
+    await until(
+      '记好启动',
+      async () => (await client.call('litch/task/runs/list', {})).data[0]?.status === 'running',
+    )
+    await first.device.close()
+    engine.handlers['thread/turns/list'] = () => {
+      throw new RpcFailure(-32603, 'history read fixture failed')
+    }
+    second = taskRig({ pi: engine }, { stateDir: first.stateDir }, first.clock)
+    const again = await tasksClient(second)
+    await until(
+      '恢复失败',
+      async () => (await again.call('litch/task/runs/list', {})).data[0]?.status === 'failed',
+    )
+    const run = (await again.call('litch/task/runs/list', {})).data[0]
+    assert.equal(run.error.code, 'interrupted')
+    assert.match(run.error.message, /history read fixture failed/)
+    assert.equal(run.turnId, engine.turns[0]?.turnId)
+    assert.equal(engine.turns.length, 1)
+  } finally {
+    await first.device.close()
+    if (second) await second.close()
+    else await first.close()
+  }
+})
