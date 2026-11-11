@@ -1,3 +1,4 @@
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 // 经理与工作线的后台命令在界面上的状态：正式桌面外壳（默认隐藏窗口）+ managed 隔离设备 + 真实 Claude Code；
 // 模型只用回环夹具（“后台跑”起一条 sleep 放到后台）。Claude 必须给 CHA_CLAUDE_CLI 隔离副本。
 //   npm run client:check:manager-background-real -- [--show]
@@ -80,7 +81,7 @@ try {
     external: ['electron'],
   })
   let output = ''
-  child = spawn(require('electron'), [bootstrap], {
+  child = spawn(require('electron'), withChromiumTestArgs([bootstrap]), {
     cwd: repo,
     env: {
       PATH: process.env.PATH,

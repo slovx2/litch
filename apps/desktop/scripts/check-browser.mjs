@@ -21,6 +21,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 import { assertUiBuildFresh } from '../../../scripts/ui-build-state.mjs'
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 
 const require = createRequire(import.meta.url)
 const appDir = fileURLToPath(new URL('..', import.meta.url))
@@ -126,7 +127,10 @@ delete env.ELECTRON_RUN_AS_NODE
 mkdirSync(env.HOME, { recursive: true })
 if (!existsSync(outfile)) throw new Error(`找不到验收入口：${outfile}`)
 
-const child = spawn(electron, [outfile], { env, stdio: ['ignore', 'pipe', 'pipe'] })
+const child = spawn(electron, withChromiumTestArgs([outfile]), {
+  env,
+  stdio: ['ignore', 'pipe', 'pipe'],
+})
 let output = ''
 child.stdout.on('data', (chunk) => {
   output += chunk

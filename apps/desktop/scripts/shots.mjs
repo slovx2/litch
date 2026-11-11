@@ -1,3 +1,4 @@
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 // 重新生成 README 用的界面截图：两种语言各起一次外壳，对着模拟核心，窗口不显示。
 //   npm run shots            （在 apps/desktop 里；根目录用 npm run client:shots，会先构建界面）
 // 图片写到仓库的 docs/images/zh 和 docs/images/en。
@@ -18,7 +19,7 @@ function run(lang, dir) {
   return new Promise((resolve, reject) => {
     // 用一份临时的用户数据目录，不碰平时用的那一份
     const profile = mkdtempSync(join(tmpdir(), 'litch-shots-'))
-    const child = spawn(electron, [appDir], {
+    const child = spawn(electron, withChromiumTestArgs([appDir]), {
       env: { ...process.env, LITCH_SHOTS: dir, LITCH_LANG: lang, LITCH_PROFILE: profile },
       stdio: ['ignore', 'pipe', 'pipe'],
     })

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { withChromiumTestArgs } from '../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { goEnvironment, goToolchain } from './go-toolchains.mjs'
 
 assert.equal(process.platform, 'darwin')
@@ -58,9 +59,9 @@ if (selected.includes('client')) {
     'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
   )
   assert.ok(
-    execFileSync(env.LITCH_CHROME_BINARY, ['--version'], { encoding: 'utf8' }).includes(
-      '151.0.7922.34',
-    ),
+    execFileSync(env.LITCH_CHROME_BINARY, withChromiumTestArgs(['--version']), {
+      encoding: 'utf8',
+    }).includes('151.0.7922.34'),
   )
 }
 if (selected.some((name) => ['client', 'client-engines'].includes(name)))

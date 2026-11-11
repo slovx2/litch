@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 
 const require = createRequire(import.meta.url)
 const electron = process.env.LITCH_ELECTRON_BINARY ?? require('electron')
@@ -46,7 +47,7 @@ try {
     'read',
   ]) {
     const result = await new Promise((resolve, reject) => {
-      const child = spawn(electron, [join(root, 'probe.mjs'), stage], {
+      const child = spawn(electron, withChromiumTestArgs([join(root, 'probe.mjs'), stage]), {
         env: { PATH: process.env.PATH, HOME: root, TMPDIR: root, LITCH_PROFILE: profile },
         stdio: ['ignore', 'pipe', 'pipe'],
       })

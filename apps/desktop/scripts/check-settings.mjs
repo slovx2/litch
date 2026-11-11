@@ -1,3 +1,4 @@
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 // 设置页和外观的验收：不显示窗口，对着模拟核心起两次桌面外壳，两次用同一份临时的用户数据目录。
 //   头一遍  设置页的开合与五个分组、入口（侧栏、快捷键、应用菜单）；皮肤、明暗、密度、缩放、语言点了当场生效；
 //           皮肤预览画的是那种皮肤的变量；快捷键一览和真的应用菜单对账；关于与许可；回合正在跑的时候换外观；
@@ -80,7 +81,7 @@ for (const file of ['LICENSE', 'THIRD_PARTY_NOTICES.md']) {
 async function runOne(kind) {
   const outside = []
   let output = ''
-  const child = spawn(electron, [appDir], {
+  const child = spawn(electron, withChromiumTestArgs([appDir]), {
     env: {
       ...process.env,
       LITCH_SMOKE: MODES[kind],

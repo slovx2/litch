@@ -1,3 +1,4 @@
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 // 首回合验收：不显示窗口，起一次桌面外壳，对着由真的适配器主进程管着的隔离设备
 // （scripts/device-fixture.mjs --managed --engines …，模型是回环上的假模型），每个真的 harness 上
 // 从界面新建会话、发头一句、收到回话（量法和判定在 src/probe-first-turn.mts）。
@@ -133,7 +134,7 @@ const fixture = await startFixture(['--managed', '--engines', ['pi', ...wanted].
 )
 const { root, socket, engines } = fixture.info
 let output = ''
-const child = spawn(electron, [appDir], {
+const child = spawn(electron, withChromiumTestArgs([appDir]), {
   env: {
     ...process.env,
     LITCH_SMOKE: 'first-turn',

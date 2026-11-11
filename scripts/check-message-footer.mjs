@@ -1,3 +1,4 @@
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 // 消息收尾的无头浏览器验收。加 --scroll 复用滚动、收起和视图切换探针；不保存截图。
 
 import assert from 'node:assert/strict'
@@ -30,18 +31,16 @@ await vite.listen()
 const base = vite.resolvedUrls.local[0]
 const child = spawn(
   binary,
-  [
+  withChromiumTestArgs([
     '--headless=new',
     `--user-data-dir=${work}/profile`,
     '--remote-debugging-port=0',
     '--no-first-run',
     '--no-default-browser-check',
-    '--password-store=basic',
-    '--use-mock-keychain',
     '--disable-background-networking',
     '--window-size=1200,900',
     'about:blank',
-  ],
+  ]),
   {
     env: { PATH: process.env.PATH, HOME: work, CODEX_HOME: join(work, 'codex'), TMPDIR: work },
     stdio: 'ignore',

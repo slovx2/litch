@@ -5,6 +5,7 @@ import { createServer } from 'node:net'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { withChromiumTestArgs } from '../../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { probeAppPath } from './shared-probe.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..')
@@ -32,7 +33,7 @@ if (process.argv[2] === 'launch') {
   const log = openSync(join(directory, 'electron.log'), 'a')
   const app = spawn(
     join(root, 'apps/desktop/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'),
-    [join(root, 'apps/desktop'), `--remote-debugging-port=${port}`],
+    withChromiumTestArgs([join(root, 'apps/desktop'), `--remote-debugging-port=${port}`]),
     {
       detached: true,
       stdio: ['ignore', log, log],

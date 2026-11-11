@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { build } from '../../node_modules/esbuild/lib/main.js'
+import { withChromiumTestArgs } from '../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { until } from '../chrome-m0/cdp.mjs'
 
 export async function startElectron(root, out, home) {
@@ -31,7 +32,7 @@ export async function startElectron(root, out, home) {
   await new Promise((r) => free.close(r))
   const child = spawn(
     join(root, 'apps/desktop/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'),
-    [probe, `--remote-debugging-port=${port}`, '--use-mock-keychain', '--password-store=basic'],
+    withChromiumTestArgs([probe, `--remote-debugging-port=${port}`]),
     {
       env: {
         PATH: process.env.PATH,

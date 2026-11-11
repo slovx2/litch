@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createServer } from '../packages/ui/node_modules/vite/dist/node/index.js'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { assertUiBuildFresh } from './ui-build-state.mjs'
 
 assertUiBuildFresh()
@@ -20,7 +21,7 @@ const electron =
   process.platform === 'darwin' ? 'Electron.app/Contents/MacOS/Electron' : 'electron.exe'
 const child = spawn(
   resolve('apps/desktop/node_modules/electron/dist', electron),
-  [resolve('apps/desktop/scripts/media-window.mjs')],
+  withChromiumTestArgs([resolve('apps/desktop/scripts/media-window.mjs')]),
   {
     env: {
       PATH: process.env.PATH,

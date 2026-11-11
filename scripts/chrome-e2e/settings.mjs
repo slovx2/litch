@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer } from '../../packages/ui/node_modules/vite/dist/node/index.js'
+import { withChromiumTestArgs } from '../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
 const require = createRequire(join(root, 'apps/desktop/package.json'))
@@ -21,17 +22,21 @@ try {
   })
   await server.listen()
   const address = server.httpServer.address()
-  child = spawn(require('electron'), [join(root, 'scripts/chrome-e2e/settings-electron.mjs')], {
-    env: {
-      PATH: process.env.PATH,
-      HOME: home,
-      CODEX_HOME: join(home, '.codex'),
-      TMPDIR: home,
-      LITCH_LOG_DIR: join(home, 'logs'),
-      LITCH_SETTINGS_URL: `http://127.0.0.1:${address.port}`,
+  child = spawn(
+    require('electron'),
+    withChromiumTestArgs([join(root, 'scripts/chrome-e2e/settings-electron.mjs')]),
+    {
+      env: {
+        PATH: process.env.PATH,
+        HOME: home,
+        CODEX_HOME: join(home, '.codex'),
+        TMPDIR: home,
+        LITCH_LOG_DIR: join(home, 'logs'),
+        LITCH_SETTINGS_URL: `http://127.0.0.1:${address.port}`,
+      },
+      stdio: 'inherit',
     },
-    stdio: 'inherit',
-  })
+  )
   const stop = () => child.kill('SIGKILL')
   process.once('SIGINT', stop)
   process.once('SIGTERM', stop)

@@ -24,6 +24,7 @@ import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
 } from '../packages/device/dist/protocol/src/manager.mjs'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { writeDeviceSettings } from './client-fixture-engines.mjs'
 import { codexConfig, startResponsesModel, userText } from './client-fixture-responses.mjs'
 
@@ -319,7 +320,7 @@ try {
       external: ['electron'],
     })
     const require = createRequire(join(repo, 'apps/desktop/package.json'))
-    desktop = spawn(require('electron'), [bootstrap], {
+    desktop = spawn(require('electron'), withChromiumTestArgs([bootstrap]), {
       cwd: repo,
       env: {
         ...env,

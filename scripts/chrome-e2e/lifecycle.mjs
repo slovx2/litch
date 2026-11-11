@@ -6,6 +6,7 @@ import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
+import { withChromiumTestArgs } from '../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { Cdp, until } from '../chrome-m0/cdp.mjs'
 import { backgroundChecks } from './background-check.mjs'
 import { foregroundGuard, launchBackgroundChrome, minimizeTarget } from './background-runtime.mjs'
@@ -76,7 +77,7 @@ export async function chromeLifecycle({
     const electron = createRequire(join(root, 'apps/desktop/package.json'))('electron')
     let ready
     let errors = ''
-    host = spawn(electron, [hostFile, base, copied, profile, nativeBinary], {
+    host = spawn(electron, withChromiumTestArgs([hostFile, base, copied, profile, nativeBinary]), {
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
     })
@@ -146,8 +147,6 @@ export async function chromeLifecycle({
         `--load-extension=${extensionDirectory}`,
         `--remote-debugging-port=${port}`,
         '--remote-debugging-address=127.0.0.1',
-        '--use-mock-keychain',
-        '--password-store=basic',
         '--no-first-run',
         '--no-default-browser-check',
         '--disable-background-networking',

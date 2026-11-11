@@ -1,3 +1,4 @@
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 // 起一次桌面外壳做自检，把结果整理成一行给人看。
 //   npm run smoke          对着模拟核心：界面和核心经消息端口打通，流式增量到了界面
 //   npm run smoke:entry    对着隔离的真实入口：核心经套接字连上，真实的会话到了界面
@@ -306,39 +307,43 @@ function writeElsewhere(socket, key, value) {
 
 // 用一份临时的用户数据目录：自检会写草稿，不能落进平时用的那一份里
 const profile = mkdtempSync(join(tmpdir(), 'litch-smoke-'))
-const child = spawn(usePacked ? packedBinary() : electron, usePacked ? [] : [appDir], {
-  env: {
-    ...fixtureEnvironment(),
-    HOME: profile,
-    CODEX_HOME: join(profile, 'codex'),
-    CLAUDE_CONFIG_DIR: join(profile, 'claude'),
-    LITCH_SMOKE: mode,
-    LITCH_SCROLL_CPU: process.env.LITCH_SCROLL_CPU ?? '1',
-    LITCH_PROFILE: profile,
-    // 上手功能：本机一个 harness 都没装的开局，首启引导照第一次启动那样出
-    ...(probe === 'onboard' ? { LITCH_MOCK_SCENE: 'fresh', LITCH_ONBOARDING: '1' } : {}),
-    // 经理冒烟按四类控制台写（设备服务较旧时仍是这一套）；issue 控制台另有验收
-    ...(probe === 'manager' ? { LITCH_MOCK_MANAGER_ISSUES: '0' } : {}),
-    ...(probe === 'manager-issues' ? { LITCH_MOCK_MANAGER_ISSUES: '1' } : {}),
-    ...(fixture ? { LITCH_ENTRY: fixture.entry } : {}),
-    // 本机设备直接连聚合面的套接字
-    ...(device ? { LITCH_ENTRY: device.socket } : {}),
-    ...(remote
-      ? {
-          // 只用假的远程机器那份 ssh 配置；对面的 codex 和适配器都是替身的名字
-          LITCH_SSH_CONFIG: remote.config,
-          LITCH_REMOTE_CODEX: remote.codex,
-          LITCH_REMOTE_ADAPTER: remote.adapter,
-          LITCH_SMOKE_ALIASES: JSON.stringify(remote.aliases),
-          // 设备服务那边建项目用的目录（在假机器的临时主目录里）
-          LITCH_SMOKE_WORK: remote.work,
-          // 本机这一版要靠这个变量指定入口：这里故意不给，顺便验“一台连不上不耽误别的”
-          LITCH_ENTRY: '',
-        }
-      : {}),
+const child = spawn(
+  usePacked ? packedBinary() : electron,
+  withChromiumTestArgs(usePacked ? [] : [appDir]),
+  {
+    env: {
+      ...fixtureEnvironment(),
+      HOME: profile,
+      CODEX_HOME: join(profile, 'codex'),
+      CLAUDE_CONFIG_DIR: join(profile, 'claude'),
+      LITCH_SMOKE: mode,
+      LITCH_SCROLL_CPU: process.env.LITCH_SCROLL_CPU ?? '1',
+      LITCH_PROFILE: profile,
+      // 上手功能：本机一个 harness 都没装的开局，首启引导照第一次启动那样出
+      ...(probe === 'onboard' ? { LITCH_MOCK_SCENE: 'fresh', LITCH_ONBOARDING: '1' } : {}),
+      // 经理冒烟按四类控制台写（设备服务较旧时仍是这一套）；issue 控制台另有验收
+      ...(probe === 'manager' ? { LITCH_MOCK_MANAGER_ISSUES: '0' } : {}),
+      ...(probe === 'manager-issues' ? { LITCH_MOCK_MANAGER_ISSUES: '1' } : {}),
+      ...(fixture ? { LITCH_ENTRY: fixture.entry } : {}),
+      // 本机设备直接连聚合面的套接字
+      ...(device ? { LITCH_ENTRY: device.socket } : {}),
+      ...(remote
+        ? {
+            // 只用假的远程机器那份 ssh 配置；对面的 codex 和适配器都是替身的名字
+            LITCH_SSH_CONFIG: remote.config,
+            LITCH_REMOTE_CODEX: remote.codex,
+            LITCH_REMOTE_ADAPTER: remote.adapter,
+            LITCH_SMOKE_ALIASES: JSON.stringify(remote.aliases),
+            // 设备服务那边建项目用的目录（在假机器的临时主目录里）
+            LITCH_SMOKE_WORK: remote.work,
+            // 本机这一版要靠这个变量指定入口：这里故意不给，顺便验“一台连不上不耽误别的”
+            LITCH_ENTRY: '',
+          }
+        : {}),
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
   },
-  stdio: ['ignore', 'pipe', 'pipe'],
-})
+)
 let output = ''
 /** 只有标准输出的那一份：信号按行认，不能让标准错误的字夹进一行中间 */
 let printed = ''

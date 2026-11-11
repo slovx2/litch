@@ -4,6 +4,7 @@ import { execFileSync, spawn } from 'node:child_process'
 import { globSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
 
 const url =
@@ -26,16 +27,14 @@ const output =
 mkdirSync(output, { recursive: true })
 const child = spawn(
   binary,
-  [
+  withChromiumTestArgs([
     '--headless=new',
     `--user-data-dir=${work}/profile`,
     '--remote-debugging-port=0',
-    '--use-mock-keychain',
-    '--password-store=basic',
     '--no-first-run',
     '--no-default-browser-check',
     'about:blank',
-  ],
+  ]),
   {
     env: { HOME: work, PATH: '/usr/bin:/bin', TMPDIR: work },
     stdio: ['ignore', 'ignore', 'pipe'],

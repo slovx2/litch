@@ -5,6 +5,7 @@ import { globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync }
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createServer } from '../packages/ui/node_modules/vite/dist/node/index.js'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
 import { mobileLatencyFixture } from './stop-latency-mobile-fixture.mjs'
 
@@ -35,18 +36,16 @@ assert.ok(binary)
 const root = mkdtempSync(join(tmpdir(), 'litch-feedback-'))
 const browser = spawn(
   binary,
-  [
+  withChromiumTestArgs([
     '--headless=new',
     `--user-data-dir=${root}/profile`,
     '--remote-debugging-port=0',
     '--no-first-run',
     '--no-default-browser-check',
-    '--password-store=basic',
-    '--use-mock-keychain',
     '--disable-background-networking',
     '--window-size=1200,900',
     'about:blank',
-  ],
+  ]),
   {
     env: { PATH: process.env.PATH, HOME: root, CODEX_HOME: join(root, 'codex'), TMPDIR: root },
     stdio: 'ignore',

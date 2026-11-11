@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import electron from 'electron'
 import { build } from 'esbuild'
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const temp = mkdtempSync(join(tmpdir(), 'litch-remote-upload-e2e-'))
@@ -24,7 +25,7 @@ try {
     target: 'node24',
     external: ['electron'],
   })
-  const result = execFileSync(electron, [output], {
+  const result = execFileSync(electron, withChromiumTestArgs([output]), {
     encoding: 'utf8',
     timeout: 120000,
     env: {

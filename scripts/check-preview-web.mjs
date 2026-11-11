@@ -7,6 +7,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build as bundle } from '../apps/desktop/node_modules/esbuild/lib/main.js'
 import { build } from '../packages/ui/node_modules/vite/dist/node/index.js'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const out = join(root, '.local/preview-web-check', `${Date.now()}-${process.pid}`)
@@ -66,7 +67,7 @@ const exe = join(
   root,
   'apps/desktop/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron',
 )
-const child = spawn(exe, [join(out, 'main.mjs'), out], {
+const child = spawn(exe, withChromiumTestArgs([join(out, 'main.mjs'), out]), {
   env: { PATH: process.env.PATH, HOME: home, TMPDIR: home, LITCH_PREVIEW_CHECK_HOME: home },
   stdio: ['ignore', 'pipe', 'pipe'],
 })

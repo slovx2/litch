@@ -1,3 +1,4 @@
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 // 原生与推断阶段的无头浏览器验收：正式 Transcript + 模拟核心，截图留在 .artifacts/message-phase。
 
 import assert from 'node:assert/strict'
@@ -31,18 +32,16 @@ await vite.listen()
 const base = vite.resolvedUrls.local[0]
 const child = spawn(
   binary,
-  [
+  withChromiumTestArgs([
     '--headless=new',
     `--user-data-dir=${work}/profile`,
     '--remote-debugging-port=0',
     '--no-first-run',
     '--no-default-browser-check',
-    '--password-store=basic',
-    '--use-mock-keychain',
     '--disable-background-networking',
     '--window-size=1200,900',
     'about:blank',
-  ],
+  ]),
   {
     env: { PATH: process.env.PATH, HOME: work, CODEX_HOME: join(work, 'codex'), TMPDIR: work },
     stdio: 'ignore',

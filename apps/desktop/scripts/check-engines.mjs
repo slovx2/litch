@@ -1,3 +1,4 @@
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 // 三个引擎各走一遍的验收：不显示窗口，起一次桌面外壳，对着由真的适配器主进程管着的三引擎隔离设备
 // （scripts/device-fixture.mjs --managed --engines claude,pi,dsh：真的 Claude Code、Pi、DeepSeek Harness，
 // 模型是回环上的假模型），在界面里把三家各走一遍。量法在 src/probe-engines*.mts，各家各步该是什么在
@@ -161,7 +162,7 @@ const { CHA_CLAUDE_CLI: _claude, CHA_DSH_CLI: _dsh, ...inherited } = process.env
 // Linux/Xvfb 的隐藏窗口即使 backgroundThrottling=false，合成器仍会把动画帧压到约 1 秒一次。
 // MutationObserver 因而只能看到合并后的正文；只给这次验收关掉帧率限制，保留原来的流式断言。
 const frameArgs = process.platform === 'linux' ? ['--disable-frame-rate-limit'] : []
-const child = spawn(electron, [...frameArgs, appDir], {
+const child = spawn(electron, withChromiumTestArgs([...frameArgs, appDir]), {
   env: {
     ...(local ? inherited : process.env),
     LITCH_SMOKE: 'engines',

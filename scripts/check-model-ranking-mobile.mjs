@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process'
 import { globSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
 
 const repo = resolve(import.meta.dirname, '..')
@@ -44,15 +45,13 @@ try {
   )
   browser = spawn(
     binary,
-    [
+    withChromiumTestArgs([
       '--headless=new',
       `--user-data-dir=${work}/profile`,
       '--remote-debugging-port=0',
-      '--use-mock-keychain',
-      '--password-store=basic',
       '--no-first-run',
       'about:blank',
-    ],
+    ]),
     {
       env: { HOME: work, PATH: '/usr/bin:/bin', TMPDIR: work },
       stdio: ['ignore', 'ignore', 'pipe'],

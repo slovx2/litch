@@ -9,6 +9,7 @@ import net from 'node:net'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { WebSocket, WebSocketServer } from 'ws'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { startManagerFixture, until } from './client-fixture-manager-check.mjs'
 
 const repo = fileURLToPath(new URL('../', import.meta.url))
@@ -251,7 +252,7 @@ app.on('browser-window-created', (_event, window) => {
 await import(${JSON.stringify(pathToFileURL(join(repo, 'apps/desktop/dist/main.mjs')).href)});
 `,
   )
-  const desktop = spawn(require('electron'), [bootstrap], {
+  const desktop = spawn(require('electron'), withChromiumTestArgs([bootstrap]), {
     cwd: repo,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {

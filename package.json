@@ -31,7 +31,7 @@
     "typecheck": "npm run typecheck --prefix packages/claude && npm run typecheck --prefix packages/pi && npm run typecheck --prefix packages/dsh && npm run typecheck --prefix packages/opencode && npm run typecheck --prefix packages/acp && npm run typecheck --prefix packages/antigravity && npm run typecheck --prefix packages/device && npm run typecheck --prefix third_party/litch-automation/packages/computer-use && npm run typecheck --prefix third_party/litch-automation/packages/chrome-extension && npm run typecheck --prefix third_party/litch-automation/packages/chrome-bridge",
     "lint": "biome lint packages apps scripts",
     "format": "biome format --write packages apps scripts",
-    "check": "biome check packages apps scripts && node scripts/check-versions.mjs && node scripts/check-manual.mjs && node scripts/check-text-sizes.mjs && npm run test:protocol:unit && npm run check:automation-contracts && npm run check:shared-modules",
+    "check": "biome check packages apps scripts && node scripts/check-versions.mjs && node scripts/check-manual.mjs && node scripts/check-text-sizes.mjs && node scripts/check-chromium-test-launches.mjs && npm run test:protocol:unit && npm run check:automation-contracts && npm run check:shared-modules",
     "check:fix": "biome check --write packages apps scripts",
     "check:rust-protocol-fixtures": "node scripts/check-rust-protocol-fixtures.mjs",
     "docs:dev": "vitepress dev docs",

@@ -15,6 +15,7 @@ import { homedir, tmpdir } from 'node:os'
 import { dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from '../packages/ui/node_modules/vite/dist/node/index.js'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
 import { startElectron } from './office-preview/electron.mjs'
 
@@ -80,19 +81,17 @@ try {
     const port = server.address().port
     browser = spawn(
       binary,
-      [
+      withChromiumTestArgs([
         '--headless=new',
         '--disable-gpu',
         '--no-first-run',
         '--no-default-browser-check',
         '--disable-background-networking',
         '--disable-extensions',
-        '--use-mock-keychain',
-        '--password-store=basic',
         '--remote-debugging-port=0',
         `--user-data-dir=${profile}`,
         'about:blank',
-      ],
+      ]),
       {
         env: { PATH: process.env.PATH, HOME: home, TMPDIR: tmpdir() },
         stdio: ['ignore', 'ignore', 'pipe'],

@@ -7,6 +7,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 
 const require = createRequire(import.meta.url)
 const repo = fileURLToPath(new URL('../../..', import.meta.url))
@@ -33,7 +34,7 @@ if (!process.versions.electron) {
       join(folder, 'index.html'),
       '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="preview.css"></head><body><div id="root"></div><script type="module" src="preview.js"></script></body></html>',
     )
-    const child = spawn(require('electron'), [self, folder, shots], {
+    const child = spawn(require('electron'), withChromiumTestArgs([self, folder, shots]), {
       env: { ...process.env, HOME: folder, CODEX_HOME: join(folder, '.codex') },
       stdio: 'inherit',
     })

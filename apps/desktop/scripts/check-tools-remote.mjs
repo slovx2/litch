@@ -13,6 +13,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 import { WebSocketServer } from 'ws'
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 
 const require = (await import('node:module')).createRequire(import.meta.url)
 const electron = require('electron')
@@ -123,7 +124,10 @@ try {
   }
   delete env.ELECTRON_RUN_AS_NODE
   result = await new Promise((resolve) => {
-    const child = spawn(electron, [outfile], { env, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(electron, withChromiumTestArgs([outfile]), {
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
     let output = ''
     child.stdout.on('data', (chunk) => {
       output += chunk

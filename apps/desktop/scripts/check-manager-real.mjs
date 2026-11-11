@@ -1,3 +1,4 @@
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 // 正式桌面外壳 + managed 隔离设备 + 真实 Claude Code / 原生 Codex；模型只用回环夹具。
 // npm run client:check:manager-real -- [--show] [--skip-missing]
 // Claude 必须给 CHA_CLAUDE_CLI 隔离副本；Codex 用 CHA_CODEX_CLI 或 PATH。
@@ -96,7 +97,7 @@ try {
     external: ['electron'],
   })
   let output = ''
-  child = spawn(require('electron'), [bootstrap], {
+  child = spawn(require('electron'), withChromiumTestArgs([bootstrap]), {
     cwd: repo,
     // 白名单，既不带个人模型凭据，也不从登录 shell 补进来。
     env: {

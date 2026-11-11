@@ -1,3 +1,4 @@
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 // 终端面板的验收：不显示窗口，起三次桌面外壳，各对着一种对面。
 //   --mock     模拟核心（假 shell）：面板的开合、标签、输入回显、慢出字、刷屏、全屏、皮肤、语言
 //   --device   隔离的多 harness 设备（scripts/device-fixture.mjs）：可重连的终端
@@ -198,7 +199,7 @@ async function runOne(kind) {
     : null
   const relay = target ? await startRelay(target, scratch) : null
   const outside = []
-  const child = spawn(electron, [appDir], {
+  const child = spawn(electron, withChromiumTestArgs([appDir]), {
     env: {
       ...process.env,
       LITCH_SMOKE: kind === 'mock' ? 'terminal' : `terminal-${kind}`,

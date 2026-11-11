@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { withChromiumTestArgs } from '../../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { probeAppPath } from '../integration/shared-probe.mjs'
 import { hidIdleSeconds } from './idle.mjs'
 
@@ -68,7 +69,7 @@ try {
   }
   const electron = spawn(
     join(cu, '../desktop/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'),
-    [join(source, 'electron.cjs'), '--directory', join(root, 'electron')],
+    withChromiumTestArgs([join(source, 'electron.cjs'), '--directory', join(root, 'electron')]),
     { env: { ...env, LITCH_PROBE_HIDDEN: '1' }, stdio: 'ignore' },
   )
   children.push(electron.pid)

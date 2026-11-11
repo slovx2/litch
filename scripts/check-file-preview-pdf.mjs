@@ -19,6 +19,7 @@ import {
   build,
   createServer as createViteServer,
 } from '../packages/ui/node_modules/vite/dist/node/index.js'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
 import { checkPdf } from './pdf-checks.mjs'
 import { pdfFixture } from './pdf-fixtures.mjs'
@@ -99,19 +100,17 @@ try {
   }
   browser = spawn(
     binary,
-    [
+    withChromiumTestArgs([
       '--headless=new',
       '--disable-gpu',
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-background-networking',
       '--disable-extensions',
-      '--use-mock-keychain',
-      '--password-store=basic',
       '--remote-debugging-port=0',
       `--user-data-dir=${profile}`,
       'about:blank',
-    ],
+    ]),
     {
       env: { PATH: process.env.PATH, HOME: home, TMPDIR: tmpdir() },
       stdio: ['ignore', 'ignore', 'pipe'],

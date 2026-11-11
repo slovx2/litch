@@ -9,6 +9,7 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { withChromiumTestArgs } from '../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { Cdp, until } from './cdp.mjs'
 import { fixtures } from './fixtures.mjs'
 import { lifecycleProbes } from './lifecycle-probes.mjs'
@@ -148,7 +149,7 @@ await new Promise((accept) => reservation.close(accept))
 if (debugPort === 9333) throw new Error('禁止端口 9333')
 const child = spawn(
   binary,
-  [
+  withChromiumTestArgs([
     ...(headless ? ['--headless=new'] : []),
     `--user-data-dir=${profile}`,
     `--remote-debugging-port=${debugPort}`,
@@ -160,15 +161,13 @@ const child = spawn(
     '--disable-background-networking',
     '--disable-component-update',
     '--disable-sync',
-    '--use-mock-keychain',
-    '--password-store=basic',
     '--no-proxy-server',
     '--disable-features=Translate',
     '--site-per-process',
     '--host-resolver-rules=MAP a.test 127.0.0.1,MAP b.test 127.0.0.1',
     '--window-size=1000,800',
     'about:blank',
-  ],
+  ]),
   {
     env: {
       PATH: `${dirname(process.execPath)}:/usr/bin:/bin:/usr/sbin:/sbin`,

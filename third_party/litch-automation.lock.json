@@ -1,11 +1,11 @@
 {
   "repository": "https://github.com/slovx2/litch-automation.git",
-  "commit": "163713723402aef68d571eec5c18388ed262701e",
-  "tree": "0eb70aff05368ef4041c4b5fa7ae5b9cb735d36e",
+  "commit": "9c75034ff2579efcbb72ca7f236095c256b8086f",
+  "tree": "b4bbc649ecab5762346ad376b0403f3eb688a29b",
   "files": {
     ".gitignore": "2f693b87eb1cba728f3c91d3a37d72c2e12879ce5a19b3ef4e54c4075be037cf",
     "LICENSE": "136c14fd21bf7d8004c9f022a427077ca6d0c0870db035d12141aa95d79336ee",
-    "README.md": "14112b2824a969f961aa1807afd1b7c83ecb19d1de0154df8b8a5feab9dfbf01",
+    "README.md": "ac94fd3d899b9790bd872d6d7ca1c4c38283fbc048c62f84359d8245484783d6",
     "apps/computer-use-win/.gitignore": "44c92e3a70ad3307b7056871c2bdb096d8bfa9373f5bf06a79bb6324a20ff2fb",
     "apps/computer-use-win/Cargo.lock": "e3d1123ddfd5f2e7619e888f527465ddfee49c2b3e7cda611e7ac5dfb513c5ce",
     "apps/computer-use-win/Cargo.toml": "ba6bb1a695e75935bac024030c87878ba9db9839739bda14c1e5f6e4eea44304",
@@ -107,7 +107,7 @@
     "internal/hostplatform/platform_unix.go": "544678719af68c4603da7a238ac23e540ee8348f286e408e2a435aeac1be2466",
     "internal/hostplatform/platform_windows.go": "f020ec89c702c29af5e2c2b46831b9e4fb27a5fe1e794db4f84356bfe3313df8",
     "package-lock.json": "9dbb000fcabc29d2d326e8497b917011a2eeb880b66ef36515d24b0cf71c8cbe",
-    "package.json": "8e08fd84ec2d5e753852a9202de4efc5dd003cf29875c148a96d86843a621ff5",
+    "package.json": "8e0801249e6b9440334d32d81eac59f21a7b8d0aaf20b7b32a25a66f49c9eacb",
     "packages/automation-contracts/CHANGELOG.md": "1b4bbcfca885641d0d1f0e3d9f7ea91b2ff31ef4ac6bb0d0ea984926dcce5959",
     "packages/automation-contracts/LICENSE": "136c14fd21bf7d8004c9f022a427077ca6d0c0870db035d12141aa95d79336ee",
     "packages/automation-contracts/README.md": "f539b6888a5854fd961117ab814894eca1cd5fa63fdb443f82bc4863f9ad1bf8",
@@ -158,7 +158,7 @@
     "packages/browser/native/keychain.h": "d3fd83e6afadfff30e35b1cac9f979fa051b2a587c85e7536cd5e09df5d79e56",
     "packages/browser/package-lock.json": "d12819cb28315e0edc77f7df127ef45a54de36ad8995d02dd0881f1d95cd9643",
     "packages/browser/package.json": "57aff80a14218e3279bfc5f30fc468b174315d35010d41443cdf90b70e0f648c",
-    "packages/browser/scripts/check-electron.mjs": "d5c9bed922c787f6eeb32de2b01a3d758830719ffc0244cac48fab5ea1b18591",
+    "packages/browser/scripts/check-electron.mjs": "af5b2069470ba1ec5bb4756bce2acc4c86e26c181cc5a3e5889354bf1bbfdc13",
     "packages/browser/scripts/check-package.mjs": "fd0e5adf1c96913c4ddd41cae38b5784ffb6375651942ebfe749ff4415967e97",
     "packages/browser/scripts/imports-of.mjs": "5f72b8c3e75388218059032ddb956610fc376f888adb84db790955a2e5403497",
     "packages/browser/src/approval-subject.mts": "07c81aa1e1464ca03a005da59416d839204861d3007e30fe5abbdb01e6307d2a",
@@ -324,6 +324,10 @@
     "packages/computer-use/test/wire.test.mts": "38172b61e4eca68d061e5f402453c040e540d831af152abe4ae1cf7b9f5ccbc9",
     "packages/computer-use/tsconfig.json": "89e691f5bd752e638a4a0aa6d876caf383b88d05b84cae4656e4ad5c6a970f4f",
     "scripts/check-chrome-packages.mjs": "16d909f76242ebb85c3e605a6f5adf829dd0d2bff5dc53783f1ca7800d7de2ee",
+    "scripts/check-chromium-test-launches.mjs": "22d84ace56e947309c226c95a7f3ef622a9a4f02ef55b2c98791c915b972860e",
+    "scripts/chromium-test-args.mjs": "4ea8f46d97d15294ec9a7ec68b5cb222cd888c09c4cbedb687fc89035b93b4c1",
+    "scripts/chromium-test-launches.mjs": "222ac66c54ee1734ccf1533c3a6b635b6fb90d78d6f22ad0fac14ddc167dd24d",
+    "scripts/chromium-test-launches.test.mjs": "9b48981d1852cca7f03a72249b1bae1dd0e5c1c98c0f6866711ddb62ffa9ed5e",
     "tsconfig.json": "01e794cdb84ed69881b158e2daa6a0ef167d231210651dc3e93e20f531ccd85f"
   }
 }
