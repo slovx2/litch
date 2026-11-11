@@ -265,7 +265,7 @@ export function IssueConsole({
           if (expanded) setOpen(null)
           else {
             setOpen(head.id)
-            invoke(commands.read(head.id))
+            invoke(commands.read(head.id, { manual: true }))
           }
         }}
         quick={
@@ -374,7 +374,11 @@ export function IssueConsole({
       {error || issues.error ? (
         <p role="alert" className="err">
           {error || issues.error}{' '}
-          <button type="button" className="btn ghost" onClick={() => invoke(commands.list(filter))}>
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={() => invoke(commands.list(filter, { manual: true }))}
+          >
             {t('manager.paging.retry')}
           </button>
         </p>
@@ -395,7 +399,9 @@ export function IssueConsole({
                 type="button"
                 className="btn ghost"
                 data-issue-more
-                onClick={() => invoke(commands.list(filter, { cursor: page.nextCursor ?? '' }))}
+                onClick={() =>
+                  invoke(commands.list(filter, { cursor: page.nextCursor ?? '', manual: true }))
+                }
               >
                 {t('issue.loadMore')}
               </button>

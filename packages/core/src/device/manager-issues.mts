@@ -12,6 +12,10 @@ import {
 } from '../projection/manager-public-issues.mjs'
 import type { ManagersHost } from './manager.mjs'
 
+export interface ManagerIssueCallOptions {
+  manual?: boolean
+}
+
 // 在途请求按代际丢弃；通知时重读所有已订阅页面和详情，断线保留最后快照。
 export class ManagerIssueCache {
   readonly host: ManagersHost
@@ -41,7 +45,8 @@ export class ManagerIssueCache {
     this.dirty = false
     this.view = { ...this.view, loading: [] }
   }
-  refresh(): Promise<void> {
+  refresh(options: ManagerIssueCallOptions = {}): Promise<void> {
+    if (options.manual) return this.refreshOnce(this.epoch, options)
     this.dirty = true
     if (this.refreshing) return this.refreshing
     const mine = this.epoch
@@ -69,22 +74,25 @@ export class ManagerIssueCache {
       .catch(() => {})
     return run
   }
-  private async refreshOnce(mine: number) {
+  private async refreshOnce(mine: number, options: ManagerIssueCallOptions = {}) {
     // 首页替换、后页追加必须有确定顺序；不能让迟到的首页清掉已加载的后页。
     for (const query of [...this.queries.values()].sort(
       (a, b) => Number(a.cursor ?? 0) - Number(b.cursor ?? 0),
     )) {
       if (mine !== this.epoch || !this.host.online()) return
-      await this.call(METHOD.list, query)
+      await this.call(METHOD.list, query, options)
     }
     if (mine !== this.epoch || !this.host.online()) return
     await Promise.all(
-      [...this.refs].map((id) => this.call(METHOD.read, { managerId: this.managerId, id })),
+      [...this.refs].map((id) =>
+        this.call(METHOD.read, { managerId: this.managerId, id }, options),
+      ),
     )
   }
   call<M extends keyof ManagerIssueRequests>(
     method: M,
     params: ManagerIssueRequests[M]['params'],
+    options: ManagerIssueCallOptions = {},
   ): Promise<ManagerIssueRequests[M]['result']> {
     // 先登记再发布 loading；订阅者重入也只能共享一条请求。写入只合并幂等的 seen。
     const merge = method === METHOD.list || method === METHOD.read || method === METHOD.seen
@@ -92,11 +100,12 @@ export class ManagerIssueCache {
       method === METHOD.list
         ? `${method}:${managerIssueQueryKey(params as ManagerIssueQuery)}:${(params as ManagerIssueQuery).cursor ?? ''}`
         : `${method}:${JSON.stringify(params)}`
+    const failed = merge ? this.failed.get(key) : undefined
+    // 手动重试绕过冷却；成功前仍保留自动重读的冷却，防止同时到来的通知重新放大请求。
+    if (!options.manual && failed && Date.now() - failed.at < 30_000)
+      return Promise.reject(failed.error)
     const pending = merge ? this.pending.get(key) : undefined
     if (pending) return pending as Promise<ManagerIssueRequests[M]['result']>
-    const failed = merge ? this.failed.get(key) : undefined
-    // 超时后的状态发布不能立即重发同一请求；不设自动重试计时器，重连会清掉失败记录。
-    if (failed && Date.now() - failed.at < 30_000) return Promise.reject(failed.error)
     const mine = this.epoch
     const run = Promise.resolve().then(() => this.request(method, params, mine))
     if (merge) {

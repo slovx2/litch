@@ -86,6 +86,46 @@ test('超时后发布失败不立即重试；冷却结束或重连后可恢复',
   assert.equal(f.calls.at(-1), M.read, '断线前的已订阅详情在恢复后重读')
 })
 
+test('手动重试立即绕过冷却并合并连点，同期自动重读仍受冷却限制', async () => {
+  for (const method of [M.list, M.read] as const) {
+    const f = fixture()
+    const params = method === M.list ? f.query : { managerId: 'm', id: f.issue.id }
+    f.block(async () => {
+      throw new Error('timeout')
+    })
+    await assert.rejects(f.cache.call(method, params), /timeout/)
+    let release!: () => void
+    const wait = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    f.block(() => wait)
+    const manual = f.cache.call(method, params, { manual: true })
+    assert.equal(f.cache.call(method, params, { manual: true }), manual)
+    await settle()
+    assert.equal(f.calls.length, 2, '手动请求不等30秒冷却')
+    await assert.rejects(f.cache.call(method, params), /timeout/, '自动重读不借手动重试绕过冷却')
+    assert.equal(f.calls.length, 2)
+    release()
+    await manual
+    f.block(null)
+    await f.cache.call(method, params)
+    assert.equal(f.calls.length, 3, '手动成功清理失败记录')
+  }
+})
+
+test('手动整板刷新立即重读失败页，自动通知刷新保持冷却', async () => {
+  const f = fixture()
+  f.block(async () => {
+    throw new Error('timeout')
+  })
+  await assert.rejects(f.cache.call(M.list, f.query), /timeout/)
+  await assert.rejects(f.cache.refresh(), /timeout/)
+  assert.equal(f.calls.length, 1)
+  f.block(null)
+  await f.cache.refresh({ manual: true })
+  assert.equal(f.calls.length, 2)
+})
+
 test('通知风暴：跨帧通知在50ms窗口合并；慢读取期间的新通知只补读一轮', async (t) => {
   const f = fixture()
   await f.cache.call(M.list, f.query)

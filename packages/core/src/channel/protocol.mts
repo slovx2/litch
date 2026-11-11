@@ -438,6 +438,7 @@ export interface Commands {
   'managers.issues.list': {
     params: import('../../../protocol/src/manager-issues.mjs').ManagerIssueQuery & {
       deviceId: string
+      manual?: boolean
     }
     result: { page: import('../../../protocol/src/manager-issues.mjs').ManagerIssuePage }
   }
@@ -446,6 +447,7 @@ export interface Commands {
       deviceId: string
       managerId: string
       id: import('../../../protocol/src/manager-issues.mjs').ManagerIssueRef
+      manual?: boolean
     }
     result: import('../../../protocol/src/manager-issues.mjs').ManagerIssueDetail
   }

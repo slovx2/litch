@@ -50,7 +50,7 @@ import {
 } from '../projection/manager.mjs'
 import { projectManagerIssue } from '../projection/manager-public-issues.mjs'
 import { openedManagerDecisions } from './manager-decisions.mjs'
-import { ManagerIssueCache } from './manager-issues.mjs'
+import { ManagerIssueCache, type ManagerIssueCallOptions } from './manager-issues.mjs'
 import { PagedManagerBoard } from './manager-paging.mjs'
 import { managerValidationError } from './manager-validation.mjs'
 
@@ -454,6 +454,7 @@ export function createManagers(host: ManagersHost) {
     async issue<M extends keyof ManagerIssueRequests>(
       method: M,
       params: ManagerIssueRequests[M]['params'],
+      options?: ManagerIssueCallOptions,
     ) {
       requires('issues', method)
       const entry = boardEntry(params.managerId)
@@ -461,7 +462,7 @@ export function createManagers(host: ManagersHost) {
         entry.view = { ...entry.view, issues }
         publishBoard(entry)
       })
-      return guarded(() => entry.issues!.call(method, params))
+      return guarded(() => entry.issues!.call(method, params, options))
     },
     async resolveReferences(managerId: string, ids: string[]) {
       if (
@@ -558,10 +559,15 @@ export function createManagers(host: ManagersHost) {
       return {}
     },
     async refresh(managerId: string, lines?: boolean) {
+      // 此命令只由手动刷新/重试入口调用；通知和订阅直接走 loadBoard/invalidate。
+      const entry = boardEntry(managerId)
       await guarded(() =>
-        lines && host.features().paging
-          ? paging(managerId, boardEntry(managerId)).lines()
-          : loadBoard(managerId, boardEntry(managerId)),
+        Promise.all([
+          lines && host.features().paging
+            ? paging(managerId, entry).lines()
+            : loadBoard(managerId, entry),
+          !lines && host.features().issues ? entry.issues?.refresh({ manual: true }) : undefined,
+        ]),
       )
       return {}
     },

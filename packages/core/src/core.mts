@@ -1423,12 +1423,17 @@ export function createCore(options: CoreOptions): Core {
           return await deviceOf(deviceId).managers.feedback(feedback)
         }
         case 'managers.issues.list': {
-          const { deviceId, ...given } = params as Commands['managers.issues.list']['params']
-          return await deviceOf(deviceId).managers.issue('litch/manager/issues/list', given)
+          const { deviceId, manual, ...given } =
+            params as Commands['managers.issues.list']['params']
+          return await deviceOf(deviceId).managers.issue('litch/manager/issues/list', given, {
+            manual: manual === true,
+          })
         }
         case 'managers.issue.read': {
-          const { deviceId, ...given } = params as Commands['managers.issue.read']['params']
-          return await deviceOf(deviceId).managers.issue('litch/manager/issue/read', given)
+          const { deviceId, manual, ...given } = params as Commands['managers.issue.read']['params']
+          return await deviceOf(deviceId).managers.issue('litch/manager/issue/read', given, {
+            manual: manual === true,
+          })
         }
         case 'managers.issue.create': {
           const { deviceId, ...given } = params as Commands['managers.issue.create']['params']

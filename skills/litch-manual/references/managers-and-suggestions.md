@@ -731,9 +731,9 @@ On phone, discussions open in a half-screen bottom drawer. Drag the handle up or
 
 When an open decision changes, existing choices and text are kept with a review prompt. Confirm the new version before submitting. Empty drafts clear silently. Ended issues retain their existing draft review/discard flow. The phone follows the same rules. Recommended options retain their marker; select the option directly.
 
-展开未读议题会合并确认已读；同一版内容的确认失败后不随页面刷新反复重试。新回复或重新打开时可再确认；报告仍由“已阅”操作处理。读取失败后同一查询冷却 30 秒，连接恢复时重新对账。
+展开未读议题会合并确认已读；同一版内容的确认失败后不随页面刷新反复重试。新回复或重新打开时可再确认；报告仍由“已阅”操作处理。读取失败后同一查询的自动重读冷却 30 秒；手动重试、刷新或加载更多立即重新请求。连接恢复时重新对账。
 
-Opening an unread issue coalesces read confirmations. A failed confirmation is not retried on each refresh of the same content. New replies or reopening allow another attempt; reports still use Mark as read. Failed queries have a 30-second cooldown, and reconnecting reconciles the board.
+Opening an unread issue coalesces read confirmations. A failed confirmation is not retried on each refresh of the same content. New replies or reopening allow another attempt; reports still use Mark as read. Automatic rereads of failed queries have a 30-second cooldown; manual retry, refresh and load more request data immediately. Reconnecting reconciles the board.
 
 新建经理入口没有明确指定项目时，项目与目录一起恢复上次保存值；进入表单后仍可手动选择“无项目”。
 
