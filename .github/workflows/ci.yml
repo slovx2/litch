@@ -58,8 +58,7 @@ jobs:
         id: phase-20
         run: |
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends bubblewrap=0.9.0-1ubuntu0.3
+          bash scripts/ci/install-bubblewrap.sh
       - run: npm ci --no-audit --no-fund
         id: phase-19
       - run: npm ci --prefix packages/claude --no-audit --no-fund
@@ -156,8 +155,7 @@ jobs:
         id: phase-6
         run: |
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends bubblewrap=0.9.0-1ubuntu0.3
+          bash scripts/ci/install-bubblewrap.sh
       - run: npm ci --no-audit --no-fund
         id: phase-5
       - run: npm ci --prefix packages/claude --no-audit --no-fund

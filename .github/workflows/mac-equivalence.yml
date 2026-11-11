@@ -33,8 +33,7 @@ jobs:
           command -v xvfb-run
           df -h /dev/shm
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends bubblewrap=0.9.0-1ubuntu0.3
+          bash scripts/ci/install-bubblewrap.sh
       - name: 安装相同源码的依赖
         run: |
           npm ci --no-audit --no-fund
