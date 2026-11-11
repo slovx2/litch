@@ -409,12 +409,13 @@ export class ManagerStore {
       )
       .run(managerId, eventId, issueId, recipient, value)
   }
-  markIssueSeen(managerId: string, issueId: string, at: number): void {
-    this.db
+  markIssueSeen(managerId: string, issueId: string, at: number): boolean {
+    const result = this.db
       .prepare(
         'UPDATE issue_notifications SET seen_at=? WHERE manager_id=? AND issue_id=? AND recipient=? AND seen_at IS NULL',
       )
       .run(at, managerId, issueId, 'user')
+    return Number(result.changes) > 0
   }
   issueUnread(managerId: string, issueId: string, recipient: string): boolean {
     return (

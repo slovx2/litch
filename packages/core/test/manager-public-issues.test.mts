@@ -136,7 +136,7 @@ test('核心 issue 缓存经 managerBoard 发布；通知/重连对账，旧设�
     unread: true,
   }
   service.notification(N.activity, event)
-  await settle()
+  await new Promise((resolve) => setTimeout(resolve, 75))
   assert.equal(view!.issues!.details['X-1']?.title, raw.title)
   assert.equal(activity.filter((op: any) => op.op === 'manager.issueActivity').length, 1)
   service.notification(N.activity, event)
@@ -159,7 +159,7 @@ test('核心 issue 缓存经 managerBoard 发布；通知/重连对账，旧设�
   online = true
   raw = { ...raw, unread: false }
   service.resync()
-  await settle()
+  await new Promise((resolve) => setTimeout(resolve, 75))
   assert.equal(view!.issues!.details['X-1']?.unread, false)
   supported = false
   await assert.rejects(
@@ -302,8 +302,14 @@ test('讨论子能力门禁：旧 I-255 白名单接受默认列表、混合记�
   // 原查询已经被缓存；降级后写入触发刷新，仍不能漏发新字段。
   supported = false
   const start = calls.length
-  await service.issue(M.seen, { managerId: 'manager', id: 'X-1', revision: 1 })
-  await settle()
+  await service.issue(M.follow, {
+    managerId: 'manager',
+    id: 'X-1',
+    revision: 1,
+    state: 'on',
+    why: '跟进',
+  })
+  await new Promise((resolve) => setTimeout(resolve, 75))
   assert.ok(calls.slice(start).some((c) => c.method === M.list))
   assert.ok(calls.slice(start).every((c) => !('discussionsOnly' in c.params)))
 })

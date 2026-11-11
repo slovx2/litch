@@ -43,6 +43,76 @@ async function setup() {
   return { env, client, managerId: manager.id as string, threadId: threadId as string }
 }
 
+test('已读风暴合并为一次写入，重复确认不广播，读取无需等合并窗口', async () => {
+  const { env, client, managerId } = await setup()
+  try {
+    const created = env.device.managers.issues.call(
+      M.create,
+      {
+        managerId,
+        title: '未读讨论',
+        body: '',
+      },
+      'manager',
+    ) as { issue: { id: string; revision: number } }
+    const params = { managerId, id: created.issue.id, revision: created.issue.revision }
+    const store = env.device.managers.store
+    const original = store.markIssueSeen.bind(store)
+    let writes = 0
+    store.markIssueSeen = (...args) => {
+      writes++
+      return original(...args)
+    }
+    const pending = Array.from({ length: 1000 }, () =>
+      env.device.managers.call(M.seen, params, true, true, true, true),
+    )
+    let finished = false
+    void pending[0]!.then(() => {
+      finished = true
+    })
+    const page = await client.call(M.list, { managerId, kinds: ['ordinary'] })
+    assert.equal(page.page.entries[0].unread, true, '读取先于延迟的已读更新完成')
+    const summary = await env.device.managers.call(
+      'litch/manager/board/summary',
+      { managerId },
+      true,
+      true,
+      true,
+      true,
+    )
+    assert.ok(summary && typeof summary === 'object' && 'summary' in summary)
+    assert.equal(finished, false)
+    const results = (await Promise.all(pending)) as { issue: { unread: boolean } }[]
+    assert.ok(results.every((result) => !result.issue.unread))
+    assert.equal(writes, 1)
+    const reads = () =>
+      client.notifications.filter(
+        (frame) => frame.method === N.changed && (frame.params as any).change === 'read',
+      ).length
+    await until(() => reads() === 1, '首次已读通知投递')
+    const before = reads()
+    await client.call(M.seen, params)
+    assert.equal(writes, 1, '已读时不再写库')
+    assert.equal(reads(), before, '空操作不产生新一轮失效通知')
+    env.device.managers.issues.call(M.comment, { ...params, body: '新回复' }, 'manager')
+    assert.equal((await client.call(M.read, { managerId, id: params.id })).issue.unread, true)
+    await client.call(M.seen, params)
+    assert.equal(writes, 2, '新回复仍能正常标记已读')
+  } finally {
+    await env.close()
+  }
+})
+
+test('服务关闭撤销待处理的已读，不能在库关闭后继续写入', async () => {
+  const { env, managerId } = await setup()
+  const issues = env.device.managers.issues
+  const pending = issues.seen({ managerId, id: 'X-1', revision: 1 })
+  const failed = assert.rejects(pending, /closed/)
+  await env.close()
+  await failed
+  await assert.rejects(issues.seen({ managerId, id: 'X-1', revision: 1 }), /closed/)
+})
+
 test('X 编号独立；创建、评论、状态和跟进；报告未读不变；旧连接没有 issue 通知或字段', async () => {
   const { env, client, managerId, threadId } = await setup()
   try {

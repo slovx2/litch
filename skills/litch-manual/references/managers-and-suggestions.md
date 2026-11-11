@@ -731,6 +731,10 @@ On phone, discussions open in a half-screen bottom drawer. Drag the handle up or
 
 When an open decision changes, existing choices and text are kept with a review prompt. Confirm the new version before submitting. Empty drafts clear silently. Ended issues retain their existing draft review/discard flow. The phone follows the same rules. Recommended options retain their marker; select the option directly.
 
+展开未读议题会合并确认已读；同一版内容的确认失败后不随页面刷新反复重试。新回复或重新打开时可再确认；报告仍由“已阅”操作处理。读取失败后同一查询冷却 30 秒，连接恢复时重新对账。
+
+Opening an unread issue coalesces read confirmations. A failed confirmation is not retried on each refresh of the same content. New replies or reopening allow another attempt; reports still use Mark as read. Failed queries have a 30-second cooldown, and reconnecting reconciles the board.
+
 新建经理入口没有明确指定项目时，项目与目录一起恢复上次保存值；进入表单后仍可手动选择“无项目”。
 
 新建经理每一步在进入下一步前校验。工作目录在目标设备上检查，显示解析后的设备路径；支持绝对路径、`~` 和 `~/项目目录`，远程设备使用远程设备自己的主目录。目录不存在、路径指向文件或无法访问时，提示原始输入、设备路径和修正方法。模型列表尚未加载时不能继续；型号和强度按目标 harness 的列表核对，创建时设备再次核验。名称、经理设定和首个任务可留空，最大并行工作线数必须为正安全整数。

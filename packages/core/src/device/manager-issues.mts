@@ -20,6 +20,11 @@ export class ManagerIssueCache {
   private epoch = 0
   private queries = new Map<string, ManagerIssueQuery>()
   private refs = new Set<ManagerIssueRef>()
+  private pending = new Map<string, Promise<unknown>>()
+  private failed = new Map<string, { at: number; error: unknown }>()
+  private refreshing: Promise<void> | null = null
+  private cancelRefresh: (() => void) | null = null
+  private dirty = false
   private view: ManagerIssuesView = { pages: {}, details: {}, loading: [], error: null }
   constructor(host: ManagersHost, managerId: string, publish: (view: ManagerIssuesView) => void) {
     this.host = host
@@ -28,10 +33,43 @@ export class ManagerIssueCache {
   }
   stop() {
     this.epoch++
+    this.cancelRefresh?.()
+    this.cancelRefresh = null
+    this.pending.clear()
+    this.failed.clear()
+    this.refreshing = null
+    this.dirty = false
+    this.view = { ...this.view, loading: [] }
   }
-  async refresh() {
-    this.epoch++
+  refresh(): Promise<void> {
+    this.dirty = true
+    if (this.refreshing) return this.refreshing
     const mine = this.epoch
+    const run = Promise.resolve().then(async () => {
+      while (this.dirty && mine === this.epoch && this.host.online()) {
+        // 固定窗口合并跨帧通知；持续收到通知也不延长窗口，读取期间至多积一轮补读。
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, 50)
+          this.cancelRefresh = () => {
+            clearTimeout(timer)
+            resolve()
+          }
+        })
+        if (mine !== this.epoch) return
+        this.cancelRefresh = null
+        this.dirty = false
+        await this.refreshOnce(mine)
+      }
+    })
+    this.refreshing = run
+    void run
+      .finally(() => {
+        if (this.refreshing === run) this.refreshing = null
+      })
+      .catch(() => {})
+    return run
+  }
+  private async refreshOnce(mine: number) {
     // 首页替换、后页追加必须有确定顺序；不能让迟到的首页清掉已加载的后页。
     for (const query of [...this.queries.values()].sort(
       (a, b) => Number(a.cursor ?? 0) - Number(b.cursor ?? 0),
@@ -44,11 +82,46 @@ export class ManagerIssueCache {
       [...this.refs].map((id) => this.call(METHOD.read, { managerId: this.managerId, id })),
     )
   }
-  async call<M extends keyof ManagerIssueRequests>(
+  call<M extends keyof ManagerIssueRequests>(
     method: M,
     params: ManagerIssueRequests[M]['params'],
   ): Promise<ManagerIssueRequests[M]['result']> {
+    // 先登记再发布 loading；订阅者重入也只能共享一条请求。写入只合并幂等的 seen。
+    const merge = method === METHOD.list || method === METHOD.read || method === METHOD.seen
+    const key =
+      method === METHOD.list
+        ? `${method}:${managerIssueQueryKey(params as ManagerIssueQuery)}:${(params as ManagerIssueQuery).cursor ?? ''}`
+        : `${method}:${JSON.stringify(params)}`
+    const pending = merge ? this.pending.get(key) : undefined
+    if (pending) return pending as Promise<ManagerIssueRequests[M]['result']>
+    const failed = merge ? this.failed.get(key) : undefined
+    // 超时后的状态发布不能立即重发同一请求；不设自动重试计时器，重连会清掉失败记录。
+    if (failed && Date.now() - failed.at < 30_000) return Promise.reject(failed.error)
     const mine = this.epoch
+    const run = Promise.resolve().then(() => this.request(method, params, mine))
+    if (merge) {
+      this.pending.set(key, run)
+      void run.then(
+        () => {
+          if (this.pending.get(key) === run) this.pending.delete(key)
+          if (mine === this.epoch) this.failed.delete(key)
+        },
+        (error) => {
+          if (this.pending.get(key) === run) this.pending.delete(key)
+          if (mine !== this.epoch) return
+          this.failed.set(key, { at: Date.now(), error })
+          if (this.failed.size > 256) this.failed.delete(this.failed.keys().next().value!)
+        },
+      )
+    }
+    return run
+  }
+  private async request<M extends keyof ManagerIssueRequests>(
+    method: M,
+    params: ManagerIssueRequests[M]['params'],
+    mine: number,
+  ): Promise<ManagerIssueRequests[M]['result']> {
+    if (mine !== this.epoch) throw new Error('Issue cache stopped')
     if (method === METHOD.list) {
       const query = params as ManagerIssueQuery
       this.queries.set(`${managerIssueQueryKey(query)}:${query.cursor ?? ''}`, query)
@@ -89,8 +162,10 @@ export class ManagerIssueCache {
       }
       throw error
     } finally {
-      this.view = { ...this.view, loading: this.view.loading.filter((key) => key !== token) }
-      this.publish(this.view)
+      if (mine === this.epoch) {
+        this.view = { ...this.view, loading: this.view.loading.filter((key) => key !== token) }
+        this.publish(this.view)
+      }
     }
     if ('page' in result) {
       const page = projectManagerIssuePage(result.page)
@@ -114,7 +189,7 @@ export class ManagerIssueCache {
     }
     const issue = projectManagerIssue(result.issue)
     if (mine !== this.epoch) {
-      if (method !== METHOD.read) {
+      if (method !== METHOD.read && method !== METHOD.seen) {
         this.refs.add(issue.id)
         void this.refresh().catch((error) => this.host.log(String(error)))
       }
@@ -123,7 +198,8 @@ export class ManagerIssueCache {
     this.refs.add(issue.id)
     this.view = { ...this.view, details: { ...this.view.details, [issue.id]: issue } }
     this.publish(this.view)
-    if (method !== METHOD.read) void this.refresh().catch((error) => this.host.log(String(error)))
+    if (method !== METHOD.read && method !== METHOD.seen)
+      void this.refresh().catch((error) => this.host.log(String(error)))
     return { issue } as ManagerIssueRequests[M]['result']
   }
 }

@@ -1,7 +1,7 @@
 // 控制台里的一条 issue：收起和展开是同一张卡。卡头一行是编号加标题，下面一行小字是类型、状态、创建者、跟进、更新时间。
 // 展开后普通 issue 直接是讨论界面（IssueThread）；特殊 issue 先是原来的快速处理区，下面一个醒目的“讨论”按钮打开底部抽屉，
 // 只展开讨论，不改类型（60 号设计 5.3）。两种都能进完整讨论页。
-import { type ReactNode, useEffect } from 'react'
+import { type ReactNode, useEffect, useRef } from 'react'
 import type { ManagerView } from '../../../../core/src/model-manager.mts'
 import type { ManagerIssue, ManagerIssueHead } from '../../../../protocol/src/manager-issues.mts'
 import { useT } from '../../app/appearance.ts'
@@ -47,11 +47,26 @@ export function IssueCard({
 }) {
   const t = useT()
   const special = head.kind !== 'ordinary'
+  const seenAttempt = useRef('')
   // 展开即读：有新回复的标已读（报告的未读由“已阅”管，不在这里清）
   useEffect(() => {
-    if (!open || !issue?.unread || issue.kind === 'report' || disabled) return
+    if (!open || !issue?.unread || issue.kind === 'report' || disabled) {
+      seenAttempt.current = ''
+      return
+    }
+    const key = JSON.stringify([
+      manager.deviceId,
+      manager.id,
+      issue.id,
+      issue.revision,
+      issue.updatedAt,
+      issue.discussion.comments.at(-1)?.id,
+      issue.discussion.comments.at(-1)?.revision,
+    ])
+    if (seenAttempt.current === key) return
+    seenAttempt.current = key
     void commands.seen({ id: issue.id, revision: issue.revision }).catch(() => {})
-  }, [open, issue, commands, disabled])
+  }, [open, issue, commands, disabled, manager.deviceId, manager.id])
   const comments = issue?.discussion.comments.length ?? 0
   return (
     <article

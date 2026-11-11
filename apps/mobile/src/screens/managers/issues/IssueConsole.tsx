@@ -473,10 +473,25 @@ export function IssueSheetDrawer({
   const issue = issues.details[issueId as keyof typeof issues.details]
   const special = issue ? issue.kind !== 'ordinary' : false
   const [talking, setTalking] = useState(!special)
+  const seenAttempt = useRef('')
   useEffect(() => {
-    if (issue?.unread && issue.kind !== 'report' && !disabled)
-      void commands.seen({ id: issue.id, revision: issue.revision }).catch(() => {})
-  }, [issue, commands, disabled])
+    if (!issue?.unread || issue.kind === 'report' || disabled) {
+      seenAttempt.current = ''
+      return
+    }
+    const key = JSON.stringify([
+      manager.deviceId,
+      manager.id,
+      issue.id,
+      issue.revision,
+      issue.updatedAt,
+      issue.discussion.comments.at(-1)?.id,
+      issue.discussion.comments.at(-1)?.revision,
+    ])
+    if (seenAttempt.current === key) return
+    seenAttempt.current = key
+    void commands.seen({ id: issue.id, revision: issue.revision }).catch(() => {})
+  }, [issue, commands, disabled, manager.deviceId, manager.id])
   if (!issue) return null
   const post = board?.posts?.find((one) => one.id === (issue.id as string))
   const quick =
