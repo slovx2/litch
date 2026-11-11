@@ -1,4 +1,5 @@
-import type { ModelRankingSnapshot } from '../../protocol/src/model-ranking.mjs'
+import type { ModelLimitFailure, ModelRankingSnapshot } from '../../protocol/src/model-ranking.mjs'
+import type { Phrase } from './phrase.mjs'
 // 设备与 harness 管理：界面看到的数据形状。
 // 设置有哪些、各是什么类型，由设备服务声明；核心原样转给界面，界面按类型画控件，哪一项都不认识。
 // 所以这里的形状和协议里的差不多是一对一的，差别只有两处：
@@ -8,6 +9,23 @@ import type { Bilingual, HarnessId } from './model.mjs'
 
 /** 一项设置管的是整台设备，还是某一个 harness */
 export type SettingScopeView = { kind: 'device' } | { kind: 'harness'; harness: HarnessId }
+
+/** 界面按目标打开设置；经理目标的 sessionId 是父会话，不是尚未创建的子会话。 */
+export type ModelLimitSettingsTarget =
+  | { kind: 'manager-default-model'; deviceId: string; sessionId: string }
+  | { kind: 'model-ranking'; deviceId: string }
+
+export interface ModelLimitFailureView {
+  reason: ModelLimitFailure
+  text: Phrase
+  settings: ModelLimitSettingsTarget[]
+}
+
+/** 设置选择模型时的预检；设备创建入口仍执行最终校验。 */
+export interface ModelLimitPreview {
+  allowed: boolean
+  failure: ModelLimitFailureView | null
+}
 
 /**
  * 环境变量表里的一项。

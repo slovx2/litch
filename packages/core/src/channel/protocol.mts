@@ -1735,12 +1735,13 @@ export interface ChannelErrorShape {
   pairingHostKey?: PairingHostKeyWarning
   /** 出码失败时仍允许用户修改手机入口。 */
   pairingAddress?: PairingAddress
+  modelLimit?: import('../model-manage.mjs').ModelLimitFailureView
 }
 
 /** 错误上除了错误码和原因之外可以带的东西 */
 export type ChannelErrorExtra = Pick<
   ChannelErrorShape,
-  'said' | 'key' | 'pairingHostKey' | 'pairingAddress'
+  'said' | 'key' | 'pairingHostKey' | 'pairingAddress' | 'modelLimit'
 >
 
 export class ChannelError extends Error {
@@ -1750,6 +1751,7 @@ export class ChannelError extends Error {
   readonly key: string | undefined
   readonly pairingHostKey: PairingHostKeyWarning | undefined
   readonly pairingAddress: PairingAddress | undefined
+  readonly modelLimit: import('../model-manage.mjs').ModelLimitFailureView | undefined
 
   constructor(
     code: ChannelErrorShape['code'],
@@ -1765,6 +1767,7 @@ export class ChannelError extends Error {
     this.key = extra.key
     this.pairingHostKey = extra.pairingHostKey
     this.pairingAddress = extra.pairingAddress
+    this.modelLimit = extra.modelLimit
   }
 
   toShape(): ChannelErrorShape {
@@ -1776,6 +1779,7 @@ export class ChannelError extends Error {
       ...(this.key === undefined ? {} : { key: this.key }),
       ...(this.pairingHostKey ? { pairingHostKey: this.pairingHostKey } : {}),
       ...(this.pairingAddress ? { pairingAddress: this.pairingAddress } : {}),
+      ...(this.modelLimit ? { modelLimit: this.modelLimit } : {}),
     }
   }
 }

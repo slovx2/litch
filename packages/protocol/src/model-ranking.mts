@@ -1,11 +1,11 @@
-// 型号等级是委派策略，不是性能测试或费用预算。内置域按 harness 隔离，自定义后全设备共用。
+// 型号等级是委派策略，不是性能测试或费用预算。跨 harness 比较仅由独立开关启用。
 export const MODEL_RANKING = {
   changed: 'litch/device/modelRanking/changed',
   read: 'litch/device/modelRanking/read',
   write: 'litch/device/modelRanking/write',
   reset: 'litch/device/modelRanking/reset',
 } as const
-export const MODEL_RANKING_REVISION = '2026-11-09.1'
+export const MODEL_RANKING_REVISION = '2026-11-11.1'
 export interface RankedModel {
   key: string
   harness: string
@@ -21,6 +21,8 @@ export interface ModelRankingConfig {
   schemaVersion: 1
   revision: number
   mode: 'builtin' | 'custom'
+  /** 缺省为 false；自定义排序本身不会开启跨 harness 比较。 */
+  crossHarness?: boolean
   /** 从低到高；同数组内并级。键是 JSON 编码的 harness、provider、规范型号身份。 */
   tiers: string[][]
   unranked: string[]
@@ -34,11 +36,28 @@ export interface ModelRankingSnapshot extends ModelRankingConfig {
   errors: Record<string, string>
 }
 export interface ModelRankingWrite {
+  crossHarness?: boolean
   manual?: string[]
   expectedRevision: number
   tiers: string[][]
   unranked: string[]
   models: RankedModel[]
+}
+
+/** 设备 RPC 的 error.data；工具失败也附带同一结构，英文 message 继续保留。 */
+export interface ModelLimitFailure {
+  litch: 'model_cap_exceeded' | 'model_rank_unknown'
+  kind: 'exceeded' | 'unranked'
+  parent: RankedModel
+  child: RankedModel
+  allowed: RankedModel[]
+  /** 保留已有调用方使用的字段。 */
+  allowedModels: string[]
+  parentModel: string | null
+  requestedModel: string | null
+  mode: ModelRankingConfig['mode']
+  crossHarness: boolean
+  revision: number
 }
 export const modelKey = (harness: string, model: string, provider = ''): string =>
   JSON.stringify([harness, provider, model])
