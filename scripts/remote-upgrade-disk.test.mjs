@@ -19,6 +19,46 @@ const { readInstall } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`
 )
 
+test('适配器检查直接载入探测源码，在隔离登录环境中找到安装的版本', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'litch-adapter-probe-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const bin = join(root, '.local/bin')
+  mkdirSync(bin, { recursive: true })
+  writeFileSync(
+    join(bin, 'codex-harness-adapter'),
+    '#!/bin/sh\ncase "$1" in version) echo "codex-harness-adapter 0.41.0";; device-proxy) exit 0;; *) exit 1;; esac\n',
+    { mode: 0o755 },
+  )
+  const generated = spawnSync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      `const { probeScript } = await import(${JSON.stringify(new URL('../apps/desktop/src/ssh/script.mts', import.meta.url).href)}); console.log(JSON.stringify(probeScript()))`,
+    ],
+    {
+      encoding: 'utf8',
+      env: {
+        HOME: root,
+        PATH: '/usr/bin:/bin',
+        LITCH_REMOTE_ADAPTER: 'codex-harness-adapter',
+        LITCH_REMOTE_CODEX: join(root, 'uninstalled-codex'),
+      },
+    },
+  )
+  assert.equal(generated.status, 0, generated.stderr)
+  const probe = JSON.parse(generated.stdout)
+  const result = spawnSync('/bin/sh', [], {
+    input: probe.text,
+    encoding: 'utf8',
+    env: { HOME: root, PATH: '/usr/bin:/bin', SHELL: '/bin/bash' },
+  })
+  assert.equal(result.status, 0, result.stderr)
+  const answer = result.stdout.slice(result.stdout.indexOf(probe.marker))
+  assert.match(answer, /^adapterVersion=codex-harness-adapter 0\.41\.0$/m)
+  assert.match(answer, /^adapterRunning=yes$/m)
+})
+
 test('稳定标记在详情截断前解析，保留末尾输出；同一退出码的 curl 超时不误判', () => {
   const marker = 'LITCH_INSTALL_DISK_SPACE\t/home/dev path\t123456\t123'
   const tail = 'tar: follow-up error\n'.repeat(400)

@@ -5,6 +5,7 @@
     "moduleResolution": "Bundler",
     "rootDir": "../..",
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "paths": {
       "@litch/core": ["../../packages/core/src/index.mts"]

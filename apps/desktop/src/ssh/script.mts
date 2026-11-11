@@ -23,13 +23,14 @@
 // 登录 shell 的启动脚本会往标准输出里写各种东西（欢迎语、提示符的装饰）。内层脚本开工前先打印一行
 // 随机的标记，这一行之前的输出全部丢掉。
 import { randomBytes } from 'node:crypto'
+// 适配器出包检查也直接读取这份源码，只引用自包含的脚本片段，不经过核心包入口或构建产物。
 import {
   downloadBody,
   executeInstallBody,
   firstInstallBody,
   installProbeBody,
   verifyInstallBody,
-} from '@litch/core'
+} from '../../../../packages/core/src/device/remote-installer.mts'
 
 /** 远程脚本用退出码说明停在了哪一步。ssh 自己出错是 255，这几个避开常见的值 */
 export const EXIT = {
