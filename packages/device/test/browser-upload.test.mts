@@ -1,11 +1,43 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, open, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { UPLOAD_CHUNK_BYTES, UPLOAD_SOURCE_MAX_BYTES } from '../../protocol/src/browser-upload.mjs'
+import {
+  BROWSER_UPLOAD_EXTENSION,
+  BROWSER_UPLOAD_METHOD,
+  UPLOAD_CHUNK_BYTES,
+  UPLOAD_SOURCE_MAX_BYTES,
+} from '../../protocol/src/browser-upload.mjs'
+import { EXTENSION } from '../../protocol/src/device.mjs'
 import { readUploadSource } from '../src/browser-upload.mjs'
 import { DeviceCalls, DeviceLayer } from '../src/device-layer.mjs'
+import { FakeUpstream } from './fake-upstream.mjs'
+import { REPO, rig } from './helpers.mjs'
+
+test('浏览器上传扩展：协议定义、读取路由及 runtime/info 的支持声明一致', async () => {
+  const definition = JSON.parse(
+    await readFile(join(REPO, 'protocol/extensions/browser-upload.json'), 'utf8'),
+  )
+  assert.equal(definition.extension, BROWSER_UPLOAD_EXTENSION)
+  assert.equal(EXTENSION.browserUpload, BROWSER_UPLOAD_EXTENSION)
+  assert.deepEqual(definition.declaration.schema.contains, { const: BROWSER_UPLOAD_EXTENSION })
+  assert.deepEqual(
+    definition.parts.map((part: { method: string }) => part.method),
+    [BROWSER_UPLOAD_METHOD],
+  )
+  assert.equal(definition.parts[0].params.oneOf[1].properties.length.maximum, UPLOAD_CHUNK_BYTES)
+  assert.equal(definition.parts[0].response.properties.size.maximum, UPLOAD_SOURCE_MAX_BYTES)
+  const env = rig({ pi: new FakeUpstream('pi') })
+  try {
+    const client = env.connect()
+    await client.initialize(['harness'])
+    const info = await client.call('runtime/info', {})
+    assert.ok(info.device.extensions.includes(BROWSER_UPLOAD_EXTENSION))
+  } finally {
+    await env.close()
+  }
+})
 
 test('上传源可靠元数据、分块、空文件、路径/范围/大小限制及修改或替换检测', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'litch-upload-device-'))
