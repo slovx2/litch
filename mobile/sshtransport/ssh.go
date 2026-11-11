@@ -19,6 +19,7 @@ import (
 
 // Target 是一台远程机器怎么连。界面传 JSON 进来
 type Target struct {
+	ScriptTimeoutMs int    `json:"scriptTimeoutMs"`
 	Tailscale       string `json:"tailscale"`
 	Host            string `json:"host"`
 	Port            int    `json:"port"`

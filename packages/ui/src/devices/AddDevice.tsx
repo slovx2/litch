@@ -11,6 +11,7 @@ import { useT } from '../app/appearance.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import type { Translator } from '../i18n/index.ts'
 import { PathPicker } from '../path-picker/PathPicker.tsx'
+import { InstallService } from './InstallService.tsx'
 
 const reasonOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
@@ -224,6 +225,36 @@ export function AddDevice({ edit, onClose }: AddDeviceProps) {
     }
   }
 
+  const installer = (key: string, wanted: RemoteTarget | null, name: string) => {
+    const checked = checks[key]
+    if (
+      !wanted ||
+      !checked ||
+      checked === 'checking' ||
+      checked.ok ||
+      checked.failure.stage !== 'notInstalled'
+    )
+      return null
+    return (
+      <InstallService
+        key={JSON.stringify(wanted)}
+        target={wanted}
+        onBusy={setBusy}
+        onConnected={async () => {
+          if (edit) await channel.command('device.update', { deviceId: edit, name, target: wanted })
+          else await channel.command('device.add', { name, target: wanted })
+          if (key) setPicked((current) => current.filter((alias) => alias !== key))
+          else onClose()
+          setChecks((current) => {
+            const next = { ...current }
+            delete next[key]
+            return next
+          })
+        }}
+      />
+    )
+  }
+
   const field = (
     id: keyof Form,
     label: string,
@@ -241,6 +272,7 @@ export function AddDevice({ edit, onClose }: AddDeviceProps) {
             .filter(Boolean)
             .join(' ')}
           value={form[id]}
+          disabled={busy}
           placeholder={extra.placeholder}
           autoComplete="off"
           autoCapitalize="off"
@@ -342,7 +374,10 @@ export function AddDevice({ edit, onClose }: AddDeviceProps) {
               {picked.length > 0 ? (
                 <div className="steps">
                   {picked.map((alias) => (
-                    <CheckLine key={alias} name={alias} check={checks[alias]} />
+                    <div key={alias}>
+                      <CheckLine name={alias} check={checks[alias]} />
+                      {installer(alias, { kind: 'alias', alias }, '')}
+                    </div>
                   ))}
                 </div>
               ) : null}
@@ -373,6 +408,7 @@ export function AddDevice({ edit, onClose }: AddDeviceProps) {
                   {checks[''] ? <CheckPill check={checks['']} /> : null}
                 </div>
                 <CheckLine name={form.host.trim()} check={checks['']} />
+                {installer('', target, form.name)}
               </div>
             </>
           )}

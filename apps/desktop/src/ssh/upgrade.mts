@@ -3,13 +3,8 @@
 // 什么时候做、做完之后怎么办（等空闲、重连、再试）由核心定（packages/core/src/device/service-upgrade.mts），
 // 这里只跑脚本、把报回来的字读成结果；用户没确认过，核心不会叫 install 和 stop。
 // 解析是单独的几个函数：只看报回来的字，和 ssh 无关，自检里直接喂字就能验。
-import type {
-  RemoteAdapterFacts,
-  RemoteInstallMethod,
-  RemoteInstallResult,
-  RemoteStopResult,
-  RemoteUpgradePlatform,
-} from '@litch/core'
+import type { RemoteAdapterFacts, RemoteStopResult, RemoteUpgradePlatform } from '@litch/core'
+import { readInstall } from '@litch/core'
 import { parseBusy } from '../adapter-upgrade.mjs'
 import { notInstalled } from './probe.mjs'
 import { fields, type RunResult, runRemote, tailOf } from './run.mjs'
@@ -39,45 +34,7 @@ export function readFacts(out: Record<string, string>): RemoteAdapterFacts {
   return { version: versionOf(out.adapterVersion), path: out.adapterPath?.trim() || null }
 }
 
-/** 安装脚本报回来的字 → 结果。没走到 step= 的（半路断了）算安装那一步没成 */
-export function readInstall(
-  out: Record<string, string>,
-  method: RemoteInstallMethod,
-): RemoteInstallResult {
-  const code = out.code === undefined ? null : Number(out.code)
-  const step = out.step
-  const installed = versionOf(out.installed)
-  if (step === 'verify' && code === 0 && installed)
-    return { ok: true, installed, said: said(out.said) }
-  const at =
-    step === 'fetch' ||
-    step === 'download' ||
-    step === 'install' ||
-    step === 'brew' ||
-    step === 'verify'
-      ? step
-      : method === 'brew'
-        ? 'brew'
-        : 'install'
-  // 先从完整输出提取稳定标记，再裁剪给“详情”的尾部；不能把 curl 的退出码 28（超时）认成磁盘满。
-  const match =
-    method === 'script'
-      ? out.said?.match(/^LITCH_INSTALL_DISK_SPACE\t([^\r\n\t]+)\t(\d+)\t(\d+)$/m)
-      : null
-  const requiredKiB = Number(match?.[2])
-  const availableKiB = Number(match?.[3])
-  const diskSpace =
-    match?.[1] && Number.isSafeInteger(requiredKiB) && Number.isSafeInteger(availableKiB)
-      ? { path: match[1], requiredKiB, availableKiB }
-      : undefined
-  return {
-    ok: false,
-    at,
-    code: Number.isFinite(code) ? code : null,
-    said: said(out.said),
-    ...(diskSpace ? { diskSpace } : {}),
-  }
-}
+export { readInstall } from '@litch/core'
 
 /** 停服务的脚本报回来的字 → 结果。退出码的含义见 cmd/codex-harness-adapter/device_stop.go */
 export function readStop(out: Record<string, string>): RemoteStopResult {

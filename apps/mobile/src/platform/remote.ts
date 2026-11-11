@@ -12,6 +12,7 @@ import {
 import { remoteDev } from './dev'
 import { keySecret } from './keys'
 import { knownHost } from './known-hosts'
+import { mobileSetup } from './ssh-setup'
 import { checkRemote, type RemoteConfig, sshOpener, stopRemote } from './ssh-transport'
 
 const ADAPTER = 'codex-harness-adapter'
@@ -56,6 +57,7 @@ export function mobileRemote(clock: Clock, version: string): RemotePlatform {
   return {
     opener: (target) => sshOpener(() => configFor(target)),
     discover: async () => [],
+    setup: mobileSetup(configFor),
     check: (target, signal) => checkRemote(() => configFor(target), signal, clock, version),
     // 重启设备服务：经 ssh 请那台机器上的服务停下（手机的钥匙是普通的登录钥匙，跑得了 device-stop）
     stopService: (target, ifIdle, signal) => stopRemote(() => configFor(target), ifIdle, signal),

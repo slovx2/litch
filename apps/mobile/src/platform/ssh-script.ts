@@ -1,3 +1,4 @@
+import { firstInstallBody, installProbeBody } from '@litch/core'
 // 要在远程机器上跑的那几段脚本：和桌面端 apps/desktop/src/ssh/script.mts 同一套做法，只是不依赖 Node：
 // 随机数由外壳给，命令名由调用方给。三步走（探测、启动、代理）、经登录 shell、打印随机标记切掉启动脚本的
 // 杂乱输出、整段包在花括号里，这几条的道理都写在桌面端那一份的开头，这里不重抄。
@@ -210,4 +211,16 @@ export function parsePairs(output: string): Record<string, string> {
     pairs[key] = key in pairs ? `${pairs[key]}\n${value}` : value
   }
   return pairs
+}
+
+export function setupScript(
+  names: ScriptNames,
+  stage: 'inspect' | 'download' | 'install' | 'clean',
+  token: string,
+  version: string,
+): RemoteScript {
+  return wrap(names, ({ marker, adapter }) => [
+    `printf '%s\\n' ${quote(marker)}`,
+    ...(stage === 'inspect' ? installProbeBody : firstInstallBody(stage, token, version, adapter)),
+  ])
 }

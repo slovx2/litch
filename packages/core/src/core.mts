@@ -29,6 +29,7 @@ import {
   sameTarget,
   WIRES,
 } from './device/remote.mjs'
+import { createRemoteSetup } from './device/remote-setup.mjs'
 import {
   createMachineWiring,
   MACHINE_DISABLED,
@@ -148,6 +149,19 @@ export function createCore(options: CoreOptions): Core {
   }
 
   const { remote, store } = options
+  const setup = createRemoteSetup({
+    version: options.version,
+    now: options.clock.now,
+    platform: remote?.setup,
+    check: (target, signal) => {
+      if (!remote) throw new ChannelError('unsupported', '此客户端不支持远程连接')
+      return remote.check(target, signal)
+    },
+    connected(target) {
+      for (const entry of saved.remotes)
+        if (sameTarget(entry.target, target)) devices.get(entry.id)?.retry()
+    },
+  })
   let saved = store?.load() ?? { localWire: null, remotes: [] }
   let started = false
   let connectionsPaused = false
@@ -421,6 +435,7 @@ export function createCore(options: CoreOptions): Core {
     },
 
     stop() {
+      setup.stop()
       started = false
       for (const device of devices.values()) device.stop()
     },
@@ -1115,6 +1130,18 @@ export function createCore(options: CoreOptions): Core {
         case 'remote.discover':
           if (!remote) return { hosts: [] }
           return { hosts: await remote.discover() }
+        case 'remote.setup.prepare': {
+          const target = checkTarget((params as Commands['remote.setup.prepare']['params']).target)
+          return await setup.prepare(target, hostLabel(target), signal)
+        }
+        case 'remote.setup.step': {
+          const { id, step } = params as Commands['remote.setup.step']['params']
+          return await setup.step(id, step, signal)
+        }
+        case 'remote.setup.dismiss': {
+          await setup.drop((params as Commands['remote.setup.dismiss']['params']).id)
+          return {}
+        }
         case 'remote.check': {
           const { target } = params as Commands['remote.check']['params']
           const checked = checkTarget(target)

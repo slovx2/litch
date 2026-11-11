@@ -40,6 +40,24 @@ const plural = (n: string | number | undefined, one: string, many: string) =>
   `${n} ${Number(n) === 1 ? one : many}`
 
 export const en: Record<MessageKey, Entry> = {
+  'service.install.blocked.inspect':
+    'Could not check installation requirements. Check SSH access; Windows requires WSL with SSH enabled. Run this command in a Linux, macOS or WSL terminal.',
+  'service.install.action': 'Install device service',
+  'service.install.title': 'Install the device service on {host}?',
+  'service.install.version':
+    'Version: {version} (same as this app). The service will start and connect after installation.',
+  'service.install.checking': 'Checking installation requirements…',
+  'service.install.blocked.system':
+    'Automatic installation supports Linux and macOS. On Windows, install and enable SSH in WSL, then run this command in WSL.',
+  'service.install.blocked.fetch':
+    'The remote device has neither curl nor wget. Install either tool, then run this command on the remote device.',
+  'service.install.download': 'Downloading installer',
+  'service.install.install': 'Installing device service',
+  'service.install.start': 'Starting device service',
+  'service.install.connect': 'Verifying connection',
+  'service.install.done': 'Device service installed and connected.',
+  'service.install.failed': '{step} failed. Remote output:',
+
   'files.link.details': 'Link details',
   'files.link.href': 'Original link',
   'files.link.path': 'Normalized path',

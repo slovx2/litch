@@ -29,7 +29,12 @@ func RunScript(targetJSON, script, marker string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	timeout := 90 * time.Second
+	// 仅安装调用放宽等待时间；上限固定，连接和主机指纹检查仍走同一路径。
+	if target.ScriptTimeoutMs > 90000 && target.ScriptTimeoutMs <= 600000 {
+		timeout = time.Duration(target.ScriptTimeoutMs) * time.Millisecond
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	client, err := connectSSH(ctx, target)
 	if err != nil {

@@ -211,6 +211,27 @@ export {
   toolSwitchesOf,
   WIRES,
 } from './device/remote.mjs'
+export {
+  downloadBody,
+  executeInstallBody,
+  firstInstallBody,
+  firstInstallCommand,
+  installBlocked,
+  installCapture,
+  installProbeBody,
+  installStop,
+  installVersion,
+  REMOTE_RELEASES,
+  readInstall,
+  verifyInstallBody,
+} from './device/remote-installer.mjs'
+export {
+  type RemoteSetupPlan,
+  type RemoteSetupPlatform,
+  type RemoteSetupRunner,
+  type RemoteSetupStep,
+  runRemoteSetup,
+} from './device/remote-setup.mjs'
 export { checkSnapshot, type DeviceSnapshot, type SnapshotStore } from './device/snapshot.mjs'
 export {
   checkNotes,

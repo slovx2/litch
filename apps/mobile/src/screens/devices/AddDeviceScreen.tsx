@@ -244,7 +244,12 @@ export function AddDeviceScreen({ navigation }: Props) {
           </View>
           {result?.ok ? <CheckResult result={result} /> : null}
           {result && !result.ok ? (
-            <FailureCard failure={result.failure} target={target()} publicKey={publicKey} />
+            <FailureCard
+              failure={result.failure}
+              target={target()}
+              publicKey={publicKey}
+              onInstalled={add}
+            />
           ) : null}
         </KeyboardFormScrollView>
         <KeyboardFormFooter>

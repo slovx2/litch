@@ -43,7 +43,7 @@ export type ConfigSource = RemoteConfig | (() => Promise<RemoteConfig>)
 const randomHex = (): string =>
   Array.from(getRandomBytes(16), (byte) => byte.toString(16).padStart(2, '0')).join('')
 
-const namesOf = (config: RemoteConfig): ScriptNames => ({
+export const namesOf = (config: RemoteConfig): ScriptNames => ({
   adapter: config.adapter,
   codex: config.codex ?? 'codex',
   randomHex,

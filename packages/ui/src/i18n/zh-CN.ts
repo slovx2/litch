@@ -37,6 +37,23 @@ import { zhTasks } from './zh-CN-tasks.ts'
 import { zhWorktrees } from './zh-CN-worktrees.ts'
 
 export const zhCN = {
+  'service.install.blocked.inspect':
+    '无法检查远程安装条件。请检查 SSH 连接；Windows 需要先启用 WSL 和其中的 SSH。可在 Linux、macOS 或 WSL 终端执行以下命令。',
+  'service.install.action': '安装设备服务',
+  'service.install.title': '在 {host} 上安装设备服务？',
+  'service.install.version': '安装版本：{version}（与应用相同）。安装后自动启动并连接。',
+  'service.install.checking': '正在检查安装条件…',
+  'service.install.blocked.system':
+    '一键安装只支持 Linux 和 macOS。Windows 请先在 WSL 中安装并开启 SSH，再在 WSL 终端执行以下命令。',
+  'service.install.blocked.fetch':
+    '远程设备没有 curl 或 wget。请先安装其中一个，再在远程终端执行以下命令。',
+  'service.install.download': '下载安装脚本',
+  'service.install.install': '安装设备服务',
+  'service.install.start': '启动设备服务',
+  'service.install.connect': '验证连接',
+  'service.install.done': '设备服务已安装并连接。',
+  'service.install.failed': '{step}失败。远端返回：',
+
   'files.link.details': '链接详情',
   'files.link.href': '原始链接',
   'files.link.path': '规范化路径',

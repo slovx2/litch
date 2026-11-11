@@ -431,6 +431,8 @@ try {
       growFlag,
       /** 一键升级那台的主目录（别名 upgrade） */
       upgradeHome,
+      setupLauncher: join(bins.ok, service.adapter),
+      setupHome: homes.svc,
       /** 设备服务那边新建会话时用的工作目录，和每次模型请求记一行的文件 */
       work: service.work,
       modelLog: service.modelLog,

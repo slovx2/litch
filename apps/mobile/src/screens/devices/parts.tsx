@@ -17,6 +17,7 @@ import { Fold } from '../../ui/kit/Icon'
 import { Confirm } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { authorizeCommand, hostKeyCommand, reasonText, stepsOf } from './failure'
+import { InstallService } from './InstallService'
 
 /** 一行“名字：值”。值用等宽字，能长按选中复制 */
 export function InfoLine({
@@ -102,11 +103,13 @@ export function FailureCard({
   target,
   publicKey,
   actions,
+  onInstalled,
 }: {
   failure: ConnectFailureView
   target: RemoteTarget | null
   publicKey?: string | null
   actions?: ReactNode
+  onInstalled?(): void | Promise<void>
 }) {
   const theme = useTheme()
   const t = useT()
@@ -139,12 +142,22 @@ export function FailureCard({
           onPress={() => navigation.navigate('Tailscale')}
         />
       ) : null}
-      {steps.map((step) => (
-        <View key={step.text} style={styles.block}>
-          <Text style={[styles.note, { color: theme.c.ink2 }]}>{t(step.text)}</Text>
-          {step.command ? <CopyBlock text={step.command} label={t('devices.guide.copy')} /> : null}
-        </View>
-      ))}
+      {failure.stage === 'notInstalled' && target ? (
+        <InstallService target={target} onConnected={onInstalled} />
+      ) : null}
+      {steps
+        .filter(
+          (entry) =>
+            failure.stage !== 'notInstalled' || entry.text === 'devices.guide.install.codex',
+        )
+        .map((step) => (
+          <View key={step.text} style={styles.block}>
+            <Text style={[styles.note, { color: theme.c.ink2 }]}>{t(step.text)}</Text>
+            {step.command ? (
+              <CopyBlock text={step.command} label={t('devices.guide.copy')} />
+            ) : null}
+          </View>
+        ))}
       {failure.stage === 'auth' && publicKey ? <PublicKeyCard publicKey={publicKey} /> : null}
       {actions}
       {failure.detail ? (

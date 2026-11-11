@@ -14,13 +14,17 @@
 //     node dist/ssh-check.mjs --store <目录> 把设备配置和侧栏快照在那个目录里存取一遍。
 import {
   type Clock,
+  createCore,
   createLink,
   describeText,
   isDeviceRuntime,
+  type RemoteCheck,
+  type RemoteSetupPlan,
   type RemoteTarget,
 } from '@litch/core'
 import { fileDeviceStore } from './device-store.mjs'
 import { discoverHosts } from './ssh/hosts.mjs'
+import { remoteSetup } from './ssh/setup.mjs'
 import { remoteUpgrade } from './ssh/upgrade.mjs'
 import { checkRemote, sshOpener } from './transport-ssh.mjs'
 
@@ -96,6 +100,50 @@ if (upgradeAt) {
     say({ error: error instanceof Error ? error.message : String(error) })
     process.exit(1)
   }
+}
+
+// 首次安装验收走正式核心命令，逐阶段打印结果，绝不自动保存设备。
+if (process.argv.includes('--setup')) {
+  const version = process.argv[process.argv.indexOf('--setup') + 1] ?? ''
+  const core = createCore({
+    version,
+    clock,
+    devices: [],
+    remote: {
+      opener: sshOpener,
+      discover: discoverHosts,
+      check: checkRemote,
+      setup: remoteSetup(() => 'zh-CN'),
+    },
+  })
+  const signal = new AbortController().signal
+  let planId: string | null = null
+  try {
+    const plan = (await core.command('remote.setup.prepare', { target }, signal)) as RemoteSetupPlan
+    planId = plan.id
+    say({ plan })
+    if (plan.blocked) process.exitCode = 1
+    else
+      for (const step of ['download', 'install', 'start', 'connect'] as const) {
+        say({ step })
+        const result = (await core.command(
+          'remote.setup.step',
+          { id: plan.id, step },
+          signal,
+        )) as RemoteCheck | null
+        if (result) {
+          say({ connected: result })
+          if (!result.ok) process.exitCode = 1
+        }
+      }
+  } catch (error) {
+    say({ error: error instanceof Error ? error.message : String(error) })
+    process.exitCode = 1
+  } finally {
+    if (planId) await core.command('remote.setup.dismiss', { id: planId }, signal)
+    core.stop()
+  }
+  process.exit(process.exitCode ?? 0)
 }
 
 if (process.argv.includes('--probe')) {

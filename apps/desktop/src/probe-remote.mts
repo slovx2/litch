@@ -39,7 +39,7 @@ export interface RemoteProbe {
   turnSurvived: boolean
   /** 之后还能接着发 */
   sentAfter: boolean
-  /** 什么都没装的那台：侧栏里是原因和安装指引（装设备服务、只装 codex 两条路），没有 ssh 的报错 */
+  /** 什么都没装的那台：侧栏里是原因、一键安装入口与手动命令，没有 ssh 的报错 */
   guideShown: boolean
   guide: string
   /** 设备列表上那两台各说了对面是哪一种：连上的那台“只有它”，什么都没装的那台照实说 */
@@ -178,15 +178,18 @@ export async function remoteProbe(aliases: {
     const element = group(aliases.bare)
     return element && one('.cfail', element) ? element : null
   })
+  await until('首次安装条件检查完成', () => one('[data-act=install-service]', bare))
   const guide = one('.cfail', bare)?.textContent ?? ''
+  const reason = one('.cfail-text', bare)?.textContent ?? ''
   const commands = all('.cfail-cmd code', bare).map((code) => code.textContent ?? '')
   const guideShown =
     Boolean(one('.pill.err', bare)) &&
-    // 两条路都给了：装设备服务的那一句，和只装 codex 的那一句
+    Boolean(one('[data-act=install-service]', bare)) &&
+    // 安装设备服务的固定版本命令和只装 Codex 的指引都保留。
     commands.some((command) => command.includes('install.sh')) &&
     commands.some((command) => command.includes('@openai/codex')) &&
     // 是给人看的话，不是 ssh 或 shell 的原话
-    !/Permission denied|command not found|exit|ssh:/i.test(guide)
+    !/Permission denied|command not found|exit|ssh:/i.test(reason)
 
   // ---- 四、打开会话，发一句 ----
   // 先关掉设备页，回到新建对话页：默认指着的还是本机（连不上）。在页上把设备换成刚连上的那台

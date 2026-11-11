@@ -26,6 +26,8 @@ export interface RemotePlatform {
   check(target: RemoteTarget, signal: AbortSignalLike): Promise<RemoteCheck>
   /** 远程设备服务的一键升级要在那台机器上做的三件事。不给（手机端）就只显示“比应用旧” */
   upgrade?: RemoteUpgradePlatform
+  /** 未安装设备服务时的首次安装；不停止已有服务 */
+  setup?: import('./remote-setup.mjs').RemoteSetupPlatform
   /**
    * 请那台机器上的服务停下（device-stop），重启设备服务用。ifIdle 时只是有客户端连着不算忙（发请求的这一端自己就连着）。
    * 不给就没有“重启设备服务”

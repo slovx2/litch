@@ -40,6 +40,15 @@ Litch 发起升级、重启设备服务或强制重启一个 harness 时，会�
   trusted, logs in, and what is installed there (device service and its version, or Codex only). Use
   it before `devices add` and to explain a failing connection.
 
+## 首次安装远程设备服务
+
+桌面添加设备的检查结果、设备列表及连接失败页，在远端未安装时提供“安装设备服务”。手机的手动添加页、设备列表和设备详情也支持，不需要桌面转发。
+检查只读取系统和下载工具；点击按钮后，确认卡列出目标主机、与当前应用相同的安装版本，以及远端执行的命令。确认后通过原有 SSH 连接下载该版本的 `install.sh`，使用 `--version` 安装；安装脚本核对发布包 SHA-256。随后启动设备服务并验证连接，成功后才将新设备保存到列表。
+
+界面依次显示下载、安装、启动、连接。失败显示发生的阶段和远端原话，并给出可复制的手动命令；重试需重新检查和确认。安装不会停止已有服务。关闭安装界面会取消后续步骤；已经安装的文件不会回滚。
+
+一键安装支持 Linux 和 macOS，远端必须具备 `curl` 或 `wget`。没有下载工具时只显示原因及手动命令，先自行装好工具。Windows 原生 SSH 不提供一键安装；请先在 WSL 中安装并启用 SSH，再以 WSL 作为远程设备，或在 WSL 终端执行所示命令。SSH 认证和主机指纹确认仍使用正常流程；手机使用已经保存的手机密钥及主机指纹。
+
 ## Adding a remote device
 
 `scripts/litch devices add` adds a device: a display name and a target, where the target is an alias

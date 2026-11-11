@@ -1,6 +1,6 @@
 // 设备列表的一行：只放一眼要看的——是谁、连没连上、上面有什么、忙不忙、最近什么时候动过。
 // 别的（怎么连的、线色、改名、改连接、移除、没连上的原因和该怎么办）都在点进去的详情里。
-// 往这一行上加东西之前先想它是不是该进详情：这一行上没有按钮，也没有说明文字，整行就是进详情的入口。
+// 未安装时，行外提供首次安装操作；主行仍然进入详情。
 import { type DeviceActivity, type DeviceView, keys } from '@litch/core'
 import { useEffect, useRef } from 'react'
 import { useT } from '../app/appearance.ts'
@@ -9,6 +9,7 @@ import { chipTitle, downHarness, wireStyle } from '../app/device.ts'
 import { ago } from '../app/format.ts'
 import { Forward, Notice } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
+import { InstallService } from './InstallService.tsx'
 import { serviceFlagOf } from './service.ts'
 import { StatePill } from './status.tsx'
 
@@ -155,6 +156,9 @@ export function DeviceRow({ deviceId, focus, onOpen }: DeviceRowProps) {
         </span>
         <Forward />
       </button>
+      {device.failure?.stage === 'notInstalled' && device.target ? (
+        <InstallService target={device.target} />
+      ) : null}
     </li>
   )
 }

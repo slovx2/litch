@@ -1683,6 +1683,15 @@ export interface Commands {
   'remote.discover': { params: Record<string, never>; result: { hosts: DiscoveredHost[] } }
   /** 添加之前先连过去看一眼对面有什么。不启动任何东西 */
   'remote.check': { params: { target: RemoteTarget }; result: RemoteCheck }
+  'remote.setup.prepare': {
+    params: { target: RemoteTarget }
+    result: import('../device/remote-setup.mjs').RemoteSetupPlan
+  }
+  'remote.setup.step': {
+    params: { id: string; step: import('../device/remote-setup.mjs').RemoteSetupStep }
+    result: RemoteCheck | null
+  }
+  'remote.setup.dismiss': { params: { id: string }; result: Record<string, never> }
 }
 
 export type CommandName = keyof Commands

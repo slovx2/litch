@@ -3,6 +3,8 @@
 import { native } from './native'
 
 export interface SshTarget {
+  /** 安装发布包最多等十分钟；普通脚本仍为 90 秒 */
+  scriptTimeoutMs?: number
   tailscale?: 'auto' | 'always' | 'never'
   host: string
   port: number

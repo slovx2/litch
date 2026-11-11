@@ -69,7 +69,7 @@ function targetOf() {
  * 发布包里的命令行是几行 sh：version 报这一版；device-stop 按主目录下 stop-mode 文件里写的退出码答，
  * 并把收到的参数记进 stop.log
  */
-function makeReleases(work) {
+function makeReleases(work, fixture) {
   const target = targetOf()
   const top = `${NAME}-${VERSION}-${target}`
   const tree = join(work, 'tree', top)
@@ -84,7 +84,7 @@ function makeReleases(work) {
     '#!/bin/sh',
     'case "$1" in',
     `  version) echo "${NAME} ${VERSION}" ;;`,
-    '  device-proxy) exit 1 ;;',
+    `  device-start|device-proxy) HOME='${fixture.setupHome}' exec '${fixture.setupLauncher}' "$@" ;;`,
     '  device-stop)',
     '    echo "$*" >>"$HOME/stop.log"',
     '    mode=$(cat "$HOME/stop-mode" 2>/dev/null || echo 0)',
@@ -117,7 +117,7 @@ function makeReleases(work) {
 
 const work = mkdtempSync(join(tmpdir(), 'litch-upgrade-'))
 const fixture = await startFixture()
-const releases = makeReleases(work)
+const releases = makeReleases(work, fixture)
 const home = fixture.upgradeHome
 const env = {
   ...process.env,
@@ -129,9 +129,9 @@ const env = {
 const target = JSON.stringify({ kind: 'alias', alias: fixture.aliases.upgrade })
 
 /** 跑一次小工具，返回它打的那一行 */
-function run(...args) {
+function runWith(givenEnv, ...args) {
   const done = spawnSync(process.execPath, [tool, target, ...args], {
-    env,
+    env: givenEnv,
     encoding: 'utf8',
     timeout: 180_000,
   })
@@ -139,6 +139,8 @@ function run(...args) {
   assert.ok(line, `小工具没有输出：\n${done.stderr}`)
   return JSON.parse(line)
 }
+
+const run = (...args) => runWith(env, ...args)
 
 const passed = []
 const check = (name, body) => {
@@ -163,11 +165,29 @@ try {
     assert.equal(existsSync(join(home, '.local', 'bin', NAME)), false, '什么都没装')
   })
 
+  check('首次安装下载失败：保留远端原话，不安装也不启动', () => {
+    const result = runWith({ ...env, LITCH_REMOTE_ADAPTER: NAME }, '--setup', '9.9.8')
+    assert.match(result.error ?? '', /curl/)
+    assert.equal(existsSync(join(home, '.local', 'bin', NAME)), false)
+  })
+
+  check('首次安装：未安装 → 指定版本安装 → 启动 → 真实聚合面握手成功', () => {
+    const setupEnv = { ...env, LITCH_REMOTE_ADAPTER: NAME }
+    const before = runWith(setupEnv, '--probe')
+    assert.equal(before.stage, 'notInstalled', JSON.stringify(before))
+    const result = runWith(setupEnv, '--setup', VERSION)
+    assert.equal(result.connected?.ok, true, JSON.stringify(result))
+    assert.equal(result.connected?.peer, 'service')
+    assert.equal(result.connected?.version, VERSION)
+    assert.equal(result.connected?.running, true)
+    assert.ok(Array.isArray(result.connected?.harnesses), '完成真实 initialize / runtime/info 握手')
+  })
+
   check('装：安装脚本从本地发布页装上这一版，装完问到的就是它', () => {
     const { install } = run('--install', 'script', VERSION)
     assert.equal(install.ok, true, JSON.stringify(install))
     assert.equal(install.installed, VERSION)
-    assert.match(install.said ?? '', /已安装|已从|Installed|Switched/)
+    assert.match(install.said ?? '', /已安装|已从|已经是|Installed|Switched|Already/)
     assert.ok(existsSync(join(home, '.local', 'share', NAME, VERSION, 'bin', NAME)))
     const { facts } = run('--inspect')
     assert.equal(facts.version, VERSION, '命令名指到了新版')

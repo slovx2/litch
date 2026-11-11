@@ -27,6 +27,7 @@ import { ManagersEntry } from '../managers/ManagersEntry'
 import { useReadMenu } from '../sessions/read-menu'
 import { reasonText, type ShownState, shownState } from './failure'
 import { forgetUnusedKey } from './forget'
+import { InstallService } from './InstallService'
 import { RecentGroup, SectionHead } from './RecentGroup'
 import { RemoveDevice } from './RemoveDevice'
 import { RestartDevice } from './RestartDevice'
@@ -102,44 +103,49 @@ function DeviceRow({
   if (device.stale && state !== 'online') parts.push(t('devices.stale'))
   const badges = device.harnesses.map((harness) => harness.badge).join(' ')
   return (
-    <Row
-      testID={`device:${deviceId}`}
-      title={t.text(device.name)}
-      // 名称行只留短时间；引擎徽标放在已有的地址行，指纹只在设备详情核对。
-      detail={[
-        [device.host, pane?.split ? '' : badges].filter(Boolean).join(' · '),
-        parts.join(' · '),
-      ].join('\n')}
-      meta={activity?.lastActiveAt ? ago(activity.lastActiveAt, now, t) : ''}
-      left={
-        <View style={styles.left}>
-          <View style={[styles.wire, { backgroundColor: theme.c.wire[device.wire] }]} />
-          <StatusMark
-            status={
-              activity?.waiting
-                ? 'waiting'
-                : state === 'online' && activity?.running
-                  ? 'running'
-                  : MARK[state]
-            }
-          />
-        </View>
-      }
-      right={
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('devices.more')}
-          testID={`device:${deviceId}:more`}
-          hitSlop={8}
-          style={styles.more}
-          onPress={() => onMenu(device)}
-        >
-          <Icon name="more" size={18} color={theme.c.ink2} />
-        </Pressable>
-      }
-      onPress={() => onPress(device)}
-      onLongPress={() => onMenu(device)}
-    />
+    <View>
+      <Row
+        testID={`device:${deviceId}`}
+        title={t.text(device.name)}
+        // 名称行只留短时间；引擎徽标放在已有的地址行，指纹只在设备详情核对。
+        detail={[
+          [device.host, pane?.split ? '' : badges].filter(Boolean).join(' · '),
+          parts.join(' · '),
+        ].join('\n')}
+        meta={activity?.lastActiveAt ? ago(activity.lastActiveAt, now, t) : ''}
+        left={
+          <View style={styles.left}>
+            <View style={[styles.wire, { backgroundColor: theme.c.wire[device.wire] }]} />
+            <StatusMark
+              status={
+                activity?.waiting
+                  ? 'waiting'
+                  : state === 'online' && activity?.running
+                    ? 'running'
+                    : MARK[state]
+              }
+            />
+          </View>
+        }
+        right={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('devices.more')}
+            testID={`device:${deviceId}:more`}
+            hitSlop={8}
+            style={styles.more}
+            onPress={() => onMenu(device)}
+          >
+            <Icon name="more" size={18} color={theme.c.ink2} />
+          </Pressable>
+        }
+        onPress={() => onPress(device)}
+        onLongPress={() => onMenu(device)}
+      />
+      {device.failure?.stage === 'notInstalled' && device.target ? (
+        <InstallService target={device.target} />
+      ) : null}
+    </View>
   )
 }
 

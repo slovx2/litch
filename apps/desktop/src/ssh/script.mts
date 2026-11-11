@@ -23,6 +23,13 @@
 // 登录 shell 的启动脚本会往标准输出里写各种东西（欢迎语、提示符的装饰）。内层脚本开工前先打印一行
 // 随机的标记，这一行之前的输出全部丢掉。
 import { randomBytes } from 'node:crypto'
+import {
+  downloadBody,
+  executeInstallBody,
+  firstInstallBody,
+  installProbeBody,
+  verifyInstallBody,
+} from '@litch/core'
 
 /** 远程脚本用退出码说明停在了哪一步。ssh 自己出错是 255，这几个避开常见的值 */
 export const EXIT = {
@@ -292,8 +299,7 @@ const stopAt = (step: string): string[] => [
  * 安装脚本自己核对 SHA-256 清单，对不上不装；它不停、不重启在跑的服务。
  */
 export function installScript(plan: InstallPlan): RemoteScript {
-  const version = quote(versionName(plan.version))
-  const base = quote(releases())
+  versionName(plan.version)
   return wrap(({ marker, adapter }) => [
     `printf '%s\\n' ${quote(marker)}`,
     `CHA_LANG=${quote(plan.lang)}`,
@@ -317,27 +323,10 @@ export function installScript(plan: InstallPlan): RemoteScript {
           'work=$(mktemp -d 2>/dev/null || mktemp -d -t litch-upgrade 2>/dev/null)',
           `if [ -z "$work" ]; then code=1; ${stopAt('download').join('; ')}; fi`,
           `trap 'rm -rf "$work"' EXIT`,
-          `url=${base}/download/v${version}/install.sh`,
-          `if ${has('curl')}; then`,
-          ...capture('curl -fsSL -o "$work/install.sh" "$url"').map((line) => `  ${line}`),
-          `elif ${has('wget')}; then`,
-          ...capture('wget -q -O "$work/install.sh" "$url"').map((line) => `  ${line}`),
-          'else',
-          `  code=127; ${stopAt('fetch').join('; ')}`,
-          'fi',
-          `if [ "$code" -ne 0 ]; then ${stopAt('download').join('; ')}; fi`,
-          ...capture(`sh "$work/install.sh" --version ${version} --base-url ${base}`),
-          `if [ "$code" -ne 0 ]; then ${stopAt('install').join('; ')}; fi`,
+          ...downloadBody(plan.version, releases()),
+          ...executeInstallBody(plan.version, releases()),
         ]),
-    // 装完问一句现在装着的是哪一版。命令名还是那一个：安装脚本换的是它指向的 current，Homebrew 换的是 Cellar 里的那份
-    `if said=$(${adapter} version </dev/null 2>&1); then`,
-    `  printf '%s\\n' "$said" | sed -n '1s/^/installed=/p'`,
-    '  code=0',
-    'else',
-    '  code=$?',
-    `  printf '%s\\n' "$said" | sed 's/^/said=/'`,
-    'fi',
-    ...stopAt('verify'),
+    ...verifyInstallBody(adapter),
   ])
 }
 
@@ -372,5 +361,22 @@ export function stopScript(options: { ifIdle: boolean; lang: RemoteLang }): Remo
     `if [ -n "$note" ]; then sed 's/^/said=/' "$note"; rm -f "$note"; fi`,
     `printf '%s\\n' "$out" | sed 's/^/out=/'`,
     `printf 'code=%s\\n' "$code"`,
+  ])
+}
+
+/** 首次安装与升级使用相同的下载、安装及验证片段。 */
+export function setupScript(
+  stage: 'inspect' | 'download' | 'install' | 'clean',
+  token: string,
+  version: string,
+  lang: RemoteLang,
+): RemoteScript {
+  return wrap(({ marker, adapter }) => [
+    `printf '%s\\n' ${quote(marker)}`,
+    `CHA_LANG=${quote(lang)}`,
+    'export CHA_LANG',
+    ...(stage === 'inspect'
+      ? installProbeBody
+      : firstInstallBody(stage, token, version, adapter, releases())),
   ])
 }

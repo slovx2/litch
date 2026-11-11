@@ -6,6 +6,7 @@ import { useT } from '../app/appearance.ts'
 import { useServices } from '../app/services.tsx'
 import type { Args } from '../i18n/index.ts'
 import { type GuideStep, guideOf } from './guide.ts'
+import { InstallService } from './InstallService.tsx'
 
 type Shown = DeviceView['connection']
 
@@ -74,7 +75,15 @@ export function FailureNote({ failure, target, onRetry }: FailureProps) {
   return (
     <div className="cfail" data-stage={failure.stage}>
       <div className="cfail-text">{t.text(failure.text)}</div>
-      <GuideSteps steps={guideOf(failure, target)} />
+      {failure.stage === 'notInstalled' && target ? (
+        <InstallService target={target} onConnected={onRetry} />
+      ) : null}
+      <GuideSteps
+        steps={guideOf(failure, target).filter(
+          (entry) =>
+            failure.stage !== 'notInstalled' || entry.text === 'devices.guide.install.codex',
+        )}
+      />
       <div className="cfail-acts">
         {onRetry ? (
           <button type="button" className="mini retry" onClick={onRetry}>
