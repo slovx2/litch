@@ -23,6 +23,11 @@ function sheetFixture(kind) {
       if (name === 'react')
         return {
           useEffect() {},
+          useRef(initial) {
+            const index = cursor++
+            if (!(index in state)) state[index] = { current: initial }
+            return state[index]
+          },
           useState(initial) {
             const index = cursor++
             if (!(index in state)) state[index] = initial
