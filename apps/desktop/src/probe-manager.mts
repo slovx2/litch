@@ -408,7 +408,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       Math.abs(paneBox.getBoundingClientRect().bottom - board.getBoundingClientRect().bottom) < 2 &&
       d15.hasAttribute('data-discussion-open') &&
       entry15?.getAttribute('aria-expanded') === 'true' &&
-      paneBox.querySelector('[data-act="discussion-back"]')?.textContent?.includes('D-15') &&
+      paneBox.querySelector('[data-act="discussion-body"]') &&
+      paneBox.querySelector('.mg-talk-title .mono')?.textContent?.includes('D-15') &&
       paneBox.querySelector('[data-act="discussion-close"]')?.getAttribute('aria-label'),
   )
   const cardHeight = d15.getBoundingClientRect().height
@@ -688,9 +689,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
         !one(talk('D-15')) &&
         !one('[data-decision="D-15"][data-discussion-open]') &&
         one(`[data-decision="${otherId}"][data-discussion-open]`) &&
-        one(talk(otherId))
-          ?.querySelector('[data-act="discussion-back"]')
-          ?.textContent?.includes(otherId),
+        one(talk(otherId))?.querySelector('[data-act="discussion-body"]') &&
+        one(talk(otherId))?.querySelector('.mg-talk-title .mono')?.textContent?.includes(otherId),
     ),
   )
   const escapeKey = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
