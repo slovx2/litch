@@ -60,6 +60,8 @@ export interface BrowserPage {
   waitForLoad(timeoutMs: number, signal: AbortSignal): Promise<boolean>
   /** 发一条 CDP 命令。只许白名单里的（cdp-allow.mts），名单外的抛 CdpRefused。需要时自动挂上调试器 */
   cdp<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>
+  /** 先订阅再开启拦截；dispose 只撤销本次拦截，即使调用已取消也必须清理。 */
+  interceptFileChooser?(signal: AbortSignal): Promise<FileChooserInterception>
   /** 已派发输入后重建观察基线；只准恢复读操作，不能重放原输入。来源/租约检查照旧。 */
   prepareObservation?(): Promise<void>
   /** 最近的控制台消息（最多留 200 条） */
@@ -75,6 +77,16 @@ export interface BrowserPage {
   setAgentActive(active: boolean): void
   /** 代理要在 (x, y) 动手了：画一下给人看（CSS 像素） */
   pointAt(x: number, y: number, width?: number, height?: number): Promise<void>
+}
+
+export interface FileChooserInfo {
+  backendNodeId?: number | undefined
+  mode: string
+}
+
+export interface FileChooserInterception {
+  wait(timeoutMs: number): Promise<FileChooserInfo | null>
+  dispose(): Promise<void>
 }
 
 export interface OpenOptions {

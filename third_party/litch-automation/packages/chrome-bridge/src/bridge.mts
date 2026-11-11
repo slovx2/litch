@@ -203,7 +203,7 @@ export class ChromeBridge {
           else if (message.kind === 'control' && typeof message.stopped === 'boolean') {
             peer.instance.stopped = message.stopped
             this.emit(peer.instance.id, message)
-          } else if (['tab', 'revoked', 'removed', 'dialog'].includes(message.kind))
+          } else if (['tab', 'revoked', 'removed', 'dialog', 'fileChooser'].includes(message.kind))
             this.emit(peer.instance.id, message)
         } catch {
           socket.destroy()

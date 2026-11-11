@@ -8,6 +8,7 @@ import { observedInput } from './input-receipt.mjs'
 import { parseKey } from './keys.mjs'
 import type { BrowserPage } from './model.mjs'
 import { blockedByDialog, guarded, inputReady, nodeOf, pageLine, pointOf } from './page-ops.mjs'
+import { associatedInput, fileInput, validateFiles } from './upload-target.mjs'
 
 /** 上传的文件一个最大多少 */
 const UPLOAD_MAX_BYTES = 100 * 1024 * 1024
@@ -210,7 +211,7 @@ const uploadAction: Tool = async (call) => {
   if (call.invocation.device.kind !== 'local') {
     return clientToolFailure(
       'invalid',
-      'upload is only available when the conversation runs on the same computer as the Litch desktop app; files of a remote device cannot be uploaded from here.',
+      'upload is only available when the conversation runs on the same computer as the Litch desktop app; remote session uploads are not supported yet. Paths on the remote device are never read from the controlling desktop.',
     )
   }
   const page = call.pick()
@@ -221,8 +222,9 @@ const uploadAction: Tool = async (call) => {
   const mode = oneOf(call.args, 'mode', ['input', 'drop'] as const) ?? 'input'
   if (mode === 'drop' && !call.uploadFiles)
     throw new BadArgs(
-      'Drop upload is only supported in Chrome. Use a file input or ask the user to choose the file on the page.',
+      'Drop upload is only supported in Chrome. Use a file input or upload trigger ref.',
     )
+  if (paths.length > 32) throw new BadArgs('Upload accepts 1 to 32 files per call.')
   const limit = call.uploadMaxBytes ?? UPLOAD_MAX_BYTES
   for (const path of paths) {
     if (!isAbsolute(path)) throw new BadArgs(`not an absolute path: ${path}`)
@@ -230,31 +232,51 @@ const uploadAction: Tool = async (call) => {
     if (!stat?.file) throw new BadArgs(`not a file: ${path}`)
     if (stat.size > limit)
       throw new BadArgs(
-        `file is larger than ${limit / 1024 / 1024} MiB: ${path}. Ask the user to choose the file on the page; do not start a local file server.`,
+        `file is larger than ${limit / 1024 / 1024} MiB: ${path}. This environment cannot upload files above that limit; do not start a local file server.`,
       )
   }
-  const backendNodeId = nodeOf(call, page, ref)
-  const described = await page.cdp<{ node: { nodeName?: string; attributes?: string[] } }>(
-    'DOM.describeNode',
-    {
-      backendNodeId,
-    },
-  )
-  const attributes = described.node.attributes ?? []
-  const typeAt = attributes.findIndex(
-    (one, index) => index % 2 === 0 && one.toLowerCase() === 'type',
-  )
-  const isFile =
-    described.node.nodeName?.toUpperCase() === 'INPUT' &&
-    attributes[typeAt + 1]?.toLowerCase() === 'file'
-  if (mode === 'input' && !isFile) throw new BadArgs(`${ref} is not an <input type="file">`)
-  if (call.uploadFiles) await call.uploadFiles(page, backendNodeId, paths, mode)
-  else await page.cdp('DOM.setFileInputFiles', { files: paths, backendNodeId })
+  let backendNodeId = nodeOf(call, page, ref)
+  let attrs = await fileInput(page, backendNodeId)
+  if (mode === 'input' && !attrs) {
+    if (!page.interceptFileChooser)
+      throw new BadArgs(
+        'This environment does not support file chooser interception. Use a file input ref from snapshot.',
+      )
+    const interception = await page.interceptFileChooser(call.context.signal)
+    try {
+      const clicked = await clickAction({ ...call, args: { ref } })
+      if (!clicked.success) return clicked
+      const chooser = await interception.wait(1500)
+      if (chooser && chooser.mode !== 'selectMultiple' && paths.length > 1)
+        throw new BadArgs('This file chooser accepts only one file.')
+      if (chooser) {
+        if (chooser.backendNodeId === undefined)
+          throw new BadArgs(
+            'This environment does not support this file chooser: it has no file input node.',
+          )
+        backendNodeId = chooser.backendNodeId
+      } else backendNodeId = await associatedInput(page, backendNodeId)
+      attrs = await fileInput(page, backendNodeId)
+      if (!attrs)
+        throw new BadArgs(
+          'The file chooser did not identify a file input; this environment does not support this chooser.',
+        )
+      validateFiles(attrs, paths)
+      if (call.uploadFiles) await call.uploadFiles(page, backendNodeId, paths, mode)
+      else await page.cdp('DOM.setFileInputFiles', { files: paths, backendNodeId })
+    } finally {
+      await interception.dispose()
+    }
+  } else {
+    if (attrs && mode === 'input') validateFiles(attrs, paths)
+    if (call.uploadFiles) await call.uploadFiles(page, backendNodeId, paths, mode)
+    else await page.cdp('DOM.setFileInputFiles', { files: paths, backendNodeId })
+  }
   return call.done(
     page,
     `${mode === 'drop' ? 'Dispatched a drop with' : 'Set'} ${paths.length} file(s) on ${ref}.` +
       (call.uploadFiles
-        ? ' Chrome used synthetic events. Verify the page accepted the files; if it rejects them, ask the user to choose the file on the page. Do not start a local file server or change extension permissions.'
+        ? ' Chrome used synthetic events. Verify the page accepted the files using its file name, progress or success message. Do not start a local file server or change extension permissions.'
         : ''),
   )
 }

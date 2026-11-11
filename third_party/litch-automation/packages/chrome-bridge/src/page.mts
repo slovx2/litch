@@ -3,6 +3,7 @@ import type {
   ChromeRequest,
   ChromeTabState,
 } from '../../automation-contracts/src/litch/chrome-browser.mjs'
+import { interceptFileChooser } from '../../browser/src/browser/file-chooser.mjs'
 import { isInputCommand } from '../../browser/src/browser/input-command.mjs'
 import type {
   BrowserPage,
@@ -137,6 +138,34 @@ export class ChromePage implements BrowserPage {
     this.activeGeneration = tab.generation
     // 接下来每条读命令仍校验来源、停止状态与租约。不会授权新来源，也不重发输入。
     this.inputDocumentChanged = false
+  }
+  interceptFileChooser(signal: AbortSignal) {
+    return interceptFileChooser(
+      async (enabled) => {
+        if (enabled) await this.cdp('Page.setInterceptFileChooserDialog', { enabled })
+        else if (this.valid)
+          // 取消信号不能阻止清理；仍由扩展核对租约和来源，只发送关闭拦截。
+          await this.bridge.call(this.instanceId, {
+            op: 'command',
+            leaseId: this.grant.leaseId,
+            args: { method: 'Page.setInterceptFileChooserDialog', params: { enabled: false } },
+          })
+      },
+      (listener) =>
+        this.bridge.onEvent((instanceId, event) => {
+          if (
+            instanceId === this.instanceId &&
+            event.kind === 'fileChooser' &&
+            event.tabId === this.grant.tabId &&
+            event.leaseId === this.grant.leaseId &&
+            event.generation === this.state.generation &&
+            this.valid &&
+            !this.paused
+          )
+            listener({ backendNodeId: event.backendNodeId, mode: event.mode })
+        }),
+      signal,
+    )
   }
   async authorize(origins: string[], keep = this.grant.keep): Promise<void> {
     await this.request('authorize', { origins, keep }, false)

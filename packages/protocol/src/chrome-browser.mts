@@ -180,6 +180,14 @@ export type ChromeEvent =
   | { kind: 'revoked'; leaseId: string; reason: string }
   | { kind: 'removed'; tabId: number }
   | {
+      kind: 'fileChooser'
+      tabId: number
+      generation: number
+      leaseId: string
+      backendNodeId?: number
+      mode: string
+    }
+  | {
       kind: 'dialog'
       tabId: number
       generation: number

@@ -112,6 +112,57 @@ export async function uploadChecks({
     })
   }
   await cdp.call('Target.closeTarget', { targetId: settings.targetId })
+  for (const label of ['Select file', 'Dynamic file', 'Label file', 'Associated file']) {
+    await check(`选择器拦截：${label} 在文件网址权限关闭时上传`, async () => {
+      const tabId = JSON.parse(
+        text(await success('navigate', { targetId, url: `${origin}/chooser` })).split('\n')[0],
+      ).tabId
+      const snapshot = text(await success('snapshot', { tabId }))
+      assert.match(snapshot, /file input "file" hidden.*ref=/)
+      const ref = snapshot
+        .split('\n')
+        .find((line) => line.includes(`button "${label}"`))
+        ?.match(/\[ref=([^\]]+)\]/)?.[1]
+      assert.ok(ref, snapshot)
+      const page = executor.pages.get(tabId)
+      const intercept = page.interceptFileChooser.bind(page)
+      let chooserObserved = false
+      page.interceptFileChooser = async (signal) => {
+        const watch = await intercept(signal)
+        return {
+          ...watch,
+          wait: async (timeout) => {
+            const event = await watch.wait(timeout)
+            chooserObserved = !!event?.backendNodeId
+            return event
+          },
+        }
+      }
+      const result = await success('upload', { tabId, ref, paths: [path] })
+      page.interceptFileChooser = intercept
+      assert.equal(
+        chooserObserved,
+        label !== 'Associated file',
+        `Expected real chooser event: ${label}`,
+      )
+      const received = await until(async () => {
+        const reply = await page.cdp('Runtime.evaluate', {
+          expression: 'uploadResults[0]',
+          returnByValue: true,
+        })
+        return reply.result.value
+      }, 'Chooser upload reached server')
+      assert.equal(received.hash, createHash('sha256').update('Litch upload 中文\n').digest('hex'))
+      assert.equal(received.name, basename(path))
+      const style = await page.cdp('Runtime.evaluate', {
+        expression: 'getComputedStyle(document.getElementById("file")).visibility',
+        returnByValue: true,
+      })
+      assert.equal(style.result.value, 'hidden')
+      evidence.uploads.push({ label, chooserObserved, received, reply: text(result) })
+      await success('release', { tabId })
+    })
+  }
   const large = join(work, 'upload-large.mp4')
   const handle = await open(large, 'w')
   const hash = createHash('sha256')

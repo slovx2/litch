@@ -33,6 +33,17 @@ export async function fixtures() {
       return res.end(
         '<!doctype html><title>Unapproved site</title><h1>UNAPPROVED_CONTENT_MUST_NOT_LEAK</h1>',
       )
+    if (url.pathname === '/chooser')
+      return res.end(`<!doctype html><title>Upload chooser</title>
+      <section><input id="file" type="file" style="visibility:hidden;height:0" accept=".txt">
+      <button onclick="document.getElementById('file').click()">Select file</button></section>
+      <section><button onclick="const f=document.createElement('input');f.type='file';f.id='dynamic';f.hidden=true;this.after(f);f.click()">Dynamic file</button></section>
+      <label for="label-file"><span role="button" tabindex="0">Label file</span></label><input id="label-file" type="file" hidden>
+      <form><button type="button">Associated file</button><input type="file" hidden></form>
+      <script>window.uploadResults=[];document.addEventListener('change',async e=>{
+        for(const file of e.target.files||[]){ const response=await fetch('/upload-body',{method:'POST',headers:{'x-name':encodeURIComponent(file.name),'Content-Type':file.type},body:file});
+        uploadResults.push(await response.json()); }
+      });</script>`)
     res.end(`<!doctype html><title>Chrome acceptance</title><style>body{background:white;color:black;padding:20px}button{padding:20px}</style>
       <h1>Chrome acceptance</h1><p>${req.headers.cookie?.includes('session=isolated-fixture') ? 'SESSION OK' : 'NO SESSION'}</p>
       <button id="count" onclick="this.textContent=String(Number(this.textContent)+1)">0</button>
