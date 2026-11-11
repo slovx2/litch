@@ -264,12 +264,12 @@ messages arrived while you were away. Other board tabs retain their own scroll p
   activity group opens its steps below it, with **Collapse** at the end; the tapped line stays in place.
   While the activity line is the last thing in a running turn it is the turn's status; there is no
   separate "… is working" line under it. Between steps, it ends with "Working · N s", with the elapsed
-  time updating every second; while a step runs, it shows "Running: …". Screen readers announce the
+  time updating every second; while a step runs, an existing status icon precedes the command. Screen readers announce the
   same status. Once text follows the activity, the usual turn status line applies.
   After the turn, the folded summary reads "Processed · N steps"
   and the time is written once, on the turn's last line ("Done · 41 s · 15:34").
   回合在跑、活动行在最下面时不再另起状态行；步骤之间在活动行末尾显示“正在工作 · N 秒”，用时每秒更新，
-  有步骤在跑时显示“正在运行：…”，读屏同样可读到状态。正文接着出来后沿用原有状态行规则。
+  有步骤在跑时用状态图标加命令显示，读屏仍可读到状态。正文接着出来后沿用原有状态行规则。
   回合结束后摘要写“已处理 · N 步”，用时只写在回合尾。
 - **Comment on this message**: long-press an assistant reply and choose Comment on this message.
   The comment editor opens immediately for the whole message; Add places the comment above the

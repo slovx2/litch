@@ -470,6 +470,7 @@ button.smen:focus-visible {
   color: var(--ink-2);
 }
 .steps-head .now {
+  flex: 1;
   color: var(--ink-2);
   font: calc(11.5px * var(--fs)) / 1.4 var(--mono);
   min-width: 0;
@@ -512,7 +513,14 @@ button.smen:focus-visible {
   flex: none;
 }
 .item-head .tgt {
+  flex: 1;
+  min-width: 0;
   font: calc(12px * var(--fs)) / 1.4 var(--mono);
+}
+.step-mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
 }
 .item-head .meta,
 .file-head .meta {
@@ -526,6 +534,14 @@ button.smen:focus-visible {
 }
 .item-detail {
   background: var(--sunken);
+}
+.command-source {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  font: calc(12px * var(--fs)) / 1.4 var(--mono);
+  padding: 8px 12px;
+  margin: 0;
 }
 /* 固定高度的内滚框。也是反向列：输出增长时自己贴着底 */
 .well {
