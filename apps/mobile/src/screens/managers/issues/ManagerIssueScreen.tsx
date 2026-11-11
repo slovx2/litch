@@ -111,6 +111,7 @@ export function ManagerIssueScreen({ route, navigation }: Props) {
             </Text>
           ) : null}
           <IssueThread
+            bodyMode="folded"
             key={issue.id}
             changes={board?.changes ?? []}
             manager={manager}

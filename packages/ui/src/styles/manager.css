@@ -1567,10 +1567,6 @@
   font-size: calc(13px * var(--fs));
   font-weight: 600;
   text-align: left;
-  cursor: pointer;
-}
-.mg-talk-title:hover {
-  text-decoration: underline;
 }
 .mg-talk-body {
   flex: 1 1 auto;

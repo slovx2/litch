@@ -2,6 +2,8 @@
 import type { Entry } from './types.ts'
 
 export const zhManagerIssues = {
+  'issue.body.view': '查看正文',
+  'issue.body.hide': '收起正文',
   'issue.kind.ordinary': 'issue',
   'issue.kind.decision': '决策',
   'issue.kind.suggestion': '建议',

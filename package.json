@@ -103,6 +103,7 @@
     "client:check:compose:entry": "npm run build --prefix packages/ui && npm run check:compose:entry --prefix apps/desktop",
     "client:check:ssh": "npm run check:ssh --prefix apps/desktop",
     "client:check:link-context-menu": "tsc -p packages/ui/test/tsconfig.link-context-menu.json --noEmit && node scripts/check-link-context-menu.mjs",
+    "client:check:issue-drawer": "tsc -p packages/ui/test/tsconfig.issue-drawer.json --noEmit && node scripts/check-issue-drawer.mjs",
     "client:check:remote-install": "tsc -p packages/ui/test/tsconfig.remote-install.json --noEmit && node scripts/check-remote-install-ui.mjs",
     "client:check:upgrade": "npm run check:upgrade --prefix apps/desktop",
     "client:check:pair": "npm run check:pair --prefix apps/desktop",

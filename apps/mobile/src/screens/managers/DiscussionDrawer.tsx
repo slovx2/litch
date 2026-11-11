@@ -33,6 +33,7 @@ export function DiscussionDrawer({
   footer,
   backLabel,
   open,
+  bodyAction,
   stickToEnd = true,
   testID = `discussion-drawer:${id}`,
 }: {
@@ -49,6 +50,8 @@ export function DiscussionDrawer({
   backLabel?: string
   /** 标题行多一个“在别处打开”图标（半屏议题卡的“在控制台打开”） */
   open?: { label: string; onPress(): void }
+  /** 讨论视图的正文入口；正文折叠状态由议题抽屉管理。 */
+  bodyAction?: { label: string; expanded: boolean; onPress(): void }
   /** 内容变高时滚到底（讨论是最新在下面）；半屏议题卡从头看 */
   stickToEnd?: boolean
   testID?: string
@@ -130,6 +133,19 @@ export function DiscussionDrawer({
                 <Text style={{ color: c.ink3 }}>{id}</Text> {title}
               </Text>
             </Pressable>
+            {bodyAction ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: bodyAction.expanded }}
+                onPress={bodyAction.onPress}
+                testID="issue-body-toggle"
+                style={{ minHeight: hit, justifyContent: 'center', paddingHorizontal: 6 }}
+              >
+                <Text style={{ color: c.accent, fontSize: font.size.meta }}>
+                  {bodyAction.label}
+                </Text>
+              </Pressable>
+            ) : null}
             {open ? (
               <IconButton
                 icon="external"

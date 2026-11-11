@@ -1,6 +1,7 @@
 // 一条 issue 的讨论界面，三处共用同一套：卡片里展开（inline）、看板底部抽屉（pane）、完整讨论页（page）。
-// 内容依次是原帖、状态与跟进、关联、评论时间线和输入框。抽屉里原帖默认收成两行，另有“打开完整讨论”。
+// 抽屉只显示讨论；标题行可定位上方原帖，不在列表时才临时展开原帖。完整页保留原帖与操作。
 import { type ReactNode, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { ManagerChangeView, ManagerView } from '../../../../core/src/model-manager.mts'
 import {
   MANAGER_ISSUE_STATUSES,
@@ -16,6 +17,7 @@ import { reasonOf } from '../../app/errors.ts'
 import { Icon } from '../../app/icons.tsx'
 import { useServices } from '../../app/services.tsx'
 import { BoardMarkdown } from '../BoardMarkdown.tsx'
+import { useDiscussionPane } from '../discussion-pane.ts'
 import { RelationLink } from '../RelationLink.tsx'
 import type { IssueCommands } from './data.ts'
 import { IssueDiscussion } from './IssueDiscussion.tsx'
@@ -25,6 +27,10 @@ export interface IssueThreadProps {
   manager: ManagerView
   issue: ManagerIssue
   changes?: readonly ManagerChangeView[]
+  /** 返回是否能在上方列表定位并展开；不能时由抽屉临时显示正文。 */
+  onShowBody?: (() => boolean) | undefined
+  /** 列表恢复显示该议题后，收起抽屉中的临时正文。 */
+  bodyInList?: boolean | undefined
   disabled: boolean
   reason: string
   commands: IssueCommands
@@ -33,9 +39,9 @@ export interface IssueThreadProps {
   onFull?: (() => void) | undefined
   /** 完整讨论页的返回 */
   onBack?: (() => void) | undefined
-  /** 特殊 issue 的快速处理区：卡片里由卡片自己画，抽屉和完整页保留主操作。 */
+  /** 特殊 issue 的正文和主操作：完整页显示，抽屉仅在无法定位原帖时按需显示。 */
   quick?: ReactNode
-  /** 特殊 issue（报告、请你做、建议）的“问经理”：旧帖子追问，回答进时间线 */
+  /** 特殊 issue 的“问经理”：帖子版本用于追问，回答进入时间线。 */
   postRevision?: number | undefined
 }
 
@@ -205,6 +211,8 @@ export function IssueThread({
   quick,
   postRevision,
   changes,
+  onShowBody,
+  bodyInList,
 }: IssueThreadProps & { mode: 'inline' | 'pane' | 'page' }) {
   const t = useT()
   const [openingError, setOpeningError] = useState('')
@@ -229,10 +237,30 @@ export function IssueThread({
 
   const { channel } = useServices()
   const special = issue.kind !== 'ordinary'
-  const [postOpen, setPostOpen] = useState(mode !== 'pane')
-  // 决策的追问随答复一起交（在决策卡里）；其他特殊 issue 可以直接问经理
+  const [bodyOpen, setBodyOpen] = useState(false)
+  useEffect(() => {
+    if (bodyInList) setBodyOpen(false)
+  }, [bodyInList])
+  const pane = useDiscussionPane()
+  const bodySlot =
+    mode === 'pane'
+      ? pane?.host?.closest('.mg-talk-pane')?.querySelector('[data-discussion-body]')
+      : null
+  const body =
+    special && quick ? (
+      quick
+    ) : (
+      <div className="mg-issue-post">
+        {issue.body ? (
+          <BoardMarkdown text={issue.body} />
+        ) : (
+          <p className="dim">{t('issue.noBody')}</p>
+        )}
+      </div>
+    )
+  // 抽屉直接问经理；卡片内的决策追问仍由决策卡随答复提交。
   const ask =
-    special && issue.kind !== 'decision' && postRevision !== undefined
+    special && (issue.kind !== 'decision' || mode === 'pane') && postRevision !== undefined
       ? (question: string) =>
           channel.command('managers.post.question', {
             deviceId: manager.deviceId,
@@ -249,6 +277,23 @@ export function IssueThread({
       data-issue-thread={mode}
       data-issue={mode === 'inline' ? undefined : issue.id}
     >
+      {bodySlot
+        ? createPortal(
+            <button
+              type="button"
+              className="btn ghost"
+              data-act="discussion-body"
+              aria-expanded={bodyOpen}
+              onClick={() => {
+                if (onShowBody?.()) setBodyOpen(false)
+                else setBodyOpen(!bodyOpen)
+              }}
+            >
+              {t(bodyOpen ? 'issue.body.hide' : 'issue.body.view')}
+            </button>,
+            bodySlot,
+          )
+        : null}
       {openingError ? (
         <p role="alert" className="err">
           {openingError}
@@ -271,37 +316,21 @@ export function IssueThread({
           </h2>
         </header>
       ) : null}
-      {mode !== 'inline' ? (
+      {mode === 'page' ? (
         <IssueMeta
           head={managerIssueHead(issue)}
           comments={issue.discussion.comments.length}
           withKind
         />
       ) : null}
-      {special && quick ? (
-        quick
-      ) : (
-        <div className="mg-issue-post" data-collapsed={!postOpen || undefined}>
-          {issue.body ? (
-            <BoardMarkdown text={issue.body} />
-          ) : (
-            <p className="dim">{t('issue.noBody')}</p>
-          )}
-          {mode === 'pane' && issue.body ? (
-            <button
-              type="button"
-              className="mg-issue-more"
-              aria-expanded={postOpen}
-              onClick={() => setPostOpen(!postOpen)}
-            >
-              {t(postOpen ? 'manager.postCollapse' : 'manager.postExpand')}
-            </button>
-          ) : null}
+      {mode !== 'pane' || bodyOpen ? (
+        <div data-issue-original={issue.id}>
+          {body}
+          <IssueControls issue={issue} disabled={disabled} reason={reason} commands={commands} />
+          <IssueRelationsRow manager={manager} issue={issue} onOpenItem={onOpenItem} />
         </div>
-      )}
-      <IssueControls issue={issue} disabled={disabled} reason={reason} commands={commands} />
-      <IssueRelationsRow manager={manager} issue={issue} onOpenItem={onOpenItem} />
-      {onFull ? (
+      ) : null}
+      {onFull && mode !== 'pane' ? (
         <div className="mg-issue-acts">
           <FullDiscussionButton onClick={onFull} />
         </div>

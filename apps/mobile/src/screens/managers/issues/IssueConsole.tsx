@@ -416,6 +416,7 @@ export function useIssueConsole({
       ) : null}
       {sheet && issues.details[sheet as keyof typeof issues.details] ? (
         <IssueSheetDrawer
+          key={sheet}
           manager={manager}
           board={board}
           features={features}
@@ -473,6 +474,7 @@ export function IssueSheetDrawer({
   const issue = issues.details[issueId as keyof typeof issues.details]
   const special = issue ? issue.kind !== 'ordinary' : false
   const [talking, setTalking] = useState(!special)
+  const [bodyOpen, setBodyOpen] = useState(false)
   useEffect(() => {
     if (issue?.unread && issue.kind !== 'report' && !disabled)
       void commands.seen({ id: issue.id, revision: issue.revision }).catch(() => {})
@@ -494,6 +496,7 @@ export function IssueSheetDrawer({
           onPosition={() => {}}
           bare
           inline
+          hideDiscussion={talking}
         />
       </IssueContext.Provider>
     ) : undefined
@@ -507,6 +510,15 @@ export function IssueSheetDrawer({
       stickToEnd={false}
       onClose={onClose}
       onBack={onClose}
+      bodyAction={
+        talking
+          ? {
+              label: t(bodyOpen ? 'issue.body.hide' : 'issue.body.view'),
+              expanded: bodyOpen,
+              onPress: () => setBodyOpen(!bodyOpen),
+            }
+          : undefined
+      }
       footer={
         talking ? (
           <IssueComposer
@@ -520,16 +532,18 @@ export function IssueSheetDrawer({
       }
     >
       <View style={{ gap: 10 }}>
-        <IssueMetaLine
-          withKind
-          head={{
-            ...issue,
-            author: issue.author.kind,
-            followUp: issue.followUp.state,
-            preview: '',
-          }}
-          comments={issue.discussion.comments.length}
-        />
+        {!talking ? (
+          <IssueMetaLine
+            withKind
+            head={{
+              ...issue,
+              author: issue.author.kind,
+              followUp: issue.followUp.state,
+              preview: '',
+            }}
+            comments={issue.discussion.comments.length}
+          />
+        ) : null}
         {special && !talking ? (
           quick
         ) : (
@@ -541,11 +555,15 @@ export function IssueSheetDrawer({
             disabled={disabled}
             reason={reason}
             commands={commands}
+            bodyMode="discussion"
+            bodyOpen={bodyOpen}
             quick={quick}
             onOpenItem={onOpenItem}
           />
         )}
-        <Button kind="plain" label={t('issue.full.open')} testID="issue-full" onPress={onFull} />
+        {!talking ? (
+          <Button kind="plain" label={t('issue.full.open')} testID="issue-full" onPress={onFull} />
+        ) : null}
       </View>
     </DiscussionDrawer>
   )

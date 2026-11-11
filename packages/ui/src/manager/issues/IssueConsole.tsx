@@ -299,6 +299,22 @@ export function IssueConsole({
         commands={commands}
         onOpenItem={onOpenItem}
         postRevision={postRevision(id)}
+        bodyInList={
+          page?.entries.some((head) => head.id === id) ||
+          (linkedIssue?.id === id && linkedIssue.kind === kind)
+        }
+        onShowBody={() => {
+          const card = root.current?.querySelector<HTMLElement>(
+            `article[data-issue="${CSS.escape(id)}"]`,
+          )
+          if (!card) return false
+          setOpen(id)
+          requestAnimationFrame(() => {
+            card.scrollIntoView({ block: 'nearest' })
+            card.focus({ preventScroll: true })
+          })
+          return true
+        }}
         quick={
           issue.kind !== 'ordinary' ? (
             <IssueQuick

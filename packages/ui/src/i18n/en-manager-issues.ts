@@ -2,6 +2,8 @@
 import type { Entry } from './types.ts'
 
 export const enManagerIssues = {
+  'issue.body.view': 'View description',
+  'issue.body.hide': 'Hide description',
   'issue.kind.ordinary': 'Issue',
   'issue.kind.decision': 'Decision',
   'issue.kind.suggestion': 'Suggestion',
