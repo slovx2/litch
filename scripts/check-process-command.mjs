@@ -212,6 +212,22 @@ try {
           )
         }
         await read(`document.querySelector('main').style.width='320px'`)
+        await read('window.__processCommand.waiting(true)')
+        await wait('[data-case="inProgress"] .steps-head .st.wait')
+        assert.equal(
+          await read(
+            `document.querySelector('[data-case="inProgress"] .steps-head .step-mark').getAttribute('aria-label')`,
+          ),
+          lang === 'zh-CN' ? '待审批' : 'Needs approval',
+        )
+        assert.equal(
+          await read(
+            `document.querySelector('[data-case="inProgress"] .steps-head [data-elapsed]')`,
+          ),
+          null,
+        )
+        await read('window.__processCommand.waiting(false)')
+        await wait('[data-case="inProgress"] .steps-head .st.run')
       }
       if (evidence) {
         mkdirSync(evidence, { recursive: true })

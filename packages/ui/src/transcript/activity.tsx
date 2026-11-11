@@ -635,7 +635,7 @@ const isSuggest = (item: ItemView): boolean => {
 
 /**
  * 已经跑了多久，一秒一秒地走：给了 since 从它算（步骤组从组里第一条开始算，是累计用时），
- * 没给就从这一条开始算。等批准的命令写“待审批”，不计时（等人的时间不算它跑的）。
+ * 没给就从这一条开始算。等批准的命令由状态图标说明，不计时（等人的时间不算它跑的）。
  * 单独一个组件：每秒重画的只有这几个字
  */
 function NowTime({
@@ -726,7 +726,14 @@ export const Steps = memo(function Steps({
               setOpen(!open)
             }}
           >
-            {now ? (
+            {now && current?.kind === 'command' ? (
+              <CommandMark
+                item={current}
+                itemId={current.id}
+                deviceId={deviceId}
+                sessionId={sessionId}
+              />
+            ) : now ? (
               <StepMark status="inProgress" label={now.label || t('command.running')} />
             ) : (
               <Caret />

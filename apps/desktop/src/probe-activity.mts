@@ -1,6 +1,6 @@
 // 过程区里跟“回合正在跑”有关的几件事，只对着模拟核心量：
-// 一、命令在跑的时候，收着的步骤组那一行写“正在运行”、当前这条命令和“已经跑了多久”
-//     （对面不增量给输出时，这是唯一看得出它还活着的东西）；等批准的命令写的是“待审批”，不计时。
+// 一、命令在跑的时候，收着的步骤组以状态图标呈现“正在运行”，并显示当前命令和累计用时；
+//     等批准的命令用待审批图标及读屏标签，不计时。
 //     跑完之后那一行是动作和个数（“运行 1 条命令”）和用时。
 //     回合在跑时，最下面“{harness} 正在工作”那一行后面跟着这一回合已经跑了多久。
 // 二、整段过程什么时候自己收成一行：各 harness 都等回合结束，Codex 的 final 一开始也不提前收。
@@ -14,7 +14,7 @@ export interface ActivityProbe {
   plain: {
     /** 命令在跑的时候，步骤组那一行上出现过的“已经跑了多久”（去重，按出现的先后） */
     elapsed: string[]
-    /** 跑着的时候那一行写的（动词和当前这条命令） */
+    /** 跑着的时候图标的读屏标签和当前这条命令 */
     running: string
     /** 命令结束之后那一行写的（汇总和用时） */
     done: string
@@ -150,7 +150,7 @@ export async function activityProbe(): Promise<ActivityProbe> {
       if (spent && !elapsed.includes(spent)) elapsed.push(spent)
       const whole = text(one('.running-line .running-time'))
       if (whole && !turnElapsed.includes(whole)) turnElapsed.push(whole)
-      state = `${text(one('.sum', head))} ${text(one('.now', head))}`
+      state = `${one('.step-mark', head)?.getAttribute('aria-label') ?? ''} ${text(one('.now', head))}`
       if (performance.now() > deadline) {
         throw new Error(`过程区：那条命令一直没结束（那一行写着“${text(head)}”）`)
       }
@@ -188,11 +188,9 @@ export async function activityProbe(): Promise<ActivityProbe> {
   const card = await until('审批卡片', () => one<HTMLElement>('.req'), 60_000)
   await frame()
   await frame()
-  const held = all('.steps-head', lastTurn() ?? undefined).find((entry) =>
-    one('[data-state="waiting"]', entry),
-  )
+  const held = all('.steps-head', lastTurn() ?? undefined).find((entry) => one('.st.wait', entry))
   const waiting = {
-    label: text(one('[data-state="waiting"]', held ?? undefined)),
+    label: one('.step-mark', held ?? undefined)?.getAttribute('aria-label') ?? '',
     timed: Boolean(one('[data-elapsed]', lastTurn() ?? undefined)),
     openAfterStop: false,
   }
@@ -258,7 +256,7 @@ export function judgeActivity(probe: ActivityProbe): string[] {
   } else if (!plain.elapsed.every((entry) => /^\d+ 秒$/.test(entry))) {
     failed.push(`“已经跑了多久”不是整秒：${plain.elapsed.join('、')}`)
   }
-  if (plain.running !== '正在运行 npm test') {
+  if (plain.running !== '运行中 npm test') {
     failed.push(`命令在跑的时候步骤组那一行写的是“${plain.running}”`)
   }
   if (!/^运行 1 条命令 2\.\d 秒$/.test(plain.done)) {

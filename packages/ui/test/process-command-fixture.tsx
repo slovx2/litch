@@ -40,6 +40,13 @@ const replica = {
 } as unknown as Replica
 Object.assign(window, {
   __processCommand: {
+    waiting(on: boolean) {
+      data.set(
+        keys.requests('nebula', 'session'),
+        on ? [{ kind: 'approval', itemId: items[0]!.id }] : [],
+      )
+      for (const fn of listeners) fn()
+    },
     output() {
       const item = { ...items[0]!, output: 'Streaming nebula output\n' }
       data.set(keys.item('nebula', 'session', item.id), item)
