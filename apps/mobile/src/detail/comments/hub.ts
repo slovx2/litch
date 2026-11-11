@@ -1,7 +1,7 @@
 // 一个会话详情页里评论这件事的中枢：对话区的单元格、长按菜单、输入框上的评论片和几个浮层都经它说话。
 // 详情页建一个、经上下文给下去（context.tsx）。上下文的值一直是同一个对象，单元格不会因为它重画；
 // 会变的状态（在选字的是哪条回答、弹出的是哪条评论、要滚到哪一行、哪一行在闪）放在它自己身上，用的地方订阅。
-// 选字回复：长按菜单里“选择文字”打开全文选字页（picking），选中后系统菜单里多一个“回复”，
+// 选字回复：长按菜单里“选择文字”原地启用选字（selecting），选中后系统菜单里多一个“回复”，
 // 点了先退出选字、弹出写评论的对话框（输入框拿着焦点），“加上”后作为评论片加到输入框上面
 // （照桌面端选字后的“评论”：写在对话框里，加上以后不另外抢输入框的焦点；发出去拼成 <litch-comments>）。
 import {
@@ -41,7 +41,6 @@ export const pressedItem = (turnId: string): string | null =>
 const FLASH_MS = 1600
 
 export class CommentsHub {
-  picking: string | null = null
   /** 能自由选字的那条回答；不在选是 null */
   selecting: string | null = null
   /** 上一次“回复”没加上：一条消息带的评论满了 */
@@ -78,12 +77,6 @@ export class CommentsHub {
     const found = parseComments(user.text)
     this.parsed.set(user, found)
     return found
-  }
-
-  /** 打开全文页，在这条回答里选字 */
-  pick(itemId: string | null): void {
-    this.picking = itemId
-    this.notify()
   }
 
   /** 评论整条消息，复用选字回复弹框；引用按共享规则截断。 */

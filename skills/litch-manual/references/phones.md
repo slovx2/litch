@@ -274,10 +274,10 @@ messages arrived while you were away. Other board tabs retain their own scroll p
 - **Comment on this message**: long-press an assistant reply and choose Comment on this message.
   The comment editor opens immediately for the whole message; Add places the comment above the
   input. Long quotes use the same 2,000-character limit and truncation marker as desktop comments,
-  and send in the existing `<litch-comments>` format. **Select text** opens the full-text selection
-  page instead; select a passage there and add a comment. Native selection's Reply action still
+  and send in the existing `<litch-comments>` format. **Select text** enables native selection
+  in the original message without opening another page or dialog. Native selection's Reply action still
   opens the same editor. Tap a comment chip to edit it.
-  手机“评论这条消息”直接打开评论框，引用整条回答；“选择文字”单独进入全文选字页。
+  手机“评论这条消息”直接打开评论框，引用整条回答；“选择文字”直接在原消息上启用系统选字，不打开新页面或弹窗。
   评论仍作为输入框上方的评论片，随发送一起交给模型，不会立即发送。
   Comment, rename and message-edit dialogs, workspace forms and searchable pickers keep their content
   above the keyboard; long dialogs scroll, and buttons can be tapped while the keyboard is open.
