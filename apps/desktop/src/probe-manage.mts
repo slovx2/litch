@@ -218,49 +218,38 @@ export async function manageProbe(): Promise<ManageProbe> {
   await piReady()
   // 经真正的设备服务和 Go 配置文件读取、保存、重读、恢复；不运行真实模型。
   const ranking = await until('模型等级入口', () => one('[data-model-ranking]'))
-  one<HTMLButtonElement>('button', ranking)?.click()
-  const rankingSelect = await until('设备型号清单', () =>
-    one<HTMLSelectElement>('[data-model-ranking] select'),
+  const rankingMode = () =>
+    one<HTMLElement>('[data-model-ranking] .mng-sum[data-mode]')?.dataset.mode ?? ''
+  const unsaved = () => text(one('[data-model-ranking] .mng-sec-head')).includes('有未保存')
+  one<HTMLButtonElement>('.fold', ranking)?.click()
+  const handle = await until('设备型号清单', () =>
+    one<HTMLButtonElement>('[data-model-ranking] [data-rank-handle]'),
   )
-  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(
-    rankingSelect,
-    'new',
+  // 第一个模型的调级菜单里挑第一项能做的
+  handle.click()
+  const action = await until('调级菜单', () =>
+    all('[data-model-ranking] .rk-pop [role="menuitem"]').find(
+      (item) => item.getAttribute('aria-disabled') !== 'true',
+    ),
   )
-  rankingSelect.dispatchEvent(new Event('change', { bubbles: true }))
-  await frame()
-  const rankButton = (label: string) =>
-    all('[data-model-ranking] button').find((button) => text(button) === label)
-  rankButton('保存自定义排序')?.click()
-  await until(
-    '设备保存自定义等级',
-    () =>
-      text(one('[data-model-ranking]')).includes('自定义排序：所有引擎共同比较') &&
-      !text(one('[data-model-ranking]')).includes('有未保存'),
-  )
-  rankButton('重新读取')?.click()
+  action.click()
+  await until('草稿有改动', () => unsaved())
+  one<HTMLButtonElement>('[data-act="ranking-save"]')?.click()
+  await until('设备保存自定义等级', () => rankingMode() === 'custom' && !unsaved())
+  one<HTMLButtonElement>('[data-act="ranking-reload"]')?.click()
   await frame()
   await until(
     '自定义配置重读',
     () =>
-      text(one('[data-model-ranking]')).includes('自定义排序：所有引擎共同比较') &&
-      !(rankButton('恢复内置排序') as HTMLButtonElement | undefined)?.disabled,
+      rankingMode() === 'custom' && !one<HTMLButtonElement>('[data-act="ranking-reset"]')?.disabled,
   )
-  rankButton('恢复内置排序')?.click()
-  await frame()
-  await until(
-    '恢复等级确认按钮',
-    () =>
-      all('[data-model-ranking] button').filter((button) => text(button) === '恢复内置排序')
-        .length === 2,
+  one<HTMLButtonElement>('[data-act="ranking-reset"]')?.click()
+  const resetConfirm = await until('恢复等级确认按钮', () =>
+    one<HTMLButtonElement>('[data-act="ranking-reset-confirm"]'),
   )
-  all('[data-model-ranking] button')
-    .filter((button) => text(button) === '恢复内置排序')
-    .at(-1)
-    ?.click()
-  await until('设备恢复内置等级', () =>
-    text(one('[data-model-ranking]')).includes('内置排序：仅比较同一引擎的模型'),
-  )
-  rankButton('关闭')?.click()
+  resetConfirm.click()
+  await until('设备恢复内置等级', () => rankingMode() === 'builtin')
+  one<HTMLButtonElement>('.fold', ranking)?.click()
   // 一打开只有 harness 各一行，设置项都收着
   const folded = `${all('[data-setting]').length}/${all('[data-harness-block] .mng-h-head').length}`
   await unfold()

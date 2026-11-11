@@ -22,8 +22,11 @@ export type RootStackParamList = {
   AddDevice: undefined
   /** 扫码添加：扫电脑上的配对二维码或者粘贴配对文本，确认后登记并添加。配对文本是秘密，不经路由传 */
   PairDevice: { tailscaleReady?: boolean } | undefined
-  /** 一台设备的详情：连接信息、密钥、重连、去掉；harness 的启用和设置（设备有设置接口时） */
-  DeviceDetail: { deviceId: string }
+  /**
+   * 一台设备的详情：连接信息、密钥、重连、去掉；harness 的启用和设置（设备有设置接口时）。
+   * section 给了 ranking 就展开模型等级排序（越级提示里的“调整模型等级”）
+   */
+  DeviceDetail: { deviceId: string; section?: 'ranking' }
   /** 一台设备上一个 harness 的详情设置：配置、账号（登录、API key、provider）、MCP 与指令文件（只读）。name 是 harness 的名字，首帧就画 */
   HarnessSettings: { deviceId: string; harness: string; name?: string }
   /** 一个本机分组（只存在这台手机上，混装各台设备的会话）：成员、长按的动作单。title 是组名，首帧就画 */

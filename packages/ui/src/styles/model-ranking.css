@@ -1,0 +1,225 @@
+/* 设备详情里的“模型等级排序”（devices/manage/ModelRanking.tsx、RankLadder.tsx、RankingPartial.tsx）。
+   一个模型一行，同一级的几行收在一格里，左边写第几级；拖着的时候两级之间露出插入的缝。
+   只用皮肤的变量；哪个皮肤要不一样的地方写在它自己的文件里。 */
+
+/* ---------- 开关那一行 ---------- */
+.rk-switch {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 2px 0 4px;
+}
+.rk-switch-text {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rk-switch-text label {
+  font-size: calc(13px * var(--fs));
+  font-weight: 500;
+}
+
+/* ---------- 读不到的 harness ---------- */
+.rk-partial {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--panel);
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
+  color: var(--ink-2);
+}
+.rk-partial > svg.ic {
+  margin-top: 2px;
+  color: var(--ink-3);
+}
+.rk-partial-body {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rk-partial-body b {
+  font-weight: 500;
+  color: var(--ink);
+}
+.rk-partial ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rk-partial li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.rk-partial-name {
+  color: var(--ink);
+}
+.rk-partial-why {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+}
+
+/* ---------- 一条阶梯 ---------- */
+.rk-ladder,
+.rk-unranked {
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--raised);
+}
+.rk-ladder-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line-1);
+  font-size: calc(12px * var(--fs));
+}
+.rk-ladder-head b {
+  font-weight: 600;
+}
+.rk-level {
+  display: grid;
+  grid-template-columns: calc(56px * var(--fs)) minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 4px 8px 4px 12px;
+}
+.rk-step + .rk-step > .rk-level {
+  border-top: 1px solid var(--line-1);
+}
+.rk-level[data-over="true"],
+.rk-unranked[data-over="true"] {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.rk-level-num {
+  padding-top: calc((28px * var(--fs) - 18px) / 2);
+  font-size: calc(11px * var(--fs));
+  line-height: 18px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rk-level-rows {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* 两级之间的缝：平时没有高度，拖着能落的模型时才露出来，经过的那一道写明落下会怎样 */
+.rk-gap {
+  height: 0;
+  transition: height 0.12s;
+}
+.rk-gap[data-shown="true"] {
+  height: 8px;
+}
+.rk-gap[data-over="true"] {
+  height: 26px;
+  margin: 2px 8px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--accent);
+  border-radius: var(--r1);
+  font-size: calc(11px * var(--fs));
+  color: var(--accent);
+}
+
+/* ---------- 一个模型一行 ---------- */
+.rk-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: calc(28px * var(--fs));
+  padding: 0 4px 0 0;
+  border-radius: var(--r1);
+  font-size: calc(13px * var(--fs));
+}
+.rk-row:hover {
+  background: var(--hover);
+}
+.rk-row[data-dragging="true"] {
+  opacity: 0.4;
+}
+.rk-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.rk-row[data-available="false"] .rk-name {
+  color: var(--ink-3);
+}
+.rk-menu {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+}
+.rk-grip {
+  cursor: grab;
+  opacity: 0.55;
+}
+.rk-row:hover .rk-grip,
+.rk-grip:focus-visible,
+.rk-grip[aria-expanded="true"] {
+  opacity: 1;
+}
+.rk-grip:active {
+  cursor: grabbing;
+}
+/* 菜单从手柄往右下展开，不压住左边的级数 */
+.rk-pop.pick-pop.down {
+  left: 0;
+  right: auto;
+  min-width: 200px;
+}
+
+/* ---------- 未分级 ---------- */
+.rk-unranked {
+  border-style: dashed;
+  background: none;
+}
+.rk-unranked > .mng-sec-note {
+  padding: 6px 12px 0;
+}
+.rk-unranked > .rk-level-rows {
+  padding: 4px 8px 6px 12px;
+}
+
+/* ---------- 底下一排 ---------- */
+.rk-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+.rk-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: calc(12px * var(--fs));
+  color: var(--ink-2);
+}
+
+/* 跳去设置的几个小按钮用强调色，看得出能点 */
+.rk-partial .mini,
+.limit-links .mini {
+  color: var(--accent);
+}

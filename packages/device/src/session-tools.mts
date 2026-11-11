@@ -1411,7 +1411,16 @@ export function sessionToolsHandler(
       if (error instanceof ArchiveBlocked) return clientToolFailure('blocked', error.message)
       if (error instanceof PendingRefused)
         return { ...ok({ error: { code: error.code, message: error.message } }), success: false }
-      if (error instanceof ProtocolError) return clientToolFailure('invalid', error.message)
+      if (error instanceof ProtocolError) {
+        const failure = clientToolFailure('invalid', error.message)
+        const data = (error as { data?: { litch?: string } }).data
+        if (data?.litch === 'model_cap_exceeded' || data?.litch === 'model_rank_unknown')
+          failure.contentItems.push({
+            type: 'inputText',
+            text: JSON.stringify({ modelLimit: data }),
+          })
+        return failure
+      }
       if (error instanceof Refused || error instanceof StartRefused)
         return clientToolFailure(error.kind, error.message)
       return clientToolFailure('failed', messageOf(error))

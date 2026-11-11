@@ -13,12 +13,13 @@ const rows = ['sonnet', 'opus', 'fable'].map((id) => ({
   isDefault: id === 'opus',
   litchModelIdentity: { provider: 'account', resolved: `claude-${id}-5`, trusted: true },
 }))
-function mockTree(custom = false) {
+function mockTree(custom = false, crossHarness = custom) {
   return {
     host: {
       modelRanking: async () => ({
         ...emptyRanking(),
         mode: custom ? 'custom' : 'builtin',
+        crossHarness,
         tiers: [[modelKey('claude-code', 'opus')], [modelKey('codex', 'gpt-6-astra')]],
         models: [],
       }),
@@ -61,6 +62,39 @@ test('有效身份、缺省型号、跨引擎自定义与仅用户选择例外',
     /limit/,
   )
 })
+
+test('custom 关闭跨 harness 时不读对方目录，未分级父子也不会阻塞跨 harness', async () => {
+  for (const parent of ['opus', 'unranked-parent']) {
+    for (const child of ['gpt-6-astra', 'unranked-child']) {
+      const tree = mockTree(true, false)
+      tree.link = async () => {
+        throw Error('跨 harness 放行不需要读取目录')
+      }
+      assert.equal(await checkChildModel(tree, 'claude-code', parent, 'codex', child), child)
+    }
+  }
+  await assert.rejects(
+    checkChildModel(mockTree(false, false), 'claude-code', 'opus', 'claude-code', 'fable'),
+    (error) => {
+      const failure = error as Error & {
+        data: import('../../protocol/src/model-ranking.mjs').ModelLimitFailure
+      }
+      assert.equal(failure.data.kind, 'exceeded')
+      assert.equal(failure.data.parent.model, 'opus')
+      assert.equal(failure.data.child.model, 'fable')
+      assert.equal(failure.data.crossHarness, false)
+      assert.ok(failure.data.allowed.some((row) => row.model === 'sonnet'))
+      return true
+    },
+  )
+  await assert.rejects(
+    checkChildModel(mockTree(false, false), 'claude-code', 'unknown', 'claude-code', 'opus'),
+    (error) => {
+      assert.equal((error as { data: { kind: string } }).data.kind, 'unranked')
+      return true
+    },
+  )
+})
 test('设备入口：工具拒绝、普通卡开始拒绝、实际用户选择放行且权限仍检查', async () => {
   const env = treeRig()
   try {
@@ -100,9 +134,24 @@ test('设备入口：工具拒绝、普通卡开始拒绝、实际用户选择�
     })
     const id = proposed.proposal_id as string
     assert.ok(id)
-    await assert.rejects(client.call('litch/sessionProposal/accept', { proposalId: id }), {
-      message: /limit|上限/,
-    })
+    await assert.rejects(
+      client.call('litch/sessionProposal/accept', { proposalId: id }),
+      (error) => {
+        const data = (
+          error as { data: import('../../protocol/src/model-ranking.mjs').ModelLimitFailure }
+        ).data
+        assert.equal(data.litch, 'model_cap_exceeded')
+        assert.equal(data.parent.model, 'opus')
+        assert.equal(data.child.model, 'fable')
+        assert.deepEqual(data.allowedModels, ['sonnet', 'opus'])
+        return true
+      },
+    )
+    const raw = (await env.claude.callTool(thread.id, SESSIONS, 'accept', { proposal_id: id }))
+      ?.answer
+    assert.ok(JSON.stringify(raw).includes('modelLimit'))
+    assert.ok(JSON.stringify(raw).includes('model_cap_exceeded'))
+    assert.equal(env.claude.sent('thread/start').length, count)
     await assert.rejects(
       client.call('litch/sessionProposal/accept', {
         proposalId: id,
@@ -133,14 +182,17 @@ test('等级设置声明门禁、设备持久配置、通知只发给声明连�
     await user.initialize(['harness', 'sessionTree', 'modelRanking'])
     const snapshot = await user.call('litch/device/modelRanking/read', {})
     assert.equal(snapshot.mode, 'builtin')
+    assert.equal(snapshot.crossHarness, false)
     assert.ok(snapshot.models.length)
     const saved = await user.call('litch/device/modelRanking/write', {
       expectedRevision: snapshot.revision,
+      crossHarness: true,
       tiers: [snapshot.models.map((row: any) => row.key)],
       unranked: [],
       models: snapshot.models,
     })
     assert.equal(saved.mode, 'custom')
+    assert.equal(saved.crossHarness, true)
     assert.ok(saved.revision > snapshot.revision)
     assert.equal(env.control?.ranking.mode, 'custom')
     await assert.rejects(
@@ -155,6 +207,7 @@ test('等级设置声明门禁、设备持久配置、通知只发给声明连�
       expectedRevision: saved.revision,
     })
     assert.equal(restored.mode, 'builtin')
+    assert.equal(restored.crossHarness, false)
   } finally {
     env.close()
   }

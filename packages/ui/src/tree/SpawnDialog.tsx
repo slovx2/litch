@@ -23,6 +23,8 @@ import { useBoardFormKeys } from '../manager/form-submit-keys.ts'
 import { submitQuestionOnEnter } from '../manager/post-presentation.ts'
 import { PathPicker } from '../path-picker/PathPicker.tsx'
 import { WorktreeCheck } from '../worktrees/WorktreeCheck.tsx'
+import { ModelLimitNotice } from './ModelLimitNotice.tsx'
+import { type ModelLimitFailureView, modelLimitOf } from './model-limit.ts'
 import { proposalOperation, withProposalNote } from './proposal-operation.ts'
 import { SANDBOX_CHOICES, SANDBOX_LEVEL, widerLevel } from './sandbox.ts'
 import { fieldsFor, kindOf, overridesOf, type SpawnFields, spawnParams } from './spawn-form.ts'
@@ -67,6 +69,8 @@ export function SpawnDialog({
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState(initialNote)
   const [failure, setFailure] = useState<string | null>(null)
+  /** 派出去时模型越级：换成越级提示（改用允许的模型、去改经理默认模型或等级） */
+  const [limit, setLimit] = useState<ModelLimitFailureView | null>(null)
   const worktreeBlock = useProposalWorktree(
     channel,
     deviceId,
@@ -108,17 +112,21 @@ export function SpawnDialog({
   }, [])
 
   const text = fields.prompt.trim()
-  const submit = () => {
+  /** patch：越级提示里“改用此模型开始”换掉的那几项，和表单一起交出去 */
+  const submit = (patch: Partial<SpawnFields> = {}) => {
     if (!text || busy || permissionBlocked || worktreeBlock) return
+    const used = { ...fields, ...patch }
+    if (patch.model !== undefined) setFields(used)
     setBusy(true)
     setFailure(null)
+    setLimit(null)
     if (proposal) {
       const operation = proposalOperation(channel, deviceId, parent.id, proposal.id)
       const sent = operation.start(
         withProposalNote(
           proposal.prompt,
           note,
-          overridesOf(fields, parent, proposal, device?.worktrees === true),
+          overridesOf(used, parent, proposal, device?.worktrees === true),
         ),
       )
       onClose()
@@ -129,7 +137,7 @@ export function SpawnDialog({
     const sent = channel.command('session.spawn', {
       deviceId,
       parentId: parent.id,
-      ...spawnParams(fields, parent, device?.worktrees === true),
+      ...spawnParams(used, parent, device?.worktrees === true),
     })
     return sent
       .then(({ sessionId }) => {
@@ -138,7 +146,9 @@ export function SpawnDialog({
       })
       .catch((error: unknown) => {
         setBusy(false)
-        setFailure(t('session.failed', { reason: reasonOf(error, t) }))
+        const over = modelLimitOf(error)
+        if (over) setLimit(over)
+        else setFailure(t('session.failed', { reason: reasonOf(error, t) }))
       })
   }
 
@@ -430,6 +440,15 @@ export function SpawnDialog({
           />
           {worktreeBlock ? <div className="modal-note err">{t(worktreeBlock)}</div> : null}
           {failure ? <div className="modal-note err">{failure}</div> : null}
+          {limit ? (
+            <ModelLimitNotice
+              limit={limit}
+              busy={busy}
+              onUseModel={({ harness, model }) =>
+                void submit({ harness, model, effort: '', modelSelected: true })
+              }
+            />
+          ) : null}
         </div>
         <div className="modal-foot">
           <span className="grow" />

@@ -50,6 +50,7 @@ const fromShape = (shape: ChannelErrorShape): ChannelError =>
     ...(shape.key === undefined ? {} : { key: shape.key }),
     ...(shape.pairingHostKey ? { pairingHostKey: shape.pairingHostKey } : {}),
     ...(shape.pairingAddress ? { pairingAddress: shape.pairingAddress } : {}),
+    ...(shape.modelLimit ? { modelLimit: shape.modelLimit } : {}),
   })
 
 export function connectChannel(port: Port): CoreChannel {

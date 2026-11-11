@@ -1,24 +1,43 @@
-import { keys, type ModelRankingSnapshot, moveRankedModel } from '@litch/core'
+// 设备详情里的“模型等级排序”（手机）：派子会话时父会话只能派同级或更低的模型，这里排哪个模型在哪一级。
+// 收着时一行标题加摘要；点开才向设备读模型清单。改动先进草稿，点“保存”才成为设备的规则。
+// “跨 harness 比较等级”关着时按 harness 分组，开着时一条共用阶梯。窄屏不拖动，点一行用动作单调级。
+// 规则与桌面同一份（packages/ui/src/devices/manage/ranking-view.ts）。
+import { type DeviceView, keys, type ModelRankingSnapshot } from '@litch/core'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useEffect, useState } from 'react'
-import { Text, View } from 'react-native'
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
+import {
+  applyRank,
+  crossHarnessOf,
+  laddersOf,
+  type RankedModel,
+  unrankedOf,
+  writeOf,
+} from '../../../../../packages/ui/src/devices/manage/ranking-view.ts'
+import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
+import { Confirm, Sheet } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { useLeaveGuard } from './hconfig/leave'
+import { LadderCard, PartialCard, rankActions, UnrankedCard } from './RankingParts'
 
-export function ModelRanking({ deviceId }: { deviceId: string }) {
-  const channel = useChannel(),
-    t = useT(),
-    theme = useTheme()
+export function ModelRanking({ device, reveal = false }: { device: DeviceView; reveal?: boolean }) {
+  const deviceId = device.id
+  const channel = useChannel()
+  const t = useT()
+  const { c, font } = useTheme()
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const latest = useKey<ModelRankingSnapshot>(keys.modelRanking(deviceId))
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(reveal)
   const [draft, setDraft] = useState<ModelRankingSnapshot | null>(null)
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<unknown>(null)
-  const [selected, setSelected] = useState<string | null>(null)
+  const [picked, setPicked] = useState<RankedModel | null>(null)
   const [reset, setReset] = useState(false)
   useEffect(() => {
     if (latest && !dirty) setDraft(latest)
@@ -37,19 +56,10 @@ export function ModelRanking({ deviceId }: { deviceId: string }) {
                 expectedRevision: draft?.revision ?? 0,
               })
             : draft &&
-              (await channel.command('device.modelRanking.write', {
-                deviceId,
-                expectedRevision: draft.revision,
-                tiers: draft.tiers,
-                unranked: draft.unranked,
-                models: draft.models,
-                manual: draft.manual ?? [],
-              }))
+              (await channel.command('device.modelRanking.write', { deviceId, ...writeOf(draft) }))
       if (result) {
         setDraft(result)
         setDirty(false)
-        setSelected(null)
-        setReset(false)
       }
       return Boolean(result)
     } catch (error) {
@@ -60,119 +70,177 @@ export function ModelRanking({ deviceId }: { deviceId: string }) {
     }
   }
   leave.current = () => request('write')
-  const move = (target: number | null, separate = false) => {
-    if (!selected || !draft) return
-    setDraft({ ...draft, ...moveRankedModel(draft, selected, target, separate) })
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 只在打开的那一下读
+  useEffect(() => {
+    if (open && !dirty) void request('read')
+  }, [open])
+  useEffect(() => {
+    if (reveal) setOpen(true)
+  }, [reveal])
+
+  const edit = (next: ModelRankingSnapshot) => {
+    if (!draft || next === draft) return
+    setDraft(next)
     setDirty(true)
-    setSelected(null)
   }
-  const group = (members: string[], level: number | null) => (
-    <View
-      key={level ?? 'unranked'}
-      style={{
-        gap: 8,
-        padding: 12,
-        borderWidth: 1,
-        borderColor: theme.c.line2,
-        borderRadius: theme.radius.s,
-      }}
-    >
-      <Text style={{ color: theme.c.ink }}>
-        {level === null ? t('ranking.unranked') : t('ranking.level', { level: level + 1 })}
-      </Text>
-      {members.map((key) => {
-        const model = draft?.models.find((entry) => entry.key === key)
-        if (!model) return null
-        return (
-          <View key={key} style={{ gap: 4 }}>
-            <Text style={{ color: theme.c.ink }}>
-              {model.name} · {model.harness}
-              {model.available ? '' : ` · ${t('ranking.unavailable')}`}
-            </Text>
-            <Button label={t('ranking.move')} disabled={busy} onPress={() => setSelected(key)} />
-          </View>
-        )
-      })}
-    </View>
-  )
+  const order = device.harnesses.map((entry) => entry.id)
+  const cross = draft ? crossHarnessOf(draft) : false
+  const summary = draft
+    ? `${t(draft.mode === 'custom' ? 'ranking.custom' : 'ranking.builtin')} · ${t(
+        cross ? 'ranking.across' : 'ranking.within',
+      )}${dirty ? ` · ${t('ranking.unsaved')}` : ''}`
+    : null
   return (
-    <View testID="model-ranking" style={{ padding: 16, gap: 12 }}>
-      <Text style={{ color: theme.c.ink }}>{t('ranking.title')}</Text>
-      <Button
-        label={t(open ? 'ranking.close' : 'ranking.open')}
-        disabled={busy}
-        onPress={() => {
-          setOpen(!open)
-          if (!open && !dirty) void request('read')
-        }}
-      />
-      {open && (
-        <>
-          <Text style={{ color: theme.c.ink2 }}>{t('ranking.note')}</Text>
-          {failure != null && (
-            <Text accessibilityRole="alert" style={{ color: theme.c.err }}>
+    <View testID="model-ranking" style={styles.root}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        onPress={() => setOpen(!open)}
+        style={styles.header}
+        testID="ranking:toggle"
+      >
+        <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{open ? '▾' : '▸'}</Text>
+        <Text style={{ color: c.ink, fontWeight: '600', fontSize: font.size.body }}>
+          {t('ranking.title')}
+        </Text>
+        {summary ? (
+          <Text
+            numberOfLines={1}
+            style={[styles.summary, { color: c.ink3, fontSize: font.size.small }]}
+          >
+            {summary}
+          </Text>
+        ) : null}
+      </Pressable>
+      {open ? (
+        <View style={styles.body}>
+          <Text style={{ color: c.ink3, fontSize: font.size.small, lineHeight: 18 }}>
+            {t('ranking.intro')}
+          </Text>
+          {failure != null ? (
+            <Text accessibilityRole="alert" style={{ color: c.err, fontSize: font.size.meta }}>
               {whyNot(failure, t)}
             </Text>
-          )}
-          {draft && (
+          ) : null}
+          {!draft ? (
+            <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{t('ranking.loading')}</Text>
+          ) : (
             <>
-              <Text style={{ color: theme.c.ink2 }}>
-                {t(draft.mode === 'custom' ? 'ranking.custom' : 'ranking.builtin')}
-                {dirty ? ` · ${t('ranking.unsaved')}` : ''}
-              </Text>
-              {Object.keys(draft.errors).length > 0 && (
-                <Text style={{ color: theme.c.ink2 }}>
-                  {t('ranking.partial')}: {Object.keys(draft.errors).join(', ')}
-                </Text>
-              )}
-              {selected && (
-                <View style={{ gap: 8 }}>
-                  {draft.tiers.map((tier, index) => (
-                    <Button
-                      key={tier.join()}
-                      label={t('ranking.level', { level: index + 1 })}
-                      onPress={() => move(index)}
-                    />
-                  ))}
-                  <Button label={t('ranking.new')} onPress={() => move(draft.tiers.length, true)} />
-                  <Button label={t('ranking.unranked')} onPress={() => move(null)} />
-                  <Button label={t('ranking.cancel')} onPress={() => setSelected(null)} />
+              <View style={styles.switchRow}>
+                <View style={styles.switchText}>
+                  <Text style={{ color: c.ink, fontSize: font.size.body }}>
+                    {t('ranking.cross')}
+                  </Text>
+                  <Text style={{ color: c.ink3, fontSize: font.size.small, lineHeight: 17 }}>
+                    {t(cross ? 'ranking.cross.on' : 'ranking.cross.off')}
+                  </Text>
                 </View>
-              )}
-              {draft.tiers
-                .map((members, level) => ({ members, level }))
-                .reverse()
-                .map(({ members, level }) => group(members, level))}
-              {group(draft.unranked, null)}
-              {draft.unranked.length > 0 && (
-                <Text style={{ color: theme.c.ink2 }}>{t('ranking.unknownNote')}</Text>
-              )}
-              <Button
-                label={t('ranking.save')}
-                disabled={busy}
-                onPress={() => void request('write')}
+                <Switch
+                  accessibilityLabel={t('ranking.cross')}
+                  value={cross}
+                  disabled={busy}
+                  onValueChange={(value) => edit({ ...draft, crossHarness: value })}
+                  testID="ranking:cross"
+                />
+              </View>
+              <PartialCard
+                device={device}
+                errors={draft.errors}
+                busy={busy}
+                onReload={() => void request('read')}
+                onSettings={(harness) =>
+                  navigation.navigate('HarnessSettings', { deviceId, harness })
+                }
               />
-              <Button label={t('ranking.reset')} disabled={busy} onPress={() => setReset(true)} />
-              {reset && (
-                <>
-                  <Text style={{ color: theme.c.ink2 }}>{t('ranking.resetNote')}</Text>
+              {laddersOf(draft, order).map((ladder) => (
+                <LadderCard
+                  key={ladder.harness ?? 'all'}
+                  device={device}
+                  ladder={ladder}
+                  disabled={busy}
+                  onPick={setPicked}
+                />
+              ))}
+              <UnrankedCard
+                device={device}
+                models={unrankedOf(draft, order)}
+                disabled={busy}
+                onPick={setPicked}
+              />
+              {draft.models.length === 0 ? (
+                <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
+                  {t('ranking.empty')}
+                </Text>
+              ) : null}
+              <View style={styles.foot}>
+                <Button
+                  label={t('ranking.save')}
+                  disabled={busy || !dirty}
+                  onPress={() => void request('write')}
+                  testID="ranking:save"
+                />
+                {dirty ? (
                   <Button
-                    label={t('ranking.reset')}
+                    kind="plain"
+                    label={t('ranking.discard')}
                     disabled={busy}
-                    onPress={() => void request('reset')}
+                    onPress={() => {
+                      setDirty(false)
+                      setDraft(latest ?? null)
+                      if (!latest) void request('read')
+                    }}
+                    testID="ranking:discard"
                   />
-                  <Button label={t('ranking.cancel')} onPress={() => setReset(false)} />
-                </>
-              )}
+                ) : null}
+                <Button
+                  kind="plain"
+                  label={t('ranking.reset')}
+                  disabled={busy || (draft.mode === 'builtin' && !cross)}
+                  onPress={() => setReset(true)}
+                  testID="ranking:reset"
+                />
+                <Button
+                  kind="plain"
+                  label={t('ranking.refresh')}
+                  disabled={busy}
+                  onPress={() => void request('read')}
+                  testID="ranking:reload"
+                />
+              </View>
+              <Sheet
+                visible={picked !== null}
+                title={picked?.name ?? ''}
+                actions={
+                  picked
+                    ? rankActions(draft, picked, t, (action) =>
+                        edit({ ...draft, ...applyRank(draft, picked.key, action) }),
+                      )
+                    : []
+                }
+                onClose={() => setPicked(null)}
+              />
+              <Confirm
+                visible={reset}
+                title={t('ranking.reset')}
+                detail={t('ranking.resetNote')}
+                confirmLabel={t('ranking.resetConfirm')}
+                onConfirm={() => void request('reset')}
+                onClose={() => setReset(false)}
+              />
             </>
           )}
-          <Button
-            label={t('ranking.refresh')}
-            disabled={busy}
-            onPress={() => void request('read')}
-          />
-        </>
-      )}
+        </View>
+      ) : null}
     </View>
   )
 }
+
+const styles = StyleSheet.create({
+  root: { paddingHorizontal: 16, paddingVertical: 12, gap: 10 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 32 },
+  summary: { flex: 1, minWidth: 0 },
+  body: { gap: 12 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  switchText: { flex: 1, minWidth: 0, gap: 2 },
+  foot: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+})

@@ -65,3 +65,48 @@ func TestModelRankingValidation(t *testing.T) {
 		t.Fatal("duplicate")
 	}
 }
+
+func TestModelRankingCrossHarnessDefaultAndPersistence(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, "device", "model-ranking.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	// 现有 custom 文件没有新字段：直接按 false 读取，不迁移、不改 revision。
+	raw := []byte(`{"schemaVersion":1,"revision":7,"mode":"custom","tiers":[],"unranked":[],"models":[]}`)
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := readModelRanking(path)
+	if err != nil || before.CrossHarness || before.Revision != 7 {
+		t.Fatal(before, err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != string(raw) {
+		t.Fatal("读取不得迁移或重写配置", err)
+	}
+	s := &controlServer{c: configuration{home: home}}
+	for _, enabled := range []bool{true, false, true} {
+		params, _ := json.Marshal(map[string]any{"expectedRevision": before.Revision, "crossHarness": enabled, "tiers": [][]string{}, "unranked": []string{}, "models": []rankedModel{}})
+		out, failure := s.handleModelRanking("modelRanking.write", params)
+		if failure != nil {
+			t.Fatal(failure)
+		}
+		before = out.(modelRankingConfig)
+		if before.CrossHarness != enabled {
+			t.Fatal(before)
+		}
+		// 自动补目录不能变更开关，即使其请求缺字段。
+		params, _ = json.Marshal(map[string]any{"expectedRevision": before.Revision, "tiers": [][]string{}, "unranked": []string{}, "models": []rankedModel{}})
+		out, failure = s.handleModelRanking("modelRanking.merge", params)
+		if failure != nil || out.(modelRankingConfig).CrossHarness != enabled {
+			t.Fatal(out, failure)
+		}
+		before = out.(modelRankingConfig)
+	}
+	params, _ := json.Marshal(map[string]any{"expectedRevision": before.Revision})
+	out, failure := s.handleModelRanking("modelRanking.reset", params)
+	if failure != nil || out.(modelRankingConfig).CrossHarness {
+		t.Fatal(out, failure)
+	}
+}

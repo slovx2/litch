@@ -12,6 +12,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useT } from '../app/appearance.ts'
 import { whyNot } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
+import { modelLimitOf } from './model-limit.ts'
 import { proposalOperation } from './proposal-operation.ts'
 
 const NONE: readonly SessionProposalView[] = []
@@ -94,11 +95,14 @@ export function useProposalAct(deviceId: string, sessionId: string, proposalId: 
       .catch((error: unknown) => setFailure(t('proposal.failed', { reason: whyNot(error, t) })))
       .finally(() => setBusy(false))
   }
+  const limit = modelLimitOf(starting.error)
   return {
     busy: busy || starting.busy,
     starting: starting.busy,
     failure: starting.error ? t('proposal.failed', { reason: whyNot(starting.error, t) }) : failure,
-    retry: starting.error ? operation.retry : null,
+    /** 开始时模型越级：卡片换成越级提示，不给原样重试 */
+    limit,
+    retry: starting.error && !limit ? operation.retry : null,
     accept: operation.start,
     dismiss: () =>
       run(channel.command('session.proposal.dismiss', { deviceId, sessionId, proposalId })),

@@ -8,6 +8,7 @@ import { CollapsedTurnPreview } from './preview/CollapsedTurn.web.tsx'
 import { applyPrefs, runScene } from './preview/frame.web.ts'
 import { PreviewIndex } from './preview/Index.web.tsx'
 import { ManagerEventsPreview } from './preview/ManagerEvents.web.tsx'
+import { ModelRankingPreview } from './preview/ModelRanking.web.tsx'
 import { startScrollNudge } from './preview/nudge.web.ts'
 import { sceneById } from './preview/scenes.web.ts'
 import { seedOrganizer } from './shell/organizer-file.web.ts'
@@ -47,5 +48,7 @@ export default function Root() {
     return <CollapsedTurnPreview params={params} />
   if (inFrame && params.get('scene') === 'manager-events')
     return <ManagerEventsPreview params={params} />
+  if (inFrame && params.get('scene') === 'model-ranking')
+    return <ModelRankingPreview params={params} />
   return inFrame ? <PreviewApp /> : <PreviewIndex />
 }

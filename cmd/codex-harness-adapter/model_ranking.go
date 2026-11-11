@@ -26,6 +26,7 @@ type modelRankingConfig struct {
 	SchemaVersion int           `json:"schemaVersion"`
 	Revision      int           `json:"revision"`
 	Mode          string        `json:"mode"`
+	CrossHarness  bool          `json:"crossHarness"`
 	Tiers         [][]string    `json:"tiers"`
 	Unranked      []string      `json:"unranked"`
 	Manual        []string      `json:"manual,omitempty"`
@@ -120,6 +121,7 @@ func (s *controlServer) handleModelRanking(method string, params json.RawMessage
 		Unranked         []string      `json:"unranked"`
 		Manual           []string      `json:"manual,omitempty"`
 		Models           []rankedModel `json:"models"`
+		CrossHarness     bool          `json:"crossHarness"`
 	}
 	if len(params) > 4*1024*1024 {
 		return nil, &controlError{Reason: "invalid", Text: both("模型等级配置过大", "Model ranking is too large")}
@@ -134,8 +136,10 @@ func (s *controlServer) handleModelRanking(method string, params json.RawMessage
 	next.Revision = current.Revision + 1
 	if method == "modelRanking.write" || method == "modelRanking.merge" {
 		next.Mode = "custom"
+		next.CrossHarness = request.CrossHarness
 		if method == "modelRanking.merge" {
 			next.Mode = current.Mode
+			next.CrossHarness = current.CrossHarness
 		}
 		next.Tiers = request.Tiers
 		next.Unranked = request.Unranked

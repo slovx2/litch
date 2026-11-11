@@ -64,12 +64,15 @@ export function ManagePanel({
   device,
   onSettings,
   harnessId,
+  revealRanking = false,
 }: {
   device: DeviceView
   /** 打开一个 harness 的详情设置 */
   onSettings?(harnessId: string): void
   /** 详情页只显示这个 harness 的运行设置。 */
   harnessId?: string
+  /** 别处要求直接看模型等级排序（越级提示里的跳转） */
+  revealRanking?: boolean
 }) {
   const { replica, channel } = useServices()
   const t = useT()
@@ -200,7 +203,13 @@ export function ManagePanel({
 
   return (
     <div className="mng" data-manage-state="ready" data-version={snapshot.version}>
-      {device.modelRanking && !harnessId && <ModelRanking deviceId={deviceId} />}
+      {device.modelRanking && !harnessId && (
+        <ModelRanking
+          device={device}
+          reveal={revealRanking}
+          onSettings={onSettings ? (id) => leaveThen(() => onSettings(id)) : null}
+        />
+      )}
       <section className="mng-sec" data-sec="harnesses">
         <div className="mng-sec-head">
           <h2>{t('manage.harness.title')}</h2>

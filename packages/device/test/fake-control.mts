@@ -68,7 +68,11 @@ export class FakeControl implements ControlChannel {
     this.handlers = {
       'modelRanking.read': () => this.ranking,
       'modelRanking.write': (params) => this.writeRanking(params, 'custom'),
-      'modelRanking.merge': (params) => this.writeRanking(params, this.ranking.mode),
+      'modelRanking.merge': (params) =>
+        this.writeRanking(
+          { ...params, crossHarness: this.ranking.crossHarness === true },
+          this.ranking.mode,
+        ),
       'modelRanking.reset': (params) =>
         this.writeRanking(
           { ...emptyRanking(), expectedRevision: params.expectedRevision },
@@ -190,6 +194,7 @@ export class FakeControl implements ControlChannel {
       schemaVersion: 1,
       revision: this.ranking.revision + 1,
       mode,
+      crossHarness: params.crossHarness === true,
       tiers: params.tiers,
       unranked: params.unranked,
       models: params.models,

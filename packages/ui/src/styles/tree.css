@@ -398,6 +398,46 @@ button.sev-title {
   margin: 4px 0 0;
   font-size: calc(12px * var(--fs));
 }
+/* 开始时模型越级（tree/ModelLimitNotice.tsx）：一句原因，下面就地改用允许的模型，再给两个跳转 */
+.limit-note {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--wait) 55%, transparent);
+  border-radius: var(--r2);
+  background: color-mix(in srgb, var(--wait) 9%, transparent);
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
+}
+.limit-text,
+.limit-none {
+  margin: 0;
+  color: var(--ink);
+}
+.limit-none {
+  color: var(--ink-3);
+}
+.limit-use {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.limit-use .req-input {
+  width: auto;
+  min-width: 160px;
+  max-width: 260px;
+  height: calc(20px * var(--fs) + 8px);
+  padding: 0 6px;
+  font-size: calc(12px * var(--fs));
+}
+.limit-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 /* 开始了：下面一行是起出来的子会话，点了进去 */
 .prop-child {
   display: flex;
@@ -1214,4 +1254,16 @@ button.agent-row:hover {
   min-width: 0;
   resize: vertical;
   margin-top: 8px;
+}
+
+/* 经理设置里工作线模型高于经理时的即时提示（manager/ManagerLimitHint.tsx） */
+.limit-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--wait);
+}
+.limit-hint .mini {
+  color: var(--accent);
 }

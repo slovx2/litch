@@ -96,6 +96,8 @@ const PATHS = {
   trash: <path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5M7 7v4M9 7v4" />,
   /** 侧聊：前面一个对话气泡，后面露出另一个的一角 */
   aside: <path d="M2.5 5.5h8v5.5h-4.5l-2 2v-2h-1.5zM5.5 5.5v-2.5h8v5.5h-1.5v1.5l-1.5-1.5" />,
+  /** 拖动手柄：两列三行小点 */
+  grip: <path d="M6 3.5v1M10 3.5v1M6 7.5v1M10 7.5v1M6 11.5v1M10 11.5v1" />,
 }
 
 export type IconName = keyof typeof PATHS

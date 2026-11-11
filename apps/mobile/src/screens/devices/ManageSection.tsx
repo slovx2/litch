@@ -430,7 +430,16 @@ function HarnessHead({
 const belongsTo = (spec: SettingSpecView, harness: string) =>
   spec.scope.kind === 'harness' && spec.scope.harness === harness
 
-export function ManageSection({ device, harnessId }: { device: DeviceView; harnessId?: string }) {
+export function ManageSection({
+  device,
+  harnessId,
+  revealRanking = false,
+}: {
+  device: DeviceView
+  harnessId?: string
+  /** 展开模型等级排序（越级提示里的跳转） */
+  revealRanking?: boolean
+}) {
   const channel = useChannel()
   const [install, setInstall] = useState<InstallTopicView>()
   useEffect(() => {
@@ -528,7 +537,7 @@ export function ManageSection({ device, harnessId }: { device: DeviceView; harne
   const loose = deviceSpecs.filter((spec) => !groups.some((group) => group.id === spec.group))
   return (
     <View testID="manage">
-      {device.modelRanking && <ModelRanking deviceId={deviceId} />}
+      {device.modelRanking && <ModelRanking device={device} reveal={revealRanking} />}
       {device.harnesses.map((harness) => {
         const specs = schema.settings.filter((spec) => belongsTo(spec, harness.id))
         const enable =

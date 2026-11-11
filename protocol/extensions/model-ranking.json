@@ -1,6 +1,6 @@
 {
   "extension": "modelRanking",
-  "description": "执行设备的子会话模型等级。默认只在 Claude Code、Codex 各自内部比较；自定义后所有 harness 共用同一顺序。只限制 Litch 子会话，不限制原生子代理的模型。",
+  "description": "执行设备的子会话模型等级。crossHarness 缺省 false；内置和自定义默认只比较同 harness，只有显式开启跨 harness 比较才使用统一阶梯。",
   "appliesTo": "有 Go 控制进程的设备聚合面；Claude 单引擎连接声明后可读 litchModelIdentity 元数据。",
   "declaration": {
     "where": "initialize.params.capabilities.litchExtensions",
@@ -19,7 +19,7 @@
     "tiers 从低到高，同组并级；所有已知模型恰好出现一次，未分级放 unranked。",
     "内置 Claude 家族为 Haiku、Sonnet、Opus、Fable；Codex 已知系列为 Luna、Sol、Astra。任意网关名称不自动信任。",
     "模型身份键是 JSON 编码的 [harness,provider,canonicalModel]；Claude provider 与 resolved 由原生目录补充，界面不可伪造身份元数据。",
-    "相同有效身份沿用允许，未知身份间的切换拒绝；自定义模式也比较跨 harness。",
+    "相同有效身份沿用允许；crossHarness 关闭时跨 harness 一律放行，与是否已分级无关。同 harness 按 builtin 内置档位或 custom 用户阶梯比较；crossHarness 打开时统一使用阶梯，未分级切换拒绝。",
     "设备创建入口先校验所有显式与继承模型。超限调用失败，返回允许模型列表，不自动降级。",
     "litch/sessionProposal/accept 的用户 overrides 可带 modelSelected:true 和具体 model，表示用户亲自选择，只有这次允许例外；工具 accept 忽略此标记。预填模型和直接开始不算选择。权限上限不豁免。",
     "配置持久化在执行设备 <home>/device/model-ranking.json，Go 独占原子写入，保留四份备份。expectedRevision 冲突拒绝。",
@@ -52,7 +52,9 @@
       "name": "litch/device/modelRanking/reset",
       "params": {
         "type": "object",
-        "required": ["expectedRevision"],
+        "required": [
+          "expectedRevision"
+        ],
         "properties": {
           "expectedRevision": {
             "type": "integer",
@@ -89,12 +91,25 @@
           }
         }
       }
+    },
+    {
+      "kind": "Error",
+      "description": "litch/session/start 和 litch/sessionProposal/accept 的 error.data；litch_sessions.start/accept 失败结果在附加 JSON 的 modelLimit 字段中返回同一结构。英文 error.message 保留。",
+      "schema": {
+        "$ref": "#/definitions/ModelLimitFailure"
+      }
     }
   ],
   "definitions": {
     "Model": {
       "type": "object",
-      "required": ["key", "harness", "model", "name", "available"],
+      "required": [
+        "key",
+        "harness",
+        "model",
+        "name",
+        "available"
+      ],
       "properties": {
         "key": {
           "type": "string"
@@ -133,7 +148,12 @@
     },
     "Write": {
       "type": "object",
-      "required": ["expectedRevision", "tiers", "unranked", "models"],
+      "required": [
+        "expectedRevision",
+        "tiers",
+        "unranked",
+        "models"
+      ],
       "properties": {
         "expectedRevision": {
           "type": "integer",
@@ -160,6 +180,11 @@
             "type": "string"
           },
           "description": "用户主动移动的模型，主动留在未分级的项不会自动归类"
+        },
+        "crossHarness": {
+          "type": "boolean",
+          "default": false,
+          "description": "显式开启跨 harness 等级比较；缺省 false，不随自定义排序自动开启"
         }
       }
     },
@@ -180,7 +205,10 @@
           "type": "integer"
         },
         "mode": {
-          "enum": ["builtin", "custom"]
+          "enum": [
+            "builtin",
+            "custom"
+          ]
         },
         "tiers": {
           "$ref": "#/definitions/Tiers"
@@ -215,6 +243,83 @@
         },
         "schemaVersion": {
           "const": 1
+        },
+        "crossHarness": {
+          "type": "boolean",
+          "default": false,
+          "description": "显式开启跨 harness 等级比较；缺省 false，不随自定义排序自动开启"
+        }
+      }
+    },
+    "ModelLimitFailure": {
+      "type": "object",
+      "required": [
+        "litch",
+        "kind",
+        "parent",
+        "child",
+        "allowed",
+        "allowedModels",
+        "parentModel",
+        "requestedModel",
+        "mode",
+        "crossHarness",
+        "revision"
+      ],
+      "properties": {
+        "litch": {
+          "enum": [
+            "model_cap_exceeded",
+            "model_rank_unknown"
+          ]
+        },
+        "kind": {
+          "enum": [
+            "exceeded",
+            "unranked"
+          ]
+        },
+        "parent": {
+          "$ref": "#/definitions/Model"
+        },
+        "child": {
+          "$ref": "#/definitions/Model"
+        },
+        "allowed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Model"
+          }
+        },
+        "allowedModels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "parentModel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requestedModel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "enum": [
+            "builtin",
+            "custom"
+          ]
+        },
+        "crossHarness": {
+          "type": "boolean"
+        },
+        "revision": {
+          "type": "integer"
         }
       }
     }

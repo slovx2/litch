@@ -10,6 +10,7 @@ import {
   type DeviceView,
   keys,
   managerMark,
+  type ProposalOverrides,
   type SandboxLevel,
   type SessionSummary,
 } from '@litch/core'
@@ -29,6 +30,7 @@ import { Sheet, type SheetAction } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { useProposalAct, useSessionStore } from './hooks'
 import { startBlocked } from './logic'
+import { ModelLimitNotice } from './ModelLimitNotice'
 import { ProposalNote } from './ProposalNote'
 import { useWorktreesOn, WorktreeSwitch } from './WorktreeSwitch'
 
@@ -96,6 +98,13 @@ export function useProposalActs(
     start: () => {
       if (off || worktreeBlock) return
       void act.accept(withProposalNote(prompt, note, worktrees ? { worktree } : {}))
+    },
+    /** 越级提示里“改用此模型开始”：照卡上的补充说明和工作树开关，换掉模型再开始 */
+    startWith: (overrides: ProposalOverrides) => {
+      if (off || worktreeBlock) return
+      void act.accept(
+        withProposalNote(prompt, note, { ...(worktrees ? { worktree } : {}), ...overrides }),
+      )
     },
     act,
     off,
@@ -207,7 +216,14 @@ export function ProposalActsRow({
           }}
         />
       ) : null}
-      {act.failure ? (
+      {act.limit ? (
+        <ModelLimitNotice
+          limit={act.limit}
+          busy={off}
+          testID={`proposal:${proposalId}:limit`}
+          onUseModel={(choice) => acts.startWith({ ...choice, modelSelected: true })}
+        />
+      ) : act.failure ? (
         <Text style={[styles.failure, { color: c.err, fontSize: font.size.meta }]}>
           {act.failure}
         </Text>

@@ -7,6 +7,7 @@ import {
   type ModelRankingSnapshot,
   mergeRanking,
   modelKey,
+  modelLimitFailure,
   type RankedModel,
   rankingAllows,
 } from '../../protocol/src/model-ranking.mjs'
@@ -90,6 +91,7 @@ export class DeviceModelRanking {
           'modelRanking.merge',
           {
             expectedRevision: config.revision,
+            crossHarness: config.crossHarness === true,
             manual: merged.manual,
             tiers: merged.tiers,
             unranked: merged.unranked,
@@ -103,7 +105,12 @@ export class DeviceModelRanking {
         merged = mergeRanking(current, groups.flat())
       }
     }
-    const snapshot = { ...merged, builtinRevision: MODEL_RANKING_REVISION, errors }
+    const snapshot = {
+      ...merged,
+      crossHarness: merged.crossHarness === true,
+      builtinRevision: MODEL_RANKING_REVISION,
+      errors,
+    }
     if (merged.revision !== config.revision)
       this.tree.host.announce(MODEL_RANKING.changed, snapshot, 'modelRanking')
     return snapshot
@@ -121,6 +128,8 @@ export class DeviceModelRanking {
     if (snapshot.revision !== params.expectedRevision)
       throw new ProtocolError(-32602, 'Model ranking changed. Reload before saving.')
     if (method === MODEL_RANKING.write) {
+      if (params.crossHarness !== undefined && typeof params.crossHarness !== 'boolean')
+        throw new ProtocolError(-32602, 'crossHarness must be a boolean')
       if (!Array.isArray(params.tiers) || !Array.isArray(params.unranked))
         throw new ProtocolError(-32602, 'tiers and unranked are required')
       if (params.tiers.some((tier) => !Array.isArray(tier) || tier.length === 0))
@@ -139,6 +148,7 @@ export class DeviceModelRanking {
       const chosen = {
         ...snapshot,
         mode: 'custom' as const,
+        crossHarness: params.crossHarness === true,
         manual: Array.isArray(params.manual)
           ? params.manual.filter((key): key is string => typeof key === 'string' && known.has(key))
           : (snapshot.manual ?? []),
@@ -151,6 +161,7 @@ export class DeviceModelRanking {
         'modelRanking.write',
         {
           expectedRevision: params.expectedRevision,
+          crossHarness: merged.crossHarness === true,
           manual: merged.manual,
           tiers: merged.tiers,
           unranked: merged.unranked,
@@ -180,9 +191,14 @@ export async function checkChildModel(
   userPicked = false,
 ): Promise<string | null> {
   const config = tree.host.modelRanking ? await tree.host.modelRanking() : emptyRanking()
-  if (config.mode === 'builtin' && harness !== parentHarness) return model
-  // 未提供内置等级的 harness 保持原行为；自定义则所有 harness 统一比较。
-  if (config.mode === 'builtin' && !['claude-code', 'codex'].includes(harness)) return model
+  if (!config.crossHarness && harness !== parentHarness) return model
+  // 未提供内置等级的 harness 保持原行为；显式跨 harness 阶梯不采用此例外。
+  if (
+    !config.crossHarness &&
+    config.mode === 'builtin' &&
+    !['claude-code', 'codex'].includes(harness)
+  )
+    return model
   const read = async (id: string) => {
     try {
       return await modelCatalog(await tree.link(id), 50)
@@ -200,10 +216,16 @@ export async function checkChildModel(
   ])
   if (userPicked && model && child.available) return child.model
   if (child.model && rankingAllows(effective, parent, child)) return child.model
-  const allowed = targetRows
-    .map((row) => rankedModel(harness, row.id, row))
-    .filter((row) => rankingAllows(effective, parent, row))
-    .map((row) => row.model)
+  const failure = modelLimitFailure(
+    effective,
+    parent,
+    child,
+    targetRows.map((row) => rankedModel(harness, row.id, row)),
+    model,
+  )
+  if (!failure) throw new ProtocolError(-32602, 'The requested default model could not be resolved')
+  failure.parentModel = parentModel
+  const allowed = failure.allowedModels
   if (harness === parentHarness && parentModel && !allowed.includes(parentModel))
     allowed.unshift(parentModel)
   throw Object.assign(
@@ -212,12 +234,7 @@ export async function checkChildModel(
       `Model exceeds the parent limit or is unranked（超出上限或未分级）: ${parentHarness}/${parentModel ?? 'unknown'} → ${harness}/${model ?? 'default'}. Allowed models: ${allowed.slice(0, 30).join(', ') || 'none'}. Choose an allowed model or inherit the parent.`,
     ),
     {
-      data: {
-        litch: 'model_cap_exceeded',
-        allowedModels: allowed,
-        parentModel,
-        requestedModel: model,
-      },
+      data: failure,
     },
   )
 }

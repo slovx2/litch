@@ -4,6 +4,8 @@
 // 每一句的各语言文本在界面包的 i18n 目录里，那边有类型检查保证这里的每一句都有对应的文本。
 
 export type PhraseKey =
+  | 'modelRanking.limitExceeded'
+  | 'modelRanking.limitUnranked'
   | 'notice.signInRequired'
   | 'session.inputSyncing'
   | 'session.inputCompacting'

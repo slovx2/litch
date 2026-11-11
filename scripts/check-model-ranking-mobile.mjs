@@ -93,14 +93,15 @@ try {
   })
   const body = () =>
     read(`document.querySelector('[data-testid="model-ranking"]')?.textContent??''`)
-  const click = async (label, last = false) => {
+  // 动作单、确认框挂在页面最外层，按 testID 在整页里找
+  const tap = async (testID) => {
     try {
       await until(
         () =>
           read(
-            `(()=>{const root=document.querySelector('[data-testid="model-ranking"]');const buttons=[...root?.querySelectorAll('[role="button"],button')??[]].filter(e=>e.textContent.trim()===${JSON.stringify(label)});const button=buttons.at(${last ? -1 : 0});if(!button)return false;button.click();return true})()`,
+            `(()=>{const el=document.querySelector('[data-testid=${JSON.stringify(testID)}]');if(!el||el.getAttribute('aria-disabled')==='true')return false;el.click();return true})()`,
           ),
-        label,
+        testID,
         60000,
       )
     } catch (error) {
@@ -109,19 +110,20 @@ try {
     }
     await read('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
   }
-  await click('管理等级')
+  await tap('ranking:toggle')
   await until(async () => (await body()).includes('gpt-6-astra'), '预排型号', 60000)
   assert.match(await body(), /内置排序/)
-  await click('移动模型')
-  await click('第 1 级')
+  // 点一行出调级动作单：Luna 上一级，并入 Sol 那一级
+  await tap('ranking:model:gpt-6-luna')
+  await tap('ranking:action:up')
   assert.match(await body(), /有未保存的修改/)
-  await click('保存自定义排序')
+  await tap('ranking:save')
   await until(
     async () => (await body()).includes('自定义排序') && !(await body()).includes('有未保存'),
     '保存自定义',
   )
-  await click('关闭')
-  await click('管理等级')
+  await tap('ranking:toggle')
+  await tap('ranking:toggle')
   await until(async () => (await body()).includes('自定义排序'), '重开保留')
   await read(
     `document.querySelector('[data-testid="model-ranking"]').scrollIntoView({block:'start'})`,
@@ -130,13 +132,13 @@ try {
   mkdirSync(join(repo, '.artifacts'), { recursive: true })
   const shot = await call('Page.captureScreenshot', { format: 'png' })
   writeFileSync(join(repo, '.artifacts/model-cap-mobile.png'), Buffer.from(shot.data, 'base64'))
-  await click('恢复内置排序')
-  await click('恢复内置排序', true)
+  await tap('ranking:reset')
+  await tap('confirm:ok')
   await until(
-    async () => (await body()).includes('内置排序') && !(await body()).includes('清除自定义'),
+    async () => (await body()).includes('内置排序') && !(await body()).includes('自定义排序'),
     '恢复内置',
   )
-  console.log('手机 390px：预排、移动并级、保存自定义、重开保留、恢复内置通过')
+  console.log('手机 390px：预排、动作单调级、保存自定义、重开保留、恢复内置通过')
 } finally {
   cdp?.close()
   for (const child of [browser, server])

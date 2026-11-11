@@ -127,6 +127,7 @@ import { SAMPLE_TEXT, type SampleLang } from './sample-text.mjs'
 import { dumpCall, shotsCall } from './sample-tools.mjs'
 
 export interface MockCoreOptions {
+  modelRankingScenario?: import('./sample-data.mjs').SampleModelRankingScenario
   clock: Clock
   /** E2E 显式推进后台任务、目标和提案过期；缺省仍按真实场景计时。 */
   scenarioClock?: Clock
@@ -1938,6 +1939,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   // 电脑操作预览（mock-automation.mts）
   const automation = createMockAutomation(clock)
   const manage = createMockManagement({
+    ...(options.modelRankingScenario ? { modelRankingScenario: options.modelRankingScenario } : {}),
     clock,
     stepMs: chunkMs,
     // 任务卡的开关改了：设备的开关一栏跟着变
@@ -2421,6 +2423,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
 
   // 会话树：Litch 子会话、提案、回报与唤醒，引擎自己的子代理线程（mock-tree.mts）
   const tree = createMockTree({
+    modelRanking: manage.modelRanking,
     lang,
     setProposalTimer: (run, ms) => scenarioClock.setTimer(run, ms),
     now: () => clock.now(),
