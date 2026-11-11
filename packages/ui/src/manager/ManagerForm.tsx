@@ -25,6 +25,7 @@ import {
   managerTabTarget,
 } from './form-steps.ts'
 import { useBoardFormKeys } from './form-submit-keys.ts'
+import { ManagerLimitHint } from './ManagerLimitHint.tsx'
 import {
   fitManagerHarness,
   fitManagerModels,
@@ -558,6 +559,14 @@ export function ManagerForm({
                   </option>
                 ))}
               </select>
+              <ManagerLimitHint
+                device={device}
+                sessionId={manager?.threadId ?? ''}
+                harness={form.harness}
+                model={model?.id ?? form.model}
+                lineHarness={form.dispatch.harness ?? form.harness}
+                lineModel={lineModel?.id ?? form.dispatch.model}
+              />
             </label>
             <label className="form-field">
               {t('manager.lineEffort')}

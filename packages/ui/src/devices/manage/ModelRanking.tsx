@@ -1,21 +1,49 @@
-import { keys, type ModelRankingSnapshot, moveRankedModel } from '@litch/core'
-import { useEffect, useState } from 'react'
+// 设备详情里的“模型等级排序”：派子会话时父会话只能派同级或更低的模型，这里排哪个模型在哪一级。
+// 收着时标题后面一句摘要；打开才向设备读模型清单。改动先进草稿，点“保存”才成为设备的规则。
+// “跨 harness 比较等级”关着时按 harness 分组，每组一条自己的阶梯；开着时只有一条共用的阶梯。
+import { type DeviceView, keys, type ModelRankingSnapshot } from '@litch/core'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { whyNot } from '../../app/errors.ts'
+import { Fold } from '../../app/Fold.tsx'
+import { Icon } from '../../app/icons.tsx'
 import { useLeaveGuard } from '../../app/leave-guard.tsx'
 import { useKey, useServices } from '../../app/services.tsx'
+import { RankingPartial } from './RankingPartial.tsx'
+import { type RankEditor, RankLadder, UnrankedZone } from './RankLadder.tsx'
+import {
+  applyDrop,
+  applyRank,
+  crossHarnessOf,
+  laddersOf,
+  unrankedOf,
+  writeOf,
+} from './ranking-view.ts'
 
-/** 草稿只在保存时成为设备策略；预填型号与打开页面都不构成用户改级。 */
-export function ModelRanking({ deviceId }: { deviceId: string }) {
+interface ModelRankingProps {
+  device: DeviceView
+  /** 别处要求直接看这一节（越级提示里的“调整模型等级”）：打开并滚到这里 */
+  reveal?: boolean
+  /** 打开某个 harness 的详情设置（读取失败那一条的“设置”） */
+  onSettings?: ((harnessId: string) => void) | null
+}
+
+export function ModelRanking({ device, reveal = false, onSettings = null }: ModelRankingProps) {
+  const deviceId = device.id
   const { channel } = useServices()
   const t = useT()
+  const id = useId()
+  const section = useRef<HTMLElement>(null)
   const latest = useKey<ModelRankingSnapshot>(keys.modelRanking(deviceId))
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(reveal)
   const [draft, setDraft] = useState<ModelRankingSnapshot | null>(null)
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>(null)
-  const [reset, setReset] = useState(false)
+  const [confirmReset, setConfirmReset] = useState(false)
+  const [dragging, setDragging] = useState<string | null>(null)
+  /** 键盘调级之后焦点留在被移动的那一行的手柄上 */
+  const [focusKey, setFocusKey] = useState<string | null>(null)
   useEffect(() => {
     if (latest && !dirty) setDraft(latest)
   }, [latest, dirty])
@@ -33,18 +61,11 @@ export function ModelRanking({ deviceId }: { deviceId: string }) {
                 expectedRevision: draft?.revision ?? 0,
               })
             : draft &&
-              (await channel.command('device.modelRanking.write', {
-                deviceId,
-                expectedRevision: draft.revision,
-                tiers: draft.tiers,
-                unranked: draft.unranked,
-                models: draft.models,
-                manual: draft.manual ?? [],
-              }))
+              (await channel.command('device.modelRanking.write', { deviceId, ...writeOf(draft) }))
       if (result) {
         setDraft(result)
         setDirty(false)
-        setReset(false)
+        setConfirmReset(false)
       }
       return Boolean(result)
     } catch (failure) {
@@ -55,137 +76,195 @@ export function ModelRanking({ deviceId }: { deviceId: string }) {
     }
   }
   leave.current = () => request('write')
-  const move = (key: string, target: number | null, separate = false) => {
-    if (!draft || busy) return
-    setDraft({ ...draft, ...moveRankedModel(draft, key, target, separate) })
+  // 打开时读一次；外面要求直接看这一节时（越级提示的跳转）也读，并滚过来
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 只在打开的那一下读
+  useEffect(() => {
+    if (open && !dirty) void request('read')
+  }, [open])
+  useEffect(() => {
+    if (!reveal) return
+    setOpen(true)
+    section.current?.scrollIntoView({ block: 'start' })
+  }, [reveal])
+  useEffect(() => {
+    if (!focusKey) return
+    section.current
+      ?.querySelector<HTMLElement>(`[data-rank-handle="${CSS.escape(focusKey)}"]`)
+      ?.focus()
+    setFocusKey(null)
+  }, [focusKey])
+
+  const edit = (next: ModelRankingSnapshot | null) => {
+    if (!next || next === draft) return
+    setDraft(next)
     setDirty(true)
   }
-  const group = (members: string[], level: number | null) => (
-    <fieldset
-      key={level ?? 'unranked'}
-      disabled={busy}
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={(event) => {
-        event.preventDefault()
-        const key = event.dataTransfer.getData('application/litch-model')
-        if (draft?.models.some((model) => model.key === key)) move(key, level)
-      }}
-    >
-      <legend>
-        {level === null ? t('ranking.unranked') : t('ranking.level', { level: level + 1 })}
-      </legend>
-      {members.map((key) => {
-        const model = draft?.models.find((row) => row.key === key)
-        if (!model) return null
-        return (
-          <div className="mng-row" key={key}>
-            <button
-              type="button"
-              draggable={!busy}
-              aria-label={`${t('ranking.move')} ${model.name}`}
-              onClick={(event) =>
-                event.currentTarget.parentElement?.querySelector('select')?.focus()
-              }
-              onDragStart={(event) => event.dataTransfer.setData('application/litch-model', key)}
-            >
-              ↕
-            </button>
-            <span className="mng-row-text">
-              {model.name} · {model.harness}
-              {model.available ? '' : ` · ${t('ranking.unavailable')}`}
-            </span>
-            <select
-              aria-label={`${t('ranking.move')} ${model.name}`}
-              value={level ?? 'unranked'}
-              onChange={(event) => {
-                const value = event.target.value
-                move(
-                  key,
-                  value === 'unranked'
-                    ? null
-                    : value === 'new'
-                      ? (draft?.tiers.length ?? 0)
-                      : Number(value),
-                  value === 'new',
-                )
-              }}
-            >
-              {draft?.tiers.map((tier, index) => (
-                <option key={tier.join()} value={index}>
-                  {t('ranking.level', { level: index + 1 })}
-                </option>
-              ))}
-              <option value="new">{t('ranking.new')}</option>
-              <option value="unranked">{t('ranking.unranked')}</option>
-            </select>
-          </div>
-        )
-      })}
-    </fieldset>
-  )
+  const order = device.harnesses.map((entry) => entry.id)
+  const editor: RankEditor | null = draft
+    ? {
+        device,
+        draft,
+        busy,
+        dragging,
+        setDragging,
+        rank: (key, action) => {
+          edit({ ...draft, ...applyRank(draft, key, action) })
+          setFocusKey(key)
+        },
+        drop: (key, target) => edit({ ...draft, ...applyDrop(draft, key, target) }),
+      }
+    : null
+  const cross = draft ? crossHarnessOf(draft) : false
+  const summary = draft ? (
+    <span className="mng-sum" data-mode={draft.mode} data-cross={cross}>
+      {t(draft.mode === 'custom' ? 'ranking.custom' : 'ranking.builtin')} ·{' '}
+      {t(cross ? 'ranking.across' : 'ranking.within')}
+      {dirty ? ` · ${t('ranking.unsaved')}` : ''}
+    </span>
+  ) : null
+
   return (
-    <section className="mng-sec" data-model-ranking>
+    <section
+      ref={section}
+      className="mng-sec rk"
+      data-model-ranking
+      data-open={open}
+      data-dragging={dragging !== null}
+    >
       <div className="mng-sec-head">
-        <h2>{t('ranking.title')}</h2>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => {
-            setOpen(!open)
-            if (!open && !dirty) void request('read')
-          }}
-        >
-          {t(open ? 'ranking.close' : 'ranking.open')}
-        </button>
+        <h2>
+          <Fold open={open} onToggle={() => setOpen(!open)} controls={id}>
+            {t('ranking.title')}
+          </Fold>
+        </h2>
+        {summary}
+        <span className="grow" />
+        {open ? (
+          <button
+            type="button"
+            className="ibtn"
+            data-act="ranking-reload"
+            title={t('ranking.refresh')}
+            aria-label={t('ranking.refresh')}
+            disabled={busy}
+            onClick={() => void request('read')}
+          >
+            <Icon name="reload" small />
+          </button>
+        ) : null}
       </div>
-      {open && (
-        <>
-          <p className="mng-sec-note">{t('ranking.note')}</p>
-          {error != null && <p role="alert">{whyNot(error, t)}</p>}
-          {busy && <p role="status">{t('ranking.loading')}</p>}
-          {draft && (
+      {open ? (
+        <div id={id} className="mng-sec-body">
+          <p className="mng-sec-note">{t('ranking.intro')}</p>
+          {error != null ? (
+            <p className="mng-note err" role="alert">
+              {whyNot(error, t)}
+            </p>
+          ) : null}
+          {!draft ? (
+            <p className="mng-note" role="status">
+              {t('ranking.loading')}
+            </p>
+          ) : null}
+          {draft && editor ? (
             <>
-              <p>
-                {t(draft.mode === 'custom' ? 'ranking.custom' : 'ranking.builtin')}
-                {dirty ? ` · ${t('ranking.unsaved')}` : ''}
-              </p>
-              {Object.keys(draft.errors).length > 0 && (
-                <p role="status">
-                  {t('ranking.partial')}: {Object.keys(draft.errors).join(', ')}
-                </p>
-              )}
-              {draft.tiers
-                .map((members, level) => ({ members, level }))
-                .reverse()
-                .map(({ members, level }) => group(members, level))}
-              {group(draft.unranked, null)}
-              {draft.unranked.length > 0 && (
-                <p className="mng-sec-note">{t('ranking.unknownNote')}</p>
-              )}
-              <button type="button" disabled={busy} onClick={() => void request('write')}>
-                {t('ranking.save')}
-              </button>
-              <button type="button" disabled={busy} onClick={() => setReset(true)}>
-                {t('ranking.reset')}
-              </button>
-              {reset && (
-                <div>
-                  <p>{t('ranking.resetNote')}</p>
-                  <button type="button" disabled={busy} onClick={() => void request('reset')}>
+              <div className="rk-switch">
+                <div className="rk-switch-text">
+                  <label htmlFor={`${id}-cross`}>{t('ranking.cross')}</label>
+                  <span className="mng-sec-note">
+                    {t(cross ? 'ranking.cross.on' : 'ranking.cross.off')}
+                  </span>
+                </div>
+                <button
+                  id={`${id}-cross`}
+                  type="button"
+                  role="switch"
+                  className="switch"
+                  data-act="ranking-cross"
+                  aria-checked={cross}
+                  disabled={busy}
+                  onClick={() => edit({ ...draft, crossHarness: !cross })}
+                >
+                  <i />
+                </button>
+              </div>
+              <RankingPartial
+                device={device}
+                errors={draft.errors}
+                busy={busy}
+                onReload={() => void request('read')}
+                onSettings={onSettings}
+              />
+              {laddersOf(draft, order).map((ladder) => (
+                <RankLadder key={ladder.harness ?? 'all'} editor={editor} ladder={ladder} />
+              ))}
+              <UnrankedZone editor={editor} models={unrankedOf(draft, order)} />
+              {draft.models.length === 0 ? <p className="mng-note">{t('ranking.empty')}</p> : null}
+              <div className="rk-foot">
+                {confirmReset ? (
+                  <span className="rk-confirm" role="alert">
+                    <span>{t('ranking.resetNote')}</span>
+                    <button
+                      type="button"
+                      className="btn"
+                      data-act="ranking-reset-confirm"
+                      disabled={busy}
+                      onClick={() => void request('reset')}
+                    >
+                      {t('ranking.resetConfirm')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      onClick={() => setConfirmReset(false)}
+                    >
+                      {t('ranking.cancel')}
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    data-act="ranking-reset"
+                    disabled={busy || (draft.mode === 'builtin' && !cross)}
+                    onClick={() => setConfirmReset(true)}
+                  >
                     {t('ranking.reset')}
                   </button>
-                  <button type="button" onClick={() => setReset(false)}>
-                    {t('ranking.cancel')}
-                  </button>
-                </div>
-              )}
+                )}
+                <span className="grow" />
+                {dirty ? (
+                  <>
+                    <span className="mng-sum">{t('ranking.unsaved')}</span>
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      data-act="ranking-discard"
+                      disabled={busy}
+                      onClick={() => {
+                        setDirty(false)
+                        setDraft(latest ?? null)
+                        if (!latest) void request('read')
+                      }}
+                    >
+                      {t('ranking.discard')}
+                    </button>
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  className="btn primary"
+                  data-act="ranking-save"
+                  disabled={busy || !dirty}
+                  onClick={() => void request('write')}
+                >
+                  {t('ranking.save')}
+                </button>
+              </div>
             </>
-          )}
-          <button type="button" disabled={busy} onClick={() => void request('read')}>
-            {t('ranking.refresh')}
-          </button>
-        </>
-      )}
+          ) : null}
+        </div>
+      ) : null}
     </section>
   )
 }

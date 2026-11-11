@@ -8,6 +8,7 @@ import {
   createMockCore,
   createPortPair,
   type Port,
+  type SampleModelRankingScenario,
   serveChannel,
 } from '@litch/core'
 
@@ -148,6 +149,13 @@ export interface Boot {
   shell: 'electron' | 'browser'
 }
 
+const MOCK_RANKINGS: readonly SampleModelRankingScenario[] = [
+  'builtin',
+  'custom-local',
+  'custom-cross',
+  'partial',
+]
+
 /** lang：在浏览器里起模拟核心时，示例数据用哪种语言 */
 export async function openChannel(lang: 'zh-CN' | 'en'): Promise<Boot> {
   const shell = window.litchShell
@@ -156,6 +164,17 @@ export async function openChannel(lang: 'zh-CN' | 'en'): Promise<Boot> {
     return { channel: connectChannel(fromMessagePort(port)), shell: 'electron' }
   }
   const [uiPort, corePort] = createPortPair()
-  serveChannel(corePort, createMockCore({ clock: browserClock, lang }), { clock: browserClock })
+  // 预览地址带 mockRanking=builtin|custom-local|custom-cross|partial：模型等级排序用模拟核心的那个场景
+  const ranking = new URLSearchParams(location.search).get('mockRanking')
+  const modelRankingScenario = MOCK_RANKINGS.find((entry) => entry === ranking)
+  serveChannel(
+    corePort,
+    createMockCore({
+      clock: browserClock,
+      lang,
+      ...(modelRankingScenario ? { modelRankingScenario } : {}),
+    }),
+    { clock: browserClock },
+  )
   return { channel: connectChannel(uiPort), shell: 'browser' }
 }

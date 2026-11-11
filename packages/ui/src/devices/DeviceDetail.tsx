@@ -340,7 +340,11 @@ export function DeviceDetail({ deviceId, section = null, onBack, onClose }: Devi
           <ServiceSection device={device} reveal={section === 'service'} />
           <PhonesSection device={device} />
           {managed ? (
-            <ManagePanel device={device} onSettings={setSettingsOf} />
+            <ManagePanel
+              device={device}
+              onSettings={setSettingsOf}
+              revealRanking={section === 'ranking'}
+            />
           ) : device.manageable ? (
             <div className="mng-state" data-manage-state="offline">
               {t('manage.offline')}

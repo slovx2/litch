@@ -158,6 +158,13 @@ export const SCENES: Scene[] = [
     steps: [],
   },
   {
+    id: 'model-ranking',
+    group: '设备',
+    name: '模型等级排序',
+    note: '地址加 rank=off|on|unranked|partial|limit：分组阶梯、共用阶梯、未分级、读不到、越级提示',
+    steps: [],
+  },
+  {
     id: 'wake-off',
     group: '会话',
     name: '子会话不唤醒',

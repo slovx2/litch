@@ -38,6 +38,7 @@ import {
   onAssistantRequest,
   onDeviceRequest,
   onManagerDraftsRequest,
+  onManagerSettingsRequest,
   onManagersRequest,
   onNewSessionRequest,
   onOpenSessionRequest,
@@ -396,6 +397,27 @@ export function App() {
         select(route)
       }),
     [select],
+  )
+
+  // 越级提示里的“改经理默认模型”：进那个经理的页面并打开设置
+  useEffect(
+    () =>
+      onManagerSettingsRequest((route) => {
+        const manager = managerData.managers.find(
+          (entry) =>
+            entry.deviceId === route.deviceId &&
+            (entry.threadId === route.sessionId ||
+              entry.historyThreadIds?.includes(route.sessionId)),
+        )
+        if (!manager) return
+        const key = `${manager.deviceId}:${manager.id}`
+        setManagerLocations((was) => ({
+          ...was,
+          [key]: { tab: 'inbox', narrow: 'board', ...was[key], settings: true },
+        }))
+        select({ deviceId: manager.deviceId, sessionId: manager.threadId })
+      }),
+    [select, managerData.managers],
   )
 
   // 别处要直接进某台设备的详情（顶栏弹层里“不确认”那一行的“去设置”、侧栏设备行上的升级记号）

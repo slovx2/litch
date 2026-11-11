@@ -31,6 +31,7 @@ import { CardMarkdown } from '../transcript/CardMarkdown.tsx'
 import type { ItemRef } from '../transcript/messages.tsx'
 import { useToggle } from '../transcript/state.ts'
 import { useWorktreesOn, WorktreeCheck } from '../worktrees/WorktreeCheck.tsx'
+import { ModelLimitNotice } from './ModelLimitNotice.tsx'
 import { proposalSummary } from './proposal-brief.ts'
 import { withProposalNote } from './proposal-operation.ts'
 import { STATUS_TEXT, useProposalAct, useProposalClock, useProposalList } from './proposals.ts'
@@ -145,7 +146,22 @@ export function ProposalActs({
         />
       </div>
       {worktreeBlock ? <p className="prop-err err">{t(worktreeBlock)}</p> : null}
-      {act.failure ? (
+      {act.limit ? (
+        <ModelLimitNotice
+          limit={act.limit}
+          busy={off}
+          onUseModel={({ harness, model }) =>
+            void act.accept(
+              withProposalNote(proposal.prompt, note, {
+                ...(worktrees ? { worktree } : {}),
+                harness,
+                model,
+                modelSelected: true,
+              }),
+            )
+          }
+        />
+      ) : act.failure ? (
         <p className="prop-err err" role="alert">
           {act.failure}
         </p>

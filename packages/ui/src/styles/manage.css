@@ -637,25 +637,3 @@
 .harness-runtime-line > .dim {
   flex-shrink: 0;
 }
-
-/* 模型等级的并级组；拖拽之外保留下拉选择与键盘操作。 */
-[data-model-ranking] fieldset {
-  min-width: 0;
-  border: 1px solid var(--line-2);
-  border-radius: var(--r1);
-  padding: 8px 12px;
-}
-[data-model-ranking] legend {
-  color: var(--ink-2);
-  padding: 0 4px;
-}
-[data-model-ranking] select {
-  max-width: 45%;
-  color: var(--ink);
-  background: var(--sunken);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r1);
-}
-[data-model-ranking] .mng-row-text {
-  overflow-wrap: anywhere;
-}

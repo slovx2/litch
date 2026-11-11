@@ -6,7 +6,13 @@ import type { Translator } from '../i18n/index.ts'
  * 或者设备服务两种语言各给了一份的。都没有就是 null
  */
 const said = (error: unknown, t: Translator): string | null => {
-  const { text, said: both } = (error ?? {}) as { text?: Text; said?: Bilingual }
+  const {
+    text,
+    said: both,
+    modelLimit,
+  } = (error ?? {}) as { text?: Text; said?: Bilingual; modelLimit?: { text: Text } }
+  // 模型越级：设备给的那一句（哪个模型高于父会话的哪个），不说英文原话
+  if (modelLimit) return t.text(modelLimit.text)
   if (text) return t.text(text)
   return both ? t.said(both) : null
 }

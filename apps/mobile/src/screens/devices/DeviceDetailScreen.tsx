@@ -205,7 +205,7 @@ export function DeviceDetailScreen({ route, navigation }: Props) {
 
         <SectionLabel>{t('manage.harness.title')}</SectionLabel>
         {device.manageable && state === 'online' ? (
-          <ManageSection device={device} />
+          <ManageSection device={device} revealRanking={route.params.section === 'ranking'} />
         ) : (
           <>
             <Text style={[styles.note, { color: theme.c.ink3 }]}>

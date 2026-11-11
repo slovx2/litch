@@ -60,7 +60,7 @@ export function onOpenSessionRequest(listener: (session: SessionRef) => void): (
 }
 
 /** 设备详情里要直接去的一节。service：“设备服务”那一节（侧栏设备行上的升级记号） */
-export type DeviceSection = 'service' | 'tools'
+export type DeviceSection = 'service' | 'tools' | 'ranking'
 
 const deviceListeners = new Set<(deviceId: string, section: DeviceSection | null) => void>()
 
@@ -126,6 +126,18 @@ export function onAssistantRequest(listener: () => void): () => void {
   assistantListeners.add(listener)
   return () => {
     assistantListeners.delete(listener)
+  }
+}
+
+/** 打开某个经理的设置页（越级提示里的“改经理默认模型”）。sessionId 是经理会话 */
+const managerSettingsListeners = new Set<(route: SessionRef) => void>()
+export function requestManagerSettings(route: SessionRef): void {
+  for (const listener of managerSettingsListeners) listener(route)
+}
+export function onManagerSettingsRequest(listener: (route: SessionRef) => void): () => void {
+  managerSettingsListeners.add(listener)
+  return () => {
+    managerSettingsListeners.delete(listener)
   }
 }
 
