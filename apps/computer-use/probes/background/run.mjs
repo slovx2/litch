@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { withChromiumTestArgs } from '../../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 
 const source = dirname(fileURLToPath(import.meta.url))
 const operation = process.argv[2]
@@ -85,11 +86,15 @@ if (operation === 'setup') {
   delete environment.ELECTRON_RUN_AS_NODE
   mkdirSync(environment.HOME, { recursive: true, mode: 0o700 })
   // 没有开启 CDP 端口。夹具只靠本地文件和固定 preload 回传状态。
-  const child = spawn(electron, [join(source, 'electron.cjs'), '--directory', directory], {
-    env: environment,
-    stdio: 'ignore',
-    detached: true,
-  })
+  const child = spawn(
+    electron,
+    withChromiumTestArgs([join(source, 'electron.cjs'), '--directory', directory]),
+    {
+      env: environment,
+      stdio: 'ignore',
+      detached: true,
+    },
+  )
   child.unref()
   execFileSync('open', [
     '-n',

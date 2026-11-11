@@ -6,6 +6,7 @@ import { globSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
 
 const binary = globSync(
@@ -34,17 +35,15 @@ const vite = spawn(
 )
 const browser = spawn(
   binary,
-  [
+  withChromiumTestArgs([
     '--headless=new',
     `--user-data-dir=${work}/profile`,
     '--remote-debugging-port=0',
     '--no-first-run',
     '--no-default-browser-check',
-    '--password-store=basic',
-    '--use-mock-keychain',
     '--disable-background-networking',
     'about:blank',
-  ],
+  ]),
   { env, stdio: 'ignore' },
 )
 let cdp

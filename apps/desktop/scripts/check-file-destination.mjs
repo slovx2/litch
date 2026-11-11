@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { fixtureEnvironment } from '../../../scripts/fixture-environment.mjs'
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 
 const require = createRequire(import.meta.url)
 if (!process.versions.electron) {
@@ -17,7 +18,7 @@ if (!process.versions.electron) {
     server: { host: '127.0.0.1', port: 0 },
   })
   await server.listen()
-  const child = spawn(require('electron'), [fileURLToPath(import.meta.url)], {
+  const child = spawn(require('electron'), withChromiumTestArgs([fileURLToPath(import.meta.url)]), {
     env: {
       ...fixtureEnvironment(),
       HOME: work,

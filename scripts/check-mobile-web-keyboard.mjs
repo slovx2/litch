@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process'
 import { globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
 
 const url = new URL(process.argv[2] ?? 'http://127.0.0.1:5189')
@@ -26,17 +27,15 @@ const out = `.artifacts/web-keyboard/${Date.now()}-${process.pid}`
 mkdirSync(out, { recursive: true })
 const browser = spawn(
   binary,
-  [
+  withChromiumTestArgs([
     '--headless=new',
     `--user-data-dir=${home}/profile`,
     '--remote-debugging-port=0',
     '--no-first-run',
     '--no-default-browser-check',
-    '--password-store=basic',
-    '--use-mock-keychain',
     '--disable-background-networking',
     'about:blank',
-  ],
+  ]),
   {
     env: { PATH: process.env.PATH, HOME: home, CODEX_HOME: join(home, 'codex'), TMPDIR: home },
     stdio: 'ignore',

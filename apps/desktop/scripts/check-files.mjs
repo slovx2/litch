@@ -1,3 +1,4 @@
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 // 侧面板和文件标签的验收：不显示窗口，起三次桌面外壳，各对着一种对面。
 //   --mock     模拟核心（示例文件树）：面板的开合与让位、树、查看器、找文件、右键菜单、对话里的路径、
 //              换会话面板跟着换、降级的设备、皮肤、语言、快捷键和应用菜单
@@ -252,7 +253,7 @@ async function runOne(kind) {
   let output = ''
   let code = 1
   if (!fixture || dirs) {
-    const child = spawn(electron, [appDir], {
+    const child = spawn(electron, withChromiumTestArgs([appDir]), {
       env: {
         ...process.env,
         LITCH_SMOKE: kind === 'mock' ? 'files' : `files-${kind}`,

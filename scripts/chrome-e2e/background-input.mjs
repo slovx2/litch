@@ -102,8 +102,6 @@ try {
       `--load-extension=${installer.extensionDirectory}`,
       '--remote-debugging-port=0',
       '--remote-debugging-address=127.0.0.1',
-      '--use-mock-keychain',
-      '--password-store=basic',
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-background-networking',

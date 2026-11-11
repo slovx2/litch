@@ -5,6 +5,7 @@ import { createServer } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { withChromiumTestArgs } from '../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { Cdp, until } from '../chrome-m0/cdp.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -29,17 +30,15 @@ await new Promise((resolve) => reservation.close(resolve))
 if (port === 9333) throw new Error('Forbidden debug port')
 const child = spawn(
   binary,
-  [
+  withChromiumTestArgs([
     '--headless=new',
     `--user-data-dir=${work}/profile`,
     `--remote-debugging-port=${port}`,
-    '--use-mock-keychain',
-    '--password-store=basic',
     '--no-first-run',
     '--no-default-browser-check',
     '--window-size=1000,1500',
     'about:blank',
-  ],
+  ]),
   { env: { HOME: work, PATH: '/usr/bin:/bin', TMPDIR: work }, stdio: 'ignore' },
 )
 let cdp

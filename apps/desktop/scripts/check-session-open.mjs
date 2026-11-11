@@ -1,3 +1,4 @@
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 // 隔离隐藏窗口验证长会话切换：测事件循环延迟、侧栏响应、滚动恢复和连续切换。
 // 先 npm run client:build，再 node apps/desktop/scripts/check-session-open.mjs。
 import './require-ui-build.mjs'
@@ -18,7 +19,7 @@ if (!process.versions.electron) {
     root: fileURLToPath(new URL('../../../packages/ui', import.meta.url)),
     preview: { host: '127.0.0.1', port: 0 },
   })
-  const child = spawn(require('electron'), [fileURLToPath(import.meta.url)], {
+  const child = spawn(require('electron'), withChromiumTestArgs([fileURLToPath(import.meta.url)]), {
     env: {
       ...fixtureEnvironment(),
       HOME: scratch,

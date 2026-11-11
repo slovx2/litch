@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process'
 import { globSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
 import { installManagerBoardMobileFixture } from './manager-board-mobile-fixture.mjs'
 
@@ -28,14 +29,12 @@ const errors = []
 try {
   child = spawn(
     binary,
-    [
+    withChromiumTestArgs([
       '--headless=new',
       `--user-data-dir=${root}/profile`,
       '--remote-debugging-port=0',
-      '--use-mock-keychain',
-      '--password-store=basic',
       'about:blank',
-    ],
+    ]),
     {
       env: { HOME: root, PATH: '/usr/bin:/bin', TMPDIR: root },
       stdio: ['ignore', 'ignore', 'pipe'],

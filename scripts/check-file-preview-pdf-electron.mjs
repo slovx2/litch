@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build as bundle } from '../apps/desktop/node_modules/esbuild/lib/main.js'
 import { build } from '../packages/ui/node_modules/vite/dist/node/index.js'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const out = join(root, '.local/pdf-electron-check', `${Date.now()}-${process.pid}`)
@@ -59,7 +60,7 @@ const profile = mkdtempSync(join(tmpdir(), 'litch-pdf-electron-'))
 const home = join(profile, 'home')
 mkdirSync(home)
 const log = openSync(join(out, 'electron.log'), 'w')
-const child = spawn(electron, [join(out, 'main.mjs')], {
+const child = spawn(electron, withChromiumTestArgs([join(out, 'main.mjs')]), {
   detached: true,
   env: {
     PATH: process.env.PATH,

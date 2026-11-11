@@ -12,7 +12,7 @@
     "typecheck": "npm run typecheck --prefix packages/automation-contracts && npm run typecheck --prefix packages/computer-use && npm run typecheck --prefix packages/browser && npm run typecheck --prefix packages/chrome-bridge && npm run typecheck --prefix packages/chrome-extension",
     "test": "npm test --prefix packages/automation-contracts && npm test --prefix packages/computer-use && npm test --prefix packages/browser && npm test --prefix packages/chrome-bridge && npm test --prefix packages/chrome-extension",
     "check:packages": "npm run check:package --prefix packages/automation-contracts && npm run check:package --prefix packages/browser",
-    "check": "biome check packages"
+    "check": "biome check packages scripts && node --test scripts/chromium-test-launches.test.mjs && node scripts/check-chromium-test-launches.mjs"
   },
   "devDependencies": {
     "@babel/parser": "7.29.7",

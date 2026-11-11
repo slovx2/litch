@@ -4,6 +4,7 @@ import { execFileSync, spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
+import { withChromiumTestArgs } from '../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { until } from '../chrome-m0/cdp.mjs'
 
 export async function minimizeTarget(cdp, targetId) {
@@ -32,7 +33,7 @@ export async function launchBackgroundChrome(binary, args, env, profile) {
         .filter(([, value]) => value !== undefined)
         .flatMap(([key, value]) => ['--env', `${key}=${value}`]),
       '--args',
-      ...args,
+      ...withChromiumTestArgs(args),
     ],
     { env, stdio: 'ignore' },
   )

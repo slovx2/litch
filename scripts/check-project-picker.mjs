@@ -6,6 +6,7 @@ import { createServer } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -57,17 +58,15 @@ server.stderr.on('data', (data) => {
 })
 const browser = spawn(
   binary,
-  [
+  withChromiumTestArgs([
     '--headless=new',
     `--user-data-dir=${work}/profile`,
     '--remote-debugging-port=0',
     '--no-first-run',
     '--no-default-browser-check',
-    '--password-store=basic',
-    '--use-mock-keychain',
     '--disable-background-networking',
     'about:blank',
-  ],
+  ]),
   {
     env: { HOME: work, CODEX_HOME: join(work, 'codex'), PATH: process.env.PATH, TMPDIR: work },
     stdio: 'ignore',

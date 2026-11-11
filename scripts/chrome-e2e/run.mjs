@@ -1,3 +1,4 @@
+import { withChromiumTestArgs } from '../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 // 一条命令构建扩展/宿主，用正式 ChromeExecutor 驱动隔离 Chrome；CDP 仅验收侧观察和设置夹具。
 
 import assert from 'node:assert/strict'
@@ -184,14 +185,12 @@ try {
   assert.notEqual(debugPort, 9333)
   child = spawn(
     binary,
-    [
+    withChromiumTestArgs([
       ...(process.argv.includes('--shown') ? [] : ['--headless=new']),
       `--user-data-dir=${profile}`,
       `--load-extension=${installer.extensionDirectory},${second.installer.extensionDirectory}`,
       `--remote-debugging-port=${debugPort}`,
       '--remote-debugging-address=127.0.0.1',
-      '--use-mock-keychain',
-      '--password-store=basic',
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-background-networking',
@@ -202,7 +201,7 @@ try {
       '--host-resolver-rules=MAP a.test 127.0.0.1,MAP b.test 127.0.0.1',
       '--window-size=1000,800',
       'about:blank',
-    ],
+    ]),
     {
       env: {
         PATH: `${dirname(process.execPath)}:/usr/bin:/bin:/usr/sbin:/sbin`,

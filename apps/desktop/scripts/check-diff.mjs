@@ -1,3 +1,4 @@
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 // 侧面板里“差异”标签的验收：不显示窗口，起三次桌面外壳，各对着一种对面。
 //   --mock     模拟核心（示例仓库，假的 git）：概况和内容、两种视图、折行、筛文件、展开上下文、上色、三种范围、
 //              暂存和还原（还原先问）、代理改完文件回合结束后自己跟上、面板收着不取、从对话里过去、行内批注、
@@ -205,7 +206,7 @@ async function runOne(kind) {
   let output = ''
   let code = 1
   if (!fixture || dirs) {
-    const child = spawn(electron, [appDir], {
+    const child = spawn(electron, withChromiumTestArgs([appDir]), {
       env: {
         ...process.env,
         LITCH_SMOKE: kind === 'mock' ? 'diff' : `diff-${kind}`,

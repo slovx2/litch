@@ -1,3 +1,4 @@
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 // 对话字号回归：隐藏窗口、浏览器模拟核心、隔离配置，不启动真实设备。
 // 可选 LITCH_TEXT_SHOTS 指定截图目录。运行前 npm run client:build。
 import './require-ui-build.mjs'
@@ -18,7 +19,7 @@ if (!process.versions.electron) {
     root: fileURLToPath(new URL('../../../packages/ui', import.meta.url)),
     preview: { host: '127.0.0.1', port: 0, strictPort: false },
   })
-  const child = spawn(require('electron'), [fileURLToPath(import.meta.url)], {
+  const child = spawn(require('electron'), withChromiumTestArgs([fileURLToPath(import.meta.url)]), {
     env: {
       ...fixtureEnvironment(),
       HOME: scratch,

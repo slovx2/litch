@@ -92,6 +92,7 @@ import { createServer } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
 import { basename, delimiter, dirname, join, parse, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { serveAnthropic } from './client-fixture-anthropic.mjs'
 import { askReply, installAskExtension } from './client-fixture-ask.mjs'
 import { browseReply } from './client-fixture-browse.mjs'
@@ -661,7 +662,11 @@ const ready = {
 console.log(`LITCH_LOCAL_FIXTURE ${JSON.stringify(ready)}`)
 if (launch) {
   // 整个环境换成 env：Windows 上应用不问登录 shell，它自己的环境就是服务的环境
-  launched = spawn(app, appArgs, { env: ready.env, detached: true, stdio: 'ignore' })
+  launched = spawn(app, withChromiumTestArgs(appArgs), {
+    env: ready.env,
+    detached: true,
+    stdio: 'ignore',
+  })
   launched.on('error', (error) => console.error(`起应用失败：${error.message}`))
   console.log(`已起应用 ${app}（进程号 ${launched.pid}）`)
 }

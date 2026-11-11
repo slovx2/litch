@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { build } from '../node_modules/esbuild/lib/main.js'
 import { createServer } from '../packages/ui/node_modules/vite/dist/node/index.js'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 
 const repo = resolve(import.meta.dirname, '..')
 const require = createRequire(new URL('../apps/desktop/package.json', import.meta.url))
@@ -208,7 +209,7 @@ app.whenReady().then(async()=>{
 });
 `,
 )
-const desktop = spawn(require('electron'), [main], {
+const desktop = spawn(require('electron'), withChromiumTestArgs([main]), {
   cwd: repo,
   env: {
     PATH: process.env.PATH,

@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { sign } from '@electron/osx-sign'
 import { packager } from '@electron/packager'
 import { build } from 'esbuild'
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 
 if (process.platform !== 'darwin' || !process.env.LITCH_SIGN_IDENTITY)
   throw new Error('需要 macOS 与 LITCH_SIGN_IDENTITY')
@@ -132,7 +133,7 @@ try {
     caches.add(join(home, 'Library/Caches', label))
     run('/usr/bin/ditto', [base, app])
     const log = []
-    const child = spawn(join(app, `Contents/MacOS/${name}`), [], {
+    const child = spawn(join(app, `Contents/MacOS/${name}`), withChromiumTestArgs([]), {
       env: {
         PATH: process.env.PATH,
         HOME: home,

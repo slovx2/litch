@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process'
 import { globSync, mkdtempSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
 
 const base = process.argv[2] ?? 'http://127.0.0.1:5199'
@@ -23,18 +24,16 @@ if (!binary) throw new Error('缺少隔离 Chrome for Testing')
 const work = mkdtempSync(join(tmpdir(), 'litch-manager-open-'))
 const browser = spawn(
   binary,
-  [
+  withChromiumTestArgs([
     '--headless=new',
     `--user-data-dir=${work}/profile`,
     '--remote-debugging-port=0',
     '--no-first-run',
     '--no-default-browser-check',
-    '--use-mock-keychain',
-    '--password-store=basic',
     '--disable-background-networking',
     '--window-size=1280,900',
     'about:blank',
-  ],
+  ]),
   {
     env: { PATH: process.env.PATH, HOME: work, TMPDIR: work },
     stdio: ['ignore', 'ignore', 'pipe'],

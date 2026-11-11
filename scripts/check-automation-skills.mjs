@@ -14,6 +14,7 @@ import {
   resolveAutomationTools,
   withAutomationGuide,
 } from '../packages/device/dist/shared/src/automation-tools.mjs'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const home = realpathSync(mkdtempSync(join(tmpdir(), 'litch-skill-model-')))
@@ -38,7 +39,7 @@ try {
     target: 'node22',
     external: ['electron'],
   })
-  child = spawn(electron, [entry], {
+  child = spawn(electron, withChromiumTestArgs([entry]), {
     env: {
       PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
       HOME: home,

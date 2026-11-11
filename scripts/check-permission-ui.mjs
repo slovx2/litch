@@ -7,6 +7,7 @@ import { createServer } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
 
 const binary = globSync(
@@ -27,17 +28,15 @@ await new Promise((r) => server.close(r))
 if (port === 9333) throw Error('禁用端口')
 const child = spawn(
   binary,
-  [
+  withChromiumTestArgs([
     '--headless=new',
     `--user-data-dir=${work}/profile`,
     `--remote-debugging-port=${port}`,
-    '--use-mock-keychain',
-    '--password-store=basic',
     '--no-first-run',
     '--no-default-browser-check',
     '--window-size=1500,1000',
     'about:blank',
-  ],
+  ]),
   { env: { HOME: work, PATH: '/usr/bin:/bin', TMPDIR: work }, stdio: 'ignore' },
 )
 const uiReservation = createServer()

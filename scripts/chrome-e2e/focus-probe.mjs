@@ -36,8 +36,6 @@ try {
       '--no-startup-window',
       '--remote-debugging-port=0',
       `--user-data-dir=${join(home, 'profile')}`,
-      '--use-mock-keychain',
-      '--password-store=basic',
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-background-networking',

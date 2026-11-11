@@ -9,6 +9,7 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { fixtureEnvironment } from './fixture-environment.mjs'
 
 const require = createRequire(import.meta.url)
@@ -168,7 +169,7 @@ if (process.versions.electron) {
     }
     electron = spawn(
       require('../apps/desktop/node_modules/electron'),
-      [fileURLToPath(import.meta.url)],
+      withChromiumTestArgs([fileURLToPath(import.meta.url)]),
       {
         cwd: root,
         env,
