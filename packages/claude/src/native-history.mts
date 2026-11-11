@@ -21,6 +21,7 @@ import { isNarration } from './narration.mjs'
 import { peerFromOrigin } from './peer-message.mjs'
 import { type PeerLookup, resolvePeer } from './peer-target.mjs'
 import { toolItemWithResult, toolResultText } from './server-helpers.mjs'
+import { isMetaMessage, withoutReminderPrefix } from './system-reminders.mjs'
 import { readImageView, toolUseItem, withPeerTarget } from './tool-items.mjs'
 import type { ThreadItem, TurnRecord, UserInput } from './types.mjs'
 import { askAnswerContent, parseAskUserQuestions } from './user-questions.mjs'
@@ -35,6 +36,8 @@ export interface NativeMessage {
   origin?: { kind?: string; [field: string]: unknown } | null
   /** 压缩后的那段摘要（“This session is being continued…”） */
   isCompactSummary?: boolean
+  isMeta?: boolean
+  renderedRole?: string
 }
 
 export interface NativeHistory {
@@ -181,6 +184,7 @@ export function projectNativeHistory(
     // 子代理的消息不在主线里画（它们在子代理自己的记录里）
     if (message.parent_tool_use_id) continue
     if (message.type !== 'user' && message.type !== 'assistant') continue
+    if (message.type === 'assistant' && isMetaMessage(message)) continue
     const blocks = blocksOf(message.message)
 
     if (message.type === 'user') {
@@ -216,6 +220,10 @@ export function projectNativeHistory(
       if (message.isCompactSummary) {
         turn ??= begin(message, null)
         turn.items.push({ type: 'contextCompaction', id: `${message.uuid}:compaction` })
+        stay()
+        continue
+      }
+      if (isMetaMessage(message)) {
         stay()
         continue
       }
@@ -283,7 +291,7 @@ export function projectNativeHistory(
     blocks.forEach((block, index) => {
       const id = `${message.uuid}:${index}`
       if (block.type === 'text') {
-        const text = String(block.text ?? '')
+        const text = withoutReminderPrefix(String(block.text ?? ''))
         if (text.trim())
           current.items.push({ type: 'agentMessage', id, text, phase: null, memoryCitation: null })
       } else if (block.type === 'thinking') {
@@ -291,8 +299,16 @@ export function projectNativeHistory(
         if (!text.trim()) return
         // 旁白（narration.mts）是说明文字，不是思考
         if (isNarration(block, index)) {
+          const visible = withoutReminderPrefix(text)
+          if (!visible.trim()) return
           narrated.add(id)
-          current.items.push({ type: 'agentMessage', id, text, phase: null, memoryCitation: null })
+          current.items.push({
+            type: 'agentMessage',
+            id,
+            text: visible,
+            phase: null,
+            memoryCitation: null,
+          })
         } else current.items.push({ type: 'reasoning', id, summary: [text], content: [] })
       } else if (block.type === 'tool_use') {
         const name = String(block.name ?? '')

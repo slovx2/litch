@@ -12,6 +12,7 @@ import { join, relative } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { claudeRefusalOf } from '../../protocol/src/claude-refusal.mjs'
 import { isVersionAtLeast } from '../../shared/src/min-version.mjs'
+import { isMetaMessage, ReminderPrefix, withoutReminderPrefix } from './system-reminders.mjs'
 import { ToolObservation } from './tool-observation.mjs'
 
 // 提示缓存时长（默认主对话 1h、子代理 5m；CHA_CLAUDE_PROMPT_CACHE_TTL=default 时不覆盖），CLI 继承这个进程的环境
@@ -309,6 +310,7 @@ interface PendingTurn {
   // 最近一次顶层请求用的模型，结果里按它取上下文窗口
   contextModel: string | null
   streamedBlocks: Map<number, { type: string; text: string }>
+  reminderPrefix?: ReminderPrefix
   // Subagent suppression — when a Task/Agent tool_use opens a subagent, all
   // nested tool_use / text / thinking events should be hidden from the App
   // timeline until the matching tool_result closes the parent Task.
@@ -2475,6 +2477,11 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     pending: PendingTurn,
     message: Record<string, unknown>,
   ): Promise<void> {
+    if (
+      message.type === 'attachment' ||
+      ((message.type === 'assistant' || message.type === 'stream_event') && isMetaMessage(message))
+    )
+      return
     const type = String(message.type ?? '')
     switch (type) {
       case 'system':
@@ -2918,7 +2925,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
           pending.structuredBuffer += text
           return
         }
-        await pending.handlers.onEvent({ type: 'text_delta', delta: text })
+        await this.visibleText(pending, text)
       }
       // thinking_delta 不发：这个块是思考还是旁白（narration.mts），要等签名和那一帧助手消息到了才知道，
       // 整块到了再按块发。默认的思考展示下真思考本来就没有字，看不出差别；打开了思考摘要时摘要整块出现
@@ -2931,11 +2938,19 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     streamStart = false,
   ): Promise<void> {
     if (messageId ? messageId === pending.assistantMessageId : !streamStart) return
+    await this.visibleText(pending, '', true)
+    pending.reminderPrefix = new ReminderPrefix()
     pending.assistantMessageId = messageId
     pending.streamedBlocks = new Map()
     if (!pending.context?.outputFormat) {
       await pending.handlers.onEvent({ type: 'message_boundary' })
     }
+  }
+
+  private async visibleText(pending: PendingTurn, text: string, final = false): Promise<void> {
+    const prefix = (pending.reminderPrefix ??= new ReminderPrefix())
+    const delta = prefix.push(text, final)
+    if (delta) await pending.handlers.onEvent({ type: 'text_delta', delta })
   }
 
   /**
@@ -2954,6 +2969,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         Math.max(0, pending.structuredBuffer.length - streamed),
       )
     pending.streamedBlocks = new Map()
+    pending.reminderPrefix = new ReminderPrefix()
     pending.assistantMessageId = null
     pending.apiRetrying = true
     await pending.handlers.onEvent({
@@ -3036,16 +3052,18 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         if (pending.context?.outputFormat) {
           pending.structuredBuffer += text
         } else if (text) {
-          await pending.handlers.onEvent({ type: 'text_delta', delta: text })
+          await this.visibleText(pending, text)
         }
       } else if (blockType === 'thinking') {
         if (nestedMessage || pending.activeSubagents.size > 0) continue
         const thinking = String(block.thinking ?? '')
         if (!thinking) continue
         if (!pending.context?.outputFormat && isNarration(block, index, narration)) {
+          const visible = withoutReminderPrefix(thinking)
+          if (!visible.trim()) continue
           // 旁白是一段说明：前后各断一次，不和前面的回答、同一条消息后面的正文粘成一条
           await pending.handlers.onEvent({ type: 'message_boundary' })
-          await pending.handlers.onEvent({ type: 'text_delta', delta: thinking })
+          await pending.handlers.onEvent({ type: 'text_delta', delta: visible })
           await pending.handlers.onEvent({ type: 'message_boundary' })
         } else {
           await pending.handlers.onEvent({ type: 'reasoning_delta', delta: thinking })
@@ -3092,6 +3110,9 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         if (isWorkflowTool(name)) pending.workflowToolUseIds.add(id)
       }
     }
+    // SDK 可能先单独交 thinking/tool_use 块，同一条消息的正文此时还没开始。
+    if (!nestedMessage && !pending.context?.outputFormat && content.some((b) => b.type === 'text'))
+      await this.visibleText(pending, '', true)
   }
 
   private async handleUser(pending: PendingTurn, message: Record<string, unknown>): Promise<void> {
@@ -3620,6 +3641,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       numTurns: message.num_turns,
     })
     if (pending.resolved) return
+    if (!pending.context?.outputFormat) await this.visibleText(pending, '', true)
     if (
       pending.context.purpose === 'compact' &&
       (message.origin as { kind?: string } | undefined)?.kind === 'task-notification' &&

@@ -70,15 +70,17 @@ export function TodoChip({
   store,
   open,
   onToggle,
+  keepCompleted = false,
 }: {
   store: SessionStore
   open: boolean
   onToggle(): void
+  keepCompleted?: boolean
 }) {
   const t = useT()
   const { c, radius } = useTheme()
   const todo = useLatestTodo(store)
-  if (!todo || !todoChipShown(todo)) return null
+  if (!todo || !todoChipShown(todo, keepCompleted)) return null
   const { done, total } = todoProgress(todo.item.steps)
   return (
     <Pressable
@@ -107,12 +109,20 @@ export function TodoChip({
 }
 
 /** 浮窗：整份清单。待办没了（被清空、回退掉）就不画 */
-export function TodoPanel({ store, onClose }: { store: SessionStore; onClose(): void }) {
+export function TodoPanel({
+  store,
+  onClose,
+  keepCompleted = false,
+}: {
+  store: SessionStore
+  onClose(): void
+  keepCompleted?: boolean
+}) {
   const t = useT()
   const theme = useTheme()
   const { c, font } = theme
   const todo = useLatestTodo(store)
-  if (!todo || !todoChipShown(todo)) return null
+  if (!todo || !todoChipShown(todo, keepCompleted)) return null
   const { done, total } = todoProgress(todo.item.steps)
   return (
     <View

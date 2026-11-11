@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { askReplyText } from '../../protocol/src/async-asks.mjs'
 import { projectNativeHistory } from '../src/native-history.mjs'
+import { CLAUDE_REMINDERS } from '../src/system-reminders.mjs'
 
 const config = await mkdtemp(join(tmpdir(), 'answer-history-'))
 process.env.CLAUDE_CONFIG_DIR = config
@@ -13,6 +14,57 @@ test.after(() => rm(config, { recursive: true, force: true }))
 const { sdkNativeSessionSource } = await import('../src/native-sessions.mjs')
 const cwd = '/work/answer-history'
 const dir = join(config, 'projects', '-work-answer-history')
+
+test('SDK 重读 CLI 附件形状：系统提醒不成为正文，助手复述只去已知前缀', async () => {
+  const sessionId = '1972ac1a-e630-4dde-b7ef-d46110598b2d'
+  const common = { sessionId, cwd, isSidechain: false, timestamp: '2026-01-01T00:00:00.000Z' }
+  const rows = [
+    {
+      ...common,
+      type: 'user',
+      uuid: 'start',
+      parentUuid: null,
+      message: { role: 'user', content: '虚构任务' },
+    },
+    {
+      ...common,
+      type: 'attachment',
+      uuid: 'reminder',
+      parentUuid: 'start',
+      attachment: { type: 'todo_reminder', content: [], itemCount: 0 },
+      renderedRole: 'system',
+      rendered: [{ content: `<system-reminder>\n${CLAUDE_REMINDERS[0]}\n</system-reminder>` }],
+    },
+    {
+      ...common,
+      type: 'assistant',
+      uuid: 'answer',
+      parentUuid: 'reminder',
+      message: {
+        id: 'answer',
+        role: 'assistant',
+        content: [{ type: 'text', text: `${CLAUDE_REMINDERS[0]}\n\n正常回答` }],
+      },
+    },
+  ]
+  await mkdir(dir, { recursive: true })
+  await writeFile(
+    join(dir, `${sessionId}.jsonl`),
+    rows.map((row) => JSON.stringify(row)).join('\n'),
+  )
+  const messages = await sdkNativeSessionSource().messages(sessionId, cwd)
+  assert.equal(
+    messages.some((m) => m.uuid === 'reminder'),
+    false,
+    'SDK 已过滤系统附件',
+  )
+  assert.ok(JSON.stringify(messages).includes(CLAUDE_REMINDERS[0]), '助手原样复述仍在 SDK 输出里')
+  const result = projectNativeHistory(sessionId, messages, cwd)
+  assert.deepEqual(
+    result.turns[0]?.items.filter((i) => i.type === 'agentMessage').map((i) => i.text),
+    ['正常回答'],
+  )
+})
 
 test('SDK 重读虚构 refusal 原生记录后保留停止原因，历史投影为失败', async () => {
   const sessionId = '1972ac1a-e630-4dde-b7ef-d46110598b2c'

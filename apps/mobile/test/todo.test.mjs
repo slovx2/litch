@@ -47,6 +47,12 @@ test('小按钮：有没做完的就出（回合结束了也出）；全做完�
   const all = todo('t', steps('completed', 'completed'))
   assert.equal(todoChipShown({ turnId: 't', item: all, running: true }), true)
   assert.equal(todoChipShown({ turnId: 't', item: all, running: false }), false)
+  assert.equal(
+    todoChipShown({ turnId: 't', item: all, running: false }, true),
+    true,
+    '经理保留已完成清单入口',
+  )
+  assert.equal(todoChipShown(null, true), false)
 })
 
 test('对话里那一行写哪一步：正在做的，没有就是第一个没做的；回合结束了“正在做”算没做', () => {
