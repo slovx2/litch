@@ -12,6 +12,10 @@ import {
 } from '../projection/manager-public-issues.mjs'
 import type { ManagersHost } from './manager.mjs'
 
+export interface ManagerIssueCallOptions {
+  manual?: boolean
+}
+
 // 在途请求按代际丢弃；通知时重读所有已订阅页面和详情，断线保留最后快照。
 export class ManagerIssueCache {
   readonly host: ManagersHost
@@ -20,6 +24,11 @@ export class ManagerIssueCache {
   private epoch = 0
   private queries = new Map<string, ManagerIssueQuery>()
   private refs = new Set<ManagerIssueRef>()
+  private pending = new Map<string, Promise<unknown>>()
+  private failed = new Map<string, { at: number; error: unknown }>()
+  private refreshing: Promise<void> | null = null
+  private cancelRefresh: (() => void) | null = null
+  private dirty = false
   private view: ManagerIssuesView = { pages: {}, details: {}, loading: [], error: null }
   constructor(host: ManagersHost, managerId: string, publish: (view: ManagerIssuesView) => void) {
     this.host = host
@@ -28,27 +37,100 @@ export class ManagerIssueCache {
   }
   stop() {
     this.epoch++
+    this.cancelRefresh?.()
+    this.cancelRefresh = null
+    this.pending.clear()
+    this.failed.clear()
+    this.refreshing = null
+    this.dirty = false
+    this.view = { ...this.view, loading: [] }
   }
-  async refresh() {
-    this.epoch++
+  refresh(options: ManagerIssueCallOptions = {}): Promise<void> {
+    if (options.manual) return this.refreshOnce(this.epoch, options)
+    this.dirty = true
+    if (this.refreshing) return this.refreshing
     const mine = this.epoch
+    const run = Promise.resolve().then(async () => {
+      while (this.dirty && mine === this.epoch && this.host.online()) {
+        // 固定窗口合并跨帧通知；持续收到通知也不延长窗口，读取期间至多积一轮补读。
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, 50)
+          this.cancelRefresh = () => {
+            clearTimeout(timer)
+            resolve()
+          }
+        })
+        if (mine !== this.epoch) return
+        this.cancelRefresh = null
+        this.dirty = false
+        await this.refreshOnce(mine)
+      }
+    })
+    this.refreshing = run
+    void run
+      .finally(() => {
+        if (this.refreshing === run) this.refreshing = null
+      })
+      .catch(() => {})
+    return run
+  }
+  private async refreshOnce(mine: number, options: ManagerIssueCallOptions = {}) {
     // 首页替换、后页追加必须有确定顺序；不能让迟到的首页清掉已加载的后页。
     for (const query of [...this.queries.values()].sort(
       (a, b) => Number(a.cursor ?? 0) - Number(b.cursor ?? 0),
     )) {
       if (mine !== this.epoch || !this.host.online()) return
-      await this.call(METHOD.list, query)
+      await this.call(METHOD.list, query, options)
     }
     if (mine !== this.epoch || !this.host.online()) return
     await Promise.all(
-      [...this.refs].map((id) => this.call(METHOD.read, { managerId: this.managerId, id })),
+      [...this.refs].map((id) =>
+        this.call(METHOD.read, { managerId: this.managerId, id }, options),
+      ),
     )
   }
-  async call<M extends keyof ManagerIssueRequests>(
+  call<M extends keyof ManagerIssueRequests>(
     method: M,
     params: ManagerIssueRequests[M]['params'],
+    options: ManagerIssueCallOptions = {},
   ): Promise<ManagerIssueRequests[M]['result']> {
+    // 先登记再发布 loading；订阅者重入也只能共享一条请求。写入只合并幂等的 seen。
+    const merge = method === METHOD.list || method === METHOD.read || method === METHOD.seen
+    const key =
+      method === METHOD.list
+        ? `${method}:${managerIssueQueryKey(params as ManagerIssueQuery)}:${(params as ManagerIssueQuery).cursor ?? ''}`
+        : `${method}:${JSON.stringify(params)}`
+    const failed = merge ? this.failed.get(key) : undefined
+    // 手动重试绕过冷却；成功前仍保留自动重读的冷却，防止同时到来的通知重新放大请求。
+    if (!options.manual && failed && Date.now() - failed.at < 30_000)
+      return Promise.reject(failed.error)
+    const pending = merge ? this.pending.get(key) : undefined
+    if (pending) return pending as Promise<ManagerIssueRequests[M]['result']>
     const mine = this.epoch
+    const run = Promise.resolve().then(() => this.request(method, params, mine))
+    if (merge) {
+      this.pending.set(key, run)
+      void run.then(
+        () => {
+          if (this.pending.get(key) === run) this.pending.delete(key)
+          if (mine === this.epoch) this.failed.delete(key)
+        },
+        (error) => {
+          if (this.pending.get(key) === run) this.pending.delete(key)
+          if (mine !== this.epoch) return
+          this.failed.set(key, { at: Date.now(), error })
+          if (this.failed.size > 256) this.failed.delete(this.failed.keys().next().value!)
+        },
+      )
+    }
+    return run
+  }
+  private async request<M extends keyof ManagerIssueRequests>(
+    method: M,
+    params: ManagerIssueRequests[M]['params'],
+    mine: number,
+  ): Promise<ManagerIssueRequests[M]['result']> {
+    if (mine !== this.epoch) throw new Error('Issue cache stopped')
     if (method === METHOD.list) {
       const query = params as ManagerIssueQuery
       this.queries.set(`${managerIssueQueryKey(query)}:${query.cursor ?? ''}`, query)
@@ -89,8 +171,10 @@ export class ManagerIssueCache {
       }
       throw error
     } finally {
-      this.view = { ...this.view, loading: this.view.loading.filter((key) => key !== token) }
-      this.publish(this.view)
+      if (mine === this.epoch) {
+        this.view = { ...this.view, loading: this.view.loading.filter((key) => key !== token) }
+        this.publish(this.view)
+      }
     }
     if ('page' in result) {
       const page = projectManagerIssuePage(result.page)
@@ -114,7 +198,7 @@ export class ManagerIssueCache {
     }
     const issue = projectManagerIssue(result.issue)
     if (mine !== this.epoch) {
-      if (method !== METHOD.read) {
+      if (method !== METHOD.read && method !== METHOD.seen) {
         this.refs.add(issue.id)
         void this.refresh().catch((error) => this.host.log(String(error)))
       }
@@ -123,7 +207,8 @@ export class ManagerIssueCache {
     this.refs.add(issue.id)
     this.view = { ...this.view, details: { ...this.view.details, [issue.id]: issue } }
     this.publish(this.view)
-    if (method !== METHOD.read) void this.refresh().catch((error) => this.host.log(String(error)))
+    if (method !== METHOD.read && method !== METHOD.seen)
+      void this.refresh().catch((error) => this.host.log(String(error)))
     return { issue } as ManagerIssueRequests[M]['result']
   }
 }

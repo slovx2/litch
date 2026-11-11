@@ -39,12 +39,53 @@ const pending = (issue: ManagerIssue) =>
 
 export class ManagerIssues {
   private readonly specialVersions = new Map<string, Map<string, string>>()
+  private readonly seenPending = new Map<
+    string,
+    {
+      promise: Promise<unknown>
+      timer: NodeJS.Timeout
+      reject(error: unknown): void
+    }
+  >()
+  private closed = false
   readonly owner: DeviceManagers
   constructor(owner: DeviceManagers) {
     this.owner = owner
   }
   private get store() {
     return this.owner.store
+  }
+  seen(given: unknown): Promise<unknown> {
+    if (this.closed) return Promise.reject(new ManagerError('closed', 'Manager service is closed.'))
+    const p = fields(given)
+    keys(p, ['managerId', 'id', 'revision'])
+    const key = JSON.stringify([text(p.managerId, 'managerId'), text(p.id, 'id'), p.revision])
+    const pending = this.seenPending.get(key)
+    if (pending) return pending.promise
+    let reject!: (error: unknown) => void
+    let timer!: NodeJS.Timeout
+    // 固定合并窗口不因后续请求延长；只延迟已读，列表和摘要无需等待它。
+    const promise = new Promise<unknown>((resolve, fail) => {
+      reject = fail
+      timer = setTimeout(() => {
+        this.seenPending.delete(key)
+        try {
+          resolve(this.call(METHOD.seen, given))
+        } catch (error) {
+          fail(error)
+        }
+      }, 25)
+    })
+    this.seenPending.set(key, { promise, timer, reject })
+    return promise
+  }
+  close(): void {
+    this.closed = true
+    for (const pending of this.seenPending.values()) {
+      clearTimeout(pending.timer)
+      pending.reject(new ManagerError('closed', 'Manager service is closed.'))
+    }
+    this.seenPending.clear()
   }
   specialChanged(managerId: string): void {
     const known = this.specialVersions.get(managerId) ?? new Map<string, string>()
@@ -549,6 +590,19 @@ export class ManagerIssues {
         return result
       })
       change = 'created'
+    } else if (method === METHOD.seen) {
+      keys(p, ['managerId', 'id', 'revision'])
+      // 已读不改正文版本。重复确认不写库、不广播，避免每次都让所有客户端重读整板。
+      const before = this.get(managerId, text(p.id, 'id'), false)
+      if (p.revision !== before.revision)
+        fail(
+          'issueConflict',
+          'The issue changed; read issue_get and retry with its current revision.',
+        )
+      const changed = before.unread && this.store.markIssueSeen(managerId, before.id, managerNow())
+      const issue = this.get(managerId, before.id)
+      if (changed) this.broadcast(managerId, issue, 'read')
+      return { issue }
     } else {
       const before = this.get(managerId, text(p.id, 'id'))
       if (p.revision !== before.revision)
@@ -613,10 +667,6 @@ export class ManagerIssues {
           )
           event = this.event(managerId, before, actor, 'issue-comment', comment)
           change = 'commented'
-        } else if (method === METHOD.seen) {
-          keys(p, ['managerId', 'id', 'revision'])
-          this.store.markIssueSeen(managerId, before.id, at)
-          change = 'read'
         } else {
           let patch: Record<string, unknown> = {}
           if (method === METHOD.follow) {

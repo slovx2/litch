@@ -7,6 +7,50 @@ import test from 'node:test'
 import { listenUnix, unixConnector } from '../src/sockets.mjs'
 import { tempDir } from './helpers.mjs'
 
+test('一批同步请求之间投递已完成应答，不等整批处理完', async () => {
+  const { WebSocket } = await import('ws')
+  const root = tempDir()
+  const path = join(root, 'fair.sock')
+  const count = 100
+  let processed = 0
+  const completedAt: number[] = []
+  const listener = await listenUnix(path, (wire) => ({
+    message(text) {
+      processed++
+      void Promise.resolve().then(() => {
+        completedAt.push(processed)
+        wire.send(text)
+      })
+    },
+    close() {},
+  }))
+  const ws = new WebSocket(`ws+unix://${path}:/`)
+  try {
+    await new Promise<void>((resolve, reject) => {
+      ws.once('open', resolve)
+      ws.once('error', reject)
+    })
+    const replies = new Promise<void>((resolve) => {
+      let received = 0
+      ws.on('message', () => {
+        if (++received === count) resolve()
+      })
+    })
+    // cork 确保接收器一次拿到多帧，直接复现同步解帧压住 Promise 应答的条件。
+    const socket = (ws as unknown as { _socket: import('node:net').Socket })._socket
+    socket.cork()
+    for (let n = 0; n < count; n++) ws.send(String(n))
+    socket.uncork()
+    await replies
+    assert.equal(processed, count)
+    assert.equal(completedAt[0], 1, '第一条回包在处理第二帧前就能执行')
+  } finally {
+    ws.close()
+    await listener.close()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('套接字的路径里有空格和中文：监听得起来，连得上，帧对得上', async () => {
   const root = tempDir()
   const directory = join(root, '张 三')

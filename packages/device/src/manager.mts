@@ -302,7 +302,10 @@ export class DeviceManagers {
             required: [EXTENSION.managerIssueDiscussions],
           },
         )
-      const result = this.issues.call(method, given)
+      const result =
+        method === MANAGER_ISSUE_METHOD.seen
+          ? await this.issues.seen(given)
+          : this.issues.call(method, given)
       // 只有声明新能力的连接能收到开启标记；其它 issue 数据继续按原合同返回。
       if (!issueDiscussionsDeclared && result && typeof result === 'object' && 'issue' in result) {
         const issue = (
@@ -974,6 +977,7 @@ export class DeviceManagers {
   }
   async close(): Promise<void> {
     this.closed = true
+    this.issues.close()
     clearInterval(this.timer)
     for (const timer of this.suggestionTimers.values()) clearTimeout(timer)
     this.suggestionTimers.clear()

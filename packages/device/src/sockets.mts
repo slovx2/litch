@@ -109,7 +109,12 @@ export async function listenUnix(
     }
   }
   const server = http.createServer()
-  const wss = new WebSocketServer({ server, perMessageDeflate: false })
+  // 每帧之间让出事件循环，避免一批同步 SQLite 请求阻止前面已完成的应答和其它连接投递。
+  const wss = new WebSocketServer({
+    server,
+    perMessageDeflate: false,
+    allowSynchronousEvents: false,
+  })
   const shutdown = websocketShutdown(server, wss)
   wss.on('connection', (ws) => {
     const handlers = attach(wireOf(ws))

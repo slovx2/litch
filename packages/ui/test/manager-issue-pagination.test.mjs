@@ -88,10 +88,12 @@ function fixture(platform) {
     },
   }
   const requests = []
+  const listOptions = []
   const filters = []
   const commands = {
     read: () => Promise.resolve(),
     list: (filter, options = {}) => {
+      listOptions.push(structuredClone(options))
       filters.push(structuredClone(filter))
       requests.push({ kind: filter.kinds[0], cursor: options.cursor ?? null })
       return Promise.resolve()
@@ -222,6 +224,7 @@ function fixture(platform) {
       : node.props?.testID?.match(/^issue-filter-status:(.+)$/)?.[1]
   return {
     requests,
+    listOptions,
     filters,
     positions,
     setActive(value) {
@@ -360,6 +363,15 @@ function fixture(platform) {
           : node.props?.testID === 'issue-more',
       )
       assert.ok(button, '控制台应提供加载更多按钮')
+      ;(button.props.onClick ?? button.props.onPress)()
+    },
+    retry() {
+      const button = nodes(tree).find((node) =>
+        platform === 'desktop'
+          ? node.props?.children === 'manager.paging.retry'
+          : node.props?.label === 'manager.paging.retry',
+      )
+      assert.ok(button, '错误旁应提供重试按钮')
       ;(button.props.onClick ?? button.props.onPress)()
     },
     async deliverPage() {
@@ -515,6 +527,19 @@ for (const platform of Object.keys(sources)) {
 }
 
 for (const platform of Object.keys(sources)) {
+  test(`${platform}：自动加载保留冷却，重试和加载更多明确标记手动请求`, () => {
+    const f = fixture(platform)
+    f.render()
+    assert.equal(f.listOptions.at(-1).manual, undefined)
+    f.load('error')
+    f.retry()
+    assert.equal(f.listOptions.at(-1).manual, true)
+    f.load('normal')
+    f.more()
+    assert.equal(f.listOptions.at(-1).manual, true)
+    f.pickOrdinary()
+    assert.equal(f.listOptions.at(-1).manual, undefined, '切换筛选后的effect仍为自动请求')
+  })
   test(`${platform}：首次分类加载更多后不重复查询首屏，切换分类仍查询一次`, async () => {
     const f = fixture(platform)
     f.render()

@@ -176,18 +176,20 @@ export function useIssueConsole({
       setLinked(id)
       setSheet(id)
       void commands
-        .read(id)
+        .read(id, { manual: true })
         .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
     },
     [commands],
   )
   const attention = useIssueCounts(manager, issues, MANAGER_ISSUE_ATTENTION_FILTERS)
   const list = useCallback(
-    (cursor?: string) =>
-      void commands.list(filter, cursor ? { cursor } : {}).then(
-        () => setError(''),
-        (cause) => setError(cause instanceof Error ? cause.message : String(cause)),
-      ),
+    (cursor?: string, manual = false) =>
+      void commands
+        .list(filter, { ...(cursor ? { cursor } : {}), ...(manual ? { manual: true } : {}) })
+        .then(
+          () => setError(''),
+          (cause) => setError(cause instanceof Error ? cause.message : String(cause)),
+        ),
     [commands, filter],
   )
   useEffect(() => {
@@ -308,7 +310,7 @@ export function useIssueConsole({
         onPress={() => {
           if (head.id !== linked) setLinked(null)
           setSheet(head.id)
-          void commands.read(head.id).catch(() => {})
+          void commands.read(head.id, { manual: true }).catch(() => {})
         }}
         style={({ pressed }) => [
           styles.card,
@@ -355,7 +357,11 @@ export function useIssueConsole({
         <Text accessibilityRole="alert" style={{ color: c.err }}>
           {error || issues.error}
         </Text>
-        <Button kind="plain" label={t('manager.paging.retry')} onPress={() => list()} />
+        <Button
+          kind="plain"
+          label={t('manager.paging.retry')}
+          onPress={() => list(undefined, true)}
+        />
       </View>
     ) : !page && !linkedHead ? (
       <Text testID="issue-loading" style={[styles.note, { color: c.ink3 }]}>
@@ -372,7 +378,7 @@ export function useIssueConsole({
             kind="plain"
             label={t('issue.loadMore')}
             testID="issue-more"
-            onPress={() => list(page?.nextCursor ?? undefined)}
+            onPress={() => list(page?.nextCursor ?? undefined, true)}
           />
         ) : null}
       </View>
@@ -475,10 +481,25 @@ export function IssueSheetDrawer({
   const special = issue ? issue.kind !== 'ordinary' : false
   const [talking, setTalking] = useState(!special)
   const [bodyOpen, setBodyOpen] = useState(false)
+  const seenAttempt = useRef('')
   useEffect(() => {
-    if (issue?.unread && issue.kind !== 'report' && !disabled)
-      void commands.seen({ id: issue.id, revision: issue.revision }).catch(() => {})
-  }, [issue, commands, disabled])
+    if (!issue?.unread || issue.kind === 'report' || disabled) {
+      seenAttempt.current = ''
+      return
+    }
+    const key = JSON.stringify([
+      manager.deviceId,
+      manager.id,
+      issue.id,
+      issue.revision,
+      issue.updatedAt,
+      issue.discussion.comments.at(-1)?.id,
+      issue.discussion.comments.at(-1)?.revision,
+    ])
+    if (seenAttempt.current === key) return
+    seenAttempt.current = key
+    void commands.seen({ id: issue.id, revision: issue.revision }).catch(() => {})
+  }, [issue, commands, disabled, manager.deviceId, manager.id])
   if (!issue) return null
   const post = board?.posts?.find((one) => one.id === (issue.id as string))
   const quick =

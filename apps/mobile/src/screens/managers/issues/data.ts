@@ -40,8 +40,11 @@ export function useManagerIssues(
 export interface IssueCommands {
   canOpenDiscussion?: boolean
   /** 列一页；cursor 是上一页的 nextCursor（加载更多）；limit 给计数用的一行查询 */
-  list(filter: ManagerIssueFilter, options?: { cursor?: string; limit?: number }): Promise<void>
-  read(id: string): Promise<unknown>
+  list(
+    filter: ManagerIssueFilter,
+    options?: { cursor?: string; limit?: number; manual?: boolean },
+  ): Promise<void>
+  read(id: string, options?: { manual?: boolean }): Promise<unknown>
   create(params: {
     title: string
     body: string
@@ -86,9 +89,16 @@ export function useIssueCommands(
           deviceId,
           ...managerIssueQuery(managerId, filter, options.limit),
           ...(options.cursor ? { cursor: options.cursor } : {}),
+          ...(options.manual ? { manual: true } : {}),
         })
       },
-      read: (id) => channel.command('managers.issue.read', { deviceId, managerId, id: ref(id) }),
+      read: (id, options) =>
+        channel.command('managers.issue.read', {
+          deviceId,
+          managerId,
+          id: ref(id),
+          ...(options?.manual ? { manual: true } : {}),
+        }),
       create: (params) =>
         channel.command('managers.issue.create', {
           deviceId,
