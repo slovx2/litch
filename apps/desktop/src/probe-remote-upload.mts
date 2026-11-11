@@ -34,7 +34,7 @@ void app
       } else {
         response.setHeader('content-type', 'text/html')
         response.end(
-          '<title>Remote source upload</title><input id="file" type="file" hidden><button onclick="document.getElementById(\'file\').click()">Select remote</button><script>window.ticks=0;setInterval(()=>ticks++,20)</script>',
+          '<title>Remote source upload</title><input id="file" type="file" hidden><button onclick="document.getElementById(\'file\').click()">Select remote</button><script>window.ticks=0;window.maxGap=0;window.lastTick=performance.now();setInterval(()=>{const now=performance.now();maxGap=Math.max(maxGap,now-lastTick);lastTick=now;ticks++},20)</script>',
         )
       }
     })
@@ -182,7 +182,7 @@ void app
       assert.equal(existsSync(source), true, '设备上的源文件保留')
       const result = JSON.parse(
         await run('evaluate', {
-          expression: `new Promise(resolve=>{const file=document.getElementById('file').files[0];const reader=new FileReader();reader.onload=async()=>{const bytes=new Uint8Array(reader.result);const raw=await fetch('/raw',{method:'POST',body:file});const data=new FormData();data.append('file',file);const form=await fetch('/form',{method:'POST',body:data});resolve({size:file.size,first:bytes[0],last:bytes[bytes.length-1],ticks,raw:await raw.json(),form:await form.json()})};reader.onerror=()=>resolve({error:reader.error.name});reader.readAsArrayBuffer(file)})`,
+          expression: `new Promise(resolve=>{const file=document.getElementById('file').files[0];const reader=new FileReader();reader.onload=async()=>{const bytes=new Uint8Array(reader.result);const raw=await fetch('/raw',{method:'POST',body:file});const data=new FormData();data.append('file',file);const form=await fetch('/form',{method:'POST',body:data});resolve({size:file.size,first:bytes[0],last:bytes[bytes.length-1],ticks,maxGap,raw:await raw.json(),form:await form.json()})};reader.onerror=()=>resolve({error:reader.error.name});reader.readAsArrayBuffer(file)})`,
         }),
       )
       clearInterval(monitor)
@@ -202,6 +202,7 @@ void app
           rendererPeakBytes: peak,
           deviceReads: reads,
           pageTicks: result.ticks,
+          pageMaxTickGapMs: result.maxGap,
           stagedFilesCleaned: staged.length,
         }),
       )

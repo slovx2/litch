@@ -63,6 +63,8 @@ function fakeMain(namespaces: string[]) {
 function setup(
   options: {
     managed?: boolean
+    deviceExtensions?: string[]
+    uploadRead?: Handler
     fullAccess?: boolean
     permissionProfile?: string
     namespaces?: string[] | null
@@ -85,6 +87,7 @@ function setup(
       releaseReady: true,
       ...(options.extensions ? { extensions: options.extensions } : {}),
     }),
+    ...(options.uploadRead ? { 'litch/browserUpload/read': options.uploadRead } : {}),
     'project/list': () => ({ data: [], nextCursor: null }),
     'thread/list': () => ({
       data: threads.map((entry) => ({ ...entry, turns: [] })),
@@ -124,7 +127,7 @@ function setup(
         declaration: { extensions: ['clientTools'], features: {} as never },
       }),
     ])
-    fake.device.extensions.push('deviceSettings')
+    fake.device.extensions.push('deviceSettings', ...(options.deviceExtensions ?? []))
     handlers['runtime/info'] = fake.handlers['runtime/info']!
     Object.assign(handlers, fakeToolSettings(['pi']).handlers)
   }
@@ -212,6 +215,52 @@ function setup(
 const resultOf = (message: JsonRpcMessage) =>
   (message as { result?: { success: boolean; contentItems: { type: string; text?: string }[] } })
     .result
+
+test('远程上传经会话设备连接请求；设备未声明时提示升级且不发送扩展方法', async () => {
+  for (const supported of [false, true]) {
+    let reads = 0
+    const world = setup({
+      managed: true,
+      kind: 'ssh',
+      namespaces: ['litch_browser'],
+      deviceExtensions: supported ? ['litchBrowserUpload'] : [],
+      uploadRead: () => {
+        reads++
+        return { size: 4, version: 'remote-device', mtimeMs: 0 }
+      },
+    })
+    world.core.start()
+    await settle()
+    const pending = world.call({
+      namespace: 'litch_browser',
+      tool: 'upload',
+      arguments: { ref: 'e1g1', paths: ['/remote-only/source.txt'] },
+    })
+    for (let index = 0; index < 10 && !world.main?.of('call').length; index++) await settle()
+    const invocation = world.main?.of('call')[0]?.invocation
+    assert.ok(invocation)
+    world.main?.reply({
+      op: 'uploadRead',
+      id: invocation.id,
+      requestId: 'read-1',
+      params: { action: 'stat', path: '/remote-only/source.txt' },
+    })
+    for (let index = 0; index < 10 && !world.main?.of('uploadReadResult').length; index++)
+      await settle()
+    const reply = world.main?.of('uploadReadResult')[0]
+    assert.ok(reply)
+    assert.equal(reads, supported ? 1 : 0)
+    if (supported) assert.equal(reply.result?.version, 'remote-device')
+    else assert.match(reply.error ?? '', /needs an update/)
+    world.main?.reply({
+      op: 'result',
+      id: invocation.id,
+      response: { success: false, contentItems: [] },
+    })
+    await pending
+    world.core.stop()
+  }
+})
 
 test('握手：主进程报了能执行的命名空间就声明 clientTools 扩展并列出它们；没有就不声明', async () => {
   const withTools = setup({ namespaces: ['litch_echo', 'litch_browser'] })
