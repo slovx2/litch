@@ -12,6 +12,8 @@
 npm run client:check:chrome
 ```
 
+只需要 headless 定向验收时用 `npm run client:check:chrome -- --headless-only`，仍跑正式 executor、上传、权限、输入和回执检查，但不启动额外的 headed 生命周期/最小化窗口场景。报告将 `headedLifecycle` 标为 `notRequested`；默认完整验收及其前台应用不变断言保持原样。
+
 上传验收在隔离 profile 对照 `isAllowedFileSchemeAccess()` 关/开/关时旧 CDP 上传的确切结果，并读取该版本的扩展详情 UI。正式 `upload` 在关闭权限时上传小文件、空文件、129 MiB 文件及拖放区域/同源 iframe；本地接收服务器逐文件核对字节数、SHA-256、名称、MIME、修改时间和事件顺序。还覆盖分块中撤租约、导航及 512 MiB 总量/单文件上限。报告的 `upload` 字段保留根因对照与接收结果。这里的 `.mp4` 是确定性测试字节，不证明视频网站会接受其媒体格式，也不代替商店签名扩展或真实投稿验收。
 
 加 `-- --no-evidence` 不写截图、报告或浏览器日志，结束后只保留终端验收结果。生命周期场景使用隐藏 Electron 窗口中的正式 Chrome 桥与执行器：网站审批实际等待 31 秒，重启隔离 Chrome、重启 Electron 宿主、更换隔离扩展副本/profile；同一会话不出现实例或标签审批。扩展停止控制在两端重启后仍生效，只能通过扩展工具栏的用户回调恢复。自动验收只在临时扩展副本捕获该回调，发布扩展没有测试入口。

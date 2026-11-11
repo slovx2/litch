@@ -208,6 +208,18 @@ export function createExtensionRuntime(options: ExtensionOptions) {
     })
     listen(chrome.debugger.onEvent, (source: { tabId?: number }, method: string, params: any) => {
       if (typeof source.tabId !== 'number') return
+      if (method === 'Page.fileChooserOpened') {
+        const grant = [...state.grants.values()].find((item) => item.tabId === source.tabId)
+        if (grant && !state.paused.size && !state.stopped)
+          state.send({
+            kind: 'fileChooser',
+            tabId: source.tabId,
+            generation: state.generations.get(source.tabId) ?? 0,
+            leaseId: grant.leaseId,
+            backendNodeId: params.backendNodeId,
+            mode: params.mode,
+          })
+      }
       if (method === 'Runtime.consoleAPICalled' || method === 'Runtime.exceptionThrown') {
         const tabId = source.tabId
         const generation = state.generations.get(tabId) ?? 0

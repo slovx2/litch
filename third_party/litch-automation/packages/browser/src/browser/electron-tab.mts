@@ -6,6 +6,7 @@ import { type Event, WebContentsView } from 'electron'
 import type { ElectronHostOptions } from '../ports.mjs'
 import { CdpRefused, isAllowedCdp } from './cdp-allow.mjs'
 import { SIGNING_IN } from './executor.mjs'
+import { interceptFileChooser } from './file-chooser.mjs'
 import type { BrowserPage, DialogInfo, LoadOutcome, TabInfo, TabKind, TabOwner } from './model.mjs'
 import { autofillPreferences, isHandedOver, registerAutofillTab } from './passwords/tabs.mjs'
 import { POPUP_GESTURE } from './popup-gesture.mjs'
@@ -379,6 +380,23 @@ export function createTab(
     },
     waitForLoad: (timeoutMs, signal) => settled(timeoutMs, signal),
     cdp: send,
+    interceptFileChooser: (signal) =>
+      interceptFileChooser(
+        async (enabled) => {
+          if (enabled) await send('Page.setInterceptFileChooserDialog', { enabled })
+          else if (cdp.isAttached())
+            await cdp.sendCommand('Page.setInterceptFileChooserDialog', { enabled })
+        },
+        (listener) => {
+          const onChooser = (_event: Event, method: string, params: Record<string, unknown>) => {
+            if (method === 'Page.fileChooserOpened')
+              listener({ backendNodeId: params.backendNodeId as number, mode: String(params.mode) })
+          }
+          cdp.on('message', onChooser)
+          return () => cdp.off('message', onChooser)
+        },
+        signal,
+      ),
     consoleEntries: log.consoleEntries,
     clearConsole: log.clearConsole,
     dialog: () => dialog,

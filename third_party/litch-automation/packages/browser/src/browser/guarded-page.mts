@@ -47,6 +47,11 @@ export function guardedPage(
           await guard(true)
           return target.cdp(method, params)
         }
+      if (key === 'interceptFileChooser' && target.interceptFileChooser)
+        return async (signal: AbortSignal) => {
+          await guard(true)
+          return target.interceptFileChooser?.(signal)
+        }
       if (key === 'pointAt')
         return async (...args: Parameters<BrowserPage['pointAt']>) => {
           await guard(true)
