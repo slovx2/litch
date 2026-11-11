@@ -15,7 +15,7 @@ export interface RpcTrace {
   opened(peer: RpcPeer): void
   closed(peer: RpcPeer): void
   received(peer: RpcPeer, message: WireMessage): void
-  sent(peer: RpcPeer, message: WireMessage): void
+  sent(peer: RpcPeer, message: WireMessage, bytes?: number): void
 }
 
 const peerTag = (peer: RpcPeer) => peer.id.slice(0, 8)
@@ -31,6 +31,7 @@ export function createRpcTrace(log: JsonlLog, now: () => number = Date.now): Rpc
     event: string,
     peer: RpcPeer,
     message: WireMessage,
+    bytes?: number,
   ) => {
     const key = keyOf(peer, (message as { id?: unknown }).id)
     const entry = map.get(key)
@@ -46,6 +47,7 @@ export function createRpcTrace(log: JsonlLog, now: () => number = Date.now): Rpc
         ...entry.ids,
         ok: error === undefined,
         ms: now() - entry.at,
+        ...(bytes === undefined ? {} : { responseBytes: bytes }),
         ...(error === undefined ? {} : { error: errorText(error) }),
       },
       error === undefined ? 'info' : 'warn',
@@ -86,7 +88,7 @@ export function createRpcTrace(log: JsonlLog, now: () => number = Date.now): Rpc
         })
       } else settle(outgoing, 'serverRequest', peer, message)
     },
-    sent(peer, message) {
+    sent(peer, message, bytes) {
       const id = (message as { id?: unknown }).id
       if (id === undefined || id === null) return
       const method = (message as { method?: unknown }).method
@@ -96,7 +98,7 @@ export function createRpcTrace(log: JsonlLog, now: () => number = Date.now): Rpc
           at: now(),
           ids: paramFields((message as { params?: unknown }).params),
         })
-      } else settle(incoming, 'rpc', peer, message)
+      } else settle(incoming, 'rpc', peer, message, bytes)
     },
   }
 }

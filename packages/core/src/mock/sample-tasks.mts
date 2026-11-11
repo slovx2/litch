@@ -356,6 +356,7 @@ export function sampleTasks(deviceId: string, now: number, lang: SampleLang): Sa
       status: spec.status,
       harness: specs.find((task) => task.id === spec.taskId)?.target.harness ?? '',
       threadId: spec.threadId,
+      turnId: spec.status === 'queued' || spec.threadId === null ? null : `task-turn-${at}`,
       startedAt,
       finishedAt: finished && startedAt !== null ? startedAt + (spec.duration ?? 3 * MINUTE) : null,
       summary: spec.summary ?? null,

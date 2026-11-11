@@ -106,6 +106,7 @@ export function SessionNotices({
               : project
                 ? `${project} · ${deviceName}`
                 : deviceName,
+            failure: kind === 'failed',
             urgent: slotOf(kind) === 'ask',
             body: !body
               ? t(`notify.session.${kind}`, { harness: nameOf(device, after.harness, t) })

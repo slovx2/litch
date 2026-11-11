@@ -195,3 +195,18 @@ test('回合停在审批上：任务和运行都标等你处理，运行的每�
     /^改文件：改配置 · 等了 30 分钟没人处理，今天 \d\d:\d\d 已自动拒绝$/,
   )
 })
+
+test('未启动回合的超限任务在运行记录中保留原因和后续失败提示', () => {
+  const failed = run({
+    status: 'failed',
+    turnId: null,
+    error: {
+      code: 'internal',
+      message: '运行时响应超过 WebSocket 100 MiB 上限，请使用分页读取历史',
+    },
+  })
+  const lines = runLines(failed, Date.now(), zh)
+  assert.match(lines.detail, /未记录到回合启动/)
+  assert.match(lines.detail, /100 MiB/)
+  assert.match(lines.detail, /后续运行仍可能失败/)
+})

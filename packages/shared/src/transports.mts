@@ -19,13 +19,14 @@ class StdioPeer implements RpcPeer {
   readonly id = 'stdio'
 
   send(message: WireMessage): void {
-    trace?.sent(this, message)
+    const text = JSON.stringify(message)
+    trace?.sent(this, message, Buffer.byteLength(text))
     // process.stdout.write can throw a synchronous EPIPE if the consumer
     // (App's SSH stream) has closed mid-stream. Without the guard a single
     // peer disconnect during a Claude text stream would kill the entire
     // adapter — which is exactly the pid-churn pattern we saw in debug.
     try {
-      process.stdout.write(`${JSON.stringify(message)}\n`)
+      process.stdout.write(`${text}\n`)
     } catch (error) {
       const code = (error as NodeJS.ErrnoException)?.code
       if (code !== 'EPIPE' && code !== 'ECONNRESET' && code !== 'EBADF') throw error
@@ -47,9 +48,10 @@ class WebSocketPeer implements RpcPeer {
 
   send(message: WireMessage): void {
     if (this.ws.readyState !== WebSocket.OPEN) return
-    trace?.sent(this, message)
+    const text = JSON.stringify(message)
+    trace?.sent(this, message, Buffer.byteLength(text))
     try {
-      this.ws.send(JSON.stringify(message))
+      this.ws.send(text)
     } catch (error) {
       // ws.send may still throw if the socket transitioned between the
       // readyState check and the send (typical when a peer drops). Drop the

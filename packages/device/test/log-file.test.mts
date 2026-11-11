@@ -149,7 +149,7 @@ test('入口的协议请求摘要：请求配上应答记成败和耗时，服�
   trace.received(peer, { jsonrpc: '2.0', id: 2, method: 'thread/read', params: {} })
   trace.sent(peer, { jsonrpc: '2.0', method: 'item/agentMessage/delta', params: { delta: '正文' } })
   clock += 25
-  trace.sent(peer, { jsonrpc: '2.0', id: 1, result: { turn: { id: 'u1' } } })
+  trace.sent(peer, { jsonrpc: '2.0', id: 1, result: { turn: { id: 'u1' } } }, 1234)
   trace.sent(peer, { jsonrpc: '2.0', id: 2, error: { code: -32602, message: '未知会话' } })
   trace.sent(peer, {
     jsonrpc: '2.0',
@@ -184,6 +184,7 @@ test('入口的协议请求摘要：请求配上应答记成败和耗时，服�
         collaborationMode: 'plan',
         ok: true,
         ms: 25,
+        responseBytes: 1234,
       },
       {
         level: 'warn',

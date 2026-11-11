@@ -1,6 +1,7 @@
 import { recoverMessage } from '../../protocol/src/system-messages.mjs'
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { EngineLink } from './engine-link.mjs'
+import { sessionHistory } from './session-history.mjs'
 import type { TurnRecoveryObserver } from './turn-recovery.mjs'
 import { isObject } from './wire.mjs'
 
@@ -34,7 +35,9 @@ export class RecoveryActions {
       link = await this.open(harness)
       const connected = link
       const read = (includeTurns: boolean, timeoutMs = 5000) =>
-        connected.request('thread/read', { threadId, includeTurns }, { timeoutMs })
+        sessionHistory(connected, threadId, includeTurns, 1, timeoutMs).then((thread) => ({
+          thread,
+        }))
       const before = await read(true)
       const last = before?.thread?.turns?.at(-1)
       if (

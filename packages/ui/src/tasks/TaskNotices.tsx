@@ -1,14 +1,20 @@
 // 定时任务跑完了发系统通知：失败的一定发，成功的看设置（默认不发）。回合停在审批、提问上等人时也发
 // （onTaskRunAsking：核心连着时看着新来的），到时限没人答设备会替人拒绝。只在桌面外壳里有，普通浏览器里什么都不做。
 // 什么时候算“跑完了”由数据副本定（onTaskRunFinished：一次运行头一回以结束的样子、未读地到）；
-// 点通知回到那次运行跑在的会话（等人处理的在那里答），还没建出会话就失败了的去那个任务的详情。
+// 失败通知打开任务详情的运行记录；成功和等待处理的通知打开对应会话。
 import { type DeviceView, keys, type TaskRunView } from '@litch/core'
 import { useEffect, useRef } from 'react'
 import type { Selection } from '../app/App.tsx'
 import { requestTasks } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { useServices } from '../app/services.tsx'
-import { askLine, errorText, runStatusText } from './describe.ts'
+import {
+  askLine,
+  runErrorText,
+  runStatusText,
+  taskNoticeDestination,
+  whenText,
+} from './describe.ts'
 import { notifySuccess } from './notify-pref.ts'
 
 /** 记着最近发过的几条，点了能找回是哪一次运行 */
@@ -56,14 +62,16 @@ export function TaskNotices({ onOpen }: { onOpen(selection: Selection): void }) 
       const name = task?.name ?? t('tasks.note.unknown')
       const text = failed
         ? run.error
-          ? errorText(run.error, t)
+          ? runErrorText(run, t)
           : runStatusText(run.status, t)
         : (run.summary ?? runStatusText(run.status, t))
       remember(run)
       notify({
         id: run.id,
+        failure: failed,
         title: t(failed ? 'tasks.notice.failed' : 'tasks.notice.succeeded', { name }),
-        body: t('tasks.notice.body', {
+        body: t('tasks.notice.bodyAt', {
+          time: whenText(run.finishedAt ?? run.startedAt ?? run.scheduledFor, Date.now(), t),
           device: device ? t.text(device.name) : run.deviceId,
           text: text.replace(/\s+/g, ' ').trim(),
         }),
@@ -80,7 +88,11 @@ export function TaskNotices({ onOpen }: { onOpen(selection: Selection): void }) 
       window.litchShell?.onNotifyClick?.((id) => {
         const run = sent.current.get(id)
         if (!run) return
-        if (run.threadId && replica.store.get(keys.summary(run.deviceId, run.threadId)))
+        if (
+          taskNoticeDestination(run) === 'session' &&
+          run.threadId &&
+          replica.store.get(keys.summary(run.deviceId, run.threadId))
+        )
           open.current({ deviceId: run.deviceId, sessionId: run.threadId })
         else requestTasks({ view: 'detail', deviceId: run.deviceId, taskId: run.taskId })
       }),

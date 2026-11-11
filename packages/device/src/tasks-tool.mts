@@ -155,8 +155,12 @@ export class TasksTool {
     }
     // 原生 codex 会把还在等的这一次调用补发给恢复会话的连接：同一次调用，注册表认得出来，不再答
     try {
-      const resumed = await link.request('thread/resume', { threadId }).catch(() => null)
-      const read = resumed ?? (await link.request('thread/read', { threadId }).catch(() => null))
+      const resumed = await link
+        .request('thread/resume', { threadId, excludeTurns: true })
+        .catch(() => null)
+      const read =
+        resumed ??
+        (await link.request('thread/read', { threadId, includeTurns: false }).catch(() => null))
       const response = isObject(read) ? read : {}
       const thread = isObject(response.thread) ? response.thread : {}
       settings.model = text(response.model)

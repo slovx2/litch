@@ -352,7 +352,7 @@ export class TaskScheduler {
       store.prune(task.id)
     })
     this.host.log(
-      `任务 ${run.taskId} 的运行 ${run.id} ${run.status === 'succeeded' ? '成功' : `失败（${run.error?.code}）：${run.error?.message}`}`,
+      `[${new Date(clock.now()).toISOString()}] 任务 ${run.taskId} 的运行 ${run.id}（${run.harness}，会话 ${run.threadId ?? '未创建'}，回合 ${run.turnId ?? '未启动'}）${run.status === 'succeeded' ? '成功' : `失败（${run.error?.code}）：${run.error?.message}`}`,
     )
     this.host.runChanged(run)
     this.host.taskChanged(run.taskId)

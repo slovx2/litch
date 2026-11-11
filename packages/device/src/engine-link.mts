@@ -1,4 +1,5 @@
 import { sessionTurn } from './session-history.mjs'
+
 // 设备进程自有的引擎连接（定时任务的运行、会话树的编排都用它）：不对应任何客户端连接，没有客户端在中间，
 // 设备进程自己对引擎建会话、发回合、读会话。和聚合面上的上游连接（upstream.mts，每条客户端连接一组、断了自己重连）
 // 不同，它断了就报 onClose，要再用由调用方重新开；和 side-link.mts（问几句就关）也不同，它一直听着。
@@ -19,10 +20,12 @@ import { sessionTurn } from './session-history.mjs'
 import { CLIENT_TOOL_NAMESPACE, isClientToolNamespace } from '../../protocol/src/client-tools.mjs'
 import { prepareSpeed, type SpeedStore } from '../../protocol/src/codex-speeds.mjs'
 import { EXTENSION, EXTENSIONS_CAPABILITY } from '../../protocol/src/device.mjs'
+import { paramFields } from '../../shared/src/log-file.mjs'
 import { NO_RECIPIENT_MESSAGE } from '../../shared/src/server-requests.mjs'
 import type { ClientToolRouter, ClientToolSource } from './client-tools.mjs'
 import { readCodexHistory } from './codex-history.mjs'
 import type { InstructionStore } from './codex-instructions.mjs'
+import type { DeviceTrace } from './device.mjs'
 import { type DeviceTools, declareDeviceTools } from './device-tools.mjs'
 import type { UpstreamDialect } from './dialect.mjs'
 import { NATIVE_CODEX_DIALECT } from './native-codex.mjs'
@@ -122,12 +125,15 @@ export interface EngineLinkOptions {
   /** 原生 codex 的速度按会话记在哪（codex-speeds.mts）。不给就不记不补 */
   speeds?: SpeedStore
   log?(line: string): void
+  trace?: DeviceTrace
 }
 
 interface Waiting {
   resolve(value: unknown): void
   reject(error: Error): void
   timer: NodeJS.Timeout
+  method: string
+  params: Record<string, unknown>
 }
 
 export async function connectEngineLink(options: EngineLinkOptions): Promise<EngineLink> {
@@ -164,6 +170,11 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
     options.clientTools?.dropped(source)
     for (const entry of waiting.values()) {
       clearTimeout(entry.timer)
+      options.trace?.(
+        'engine.request.failed',
+        { harness, method: entry.method, ...entry.params, error: reason },
+        'warn',
+      )
       entry.reject(new Error(reason))
     }
     waiting.clear()
@@ -296,7 +307,7 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
         waiting.delete(id)
         reject(new Error(`${method} 等了 ${timeoutMs} 毫秒没有应答`))
       }, timeoutMs)
-      waiting.set(id, { resolve, reject, timer })
+      waiting.set(id, { resolve, reject, timer, method, params: paramFields(params) })
       opened.send(JSON.stringify({ id, method, params }))
     })
   const close = () => {

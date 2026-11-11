@@ -29,10 +29,11 @@ async function rig(slowReads = 0, staleFullReads = 0) {
     },
     request: async (method: string, params: unknown) => {
       calls.push({ method, params, at: Date.now() })
-      if (method === 'thread/read') {
-        const full = (params as { includeTurns: boolean }).includeTurns
+      if (method === 'thread/read' || method === 'thread/turns/list') {
+        const full = method === 'thread/turns/list'
         if (!full && stopping && --slowReads <= 0) status = 'interrupted'
         const reportedStatus = full && stopping && staleFullReads-- > 0 ? 'inProgress' : status
+        if (full) return { data: [{ id, status: reportedStatus }], nextCursor: null }
         return {
           thread: {
             get status() {
@@ -79,7 +80,15 @@ test('显式继续先中断并读到 interrupted，再发送一次继续请求',
   await r.actions.continue(r.ref)
   assert.deepEqual(
     r.calls.map((c) => c.method),
-    ['thread/read', 'turn/interrupt', 'thread/read', 'thread/read', 'turn/start'],
+    [
+      'thread/read',
+      'thread/turns/list',
+      'turn/interrupt',
+      'thread/read',
+      'thread/read',
+      'thread/turns/list',
+      'turn/start',
+    ],
   )
   assert.deepEqual(parseSystemMessage(r.calls.at(-1)?.params.input[0].text), {
     kind: 'recover',
@@ -139,7 +148,7 @@ test('检查快照后、发中断前恢复进展，不得中断正常回合', as
     await assert.rejects(r.actions.continue(r.ref), /turn changed/i)
     assert.deepEqual(
       r.calls.map((c) => c.method),
-      ['thread/read'],
+      ['thread/read', 'thread/turns/list'],
     )
   } finally {
     r.observer.close()
@@ -153,9 +162,10 @@ test('中断确认用轻量状态300–500ms退避，完整历史只在开始和
     const reads = r.calls.filter((c) => c.method === 'thread/read')
     assert.deepEqual(
       reads.map((c) => c.params.includeTurns),
-      [true, false, false, false, true],
+      [false, false, false, false, false],
     )
-    const light = reads.filter((c) => !c.params.includeTurns)
+    assert.equal(r.calls.filter((c) => c.method === 'thread/turns/list').length, 2)
+    const light = reads.slice(1, -1)
     const [first, second, third] = light
     assert.ok(first && second && third)
     assert.ok(second.at - first.at >= 280)
@@ -175,10 +185,7 @@ test('状态离开active后仍完整核对旧回合，新回合已经出现则�
       r.calls.some((c) => c.method === 'turn/start'),
       false,
     )
-    assert.equal(
-      r.calls.filter((c) => c.method === 'thread/read' && c.params.includeTurns).length,
-      2,
-    )
+    assert.equal(r.calls.filter((c) => c.method === 'thread/turns/list').length, 2)
   } finally {
     r.observer.close()
   }
@@ -188,10 +195,11 @@ test('状态先离开active、完整回合稍后才写成interrupted：核对退
   const r = await rig(0, 2)
   try {
     await r.actions.continue(r.ref)
-    const reads = r.calls.filter((c) => c.method === 'thread/read')
-    assert.deepEqual(
-      reads.map((c) => c.params.includeTurns),
-      [true, false, true, false, true, false, true],
+    assert.equal(r.calls.filter((c) => c.method === 'thread/turns/list').length, 4)
+    assert.ok(
+      r.calls
+        .filter((c) => c.method === 'thread/read')
+        .every((c) => c.params.includeTurns === false),
     )
     assert.equal(r.calls.at(-1)?.method, 'turn/start')
     assert.equal(r.calls.filter((c) => c.method === 'turn/start').length, 1)
@@ -207,7 +215,7 @@ test('状态已停但完整回合始终未确认中断：等到截止时间，�
     const pending = r.actions.continue(r.ref)
     const rejected = assert.rejects(pending, /Interruption has not completed/)
     await new Promise((resolve) => setImmediate(resolve))
-    assert.equal(r.calls.at(-1)?.params.includeTurns, true)
+    assert.equal(r.calls.at(-1)?.method, 'thread/turns/list')
     t.mock.timers.tick(10000)
     await rejected
     assert.equal(

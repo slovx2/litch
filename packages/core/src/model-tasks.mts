@@ -54,6 +54,8 @@ export interface TaskRunView {
   harness: string
   /** 跑在哪个会话里；还没建出来是 null */
   threadId: string | null
+  /** 设备确认启动的回合；尚未确认时是 null。 */
+  turnId: string | null
   startedAt: number | null
   finishedAt: number | null
   /** 回合最后一条回答的开头 */

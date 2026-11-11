@@ -17,6 +17,8 @@ export interface TaskNotice {
   body: string
   /** 要人处理的事：窗口不在前台时 Dock 图标跳动 */
   urgent?: boolean
+  /** 失败原因可以写入诊断日志，成功回答正文不记。 */
+  failure?: boolean
 }
 
 const clip = (text: string, max: number): string =>
@@ -24,10 +26,11 @@ const clip = (text: string, max: number): string =>
 
 /** 界面发来的是不是一条像样的通知。别的形状一律不认 */
 export function parseTaskNotice(value: unknown): TaskNotice | null {
-  const { id, title, subtitle, body, urgent } = (value ?? {}) as Record<string, unknown>
+  const { id, title, subtitle, body, urgent, failure } = (value ?? {}) as Record<string, unknown>
   if (typeof id !== 'string' || typeof title !== 'string' || typeof body !== 'string') return null
   if (subtitle !== undefined && typeof subtitle !== 'string') return null
   if (urgent !== undefined && typeof urgent !== 'boolean') return null
+  if (failure !== undefined && typeof failure !== 'boolean') return null
   if (!id || id.length > 200 || !title) return null
   return {
     id,
@@ -35,6 +38,7 @@ export function parseTaskNotice(value: unknown): TaskNotice | null {
     ...(subtitle ? { subtitle: clip(subtitle, TITLE_MAX) } : {}),
     body: clip(body, BODY_MAX),
     ...(urgent ? { urgent } : {}),
+    ...(failure ? { failure } : {}),
   }
 }
 

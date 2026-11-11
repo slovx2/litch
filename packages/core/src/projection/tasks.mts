@@ -34,6 +34,7 @@ export function projectRun(deviceId: string, run: DeviceTaskRun): TaskRunView {
     status: run.status,
     harness: run.harness,
     threadId: run.threadId ?? null,
+    turnId: run.turnId,
     startedAt: ms(run.startedAt),
     finishedAt: ms(run.finishedAt),
     summary: run.summary ?? null,

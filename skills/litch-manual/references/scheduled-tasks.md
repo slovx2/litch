@@ -62,6 +62,8 @@ Exact flags: `scripts/litch tasks --help`.
   (questions are skipped) and the run history says which ones and when.
 - At most 200 tasks per device. Runs at once per device are limited by `tasks.maxConcurrent` (default
   2); `tasks.enabled` switches all schedules on the device off and on (`device-settings.md`).
+- Long sessions can be continued or recovered without discarding existing history.
+- Failed notifications include the task, time and cause. Clicking one opens the task details and run history. A failure with no recorded turn start is shown explicitly on desktop and phone; it does not mean the target session produced a failed turn.
 - Failed runs always show a system notification on the desktop; successful ones only when the user
   turns that on: `scripts/litch notify task-success` (`appearance-and-preferences.md`).
 - Models in sessions that expose the device’s scheduled-task tools can manage tasks through their

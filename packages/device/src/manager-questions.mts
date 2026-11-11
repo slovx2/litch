@@ -12,6 +12,7 @@ import type { EngineLink } from './engine-link.mjs'
 import type { DeviceManagers } from './manager.mjs'
 import { managerNow, type QuestionState } from './manager-store.mjs'
 import { fields, invalid, ManagerError } from './manager-validate.mjs'
+import { sessionHistory, sessionTurn } from './session-history.mjs'
 import { lastAnswer } from './session-tree.mjs'
 import { isObject } from './wire.mjs'
 
@@ -257,11 +258,8 @@ export class ManagerQuestions {
       throw new Error(
         'This harness cannot enforce scoped background questions. Ask the manager in chat.',
       )
-    const read = await link.request('thread/read', {
-      threadId: manager.threadId,
-      includeTurns: true,
-    })
-    const turns = Array.isArray(read?.thread?.turns) ? read.thread.turns : []
+    const thread = await sessionHistory(link, manager.threadId, true, 2)
+    const turns = Array.isArray(thread.turns) ? thread.turns : []
     const snapshot = questionSnapshot(turns)
     const fork = link.native || features.ephemeralFork === true
     const previous = state.discussion.messages.slice(0, -1)
@@ -391,11 +389,8 @@ export class ManagerQuestions {
         const answer = lastAnswer(turn)
         if (answer !== null) done(null, answer)
         else
-          void link.request('thread/read', { threadId, includeTurns: true }).then(
-            (read) => {
-              const found = read?.thread?.turns?.find((item: { id: string }) => item.id === turn.id)
-              done(null, lastAnswer(found) ?? '')
-            },
+          void sessionTurn(link, threadId, turn.id).then(
+            (found) => done(null, lastAnswer(found) ?? ''),
             (error) => done(error),
           )
       })

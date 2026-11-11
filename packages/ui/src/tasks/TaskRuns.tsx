@@ -9,7 +9,7 @@ import { useKey, useServices } from '../app/services.tsx'
 import {
   askLine,
   askStateText,
-  errorText,
+  runErrorText,
   runStatusText,
   runTone,
   triggerText,
@@ -71,7 +71,7 @@ function RunRow({
         )}
       </div>
       {run.summary ? <div className="tk-run-summary">{run.summary}</div> : null}
-      {run.error ? <div className="tk-run-error">{errorText(run.error, t)}</div> : null}
+      {run.error ? <div className="tk-run-error">{runErrorText(run, t)}</div> : null}
       {run.approvals.length > 0 ? (
         <ul className="tk-run-asks">
           {run.approvals.map((entry) => (

@@ -236,4 +236,7 @@ export const zhTasks = {
   'settings.notify.failures': '失败时始终通知',
   'settings.notify.success': '成功时也通知',
   'settings.notify.browser': '浏览器中不支持系统通知，此项仅在桌面应用中生效。',
+  'tasks.run.notStarted': '未记录到回合启动：{text}',
+  'tasks.run.payloadRetry': '{text}。此原因未解决前，后续运行仍可能失败。',
+  'tasks.notice.bodyAt': '{device} · {time} · {text}',
 } satisfies Record<string, Entry>
