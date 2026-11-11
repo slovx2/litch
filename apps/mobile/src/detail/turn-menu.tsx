@@ -2,7 +2,7 @@
 // 能不能分叉、编辑照会话的声明：声明了不会的不出这一项；没声明的留着，对面说不认识了点了说为什么（照桌面端）。
 // 从回合进行中插进来的话上长按出来的，复制、分叉、编辑对的是这条话（turn-target.ts）。
 // 编辑在弹出的编辑框里改了再重发（edit-message.tsx），确认发送之前什么都不改。
-// 从一条回答上长按出来的，头两项是“选择文字”（打开全文选字页，选中后回复引用到输入框）
+// 从一条回答上长按出来的，头两项是“选择文字”（原地启用系统选字，选中后回复引用到输入框）
 // 和“评论这条回答”（直接弹出评论框，comments/）。
 import * as Clipboard from 'expo-clipboard'
 import { useEffect, useState, useSyncExternalStore } from 'react'
@@ -52,7 +52,7 @@ export function TurnMenu({
     actions.push({
       label: t('comment.select'),
       testID: 'menu:select',
-      onPress: () => comments.pick(pressed),
+      onPress: () => comments.select(pressed),
       afterDismiss: true,
     })
     actions.push({

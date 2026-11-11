@@ -195,7 +195,7 @@ test('选字回复：退出选字、弹出写评论的对话框，加上后带�
   off()
 })
 
-test('评论整条消息直接弹评论框；长引用用共享截断规则，选字仍开独立全文页', async () => {
+test('评论整条消息直接弹评论框；长引用用共享截断规则，选择文字只进入原位选字', async () => {
   const { CommentsHub } = await import('../src/detail/comments/hub.ts')
   const { clipQuote, commentsBlock, parseComments } = await import(
     '../../../packages/core/src/projection/comments.mts'
@@ -205,14 +205,14 @@ test('评论整条消息直接弹评论框；长引用用共享截断规则，�
   const key = drafts.draftKey('fixture', 'whole-message')
   const hub = new CommentsHub(/** @type {any} */ ({ itemText: () => text }), key)
   assert.equal(hub.comment('message'), true)
-  assert.equal(hub.picking, null)
+  assert.equal(hub.selecting, null)
   assert.deepEqual(hub.replying, { itemId: 'message', quote: clipQuote(text) })
   hub.replied('整条意见')
   const saved = drafts.loadDraftComments(key)
   const parsed = parseComments(commentsBlock(saved))
   assert.equal(parsed.comments[0].quote, clipQuote(text))
   assert.equal(parsed.comments[0].note, '整条意见')
-  hub.pick('message')
-  assert.equal(hub.picking, 'message')
+  hub.select('message')
+  assert.equal(hub.selecting, 'message')
   assert.equal(hub.replying, null)
 })

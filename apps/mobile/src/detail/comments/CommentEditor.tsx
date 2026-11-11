@@ -1,5 +1,5 @@
 // 写评论、改评论的对话框：上面是引用的那段（太长的可以在框里滚），下面一个多行输入框。
-// 新加的（全文页选好一段之后）按钮是“加上”；改输入框上的评论片时是“保存”，另有“删掉”，能找到原文的还有“定位原文”。
+// 新加评论的按钮是“加上”；改输入框上的评论片时是“保存”，另有“删掉”，能找到原文的还有“定位原文”。
 import { useEffect, useRef, useState } from 'react'
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useT } from '../../ui/i18n'

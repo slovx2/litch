@@ -4,13 +4,7 @@ import type { Entry } from '../../../../../packages/ui/src/i18n/types.ts'
 
 export const zhCN = {
   'comment.menu': '评论这条回答',
-  'comment.pick.title': '选择一段添加评论',
-  'comment.pick.hint': '长按选中一段文字，再点击下方的“评论”',
-  'comment.pick.selected': '已选 {n} 个字',
-  'comment.pick.none': '未选择',
-  'comment.pick.gone': '这条回答已不存在',
   'comment.full': '每条消息最多附带 {max} 条评论，请先删除部分评论',
-  'comment.add': '评论',
   'comment.editor.new': '添加评论',
   'comment.editor.placeholder': '添加评论（可选）',
   'comment.editor.add': '添加',
@@ -34,14 +28,7 @@ export const zhCN = {
 
 export const en: Record<keyof typeof zhCN, Entry> = {
   'comment.menu': 'Comment on this reply',
-  'comment.pick.title': 'Comment on a passage',
-  'comment.pick.hint': 'Long-press to select a passage, then tap Comment below',
-  'comment.pick.selected': ({ n }) =>
-    n === 1 ? '1 character selected' : `${n} characters selected`,
-  'comment.pick.none': 'Nothing selected',
-  'comment.pick.gone': 'This reply is no longer available',
   'comment.full': 'Up to {max} comments per message. Remove some first.',
-  'comment.add': 'Comment',
   'comment.editor.new': 'Add comment',
   'comment.editor.placeholder': 'Add a comment (optional)',
   'comment.editor.add': 'Add',

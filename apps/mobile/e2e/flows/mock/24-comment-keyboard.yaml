@@ -16,12 +16,7 @@ tags: [mock]
     id: answer
 - tapOn:
     id: menu:comment
-- longPressOn:
-    id: comment-picker:text
-- tapOn:
-    text: '^(Select All|Select all|全选)$'
-- tapOn:
-    id: comment-picker:add
+# 整条评论直接进入编辑器；不经过全文选字弹窗。
 # 评论弹层自动聚焦并移动；等动画结束后再定位，避免点到移动前的坐标。
 - waitForAnimationToEnd:
     timeout: 3000
