@@ -436,7 +436,11 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
         onCancel = () => resolve(clientToolFailure('failed', 'the call was cancelled'))
         context.signal.addEventListener('abort', onCancel, { once: true })
       })
-      const result = await Promise.race([tool(kit), cancelled])
+      const work = tool(kit)
+      // 上传持有私有磁盘暂存与页面分块；取消响应前必须完成它自己的 finally 清理。
+      const result = await (invocation.tool === 'upload' && context.prepareUpload
+        ? work
+        : Promise.race([work, cancelled]))
       if (host.downloads && !context.signal.aborted && ![...used].some((page) => page.dialog())) {
         // 下载响应可能晚于点击返回；延迟更长的仍留在面板，下一次 downloads 可领取审批。
         if (['click', 'navigate', 'press', 'type', 'evaluate'].includes(invocation.tool))

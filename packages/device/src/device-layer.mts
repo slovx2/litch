@@ -4,6 +4,10 @@
 //
 // 进程有两种。协议原本的那种属于发起它的连接，连接一断就结束；`process/spawn` 带了扩展参数的属于设备
 // （可重连的终端，扩展名 deviceProcesses，见 device-processes.mts）。两种的输出都经连接的流量控制发。
+import {
+  BROWSER_UPLOAD_EXTENSION,
+  BROWSER_UPLOAD_METHOD,
+} from '../../protocol/src/browser-upload.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import {
   DEVICE_PROCESS_ATTACH,
@@ -22,6 +26,7 @@ import { nativeWirePaths } from '../../shared/src/native-path.mjs'
 import { ProcessRpc } from '../../shared/src/process-rpc.mjs'
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { RpcPeer, WireMessage } from '../../shared/src/types.mjs'
+import { readUploadSource } from './browser-upload.mjs'
 import {
   DEFAULT_PROCESS_LIMITS,
   DEVICE_PROCESS_PREFIX,
@@ -124,6 +129,14 @@ export class DeviceCalls {
   call(method: string, params: unknown): unknown {
     const raw = isObject(params) ? params : {}
     const fields = nativeWirePaths(raw)
+    if (method === BROWSER_UPLOAD_METHOD) {
+      if (!this.connection.declares(BROWSER_UPLOAD_EXTENSION))
+        throw new DeviceError(
+          'extensionRequired',
+          'Declare litchBrowserUpload to read upload sources.',
+        )
+      return readUploadSource(raw)
+    }
     if (method === MEDIA_IMAGE_METHOD) {
       if (!this.connection.declares(MEDIA_IMAGES_EXTENSION))
         throw new DeviceError('extensionRequired', 'Declare mediaImages to load images.', {

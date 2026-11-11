@@ -2,6 +2,10 @@
 
 ## 未发布
 
+### 0.42.0
+
+upload 路径按会话设备解释，说明远程分块读取、限额、暂存清理与延迟提交语义。
+
 ### 自动化恢复与观察合同
 
 公开导出 `AutomationRecovery`、`automationRecovery` 和 `observationSlice`。错误文字旁的 JSON 带 `recovery`，字段为 `status/retryable/needs_snapshot/needs_claim/needs_approval/may_have_executed/next_action/hint`；浏览器输入以 `inputReceipt.recovery` 为准，因为只有它知道实际派发情况。未知异常保守标记可能执行，不授权重放。

@@ -53,6 +53,7 @@
     "check:first-turn": "node --test scripts/probe-engines-kit.test.mjs && npm run build && node scripts/check-first-turn.mjs",
     "test:computer-use": "node scripts/test-computer-use.mjs",
     "check:computer-use": "node scripts/check-computer-use.mjs",
+    "check:remote-upload": "node scripts/check-remote-upload.mjs",
     "test:browser": "node scripts/test-browser.mjs",
     "check:browser:persistence": "node scripts/check-browser-persistence.mjs",
     "check:browser": "node scripts/check-browser.mjs && node scripts/check-browser.mjs --popups && node scripts/check-browser.mjs --popups-ui && node scripts/check-browser.mjs --ui",

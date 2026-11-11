@@ -7,6 +7,7 @@ import { app, BrowserWindow, session } from 'electron'
 import { createBrowserExecutor } from '../src/browser/executor.mjs'
 import { createElectronHost, restoreBrowserCookies } from '../src/electron.mjs'
 import { createCdpDriver, createSiteBook } from '../src/index.mjs'
+import { remoteUploadChecks } from './remote-upload.fixture.mjs'
 
 const profile = process.env.BROWSER_FIXTURE_PROFILE
 assert.ok(profile)
@@ -22,7 +23,17 @@ BrowserWindow.prototype.showInactive = () => {
 void app
   .whenReady()
   .then(async () => {
-    const server = createServer((_request, response) => {
+    const server = createServer((request, response) => {
+      if (request.url === '/receive') {
+        let size = 0
+        request.on('data', (chunk: Buffer) => {
+          size += chunk.length
+        })
+        request.on('end', () => {
+          response.end(`received:${size}`)
+        })
+        return
+      }
       response.setHeader('content-type', 'text/html')
       response.end(
         '<title>Host injection</title><button>Owned fixture</button><label>Nebula password<input id="password" type="password" autocomplete="current-password"></label><label>Nebula code<input id="code" autocomplete="one-time-code"></label><label>Nebula card<input id="card" autocomplete="cc-number"></label>' +
@@ -156,11 +167,23 @@ void app
           },
         }
       }
+      const originalCdp = uploadPage.cdp.bind(uploadPage)
+      let nativeUploads = 0
+      uploadPage.cdp = async <T,>(method: string, params?: Record<string, unknown>): Promise<T> => {
+        if (method === 'DOM.setFileInputFiles') {
+          nativeUploads++
+          assert.ok(Array.isArray(params?.files))
+          assert.ok(params.files.every((path: string) => path === fixtureFile))
+        }
+        return originalCdp<T>(method, params)
+      }
       const reply = await call('upload', {
         ref,
         paths: label === 'Multiple files' ? [fixtureFile, fixtureFile] : [fixtureFile],
       })
       uploadPage.interceptFileChooser = intercept
+      uploadPage.cdp = originalCdp
+      assert.equal(nativeUploads, 1, '本机会话仍直接使用 DOM.setFileInputFiles')
       assert.equal(reply.success, true, text(reply))
       assert.equal(
         chooserObserved,
@@ -199,6 +222,12 @@ void app
     assert.equal(ambiguous.success, false)
     assert.match(text(ambiguous), /Ambiguous upload target/)
     console.log('BROWSER_UPLOAD_CHOOSER_OK hidden/dynamic/label/associated/multiple')
+    await remoteUploadChecks(executor, first, profile, url, fixtureFile, () =>
+      app
+        .getAppMetrics()
+        .filter((value) => value.type === 'Tab')
+        .reduce((sum, value) => sum + value.memory.workingSetSize * 1024, 0),
+    )
     const afterTyping = await driver.snapshot(id, false, operation)
     assert.equal(
       afterTyping.text.includes('example-nebula-secret'),

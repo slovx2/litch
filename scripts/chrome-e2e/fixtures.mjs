@@ -33,6 +33,10 @@ export async function fixtures() {
       return res.end(
         '<!doctype html><title>Unapproved site</title><h1>UNAPPROVED_CONTENT_MUST_NOT_LEAK</h1>',
       )
+    if (url.pathname === '/remote-upload')
+      return res.end(`<!doctype html><title>Remote upload</title>
+      <input id="remote-file" type="file" hidden accept=".txt"><button onclick="document.getElementById('remote-file').click()">Remote trigger</button>
+      <button onclick="const f=document.createElement('input');f.type='file';f.id='dynamic-file';f.hidden=true;this.after(f);f.click()">Remote dynamic</button>`)
     if (url.pathname === '/chooser')
       return res.end(`<!doctype html><title>Upload chooser</title>
       <section><input id="file" type="file" style="visibility:hidden;height:0" accept=".txt">

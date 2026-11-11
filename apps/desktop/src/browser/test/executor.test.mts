@@ -461,7 +461,7 @@ test('上传：只给本机的会话、路径要是绝对的文件', async () =>
   await run('snapshot')
   assert.match(
     text(await run('upload', { ref: 'e1', paths: ['/tmp/a.txt'] }, { remote: true })),
-    /^\[litch:invalid\] upload is only available/,
+    /^\[litch:invalid\] The host cannot read upload files/,
   )
   assert.match(text(await run('upload', { ref: 'e1', paths: ['a.txt'] })), /not an absolute path/)
   assert.match(text(await run('upload', { ref: 'e1', paths: ['/tmp/none'] })), /not a file/)

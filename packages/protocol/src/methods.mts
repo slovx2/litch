@@ -311,6 +311,10 @@ export interface ClientRequests extends AcpControlsRequests {
     params: { threadId: string; completedSequence: number }
     result: import('./thread-read-state.mjs').ThreadReadState
   }
+  'litch/browserUpload/read': {
+    params: import('./browser-upload.mjs').UploadReadParams
+    result: import('./browser-upload.mjs').UploadReadResult
+  }
   'litch/media/readImage': {
     params: { source: string }
     result: import('./media-images.mjs').ImageReadResult

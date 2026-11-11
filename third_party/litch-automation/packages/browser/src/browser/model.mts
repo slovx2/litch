@@ -60,6 +60,8 @@ export interface BrowserPage {
   waitForLoad(timeoutMs: number, signal: AbortSignal): Promise<boolean>
   /** 发一条 CDP 命令。只许白名单里的（cdp-allow.mts），名单外的抛 CdpRefused。需要时自动挂上调试器 */
   cdp<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>
+  /** 取消后仅丢弃本次上传的临时对象，不派发输入。 */
+  discardUpload?(state: string | undefined, objects: readonly string[]): Promise<void>
   /** 先订阅再开启拦截；dispose 只撤销本次拦截，即使调用已取消也必须清理。 */
   interceptFileChooser?(signal: AbortSignal): Promise<FileChooserInterception>
   /** 已派发输入后重建观察基线；只准恢复读操作，不能重放原输入。来源/租约检查照旧。 */

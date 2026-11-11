@@ -664,6 +664,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let fileAttachmentsSupported = false
   let fileDownloadSupported = false
   let filePreviewSupported = false
+  let browserUploadSupported = false
   let mediaImagesSupported = false
   let modelRankingSupported = false
   let powerSupported = false
@@ -1906,6 +1907,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     fileAttachmentsSupported = false
     fileDownloadSupported = false
     filePreviewSupported = false
+    browserUploadSupported = false
     mediaImagesSupported = false
     turnNotices = false
     readStateSupported = false
@@ -1936,6 +1938,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
           info.device.extensions?.includes(EXTENSION.fileAttachments) === true
         fileDownloadSupported = info.device.extensions?.includes(EXTENSION.fileDownload) === true
         filePreviewSupported = info.device.extensions?.includes(EXTENSION.filePreview) === true
+        browserUploadSupported = info.device.extensions?.includes(EXTENSION.browserUpload) === true
         mediaImagesSupported = info.device.extensions?.includes(EXTENSION.mediaImages) === true
         configurable = info.device.extensions?.includes(EXTENSION.harnessConfig) === true
         harnesses = info.harnesses.map((entry) => withConfig(harnessFromInfo(entry)))
@@ -2426,6 +2429,13 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
 
   /** 这台桌面执行客户端工具（内置浏览器、Computer Use）的调用：开关、交给主进程、卡片、收尾（tool-calls.mts） */
   const toolCalls = createToolCalls({
+    uploadRead(params) {
+      if (!browserUploadSupported)
+        return Promise.reject(
+          new Error('The session device needs an update to support remote browser uploads.'),
+        )
+      return link.request('litch/browserUpload/read', params, { timeoutMs: 30_000 })
+    },
     async fullAccess(threadId) {
       // 恢复响应是引擎的权威设置；后台会话和远程调用不能靠界面当前选中的预设判断。
       try {

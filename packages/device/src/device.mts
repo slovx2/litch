@@ -360,7 +360,7 @@ export class DeviceServer {
     })
     const info = deviceInfo(this.version)
     info.extensions.push(EXTENSION.filePreview)
-    info.extensions.push(EXTENSION.mediaImages)
+    info.extensions.push(EXTENSION.mediaImages, EXTENSION.browserUpload)
     info.extensions.push(EXTENSION.toolImages)
     info.extensions.push(EXTENSION.fileDownload)
     info.extensions.push(EXTENSION.fileAttachments)

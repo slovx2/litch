@@ -64,6 +64,7 @@ export function classify(method: string, params: unknown): Route {
   if (method === 'litch/attachments/status' || method === 'litch/attachments/watch')
     return { kind: 'device' }
   if (method.startsWith('fs/')) return { kind: 'device' }
+  if (method === 'litch/browserUpload/read') return { kind: 'device' }
   if (method === 'litch/media/readImage') return { kind: 'device' }
   if (PROCESS_METHODS.has(method) || SEARCH_METHODS.has(method)) return { kind: 'device' }
   // 属于设备的进程（可重连的终端，deviceProcesses 扩展）：列出、挂接、解除、结束、清除

@@ -2,6 +2,7 @@
 // 结果、要用户点头的卡片发回核心。这是“主进程不在数据路径上”的一处例外：
 // 浏览器视图、Computer Use 助手都只能由主进程管。经手的只有这一次调用的参数和结果，不碰会话内容。
 // 超时、回合结束、连接断开都由核心判断，这里只照它说的取消（op: cancel），执行器从 signal 上知道。
+import type { UploadReadResult } from '../../../../packages/protocol/src/browser-upload.mjs'
 import {
   type ClientToolCallResponse,
   clientToolFailure,
@@ -16,6 +17,7 @@ import {
   type ClientToolToCore,
   type ClientToolToMain,
 } from './types.mjs'
+import { prepareRemoteUpload } from './upload-source.mjs'
 
 export interface ClientToolHost {
   /** 能执行的命名空间：登记了执行器的那几个。启动时报给核心，核心握手时照它声明 */
@@ -33,6 +35,7 @@ export interface ClientToolHost {
 
 interface Running {
   controller: AbortController
+  reads: Map<string, { resolve(result: UploadReadResult): void; reject(error: Error): void }>
   /** 这次调用挂着的卡片 */
   asks: Set<string>
 }
@@ -70,6 +73,7 @@ export function createClientToolHost(
   /** 等用户答的卡片：卡片的标识 → 答了（或者撤了，null）之后怎么办 */
   const waiting = new Map<string, (answer: ClientToolAnswer | null) => void>()
   let askSeq = 0
+  let readSeq = 0
 
   const settleAsk = (askId: string, answer: ClientToolAnswer | null) => {
     const resolve = waiting.get(askId)
@@ -117,10 +121,41 @@ export function createClientToolHost(
       turnId: invocation.turnId,
     }
     turns.set(turnKey(turn), turn)
-    const entry: Running = { controller: new AbortController(), asks: new Set() }
+    const entry: Running = { controller: new AbortController(), asks: new Set(), reads: new Map() }
     running.set(id, entry)
     const { signal } = entry.controller
+    signal.addEventListener(
+      'abort',
+      () => {
+        for (const read of entry.reads.values())
+          read.reject(new Error('Upload cancelled or device disconnected.'))
+        entry.reads.clear()
+      },
+      { once: true },
+    )
     const context: ClientToolContext = {
+      ...(invocation.device.kind === 'ssh' &&
+      invocation.namespace === 'litch_browser' &&
+      invocation.tool === 'upload'
+        ? {
+            prepareUpload: (
+              paths: readonly string[],
+              limits: { fileBytes: number; totalBytes: number },
+            ) =>
+              prepareRemoteUpload(
+                paths,
+                limits,
+                (params) =>
+                  new Promise((resolve, reject) => {
+                    signal.throwIfAborted()
+                    const requestId = `upload-${++readSeq}`
+                    entry.reads.set(requestId, { resolve, reject })
+                    post({ type: CLIENT_TOOL, op: 'uploadRead', id, requestId, params })
+                  }),
+                signal,
+              ),
+          }
+        : {}),
       signal,
       ask(ask: ClientToolAsk) {
         if (signal.aborted || running.get(id) !== entry) return Promise.resolve(null)
@@ -219,6 +254,16 @@ export function createClientToolHost(
             return
           }
           void run(executor, message)
+          return
+        }
+        case 'uploadReadResult': {
+          const entry = running.get(message.id)
+          const read = entry?.reads.get(message.requestId)
+          if (!read) return
+          entry?.reads.delete(message.requestId)
+          if (message.error || !message.result)
+            read.reject(new Error(message.error ?? 'Missing upload response.'))
+          else read.resolve(message.result)
           return
         }
         case 'cancel': {

@@ -6,6 +6,10 @@
 
 import type { ConfigMainRequest, ConfigMainResult } from '@litch/core'
 import type {
+  UploadReadParams,
+  UploadReadResult,
+} from '../../../../packages/protocol/src/browser-upload.mjs'
+import type {
   ClientToolCallParams,
   ClientToolCallResponse,
 } from '../../../../packages/protocol/src/client-tools.mjs'
@@ -106,6 +110,12 @@ export type ClientToolAnswer = 'once' | 'session' | 'always' | 'decline'
 
 /** 执行器能用的东西 */
 export interface ClientToolContext {
+  /** 宿主按本次调用的设备准备上传源；远程源只在私有临时目录中物化。 */
+  prepareUpload?(
+    paths: readonly string[],
+    limits: { fileBytes: number; totalBytes: number },
+  ): Promise<{ paths: string[]; dispose(): Promise<void> }>
+
   /** 回合被打断、连接断了、超时时会被中止 */
   signal: AbortSignal
   /** 在这个会话的对话里出一张卡片等用户答复；被取消时回 null */
@@ -156,6 +166,14 @@ export interface MachineNotice {
 /** 核心 → 主进程 */
 export type ClientToolToMain =
   | { type: typeof CLIENT_TOOL; op: 'call'; invocation: ClientToolInvocation }
+  | {
+      type: typeof CLIENT_TOOL
+      op: 'uploadReadResult'
+      id: string
+      requestId: string
+      result?: UploadReadResult
+      error?: string
+    }
   | { type: typeof CLIENT_TOOL; op: 'cancel'; id: string }
   | { type: typeof CLIENT_TOOL; op: 'answer'; askId: string; answer: ClientToolAnswer | null }
   | {
@@ -173,6 +191,13 @@ export type ClientToolToMain =
 
 /** 主进程 → 核心 */
 export type ClientToolToCore =
+  | {
+      type: typeof CLIENT_TOOL
+      op: 'uploadRead'
+      id: string
+      requestId: string
+      params: UploadReadParams
+    }
   | { type: typeof CLIENT_TOOL; op: 'result'; id: string; response: ClientToolCallResponse }
   | { type: typeof CLIENT_TOOL; op: 'ask'; id: string; askId: string; ask: ClientToolAsk }
   | { type: typeof CLIENT_TOOL; op: 'askDone'; askId: string }

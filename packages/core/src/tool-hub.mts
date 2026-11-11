@@ -1,5 +1,6 @@
 // 核心里通往主进程的那一头（客户端工具）：各台设备收到的工具调用都经它交给主进程，主进程的回话按调用的标识
 // 分回给发起的那一台。它只管收发和对号，开关、超时、卡片、回合收尾都是设备那一层的事（device/tool-calls.mts）。
+import type { UploadReadParams, UploadReadResult } from '../../protocol/src/browser-upload.mjs'
 import type { ApprovalAnswer } from '../../protocol/src/client-approvals.mjs'
 import type { ClientToolCallResponse } from '../../protocol/src/client-tools.mjs'
 import type { ClientAskView } from './model.mjs'
@@ -15,6 +16,7 @@ import type { ConfigMainRequest, ConfigMainResult } from './model-config.mjs'
 
 /** 一次调用在执行途中主进程报回来的事 */
 export interface ToolCallHandlers {
+  uploadRead?(params: UploadReadParams): Promise<UploadReadResult>
   result(response: ClientToolCallResponse): void
   /** 执行器要用户点头：出一张卡片 */
   ask(askId: string, ask: ClientAskView): void
@@ -63,6 +65,36 @@ export function createToolHub(
   const receive = (message: ToolToCore) => {
     if (message?.type !== CLIENT_TOOL) return
     switch (message.op) {
+      case 'uploadRead': {
+        const handlers = calls.get(message.id)
+        if (!handlers) return
+        const read = handlers.uploadRead
+        void (
+          read ? read(message.params) : Promise.reject(new Error('Remote upload is unavailable.'))
+        ).then(
+          (result) => {
+            if (calls.get(message.id) === handlers)
+              port?.post({
+                type: CLIENT_TOOL,
+                op: 'uploadReadResult',
+                id: message.id,
+                requestId: message.requestId,
+                result,
+              })
+          },
+          (error: unknown) => {
+            if (calls.get(message.id) === handlers)
+              port?.post({
+                type: CLIENT_TOOL,
+                op: 'uploadReadResult',
+                id: message.id,
+                requestId: message.requestId,
+                error: String(error),
+              })
+          },
+        )
+        return
+      }
       case 'result': {
         const handlers = calls.get(message.id)
         if (!handlers) return

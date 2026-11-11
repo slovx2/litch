@@ -12,6 +12,7 @@ import type {
   LoadOutcome,
   TabInfo,
 } from '../../browser/src/browser/model.mjs'
+import { discardUpload } from '../../browser/src/browser/upload-cleanup.mjs'
 import { type ChromeBridge, ChromeBridgeError } from './bridge.mjs'
 
 export class ChromePage implements BrowserPage {
@@ -116,6 +117,20 @@ export class ChromePage implements BrowserPage {
       return result.value
     }
     return this.request<T>('command', { method, params })
+  }
+  async discardUpload(state: string | undefined, objects: readonly string[]): Promise<void> {
+    if (!this.valid) return
+    await discardUpload(
+      <T,>(method: string, params?: Record<string, unknown>) =>
+        this.bridge.call<T>(this.instanceId, {
+          op: 'command',
+          leaseId: this.grant.leaseId,
+          ...(this.activeGeneration === undefined ? {} : { generation: this.activeGeneration }),
+          args: { method, params },
+        }),
+      state,
+      objects,
+    )
   }
   async prepareObservation(): Promise<void> {
     if (!this.valid)

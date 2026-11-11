@@ -118,6 +118,12 @@ export type ClientToolAnswer = 'once' | 'session' | 'always' | 'decline'
 
 /** 执行器能用的东西 */
 export interface ClientToolContext {
+  /** 宿主按本次调用的设备准备上传源；远程源只在私有临时目录中物化。 */
+  prepareUpload?(
+    paths: readonly string[],
+    limits: { fileBytes: number; totalBytes: number },
+  ): Promise<{ paths: string[]; dispose(): Promise<void> }>
+
   /** 回合被打断、连接断了、超时时会被中止 */
   signal: AbortSignal
   /** 在这个会话的对话里出一张卡片等用户答复；被取消时回 null */

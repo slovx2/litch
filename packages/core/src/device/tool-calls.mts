@@ -11,6 +11,7 @@
 // litch_machine 不交给主进程：交给核心自己的接线那一层（host.machine，machine-wiring.mts），
 // 开关、审批、卡片放哪都在那里。这里照样管超时（卡片挂着时停表）、撤回、打断、断线。它有两种来路：
 // 回合里的 item/tool/call，和设备进程转来的命令行调用 litch/clientTool/call（不一定有会话和回合）。
+import type { UploadReadParams, UploadReadResult } from '../../../protocol/src/browser-upload.mjs'
 import {
   CLIENT_TOOL_METHOD,
   CLIENT_TOOL_NAMESPACE,
@@ -82,6 +83,7 @@ export interface MachineCalls {
 
 export interface ToolCallsHost {
   /** 仅供浏览器读取会话实际权限；未知配置绝不免审。 */
+  uploadRead?(params: UploadReadParams): Promise<UploadReadResult>
   fullAccess?(threadId: string): Promise<boolean>
   deviceId: string
   clock: Clock
@@ -291,6 +293,23 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
       const execute = () => {
         if (running.get(id) !== entry) return
         host.hub.call(invocation, {
+          async uploadRead(request) {
+            const args = params.arguments as { paths?: unknown } | null
+            if (
+              running.get(id) !== entry ||
+              namespace !== 'litch_browser' ||
+              params.tool !== 'upload' ||
+              invocation.device.kind !== 'ssh' ||
+              !args ||
+              !Array.isArray(args.paths) ||
+              !args.paths.includes(request.path) ||
+              !host.uploadRead
+            )
+              throw new Error('Upload source is not authorized for this call.')
+            const result = await host.uploadRead(request)
+            if (running.get(id) !== entry) throw new Error('Upload call ended.')
+            return result
+          },
           result: (response) => finish(entry, response),
           ask(askId, ask) {
             if (running.get(id) !== entry) return

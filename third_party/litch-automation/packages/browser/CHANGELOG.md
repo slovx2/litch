@@ -2,6 +2,10 @@
 
 ## 未发布
 
+### 0.42.0
+
+新增 prepareUpload 宿主端口，支持远程源私有暂存；远程上传在隔离 world 构造与磁盘独立的 File，finally 删除暂存，取消时丢弃页面分块；本地路径仍用 DOM.setFileInputFiles。
+
 ### 紧凑观察与恢复
 
 snapshot 默认最多 180 行、约 10K 字符，仍略去装饰容器与重复文字。`detail:"full"` 提高到 1500 行、约 60K；`offset` 根据 `observation.next_offset` 读取后续行。分页针对完整快照，`diff:true` 在有完整基准时只回变化；截断后不推进基准，避免漏掉从未返回的内容。

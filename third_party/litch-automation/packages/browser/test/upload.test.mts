@@ -115,6 +115,6 @@ test('远程会话的同名路径绝不能读取桌面本地文件', async () =>
     { signal: new AbortController().signal, ask: async () => 'once' },
   )
   assert.equal(result.success, false)
-  assert.match(JSON.stringify(result), /remote session uploads are not supported yet/)
+  assert.match(JSON.stringify(result), /host cannot read upload files/)
   assert.doesNotMatch(JSON.stringify(result), /不得读取控制端文件/)
 })

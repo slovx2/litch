@@ -1,5 +1,7 @@
 // 每次调用持有自己的停止信号和文档基线；取消后的异步尾巴不能继续派发输入。
+
 import type { BrowserPage } from './model.mjs'
+import { discardUpload } from './upload-cleanup.mjs'
 
 export function guardedPage(
   page: BrowserPage,
@@ -34,6 +36,10 @@ export function guardedPage(
   }
   const proxy = new Proxy(page, {
     get(target, key) {
+      if (key === 'discardUpload')
+        return (state: string | undefined, objects: readonly string[]) =>
+          target.discardUpload?.(state, objects) ??
+          discardUpload(target.cdp.bind(target), state, objects)
       if (key === 'prepareObservation')
         return async () => {
           await guard(false)

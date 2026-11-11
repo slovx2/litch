@@ -1,0 +1,49 @@
+{
+  "extension": "litchBrowserUpload",
+  "description": "浏览器上传所用的设备文件元数据与有界分块读取。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "litchBrowserUpload" } }
+  },
+  "undeclared": "请求返回 extensionRequired；没有主动通知，不修改标准 fs 方法。客户端只对自报支持的设备发送请求。",
+  "rules": [
+    "仅已认证且声明此扩展的连接可调用，不注册为模型工具；路径按设备操作系统解析。",
+    "stat 从打开的普通文件获取可靠大小与版本（dev/ino/size/mtimeNs/ctimeNs），最大 512 MiB；浏览器侧另守原有限额：内置单文件 100 MiB，Chrome 合计 512 MiB，每次最多 32 文件。",
+    "read 每块最多 192 KiB；必须带 stat 取得的版本，范围不得超出文件。每次读取前后核对句柄版本，读取后复验路径身份。零长度末尾读取用于最终复验及空文件。",
+    "不保留设备文件句柄：每个请求 finally 关闭，取消与断线最多剩一次有界读取。",
+    "核心仅允许活跃 litch_browser.upload 调用请求原始 paths 中的源，通过该调用绑定的设备连接读取。不得回退读取控制端同路径。",
+    "主进程预检所有源的大小，顺序分块写私有临时目录；上传前构造浏览器独立 File，成功、失败或取消后 finally 清理磁盘临时文件。浏览器 File 可供网页延迟提交。"
+  ],
+  "parts": [
+    {
+      "kind": "ClientRequest",
+      "method": "litch/browserUpload/read",
+      "params": {
+        "oneOf": [
+          {
+            "type": "object", "additionalProperties": false, "required": ["action", "path"],
+            "properties": { "action": { "const": "stat" }, "path": { "type": "string", "minLength": 1 } }
+          },
+          {
+            "type": "object", "additionalProperties": false, "required": ["action", "path", "version", "offset", "length"],
+            "properties": {
+              "action": { "const": "read" }, "path": { "type": "string", "minLength": 1 },
+              "version": { "type": "string", "minLength": 1 },
+              "offset": { "type": "integer", "minimum": 0 },
+              "length": { "type": "integer", "minimum": 0, "maximum": 196608 }
+            }
+          }
+        ]
+      },
+      "response": {
+        "type": "object", "additionalProperties": false, "required": ["size", "version", "mtimeMs"],
+        "properties": {
+          "size": { "type": "integer", "minimum": 0, "maximum": 536870912 },
+          "version": { "type": "string", "minLength": 1 },
+          "mtimeMs": { "type": "number" },
+          "dataBase64": { "type": "string", "maxLength": 262144 }
+        }
+      }
+    }
+  ]
+}

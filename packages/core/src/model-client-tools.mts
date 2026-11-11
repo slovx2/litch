@@ -3,6 +3,7 @@
 // 核心不认识 Electron：这里的形状和桌面外壳的 apps/desktop/src/client-tools/types.mts 是同一份，
 // 由外壳（core-host.mts）把两边接起来，类型在那里对一遍。
 
+import type { UploadReadParams, UploadReadResult } from '../../protocol/src/browser-upload.mjs'
 import type { ApprovalAnswer } from '../../protocol/src/client-approvals.mjs'
 import type {
   ClientToolCallParams,
@@ -60,6 +61,14 @@ export interface MachineNotice {
 /** 核心 → 主进程 */
 export type ToolToMain =
   | { type: typeof CLIENT_TOOL; op: 'call'; invocation: ToolInvocation }
+  | {
+      type: typeof CLIENT_TOOL
+      op: 'uploadReadResult'
+      id: string
+      requestId: string
+      result?: UploadReadResult
+      error?: string
+    }
   | { type: typeof CLIENT_TOOL; op: 'cancel'; id: string }
   | { type: typeof CLIENT_TOOL; op: 'answer'; askId: string; answer: ToolAnswer | null }
   | {
@@ -80,6 +89,13 @@ export type ToolToMain =
 
 /** 主进程 → 核心 */
 export type ToolToCore =
+  | {
+      type: typeof CLIENT_TOOL
+      op: 'uploadRead'
+      id: string
+      requestId: string
+      params: UploadReadParams
+    }
   | { type: typeof CLIENT_TOOL; op: 'result'; id: string; response: ClientToolCallResponse }
   | { type: typeof CLIENT_TOOL; op: 'ask'; id: string; askId: string; ask: ClientAskView }
   | { type: typeof CLIENT_TOOL; op: 'askDone'; askId: string }

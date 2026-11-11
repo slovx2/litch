@@ -12,6 +12,8 @@
 npm run client:check:chrome
 ```
 
+远程上传可用 `npm run client:check:chrome -- --headless-only` 验收，假远程走正式设备读取、核心反向 IPC 与主进程暂存，清理后再做 FileReader 和实际表单提交。内置浏览器对应 `npm --prefix apps/desktop run check:remote-upload`：99 MiB 源文件经过同一条完整链路，并报告渲染进程工作集峰值、用时及页面心跳。两者都不建立 SSH 或访问真实 Chrome 配置。
+
 只需要 headless 定向验收时用 `npm run client:check:chrome -- --headless-only`，仍跑正式 executor、上传、权限、输入和回执检查，但不启动额外的 headed 生命周期/最小化窗口场景。报告将 `headedLifecycle` 标为 `notRequested`；默认完整验收及其前台应用不变断言保持原样。
 
 上传验收在隔离 profile 对照 `isAllowedFileSchemeAccess()` 关/开/关时旧 CDP 上传的确切结果，并读取该版本的扩展详情 UI。正式 `upload` 在关闭权限时上传小文件、空文件、129 MiB 文件及拖放区域/同源 iframe；本地接收服务器逐文件核对字节数、SHA-256、名称、MIME、修改时间和事件顺序。还覆盖分块中撤租约、导航及 512 MiB 总量/单文件上限。报告的 `upload` 字段保留根因对照与接收结果。这里的 `.mp4` 是确定性测试字节，不证明视频网站会接受其媒体格式，也不代替商店签名扩展或真实投稿验收。

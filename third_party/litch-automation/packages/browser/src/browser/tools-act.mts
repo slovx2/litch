@@ -8,6 +8,7 @@ import { observedInput } from './input-receipt.mjs'
 import { parseKey } from './keys.mjs'
 import type { BrowserPage } from './model.mjs'
 import { blockedByDialog, guarded, inputReady, nodeOf, pageLine, pointOf } from './page-ops.mjs'
+import { uploadBufferedFiles } from './upload-files.mjs'
 import { associatedInput, fileInput, validateFiles } from './upload-target.mjs'
 
 /** 上传的文件一个最大多少 */
@@ -208,17 +209,16 @@ const scrollAction: Tool = async (call) => {
 }
 
 const uploadAction: Tool = async (call) => {
-  if (call.invocation.device.kind !== 'local') {
+  if (call.invocation.device.kind !== 'local' && !call.context.prepareUpload)
     return clientToolFailure(
       'invalid',
-      'upload is only available when the conversation runs on the same computer as the Litch desktop app; remote session uploads are not supported yet. Paths on the remote device are never read from the controlling desktop.',
+      'The host cannot read upload files from this session device. Update the device service and desktop app. Remote paths are never read on the controlling desktop.',
     )
-  }
   const page = call.pick()
   const stop = await ready(call, page)
   if (stop) return stop
   const ref = str(call.args, 'ref', true)
-  const paths = strings(call.args, 'paths')
+  let paths = strings(call.args, 'paths')
   const mode = oneOf(call.args, 'mode', ['input', 'drop'] as const) ?? 'input'
   if (mode === 'drop' && !call.uploadFiles)
     throw new BadArgs(
@@ -226,59 +226,91 @@ const uploadAction: Tool = async (call) => {
     )
   if (paths.length > 32) throw new BadArgs('Upload accepts 1 to 32 files per call.')
   const limit = call.uploadMaxBytes ?? UPLOAD_MAX_BYTES
-  for (const path of paths) {
-    if (!isAbsolute(path)) throw new BadArgs(`not an absolute path: ${path}`)
-    const stat = call.statFile(path)
-    if (!stat?.file) throw new BadArgs(`not a file: ${path}`)
-    if (stat.size > limit)
-      throw new BadArgs(
-        `file is larger than ${limit / 1024 / 1024} MiB: ${path}. This environment cannot upload files above that limit; do not start a local file server.`,
-      )
-  }
-  let backendNodeId = nodeOf(call, page, ref)
-  let attrs = await fileInput(page, backendNodeId)
-  if (mode === 'input' && !attrs) {
-    if (!page.interceptFileChooser)
-      throw new BadArgs(
-        'This environment does not support file chooser interception. Use a file input ref from snapshot.',
-      )
-    const interception = await page.interceptFileChooser(call.context.signal)
-    try {
-      const clicked = await clickAction({ ...call, args: { ref } })
-      if (!clicked.success) return clicked
-      const chooser = await interception.wait(1500)
-      if (chooser && chooser.mode !== 'selectMultiple' && paths.length > 1)
-        throw new BadArgs('This file chooser accepts only one file.')
-      if (chooser) {
-        if (chooser.backendNodeId === undefined)
-          throw new BadArgs(
-            'This environment does not support this file chooser: it has no file input node.',
+  const prepared =
+    call.invocation.device.kind !== 'local'
+      ? await call.context.prepareUpload!(paths, {
+          fileBytes: limit,
+          totalBytes: call.uploadFiles ? limit : limit * 32,
+        })
+      : null
+  if (prepared) paths = prepared.paths
+  // 远程临时文件必须在返回时删除。先构造独立于磁盘路径的 File，网页稍后提交仍可读取。
+  const uploadFiles =
+    call.uploadFiles ??
+    (prepared
+      ? (
+          page: Parameters<typeof uploadBufferedFiles>[0],
+          node: number,
+          files: string[],
+          mode: 'input' | 'drop',
+        ) =>
+          uploadBufferedFiles(
+            page,
+            node,
+            files,
+            mode,
+            { fileBytes: limit, totalBytes: limit * 32 },
+            call.context.signal,
           )
-        backendNodeId = chooser.backendNodeId
-      } else backendNodeId = await associatedInput(page, backendNodeId)
-      attrs = await fileInput(page, backendNodeId)
-      if (!attrs)
+      : undefined)
+  try {
+    call.context.signal.throwIfAborted()
+    for (const path of paths) {
+      if (!isAbsolute(path)) throw new BadArgs(`not an absolute path: ${path}`)
+      const stat = call.statFile(path)
+      if (!stat?.file) throw new BadArgs(`not a file: ${path}`)
+      if (stat.size > limit)
         throw new BadArgs(
-          'The file chooser did not identify a file input; this environment does not support this chooser.',
+          `file is larger than ${limit / 1024 / 1024} MiB: ${path}. This environment cannot upload files above that limit; do not start a local file server.`,
         )
-      validateFiles(attrs, paths)
-      if (call.uploadFiles) await call.uploadFiles(page, backendNodeId, paths, mode)
-      else await page.cdp('DOM.setFileInputFiles', { files: paths, backendNodeId })
-    } finally {
-      await interception.dispose()
     }
-  } else {
-    if (attrs && mode === 'input') validateFiles(attrs, paths)
-    if (call.uploadFiles) await call.uploadFiles(page, backendNodeId, paths, mode)
-    else await page.cdp('DOM.setFileInputFiles', { files: paths, backendNodeId })
+    let backendNodeId = nodeOf(call, page, ref)
+    let attrs = await fileInput(page, backendNodeId)
+    if (mode === 'input' && !attrs) {
+      if (!page.interceptFileChooser)
+        throw new BadArgs(
+          'This environment does not support file chooser interception. Use a file input ref from snapshot.',
+        )
+      const interception = await page.interceptFileChooser(call.context.signal)
+      try {
+        const clicked = await clickAction({ ...call, args: { ref } })
+        if (!clicked.success) return clicked
+        const chooser = await interception.wait(1500)
+        if (chooser && chooser.mode !== 'selectMultiple' && paths.length > 1)
+          throw new BadArgs('This file chooser accepts only one file.')
+        if (chooser) {
+          if (chooser.backendNodeId === undefined)
+            throw new BadArgs(
+              'This environment does not support this file chooser: it has no file input node.',
+            )
+          backendNodeId = chooser.backendNodeId
+        } else backendNodeId = await associatedInput(page, backendNodeId)
+        attrs = await fileInput(page, backendNodeId)
+        if (!attrs)
+          throw new BadArgs(
+            'The file chooser did not identify a file input; this environment does not support this chooser.',
+          )
+        validateFiles(attrs, paths)
+        if (uploadFiles) await uploadFiles(page, backendNodeId, paths, mode)
+        else await page.cdp('DOM.setFileInputFiles', { files: paths, backendNodeId })
+      } finally {
+        await interception.dispose()
+      }
+    } else {
+      if (attrs && mode === 'input') validateFiles(attrs, paths)
+      if (uploadFiles) await uploadFiles(page, backendNodeId, paths, mode)
+      else await page.cdp('DOM.setFileInputFiles', { files: paths, backendNodeId })
+    }
+    return call.done(
+      page,
+      `${mode === 'drop' ? 'Dispatched a drop with' : 'Set'} ${paths.length} file(s) on ${ref}.` +
+        (uploadFiles
+          ? ' The browser used synthetic events. Verify the page accepted the files using its file name, progress or success message. Do not start a local file server or change extension permissions.'
+          : ''),
+    )
+  } finally {
+    await prepared?.dispose()
   }
-  return call.done(
-    page,
-    `${mode === 'drop' ? 'Dispatched a drop with' : 'Set'} ${paths.length} file(s) on ${ref}.` +
-      (call.uploadFiles
-        ? ' Chrome used synthetic events. Verify the page accepted the files using its file name, progress or success message. Do not start a local file server or change extension permissions.'
-        : ''),
-  )
 }
 
 const dialogAction: Tool = async (call) => {
@@ -301,5 +333,7 @@ export const press = observedInput(pressAction)
 export const scroll = observedInput(scrollAction)
 const observedUpload = observedInput(uploadAction)
 export const upload: Tool = (call) =>
-  call.invocation.device.kind === 'local' ? observedUpload(call) : uploadAction(call)
+  call.invocation.device.kind === 'local' || call.context.prepareUpload
+    ? observedUpload(call)
+    : uploadAction(call)
 export const dialog = observedInput(dialogAction)

@@ -15,6 +15,7 @@ import { fixtures } from './fixtures.mjs'
 import { inputChecks } from './input-check.mjs'
 import { chromeLifecycle } from './lifecycle.mjs'
 import { remoteCheck } from './remote-check.mjs'
+import { remoteUploadChecks } from './remote-upload.mjs'
 import { secondIdentity } from './second-identity.mjs'
 import { uploadChecks } from './upload.mjs'
 import { uploadBoundaries } from './upload-boundaries.mjs'
@@ -129,7 +130,7 @@ try {
         ['bridge', 'installer', 'executor']
           .map((name) => `export * from './apps/desktop/src/chrome-browser/${name}.mts'`)
           .join('\n') +
-        `\nexport * as chromeLibrary from './third_party/litch-automation/packages/chrome-bridge/src/index.mts'; export {createCore,reduceSession} from './packages/core/src/index.mts'; export {sshOpener} from './apps/desktop/src/transport-ssh.mts'; export {createClientToolHost} from './apps/desktop/src/client-tools/host.mts';`,
+        `\nexport * as chromeLibrary from './third_party/litch-automation/packages/chrome-bridge/src/index.mts'; export {createCore,reduceSession} from './packages/core/src/index.mts'; export {sshOpener} from './apps/desktop/src/transport-ssh.mts'; export {createClientToolHost} from './apps/desktop/src/client-tools/host.mts'; export {createToolHub} from './packages/core/src/tool-hub.mts'; export {createToolCalls} from './packages/core/src/device/tool-calls.mts'; export {DeviceCalls,DeviceLayer} from './packages/device/src/device-layer.mts';`,
       resolveDir: root,
     },
     outfile: join(work, 'driver.mjs'),
@@ -292,6 +293,16 @@ try {
     return result
   }
   let tabId
+  report.remoteUpload = await remoteUploadChecks({
+    driver,
+    executor,
+    bridge,
+    targetId,
+    check,
+    work,
+    origin: site.origin,
+    text,
+  })
   report.upload = await uploadChecks({
     cdp,
     identity,
@@ -305,6 +316,7 @@ try {
     origin: site.origin,
   })
   await uploadBoundaries({ executor, targetId, success, run: call, text, check, work, site })
+
   await check('固定 ID / Native Messaging / 正式 executor', async () => {
     assert.equal(identity.id, 'fakgembkgnmeknpaegnneneockbjhaai')
     // 协议协商与安装来源：开发者模式加载报 unpacked，协商出当前协议号
@@ -315,7 +327,11 @@ try {
       { protocol: 1, incompatible: null, source: 'unpacked' },
     )
     await success('targets', {})
-    const result = await success('navigate', { targetId, url: `${site.origin}/login`, keep: true })
+    const result = await success('navigate', {
+      targetId,
+      url: `${site.origin}/login`,
+      keep: true,
+    })
     tabId = JSON.parse(text(result).split('\n')[0]).tabId
   })
   await check('第二身份独立登记与握手 / 同标签 debugger 冲突不抢占', async () => {
@@ -372,7 +388,12 @@ try {
       const value = text(await success('snapshot', { tabId }))
       const ref = value.match(/button "1".*?\[ref=([^\]\s]+)\]/)?.[1]
       assert.ok(ref)
-      const repeated = { ...invocation, callId: unique(), tool: 'click', arguments: { tabId, ref } }
+      const repeated = {
+        ...invocation,
+        callId: unique(),
+        tool: 'click',
+        arguments: { tabId, ref },
+      }
       const first = await executor.call(repeated, context)
       const second = await executor.call(repeated, context)
       assert.equal(first.success, true, text(first))
@@ -482,7 +503,12 @@ try {
       ).tabs.find((tab) => tab.url === `${site.origin}/`)
       const other = { ...invocation, threadId: 'competing-thread' }
       const denied = await executor.call(
-        { ...other, callId: unique(), tool: 'claim', arguments: { claimToken: listed.claimToken } },
+        {
+          ...other,
+          callId: unique(),
+          tool: 'claim',
+          arguments: { claimToken: listed.claimToken },
+        },
         context,
       )
       assert.equal(denied.success, false)
@@ -519,7 +545,12 @@ try {
       const claims = await Promise.all(
         contenders.map((owner, index) =>
           executor.call(
-            { ...owner, callId: unique(), tool: 'claim', arguments: { claimToken: tokens[index] } },
+            {
+              ...owner,
+              callId: unique(),
+              tool: 'claim',
+              arguments: { claimToken: tokens[index] },
+            },
             context,
           ),
         ),
@@ -733,7 +764,10 @@ try {
         report.reloadInstances = bridge.instances()
         const diagnostic = await cdp.call('Target.createTarget', { url: 'chrome://extensions/' })
         const debugSession = (
-          await cdp.call('Target.attachToTarget', { targetId: diagnostic.targetId, flatten: true })
+          await cdp.call('Target.attachToTarget', {
+            targetId: diagnostic.targetId,
+            flatten: true,
+          })
         ).sessionId
         await new Promise((resolve) => setTimeout(resolve, 300))
         report.extensionDiagnostics = await cdp.call(

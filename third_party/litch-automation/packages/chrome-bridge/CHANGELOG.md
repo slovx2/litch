@@ -2,6 +2,10 @@
 
 ## 未发布
 
+### 0.42.0
+
+复用 browser 的有界 File 构造与清理逻辑；调用取消后仅清理已持有的上传对象，继续核验租约与来源。
+
 ### 一次准备 Chrome 标签
 
 `ensure_claimed({targetId,url?})` 只选精确 URL，省略 url 时选最后焦点窗口的当前标签；多匹配直接要求明确选择。`ensure_claimed({tabId})` 恢复本会话原标签，一次完成列表、来源检查、认领、加载等待和新快照，返回稳定 tabId 与新 ref。未引入扩展 RPC，沿用 v1 list/claim/renew/command。

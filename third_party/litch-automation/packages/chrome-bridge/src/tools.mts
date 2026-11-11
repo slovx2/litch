@@ -178,7 +178,8 @@ export async function executePageTool(
       }
     },
     handover: null,
-    uploadFiles: uploadChromeFiles,
+    uploadFiles: (page, node, paths, mode) =>
+      uploadChromeFiles(page, node, paths, mode, context.signal),
     uploadMaxBytes: CHROME_UPLOAD_MAX_BYTES,
   }
   const result = await handler(call)

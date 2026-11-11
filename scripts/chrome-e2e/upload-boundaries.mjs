@@ -47,7 +47,7 @@ export async function uploadBoundaries({
       const result = await run('upload', { tabId, ref, paths: [path] })
       page.cdp = original
       assert.equal(result.success, false, text(result))
-      assert.match(text(result), /Chrome file upload failed/)
+      assert.match(text(result), /Browser file upload failed/)
       assert.match(text(result), /notDispatched/)
       assert.equal(chunks, 1)
       assert.equal(site.requests.filter((p) => p === '/upload-body').length, before)
@@ -68,7 +68,7 @@ export async function uploadBoundaries({
       await handle.truncate(300 * 1024 * 1024)
       const total = await run('upload', { tabId, ref, paths: [sparse, sparse] })
       assert.equal(total.success, false)
-      assert.match(text(total), /totaling at most 512 MiB/)
+      assert.match(text(total), /within the browser size limits/)
       await handle.truncate(513 * 1024 * 1024)
       const single = await run('upload', { tabId, ref, paths: [sparse] })
       assert.equal(single.success, false)
