@@ -11,6 +11,7 @@ import { emptyGoalLedger, type GoalLedger, type GoalState } from './goal-control
 import { type HookEvent, type HookRun, hookItem } from './hook-lifecycle.mjs'
 import type { ContextInjection } from './native-context.mjs'
 import { ProtocolError, type ThreadRuntimeSettings } from './protocol-contract.mjs'
+import { visibleClaudeItems } from './system-reminders.mjs'
 import type { ThreadAttachment } from './thread-attachments.mjs'
 import type { ThreadGoal } from './thread-goals.mjs'
 import type {
@@ -2162,7 +2163,7 @@ export class SessionStore {
       startedAt: row.started_at == null ? null : Number(row.started_at),
       completedAt: row.completed_at == null ? null : Number(row.completed_at),
       durationMs: row.duration_ms == null ? null : Number(row.duration_ms),
-      items: JSON.parse(String(row.items_json)),
+      items: visibleClaudeItems(JSON.parse(String(row.items_json))),
       diff: String(row.diff ?? ''),
       error: row.error_json == null ? null : JSON.parse(String(row.error_json)),
     }

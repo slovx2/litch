@@ -9,6 +9,21 @@ issue 正文计数及 CI 写权限；原来的 `nightly-triage` issue 保留用�
 它们没有 GitHub run/job ID，不加入 `cases.events`，也不参与按独立 CI run 累计的三次阈值；
 `summary` 仍只汇总 CI 事件。本地观察次数按各用例的独立执行标识核对，不能充作 CI 次数。
 
+## 本地观察
+
+### 2026-11-11：Claude 后台回合收尾
+
+- 用例：`packages/claude/test/native-background-races.test.mts` 的
+  `自行续跑的回合正在收尾时用户发来消息：按新回合提交，消息不丢`。
+- 环境：macOS arm64、Node 24.21.0、隔离 Claude Code CLI 2.1.282、回环假模型；
+  基线 `d2be1dab`，工作树含本次系统提醒过滤的未提交改动。
+- 一次本地 `npm run test --prefix packages/claude`（并发 4）中，收到的回合号仍是自行续跑回合，
+  `assert.notEqual(turn.id, spontaneousId)` 失败；总计 990 项，988 通过、1 失败、1 Windows 项跳过。
+- 同一份构建按完整用例名单独复跑通过（1/1）；最终修订重新构建后，包含该文件的定向复跑
+  也全部通过（29/29）。用例先观察正文增量，再固定等待 600ms；是否因时序前提漂移而失败尚未查清。
+- 仅为一次本地失败观察，没有对应 GitHub run/job 或已核实的 CI 记录，**不计入 CI 次数**。
+  未修改用例、扩大等待或添加重试；暂不单独立项。
+
 ## 认定和计数
 
 - 键是 **Full 中完整作业名 + 稳定用例名**。保留矩阵后缀和嵌套作业名，不将不同平台、

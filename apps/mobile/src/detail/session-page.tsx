@@ -378,6 +378,7 @@ export function useSessionPage({
               <CommentsContext.Provider value={comments}>
                 <Composer
                   store={store}
+                  keepTodo={manager}
                   markers={markers}
                   inputRef={input}
                   onUsage={() => setUsageOpen(true)}

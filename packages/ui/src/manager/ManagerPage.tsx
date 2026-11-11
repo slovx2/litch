@@ -28,6 +28,7 @@ import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
+import { SessionTodo } from '../rail/InfoRail.tsx'
 import { onFindPreparing } from '../search/actions.ts'
 import { Transcript } from '../transcript/Transcript.tsx'
 import { ManagerSuggestions } from '../tree/SuggestionsPage.tsx'
@@ -533,6 +534,7 @@ export function ManagerPage({
         ))}
       </div>
       <div className="mg-chat">
+        <SessionTodo deviceId={manager.deviceId} sessionId={manager.threadId} />
         <Transcript
           deviceId={manager.deviceId}
           sessionId={manager.threadId}

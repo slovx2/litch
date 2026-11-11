@@ -34,10 +34,10 @@ export function todoProgress(steps: readonly TodoStep[]): { done: number; total:
  * 输入框上方的小按钮出不出：有没做完的就一直在（回合结束了也在，下一回合接着做）；
  * 全做完了只在它所在的回合还在跑时留着，回合结束就收掉（对话里那一行还在）
  */
-export function todoChipShown(todo: LatestTodo | null): boolean {
+export function todoChipShown(todo: LatestTodo | null, keepCompleted = false): boolean {
   if (!todo) return false
   const { done, total } = todoProgress(todo.item.steps)
-  return done < total || todo.running
+  return keepCompleted || done < total || todo.running
 }
 
 /** 回合结束时还标着“正在做”的，算没做完（和对话里一样） */

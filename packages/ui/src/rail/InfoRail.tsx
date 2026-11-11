@@ -147,6 +147,22 @@ function RailTodo({
   )
 }
 
+/** 经理的看板占着侧栏位置，最近待办放在对话上方，仍订阅同一份回合计划。 */
+export function SessionTodo({ deviceId, sessionId }: InfoRailProps) {
+  const { item, running } = useLatestTodo(deviceId, sessionId)
+  const sessionKey = `${deviceId}:${sessionId}`
+  useEffect(() => {
+    setRailTodo(item ? sessionKey : null)
+    return () => setRailTodo(null)
+  }, [item, sessionKey])
+  if (!item) return null
+  return (
+    <div className="mg-todo">
+      <RailTodo sessionKey={sessionKey} item={item} running={running} />
+    </div>
+  )
+}
+
 /** 标题栏上开合信息栏的按钮。栏里没东西、窗口放不下的时候没有 */
 export function RailToggle() {
   const t = useT()

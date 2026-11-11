@@ -271,8 +271,64 @@ try {
   )
   await run(() => window.__restoreManager())
   await opened()
+  // 经理的最近待办订同一份回合计划，更新、折叠、窄屏及清空都不依赖看板数据。
+  await run(() => {
+    const { store, keys } = window.__managerOpen
+    const turnId = 'manager-todo-fixture'
+    store.set(keys.item('local', 'm1', `${turnId}:#todo`), {
+      id: `${turnId}:#todo`,
+      kind: 'todo',
+      note: null,
+      steps: [{ text: '经理待办验收', status: 'inProgress' }],
+    })
+    store.set(keys.turn('local', 'm1', turnId), {
+      id: turnId,
+      status: 'running',
+      itemIds: [],
+      startedAt: null,
+      durationMs: null,
+      error: null,
+    })
+    store.set(keys.turnIds('local', 'm1'), [turnId])
+  })
+  await until(() => has('.mg-todo .rail-body'), '经理待办卡片')
+  assert.match(await read('document.querySelector(".mg-todo").textContent'), /经理待办验收/)
+  await click('.mg-todo .rail-head')
+  assert.equal(await has('.mg-todo .rail-body'), false, '可收起')
+  await click('.mg-todo .rail-head')
+  await call('Emulation.setDeviceMetricsOverride', {
+    width: 800,
+    height: 850,
+    deviceScaleFactor: 1,
+    mobile: false,
+  })
+  await click('.mg-narrow button:first-child')
+  assert.ok(
+    await read('document.querySelector(".mg-todo").getBoundingClientRect().height > 0'),
+    '窄屏对话仍能看待办',
+  )
+  await run(() => {
+    const { store, keys } = window.__managerOpen
+    const turnId = 'manager-todo-fixture'
+    const key = keys.item('local', 'm1', `${turnId}:#todo`)
+    store.set(key, {
+      ...store.get(key),
+      steps: [{ text: '已完成的经理待办', status: 'completed' }],
+    })
+    const turnKey = keys.turn('local', 'm1', turnId)
+    store.set(turnKey, { ...store.get(turnKey), status: 'completed' })
+  })
+  await until(
+    () => read('document.querySelector(".mg-todo").textContent.includes("1/1")'),
+    '完成计数实时更新',
+  )
+  await run(() => {
+    const { store, keys } = window.__managerOpen
+    store.set(keys.turnIds('local', 'm1'), [])
+  })
+  await until(async () => !(await has('.mg-todo')), '无待办不占空间')
   console.log(
-    '桌面经理入口检查通过：等待身份时切树仍完成打开、再次选择以最后一次为准、切树保留会话/侧面板/看板页签、最近打开经理保留导航树及选中行、经理侧栏/目录、返回/前进、@、回报、通知、搜索、普通对话/工作线、迟到经理目录。无截图。',
+    '桌面经理入口检查通过：等待身份时切树仍完成打开、再次选择以最后一次为准、切树保留会话/侧面板/看板页签、最近打开经理保留导航树及选中行、经理侧栏/目录、返回/前进、@、回报、通知、搜索、普通对话/工作线、迟到经理目录；经理待办实时更新、折叠、窄屏和清空。无截图。',
   )
 } finally {
   cdp?.ws.close()

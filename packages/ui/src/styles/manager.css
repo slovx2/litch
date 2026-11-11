@@ -282,6 +282,13 @@
   flex-direction: column;
   background: var(--panel);
 }
+.mg-todo {
+  flex: none;
+  padding: 8px 16px;
+  max-height: 30%;
+  overflow: auto;
+  border-bottom: 1px solid var(--line-2);
+}
 /* 概览末尾的经理设定卡：完整显示，长了先折起 */
 .mg-rules {
   margin-top: 16px;

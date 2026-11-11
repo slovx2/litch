@@ -55,6 +55,7 @@ export function Composer({
   markers,
   inputRef,
   onUsage,
+  keepTodo = false,
 }: {
   store: SessionStore
   markers: boolean
@@ -62,6 +63,8 @@ export function Composer({
   inputRef?: RefObject<TextInput | null>
   /** 点了“上下文 N%”：打开用量页（上下文、账号额度、压缩） */
   onUsage?(): void
+  /** 经理始终保留最近待办的入口，包括已完成清单。 */
+  keepTodo?: boolean
 }) {
   const { deviceId, sessionId } = store
   const t = useT()
@@ -244,7 +247,9 @@ export function Composer({
               {/* 会话的持续目标：状态、用时、目标的话，暂停或继续、清除 */}
               <GoalBar store={store} onError={setError} />
               {/* 待办的浮窗：点了下面的小按钮展开，整份清单跟着待办换 */}
-              {panel === 'todo' ? <TodoPanel store={store} onClose={() => setPanel(null)} /> : null}
+              {panel === 'todo' ? (
+                <TodoPanel store={store} keepCompleted={keepTodo} onClose={() => setPanel(null)} />
+              ) : null}
               {/* 排着的回报的浮窗：点了下面的小按钮展开，一条一行 */}
               {panel === 'notes' ? (
                 <QueuedNotesPanel
@@ -263,7 +268,12 @@ export function Composer({
                   open={panel === 'notes'}
                   onToggle={() => toggle('notes')}
                 />
-                <TodoChip store={store} open={panel === 'todo'} onToggle={() => toggle('todo')} />
+                <TodoChip
+                  store={store}
+                  keepCompleted={keepTodo}
+                  open={panel === 'todo'}
+                  onToggle={() => toggle('todo')}
+                />
               </View>
               {/* 下一轮要换到别的供应商：提示一行 */}
               <ProviderSwitch
