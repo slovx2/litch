@@ -16,12 +16,14 @@ export function DiscussionPane({
   onHost,
   onBack,
   onClose,
+  issue = false,
 }: {
   id: string
   title: string
   onHost(element: HTMLElement | null): void
   onBack(): void
   onClose(): void
+  issue?: boolean
 }) {
   const t = useT()
   const height = usePaneHeight()
@@ -82,15 +84,16 @@ export function DiscussionPane({
         }}
       />
       <header className="mg-talk-head">
-        <button
-          type="button"
-          className="mg-talk-title ell"
-          data-act="discussion-back"
-          title={t('manager.discussionBack')}
-          onClick={onBack}
-        >
+        <div className="mg-talk-title ell" tabIndex={-1}>
           <span className="mono dim">{id}</span> {title}
-        </button>
+        </div>
+        <span data-discussion-body>
+          {!issue ? (
+            <button type="button" className="btn ghost" data-act="discussion-body" onClick={onBack}>
+              {t('issue.body.view')}
+            </button>
+          ) : null}
+        </span>
         <button
           type="button"
           className="ibtn"

@@ -204,6 +204,11 @@
   min-width: 0;
   margin-top: 6px;
 }
+.mg-issue-thread > [data-issue-original] {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
 .mg-issue-quick {
   min-width: 0;
 }
@@ -541,7 +546,7 @@ fieldset.mg-issue-status {
 }
 
 /* 完整页和抽屉的快速处理有自己的留白；内嵌旧卡不再保留草稿描边。 */
-.mg-issue-thread > .mg-issue-quick {
+.mg-issue-thread > [data-issue-original] > .mg-issue-quick {
   padding: 16px;
   border: 1px solid var(--line-1);
   border-radius: var(--r2);

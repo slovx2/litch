@@ -1,5 +1,5 @@
 // 手机上一条 issue 的讨论界面：半屏抽屉（IssueSheet）和完整讨论页共用，与桌面 IssueThread 对应。
-// 依次是一行小字（类型、状态、创建者、跟进）、原帖、状态与跟进、关联、评论时间线；输入框是单独的 IssueComposer，
+// 讨论默认只显示时间线；原帖、状态与跟进、关联都折叠。输入框是单独的 IssueComposer，
 // 抽屉里放在底部固定，完整页放在页尾。触控区不小于主题的 hit。
 import type { ManagerView } from '@litch/core'
 import { useIsFocused } from '@react-navigation/native'
@@ -99,6 +99,8 @@ export function IssueThread({
   commands,
   quick,
   onOpenItem,
+  bodyMode,
+  bodyOpen = false,
 }: {
   manager: ManagerView
   issue: ManagerIssue
@@ -109,6 +111,8 @@ export function IssueThread({
   /** 特殊 issue 的快速处理区（原来那张卡）；给了就画在原帖位置 */
   quick?: ReactNode
   onOpenItem(id: string): void
+  bodyMode: 'folded' | 'discussion'
+  bodyOpen?: boolean
 }) {
   const t = useT()
   const [openingError, setOpeningError] = useState('')
@@ -138,6 +142,8 @@ export function IssueThread({
   const { c, font, radius } = useTheme()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [expanded, setExpanded] = useState(false)
+  const showBody = bodyMode === 'folded' ? expanded : bodyOpen
   const run = async (request: Promise<unknown>) => {
     setBusy(true)
     setError('')
@@ -198,107 +204,118 @@ export function IssueThread({
           {openingError}
         </Text>
       ) : null}
-      {quick ??
-        (issue.body ? (
-          <Markdown text={issue.body} />
-        ) : (
-          <Text style={{ color: c.ink3 }}>{t('issue.noBody')}</Text>
-        ))}
-      {ordinary ? (
-        <View style={styles.controls}>
-          <View style={styles.wrap} role="radiogroup" aria-label={t('issue.filter.status')}>
-            {MANAGER_ISSUE_STATUSES.ordinary.map((status) => (
-              <Chip
-                key={status}
-                radio
-                label={t(`issue.status.${status}` as Parameters<typeof t>[0])}
-                on={issue.status === status}
-                disabled={disabled || busy}
-                testID={`issue-status:${status}`}
-                onPress={() =>
-                  issue.status === status
-                    ? undefined
-                    : void run(
-                        commands.update({
-                          id: issue.id,
-                          revision: issue.revision,
-                          patch: { status: status as ManagerOrdinaryStatus },
-                          why: t('issue.why.status', {
-                            status: t(`issue.status.${status}` as Parameters<typeof t>[0]),
-                          }),
-                        }),
-                      )
-                }
-              />
-            ))}
-          </View>
-          <View style={styles.followRow}>
-            <Text style={{ color: c.ink2, fontSize: font.size.meta + 1, flex: 1 }}>
-              {t('issue.follow.label')}
-              <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
-                {`  ${t('issue.follow.hint')}`}
-              </Text>
-            </Text>
-            <Switch
-              testID="issue-follow"
-              value={issue.followUp.state === 'on'}
-              disabled={disabled || busy}
-              trackColor={{ true: c.accent, false: c.line2 }}
-              onValueChange={(on) =>
-                void run(
-                  commands.follow({
-                    id: issue.id,
-                    revision: issue.revision,
-                    state: on ? 'on' : 'off',
-                    why: t(on ? 'issue.why.followUp.on' : 'issue.why.followUp.off'),
-                  }),
-                )
-              }
-            />
-          </View>
-        </View>
+      {bodyMode === 'folded' ? (
+        <Fold open={expanded} onToggle={() => setExpanded(!expanded)} testID="issue-body-toggle">
+          <Text style={{ color: c.accent, fontSize: font.size.meta }}>{t('issue.body.view')}</Text>
+        </Fold>
       ) : null}
-      {error ? <Text style={{ color: c.err }}>{error}</Text> : null}
-      {disabled ? <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{reason}</Text> : null}
-      {targets.length ? (
-        <View testID="issue-relations">
-          <Fold
-            open={relationsOpen}
-            onToggle={() => setRelationsOpen(!relationsOpen)}
-            testID="issue-relations-toggle"
-          >
-            <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
-              {t('manager.relations')} {targets.length}
-            </Text>
-          </Fold>
-          {relationsOpen ? (
-            <View style={styles.wrap}>
-              {targets.map((target) =>
-                target.kind === 'item' ? (
+      {showBody ? (
+        <View testID="issue-original" style={styles.thread}>
+          {quick ??
+            (issue.body ? (
+              <Markdown text={issue.body} />
+            ) : (
+              <Text style={{ color: c.ink3 }}>{t('issue.noBody')}</Text>
+            ))}
+          {ordinary ? (
+            <View style={styles.controls}>
+              <View style={styles.wrap} role="radiogroup" aria-label={t('issue.filter.status')}>
+                {MANAGER_ISSUE_STATUSES.ordinary.map((status) => (
                   <Chip
-                    key={`${target.kind}:${target.target}`}
-                    label={`${target.target} · ${t('issue.itemTag')}`}
-                    testID={`issue-item:${target.target}`}
-                    onPress={() => onOpenItem(target.target)}
+                    key={status}
+                    radio
+                    label={t(`issue.status.${status}` as Parameters<typeof t>[0])}
+                    on={issue.status === status}
+                    disabled={disabled || busy}
+                    testID={`issue-status:${status}`}
+                    onPress={() =>
+                      issue.status === status
+                        ? undefined
+                        : void run(
+                            commands.update({
+                              id: issue.id,
+                              revision: issue.revision,
+                              patch: { status: status as ManagerOrdinaryStatus },
+                              why: t('issue.why.status', {
+                                status: t(`issue.status.${status}` as Parameters<typeof t>[0]),
+                              }),
+                            }),
+                          )
+                    }
                   />
-                ) : (
-                  <Text
-                    key={`${target.kind}:${target.target}`}
-                    style={[
-                      styles.relation,
-                      {
-                        color: c.ink2,
-                        fontSize: font.size.meta,
-                        borderColor: c.line2,
-                        backgroundColor: c.sunken,
-                      },
-                    ]}
-                  >
-                    {t(`manager.relationKind.${target.kind}` as Parameters<typeof t>[0])} ·{' '}
-                    {target.label ?? target.target}
+                ))}
+              </View>
+              <View style={styles.followRow}>
+                <Text style={{ color: c.ink2, fontSize: font.size.meta + 1, flex: 1 }}>
+                  {t('issue.follow.label')}
+                  <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
+                    {`  ${t('issue.follow.hint')}`}
                   </Text>
-                ),
-              )}
+                </Text>
+                <Switch
+                  testID="issue-follow"
+                  value={issue.followUp.state === 'on'}
+                  disabled={disabled || busy}
+                  trackColor={{ true: c.accent, false: c.line2 }}
+                  onValueChange={(on) =>
+                    void run(
+                      commands.follow({
+                        id: issue.id,
+                        revision: issue.revision,
+                        state: on ? 'on' : 'off',
+                        why: t(on ? 'issue.why.followUp.on' : 'issue.why.followUp.off'),
+                      }),
+                    )
+                  }
+                />
+              </View>
+            </View>
+          ) : null}
+          {error ? <Text style={{ color: c.err }}>{error}</Text> : null}
+          {disabled ? (
+            <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{reason}</Text>
+          ) : null}
+          {targets.length ? (
+            <View testID="issue-relations">
+              <Fold
+                open={relationsOpen}
+                onToggle={() => setRelationsOpen(!relationsOpen)}
+                testID="issue-relations-toggle"
+              >
+                <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
+                  {t('manager.relations')} {targets.length}
+                </Text>
+              </Fold>
+              {relationsOpen ? (
+                <View style={styles.wrap}>
+                  {targets.map((target) =>
+                    target.kind === 'item' ? (
+                      <Chip
+                        key={`${target.kind}:${target.target}`}
+                        label={`${target.target} · ${t('issue.itemTag')}`}
+                        testID={`issue-item:${target.target}`}
+                        onPress={() => onOpenItem(target.target)}
+                      />
+                    ) : (
+                      <Text
+                        key={`${target.kind}:${target.target}`}
+                        style={[
+                          styles.relation,
+                          {
+                            color: c.ink2,
+                            fontSize: font.size.meta,
+                            borderColor: c.line2,
+                            backgroundColor: c.sunken,
+                          },
+                        ]}
+                      >
+                        {t(`manager.relationKind.${target.kind}` as Parameters<typeof t>[0])} ·{' '}
+                        {target.label ?? target.target}
+                      </Text>
+                    ),
+                  )}
+                </View>
+              ) : null}
             </View>
           ) : null}
         </View>

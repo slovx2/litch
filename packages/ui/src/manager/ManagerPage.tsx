@@ -280,7 +280,7 @@ export function ManagerPage({
     if (!talk || !talkHost) return
     const pane = talkHost.closest<HTMLElement>('.mg-talk-pane')
     const input = talkHost.querySelector<HTMLTextAreaElement>('textarea:not(:disabled)')
-    ;(input ?? pane?.querySelector<HTMLElement>('[data-act="discussion-back"]'))?.focus({
+    ;(input ?? pane?.querySelector<HTMLElement>('.mg-talk-title'))?.focus({
       preventScroll: true,
     })
   }, [talk, talkHost])
@@ -824,6 +824,7 @@ export function ManagerPage({
         </div>
         {talk ? (
           <DiscussionPane
+            issue={talk.startsWith('issue:')}
             id={talk.replace(/^issue:/, '')}
             title={
               issues.details[talk.replace(/^issue:/, '') as keyof typeof issues.details]?.title ??

@@ -33,7 +33,8 @@ issue 页签默认只选类型“issue”（X-n），类型过滤支持多选和
 对应状态放在过滤选项第一位，“全部”在最后；用户选过的条件不重置，概览数字带入的条件优先。
 点击对话中的 D-n、R-n、P-n、S- 或 X-n 链接，会切到目标实际所属的类别和状态，保留排序，清除作者、未读和跟进等可能隐藏目标的过滤。目标置于当前列表顶部并展开，收起后仍保留；手动改过滤或打开其他条目时结束定位。
 展开 X-n 可查看原帖、状态与跟进、关联、评论及输入框；其他类型保留快速处理按钮，可打开底部讨论或完整讨论页。
-完整讨论页和讨论抽屉保留对应的处理入口：决策提交答复（可只选选项）、请你做交付或回复、建议开始或编辑后开始、报告标为已阅。评论不会代替这些操作。
+桌面讨论抽屉只显示标题、讨论消息、问题和回复框，不重复上方已显示的正文与选项。标题行的“查看正文”会在上方列表定位并展开议题；当前列表没有该议题时，正文与对应操作在抽屉内按需展开，默认收起。完整讨论页保留原帖和处理入口。手机切到讨论后正文默认收起，可用“查看正文”展开；完整讨论页也先折叠正文。
+决策提交答复（可只选选项）、请你做交付或回复、建议开始或编辑后开始、报告标为已阅仍在正文区域，评论不会代替这些操作。
 依据与关联默认只显示标题和数量，点击展开；重新进入页面时恢复收起。活动只显示经理对正文、选项、推荐等内容和状态的实质更新，不重复显示用户答复、关联或依据变更、讨论开关；没有有效时间的活动不显示，历史数据仍保留。
 概览的 issue 摘要仍统计 X-n 的未完成、等我看、跟进已暂停；点击数字会回到 issue 页签，恢复只选 issue 类型并套用相应过滤。
 手机的类别胶囊和过滤抽屉采用相同规则。设备不支持 issue 时仍显示原来的四类控制台，并提示升级设备服务。
@@ -49,7 +50,8 @@ On first entry, Decisions, For you and Issues default to Open; Suggestions to Re
 That filter comes first and All comes last. Saved choices remain unchanged; filters from Overview counts take precedence.
 Conversation links to D-n, R-n, P-n, S- or X-n select the target's actual category and status, preserve sorting, and clear author, unread and follow-up filters that could hide it. The target opens at the top of the list and remains after collapsing. Changing filters or opening another entry ends this placement.
 X-n opens its description, status, follow-up, links and comments; other types keep their quick actions and can open a discussion drawer or full page.
-Full discussions and drawers retain the relevant action: submit a decision answer (an option alone is enough), deliver or reply to a request, start or edit a suggestion, and mark a report as read. Comments do not replace these actions.
+Desktop discussion drawers show the title, messages, questions and reply field without repeating the description or options above. **View description** locates and expands the issue in the list; if it is absent from that list, the description and its actions can be expanded inside the drawer and start collapsed. Full discussion pages retain the original content and actions. On phones, descriptions start collapsed in discussion drawers and full discussion pages.
+The description retains the relevant action: submit a decision answer (an option alone is enough), deliver or reply to a request, start or edit a suggestion, and mark a report as read. Comments do not replace these actions.
 Evidence and links initially show only their title and count. Click to expand; reopening the page collapses them again. Activity shows substantive manager edits and status changes, omitting duplicate user responses, link or evidence changes, discussion toggles, and entries without a valid timestamp. The underlying history is retained.
 Overview counts still cover X-n issues. Clicking a count selects the Issues tab and the Issue type with the corresponding filter.
 The phone uses the same rules in its category pills and filter drawer. Older devices keep the four-category Console and show an upgrade notice.
@@ -400,7 +402,7 @@ moves to Answered. Decisions under an ending or ended manager remain read-only.
 You may also answer explicitly in the manager conversation. Recorded links and evidence do not
 automatically become stale or verified; there is no automatic deadline/default-answer execution.
 
-Every issue keeps its original content and actions at the top, followed by a chronological discussion.
+Issue cards keep their original content and actions. Discussion drawers focus on the chronological discussion, with a separate description entry as described above.
 The former Answer/Ask tabs are replaced by this single post. **Ask manager** is the default: save a
 local question draft, combine it with answers, request deliveries and questions on other issues,
 and use **Submit to manager**. Failed drafts remain. The manager uses `post_get` and `post_reply`
@@ -713,7 +715,7 @@ Opening a conversation from a suggestion source, decision, item or other board l
 
 桌面和手机的分页看板按设备、经理、页签、状态筛选和排序分别记住展开的卡片与滚动位置；切换后返回、离开经理再返回均会恢复。每个列表最多展开一张卡，列表和详情加载完成后恢复位置；原卡已处理或不在当前筛选中时保持收起，滚动到原位置附近。阅读位置与对话滚动一样仅保留在当前客户端会话内，重启后不保留；排序偏好仍保存在本机。
 
-控制台卡片标题行的讨论图标显示回复数；当前客户端内新到的回复、等待回复或未发出的追问带小点。点开后，全部问答按时间排在看板底部分屏，卡片列表独立滚动，当前卡片有选中记号。一次只打开一条讨论，换帖子会替换内容。拖动分隔条调整高度并保存在本机；聚焦分隔条后也可用上下方向键调整。点标题回到卡片，点关闭图标或按 Esc 关闭，未发出的草稿保留。窄窗口仍为卡片列表留出空间。
+控制台卡片标题行的讨论图标显示回复数；当前客户端内新到的回复、等待回复或未发出的追问带小点。点开后，全部问答按时间排在看板底部分屏，卡片列表独立滚动，当前卡片有选中记号。一次只打开一条讨论，换帖子会替换内容。拖动分隔条调整高度并保存在本机；聚焦分隔条后也可用上下方向键调整。点“查看正文”定位卡片，点关闭图标或按 Esc 关闭，未发出的草稿保留。窄窗口仍为卡片列表留出空间。
 
 手机使用半屏底部抽屉，向上拖把手或点展开图标可到全屏，向下拖可收回半屏、再拖关闭；点标题关闭并回到卡片。两端的讨论默认展开，也可手动收起并记住。追问默认发到已有临时会话，没有临时问答时发给经理，输入框旁可切换。原来的草稿计数、随答复提交和已结束议题的草稿规则不变。全局建议窗口中的内嵌讨论仍在超过 1200 字符时默认收起。
 
@@ -725,7 +727,7 @@ The desktop board follows the conversation text size, including overview, consol
 
 On desktop and mobile, paged boards remember the expanded card and scroll position separately for each device, manager, tab, status filter and sort order. Returning to a tab or manager restores its position after the list and card details load. Each list keeps at most one card expanded. If the card is no longer in the list, it stays collapsed and the list returns as close as possible to the previous position. Like conversation scroll positions, this reading state lasts for the current client session; the sort preference remains saved locally.
 
-The discussion icon in each console card header shows its reply count. A dot indicates a new reply received in this client session, a pending reply or an unsent question. Open it to read all questions and answers chronologically in a pane below the board. The card list scrolls independently and highlights the selected card. Opening another post replaces the single pane. Drag its separator to resize it; the height is saved locally. The focused separator also accepts the Up and Down keys. Select the title to return to the card, or close with the icon or Esc. Drafts survive closing, and narrow windows retain space for the card list.
+The discussion icon in each console card header shows its reply count. A dot indicates a new reply received in this client session, a pending reply or an unsent question. Open it to read all questions and answers chronologically in a pane below the board. The card list scrolls independently and highlights the selected card. Opening another post replaces the single pane. Drag its separator to resize it; the height is saved locally. The focused separator also accepts the Up and Down keys. Select View description to locate the card, or close with the icon or Esc. Drafts survive closing, and narrow windows retain space for the card list.
 
 On phone, discussions open in a half-screen bottom drawer. Drag the handle up or use the expand icon for full screen; drag down to return to half screen, then again to close. Selecting the title closes the drawer and returns to its card. Discussions start expanded on both platforms and remember manual collapse choices. Follow-ups default to the existing temporary conversation, or to the manager when there is none; switch targets beside the input. Draft counts, submission with answers and ended-issue draft rules are unchanged. Inline discussions in the global suggestions window still start collapsed above 1,200 characters.
 
