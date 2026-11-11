@@ -16,7 +16,7 @@ import {
   managerIssuePending,
   projectManagerIssue,
 } from '../src/projection/manager-public-issues.mjs'
-import { settle } from './helpers.mjs'
+import { settle, systemClock } from './helpers.mjs'
 
 test('issue 时间投影与特殊状态：全部时间为毫秒，报告不计待处理', () => {
   const raw: ManagerIssue = {
@@ -66,6 +66,7 @@ test('核心 issue 缓存经 managerBoard 发布；通知/重连对账，旧设�
     supported = true
   const calls: string[] = []
   const host: ManagersHost = {
+    clock: systemClock,
     deviceId: 'd',
     online: () => online,
     supported: () => true,
@@ -214,6 +215,7 @@ test('讨论子能力门禁：旧 I-255 白名单接受默认列表、混合记�
   const calls: { method: string; params: any }[] = []
   const issue = structuredClone(managerIssueFixture.newOrdinary)
   const host: ManagersHost = {
+    clock: systemClock,
     deviceId: 'fixture',
     online: () => true,
     supported: () => true,

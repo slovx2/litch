@@ -28,7 +28,7 @@ import { sampleManagers } from '../src/mock/sample-manager.mjs'
 import { fakeDevice, harness } from './fake-device.mjs'
 import { fakeOpener, type Handler, RpcFailure } from './fake-server.mjs'
 import { thread, turn } from './fixtures.mjs'
-import { fakeClock, settle } from './helpers.mjs'
+import { fakeClock, settle, systemClock } from './helpers.mjs'
 import { watchSession } from './wire.mjs'
 
 for (const initial of ['active', 'ended'] as const)
@@ -409,6 +409,7 @@ function serviceWorld(
   let supported = true
   const calls: string[] = []
   const host: ManagersHost = {
+    clock: systemClock,
     deviceId: 'local',
     online: () => online,
     supported: () => supported,
@@ -598,6 +599,7 @@ test('通知观察器已在读取时，界面订阅复用首次读取，不废�
   let reads = 0
   let finish: (value: { board: ManagerBoard }) => void = () => {}
   const service = createManagers({
+    clock: systemClock,
     deviceId: 'local',
     online: () => true,
     supported: () => true,

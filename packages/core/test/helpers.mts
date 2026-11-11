@@ -1,5 +1,14 @@
 import type { Clock } from '../src/index.mjs'
 
+/** 用实际定时器驱动需要跨事件循环的服务夹具。 */
+export const systemClock: Clock = {
+  now: () => Date.now(),
+  setTimer(callback, delayMs) {
+    const timer = setTimeout(callback, delayMs)
+    return () => clearTimeout(timer)
+  },
+}
+
 /** 手动拨动的时钟：定时器只在 advance 时触发 */
 export function fakeClock(start = 1_700_000_000_000) {
   let now = start

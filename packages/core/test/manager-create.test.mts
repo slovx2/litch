@@ -6,6 +6,7 @@ import { RpcError } from '../src/connection/rpc.mjs'
 import { createManagers } from '../src/device/manager.mjs'
 import { managerValidationError } from '../src/device/manager-validation.mjs'
 import { sampleManagers } from '../src/mock/sample-manager.mjs'
+import { systemClock } from './helpers.mjs'
 
 const draft: ManagerCreateParams = {
   cwd: '/project',
@@ -34,6 +35,7 @@ test('创建经理：合法配置发往设备，参数错误在客户端定位�
   let calls = 0
   let failure: RpcError | null = null
   const service = createManagers({
+    clock: systemClock,
     deviceId: 'fixture',
     online: () => true,
     supported: () => true,

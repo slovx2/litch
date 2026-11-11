@@ -2717,6 +2717,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     request: (method, params) => link.request(method, params),
   })
   const managers = createManagers({
+    clock: options.clock,
     deviceId: config.id,
     online: () => online,
     supported: () => managersOn,

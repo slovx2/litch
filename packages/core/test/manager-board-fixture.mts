@@ -5,6 +5,7 @@ import type { Manager, ManagerBoard } from '../../protocol/src/manager.mjs'
 import { ChannelError } from '../src/channel/protocol.mjs'
 import type { CoreHost } from '../src/channel/server.mjs'
 import { createManagers, type ManagersHost } from '../src/device/manager.mjs'
+import { systemClock } from './helpers.mjs'
 
 export function managerBoardFixture(
   mock: CoreHost,
@@ -30,6 +31,7 @@ export function managerBoardFixture(
   >()
   let nextId = 0
   const host: ManagersHost = {
+    clock: systemClock,
     deviceId: 'local',
     online: () => true,
     supported: () => true,

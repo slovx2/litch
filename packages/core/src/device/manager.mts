@@ -27,7 +27,7 @@ import {
   type ManagerPageQuery,
 } from '../../../protocol/src/manager-paging.mjs'
 import { managerInputIssue } from '../../../protocol/src/manager-validation.mjs'
-import { ChannelError } from '../channel/protocol.mjs'
+import { ChannelError, type Clock } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
 import type { ManagerRequests } from '../connection/manager-protocol.mjs'
 import { RpcError } from '../connection/rpc.mjs'
@@ -55,6 +55,7 @@ import { PagedManagerBoard } from './manager-paging.mjs'
 import { managerValidationError } from './manager-validation.mjs'
 
 export interface ManagersHost {
+  clock: Clock
   deviceId: string
   online(): boolean
   supported(): boolean

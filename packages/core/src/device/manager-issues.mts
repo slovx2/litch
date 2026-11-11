@@ -54,9 +54,9 @@ export class ManagerIssueCache {
       while (this.dirty && mine === this.epoch && this.host.online()) {
         // 固定窗口合并跨帧通知；持续收到通知也不延长窗口，读取期间至多积一轮补读。
         await new Promise<void>((resolve) => {
-          const timer = setTimeout(resolve, 50)
+          const cancel = this.host.clock.setTimer(resolve, 50)
           this.cancelRefresh = () => {
-            clearTimeout(timer)
+            cancel()
             resolve()
           }
         })

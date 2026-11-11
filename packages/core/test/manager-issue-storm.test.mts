@@ -7,15 +7,16 @@ import {
 } from '../../protocol/src/manager-issues.mjs'
 import type { ManagersHost } from '../src/device/manager.mjs'
 import { ManagerIssueCache } from '../src/device/manager-issues.mjs'
-import { settle } from './helpers.mjs'
+import { fakeClock, settle, systemClock } from './helpers.mjs'
 
-function fixture() {
+function fixture(clock = systemClock) {
   const issue: ManagerIssue = structuredClone(managerIssueFixture.newOrdinary)
   issue.unread = true
   const query = { managerId: 'm', order: 'newest' as const }
   const calls: string[] = []
   let block: ((method: string) => Promise<void>) | null = null
   const host = {
+    clock,
     online: () => true,
     features: () => ({ issues: true, issueDiscussions: true }),
     log() {},
@@ -154,4 +155,23 @@ test('通知风暴：跨帧通知在50ms窗口合并；慢读取期间的新通�
   t.mock.timers.tick(50)
   await refreshing
   assert.deepEqual(f.calls, [M.list, M.list])
+})
+
+test('通知合并使用注入的时钟，停止时取消窗口且不发送迟到请求', async () => {
+  const clock = fakeClock()
+  const f = fixture(clock.clock)
+  await f.cache.call(M.list, f.query)
+  f.calls.length = 0
+  const refreshing = f.cache.refresh()
+  await settle()
+  assert.equal(clock.pending(), 1)
+  clock.advance(49)
+  await settle()
+  assert.deepEqual(f.calls, [])
+  f.cache.stop()
+  await refreshing
+  assert.equal(clock.pending(), 0)
+  clock.advance(100)
+  await settle()
+  assert.deepEqual(f.calls, [])
 })

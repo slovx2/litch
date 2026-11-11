@@ -12,6 +12,7 @@ import { createManagers, type ManagersHost } from '../src/device/manager.mjs'
 import { PagedManagerBoard } from '../src/device/manager-paging.mjs'
 import { sampleManagers } from '../src/mock/sample-manager.mjs'
 import type { ManagerBoardTopicView } from '../src/model-manager.mjs'
+import { systemClock } from './helpers.mjs'
 
 function fixture() {
   const sample = sampleManagers('local', 1_800_000_000, 'zh-CN')
@@ -68,6 +69,7 @@ function fixture() {
   })
   let summaryGate: Promise<void> | null = null
   const host: ManagersHost = {
+    clock: systemClock,
     deviceId: 'local',
     online: () => true,
     supported: () => true,

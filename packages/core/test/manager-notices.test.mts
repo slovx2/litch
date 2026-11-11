@@ -8,7 +8,7 @@ import {
 import { ChannelError, type ManagersOp } from '../src/channel/protocol.mjs'
 import { createManagers, type ManagersHost } from '../src/device/manager.mjs'
 import { sampleManagers } from '../src/mock/sample-manager.mjs'
-import { settle } from './helpers.mjs'
+import { settle, systemClock } from './helpers.mjs'
 
 function world(enabled = true) {
   const data = sampleManagers('local', 1_800_000_000, 'zh-CN')
@@ -21,6 +21,7 @@ function world(enabled = true) {
   let delay: (() => Promise<{ board: typeof board }>) | null = null
   let reads = 0
   const service = createManagers({
+    clock: systemClock,
     deviceId: 'local',
     online: () => online,
     supported: () => true,
