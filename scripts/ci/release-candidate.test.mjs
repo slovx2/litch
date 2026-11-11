@@ -471,11 +471,11 @@ async function serviceFixture(t, mode = 'standard') {
       if (path.endsWith('/releases/7')) return release
       throw new Error(`意外 API：${path}`)
     },
+    readJobs(path) {
+      const match = /\/attempts\/(\d+)\//.exec(path)
+      return match ? jobs.filter((job) => job.run_attempt === Number(match[1])) : jobs
+    },
     pages(path) {
-      if (path.includes('/jobs?')) {
-        const match = /\/attempts\/(\d+)\//.exec(path)
-        return match ? jobs.filter((job) => job.run_attempt === Number(match[1])) : jobs
-      }
       if (path.includes('/assets?')) return assets
       if (path.endsWith('/releases?per_page=100')) return release ? [release] : []
       throw new Error(`意外分页：${path}`)

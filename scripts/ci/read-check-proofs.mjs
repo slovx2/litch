@@ -8,6 +8,7 @@ import { checkLinuxProof, linuxSources } from './linux-proof.mjs'
 import { checkNativeProof } from './mac-native-plan.mjs'
 import { api, archiveNames, download, fileHash, pages } from './release-artifacts.mjs'
 import { checkJob, chooseArtifact } from './release-candidate.mjs'
+import { readJobs } from './release-jobs.mjs'
 import { checkWindowsProof, windowsSource } from './windows-proof.mjs'
 
 const env = process.env
@@ -35,7 +36,7 @@ async function readProof(kind, filename, job, validate) {
   const artifact = chooseArtifact(listed, kind, context)
   assert.ok(listed.find((item) => item.id === artifact.id).size_in_bytes <= limit)
   artifact.jobId = checkJob(
-    pages(`${base}/attempts/${artifact.attempt}/jobs?per_page=100`, 'jobs'),
+    await readJobs(`${base}/attempts/${artifact.attempt}/jobs`),
     `${prefixes[run.path]}${job}`,
     artifact.attempt,
   )

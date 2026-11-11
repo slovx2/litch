@@ -9,6 +9,7 @@ import {
   policyVersion,
   writeJson,
 } from './release-candidate.mjs'
+import { readJobs } from './release-jobs.mjs'
 
 const context = {
   repository: process.env.GITHUB_REPOSITORY,
@@ -24,7 +25,7 @@ const fullArtifact = chooseArtifact(
   context,
 )
 fullArtifact.jobId = checkJob(
-  pages(`${path}/attempts/${fullArtifact.attempt}/jobs?per_page=100`, 'jobs'),
+  await readJobs(`${path}/attempts/${fullArtifact.attempt}/jobs`),
   run.path === '.github/workflows/release.yml' ? 'gate / tests / report' : 'tests / report',
   fullArtifact.attempt,
 )

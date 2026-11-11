@@ -1,30 +1,16 @@
 // 工作流结束时读 Actions 的实际 step 时间；所有 attempt 都列出，重跑不能抹掉首败。
 import { appendFileSync } from 'node:fs'
+import { readJobs } from './release-jobs.mjs'
 
-const { GITHUB_API_URL, GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT, GITHUB_TOKEN } =
-  process.env
+const { GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT } = process.env
 const lines = [
   '## 阶段耗时与首次失败',
   '缓存命中见各 job 的“缓存与首次失败”；手机逐 flow 结果见对应 shard。',
 ]
 for (let attempt = 1; attempt <= Number(GITHUB_RUN_ATTEMPT); attempt++) {
-  const jobs = []
-  for (let page = 1; ; page++) {
-    const response = await fetch(
-      `${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${attempt}/jobs?per_page=100&page=${page}`,
-      {
-        headers: {
-          Authorization: `Bearer ${GITHUB_TOKEN}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-      },
-    )
-    if (!response.ok) throw new Error(`读取 job 失败：${response.status}`)
-    const result = await response.json()
-    jobs.push(...result.jobs)
-    if (result.jobs.length < 100) break
-  }
+  const jobs = await readJobs(
+    `repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${attempt}/jobs`,
+  )
   const failures = jobs
     .flatMap((job) =>
       (job.steps ?? [])

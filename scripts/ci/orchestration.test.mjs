@@ -152,6 +152,7 @@ test('运行汇总保留 attempt 1 首败，即使 attempt 2 通过', async (t) 
       GITHUB_REPOSITORY: 'fake/repo',
       GITHUB_RUN_ID: '1',
       GITHUB_RUN_ATTEMPT: '2',
+      GH_TOKEN: '',
       GITHUB_TOKEN: 'fake',
       GITHUB_STEP_SUMMARY: summary,
     },
@@ -160,6 +161,60 @@ test('运行汇总保留 attempt 1 首败，即使 attempt 2 通过', async (t) 
   assert.match(text, /Attempt 1（首轮）[\s\S]*首次失败：mobile \(1\) \/ Maestro/)
   assert.match(text, /Attempt 2（人工\/外部重跑）[\s\S]*首次失败：无/)
   assert.match(text, /failure \| 12/)
+})
+
+test('运行汇总以30条分页读取，末页失败步骤不会遗漏', async (t) => {
+  const directory = temporary(t)
+  const summary = join(directory, 'summary.md')
+  const pages = []
+  const server = createServer((req, res) => {
+    const url = new URL(req.url, 'http://localhost')
+    assert.equal(url.searchParams.get('per_page'), '30')
+    assert.equal(req.headers.authorization, 'Bearer fake')
+    const page = Number(url.searchParams.get('page'))
+    pages.push(page)
+    res.setHeader('Content-Type', 'application/json')
+    res.end(
+      JSON.stringify({
+        jobs:
+          page === 1
+            ? Array.from({ length: 30 }, (_, i) => ({ name: `job-${i}`, steps: [] }))
+            : [
+                {
+                  name: 'last-job',
+                  steps: [
+                    {
+                      name: '末页失败',
+                      conclusion: 'failure',
+                      completed_at: '2026-11-11T00:00:00Z',
+                    },
+                  ],
+                },
+              ],
+      }),
+    )
+  })
+  await new Promise((done) => server.listen(0, '127.0.0.1', done))
+  t.after(() => server.close())
+  await promisify(execFile)(process.execPath, [script('run-summary.mjs')], {
+    env: {
+      ...process.env,
+      HOME: directory,
+      CODEX_HOME: directory,
+      GITHUB_API_URL: `http://127.0.0.1:${server.address().port}`,
+      GITHUB_REPOSITORY: 'fake/repo',
+      GITHUB_RUN_ID: '1',
+      GITHUB_RUN_ATTEMPT: '1',
+      GH_TOKEN: '',
+      GITHUB_TOKEN: 'fake',
+      GITHUB_STEP_SUMMARY: summary,
+    },
+  })
+  const text = readFileSync(summary, 'utf8')
+  assert.deepEqual(pages, [1, 2])
+  assert.match(text, /首次失败：last-job \/ 末页失败/)
+  assert.equal([...text.matchAll(/\| \*\*job-\d+\*\*/g)].length, 30)
+  assert.match(text, /\*\*last-job\*\*/)
 })
 
 test('外部下载只重试已识别的瞬态错误，404 立即失败且逐次记账', (t) => {

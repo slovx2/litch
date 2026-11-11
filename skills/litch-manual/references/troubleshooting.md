@@ -21,6 +21,8 @@ Start every investigation with `scripts/litch status`, then narrow down.
 
 ## Common problems
 
+**发版或运行报告提示“读取 jobs 失败”。** 维护脚本已按每页30条读取全部结果；GitHub 5xx或网络故障会有限退避重试，整次查询最多3分钟。最终失败仍会停止当前步骤并在日志保留失败次数与状态。4xx不重试，应按状态检查令牌权限、仓库和run；不要用缺失的job列表或旧成功结果跳过候选校验。
+
 **远程升级提示“远程设备磁盘空间不足”。** 设备详情主区域会列出路径、需要和剩余空间（KiB），释放该路径所在文件系统的空间后再点“重试”。可检查 `df -Pk <路径>`，优先清理已确认不再需要的缓存；不要删除会话或设备状态目录。安装器下载前检查至少 64 MiB，解压前按完整 tar 字节数的 1.5 倍再加 64 MiB 检查安装分区，并检查系统临时目录的 64 MiB 余量。已下载的压缩包已计入占用，同一分区不重复计数；普通用户按 `df` 的 Available 检查；Linux root 按总块数减已用块数计入其可用的保留块，macOS 始终使用 Available（APFS 共享容器不能相减）。失败会清理解压残留，旧版本和运行中的服务保持原样；“详情”保留脚本末尾输出。手机端目前没有一键升级按钮。
 
 **Remote upgrade reports insufficient disk space.** Device details show the path, required space and available space in KiB. Free space on that filesystem, then click Retry. The installer checks a 64 MiB reserve before downloading and 1.5 times the expanded tar size plus 64 MiB before extraction; the temporary filesystem also needs a 64 MiB reserve. The downloaded archive is already reflected in free space. Linux root may use reserved blocks (total minus used); other users and macOS use df Available. Failed extraction is cleaned up without changing the old version or stopping its service; Details retains the script output tail.

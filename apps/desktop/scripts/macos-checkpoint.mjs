@@ -11,6 +11,7 @@ import {
   pages,
   validateArtifact,
 } from '../../../scripts/ci/release-artifacts.mjs'
+import { readJobs } from '../../../scripts/ci/release-jobs.mjs'
 import { staple } from './notarize.mjs'
 
 const run = (command, args) => execFileSync(command, args, { encoding: 'utf8' })
@@ -135,7 +136,7 @@ export async function findCheckpoint(dir, context = checkpointContext()) {
   if (!found.length) {
     // 已经到达 Accepted 后不允许因检查点丢失而重新公证。
     if (context.attempt > 1) {
-      const jobs = pages(`${base}/jobs?filter=all&per_page=100`, 'jobs')
+      const jobs = await readJobs(`${base}/jobs?filter=all`)
       assert.ok(
         !hasAttemptedNotarization(jobs),
         '既有公证步骤已执行但检查点缺失，禁止重新提交；先检查原始日志',
@@ -148,10 +149,7 @@ export async function findCheckpoint(dir, context = checkpointContext()) {
   assert.ok(attempt < context.attempt, '检查点必须来自本 run 的较早 attempt')
   assert.equal(found.filter((a) => a.name === artifact.name).length, 1)
   validateArtifact(artifact, { run: context.run, sha: context.sha, name: artifact.name })
-  const jobId = checkCheckpointJob(
-    pages(`${base}/attempts/${attempt}/jobs?per_page=100`, 'jobs'),
-    attempt,
-  )
+  const jobId = checkCheckpointJob(await readJobs(`${base}/attempts/${attempt}/jobs`), attempt)
   mkdirSync(dir, { recursive: true })
   await downloadArtifact(context.repository, artifact, dir)
   const proof = await verifyCheckpoint(dir, context)

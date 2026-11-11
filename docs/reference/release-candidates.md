@@ -71,6 +71,7 @@ gh workflow run promote.yml --ref <已推送验证分支> \
 
 ## 4. 失败、补验和证明边界
 
+- 封存、晋级、Gate 证明、签名等待、公证检查点恢复和运行报告读取 GitHub jobs 时，每页30条并聚合全部分页，保持原来的 `filter=latest`、`filter=all` 或指定 attempt 语义。只有5xx和已识别网络错误才重试：每页最多请求5次（含首次），退避1/2/4/8秒；单次请求最多30秒，整次分页查询（含等待）共用3分钟预算。4xx、无效JSON和响应结构错误立即失败；每次失败及最终停止写入日志，后页失败不能返回部分列表，也不放宽job/SHA/attempt校验。
 - 任何测试、出包或验证失败，都不封存可晋级候选。部分 Full、缺 run-ci、实际检出错误、未知证明不能冒充完整。
 - 合并 Mac 逐检查生成 `mac-native-proof-<attempt>`，Full 汇总核对实际成功 job、源码/工作流 SHA、run、attempt、artifact ID/digest、命令与检查 ID 后才生成逻辑领域结果。缺浏览器或任一窗口/原生检查都不能以“合并 job 绿”替代。验证策略已变更，旧策略候选不能用新代码晋级。夜间增量基线的选择规则保持不变：真实 schedule、全绿、48 小时内且是候选祖先；候选证明升级不额外要求既有夜间带有新版候选证明。
 - Linux 的 CI/client、real-engines、必要时补跑的client单测也逐一绑定真实成功job和`linux-checks-*-<attempt>`制品。Full保留完整检查计划、稳定ID、实际用例清单和版本，核对SHA/run/attempt及archive摘要后才允许复用首回合；只有CI的success而没有这条制品绑定仍拒绝。含用例名称的Full证明大小上限为2MiB，未知文件/额外归档条目仍拒绝。

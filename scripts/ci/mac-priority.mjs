@@ -4,6 +4,7 @@ import { appendFileSync } from 'node:fs'
 import { setTimeout as delay } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
 import { gh } from './release-artifacts.mjs'
+import { readJobs } from './release-jobs.mjs'
 
 export class SigningFailure extends Error {
   constructor(jobId) {
@@ -59,12 +60,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     // 单次读取也有界，不能让卡住的网络请求绕过70分钟的状态等待上限。
     readRun: () => JSON.parse(gh(['api', base], { timeout: 30_000 })),
     // filter=latest保留前次attempt已经成功且本次未重跑的签名job；仍只接受同run同SHA。
-    readJobs: () =>
-      JSON.parse(
-        gh(['api', '--paginate', '--slurp', `${base}/jobs?filter=latest&per_page=100`], {
-          timeout: 30_000,
-        }),
-      ).flatMap((page) => page.jobs),
+    readJobs: () => readJobs(`${base}/jobs?filter=latest`),
   }).catch((error) => {
     if (error instanceof SigningFailure)
       console.error(`::error::LITCH_RECOVERY_UPSTREAM_FAILURE_JOB:${error.jobId}`)

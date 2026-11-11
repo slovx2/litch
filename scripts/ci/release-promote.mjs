@@ -26,6 +26,7 @@ import {
   verifyCandidate,
   writeJson,
 } from './release-candidate.mjs'
+import { readJobs as defaultReadJobs } from './release-jobs.mjs'
 
 export function promotionInputs(env) {
   for (const key of ['SOURCE_RUN', 'SOURCE_ATTEMPT', 'ARTIFACT_ID'])
@@ -88,6 +89,7 @@ export async function promote(env = process.env, services = {}) {
   const {
     api = defaultApi,
     pages = defaultPages,
+    readJobs = defaultReadJobs,
     gh = defaultGh,
     download = defaultDownload,
     downloadArtifact = defaultArtifactDownload,
@@ -112,12 +114,8 @@ export async function promote(env = process.env, services = {}) {
     mkdirSync(dir)
     await downloadArtifact(repo, artifact, dir)
     const manifest = await verifyCandidate(dir, context, policyHash())
-    const latestJobs = pages(`${runPath}/jobs?filter=latest&per_page=100`, 'jobs')
-    checkJob(
-      pages(`${runPath}/attempts/${context.attempt}/jobs?per_page=100`, 'jobs'),
-      'seal',
-      context.attempt,
-    )
+    const latestJobs = await readJobs(`${runPath}/jobs?filter=latest`)
+    checkJob(await readJobs(`${runPath}/attempts/${context.attempt}/jobs`), 'seal', context.attempt)
     for (const [kind, source] of Object.entries(manifest.artifacts)) {
       const name =
         kind === 'gate-proof'
@@ -132,7 +130,7 @@ export async function promote(env = process.env, services = {}) {
         digest: source.digest,
       })
       const id = checkJob(
-        pages(`${runPath}/attempts/${source.attempt}/jobs?per_page=100`, 'jobs'),
+        await readJobs(`${runPath}/attempts/${source.attempt}/jobs`),
         name,
         source.attempt,
       )
@@ -153,7 +151,7 @@ export async function promote(env = process.env, services = {}) {
       digest: notarization.artifact.digest,
     })
     checkCheckpointJob(
-      pages(`${runPath}/attempts/${notarization.attempt}/jobs?per_page=100`, 'jobs'),
+      await readJobs(`${runPath}/attempts/${notarization.attempt}/jobs`),
       notarization.attempt,
     )
     const candidateFull = { run, proof: manifest.full, verifiedPreviousAttempt: true }

@@ -18,6 +18,7 @@ import {
   summary,
   writeJson,
 } from './release-candidate.mjs'
+import { readJobs } from './release-jobs.mjs'
 
 const dir = process.argv[2]
 mkdirSync(dir, { recursive: true })
@@ -31,14 +32,14 @@ const context = {
 const base = `repos/${context.repository}/actions/runs/${context.runId}`
 sourceRun(api(base), context, { preparing: true })
 const listed = pages(`${base}/artifacts?per_page=100`, 'artifacts')
-const latestJobs = pages(`${base}/jobs?filter=latest&per_page=100`, 'jobs')
+const latestJobs = await readJobs(`${base}/jobs?filter=latest`)
 const artifacts = {}
 const bypassed = bypassReason() !== null
 for (const kind of bypassed ? artifactKinds : [...artifactKinds, 'gate-proof', 'full-proof']) {
   const selected = chooseArtifact(listed, kind, context)
   const name =
     kind === 'gate-proof' ? 'gate / result' : kind === 'full-proof' ? 'gate / tests / report' : kind
-  const jobs = pages(`${base}/attempts/${selected.attempt}/jobs?per_page=100`, 'jobs')
+  const jobs = await readJobs(`${base}/attempts/${selected.attempt}/jobs`)
   selected.jobId = checkJob(jobs, name, selected.attempt)
   if (!latestJobs.some((job) => job.name === name && job.conclusion === 'success'))
     throw new Error(`最新 ${name} 未通过，禁止用旧成功覆盖`)
@@ -65,12 +66,12 @@ validateArtifact(
   },
 )
 checkCheckpointJob(
-  pages(`${base}/attempts/${notarization.attempt}/jobs?per_page=100`, 'jobs'),
+  await readJobs(`${base}/attempts/${notarization.attempt}/jobs`),
   notarization.attempt,
 )
 manifest.history = []
 for (let attempt = 1; attempt <= context.attempt; attempt++) {
-  const jobs = pages(`${base}/attempts/${attempt}/jobs?per_page=100`, 'jobs')
+  const jobs = await readJobs(`${base}/attempts/${attempt}/jobs`)
   manifest.history.push({
     attempt,
     failures: jobs
