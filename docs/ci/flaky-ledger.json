@@ -512,6 +512,66 @@
   },
   "localObservations": [
     {
+      "id": "2026-11-11-ws-integration-claude-listing",
+      "source": "local",
+      "suite": "device full, default concurrency",
+      "test": "端到端：Claude Code 的会话也一样，没打开它的聚合面连接收到新建、状态、改名、归档，回合和条目只到打开了它的连接",
+      "sha": "173cfdb78a43647fc9df1753d8cdfa402e66228c",
+      "startedAt": "2026-11-11T11:50:37.675628+00:00",
+      "environment": {
+        "platform": "darwin-arm64",
+        "node": "24.19.0",
+        "claudeCli": "2.1.282",
+        "isolation": "隔离HOME、隔离官方CLI与回环假模型"
+      },
+      "failure": "夹具提前退出：隔离设备未在30秒内开始监听，尚未进入业务断言。",
+      "failureLog": {
+        "name": "ws-payload-integration/device.log",
+        "sha256": "51a077c0b2f37c8029a36e8e471b400ef3a87354cfe220064b288e711426b9bd"
+      },
+      "evidence": {
+        "kind": "equivalent-device-source-local-rerun",
+        "sha": "d9360c45e0404bea69ae6c871c363cd5ab4c54d8",
+        "result": "相同两项在基线095dcf6c与候选上均2/2通过；候选仅多提交经理界面探针，无设备/引擎源码差异。",
+        "log": "ws-payload-integration/candidate-comparison.log",
+        "sha256": "018ef95c0dd636577f22cebbd0d2664ded9e9bff6dad37d7561122da92940a11",
+        "baselineLog": "ws-payload-integration/baseline-comparison.log",
+        "baselineSha256": "73327a6d7325e3cd8720582072e485f27e8ca70470709fe918a12a59e1bd75e5"
+      },
+      "countedInCiThreshold": false,
+      "note": "首次全量期间有另一工作线device全量和Metro导出并行（经理确认）；资源争用为推测，未修改时限/断言。本地观察不计CI次数。启动后HEAD仅因经理探针提交变为d9360c45。"
+    },
+    {
+      "id": "2026-11-11-ws-integration-codex-task",
+      "source": "local",
+      "suite": "device full, default concurrency",
+      "test": "原生 codex 上的任务建会话：权限给预设和配套的审批策略，来源记 automation，带上 litch_tasks；codex 都认",
+      "sha": "173cfdb78a43647fc9df1753d8cdfa402e66228c",
+      "startedAt": "2026-11-11T11:50:37.675628+00:00",
+      "environment": {
+        "platform": "darwin-arm64",
+        "node": "24.19.0",
+        "claudeCli": "2.1.282",
+        "isolation": "隔离HOME、隔离官方CLI与回环假模型"
+      },
+      "failure": "5秒内未观察到发回合，实际测试耗时8.7秒。",
+      "failureLog": {
+        "name": "ws-payload-integration/device.log",
+        "sha256": "51a077c0b2f37c8029a36e8e471b400ef3a87354cfe220064b288e711426b9bd"
+      },
+      "evidence": {
+        "kind": "equivalent-device-source-local-rerun",
+        "sha": "d9360c45e0404bea69ae6c871c363cd5ab4c54d8",
+        "result": "相同两项在基线095dcf6c与候选上均2/2通过；候选仅多提交经理界面探针，无设备/引擎源码差异。",
+        "log": "ws-payload-integration/candidate-comparison.log",
+        "sha256": "018ef95c0dd636577f22cebbd0d2664ded9e9bff6dad37d7561122da92940a11",
+        "baselineLog": "ws-payload-integration/baseline-comparison.log",
+        "baselineSha256": "73327a6d7325e3cd8720582072e485f27e8ca70470709fe918a12a59e1bd75e5"
+      },
+      "countedInCiThreshold": false,
+      "note": "首次全量期间有另一工作线device全量和Metro导出并行（经理确认）；资源争用为推测，未修改时限/断言。本地观察不计CI次数。启动后HEAD仅因经理探针提交变为d9360c45。"
+    },
+    {
       "id": "2026-11-09-main-3922a50e-mcp-form",
       "source": "local",
       "suite": "claude full, concurrency 1",
