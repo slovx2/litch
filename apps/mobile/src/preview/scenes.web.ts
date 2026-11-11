@@ -102,7 +102,7 @@ export const SCENES: Scene[] = [
     id: 'manager-console',
     group: '经理',
     name: '控制台与 issue',
-    note: '默认决策；状态过滤行常驻，决策、请求和 X-n 默认开放，建议默认待开始、报告默认未读。加载、失败和空列表都有提示；各页签记住条件，支持类型多选、过滤抽屉、新建、评论与讨论',
+    note: '默认决策；胶囊行下常驻状态分组（待处理、进行中、未完成、已完成、已撤销、全部），各页签默认待处理。加载、失败和空列表都有提示；各页签记住条件，筛选按钮带生效数，底部抽屉里有类型多选、细分、只看、排序和清除筛选，另有新建、评论与讨论',
     steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1' })],
   },
   {
@@ -116,7 +116,7 @@ export const SCENES: Scene[] = [
     id: 'manager-issues-many',
     group: '经理',
     name: 'issue · 大量',
-    note: '经理“移动端体验打磨”有 120 条 issue，默认开放集合超过一页；可切全部或其他状态、每页 30 条加载更多',
+    note: '经理“移动端体验打磨”有 120 条 issue，默认待处理集合超过一页；可切全部或其他分组、每页 30 条加载更多',
     steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm3' })],
   },
   {

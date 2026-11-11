@@ -1,4 +1,5 @@
-// 手机经理控制台的 issue 模式：类别胶囊一行（默认决策）、行尾过滤和普通 issue 的新建图标；
+// 手机经理控制台的 issue 模式：类别胶囊一行（默认决策）、行尾筛选（带生效数）和普通 issue 的新建图标，
+// 下面一行状态分组分段（IssueFilters.tsx）；
 // 列表是一张张卡（编号加标题、一行小字、两行预览），点开拉起 IssueSheet 半屏抽屉；过滤和新建也是底部抽屉。
 // 屏幕只管摆放：useIssueConsole 给出 header（胶囊行）、body（列表）、overlays（抽屉）。
 import type {
@@ -24,25 +25,25 @@ import {
 } from '../../../../../../packages/core/src/manager-board-memory.mts'
 import {
   MANAGER_ISSUE_ATTENTION_FILTERS,
-  MANAGER_ISSUE_KINDS,
-  MANAGER_ISSUE_LIST_ORDERS,
   type ManagerIssueFilter,
   managerIssueFilterKey,
   managerIssueHead,
   managerIssueKindFilter,
   managerIssueLinkFilter,
   managerIssuePageKey,
-  managerIssueStatusFilters,
   supportedManagerIssueFilter,
-  withManagerIssueKinds,
 } from '../../../../../../packages/core/src/projection/manager-issue-list.mts'
 import type {
   ManagerIssueHead,
   ManagerIssueKind,
-  ManagerIssueStatus,
 } from '../../../../../../packages/protocol/src/manager-issues.mts'
+import {
+  clearIssueFilter,
+  issueActiveFilterCount,
+  normalizeIssueFilter,
+} from '../../../../../../packages/ui/src/manager/issues/filter-groups.ts'
 import { useT } from '../../../ui/i18n'
-import { Button, Chip } from '../../../ui/kit/controls'
+import { Button } from '../../../ui/kit/controls'
 import { IconButton } from '../../../ui/kit/Icon'
 import { useTheme } from '../../../ui/theme'
 import { DiscussionDrawer } from '../DiscussionDrawer'
@@ -54,6 +55,7 @@ import {
   useIssueCommands,
   useIssueCounts,
 } from './data'
+import { IssueFilterDrawer, IssueStatusRow } from './IssueFilters'
 import { IssueComposer, IssueMetaLine, IssueThread } from './IssueThread'
 
 /** 页签次序：四类特殊 issue 在前（日常处理的都在这里），普通 issue 在末尾 */
@@ -122,9 +124,12 @@ export function useIssueConsole({
   // 保持默认条件引用，分页结果不能触发 list effect 再读首屏。
   const filter = useMemo(
     () =>
-      supportedManagerIssueFilter(
-        saved.filters[kind] ?? kindFilter(kind),
-        issues.discussions === true,
+      // 记住的状态读不成分组（旧版本的零散状态组合）时回到默认分组
+      normalizeIssueFilter(
+        supportedManagerIssueFilter(
+          saved.filters[kind] ?? kindFilter(kind),
+          issues.discussions === true,
+        ),
       ),
     [saved.filters, kind, issues.discussions],
   )
@@ -205,7 +210,8 @@ export function useIssueConsole({
     )
   }, [preset, applied, setFilter])
   const ordinary = kind === 'ordinary'
-  const filtered = managerIssueFilterKey(filter) !== managerIssueFilterKey(kindFilter(kind))
+  const activeFilters = issueActiveFilterCount(filter, kind)
+  const filtered = activeFilters > 0
   // 窄屏放不下五个胶囊：选到末尾的普通 issue 时把胶囊行滚到头，选回特殊类型时滚回开头
   const pills = useRef<ScrollView>(null)
   useEffect(() => {
@@ -257,9 +263,14 @@ export function useIssueConsole({
           {TABS.map(capsule)}
         </ScrollView>
         <IconButton
-          icon="list"
-          label={t('issue.filter.title')}
-          dot={filtered ? c.accent : undefined}
+          icon="filter"
+          label={
+            activeFilters
+              ? t('issue.filter.applied', { n: activeFilters })
+              : t('issue.filter.title')
+          }
+          count={activeFilters || undefined}
+          selected={activeFilters > 0}
           testID="issue-filter-open"
           onPress={() => setFiltering(true)}
         />
@@ -273,25 +284,7 @@ export function useIssueConsole({
           />
         ) : null}
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        testID="issue-status-row"
-        contentContainerStyle={styles.pills}
-      >
-        {managerIssueStatusFilters(kind, filter.kinds).map((option) => (
-          <Chip
-            key={option.key}
-            label={t(option.label as never)}
-            testID={`issue-status:${option.key}`}
-            on={
-              option.statuses.length === filter.statuses.length &&
-              option.statuses.every((status) => filter.statuses.includes(status))
-            }
-            onPress={() => setFilter({ ...filter, statuses: option.statuses })}
-          />
-        ))}
-      </ScrollView>
+      <IssueStatusRow filter={filter} onChange={setFilter} />
     </View>
   )
   const card = (head: ManagerIssueHead) => {
@@ -394,7 +387,7 @@ export function useIssueConsole({
           <Button
             kind="plain"
             label={t('issue.filter.reset')}
-            onPress={() => setFilter(kindFilter(kind))}
+            onPress={() => setFilter(clearIssueFilter(filter, kind))}
           />
         ) : null}
       </View>
@@ -402,7 +395,7 @@ export function useIssueConsole({
   const overlays = (
     <>
       {filtering ? (
-        <FilterDrawer
+        <IssueFilterDrawer
           discussions={issues.discussions === true}
           kind={kind}
           filter={filter}
@@ -585,171 +578,6 @@ export function IssueSheetDrawer({
         {!talking ? (
           <Button kind="plain" label={t('issue.full.open')} testID="issue-full" onPress={onFull} />
         ) : null}
-      </View>
-    </DiscussionDrawer>
-  )
-}
-
-function FilterDrawer({
-  discussions,
-  kind,
-  filter,
-  onChange,
-  onClose,
-}: {
-  discussions: boolean
-  kind: ManagerIssueKind
-  filter: ManagerIssueFilter
-  onChange(filter: ManagerIssueFilter): void
-  onClose(): void
-}) {
-  const t = useT()
-  const { c, font } = useTheme()
-  const ordinary = kind === 'ordinary'
-  const section = (label: string, children: ReactNode) => (
-    <View style={{ gap: 6 }}>
-      <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{label}</Text>
-      <View style={styles.wrap}>{children}</View>
-    </View>
-  )
-  const toggle = <T extends string>(list: T[], value: T) =>
-    list.includes(value) ? list.filter((one) => one !== value) : [...list, value]
-  return (
-    <DiscussionDrawer
-      visible
-      id=""
-      title={t('issue.filter.title')}
-      testID="issue-filter"
-      stickToEnd={false}
-      onClose={onClose}
-      onBack={onClose}
-      footer={
-        <View style={styles.acts}>
-          <Button
-            kind="plain"
-            label={t('issue.filter.reset')}
-            testID="issue-filter-reset"
-            onPress={() => onChange(kindFilter(kind))}
-          />
-          <Button label={t('issue.filter.done')} testID="issue-filter-done" onPress={onClose} />
-        </View>
-      }
-    >
-      <View style={{ gap: 14 }}>
-        {ordinary
-          ? section(
-              t('issue.filter.kind'),
-              <>
-                {discussions ? (
-                  <Chip
-                    label={t('issue.kind.all')}
-                    testID="issue-filter-kind:all"
-                    on={!filter.kinds.length || filter.kinds.length === MANAGER_ISSUE_KINDS.length}
-                    onPress={() => onChange(withManagerIssueKinds(filter, []))}
-                  />
-                ) : null}
-                {(discussions ? MANAGER_ISSUE_KINDS : (['ordinary'] as const)).map((one) => (
-                  <Chip
-                    key={one}
-                    label={t(`issue.kind.${one}`)}
-                    testID={`issue-filter-kind:${one}`}
-                    on={!filter.kinds.length || filter.kinds.includes(one)}
-                    onPress={() => {
-                      const selected = filter.kinds.length ? filter.kinds : [...MANAGER_ISSUE_KINDS]
-                      const next = selected.includes(one)
-                        ? selected.filter((k) => k !== one)
-                        : [...selected, one]
-                      if (next.length) onChange(withManagerIssueKinds(filter, next))
-                    }}
-                  />
-                ))}
-              </>,
-            )
-          : null}
-        {section(
-          t('issue.filter.status'),
-          managerIssueStatusFilters(kind, filter.kinds).map((option) => {
-            const status = option.statuses[0]
-            return (
-              <Chip
-                key={option.key}
-                label={t(option.label as Parameters<typeof t>[0])}
-                on={
-                  option.statuses.length === 1 && status !== undefined
-                    ? filter.statuses.includes(status)
-                    : option.statuses.length === filter.statuses.length &&
-                      option.statuses.every((status) => filter.statuses.includes(status))
-                }
-                testID={`issue-filter-status:${option.key}`}
-                onPress={() =>
-                  onChange({
-                    ...filter,
-                    statuses:
-                      option.statuses.length === 1 && status !== undefined
-                        ? toggle<ManagerIssueStatus>(filter.statuses, status)
-                        : option.statuses,
-                  })
-                }
-              />
-            )
-          }),
-        )}
-        {ordinary
-          ? section(
-              t('issue.filter.author'),
-              (['user', 'manager'] as const).map((author) => (
-                <Chip
-                  key={author}
-                  label={t(author === 'user' ? 'issue.filter.byUser' : 'issue.filter.byManager')}
-                  on={filter.authors.includes(author)}
-                  testID={`issue-filter-author:${author}`}
-                  onPress={() => onChange({ ...filter, authors: toggle(filter.authors, author) })}
-                />
-              )),
-            )
-          : null}
-        {ordinary
-          ? section(
-              t('issue.filter.follow'),
-              (['all', 'on', 'off'] as const).map((value) => (
-                <Chip
-                  key={value}
-                  radio
-                  label={t(
-                    value === 'all'
-                      ? 'issue.filter.all'
-                      : value === 'on'
-                        ? 'issue.follow.on'
-                        : 'issue.follow.off',
-                  )}
-                  on={filter.followUp === value}
-                  testID={`issue-filter-follow:${value}`}
-                  onPress={() => onChange({ ...filter, followUp: value })}
-                />
-              )),
-            )
-          : null}
-        {section(
-          t('issue.filter.order'),
-          MANAGER_ISSUE_LIST_ORDERS.map((order) => (
-            <Chip
-              key={order}
-              radio
-              label={t(`issue.order.${order}`)}
-              on={filter.order === order}
-              testID={`issue-filter-order:${order}`}
-              onPress={() => onChange({ ...filter, order })}
-            />
-          )),
-        )}
-        <View style={[styles.wrap, ordinary ? null : styles.hidden]}>
-          <Chip
-            label={t('issue.filter.unread')}
-            on={filter.unread}
-            testID="issue-filter-unread"
-            onPress={() => onChange({ ...filter, unread: !filter.unread })}
-          />
-        </View>
       </View>
     </DiscussionDrawer>
   )

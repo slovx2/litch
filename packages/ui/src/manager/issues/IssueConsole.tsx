@@ -1,4 +1,4 @@
-// 控制台按分类标签列 issue，默认决策；普通 issue 另有新建、创建者、未读和跟进过滤。
+// 控制台按分类标签列 issue，默认决策；顶上是筛选栏（IssueFilterBar）；普通 issue 页签的新建按钮放在类别分段右端（actionSlot）。
 // 特殊 issue 展开后先是原来的快速处理区；决策草稿的提交条只有一份，固定在列表底部。
 import { managerBoardPages } from '@litch/core'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -6,24 +6,15 @@ import { createPortal } from 'react-dom'
 import type { ManagerBoardTopicView, ManagerView } from '../../../../core/src/model-manager.mts'
 import { pagedDraftBoard } from '../../../../core/src/projection/manager-drafts.mts'
 import {
-  MANAGER_ISSUE_KINDS,
-  MANAGER_ISSUE_LIST_ORDERS,
   type ManagerIssueFilter,
   managerIssueFilterKey,
   managerIssueHead,
   managerIssueKindFilter,
   managerIssueLinkFilter,
   managerIssuePageKey,
-  managerIssueStatusFilters,
   supportedManagerIssueFilter,
-  withManagerIssueKinds,
 } from '../../../../core/src/projection/manager-issue-list.mts'
-import type {
-  ManagerIssueAuthorKind,
-  ManagerIssueId,
-  ManagerIssueKind,
-  ManagerIssueStatus,
-} from '../../../../protocol/src/manager-issues.mts'
+import type { ManagerIssueId, ManagerIssueKind } from '../../../../protocol/src/manager-issues.mts'
 import type { Selection } from '../../app/App.tsx'
 import { useT } from '../../app/appearance.ts'
 import { reasonOf } from '../../app/errors.ts'
@@ -32,7 +23,9 @@ import { Decisions } from '../Decisions.tsx'
 import { useDiscussionPane } from '../discussion-pane.ts'
 import { useBoardFormKeys } from '../form-submit-keys.ts'
 import { type IssueCommands, type ManagerIssuesState, useIssueCommands } from './data.ts'
+import { clearIssueFilter, issueActiveFilterCount, normalizeIssueFilter } from './filter-groups.ts'
 import { IssueCard } from './IssueCard.tsx'
+import { IssueFilterBar } from './IssueFilterBar.tsx'
 import { IssueQuick } from './IssueQuick.tsx'
 import { IssueThread } from './IssueThread.tsx'
 
@@ -77,6 +70,7 @@ export function IssueConsole({
   reason,
   target,
   preset,
+  actionSlot = null,
   onLocated,
   onKind,
   onOpenItem,
@@ -92,6 +86,8 @@ export function IssueConsole({
   /** 编号跳转来的 issue（#n 或旧别名） */
   target: string | null
   preset: IssuePreset | null
+  /** 类别分段右端留给新建按钮的位置；没有时放在筛选栏右上角 */
+  actionSlot?: HTMLElement | null
   onLocated(): void
   /** 跳到别的类型（编号跳转、新建后） */
   onKind(kind: ManagerIssueKind): void
@@ -104,11 +100,14 @@ export function IssueConsole({
   const saved = remembered(manager.deviceId, manager.id)
   const [filters, setFiltersState] = useState(saved.filters)
   // 初次打开分类也保持条件引用，避免分页回包重渲染后重发首屏查询、覆盖已追加的页。
+  // 记住的状态读不成分组（旧版本的零散状态组合）时回到默认分组
   const filter = useMemo(
     () =>
-      supportedManagerIssueFilter(
-        filters[kind] ?? issueKindFilter(kind),
-        issues.discussions === true,
+      normalizeIssueFilter(
+        supportedManagerIssueFilter(
+          filters[kind] ?? issueKindFilter(kind),
+          issues.discussions === true,
+        ),
       ),
     [filters, kind, issues.discussions],
   )
@@ -349,32 +348,31 @@ export function IssueConsole({
         {thread(full, 'page')}
       </div>
     )
-  const filtered = managerIssueFilterKey(filter) !== managerIssueFilterKey(issueKindFilter(kind))
+  const filtered = issueActiveFilterCount(filter, kind) > 0
   const ordinary = kind === 'ordinary'
+  const newButton = ordinary ? (
+    <button
+      type="button"
+      className="btn primary mg-issue-new"
+      data-act="issue-new"
+      aria-expanded={creating}
+      disabled={disabled}
+      title={disabled ? reason : undefined}
+      onClick={() => setCreating(!creating)}
+    >
+      <Icon name="plus" small /> {t('issue.new')}
+    </button>
+  ) : null
   return (
     <div ref={root} className="mg-stack" data-issue-console data-issue-kind={kind}>
-      <IssueFilters
+      <IssueFilterBar
         discussions={issues.discussions === true}
         kind={kind}
         filter={filter}
         onChange={setFilter}
+        action={actionSlot ? null : newButton}
       />
-      {ordinary ? (
-        <div className="mg-issue-subbar">
-          <button
-            type="button"
-            className="btn mg-issue-new"
-            data-act="issue-new"
-            aria-expanded={creating}
-            disabled={disabled}
-            title={disabled ? reason : undefined}
-            onClick={() => setCreating(!creating)}
-          >
-            <Icon name="plus" small /> {t('issue.new')}
-          </button>
-          <IssueToggles filter={filter} onChange={setFilter} />
-        </div>
-      ) : null}
+      {newButton && actionSlot ? createPortal(newButton, actionSlot) : null}
       {creating && ordinary ? (
         <IssueNew
           commands={commands}
@@ -432,7 +430,7 @@ export function IssueConsole({
               type="button"
               className="btn ghost"
               data-act="issue-filter-reset"
-              onClick={() => setFilter(issueKindFilter(kind))}
+              onClick={() => setFilter(clearIssueFilter(filter, kind))}
             >
               {t('issue.filter.reset')}
             </button>
@@ -457,147 +455,6 @@ export function IssueConsole({
       />
       {paneContent}
     </div>
-  )
-}
-
-/** 状态一行文字切换（和原来决策的状态行一样），排序在右端 */
-function IssueFilters({
-  discussions,
-  kind,
-  filter,
-  onChange,
-}: {
-  discussions: boolean
-  kind: ManagerIssueKind
-  filter: ManagerIssueFilter
-  onChange(filter: ManagerIssueFilter): void
-}) {
-  const t = useT()
-  const active = (list: readonly ManagerIssueStatus[]) =>
-    list.length === filter.statuses.length && list.every((one) => filter.statuses.includes(one))
-  const options = managerIssueStatusFilters(kind, filter.kinds)
-  return (
-    <div className="mg-decision-filter mg-issue-filters" data-issue-filters>
-      {kind === 'ordinary' ? (
-        <fieldset className="mg-issue-statuses" aria-label={t('issue.filter.kind')}>
-          <legend>{t('issue.filter.kind')}</legend>
-          {discussions ? (
-            <button
-              type="button"
-              data-issue-filter-kind="all"
-              aria-pressed={
-                !filter.kinds.length || filter.kinds.length === MANAGER_ISSUE_KINDS.length
-              }
-              onClick={() => onChange(withManagerIssueKinds(filter, []))}
-            >
-              {t('issue.kind.all')}
-            </button>
-          ) : null}
-          {(discussions ? MANAGER_ISSUE_KINDS : (['ordinary'] as const)).map((one) => (
-            <button
-              type="button"
-              key={one}
-              data-issue-filter-kind={one}
-              aria-pressed={!filter.kinds.length || filter.kinds.includes(one)}
-              onClick={() => {
-                const selected = filter.kinds.length ? filter.kinds : [...MANAGER_ISSUE_KINDS]
-                const next = selected.includes(one)
-                  ? selected.filter((k) => k !== one)
-                  : [...selected, one]
-                if (next.length) onChange(withManagerIssueKinds(filter, next))
-              }}
-            >
-              {t(`issue.kind.${one}`)}
-            </button>
-          ))}
-        </fieldset>
-      ) : null}
-      <fieldset className="mg-issue-statuses" aria-label={t('issue.filter.status')}>
-        {options.map((one) => (
-          <button
-            type="button"
-            key={one.key}
-            data-issue-filter-status={one.key}
-            aria-pressed={active(one.statuses)}
-            onClick={() => onChange({ ...filter, statuses: one.statuses })}
-          >
-            {t(one.label as Parameters<typeof t>[0])}
-          </button>
-        ))}
-      </fieldset>
-      <label className="mg-issue-order">
-        <span className="mg-issue-order-label">{t('manager.order')}</span>
-        <select
-          data-issue-filter="order"
-          value={filter.order}
-          onChange={(event) =>
-            onChange({ ...filter, order: event.target.value as ManagerIssueFilter['order'] })
-          }
-        >
-          {MANAGER_ISSUE_LIST_ORDERS.map((one) => (
-            <option key={one} value={one}>
-              {t(`issue.order.${one}`)}
-            </option>
-          ))}
-        </select>
-      </label>
-    </div>
-  )
-}
-
-/** 普通 issue 的几个开关：谁建的、只看未读、跟进已暂停；再点一次取消 */
-function IssueToggles({
-  filter,
-  onChange,
-}: {
-  filter: ManagerIssueFilter
-  onChange(filter: ManagerIssueFilter): void
-}) {
-  const t = useT()
-  const author = (who: ManagerIssueAuthorKind) => ({
-    pressed: filter.authors.length === 1 && filter.authors[0] === who,
-    toggle: () =>
-      onChange({
-        ...filter,
-        authors: filter.authors.length === 1 && filter.authors[0] === who ? [] : [who],
-      }),
-  })
-  const chips: {
-    key: string
-    label: string
-    pressed: boolean
-    toggle(): void
-  }[] = [
-    { key: 'user', label: t('issue.filter.byUser'), ...author('user') },
-    { key: 'manager', label: t('issue.filter.byManager'), ...author('manager') },
-    {
-      key: 'unread',
-      label: t('issue.filter.unread'),
-      pressed: filter.unread,
-      toggle: () => onChange({ ...filter, unread: !filter.unread }),
-    },
-    {
-      key: 'paused',
-      label: t('issue.follow.off'),
-      pressed: filter.followUp === 'off',
-      toggle: () => onChange({ ...filter, followUp: filter.followUp === 'off' ? 'all' : 'off' }),
-    },
-  ]
-  return (
-    <fieldset className="mg-issue-chips" aria-label={t('issue.filter.title')}>
-      {chips.map((chip) => (
-        <button
-          type="button"
-          key={chip.key}
-          className="mg-issue-chip"
-          data-issue-chip={chip.key}
-          aria-pressed={chip.pressed}
-          onClick={chip.toggle}
-        >
-          {chip.label}
-        </button>
-      ))}
-    </fieldset>
   )
 }
 
