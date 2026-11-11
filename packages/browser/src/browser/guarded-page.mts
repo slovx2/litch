@@ -1,5 +1,7 @@
 // 每次调用持有自己的停止信号和文档基线；取消后的异步尾巴不能继续派发输入。
+
 import type { BrowserPage } from './model.mjs'
+import { discardUpload } from './upload-cleanup.mjs'
 
 export function guardedPage(
   page: BrowserPage,
@@ -19,12 +21,14 @@ export function guardedPage(
       const current = await stamp()
       if (
         (baseline !== undefined && current !== baseline) ||
-        (!observation && observed !== undefined && current !== observed)
+        (observed !== undefined && current !== observed)
       ) {
         changed()
-        throw new Error(
-          'The document changed. Take a fresh snapshot before acting; a previous action may have executed.',
-        )
+        if (observation && baseline === undefined) observed = current
+        if (!observation || baseline !== undefined)
+          throw new Error(
+            'The document changed. Take a fresh snapshot before acting; a previous action may have executed.',
+          )
       }
       baseline = current
     }
@@ -32,6 +36,10 @@ export function guardedPage(
   }
   const proxy = new Proxy(page, {
     get(target, key) {
+      if (key === 'discardUpload')
+        return (state: string | undefined, objects: readonly string[]) =>
+          target.discardUpload?.(state, objects) ??
+          discardUpload(target.cdp.bind(target), state, objects)
       if (key === 'prepareObservation')
         return async () => {
           await guard(false)
@@ -44,6 +52,11 @@ export function guardedPage(
         return async (method: string, params?: Record<string, unknown>) => {
           await guard(true)
           return target.cdp(method, params)
+        }
+      if (key === 'interceptFileChooser' && target.interceptFileChooser)
+        return async (signal: AbortSignal) => {
+          await guard(true)
+          return target.interceptFileChooser?.(signal)
         }
       if (key === 'pointAt')
         return async (...args: Parameters<BrowserPage['pointAt']>) => {

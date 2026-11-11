@@ -1,8 +1,10 @@
 // 读页面：snapshot、screenshot、console、evaluate、wait。
 import { BROWSER_SCREENSHOT_MAX_EDGE } from '../../../automation-contracts/src/litch/client-tools-browser.mjs'
+import { observationSlice } from '../../../automation-contracts/src/observation.mjs'
 import { BadArgs, bool, num, oneOf, str, timeout } from './args.mjs'
-import { type AxNode, capLines, diffLines, formatAxTree } from './ax.mjs'
+import { type AxNode, diffLines, formatAxTree } from './ax.mjs'
 import type { Tool } from './executor.mjs'
+import { fileInputSnapshot } from './file-input-snapshot.mjs'
 import type { BrowserPage } from './model.mjs'
 import { blockedByDialog, guarded, imageSize, pageLine, sleep, within } from './page-ops.mjs'
 import {
@@ -101,23 +103,45 @@ export const snapshot: Tool = async (call) => {
     }
   }
   await walk(frameTree, 0)
-  const { lines: kept, cut } = capLines(lines)
-  const before = state.lastSnapshot
-  state.lastSnapshot = kept
-  const head = pageLine(page)
-  const tail = cut
-    ? '\n(The page is longer; this snapshot was cut. Scroll and snapshot again.)'
-    : ''
-  if (bool(call.args, 'diff') === true && before) {
-    const changes = diffLines(before, kept)
-    if (changes) {
-      return call.done(
-        page,
-        `${head}\n${changes.length === 0 ? '(no changes since the previous snapshot)' : changes.join('\n')}${tail}`,
-      )
+  await fileInputSnapshot(page, state.book, lines)
+  // 清掉本次树里消失的引用；新控件从不接管旧 ref。
+  const live = new Set(
+    lines.flatMap((line) => [...line.matchAll(/\[ref=([^\]]+)\]/g)].map((m) => m[1])),
+  )
+  for (const [ref, node] of state.book.byRef)
+    if (!live.has(ref)) {
+      state.book.byRef.delete(ref)
+      state.book.byNode.delete(node)
     }
+  const before = state.lastSnapshot
+  const full = oneOf(call.args, 'detail', ['compact', 'full'] as const) === 'full'
+  const offset = Math.max(0, Math.floor(num(call.args, 'offset') ?? 0))
+  let changes =
+    bool(call.args, 'diff') === true && !full && offset === 0 && before
+      ? diffLines(before, lines)
+      : null
+  // 大 diff 回退为完整树的分页，避免把“变化行偏移”误用为下一次全文偏移。
+  if (changes && observationSlice(changes).truncated) changes = null
+  // 分页/截断的观察不能推进 diff 基准，否则下一次会漏掉模型从未见过的变化。
+  const view = observationSlice(changes ?? lines, { full, offset })
+  state.lastSnapshot = !view.truncated && offset === 0 ? lines : null
+  const metadata = {
+    generation: state.book.generation,
+    mode: changes ? 'diff' : 'snapshot',
+    ...view,
   }
-  return call.done(page, `${head}\n${kept.join('\n')}${tail}`)
+  const { text: body, ...summary } = metadata
+  return call.done(
+    page,
+    `${pageLine(page)}
+${JSON.stringify({ observation: summary })}
+${body || (changes ? '(no changes since the previous snapshot)' : '(empty accessibility tree)')}${
+  view.truncated
+    ? `
+(Truncated. Use snapshot(diff:false, detail:"full", offset:${view.next_offset}) for subsequent lines, or offset:0 for a full view.)`
+    : ''
+}`,
+  )
 }
 
 interface Metrics {

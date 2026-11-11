@@ -8,6 +8,7 @@
 const ALLOWED: ReadonlySet<string> = new Set([
   // 页面：截图、视口大小、对话框、框架树（快照要逐个框架取）、生命周期事件
   'Page.enable',
+  'Page.setInterceptFileChooserDialog',
   'Page.captureScreenshot',
   'Page.getLayoutMetrics',
   'Page.handleJavaScriptDialog',

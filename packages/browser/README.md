@@ -68,7 +68,7 @@ const executor = createBrowserExecutor({
 
 `partition` 必须专供本组件；该 session 会拒绝页面权限与屏幕共享，没开 `downloads` 时也拒绝下载，并清空 session 级 preloads。开了 `downloads` 时，下载先收进 `stagingRoot` 下的私有目录，`context.ask` 收到 `browserDownload` 审批，批准后才发布到 `downloadsDirectory`；接通用 `ApprovalPort` 的宿主用 `browserApprovalSubject` 转成 `{ kind: 'download' }`。退出前调用 `host.downloads?.dispose()` 清掉暂存区。不要传应用主界面的 session。这里复用 Chromium CDP 与 Electron session；不会把旧应用的 Cookie/密码目录迁移到新应用。Cookie 快照保留 session Cookie 和 CHIPS 键，使用私有控制页访问 Network，模型工具仍不能读取 Network/Storage。
 
-默认 Cookie 加密使用 Electron `safeStorage`，不可用时不保存明文。测试或有自己的密钥库的宿主可注入 `cipher`。日志钩子只通知保存失败，不携带 Cookie。站点策略可以传文件或 `SitePersistence`；不同产品必须使用不同实例和目录，禁止通过共用文件继承另一宿主的授权。
+默认 Cookie 加密使用 Electron `safeStorage`，不可用时不保存明文。测试或有自己的密钥库的宿主可注入 `cipher`。日志钩子只通知保存失败，不携带 Cookie。站点策略可以传文件或 `SitePersistence`；不同产品必须使用不同实例和目录，禁止通过共用文件继承其他宿主的授权。
 
 网页 preload 用 esbuild 等构建器将 `/preload` 入口打成 `format: 'cjs'`、`platform: 'node'`，将 `electron` 留作 external；`autofillPreload` 传该绝对路径。应用自己的 preload/IPC 负责面板与审批卡，不把网页 preload 的接口暴露给普通渲染页面。
 
@@ -76,7 +76,7 @@ const executor = createBrowserExecutor({
 
 1. `createPasswordStore({ file, cipher })` 建自己的密码库；文件路径与加密器显式传入。密码明文只在可信主进程中短暂使用，不进工具结果。
 2. `createSignIns`、`createSavePrompts` 建卡片状态。可信 UI 订阅并回答；账户编号只在当次卡片有效。若接手机，必须由宿主验签与验证设备身份。
-3. `createHandover({ host, signIns, ... })` 组装登录预检、观察闸、代填、清框和重载；传给工具 executor 的 `handover`。具体依赖见导出的 `HandoverOptions`。未装 handover 时登录工具返回不支持，不会改用模型填密码。
+3. `createHandover({ host, signIns, ... })` 组装手动登录交接、清框和重载；传给工具 executor 的 `handover`。具体依赖见导出的 `HandoverOptions`。任务已有可用凭据时，代理可用输入工具直接登录；只有缺少凭据或需要用户本人操作时才请求交接。未装 handover 时登录交接工具返回不支持。
 4. `installAutofill(store, prompts, menuWords?)` 安装网页 IPC 与原生菜单；第三个参数可返回宿主自己的标题和空用户名文案。默认保留 Litch 文案。当前每个 Electron 主进程只安装一次密码服务，并使用一个浏览器标签宿主；不要为不同密码库重复注册同名 IPC。纯页面分区可独立创建与销毁。
 5. `createImporter` 完全注入 `env`、reader、CookieJar、密码 sink、状态 book 和日志。`assembleImporter` 是采用 `userData/browser` 状态布局的便捷组装；需要其他布局时使用 `createImportStateBook(file)` 和 `createImporter`。导入只能从用户明确选择的资料读取，包不会在 import 时自动扫描个人目录。
 
@@ -84,7 +84,7 @@ macOS `createProtectedReader` 接受 `platform` 和 `SystemSecrets`。可用 `sy
 
 构建 macOS 原生组件：`buildKeychain({ out, nodeHeaders? })`，从 `/native/build` 导入。它使用 Node-API 8、系统 clang 与 Security.framework；tarball 附源码和启动脚本，宿主自己编译、签名、打包（通常放 asar 外）。不要把另一应用的签名当成自己访问钥匙串的授权。Electron/Node 宿主退出前必须取消导入并清理子进程。
 
-WakeQora 的新 Electron 客户端可采用以上主进程接线：它自己提供可信 preload、分区、存储路径、审批卡与构建资源。Litch 当前验证 Electron 44.7.0；WakeQora 的 44.10.2 仍需在其应用中复验 CDP、sandbox preload、session Cookie、koffi/打包与签名。本包不接管自动更新，退出前的 flush 等待顺序由宿主安排。
+其他宿主的新 Electron 客户端可采用以上主进程接线：它自己提供可信 preload、分区、存储路径、审批卡与构建资源。Litch 当前验证 Electron 44.7.0；其他 Electron 版本仍需在宿主应用中复验 CDP、sandbox preload、session Cookie、koffi/打包与签名。本包不接管自动更新，退出前的 flush 等待顺序由宿主安排。
 
 ## 构建与验收
 
@@ -101,3 +101,17 @@ npm run check:electron --prefix packages/browser
 `check:package` 检查源码边界和 tarball 依赖闭包，离线装入仓外消费者，并编译运行 [Node fake host](examples/node-host.mts)。`check:electron` 使用本包固定版本的 Electron，测试独立 partition、私有 Cookie 文件、默认 session 隔离及语义 driver；全隐藏且使用模拟钥匙串。Litch 原有浏览器/导入测试继续经接线外观验证唯一实现，跨进程持久化与真实面板检查由桌面端脚本执行。
 
 本包遵循 [MIT 许可证](LICENSE)。tarball 由宿主按自身发布流程集成；没有自动公开发布步骤。
+
+### 紧凑观察与恢复
+
+snapshot 默认最多 180 行、约 10K 字符，仍略去装饰容器与重复文字。`detail:"full"` 提高到 1500 行、约 60K；`offset` 根据 `observation.next_offset` 读取后续行。分页针对完整快照，`diff:true` 在有完整基准时只回变化；截断后不推进基准，避免漏掉从未返回的内容。
+ref 含文档代次（如 `e3g12`）；同一文档保留稳定编号，文档更换、重新认领或节点消失后旧 ref 失效。错误给 `recovery.needs_snapshot` 与修复提示；输入的精确恢复字段在 `inputReceipt.recovery`。
+已知连续操作优先 run_actions，以 wait(selector/text/url) 结束验证业务条件。结果新增 `verification.status`（matched/notConfirmed/notRequested），只证明所给条件匹配；业务结果仍由调用方判断。最终快照优先紧凑 diff。截图继续显式调用 screenshot。
+
+### 文件上传
+
+`upload` 接受文件框、上传按钮或可点击上传区域的 ref。隐藏文件框在快照中仍有 ref，并标注 `hidden`。按钮路径先拦截 `Page.fileChooserOpened`，再点击一次；没有选择器事件时，仅使用 label、form 或最近祖先中唯一的文件框。拦截结束或调用取消时撤订阅并关闭拦截，不修改页面 DOM/样式。多文件、目录、禁用和 accept 不符会明确报错。
+
+本机会话的内置 Electron 用 `DOM.setFileInputFiles`；Chrome 扩展可用选择器拦截，但设置路径受文件网址权限限制，因此沿用有界分块通道，组装 File 并派发事件。工具回执只证明派发，调用方须核对站点反馈。上传限额仍为内置单文件 100 MiB、Chrome 每次 32 个文件总计 512 MiB。
+
+远程会话通过宿主提供的 `ClientToolContext.prepareUpload(paths, { fileBytes, totalBytes })` 读取会话设备上的源，返回 `{ paths, dispose }`。宿主须绑定本次调用的设备、在可靠大小预检后有界分块物化到控制端私有目录，不能读取控制端同路径文件。执行器在 `finally` 调用 `dispose`。远程内置上传和 Chrome 共用隔离 world 的 File 构造，字节独立于暂存路径，清理后仍可供网页延迟读取和提交；这条路使用合成事件，须验证站点反馈。取消时仅清理已持有的对象，未提交的分块不会进入 input；无法向失效文档清理时另有 30 秒空闲回收。没有远程源端口的宿主明确拒绝，不回退读取本机。若系统原生窗口已弹出且浏览器工具无法关闭，可结合 `litch-computer-automation`；网页操作仍使用 `litch-browser-automation`。

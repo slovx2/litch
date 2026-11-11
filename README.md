@@ -15,4 +15,6 @@ go test ./chromebridge ./internal/hostplatform
 
 macOS 编译：`node apps/computer-use/build.mjs`。Windows：在 `apps/computer-use-win` 显式提供五个 CU_* 构建变量后运行 `cargo build --locked --release --target x86_64-pc-windows-msvc`。宿主身份在构建阶段固定，正式运行不得由模型改写。
 
+隔离测试启动 Chromium 或 Electron 时，使用 `scripts/chromium-test-args.mjs` 的 `withChromiumTestArgs(args)`：统一传入 mock keychain 和 basic password store，避免测试访问系统钥匙串。Playwright 的 `args` 和直接启动进程共用此函数；`npm run check` 包含启动参数的静态检查及回归测试。产品宿主不使用这个测试 helper。
+
 Litch 通过 subtree 源码集成；其他宿主可安装精确 npm 包并从对应源码 tag 编译 helper。npm 默认入口不查个人 HOME、不登记系统宿主、不下载 helper。

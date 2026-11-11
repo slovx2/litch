@@ -3,6 +3,7 @@ import type {
   ChromeRequest,
   ChromeTabState,
 } from '../../automation-contracts/src/litch/chrome-browser.mjs'
+import { interceptFileChooser } from '../../browser/src/browser/file-chooser.mjs'
 import { isInputCommand } from '../../browser/src/browser/input-command.mjs'
 import type {
   BrowserPage,
@@ -11,6 +12,7 @@ import type {
   LoadOutcome,
   TabInfo,
 } from '../../browser/src/browser/model.mjs'
+import { discardUpload } from '../../browser/src/browser/upload-cleanup.mjs'
 import { type ChromeBridge, ChromeBridgeError } from './bridge.mjs'
 
 export class ChromePage implements BrowserPage {
@@ -19,6 +21,10 @@ export class ChromePage implements BrowserPage {
   readonly grant: ChromeGrant
   state: ChromeTabState
   valid = true
+  recoverable = true
+  /** Chrome 重启可能重用数字 tabId；重认领必须核对原 DevTools target。 */
+  targetId?: string
+  claimEpoch?: string
   paused = false
   scripted = false
   private dialogState: DialogInfo | null = null
@@ -112,6 +118,20 @@ export class ChromePage implements BrowserPage {
     }
     return this.request<T>('command', { method, params })
   }
+  async discardUpload(state: string | undefined, objects: readonly string[]): Promise<void> {
+    if (!this.valid) return
+    await discardUpload(
+      <T,>(method: string, params?: Record<string, unknown>) =>
+        this.bridge.call<T>(this.instanceId, {
+          op: 'command',
+          leaseId: this.grant.leaseId,
+          ...(this.activeGeneration === undefined ? {} : { generation: this.activeGeneration }),
+          args: { method, params },
+        }),
+      state,
+      objects,
+    )
+  }
   async prepareObservation(): Promise<void> {
     if (!this.valid)
       throw new ChromeBridgeError(
@@ -133,6 +153,34 @@ export class ChromePage implements BrowserPage {
     this.activeGeneration = tab.generation
     // 接下来每条读命令仍校验来源、停止状态与租约。不会授权新来源，也不重发输入。
     this.inputDocumentChanged = false
+  }
+  interceptFileChooser(signal: AbortSignal) {
+    return interceptFileChooser(
+      async (enabled) => {
+        if (enabled) await this.cdp('Page.setInterceptFileChooserDialog', { enabled })
+        else if (this.valid)
+          // 取消信号不能阻止清理；仍由扩展核对租约和来源，只发送关闭拦截。
+          await this.bridge.call(this.instanceId, {
+            op: 'command',
+            leaseId: this.grant.leaseId,
+            args: { method: 'Page.setInterceptFileChooserDialog', params: { enabled: false } },
+          })
+      },
+      (listener) =>
+        this.bridge.onEvent((instanceId, event) => {
+          if (
+            instanceId === this.instanceId &&
+            event.kind === 'fileChooser' &&
+            event.tabId === this.grant.tabId &&
+            event.leaseId === this.grant.leaseId &&
+            event.generation === this.state.generation &&
+            this.valid &&
+            !this.paused
+          )
+            listener({ backendNodeId: event.backendNodeId, mode: event.mode })
+        }),
+      signal,
+    )
   }
   async authorize(origins: string[], keep = this.grant.keep): Promise<void> {
     await this.request('authorize', { origins, keep }, false)
@@ -193,6 +241,7 @@ export class ChromePage implements BrowserPage {
     await this.request('pointer', { x, y, width, height })
   }
   async release(close = false): Promise<void> {
+    this.recoverable = false
     if (!this.valid) return
     try {
       await this.request('release', { close }, false)

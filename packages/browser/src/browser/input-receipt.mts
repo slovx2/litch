@@ -1,3 +1,4 @@
+import { automationRecovery } from '../../../automation-contracts/src/recovery.mjs'
 // 输入完成不代表业务成功。两种浏览器共用派发/观察回执，不为验证结果重放输入。
 import { type ClientToolCallResponse, clientToolFailure } from '../tool-port.mjs'
 import { BadArgs } from './args.mjs'
@@ -200,6 +201,20 @@ export const observedInput =
       settled,
       elapsedMs: Date.now() - started,
       businessOutcome: 'unknown',
+      ...(!success
+        ? {
+            recovery: automationRecovery(
+              (failure as { code?: string })?.code ??
+                (failure instanceof BadArgs
+                  ? 'invalid'
+                  : attempted === 0
+                    ? 'notDispatched'
+                    : 'failed'),
+              failure instanceof Error ? failure.message : (toolError ?? ''),
+              attempted > 0,
+            ),
+          }
+        : {}),
       ...(observationError ? { observationError: receiptError(observationError) } : {}),
       ...(toolError ? { error: receiptError(toolError) } : {}),
       ...(failure
@@ -244,7 +259,9 @@ export const observedInput =
     return {
       success,
       contentItems: [
-        ...errors,
+        ...errors.filter(
+          (item) => item.type !== 'inputText' || !item.text.startsWith('{"recovery":'),
+        ),
         {
           type: 'inputText',
           text:

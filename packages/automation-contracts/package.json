@@ -1,6 +1,6 @@
 {
   "name": "@litch/automation-contracts",
-  "version": "0.1.0",
+  "version": "0.42.0",
   "type": "module",
   "license": "MIT",
   "description": "自动化公共合同；内部标识不代表最终发布包名",
@@ -16,6 +16,7 @@
   },
   "files": [
     "dist",
+    "skills",
     "README.md",
     "LICENSE"
   ],
@@ -23,7 +24,7 @@
     "build": "tsc -p tsconfig.json",
     "check:package": "node scripts/check-package.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
-    "test": "node --import tsx --test test/*.test.mts"
+    "test": "node scripts/generate-skills.mjs && node --import tsx --test test/*.test.mts"
   },
   "repository": {
     "type": "git",

@@ -118,7 +118,12 @@ interface Quad {
 export function nodeOf(call: Call, page: BrowserPage, ref: string): number {
   const node = call.state(page).book.byRef.get(ref)
   if (node === undefined) {
-    throw new BadArgs(`unknown ref ${ref}; take a new \`snapshot\` (refs belong to one tab)`)
+    throw Object.assign(
+      new BadArgs(
+        `stale or unknown ref ${ref}; current generation is ${call.state(page).book.generation}. Take a new snapshot and use its refs (refs belong to one tab/document).`,
+      ),
+      { code: 'staleRef' },
+    )
   }
   return node
 }

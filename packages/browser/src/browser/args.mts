@@ -74,7 +74,8 @@ export type Target = { ref: string } | { x: number; y: number }
 export function target(args: Args, optional = false): Target | null {
   const ref = str(args, 'ref')
   if (ref !== undefined) {
-    if (!/^e\d+$/.test(ref)) throw new BadArgs('`ref` looks like "e12" (from `snapshot`)')
+    if (!/^e\d+(?:g\d+)?$/.test(ref))
+      throw new BadArgs('`ref` looks like "e3g12" (from `snapshot`)')
     return { ref }
   }
   const x = num(args, 'x')

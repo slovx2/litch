@@ -82,7 +82,7 @@ export async function executePageTool(
         await page.request('unfreeze', {}, false)
       return done(
         answer && answer !== 'decline'
-          ? 'The user finished signing in. List tabs and claim again before observing the new document.'
+          ? 'The user finished signing in. Call ensure_claimed with this tabId to recover the tab and observe its new document.'
           : 'Sign-in was cancelled. The tab was released.',
       )
     } finally {
@@ -178,7 +178,8 @@ export async function executePageTool(
       }
     },
     handover: null,
-    uploadFiles: uploadChromeFiles,
+    uploadFiles: (page, node, paths, mode) =>
+      uploadChromeFiles(page, node, paths, mode, context.signal),
     uploadMaxBytes: CHROME_UPLOAD_MAX_BYTES,
   }
   const result = await handler(call)

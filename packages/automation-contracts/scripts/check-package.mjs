@@ -57,7 +57,13 @@ assert.deepEqual(
   '构建不得漏入口或带入旧 dist 文件',
 )
 assert.ok(
-  pack.files.every(({ path }) => /^(dist\/|README\.md$|LICENSE$|package\.json$)/.test(path)),
+  pack.files.every(({ path }) =>
+    /^(dist\/|skills\/|README\.md$|LICENSE$|package\.json$)/.test(path),
+  ),
+)
+assert.ok(pack.files.some(({ path }) => path === 'skills/litch-browser-automation/SKILL.md'))
+assert.ok(
+  pack.files.some(({ path }) => path === 'skills/litch-computer-automation/references/windows.md'),
 )
 const manifest = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8'))
 assert.equal(manifest.dependencies, undefined)

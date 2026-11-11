@@ -17,6 +17,7 @@ export interface AxNode {
 
 /** 编号簿：同一个标签里同一个元素的编号不变，快照之间能对上 */
 export interface RefBook {
+  generation: number
   /** 编号 → backendNodeId */
   byRef: Map<string, number>
   /** backendNodeId → 编号 */
@@ -24,7 +25,13 @@ export interface RefBook {
   next: number
 }
 
-export const newRefBook = (): RefBook => ({ byRef: new Map(), byNode: new Map(), next: 1 })
+let generation = 0
+export const newRefBook = (): RefBook => ({
+  generation: ++generation,
+  byRef: new Map(),
+  byNode: new Map(),
+  next: 1,
+})
 
 /** 一次快照最多多少行、多少字。再多的截掉并说明 */
 export const SNAPSHOT_MAX_LINES = 1500
@@ -110,7 +117,7 @@ export function formatAxTree(nodes: readonly AxNode[], book: RefBook, indent = 0
       if (target !== undefined && (ACTIONABLE.has(role) || focusable)) {
         let ref = book.byNode.get(target)
         if (!ref) {
-          ref = `e${book.next++}`
+          ref = `e${book.generation}g${book.next++}`
           book.byNode.set(target, ref)
           book.byRef.set(ref, target)
         }

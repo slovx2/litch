@@ -43,7 +43,7 @@ await bridge.close()
 
 **跨应用互斥有明确前提：双方均使用新组件，并配置同一个 claimLockDirectory。** Go host 转发已有 claim 前，以真实 CDP targetId 的哈希文件做 flock / LockFileEx；扩展完成 detach 后的 revoked、claim 失败及进程退出释放内核锁。Node 不阻塞等待锁，也不重试输入；竞争者返回 busy。只用 getTargets 的旧方案曾在定向 5 轮中 4 轮双方成功，不能作为原子互斥。旧扩展不带新 metadata 时保留 wire 1 原行为，因此不能承诺与旧组件或不合作调试器之间的原子互斥。没有其他控制者时单 Litch 的允许/拒绝和租约语义保持，新增锁有少量系统调用耗时，实际基准见扩展包 COMPATIBILITY.md。
 
-共享目录由宿主**显式传入**，库不读取个人 HOME；Litch 和 WakeQora 应传同一个每用户约定路径（`chromeClaimDirectory` 为纯路径函数）：
+共享目录由宿主**显式传入**，库不读取个人 HOME；Litch 和其他宿主 应传同一个每用户约定路径（`chromeClaimDirectory` 为纯路径函数）：
 
 | 平台 | 路径 |
 |---|---|
@@ -52,3 +52,10 @@ await bridge.close()
 | Linux | `~/.local/state/chrome-automation-claims/v1` |
 
 测试一律传共同的临时目录。空锁文件保留，不在释放时 unlink，否则可被新 inode 绕过正在持有的锁；锁状态属于内核，空文件不表示还在占用。不同 Chrome 实例/profile 的 targetId 是不同的随机目标标识；同一目标在两个扩展中相同。不得把扩展各自的 instanceId、host 名加入锁键，否则彼此不再互斥。新扩展附带真实目标元数据，Node 仅从可信列举结果组成 claim；原有 wire 1 的操作/消息类型不变。扩展 attach 前核对当前 targetId，变化时失败重列。用自己的扩展组装时勿移除该核对。
+
+### 一次准备 Chrome 标签
+
+`ensure_claimed({targetId,url?})` 只选精确 URL，省略 url 时选最后焦点窗口的当前标签；多匹配直接要求明确选择。`ensure_claimed({tabId})` 恢复本会话原标签，一次完成列表、来源检查、认领、加载等待和新快照，返回稳定 tabId 与新 ref。未引入扩展 RPC，沿用 v1 list/claim/renew/command。
+同一实例的过期租约最多自动恢复一次；断线失效的只读 snapshot 可自动恢复，显式 release 后须明确 ensure_claimed。未知实例、用户停止、登录暂停、站点拒绝和其他会话占用都不猜测替代目标，不自动重放输入。callId 去重规则仍适用。
+重认领核对原 DevTools target，防止 Chrome 重启重用数字 tabId 后误接管其他标签；缺少可核对身份时要求明确重新选择。用户停止、显式释放或无法判定原因的调试器撤销不会触发隐式恢复。
+失败 JSON 新增 recovery，给明确下一步与保守的执行状态；输入失败以 inputReceipt.recovery 的实际派发记录为准。工具说明优先 ensure_claimed 与 run_actions，批末显式等待业务确认。

@@ -1,3 +1,4 @@
+import { automationRecovery } from '../../automation-contracts/src/recovery.mjs'
 // 执行器内部的线格式；对外入口以 automation-contracts 的 ToolInvocation/ToolResult 为准。
 export interface ClientToolInvocation {
   id: string
@@ -47,6 +48,9 @@ export const CLIENT_TOOL_NAMESPACE = { computer: 'litch_computer' } as const
 export function clientToolFailure(kind: string, message: string): ClientToolCallResponse {
   return {
     success: false,
-    contentItems: [{ type: 'inputText', text: `[litch:${kind}] ${message}` }],
+    contentItems: [
+      { type: 'inputText', text: `[litch:${kind}] ${message}` },
+      { type: 'inputText', text: JSON.stringify({ recovery: automationRecovery(kind, message) }) },
+    ],
   }
 }

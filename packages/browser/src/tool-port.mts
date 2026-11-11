@@ -1,3 +1,4 @@
+import { automationRecovery } from '../../automation-contracts/src/recovery.mjs'
 // 浏览器的工具宿主端口：结构保持 Litch 接线形状，不依赖 core、device 或 Electron。
 export interface ClientToolCallParams {
   threadId: string
@@ -17,7 +18,10 @@ export interface ClientToolCallResponse {
 export function clientToolFailure(kind: string, message: string): ClientToolCallResponse {
   return {
     success: false,
-    contentItems: [{ type: 'inputText', text: `[litch:${kind}] ${message}` }],
+    contentItems: [
+      { type: 'inputText', text: `[litch:${kind}] ${message}` },
+      { type: 'inputText', text: JSON.stringify({ recovery: automationRecovery(kind, message) }) },
+    ],
   }
 }
 
@@ -35,6 +39,8 @@ export interface ClientToolDevice {
 
 /** 交给执行器的一次调用：协议原有的参数，加上桌面端知道的上下文 */
 export interface ClientToolInvocation extends ClientToolCallParams {
+  /** 仅供浏览器使用的会话完全访问标志；从实际配置读取，不接受模型传参。 */
+  fullAccess?: boolean
   /** 桌面批量编排的内部子调用，沿用批次开始前的观察。 */
   browserBatch?: boolean
   /** 会话标题，仅供浏览器标签组显示；尚未命名时为空。 */
@@ -112,6 +118,12 @@ export type ClientToolAnswer = 'once' | 'session' | 'always' | 'decline'
 
 /** 执行器能用的东西 */
 export interface ClientToolContext {
+  /** 宿主按本次调用的设备准备上传源；远程源只在私有临时目录中物化。 */
+  prepareUpload?(
+    paths: readonly string[],
+    limits: { fileBytes: number; totalBytes: number },
+  ): Promise<{ paths: string[]; dispose(): Promise<void> }>
+
   /** 回合被打断、连接断了、超时时会被中止 */
   signal: AbortSignal
   /** 在这个会话的对话里出一张卡片等用户答复；被取消时回 null */
