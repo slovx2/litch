@@ -1,5 +1,14 @@
 // 模拟核心用的示例数据：四台设备，覆盖在线、远程、只有 codex、离线四种情况。
 // 内容和界面稿（设计目录的 ui/v1）是同一套，全是编出来的。文字在 sample-text.mts 里，中英文各一份。
+
+import {
+  emptyRanking,
+  MODEL_RANKING_REVISION,
+  type ModelRankingSnapshot,
+  mergeRanking,
+  modelKey,
+  type RankedModel,
+} from '../../../protocol/src/model-ranking.mjs'
 import type {
   AppView,
   ComposeOptions,
@@ -21,6 +30,7 @@ import type {
   TurnView,
   WireColor,
 } from '../model.mjs'
+
 import { phrase } from '../phrase.mjs'
 import { ALL_ABLE } from '../projection/session.mjs'
 import { BUILTIN_PERMISSIONS } from '../projection/settings.mjs'
@@ -33,6 +43,51 @@ import {
   type SampleQuestion,
   type SampleText,
 } from './sample-text.mjs'
+
+export type SampleModelRankingScenario = 'builtin' | 'custom-local' | 'custom-cross' | 'partial'
+
+/** 排序界面截图夹具：跨引擎开关独立于 custom，所有场景均保留未分级网关型号。 */
+export function sampleModelRanking(
+  scenario: SampleModelRankingScenario = 'builtin',
+): ModelRankingSnapshot {
+  const codex = ['gpt-6-luna', 'gpt-6-sol', 'gpt-6-astra'].map((model) => ({
+    key: modelKey('codex', model),
+    harness: 'codex',
+    model,
+    name: model,
+    available: true,
+  }))
+  const claude: RankedModel[] = [
+    ['claude-haiku-5-5', 'Haiku 5.5'],
+    ['claude-sonnet-5-5', 'Sonnet 5.5'],
+    ['claude-opus-5-5', 'Opus 5.5'],
+  ].map(([id, name]) => ({
+    key: modelKey('claude-code', id!, 'anthropic'),
+    harness: 'claude-code',
+    model: `anthropic/${id}`,
+    name: name!,
+    provider: 'anthropic',
+    resolved: id!,
+    trusted: true,
+    available: true,
+  }))
+  const unknown: RankedModel = {
+    key: modelKey('claude-code', 'future-v1', 'gateway'),
+    harness: 'claude-code',
+    model: 'gateway/future-v1',
+    name: 'Gateway Future',
+    provider: 'gateway',
+    available: true,
+  }
+  const config = mergeRanking(emptyRanking(), [...codex, ...claude, unknown])
+  return {
+    ...config,
+    mode: scenario === 'builtin' ? 'builtin' : 'custom',
+    crossHarness: scenario === 'custom-cross',
+    builtinRevision: MODEL_RANKING_REVISION,
+    errors: scenario === 'partial' ? { pi: 'Fixture: model catalogue unavailable' } : {},
+  }
+}
 
 /** 表单里一栏的底子：一行可以不填的字 */
 const FIELD: FormField = {

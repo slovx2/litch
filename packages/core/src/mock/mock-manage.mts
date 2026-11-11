@@ -3,7 +3,6 @@ import {
   MODEL_RANKING_REVISION,
   type ModelRankingSnapshot,
   mergeRanking,
-  modelKey,
 } from '../../../protocol/src/model-ranking.mjs'
 // 模拟核心的设备与 harness 管理：订阅设置、改设置、重启 harness、诊断、日志、ssh 配置片段。
 // 行为照真的设备服务：一次写入全有或全无、版本号对不上就拒绝、改了要重启才生效的设置时
@@ -30,10 +29,12 @@ import {
   type MockSettings,
   snapshotOf,
 } from './mock-settings.mjs'
+import { type SampleModelRankingScenario, sampleModelRanking } from './sample-data.mjs'
 import { sampleChecks, sampleLog, sampleSshConfig } from './sample-diagnostics.mjs'
 import { both, sampleSettings } from './sample-manage.mjs'
 
 export interface MockManageHost {
+  modelRankingScenario?: SampleModelRankingScenario
   clock: Clock
   /** 流式回答每一小块之间隔多久。这里的“过一会儿”都是它的倍数；0 表示不拖时间 */
   stepMs: number
@@ -51,6 +52,7 @@ export interface MockManageHost {
 }
 
 export interface MockManagement {
+  modelRanking(deviceId: string): ModelRankingSnapshot
   subscribe(deviceId: string, sink: HostSink): () => void
   /** 这个 harness 的任务卡开着没有。设备没连着、没有设置接口的是 null */
   taskCards(deviceId: string, harness: string): boolean | null
@@ -95,18 +97,7 @@ export function createMockManagement(host: MockManageHost): MockManagement {
   const rankingOf = (deviceId: string): ModelRankingSnapshot => {
     const current = rankings.get(deviceId)
     if (current) return current
-    const models = ['gpt-6-luna', 'gpt-6-sol', 'gpt-6-astra'].map((model) => ({
-      key: modelKey('codex', model),
-      harness: 'codex',
-      model,
-      name: model,
-      available: true,
-    }))
-    const initial = {
-      ...mergeRanking(emptyRanking(), models),
-      builtinRevision: MODEL_RANKING_REVISION,
-      errors: {},
-    }
+    const initial = sampleModelRanking(host.modelRankingScenario)
     rankings.set(deviceId, initial)
     return initial
   }
@@ -367,6 +358,7 @@ export function createMockManagement(host: MockManageHost): MockManagement {
   }
 
   return {
+    modelRanking: rankingOf,
     taskCards(deviceId, harness) {
       const device = host.device(deviceId)
       if (!device?.manageable || device.connection !== 'online') return null
@@ -403,6 +395,8 @@ export function createMockManagement(host: MockManageHost): MockManagement {
           reach(input.deviceId)
           const before = rankingOf(input.deviceId)
           if (name.endsWith('.read')) return before
+          if (input.crossHarness !== undefined && typeof input.crossHarness !== 'boolean')
+            throw new ChannelError('invalid', 'crossHarness must be a boolean')
           if (input.expectedRevision !== before.revision)
             throw new ChannelError('conflict', 'Model ranking changed')
           const next: ModelRankingSnapshot = name.endsWith('.reset')
@@ -415,6 +409,7 @@ export function createMockManagement(host: MockManageHost): MockManagement {
             : {
                 ...before,
                 mode: 'custom',
+                crossHarness: input.crossHarness === true,
                 tiers: input.tiers,
                 manual: input.manual ?? [],
                 unranked: input.unranked,

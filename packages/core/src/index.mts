@@ -1,10 +1,18 @@
 export type { AcpAuthLogin, AcpAuthView } from '../../protocol/src/acp-controls.mjs'
 export {
+  type ModelLimitFailure,
   type ModelRankingConfig,
   type ModelRankingSnapshot,
   type ModelRankingWrite,
   moveRankedModel,
+  type RankedModel,
 } from '../../protocol/src/model-ranking.mjs'
+export {
+  type ModelLimitContext,
+  modelLimitPreview,
+  modelLimitView,
+  rankedModelSelection,
+} from './model-limit.mjs'
 // 核心包的入口。界面和外壳只从这里引用。
 
 export type {
@@ -279,6 +287,7 @@ export {
 } from './manager-references.mjs'
 export { type ImageTarget, transcriptImageTarget } from './media.mjs'
 export { createMockCore, type MockCore, type MockCoreOptions } from './mock/mock-core.mjs'
+export { type SampleModelRankingScenario, sampleModelRanking } from './mock/sample-data.mjs'
 export type { SampleLang } from './mock/sample-text.mjs'
 export type * from './model.mjs'
 export type * from './model-approvals.mjs'

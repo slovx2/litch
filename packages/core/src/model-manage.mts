@@ -1,11 +1,11 @@
 import type { ModelLimitFailure, ModelRankingSnapshot } from '../../protocol/src/model-ranking.mjs'
-import type { Phrase } from './phrase.mjs'
 // 设备与 harness 管理：界面看到的数据形状。
 // 设置有哪些、各是什么类型，由设备服务声明；核心原样转给界面，界面按类型画控件，哪一项都不认识。
 // 所以这里的形状和协议里的差不多是一对一的，差别只有两处：
 // - 给人看的字是两种语言各一份（Bilingual），核心不挑，界面按当前的语言取；
 // - 已保存的密钥在这里没有值，只有“设没设过”。对面本来就不读回，核心转的时候再剥一遍（projection/manage.mts）。
 import type { Bilingual, HarnessId } from './model.mjs'
+import type { Phrase } from './phrase.mjs'
 
 /** 一项设置管的是整台设备，还是某一个 harness */
 export type SettingScopeView = { kind: 'device' } | { kind: 'harness'; harness: HarnessId }

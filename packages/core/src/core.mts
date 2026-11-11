@@ -38,6 +38,7 @@ import {
 } from './machine-wiring.mjs'
 import type { AppView, OutgoingMessage, RemoteCheck, WireColor } from './model.mjs'
 import type { ClientToolPort } from './model-client-tools.mjs'
+import { modelLimitSettings } from './model-limit.mjs'
 import type { MachineAccessMode, MachineAccessView, MachineApproval } from './model-machine.mjs'
 import type { PairingView } from './model-pairing.mjs'
 import type { TerminalsAlive } from './model-terminal.mjs'
@@ -843,7 +844,10 @@ export function createCore(options: CoreOptions): Core {
           try {
             return { sessionId: await deviceOf(deviceId).spawn(request) }
           } catch (error) {
-            throw toChannelFailure(error)
+            throw modelLimitSettings(toChannelFailure(error), {
+              deviceId,
+              sessionId: request.parentId,
+            })
           }
         }
         case 'session.report.set': {
@@ -882,7 +886,7 @@ export function createCore(options: CoreOptions): Core {
               sessionId: await deviceOf(deviceId).acceptProposal(sessionId, proposalId, overrides),
             }
           } catch (error) {
-            throw toChannelFailure(error)
+            throw modelLimitSettings(toChannelFailure(error), { deviceId, sessionId: sessionId })
           }
         }
         case 'session.proposal.dismiss': {

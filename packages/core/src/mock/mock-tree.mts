@@ -24,6 +24,7 @@
 // - 界面上手动派（session.spawn）、脱离（session.detach）、提案的开始和不要、列子代理（session.agents）。
 // 子会话的回报：父会话在跑就当场插进那个回合；没被插走、唤醒带走的，攒到父会话下一条用户消息前面（kind="notes"）。
 import { CLIENT_TOOL_NAMESPACE, SESSION_TREE_LIMITS } from '../../../protocol/src/index.mjs'
+import type { ModelRankingSnapshot } from '../../../protocol/src/model-ranking.mjs'
 import { permissionRank } from '../../../protocol/src/project-permissions.mjs'
 import { ChannelError, type Commands, type SessionOp } from '../channel/protocol.mjs'
 import type {
@@ -34,6 +35,7 @@ import type {
   SessionSummary,
   SessionView,
 } from '../model.mjs'
+import { modelLimitPreview, rankedModelSelection } from '../model-limit.mjs'
 import type {
   AgentThreadView,
   LineageKind,
@@ -91,6 +93,7 @@ const AGENT_STOP_MS = 2500
 const SHORT_PROPOSAL_MS = 8000
 
 export interface MockTreeHost {
+  modelRanking?(deviceId: string): ModelRankingSnapshot
   lang: SampleLang
   now(): number
   setTimer(run: () => void, ms: number): () => void
@@ -229,6 +232,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       wakeParent: boolean
       reply: string | null
       settings?: Partial<SessionSettings>
+      modelSelected?: boolean
       workspaceId?: string
       cwd?: string
       proposalId?: string
@@ -250,6 +254,36 @@ export function createMockTree(host: MockTreeHost): MockTree {
     if (parentRank === null || childRank === null || childRank > parentRank)
       throw new ChannelError('rejected', '子会话权限不能高于父会话')
     const target = host.harnesses(deviceId).find((entry) => entry.id === harness)
+    const ranking = host.modelRanking?.(deviceId)
+    if (ranking) {
+      // 模拟目录的 Claude 标签仍用 claude；等级目录使用协议中的真实 harness 标识。
+      const identityHarness = (id: string) => (id === 'claude' ? 'claude-code' : id)
+      const parentModel = rankedModelSelection(
+        ranking,
+        identityHarness(parent.harness),
+        parent.settings.model,
+      )
+      const childId =
+        options.settings?.model ??
+        (harness === parent.harness
+          ? parent.settings.model
+          : host.settings(deviceId, harness).model)
+      const childModel = rankedModelSelection(ranking, identityHarness(harness), childId)
+      const preview = modelLimitPreview(ranking, parentModel, childModel, {
+        deviceId,
+        sessionId: parent.sessionId,
+      })
+      // 和设备相同：仅用户明确选择且目录中可用的型号可以取得本次例外。
+      if (!preview.allowed && !(options.modelSelected && childModel.available)) {
+        const modelLimit = preview.failure!
+        throw new ChannelError(
+          'rejected',
+          `Model exceeds the parent limit or is unranked: ${parentModel.model} → ${childModel.model}. Allowed models: ${modelLimit.reason.allowedModels.join(', ') || 'none'}. Choose an allowed model or inherit the parent.`,
+          modelLimit.text,
+          { modelLimit },
+        )
+      }
+    }
     const presets = samplePresets(target)
     if (presets && !presets.some((entry) => entry.id === permission))
       throw new ChannelError(
@@ -646,6 +680,16 @@ export function createMockTree(host: MockTreeHost): MockTree {
     host.reply(view, turnId, text.proposeReply, emptyWrapUp(turnId))
   }
 
+  /** 截图专用：保留越级提案；点击普通开始才由同一预检拒绝，不偷偷改低型号。 */
+  const modelLimitDemo = (view: SessionView, turnId: string) => {
+    const proposal = newProposal(text.proposals[0]!, turnId, host.nextId('ls'), host.now(), false)
+    proposal.harness = view.harness
+    proposal.model = 'anthropic/claude-opus-5-5'
+    proposal.title = host.lang === 'zh-CN' ? '检查高等级模型建议' : 'Check higher model suggestion'
+    host.apply(view, [{ op: 'session.proposals', proposals: [...view.proposals, proposal] }])
+    host.reply(view, turnId, text.proposeReply, emptyWrapUp(turnId))
+  }
+
   /** 模型撤回最近提的、还等着的那一个提案（litch_sessions.withdraw） */
   const withdrawDemo = (view: SessionView, turnId: string) => {
     const target = view.proposals.filter((entry) => waiting(view, entry.id) !== undefined).at(-1)
@@ -880,6 +924,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       harness: overrides.harness ?? proposal.harness,
       kind: overrides.kind ?? proposal.kind,
       origin: 'proposal',
+      modelSelected: overrides.modelSelected === true && !!overrides.model,
       wakeParent: overrides.wakeParent ?? proposal.wakeParent,
       // 简报改过了，写好的那句回话就对不上了
       reply: overrides.prompt || overrides.background !== undefined ? null : reply,
@@ -1266,6 +1311,10 @@ export function createMockTree(host: MockTreeHost): MockTree {
       }
       if (SPAWNS.test(message.text)) {
         spawnDemo(view, turnId)
+        return true
+      }
+      if (/模型越级建议|model limit proposal/i.test(message.text)) {
+        modelLimitDemo(view, turnId)
         return true
       }
       if (PROPOSES.test(message.text)) {

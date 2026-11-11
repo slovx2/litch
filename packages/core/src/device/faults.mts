@@ -6,6 +6,7 @@ import { archiveChildrenFailure } from '../archive.mjs'
 import { ChannelError } from '../channel/protocol.mjs'
 import { RpcAbortError, RpcError } from '../connection/rpc.mjs'
 import type { HarnessId } from '../model.mjs'
+import { isModelLimitFailure, modelLimitView } from '../model-limit.mjs'
 import { phrase } from '../phrase.mjs'
 import { bilingual } from '../projection/manage.mjs'
 
@@ -120,6 +121,10 @@ function fromDevice(error: RpcError, fault: DeviceErrorData, nameOf: HarnessName
 export function channelFailure(error: unknown, nameOf: HarnessNamer = (id) => id): ChannelError {
   if (error instanceof ChannelError) return error
   if (error instanceof RpcError) {
+    if (isModelLimitFailure(error.data)) {
+      const modelLimit = modelLimitView(error.data)
+      return new ChannelError('rejected', error.message, modelLimit.text, { modelLimit })
+    }
     // 原生 Codex 的归档拒绝含 CLI 恢复命令；客户端给出对应的界面操作。
     if (/\b(?:session|thread)\b[^\n]*\bis archived\b/i.test(error.message))
       return new ChannelError('rejected', 'Session is archived', phrase('fault.sessionArchived'))

@@ -65,6 +65,7 @@ export const emptyRanking = (): ModelRankingConfig => ({
   schemaVersion: 1,
   revision: 0,
   mode: 'builtin',
+  crossHarness: false,
   tiers: [],
   unranked: [],
   models: [],
@@ -152,7 +153,14 @@ export function rankingAllows(
   parent: RankedModel,
   child: RankedModel,
 ): boolean {
-  if (config.mode === 'builtin' && parent.harness !== child.harness) return true
+  if (!config.crossHarness && parent.harness !== child.harness) return true
+  // 未提供内置表的引擎保持原委派行为；自定义或显式跨引擎阶梯仍严格比较。
+  if (
+    !config.crossHarness &&
+    config.mode === 'builtin' &&
+    !['claude-code', 'codex'].includes(child.harness)
+  )
+    return true
   if (
     parent.key === child.key &&
     parent.provider === child.provider &&
@@ -166,14 +174,43 @@ export function rankingAllows(
     parent.resolved === child.resolved
   )
     return true
-  const rank = (model: RankedModel): number | null => {
-    if (config.mode === 'builtin') return builtinTier(model)
-    const index = config.tiers.findIndex((tier) => tier.includes(model.key))
-    return index < 0 ? null : index
-  }
-  const ceiling = rank(parent),
-    target = rank(child)
+  const ceiling = modelRank(config, parent),
+    target = modelRank(config, child)
   return ceiling !== null && target !== null && target <= ceiling
+}
+
+/** 跨 harness 开启后明确使用统一阶梯；builtin 关闭时才使用原生档位。 */
+export function modelRank(config: ModelRankingConfig, model: RankedModel): number | null {
+  if (config.mode === 'builtin' && !config.crossHarness) return builtinTier(model)
+  const index = config.tiers.findIndex((tier) => tier.includes(model.key))
+  return index < 0 ? null : index
+}
+
+export function modelLimitFailure(
+  config: ModelRankingConfig,
+  parent: RankedModel,
+  child: RankedModel,
+  candidates: RankedModel[] = config.models,
+  requestedModel: string | null = child.model || null,
+): ModelLimitFailure | null {
+  if (rankingAllows(config, parent, child)) return null
+  const unranked = modelRank(config, parent) === null || modelRank(config, child) === null
+  const allowed = candidates.filter(
+    (row) => row.available && row.harness === child.harness && rankingAllows(config, parent, row),
+  )
+  return {
+    litch: unranked ? 'model_rank_unknown' : 'model_cap_exceeded',
+    kind: unranked ? 'unranked' : 'exceeded',
+    parent,
+    child,
+    allowed,
+    allowedModels: allowed.map((row) => row.model),
+    parentModel: parent.model || null,
+    requestedModel,
+    mode: config.mode,
+    crossHarness: config.crossHarness === true,
+    revision: config.revision,
+  }
 }
 
 /** 两端共用编辑操作；移动到 null 表示未分级，独立等级插在指定位置。 */

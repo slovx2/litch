@@ -93,9 +93,8 @@
       }
     },
     {
-      "kind": "Field",
-      "where": "litch/session/spawn 和 litch/sessionProposal/accept 的 error.data；litch_sessions.start/accept 失败结果的附加 JSON reason",
-      "name": "modelLimit",
+      "kind": "Error",
+      "description": "litch/session/start 和 litch/sessionProposal/accept 的 error.data；litch_sessions.start/accept 失败结果在附加 JSON 的 modelLimit 字段中返回同一结构。英文 error.message 保留。",
       "schema": {
         "$ref": "#/definitions/ModelLimitFailure"
       }
