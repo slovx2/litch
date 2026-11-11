@@ -164,6 +164,7 @@ export function CardButton({
   label,
   symbol,
   onPress,
+  onLongPress,
   kind = 'plain',
   disabled,
   testID,
@@ -171,6 +172,7 @@ export function CardButton({
   label: string
   symbol?: 'check' | 'close'
   onPress(): void
+  onLongPress?(): void
   kind?: 'primary' | 'plain' | 'danger' | 'ghost'
   disabled?: boolean
   testID?: string
@@ -189,6 +191,7 @@ export function CardButton({
       disabled={disabled}
       testID={testID}
       onPress={onPress}
+      onLongPress={onLongPress}
       style={({ pressed }) => [
         styles.button,
         {

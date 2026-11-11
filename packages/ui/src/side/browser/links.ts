@@ -8,7 +8,13 @@ import { useSyncExternalStore } from 'react'
 import { currentPlatform } from '../../app/platform.ts'
 import { showSideTab } from '../side.ts'
 import { browserBridge } from './bridge.ts'
-import { type LinkClick, readLinksPref, routeLink, sameUserTab } from './link-logic.ts'
+import {
+  browserLinkBlocked,
+  type LinkClick,
+  readLinksPref,
+  routeLink,
+  sameUserTab,
+} from './link-logic.ts'
 import { BROWSER_TAB, chooseBrowserTab, viewingNow } from './store.ts'
 
 const STORAGE_KEY = 'litch.browser'
@@ -105,4 +111,23 @@ export function clickLink(url: string, click: LinkClick, device?: string): boole
   })
   if (route === 'browser' && openInBrowser(url)) return true
   return openOutside(url)
+}
+
+/** 右键菜单显式选系统浏览器：预览环境也要实际打开新标签。 */
+export function openSystemLink(url: string): void {
+  if (!/^https?:\/\//i.test(url)) return
+  if (!openOutside(url)) window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+export function appLinkBlocked(): ReturnType<typeof browserLinkBlocked> {
+  return browserLinkBlocked({
+    hasBrowser: browserBridge() !== undefined,
+    enabled: linksInBrowser,
+    owner: viewingNow(),
+  })
+}
+
+/** 激活时再核对开关和会话，避免菜单打开期间切换页面后挂到错误的会话。 */
+export function openAppLink(url: string): boolean {
+  return /^https?:\/\//i.test(url) && appLinkBlocked() === null && openInBrowser(url)
 }

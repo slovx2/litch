@@ -9,16 +9,14 @@ import {
 import { useIsFocused } from '@react-navigation/native'
 import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Image, Linking, Modal, Pressable, Text, useWindowDimensions, View } from 'react-native'
-import {
-  type EnrichedMarkdownTextProps,
-  EnrichedMarkdownText as NativeMarkdown,
-} from 'react-native-enriched-markdown'
+import type { EnrichedMarkdownTextProps } from 'react-native-enriched-markdown'
 import { imageInfo } from '../../../../../packages/core/src/image-info.mts'
 import { PreviewResources } from '../../../../../packages/ui/src/files/preview/resources'
 import { useChannel, useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Icon } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
+import { WebLinkMarkdown as NativeMarkdown } from '../../ui/WebLinkMenu'
 import { TranscriptContext, useTranscript } from '../context'
 import { ImageSurface } from './ImageSurface'
 import { type ImageSegment, mediaBlocks } from './segments'

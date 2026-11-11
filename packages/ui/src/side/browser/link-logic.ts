@@ -79,3 +79,15 @@ export function readLinksPref(raw: string | null): boolean {
   }
   return true
 }
+
+/** 显式选择内置浏览器前的条件；默认点击和菜单沿用同一套开关与会话归属。 */
+export function browserLinkBlocked(input: {
+  hasBrowser: boolean
+  enabled: boolean
+  owner: BrowserOwner | null
+}): 'link.menu.noBrowser' | 'link.menu.disabled' | 'link.menu.noSession' | null {
+  if (!input.hasBrowser) return 'link.menu.noBrowser'
+  if (!input.enabled) return 'link.menu.disabled'
+  if (!input.owner) return 'link.menu.noSession'
+  return null
+}

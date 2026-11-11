@@ -37,6 +37,16 @@ import { zhTasks } from './zh-CN-tasks.ts'
 import { zhWorktrees } from './zh-CN-worktrees.ts'
 
 export const zhCN = {
+  'link.menu.openFailed': '无法打开链接，请重试。',
+  'link.menu.title': '网页链接',
+  'link.menu.copy': '复制链接',
+  'link.menu.system': '在系统浏览器中打开',
+  'link.menu.app': '在内置浏览器中打开',
+  'link.menu.disabled': '已在设置中关闭内置浏览器打开链接。',
+  'link.menu.noBrowser': '当前环境没有内置浏览器。',
+  'link.menu.noSession': '当前页面没有可用的会话。',
+  'link.menu.copyFailed': '复制链接失败，请重试。',
+
   'service.install.blocked.inspect':
     '无法检查远程安装条件。请检查 SSH 连接；Windows 需要先启用 WSL 和其中的 SSH。可在 Linux、macOS 或 WSL 终端执行以下命令。',
   'service.install.action': '安装设备服务',

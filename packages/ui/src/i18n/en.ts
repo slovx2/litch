@@ -40,6 +40,16 @@ const plural = (n: string | number | undefined, one: string, many: string) =>
   `${n} ${Number(n) === 1 ? one : many}`
 
 export const en: Record<MessageKey, Entry> = {
+  'link.menu.openFailed': 'Could not open the link. Try again.',
+  'link.menu.title': 'Web link',
+  'link.menu.copy': 'Copy link',
+  'link.menu.system': 'Open in system browser',
+  'link.menu.app': 'Open in built-in browser',
+  'link.menu.disabled': 'Opening links in the built-in browser is disabled in settings.',
+  'link.menu.noBrowser': 'The built-in browser is unavailable in this environment.',
+  'link.menu.noSession': 'No session is available on this page.',
+  'link.menu.copyFailed': 'Could not copy the link. Try again.',
+
   'service.install.blocked.inspect':
     'Could not check installation requirements. Check SSH access; Windows requires WSL with SSH enabled. Run this command in a Linux, macOS or WSL terminal.',
   'service.install.action': 'Install device service',

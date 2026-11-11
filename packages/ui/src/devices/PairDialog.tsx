@@ -25,6 +25,7 @@ import { Close } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import type { MessageKey } from '../i18n/index.ts'
+import { ExternalLink } from '../transcript/ExternalLink.tsx'
 import {
   ADDRESS_FIELDS,
   type AddressDraft,
@@ -607,21 +608,9 @@ function Failure({
       {kind === 'sshOff' ? <div className="cfail-text">{t(sshOffHint(device.os))}</div> : null}
       {verifyUrl ? (
         <div className="cfail-text">
-          <a
-            href={verifyUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mono"
-            data-pair-verify={verifyUrl}
-            onClick={(event) => {
-              const shell = window.litchShell
-              if (!shell) return
-              event.preventDefault()
-              shell.openExternal(verifyUrl)
-            }}
-          >
+          <ExternalLink href={verifyUrl} className="mono" data-pair-verify={verifyUrl} openInSystem>
             {t('pairing.fail.verify.open')}
-          </a>
+          </ExternalLink>
         </div>
       ) : null}
       {kind && showsSaid(kind) && said ? (

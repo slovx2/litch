@@ -3,11 +3,12 @@
 // “装好后重新检测”）。设备页的 harness 块、新建页“没有可用的 harness”、首启引导第一步共用这一个。
 // 设备不能装（没有这个能力）时什么都不画，用的地方照原来的说明显示。
 import type { DeviceView, HarnessVersionView, InstallJobView, InstallTopicView } from '@litch/core'
-import { type MouseEvent, useId, useState } from 'react'
+import { useId, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { whyNot } from '../app/errors.ts'
 import { useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
+import { ExternalLink } from '../transcript/ExternalLink.tsx'
 import { type InstallOffer, installChoice, logTail, phaseOf, runningJob } from './logic.ts'
 
 /** 进行中只露出最后这么几行 */
@@ -27,16 +28,10 @@ interface InstallRowProps {
 /** 官方说明的链接：桌面外壳里交给系统浏览器，普通浏览器里开新标签 */
 export function DocsLink({ href, children }: { href: string; children: string }) {
   if (!/^https?:\/\//i.test(href)) return null
-  const open = (event: MouseEvent) => {
-    const shell = window.litchShell
-    if (!shell) return
-    event.preventDefault()
-    shell.openExternal(href)
-  }
   return (
-    <a className="inst-docs" href={href} target="_blank" rel="noreferrer" onClick={open}>
+    <ExternalLink className="inst-docs" href={href} openInSystem>
       {children}
-    </a>
+    </ExternalLink>
   )
 }
 

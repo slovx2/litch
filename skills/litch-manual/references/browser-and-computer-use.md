@@ -178,6 +178,12 @@ Agents can sign in directly with authorized credentials available for the task, 
 
 完全访问下，普通网站访问和下载不再弹批准卡，也不会自动添加永久白名单。明确拒绝、黑名单、用户停止、标签租约冲突仍会立即返回失败。Computer Use、系统权限及其他功能的审批规则不变。
 
+网页链接支持右键菜单：“复制链接”“在系统浏览器中打开”“在内置浏览器中打开”。回答正文（含自动识别的网址）、经理控制台和看板正文、Markdown 文件预览、网页请求卡片及文档链接使用同一菜单。内置浏览器打开到当前会话的用户标签；设置关闭、当前环境没有内置浏览器或页面没有可用会话时，该项置灰并说明原因。文件链接继续使用文件原有操作。
+
+普通点击保持原有路由：回答中的链接默认使用内置浏览器，中键、Cmd/Ctrl 点击或关闭该设置后使用系统浏览器；原本固定使用系统浏览器的安装文档、登录验证入口仍使用系统浏览器。菜单支持上下键、回车，Esc 关闭后焦点回到链接。
+
+手机没有可供用户浏览网页的内置浏览器。回答、卡片及经理正文中的网页链接长按后提供“复制链接”“在系统浏览器中打开”两项；直接点按仍交给系统浏览器。经理编号和文件链接保留原有行为。
+
 Preferences (Settings → Built-in browser):
 
 - `scripts/litch browser links` sets whether links in conversations open in the built-in browser

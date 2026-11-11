@@ -17,6 +17,7 @@ import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
 import { Fold, Icon, type IconName } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
+import { useWebLinkMenu } from '../../ui/WebLinkMenu'
 
 const ICONS = {
   issue: 'note',
@@ -43,6 +44,7 @@ export function IssueRelations({
   kind?: 'issue' | 'item' | 'thread'
   basis?: ManagerLink[]
 }) {
+  const links = useWebLinkMenu()
   const focused = useIsFocused()
   const context = useContext(IssueContext)
   const [expanded, setExpanded] = useState(false)
@@ -127,6 +129,7 @@ export function IssueRelations({
   }
   return (
     <View>
+      {links.menu}
       <Fold
         open={expanded}
         testID={`${basis ? 'evidence' : 'relations'}:${id}`}
@@ -158,7 +161,10 @@ export function IssueRelations({
                       accessibilityState={{ disabled: unreadable(target) }}
                       disabled={unreadable(target)}
                       accessibilityHint={target.target}
-                      onLongPress={() => Alert.alert(title(target), target.target)}
+                      onLongPress={() => {
+                        if (target.kind !== 'url' || !links.open(target.target))
+                          Alert.alert(title(target), target.target)
+                      }}
                       onPress={() => void open(target)}
                       style={{ paddingVertical: 8, gap: 3 }}
                     >

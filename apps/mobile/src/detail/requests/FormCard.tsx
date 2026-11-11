@@ -7,6 +7,7 @@ import { Linking, Pressable, StyleSheet, Switch, Text, View } from 'react-native
 import { type Key, useT } from '../../ui/i18n'
 import { CardTextInput } from '../../ui/kit/KeyboardCardScrollView'
 import { useTheme } from '../../ui/theme'
+import { useWebLinkMenu } from '../../ui/WebLinkMenu'
 import { Card, CardButton, type CardProps, useRespond, Well, Why } from './Card'
 
 /** 一栏里填着的东西：字和数都先当字存着，提交时再换 */
@@ -129,6 +130,7 @@ function Control({
 export function FormCard(props: CardProps<FormRequest>) {
   const { request, waiting } = props
   const { fields, link } = request
+  const links = useWebLinkMenu()
   const t = useT()
   const theme = useTheme()
   const { c } = theme
@@ -207,7 +209,12 @@ export function FormCard(props: CardProps<FormRequest>) {
       actions={
         <>
           {link?.openable ? (
-            <CardButton testID="form:open" label={t('form.open')} onPress={open} />
+            <CardButton
+              testID="form:open"
+              label={t('form.open')}
+              onPress={open}
+              onLongPress={() => links.open(link.url)}
+            />
           ) : null}
           {link ? (
             <CardButton
@@ -236,6 +243,7 @@ export function FormCard(props: CardProps<FormRequest>) {
         </>
       }
     >
+      {links.menu}
       {request.message ? <Why>{request.message}</Why> : null}
       {link ? <Well>{link.url}</Well> : null}
       {link && !link.openable ? <Why>{t('form.unsafeLink')}</Why> : null}

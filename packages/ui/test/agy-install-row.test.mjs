@@ -11,6 +11,10 @@ test('agy 安装行：最新版按钮投递到所选远程设备，已装重检�
     ['../app/services.tsx', 'export const useServices=()=>({channel:globalThis.__agyChannel});'],
     ['../app/errors.ts', 'export const whyNot=e=>String(e);'],
     ['../app/toasts.tsx', 'export const showToast=()=>{};'],
+    [
+      '../transcript/ExternalLink.tsx',
+      'export const ExternalLink=({href,children,...props})=>({type:"a",props:{...props,href,children}});',
+    ],
   ])
   const output = await build({
     entryPoints: [new URL('../src/install/InstallRow.tsx', import.meta.url).pathname],

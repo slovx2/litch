@@ -84,3 +84,11 @@ test('设置：默认开，只有明说关了才关', () => {
   assert.equal(readLinksPref('坏了'), true)
   assert.equal(readLinksPref('{"links":"no"}'), true)
 })
+
+test('右键显式打开内置浏览器：分别说明缺外壳、设置关闭和没有当前会话', async () => {
+  const { browserLinkBlocked } = await import('../src/side/browser/link-logic.ts')
+  assert.equal(browserLinkBlocked(base), null)
+  assert.equal(browserLinkBlocked({ ...base, hasBrowser: false }), 'link.menu.noBrowser')
+  assert.equal(browserLinkBlocked({ ...base, enabled: false }), 'link.menu.disabled')
+  assert.equal(browserLinkBlocked({ ...base, owner: null }), 'link.menu.noSession')
+})

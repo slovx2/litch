@@ -1,8 +1,8 @@
 import type { FormField, FormRequest } from '@litch/core'
-import { type MouseEvent, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import type { MessageKey } from '../i18n/index.ts'
-import { clickLink } from '../side/browser/links.ts'
+import { ExternalLink } from '../transcript/ExternalLink.tsx'
 import { busyWriting } from './focus.ts'
 import { type CardProps, Foot, ownsKey, useRespond } from './respond.tsx'
 
@@ -199,11 +199,6 @@ export function FormCard(props: CardProps<FormRequest>) {
     return () => document.removeEventListener('keydown', onKey)
   })
 
-  // 和回答里的链接一样：默认在内置浏览器里开，中键、Cmd/Ctrl 点交给系统的浏览器（side/browser/links.ts）
-  const openLink = (event: MouseEvent) => {
-    if (!link || (event.button !== 0 && event.button !== 1)) return
-    if (clickLink(link.url, event)) event.preventDefault()
-  }
   /** 对面给这一栏定的范围，写成一句提示；没定就是空的 */
   const rangeOf = ({ limits }: FormField): string => {
     const [least, most, between, atLeast, atMost] =
@@ -267,16 +262,9 @@ export function FormCard(props: CardProps<FormRequest>) {
       </div>
       <div className="req-actions">
         {link?.openable ? (
-          <a
-            className="btn"
-            href={link.url}
-            target="_blank"
-            rel="noreferrer"
-            onClick={openLink}
-            onAuxClick={openLink}
-          >
+          <ExternalLink className="btn" href={link.url}>
             {t('form.open')}
-          </a>
+          </ExternalLink>
         ) : null}
         {link ? (
           <button
