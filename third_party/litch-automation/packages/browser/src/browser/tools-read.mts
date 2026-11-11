@@ -4,6 +4,7 @@ import { observationSlice } from '../../../automation-contracts/src/observation.
 import { BadArgs, bool, num, oneOf, str, timeout } from './args.mjs'
 import { type AxNode, diffLines, formatAxTree } from './ax.mjs'
 import type { Tool } from './executor.mjs'
+import { fileInputSnapshot } from './file-input-snapshot.mjs'
 import type { BrowserPage } from './model.mjs'
 import { blockedByDialog, guarded, imageSize, pageLine, sleep, within } from './page-ops.mjs'
 import {
@@ -102,6 +103,7 @@ export const snapshot: Tool = async (call) => {
     }
   }
   await walk(frameTree, 0)
+  await fileInputSnapshot(page, state.book, lines)
   // 清掉本次树里消失的引用；新控件从不接管旧 ref。
   const live = new Set(
     lines.flatMap((line) => [...line.matchAll(/\[ref=([^\]]+)\]/g)].map((m) => m[1])),

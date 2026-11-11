@@ -39,6 +39,8 @@ if (!binary || !existsSync(binary) || !binary.includes('for Testing'))
   )
 if (process.argv.includes('--shown') && process.env.LITCH_CHROME_GUI_SLOT !== 'approved')
   throw new Error('GUI checks need an approved foreground slot and LITCH_CHROME_GUI_SLOT=approved.')
+if (process.argv.includes('--headless-only') && process.argv.includes('--shown'))
+  throw new Error('--headless-only cannot be combined with --shown.')
 const started = Date.now()
 const work = mkdtempSync(join(tmpdir(), 'litch-chrome-e2e-'))
 const noEvidence = process.argv.includes('--no-evidence')
@@ -928,17 +930,20 @@ try {
           context,
         ),
     })
-    await chromeLifecycle({
-      root,
-      work,
-      assets,
-      nativeBinary,
-      binary,
-      site,
-      build,
-      check,
-      focusWindows: process.argv.includes('--focus-windows'),
-    })
+    // 定向 headless 验收不启动额外的 headed 生命周期场景；默认完整验收仍保留全部断言。
+    report.headedLifecycle = process.argv.includes('--headless-only') ? 'notRequested' : 'requested'
+    if (!process.argv.includes('--headless-only'))
+      await chromeLifecycle({
+        root,
+        work,
+        assets,
+        nativeBinary,
+        binary,
+        site,
+        build,
+        check,
+        focusWindows: process.argv.includes('--focus-windows'),
+      })
     if (process.argv.includes('--remote'))
       await check('真实 SSH / 远程 Pi / 核心审批 / 控制端 Chrome', async () => {
         report.remote = await remoteCheck({ ...driver, executor, origin: site.origin })

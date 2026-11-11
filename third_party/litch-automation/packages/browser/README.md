@@ -107,3 +107,11 @@ npm run check:electron --prefix packages/browser
 snapshot 默认最多 180 行、约 10K 字符，仍略去装饰容器与重复文字。`detail:"full"` 提高到 1500 行、约 60K；`offset` 根据 `observation.next_offset` 读取后续行。分页针对完整快照，`diff:true` 在有完整基准时只回变化；截断后不推进基准，避免漏掉从未返回的内容。
 ref 含文档代次（如 `e3g12`）；同一文档保留稳定编号，文档更换、重新认领或节点消失后旧 ref 失效。错误给 `recovery.needs_snapshot` 与修复提示；输入的精确恢复字段在 `inputReceipt.recovery`。
 已知连续操作优先 run_actions，以 wait(selector/text/url) 结束验证业务条件。结果新增 `verification.status`（matched/notConfirmed/notRequested），只证明所给条件匹配；业务结果仍由调用方判断。最终快照优先紧凑 diff。截图继续显式调用 screenshot。
+
+### 文件上传
+
+`upload` 接受文件框、上传按钮或可点击上传区域的 ref。隐藏文件框在快照中仍有 ref，并标注 `hidden`。按钮路径先拦截 `Page.fileChooserOpened`，再点击一次；没有选择器事件时，仅使用 label、form 或最近祖先中唯一的文件框。拦截结束或调用取消时撤订阅并关闭拦截，不修改页面 DOM/样式。多文件、目录、禁用和 accept 不符会明确报错。
+
+内置 Electron 用 `DOM.setFileInputFiles`；Chrome 扩展可用选择器拦截，但设置路径受文件网址权限限制，因此沿用有界分块通道，组装 File 并派发事件。工具回执只证明派发，调用方须核对站点反馈。上传限额仍为内置单文件 100 MiB、Chrome 每次 32 个文件总计 512 MiB。
+
+远程会话暂不支持上传：路径属于会话设备，不能读取控制端同路径文件。若系统原生窗口已弹出且浏览器工具无法关闭，可结合 `litch-computer-automation`；网页操作仍使用 `litch-browser-automation`。

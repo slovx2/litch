@@ -1,32 +1,12 @@
 import { type FileHandle, open } from 'node:fs/promises'
-import { basename, extname } from 'node:path'
+import { basename } from 'node:path'
 import { UPLOAD_COMMIT_MARK } from '../../browser/src/browser/input-command.mjs'
 import type { BrowserPage } from '../../browser/src/browser/model.mjs'
+import { fileMime } from '../../browser/src/browser/upload-target.mjs'
 
 // 一次调用的总量也受此限制；base64 后单包 256 KiB，低于桥的 512 KiB 与原生消息的 1 MiB。
 export const CHROME_UPLOAD_MAX_BYTES = 512 * 1024 * 1024
 export const UPLOAD_CHUNK_BYTES = 192 * 1024
-const MANUAL =
-  'Ask the user to choose the file on the page. Do not start a local file server, retry through another channel, or change extension permissions.'
-const MIME: Record<string, string> = {
-  '.txt': 'text/plain',
-  '.csv': 'text/csv',
-  '.json': 'application/json',
-  '.pdf': 'application/pdf',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.mp4': 'video/mp4',
-  '.mov': 'video/quicktime',
-  '.webm': 'video/webm',
-  '.m4v': 'video/mp4',
-  '.mkv': 'video/x-matroska',
-  '.mp3': 'audio/mpeg',
-  '.wav': 'audio/wav',
-  '.zip': 'application/zip',
-}
 interface Reply {
   result?: { objectId?: string; value?: unknown }
   exceptionDetails?: { exception?: { description?: string }; text?: string }
@@ -117,7 +97,7 @@ export async function uploadChromeFiles(
         handle,
         stat,
         name: basename(path),
-        type: MIME[extname(path).toLowerCase()] ?? '',
+        type: fileMime(path),
       })
     }
     const node = await page.cdp<{ object: { objectId: string } }>('DOM.resolveNode', {
@@ -204,7 +184,7 @@ export async function uploadChromeFiles(
     await invoke(state, COMMIT, [mode])
   } catch (error) {
     throw Error(
-      `Chrome file upload failed: ${error instanceof Error ? error.message : String(error)}. ${MANUAL}`,
+      `Chrome file upload failed: ${error instanceof Error ? error.message : String(error)}. Inspect the page response before continuing; use a fresh snapshot or renew the existing tab lease as indicated by the error. Do not replay the upload blindly.`,
     )
   } finally {
     await Promise.allSettled(handles.map((handle) => handle.close()))

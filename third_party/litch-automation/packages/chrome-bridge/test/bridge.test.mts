@@ -70,6 +70,24 @@ test('原生握手验证 token/来源，协议 1 往返与重连撤销在途调�
   }
   const first = await peer('first')
   assert.equal(first.welcome.protocol, 1)
+  const chooser = {
+    kind: 'fileChooser' as const,
+    tabId: 7,
+    generation: 3,
+    leaseId: 'fixture-lease',
+    backendNodeId: 42,
+    mode: 'selectSingle',
+  }
+  const event = new Promise<unknown>((resolve) => {
+    const off = bridge.onEvent((instance, value) => {
+      if (instance === 'instance' && value.kind === 'fileChooser') {
+        off()
+        resolve(value)
+      }
+    })
+  })
+  first.socket.write(`${JSON.stringify(chooser)}\n`)
+  assert.deepEqual(await event, chooser)
   const request = once(first.lines, 'line')
   const result = bridge.call('instance', { op: 'list', args: {} })
   const call = JSON.parse((await request)[0])
