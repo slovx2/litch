@@ -254,6 +254,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
     if (parentRank === null || childRank === null || childRank > parentRank)
       throw new ChannelError('rejected', '子会话权限不能高于父会话')
     const target = host.harnesses(deviceId).find((entry) => entry.id === harness)
+    const parentSummary = host.summary(deviceId, parent.sessionId)
     const ranking = host.modelRanking?.(deviceId)
     if (ranking) {
       // 模拟目录的 Claude 标签仍用 claude；等级目录使用协议中的真实 harness 标识。
@@ -272,6 +273,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       const preview = modelLimitPreview(ranking, parentModel, childModel, {
         deviceId,
         sessionId: parent.sessionId,
+        isManager: !!parentSummary && managerMark(parentSummary)?.role === 'manager',
       })
       // 和设备相同：仅用户明确选择且目录中可用的型号可以取得本次例外。
       if (!preview.allowed && !(options.modelSelected && childModel.available)) {
@@ -300,7 +302,6 @@ export function createMockTree(host: MockTreeHost): MockTree {
     if (live.length >= SESSION_TREE_LIMITS.liveChildren) {
       throw new ChannelError('rejected', '这个会话同时在跑的子会话太多了')
     }
-    const parentSummary = host.summary(deviceId, parent.sessionId)
     const now = host.now()
     const summary: SessionSummary = {
       id: host.nextId('c'),

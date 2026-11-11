@@ -48,6 +48,7 @@ import {
   type OrganizerStore,
 } from './organizer/host.mjs'
 import { phrase } from './phrase.mjs'
+import { managerMark } from './projection/manager.mjs'
 import { outgoing } from './projection/outgoing.mjs'
 import { createToolHub } from './tool-hub.mjs'
 import type { CoreTrace } from './trace.mjs'
@@ -147,6 +148,11 @@ export function createCore(options: CoreOptions): Core {
     const device = devices.get(deviceId)
     if (!device) throw new ChannelError('notFound', `设备不存在：${deviceId}`)
     return device
+  }
+
+  const isManager = (deviceId: string, sessionId: string): boolean => {
+    const parent = deviceOf(deviceId).sidebar.sessions.find((row) => row.id === sessionId)
+    return !!parent && managerMark(parent)?.role === 'manager'
   }
 
   const { remote, store } = options
@@ -847,6 +853,7 @@ export function createCore(options: CoreOptions): Core {
             throw modelLimitSettings(toChannelFailure(error), {
               deviceId,
               sessionId: request.parentId,
+              isManager: isManager(deviceId, request.parentId),
             })
           }
         }
@@ -886,7 +893,11 @@ export function createCore(options: CoreOptions): Core {
               sessionId: await deviceOf(deviceId).acceptProposal(sessionId, proposalId, overrides),
             }
           } catch (error) {
-            throw modelLimitSettings(toChannelFailure(error), { deviceId, sessionId: sessionId })
+            throw modelLimitSettings(toChannelFailure(error), {
+              deviceId,
+              sessionId,
+              isManager: isManager(deviceId, sessionId),
+            })
           }
         }
         case 'session.proposal.dismiss': {

@@ -24,6 +24,7 @@ test('经理默认模型预检提供父子身份、可选型号、Phrase 和两�
   const result = modelLimitPreview(config, parent, child, {
     deviceId: 'local',
     sessionId: 'manager',
+    isManager: true,
   })
   assert.equal(result.allowed, false)
   assert.equal(result.failure?.reason.kind, 'exceeded')
@@ -114,7 +115,7 @@ test('设备结构化 RPC 错误经通道传递时保留模型原因与设置目
   const reason = modelLimitFailure(config, parent, child)!
   const error = modelLimitSettings(
     channelFailure(new RpcError(-32602, 'Model exceeds the parent limit or is unranked', reason)),
-    { deviceId: 'local', sessionId: 'parent' },
+    { deviceId: 'local', sessionId: 'parent', isManager: true },
   )
   const [a, b] = createPortPair()
   const time = fakeClock()
@@ -208,6 +209,9 @@ test('mock 场景覆盖开关、未分级、部分目录失败，建议卡越级
         assert.ok(failure instanceof ChannelError)
         assert.equal(failure.modelLimit?.reason.kind, 'exceeded')
         assert.equal(failure.modelLimit?.reason.parent.harness, 'claude-code')
+        assert.deepEqual(failure.modelLimit?.settings, [
+          { kind: 'model-ranking', deviceId: 'local' },
+        ])
         return true
       },
     )
@@ -234,57 +238,67 @@ test('mock 场景覆盖开关、未分级、部分目录失败，建议卡越级
   }
 })
 
-test('真实核心的 spawn 和 accept 都补上父会话设置跳转，拒绝不改变目录', async () => {
-  const config = sampleModelRanking('custom-local')
-  const parent = rankedModelSelection(config, 'claude-code', 'anthropic/claude-sonnet-5-5')
-  const child = rankedModelSelection(config, 'claude-code', 'anthropic/claude-opus-5-5')
-  const reason = modelLimitFailure(config, parent, child)!
-  const world = deviceWorld(
-    [
-      harness('claude-code', {
-        threads: [thread({ id: 'parent' })],
-        declaration: { extensions: ['clientTools'], features: features() },
-      }),
-    ],
-    {
-      prepare: (device) => {
-        device.extensions.push('sessionTree')
-      },
-      extra: {
-        'litch/session/start': () => {
-          throw new RpcFailure(-32602, 'Model exceeds the parent limit or is unranked', reason)
+for (const isManager of [false, true])
+  test(`真实核心 spawn 和 accept 仅经理提供默认模型设置跳转：${isManager}`, async () => {
+    const config = sampleModelRanking('custom-local')
+    const parent = rankedModelSelection(config, 'claude-code', 'anthropic/claude-sonnet-5-5')
+    const child = rankedModelSelection(config, 'claude-code', 'anthropic/claude-opus-5-5')
+    const reason = modelLimitFailure(config, parent, child)!
+    const world = deviceWorld(
+      [
+        harness('claude-code', {
+          threads: [
+            Object.assign(
+              thread({ id: 'parent' }),
+              isManager ? { litchManager: { managerId: 'm', role: 'manager' } } : {},
+            ),
+          ],
+          declaration: { extensions: ['clientTools'], features: features() },
+        }),
+      ],
+      {
+        prepare: (device) => {
+          device.extensions.push('sessionTree', 'litchManager')
         },
-        'litch/sessionProposal/accept': () => {
-          throw new RpcFailure(-32602, 'Model exceeds the parent limit or is unranked', reason)
+        extra: {
+          'litch/session/start': () => {
+            throw new RpcFailure(-32602, 'Model exceeds the parent limit or is unranked', reason)
+          },
+          'litch/sessionProposal/accept': () => {
+            throw new RpcFailure(-32602, 'Model exceeds the parent limit or is unranked', reason)
+          },
         },
       },
-    },
-  )
-  world.core.start()
-  try {
-    await settle()
-    for (const task of [
-      world.command('session.spawn', {
-        parentId: 'parent',
-        title: 'fixture',
-        prompt: 'fixture',
-        kind: 'fresh',
-        wakeParent: false,
-      }),
-      world.command('session.proposal.accept', { sessionId: 'parent', proposalId: 'proposal' }),
-    ]) {
-      await assert.rejects(task, (error) => {
-        assert.ok(error instanceof ChannelError)
-        assert.deepEqual(error.modelLimit?.reason, reason)
-        assert.deepEqual(error.modelLimit?.settings, [
-          { kind: 'manager-default-model', deviceId: 'local', sessionId: 'parent' },
-          { kind: 'model-ranking', deviceId: 'local' },
-        ])
-        return true
-      })
+    )
+    world.core.start()
+    try {
+      await settle()
+      for (const task of [
+        () =>
+          world.command('session.spawn', {
+            parentId: 'parent',
+            title: 'fixture',
+            prompt: 'fixture',
+            kind: 'fresh',
+            wakeParent: false,
+          }),
+        () =>
+          world.command('session.proposal.accept', { sessionId: 'parent', proposalId: 'proposal' }),
+      ]) {
+        await assert.rejects(task, (error) => {
+          assert.ok(error instanceof ChannelError)
+          assert.deepEqual(error.modelLimit?.reason, reason)
+          assert.deepEqual(error.modelLimit?.settings, [
+            ...(isManager
+              ? [{ kind: 'manager-default-model', deviceId: 'local', sessionId: 'parent' }]
+              : []),
+            { kind: 'model-ranking', deviceId: 'local' },
+          ])
+          return true
+        })
+      }
+      assert.equal(world.side.sessions.size, 1)
+    } finally {
+      world.core.stop()
     }
-    assert.equal(world.side.sessions.size, 1)
-  } finally {
-    world.core.stop()
-  }
-})
+  })

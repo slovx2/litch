@@ -13,6 +13,8 @@ export interface ModelLimitContext {
   deviceId: string
   /** 父会话。经理的默认委派设置属于该会话。 */
   sessionId: string
+  /** 仅经理父会话拥有默认委派模型设置。 */
+  isManager?: boolean
 }
 
 /** 用设备给的身份元数据查找选择项；不存在时保持未分级，不猜供应商身份。 */
@@ -55,7 +57,15 @@ export function modelLimitView(
     ),
     settings: context
       ? [
-          { kind: 'manager-default-model', ...context },
+          ...(context.isManager
+            ? [
+                {
+                  kind: 'manager-default-model' as const,
+                  deviceId: context.deviceId,
+                  sessionId: context.sessionId,
+                },
+              ]
+            : []),
           { kind: 'model-ranking', deviceId: context.deviceId },
         ]
       : [],

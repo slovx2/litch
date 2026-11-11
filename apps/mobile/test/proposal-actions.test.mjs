@@ -46,6 +46,7 @@ function actions({
       useProposalAct: () => ({ busy, dismiss() {}, accept: (value) => starts.push(value) }),
     },
     '../../../../../packages/ui/src/tree/proposal-operation.ts': { withProposalNote },
+    './ModelLimitNotice': { ModelLimitNotice: 'ModelLimitNotice' },
     './ProposalNote': { ProposalNote: 'ProposalNote' },
     './WorktreeSwitch': { useWorktreesOn: () => true, WorktreeSwitch: 'WorktreeSwitch' },
     '../../../../../packages/ui/src/tree/useProposalWorktree.ts': {
