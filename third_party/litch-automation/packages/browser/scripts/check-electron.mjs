@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
+import { withChromiumTestArgs } from '../../../scripts/chromium-test-args.mjs'
 
 const packageDir = fileURLToPath(new URL('..', import.meta.url))
 const require = createRequire(join(packageDir, 'package.json'))
@@ -26,7 +27,7 @@ await build({
   target: 'node22',
   external: ['electron'],
 })
-const output = execFileSync(electron, [outfile], {
+const output = execFileSync(electron, withChromiumTestArgs([outfile]), {
   timeout: 90000,
   encoding: 'utf8',
   env: {
