@@ -456,17 +456,69 @@
 /* 文件链接诊断里的长路径换行；不把失败对话框撑出窗口。 */
 .file-link-details {
   overflow-wrap: anywhere;
-  padding: 8px;
-  color: var(--ink);
+  padding: 4px 10px;
+  color: var(--ink-2);
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   max-height: 40vh;
   overflow: auto;
   flex-shrink: 0;
 }
+/* 诊断是次要信息：小字、浅色，用自画的折叠箭头代替浏览器默认的黑三角 */
+.file-link-details summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--ink-3);
+}
+.file-link-details summary::-webkit-details-marker {
+  display: none;
+}
+.file-link-details summary::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border: solid currentColor;
+  border-width: 0 1.2px 1.2px 0;
+  transform: rotate(-45deg);
+  margin: 0 3px 0 1px;
+}
+.file-link-details[open] summary::before {
+  transform: rotate(45deg);
+  margin-top: -3px;
+}
+.file-link-details summary:hover {
+  color: var(--ink-2);
+}
+.file-link-details dl {
+  margin: 6px 0 0;
+}
+.file-link-details dt {
+  color: var(--ink-3);
+}
 .file-link-details dd {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
+  font-family: var(--mono);
+}
+.file-link-details .file-link-reason {
+  color: var(--err);
+  font-family: var(--ui);
 }
 .file-link-dialog .modal-body {
   overflow-wrap: anywhere;
+}
+.file-link-dialog .modal-body > p {
+  margin: 0;
+}
+.file-link-dialog .file-link-target {
+  font-family: var(--mono);
+  font-size: calc(12px * var(--fs));
+  color: var(--ink-2);
+}
+.file-link-dialog .file-link-details {
+  padding: 0;
 }
 .file-link-dialog[open] {
   flex-direction: column;

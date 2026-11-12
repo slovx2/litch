@@ -107,11 +107,13 @@ export function FilePreview({
           dataBase64={loaded.dataBase64}
           type={type}
           onFail={(reason) => setLoaded({ kind: 'failed', reason })}
+          actions={
+            <>
+              <CopyPath path={path} compact />
+              <SavePhoneFile deviceId={deviceId} root={root} path={path} />
+            </>
+          }
         />
-        <View style={styles.toolbar}>
-          <CopyPath path={path} />
-          <SavePhoneFile deviceId={deviceId} root={root} path={path} />
-        </View>
       </View>
     )
   }
@@ -173,7 +175,7 @@ function PreviewWeb({
     <View style={styles.wrap}>
       <View style={[styles.toolbar, { backgroundColor: c.panel }]}>
         <Text style={{ color: c.ink2, fontSize: font.size.meta }}>{byteSize(data.bytes)}</Text>
-        <CopyPath path={data.path} />
+        <CopyPath path={data.path} compact />
       </View>
       {format === 'pdf' ? (
         <View style={[styles.toolbar, { backgroundColor: c.panel }]}>

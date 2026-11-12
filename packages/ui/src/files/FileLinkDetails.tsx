@@ -12,6 +12,12 @@ export function FileLinkDetails({
   copy?: boolean
 }) {
   const t = useT()
+  // 失败原因并到对应的尝试路径后面，不另列一遍同样的路径
+  const reasons = new Map(result.failures.map((failure) => [failure.path, failure.reason]))
+  const tried = [
+    ...result.attempted,
+    ...result.failures.map((failure) => failure.path).filter((path) => !result.attempted.includes(path)),
+  ]
   return (
     <details className="file-link-details" open={expanded || undefined}>
       <summary>{t('files.link.details')}</summary>
@@ -22,20 +28,24 @@ export function FileLinkDetails({
         <dd>{result.path || t('files.link.notResolved')}</dd>
         <dt>{t('files.link.attempted')}</dt>
         <dd>
-          {result.attempted.length
-            ? result.attempted.map((path) => <div key={path}>{path}</div>)
+          {tried.length
+            ? tried.map((path) => {
+                const reason = reasons.get(path)
+                return (
+                  <div key={path}>
+                    {path}
+                    {reason ? (
+                      <span className="file-link-reason">
+                        {' · '}
+                        {t(`files.link.error.${reason}`)}
+                      </span>
+                    ) : null}
+                  </div>
+                )
+              })
             : t('files.link.notAttempted')}
         </dd>
       </dl>
-      {result.failures.length > 0 ? (
-        <ul>
-          {result.failures.map((failure) => (
-            <li key={failure.path}>
-              {failure.path} · {t(`files.link.error.${failure.reason}`)}
-            </li>
-          ))}
-        </ul>
-      ) : null}
       {copy ? (
         <button
           type="button"

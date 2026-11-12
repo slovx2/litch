@@ -305,7 +305,7 @@ export function FilesScreen({ navigation, route }: Props) {
           onPick={changeRoot}
         />
         <IconButton
-          icon="branch"
+          icon="home"
           label={t('files.nav.project')}
           testID="files:project"
           disabled={!defaultRoot}

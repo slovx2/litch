@@ -3,29 +3,37 @@ import { useState } from 'react'
 import { Text, View } from 'react-native'
 import { useT } from '../../../ui/i18n'
 import { Button, Empty } from '../../../ui/kit/controls'
+import { IconButton } from '../../../ui/kit/Icon'
 import { useTheme } from '../../../ui/theme'
 import { SavePhoneFile } from './SavePhoneFile'
 
-export function CopyPath({ path }: { path: string }) {
+/** compact：工具条里只放图标（读屏名称照旧）；空状态里仍是文字按钮 */
+export function CopyPath({ path, compact = false }: { path: string; compact?: boolean }) {
   const t = useT()
   const { c } = useTheme()
   const [copied, setCopied] = useState(false)
   const [failed, setFailed] = useState(false)
+  const label = t(copied ? 'code.copied' : 'mobilePreview.copy')
+  const press = () => {
+    setFailed(false)
+    void Clipboard.setStringAsync(path).then(
+      () => setCopied(true),
+      () => setFailed(true),
+    )
+  }
   return (
-    <View>
-      <Button
-        kind="plain"
-        testID="files:copy-path"
-        label={t(copied ? 'code.copied' : 'mobilePreview.copy')}
-        onPress={() => {
-          setFailed(false)
-          void Clipboard.setStringAsync(path).then(
-            () => setCopied(true),
-            () => setFailed(true),
-          )
-        }}
-      />
+    <View style={compact ? { flexDirection: 'row', alignItems: 'center' } : undefined}>
       {failed ? <Text style={{ color: c.err }}>{t('mobilePreview.copyFailed')}</Text> : null}
+      {compact ? (
+        <IconButton
+          icon={copied ? 'check' : 'copy'}
+          label={label}
+          testID="files:copy-path"
+          onPress={press}
+        />
+      ) : (
+        <Button kind="plain" testID="files:copy-path" label={label} onPress={press} />
+      )}
     </View>
   )
 }

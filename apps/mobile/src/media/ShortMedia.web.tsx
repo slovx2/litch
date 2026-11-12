@@ -1,6 +1,6 @@
 // 网页预览仍使用同一份播放器文档和事件协议，原生版本由 WebView 承载。
 import type { ShortMediaType } from '@litch/core'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Text, View } from 'react-native'
 import { useT } from '../ui/i18n'
 import { IconButton } from '../ui/kit/Icon'
@@ -11,10 +11,12 @@ export function ShortMedia({
   dataBase64,
   type,
   onFail,
+  actions,
 }: {
   dataBase64: string
   type: ShortMediaType
   onFail(reason: Extract<ShortMediaEvent, { kind: 'failed' }>['reason']): void
+  actions?: ReactNode
 }) {
   const t = useT(),
     theme = useTheme()
@@ -52,9 +54,13 @@ export function ShortMedia({
             )
           }
         />
-        <Text style={{ color: theme.c.ink3, fontSize: theme.font.size.meta }}>
+        <Text
+          numberOfLines={1}
+          style={{ flex: 1, minWidth: 0, color: theme.c.ink3, fontSize: theme.font.size.meta }}
+        >
           {t(ready ? 'preview.media.note' : 'mobilePreview.loading')}
         </Text>
+        {actions}
       </View>
       <iframe
         title={t(type.kind === 'audio' ? 'preview.media.audio' : 'preview.media.video')}

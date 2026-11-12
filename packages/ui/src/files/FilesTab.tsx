@@ -466,7 +466,7 @@ export function FilesTab({ place, shown }: SideTabProps) {
           aria-label={t('files.nav.project')}
           onClick={() => defaultRoot && changeRoot(defaultRoot)}
         >
-          <Icon name="tree" small />
+          <Icon name="home" small />
         </button>
         <details className="ft-location">
           <summary
