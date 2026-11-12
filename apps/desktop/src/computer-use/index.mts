@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { ClientToolInvocation } from '../client-tools/types.mjs'
 import { createComputerExecutor } from './executor.mjs'
+import { releaseComputerInput } from './executor-shared.mjs'
 import { MacLauncher } from './launcher-mac.mjs'
 import { WinLauncher, type WinLauncherOptions } from './launcher-win.mjs'
 import { ComputerSelfGuard } from './self-guard.mjs'
@@ -124,6 +125,14 @@ export function createComputerUse(options: ComputerUseOptions) {
     platform: windows ? ('win32' as const) : ('darwin' as const),
     executor,
     supervisor,
+    async releaseInput(owner: {
+      deviceId: string
+      threadId: string
+      turnId: string
+    }): Promise<void> {
+      if (windows) return
+      await releaseComputerInput(supervisor, owner)
+    },
     setLanguage(next: string): void {
       lang = next
       supervisor.setLanguage(next)

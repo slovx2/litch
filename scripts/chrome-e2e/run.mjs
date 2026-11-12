@@ -13,6 +13,7 @@ import { buildChromeExtension } from '../../apps/desktop/scripts/build-chrome.mj
 import { Cdp, until } from '../chrome-m0/cdp.mjs'
 import { concurrentClaim } from './concurrent-claim.mjs'
 import { fixtures } from './fixtures.mjs'
+import { chromeHandoff } from './handoff.mjs'
 import { inputChecks } from './input-check.mjs'
 import { chromeLifecycle } from './lifecycle.mjs'
 import { remoteCheck } from './remote-check.mjs'
@@ -292,6 +293,27 @@ try {
     return result
   }
   let tabId
+  report.handoff = await chromeHandoff({
+    executor,
+    targetId,
+    origin: site.origin,
+    invocation,
+    context: { ...context, ask: async () => 'once' },
+    check,
+    cdp,
+    identity,
+  })
+  if (process.argv.includes('--handoff-only')) {
+    report.success = true
+    await cleanup()
+    report.elapsedMs = Date.now() - started
+    if (!noEvidence) {
+      writeFileSync(join(output, 'report.json'), JSON.stringify(report, null, 2))
+      writeFileSync(join(outputBase, 'report.json'), JSON.stringify({ ...report, output }, null, 2))
+    }
+    console.log(JSON.stringify(report, null, 2))
+    process.exit(0)
+  }
   report.remoteUpload = await remoteUploadChecks({
     driver,
     executor,
@@ -407,6 +429,8 @@ try {
         writeFileSync(join(output, 'page.png'), Buffer.from(image.imageUrl.split(',')[1], 'base64'))
     })
     await check('isolated world 公共光标 / 截图不含光标 / AX 无光标', async () => {
+      // 光标空闲后自行到期；先做一次无业务副作用的滚动，再检查本次呈现。
+      await success('scroll', { tabId, dy: 1, x: 10, y: 10 })
       const page = executor.pages.get(tabId)
       const target = (await cdp.call('Target.getTargets')).targetInfos.find(
         (target) => target.type === 'page' && target.url === `${site.origin}/`,

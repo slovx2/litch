@@ -24,6 +24,21 @@ export interface HelperRequester {
 /** 动作和取状态最多等多久 */
 export const CALL_TIMEOUT = 60_000
 
+/** 不为交还启动助手，也不以回合结束清掉观察与用户停止标记。 */
+export async function releaseComputerInput(
+  helper: HelperAccess,
+  owner: { deviceId: string; threadId: string; turnId: string },
+): Promise<void> {
+  await helper.connected?.request(
+    'releaseInput',
+    {
+      session: sessionKey({ device: { id: owner.deviceId }, threadId: owner.threadId }),
+      turnId: owner.turnId,
+    },
+    5000,
+  )
+}
+
 export function sessionKey(invocation: { device: { id: string }; threadId: string }): string {
   return `${invocation.device.id}/${invocation.threadId}`
 }

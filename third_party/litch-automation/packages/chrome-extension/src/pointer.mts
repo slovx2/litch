@@ -275,7 +275,10 @@ export async function disposePointer(
 ): Promise<void> {
   const world = worldsOf(state).get(grant.leaseId)
   worldsOf(state).delete(grant.leaseId)
-  if (!world) return
+  if (!world) {
+    await clearPointerNodes(state, grant.tabId).catch(() => {})
+    return
+  }
   if (world.sample && world.sample.phase !== 'completed') {
     world.sample = {
       ...world.sample,
@@ -292,6 +295,18 @@ export async function disposePointer(
     ).catch(() => {})
   }
   await evaluate(state, grant, world, '__litchChromePointer.dispose()').catch(() => {})
+  await clearPointerNodes(state, grant.tabId).catch(() => {})
+}
+
+/** 认领/交还时只移除自动化自己的 DOM 标记，不恢复外部撤掉的 debugger。 */
+export async function clearPointerNodes(state: ExtensionState, tabId: number): Promise<void> {
+  await bounded(
+    cdp(state, tabId, 'Runtime.evaluate', {
+      expression:
+        "document.querySelectorAll('[data-litch-chrome-pointer]').forEach(node => node.remove())",
+      timeout: 1000,
+    }),
+  )
 }
 
 /** worker 被强停后只清理已登记的本扩展 host；不恢复租约。 */

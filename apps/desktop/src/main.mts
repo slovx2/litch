@@ -1234,6 +1234,9 @@ if (!smoke && !app.requestSingleInstanceLock()) {
       assets: fileURLToPath(new URL('./chrome-extension', import.meta.url)),
       nativeBinary: adapterRoot ? bundledAdapter(adapterRoot).bin : '',
       openInChrome,
+      onSessionReleased: async (owner) => {
+        await computerUse?.releaseInput(owner)
+      },
       openDirectory: async (directory) => {
         const error = await shell.openPath(directory)
         if (error) throw new Error(error)

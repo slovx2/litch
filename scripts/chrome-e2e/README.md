@@ -1,5 +1,7 @@
 # Chrome 自动验收
 
+两会话交接定向验收：`node scripts/chrome-e2e/run.mjs --headless-only --handoff-only`。使用隔离 profile 和正式扩展/桥，覆盖未释放时含会话标题的拒绝、不同会话各开各的标签、主动释放后立即认领同一标签、回合结束后认领及旧句柄失效。原生输入锁的无输入回归在 Computer Use 的 `InputOwnershipTests`，交还接线在 `input-release.test.mts`；定向脚本不向系统发送键鼠输入。
+
 测试和验收启动 Chrome for Testing、Chromium 或 Electron 时，参数统一经过 `third_party/litch-automation/scripts/chromium-test-args.mjs` 的 `withChromiumTestArgs(args)`，固定使用 `--use-mock-keychain` 和 `--password-store=basic`。Playwright 放进 `args`，CDP 直起传给进程参数；Launch Services 的 `--args` 后也用同一 helper。根 `npm run check` 检查实际启动参数，防止新入口漏项；产品运行时不使用此 helper。
 
 局部后台输入回归：`node scripts/chrome-e2e/background-input.mjs --expect-fixed`。只构建扩展与原生桥，不跑 Full；默认使用最小化隔离 CFT，检查后台标签、首次认领、导航、登录暂停/交还后重新认领，以及页面 rAF 和指针 world 的 rAF/计时器不回调。每次打印完整回执、页面值及窗口状态，退出清理 profile、浏览器、桥和站点夹具。冻结命令的结果以报告中的 `tab.frozen` 为准，不能把发出了命令等同于 Chrome 真的冻结。

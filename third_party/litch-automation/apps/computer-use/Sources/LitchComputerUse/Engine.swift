@@ -120,6 +120,17 @@ final class Engine: ConnectionHandler {
     case "setValue": return try act(params) { try self.setValue($0, $1) }
     case "drag": return try act(params) { try self.drag($0, $1) }
     case "selectText": return try act(params) { try self.selectText($0, $1) }
+    case "releaseInput":
+      let session = try string(params, "session")
+      lock.lock()
+      let stale = turns[session].map { $0 != params["turnId"]?.stringValue } ?? false
+      if stale { lock.unlock(); return [:] }
+      epochs[session, default: 0] += 1
+      // 交还输入不结束回合，也不清掉观察或用户停止标记。正在投递的动作先收到撤销，再等待退出。
+      InputOwnership.shared.end(prefix: ownerPrefix(session))
+      lock.unlock()
+      try InputOwnership.shared.waitUntilIdle(prefix: ownerPrefix(session))
+      return [:]
     case "turnEnded":
       let session = try string(params, "session")
       lock.lock()
