@@ -129,6 +129,7 @@
     "client:check:sidebar": "npm run build --prefix packages/ui && npm run check:sidebar --prefix apps/desktop",
     "client:check:console": "node scripts/check-console-cards.mjs && node scripts/check-console-cards.mjs --mobile",
     "client:check:manager": "npm run build --prefix packages/ui && npm run build --prefix apps/desktop && node apps/desktop/scripts/smoke.mjs --manager",
+    "client:check:manager-mobile": "node --test scripts/manager-mobile-runner.test.mjs && npm run web:build --prefix apps/mobile && node scripts/check-manager-mobile-run.mjs",
     "client:check:manager-issues": "npm run build --prefix packages/ui && npm run build --prefix apps/desktop && node apps/desktop/scripts/smoke.mjs --manager-issues",
     "client:check:manager-real": "npm run build && npm run build --prefix packages/ui && npm run build --prefix apps/desktop && node apps/desktop/scripts/check-manager-real.mjs",
     "client:check:manager-background-real": "npm run build && npm run client:build && node apps/desktop/scripts/check-manager-background-real.mjs",
