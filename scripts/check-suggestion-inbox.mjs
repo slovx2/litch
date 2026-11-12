@@ -669,6 +669,9 @@ try {
     ),
   )
   await click('[data-board-tab="requests"]')
+  // 回复框默认收起：先点“回复”展开
+  if (!(await read('!!document.querySelector(\'[data-act="manager-request-text"]\')')))
+    await click('[data-act="manager-request-reply-open"]')
   await fill('[data-act="manager-request-text"]', '真机复验 **通过**。')
   await click('[data-act="manager-request-deliver"]')
   await click('[data-act="manager-submit"]')

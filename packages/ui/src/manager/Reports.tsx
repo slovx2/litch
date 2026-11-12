@@ -6,6 +6,7 @@ import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useServices } from '../app/services.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
+import { CardActions } from './CardActions.tsx'
 import { useCardMotion } from './card-motion.ts'
 import { useManagerFeatures } from './data.ts'
 import { useIssueOrder } from './issue-order.tsx'
@@ -77,16 +78,18 @@ export function Reports({
           <BoardMarkdown text={post.body} />
           <PostHistory post={post} />
           {post.unread ? (
-            <button
-              type="button"
-              className="btn"
-              disabled={disabled || !!busy || !features.posts}
-              title={features.posts ? undefined : t('manager.oldDeviceShort')}
-              data-act="report-read"
-              onClick={() => void read(post)}
-            >
-              {t('manager.markRead')}
-            </button>
+            <CardActions>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={disabled || !!busy || !features.posts}
+                title={features.posts ? undefined : t('manager.oldDeviceShort')}
+                data-act="report-read"
+                onClick={() => void read(post)}
+              >
+                {t('manager.markRead')}
+              </button>
+            </CardActions>
           ) : null}
           {post.unread && !features.posts ? (
             <span className="dim" data-old-device-reason>

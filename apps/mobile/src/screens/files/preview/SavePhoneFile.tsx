@@ -49,7 +49,8 @@ export function SavePhoneFile({
     }
   }
   return (
-    <View style={{ gap: 4 }}>
+    // 进度和失败原因写在图标左侧同一行，放进工具条时不撑高
+    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4, flexShrink: 1 }}>
       <IconButton
         icon={busy ? 'stop' : 'download'}
         testID="files:save"
@@ -57,7 +58,7 @@ export function SavePhoneFile({
         onPress={() => (busy ? request.current?.abort() : void save())}
       />
       {busy && progress ? (
-        <Text style={{ color: theme.c.ink3 }}>
+        <Text style={{ color: theme.c.ink3, fontSize: theme.font.size.meta }}>
           {t('mobilePreview.saving', {
             size: byteSize(progress.bytes),
             total: byteSize(progress.total),
@@ -65,7 +66,11 @@ export function SavePhoneFile({
         </Text>
       ) : null}
       {error ? (
-        <Text accessibilityRole="alert" style={{ color: theme.c.err }}>
+        <Text
+          accessibilityRole="alert"
+          numberOfLines={2}
+          style={{ flexShrink: 1, color: theme.c.err, fontSize: theme.font.size.meta }}
+        >
           {t('mobilePreview.saveFailed', { reason: error })}
         </Text>
       ) : null}

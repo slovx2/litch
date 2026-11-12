@@ -9,14 +9,14 @@ import {
 } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useEffect, useState } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text } from 'react-native'
 import type { RootStackParamList } from '../../../nav/routes'
 import { useChannel, useKey, useReplica } from '../../../shell/services'
 import { useT } from '../../../ui/i18n'
 import { Empty } from '../../../ui/kit/controls'
-import { KeyboardFormScrollView } from '../../../ui/kit/KeyboardForm'
 import { Screen } from '../../../ui/kit/Screen'
 import { useTheme } from '../../../ui/theme'
+import { BoardActionScrollView, CardActionArea, CardActions } from '../CardActions'
 import { Issue } from '../Issue'
 import { IssueContext } from '../IssueRelations'
 import { useIssueCommands, useManagerIssues } from './data'
@@ -90,8 +90,8 @@ export function ManagerIssueScreen({ route, navigation }: Props) {
     ) : undefined
   return (
     <Screen title={`${issue.id} · ${t('issue.full.title')}`} testID="manager-issue">
-      <KeyboardFormScrollView testID="manager-issue-scroll" style={styles.fill}>
-        <View style={styles.body}>
+      <BoardActionScrollView testID="manager-issue-scroll" style={styles.fill}>
+        <CardActionArea style={styles.body}>
           <Text style={{ color: c.ink, fontSize: font.size.title + 1, fontWeight: '600' }}>
             {issue.title}
           </Text>
@@ -122,15 +122,17 @@ export function ManagerIssueScreen({ route, navigation }: Props) {
             quick={quick}
             onOpenItem={openItem}
           />
-          <IssueComposer
-            manager={manager}
-            issue={issue}
-            disabled={disabled}
-            reason={reason}
-            commands={commands}
-          />
-        </View>
-      </KeyboardFormScrollView>
+          <CardActions full>
+            <IssueComposer
+              manager={manager}
+              issue={issue}
+              disabled={disabled}
+              reason={reason}
+              commands={commands}
+            />
+          </CardActions>
+        </CardActionArea>
+      </BoardActionScrollView>
     </Screen>
   )
 }

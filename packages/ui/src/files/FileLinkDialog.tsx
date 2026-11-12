@@ -37,7 +37,7 @@ export function FileLinkDialog({
           <p>
             {t(`files.link.error.${failure?.reason ?? 'missing'}`)}
             <br />
-            {target}
+            <span className="file-link-target">{target}</span>
           </p>
         ) : null}
         {result.candidates.map((candidate) => (

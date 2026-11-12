@@ -232,6 +232,8 @@ try {
       await read(`document.querySelectorAll('[data-testid="relation:/outside/STORE.md"]').length`),
       1,
     )
+    // 回复框默认收起：点“回复”展开后再点进输入框，两者都不应收起卡片
+    await click('[data-testid="request-reply-open:R-2"]')
     await click('[data-testid="manager-issue:R-2"] textarea')
     assert.equal(await read(`!!document.querySelector('[data-testid="manager-issue:R-2"]')`), true)
     const returnState = () =>
@@ -291,6 +293,8 @@ try {
       assert.ok(Math.abs(before - observed.headerY) < 2, '展开保持卡头位置')
       assert.deepEqual(observed.order, ['R-1', 'R-2', 'R-3'])
       assert.equal(observed.links, 1, '同一链接只显示一次')
+      // 回复框默认收起：点“回复”展开后再点进输入框，两者都不应收起卡片
+      await click('[data-manager-request="R-2"] [data-act="manager-request-reply-open"]')
       await click('[data-manager-request="R-2"] textarea')
       assert.equal(
         await read(

@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import App from './App'
 import { AntigravityQuotaPreview } from './preview/AntigravityQuota.web.tsx'
+import { BoardActionsPreview } from './preview/BoardActions.web.tsx'
 import { BoardMermaidPreview } from './preview/BoardMermaid.web.tsx'
 import { CjkEmphasisPreview } from './preview/CjkEmphasis.web.tsx'
 import { CollapsedTurnPreview } from './preview/CollapsedTurn.web.tsx'
@@ -43,6 +44,7 @@ function PreviewApp() {
 }
 
 export default function Root() {
+  if (inFrame && params.get('scene') === 'board-actions') return <BoardActionsPreview />
   if (inFrame && params.get('scene') === 'board-mermaid') return <BoardMermaidPreview />
   if (inFrame && params.get('scene') === 'compose-state') return <ComposeStatePreview />
   if (inFrame && params.get('scene') === 'antigravity-quota')

@@ -314,7 +314,11 @@ export const StepCell = memo(function StepCell({ row }: Props<'step'>) {
           testID={`step:${item.kind}`}
         >
           <View style={styles.mark} accessibilityRole="image" accessibilityLabel={state}>
-            <Icon name={MARK[row.state]} size={13} color={stateColor(row.state, c)} />
+            {row.state === 'running' ? (
+              <StatusMark status="running" size={12} />
+            ) : (
+              <Icon name={MARK[row.state]} size={13} color={stateColor(row.state, c)} />
+            )}
           </View>
           <Text
             style={[cellStyles.grow, styles.stepLabel, { color: c.ink, fontFamily: font.mono }]}
@@ -323,9 +327,7 @@ export const StepCell = memo(function StepCell({ row }: Props<'step'>) {
           >
             {label}
           </Text>
-          {time ? (
-            <Text style={[styles.stepState, { color: stateColor(row.state, c) }]}>{time}</Text>
-          ) : null}
+          {time ? <Text style={[styles.stepState, { color: c.ink3 }]}>{time}</Text> : null}
         </Pressable>
         {!row.expanded && item.kind === 'toolCall' && item.images ? (
           <ToolImages images={item.images} gallery={row.gallery ?? item.images} />
@@ -622,7 +624,7 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   // 记号和第一行字对齐（字行高 18）
-  mark: { height: 18, width: 14, flexShrink: 0, justifyContent: 'center' },
+  mark: { height: 18, width: 16, flexShrink: 0, justifyContent: 'center' },
   statusMark: { flexShrink: 0 },
   current: { flex: 1, minWidth: 0 },
   stepLabel: { fontSize: 13, lineHeight: 18 },

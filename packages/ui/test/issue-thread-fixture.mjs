@@ -23,7 +23,8 @@ export function threadFixture(platform, kind, options = {}) {
   }).code
   let cursor = 0
   const state = []
-  const element = (type, props) => ({ type, props })
+  const element = (type, props) =>
+    type === 'action-scope' ? props.children(null) : { type, props }
   const bodySlot = {}
   let found = options.found ?? false
   let located = 0
@@ -55,6 +56,8 @@ export function threadFixture(platform, kind, options = {}) {
     module: output,
     require(name) {
       if (modules[name]) return modules[name]
+      if (name.endsWith('/CardActions.tsx'))
+        return { CardActionScope: 'action-scope', CardActions: 'action-group' }
       if (/appearance|\/i18n$/.test(name)) return { useT: () => (key) => key }
       if (name.endsWith('/theme'))
         return { useTheme: () => ({ c: {}, font: { size: {} }, radius: {} }) }

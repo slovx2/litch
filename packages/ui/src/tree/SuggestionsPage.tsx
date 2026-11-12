@@ -21,6 +21,7 @@ import { ago, agoLong, stampFull } from '../app/format.ts'
 import { Close, Forward, Icon } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import { BoardMarkdown } from '../manager/BoardMarkdown.tsx'
+import { CardActions } from '../manager/CardActions.tsx'
 import { useCardMotion } from '../manager/card-motion.ts'
 import { useIssueOrder } from '../manager/issue-order.tsx'
 import { PostCard } from '../manager/PostCard.tsx'
@@ -126,20 +127,22 @@ function SuggestionRow({
     </>
   )
   const acts = (small: boolean) => (
-    <ProposalActs
-      deviceId={deviceId}
-      sessionId={source.threadId}
-      proposal={proposal}
-      inbox
-      small={small}
-      sourceParent={{
-        id: source.threadId,
-        harness: source.harness,
-        title: source.title,
-        cwd: source.cwd,
-        workspaceId: workspace?.id ?? null,
-      }}
-    />
+    <CardActions>
+      <ProposalActs
+        deviceId={deviceId}
+        sessionId={source.threadId}
+        proposal={proposal}
+        inbox
+        small={small}
+        sourceParent={{
+          id: source.threadId,
+          harness: source.harness,
+          title: source.title,
+          cwd: source.cwd,
+          workspaceId: workspace?.id ?? null,
+        }}
+      />
+    </CardActions>
   )
   const meta = <SuggestionMeta row={row} workspace={workspace} online={online} onOpen={onOpen} />
   // 看板里：和决策、请求同一种卡，一个卡头（编号加标题），展开只是往下多出元信息、背景、任务和操作

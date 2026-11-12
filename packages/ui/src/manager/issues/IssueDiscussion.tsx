@@ -1,6 +1,6 @@
 // issue 的讨论区：评论、旧“问经理”问答与状态变化按时间排成一条；底部是评论框。
 // 评论与问答分开：评论不回答决策、不交付请求（60 号设计 5.3）。草稿按 [设备, 经理, #n] 存在内存里，切卡不丢。
-import { useContext, useRef, useState } from 'react'
+import { type ReactNode, useContext, useRef, useState } from 'react'
 import { managerIssueActivity } from '../../../../core/src/projection/manager-issue-activity.mts'
 import type { ManagerIssue } from '../../../../protocol/src/manager-issues.mts'
 import { useT } from '../../app/appearance.ts'
@@ -8,6 +8,7 @@ import { reasonOf } from '../../app/errors.ts'
 import { Icon } from '../../app/icons.tsx'
 import { Stamp } from '../../transcript/Stamp.tsx'
 import { BoardMarkdown } from '../BoardMarkdown.tsx'
+import { CardActions } from '../CardActions.tsx'
 import { submitQuestionOnEnter } from '../post-presentation.ts'
 import { RelationsContext } from '../Relations.tsx'
 
@@ -27,6 +28,7 @@ export function IssueDiscussion({
   special,
   onComment,
   onAsk,
+  headAction,
 }: {
   issue: ManagerIssue
   changes?: readonly { id: string; fields: readonly string[] }[] | undefined
@@ -38,6 +40,8 @@ export function IssueDiscussion({
   onComment(body: string): Promise<unknown>
   /** 有它时输入框上多一个“问经理”：发的是旧帖子追问，不是评论 */
   onAsk?: ((question: string) => Promise<unknown>) | undefined
+  /** 评论标题行末尾的入口（完整讨论），不另占一行 */
+  headAction?: ReactNode
 }) {
   const t = useT()
   const relations = useContext(RelationsContext)
@@ -111,6 +115,7 @@ export function IssueDiscussion({
       <header className="mg-issue-talk-head">
         <b>{t('issue.comments')}</b>
         <span className="mg-issue-count">{issue.discussion.comments.length}</span>
+        {headAction}
       </header>
       {rows.length ? (
         <ol className="mg-issue-timeline">
@@ -159,62 +164,64 @@ export function IssueDiscussion({
           {t(issue.kind === 'report' ? 'issue.follow.reportPausedNote' : 'issue.follow.pausedNote')}
         </p>
       ) : null}
-      <div className="mg-post-compose mg-issue-compose">
-        {onAsk ? (
-          <fieldset className="mg-question-modes" aria-label={t('issue.mode')}>
-            <button
-              type="button"
-              aria-pressed={!asking}
-              data-issue-mode="comment"
-              onClick={() => setAsking(false)}
-            >
-              {t('issue.comments')}
-            </button>
-            <button
-              type="button"
-              aria-pressed={asking}
-              data-issue-mode="ask"
-              onClick={() => setAsking(true)}
-            >
-              {t('issue.ask')}
-            </button>
-          </fieldset>
-        ) : null}
-        <textarea
-          className="req-input mg-post-input grow-input"
-          rows={2}
-          value={text}
-          disabled={disabled}
-          title={disabled ? reason : undefined}
-          placeholder={
-            disabled ? reason : t(asking ? 'issue.ask.placeholder' : 'issue.comment.placeholder')
-          }
-          aria-label={t('issue.comment.placeholder')}
-          data-issue-comment-input
-          onChange={(event) => edit(event.target.value)}
-          onKeyDown={(event) => {
-            if (!submitQuestionOnEnter(event.nativeEvent)) return
-            event.preventDefault()
-            void send()
-          }}
-        />
-        <button
-          type="button"
-          className="ibtn mg-post-send"
-          data-act="issue-comment"
-          title={disabled ? reason : t(asking ? 'issue.ask.send' : 'issue.comment.send')}
-          aria-label={t(asking ? 'issue.ask.send' : 'issue.comment.send')}
-          disabled={disabled || busy || !text.trim()}
-          onClick={() => void send()}
-        >
-          <Icon name="send" small />
-        </button>
-        {error ? (
-          <p className="err" role="alert">
-            {error}
-          </p>
-        ) : null}
-      </div>
+      <CardActions>
+        <div className="mg-post-compose mg-issue-compose">
+          {onAsk ? (
+            <fieldset className="mg-question-modes" aria-label={t('issue.mode')}>
+              <button
+                type="button"
+                aria-pressed={!asking}
+                data-issue-mode="comment"
+                onClick={() => setAsking(false)}
+              >
+                {t('issue.comments')}
+              </button>
+              <button
+                type="button"
+                aria-pressed={asking}
+                data-issue-mode="ask"
+                onClick={() => setAsking(true)}
+              >
+                {t('issue.ask')}
+              </button>
+            </fieldset>
+          ) : null}
+          <textarea
+            className="req-input mg-post-input grow-input"
+            rows={2}
+            value={text}
+            disabled={disabled}
+            title={disabled ? reason : undefined}
+            placeholder={
+              disabled ? reason : t(asking ? 'issue.ask.placeholder' : 'issue.comment.placeholder')
+            }
+            aria-label={t('issue.comment.placeholder')}
+            data-issue-comment-input
+            onChange={(event) => edit(event.target.value)}
+            onKeyDown={(event) => {
+              if (!submitQuestionOnEnter(event.nativeEvent)) return
+              event.preventDefault()
+              void send()
+            }}
+          />
+          <button
+            type="button"
+            className="ibtn mg-post-send"
+            data-act="issue-comment"
+            title={disabled ? reason : t(asking ? 'issue.ask.send' : 'issue.comment.send')}
+            aria-label={t(asking ? 'issue.ask.send' : 'issue.comment.send')}
+            disabled={disabled || busy || !text.trim()}
+            onClick={() => void send()}
+          >
+            <Icon name="send" small />
+          </button>
+          {error ? (
+            <p className="err" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
+      </CardActions>
     </section>
   )
 }

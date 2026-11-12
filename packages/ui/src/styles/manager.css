@@ -305,10 +305,12 @@
   font-size: calc(13px * var(--fs));
 }
 .mg-body {
+  /* 下内边距也是卡尾操作栏吸底时要抵消的量（.mg-card-actions） */
+  --mg-scroll-pad: 16px;
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 16px;
+  padding: var(--mg-scroll-pad);
 }
 .mg-board-grip {
   grid-column: 2;
@@ -1556,6 +1558,13 @@
   padding: 4px 8px 4px 16px;
   border-bottom: 1px solid var(--line-2);
 }
+/* 抽屉标题行末尾的入口（查看正文、完整讨论）排成一行 */
+.mg-talk-head [data-discussion-body] {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
 .mg-talk-title {
   flex: 1 1 auto;
   min-width: 0;
@@ -1631,4 +1640,39 @@
 }
 .mg-sidebar-drafts:hover {
   text-decoration: underline;
+}
+
+/* 卡尾保留真实高度；sticky 的包含块是整张卡，滚出时不会留在相邻卡上。
+   sticky 的底边从滚动区内容盒算起：减去滚动区下内边距才贴住可视底边，有批量栏时再让出它的高度 */
+.mg-card-actions {
+  position: sticky;
+  bottom: calc(var(--mg-send-h, 0px) - var(--mg-scroll-pad, 0px));
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  margin-top: 10px;
+  background: var(--raised);
+  border-top: 1px solid var(--line-2);
+}
+.mg-card-actions:empty {
+  display: none;
+}
+.mg-card-actions :is(.mg-actions, .mg-issue-acts) {
+  display: contents;
+}
+/* 按钮汇入的先后由挂载顺序决定，排位交给样式：主按钮在最前，讨论入口靠右，写字区单独一行在最后 */
+.mg-card-actions .btn.primary {
+  order: -1;
+}
+/* 每张卡只有一个讨论入口（讨论抽屉或完整讨论），靠右 */
+.mg-card-actions :is(.mg-talk-entry, .mg-issue-full) {
+  order: 8;
+  margin-inline-start: auto;
+}
+.mg-card-actions .mg-post-compose {
+  width: 100%;
+  order: 9;
 }

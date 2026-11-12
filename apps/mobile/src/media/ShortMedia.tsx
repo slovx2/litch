@@ -1,7 +1,7 @@
 // 可用于文件页和对话的短媒体播放器；不读取路径、不请求设备、不自动播放。
 import type { ShortMediaType } from '@litch/core'
 import { useIsFocused } from '@react-navigation/native'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState, Text, View } from 'react-native'
 import { WebView } from 'react-native-webview'
 import { useT } from '../ui/i18n'
@@ -13,9 +13,11 @@ export interface ShortMediaProps {
   dataBase64: string
   type: ShortMediaType
   onFail(reason: Extract<ShortMediaEvent, { kind: 'failed' }>['reason']): void
+  /** 播放条右端的操作（复制路径、存到手机），和播放键同一行，不另占一行 */
+  actions?: ReactNode
 }
 
-export function ShortMedia({ dataBase64, type, onFail }: ShortMediaProps) {
+export function ShortMedia({ dataBase64, type, onFail, actions }: ShortMediaProps) {
   const t = useT(),
     theme = useTheme(),
     focused = useIsFocused()
@@ -56,9 +58,13 @@ export function ShortMedia({ dataBase64, type, onFail }: ShortMediaProps) {
             )
           }
         />
-        <Text style={{ color: theme.c.ink3, fontSize: theme.font.size.meta }}>
+        <Text
+          numberOfLines={1}
+          style={{ flex: 1, minWidth: 0, color: theme.c.ink3, fontSize: theme.font.size.meta }}
+        >
           {t(ready ? 'preview.media.note' : 'mobilePreview.loading')}
         </Text>
+        {actions}
       </View>
       <WebView
         source={{ html, baseUrl: 'https://short-media.litch.invalid/' }}

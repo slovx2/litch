@@ -21,6 +21,8 @@ import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardLinks } from './BoardLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferences } from './BoardReferences.tsx'
+import { CardActions } from './CardActions.tsx'
+import { useBatchBarInset } from './card-action-viewport.ts'
 import { useCardMotion } from './card-motion.ts'
 import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutcome.tsx'
 import { DraftEnded } from './DraftEnded.tsx'
@@ -150,6 +152,8 @@ export function Decisions({
     return () => clearTimeout(timer)
   }, [sent])
   const footer = useRef<HTMLElement>(null)
+  // 批量栏吸底时，卡尾操作栏贴在它的上沿
+  const barRef = useBatchBarInset(footer)
   const located = useRef<HTMLElement | null>(null)
   /** 点草稿数：滚到当前位置之后的下一张有草稿的卡，到底了回到第一张 */
   const locateDraft = () => {
@@ -618,45 +622,47 @@ export function Decisions({
                         }}
                         onChange={(event) => change(decision, { text: event.target.value })}
                       />
-                      <div className="mg-actions">
-                        {singleSubmit ? (
-                          <button
-                            type="button"
-                            className="btn primary"
-                            data-act="manager-submit"
-                            disabled={disabled || busy || conflict || asking || !pending.length}
-                            onClick={() => void submit()}
-                          >
-                            {t(busy ? 'manager.submitting' : 'manager.submit')}
-                          </button>
-                        ) : null}
-                        {decision.status !== 'open' ? (
-                          <button
-                            type="button"
-                            className="btn ghost"
-                            data-act="manager-cancel-answer-edit"
-                            disabled={disabled || busy}
-                            onClick={() => {
-                              save(cancelAnswerEdit(drafts, decision.id))
-                              setEditing(new Set([...editing].filter((id) => id !== decision.id)))
-                            }}
-                          >
-                            {t('manager.cancelEdit')}
-                          </button>
-                        ) : null}
-                        {decision.status === 'open' && ignoring?.id !== decision.id ? (
-                          <button
-                            type="button"
-                            className="btn ghost"
-                            data-act="manager-ignore"
-                            disabled={disabled || busy || !features.ignore}
-                            title={features.ignore ? undefined : t('manager.oldDeviceShort')}
-                            onClick={() => setIgnoring({ id: decision.id, reason: '' })}
-                          >
-                            {t('manager.ignore')}
-                          </button>
-                        ) : null}
-                      </div>
+                      <CardActions>
+                        <div className="mg-actions">
+                          {singleSubmit ? (
+                            <button
+                              type="button"
+                              className="btn primary"
+                              data-act="manager-submit"
+                              disabled={disabled || busy || conflict || asking || !pending.length}
+                              onClick={() => void submit()}
+                            >
+                              {t(busy ? 'manager.submitting' : 'manager.submit')}
+                            </button>
+                          ) : null}
+                          {decision.status !== 'open' ? (
+                            <button
+                              type="button"
+                              className="btn ghost"
+                              data-act="manager-cancel-answer-edit"
+                              disabled={disabled || busy}
+                              onClick={() => {
+                                save(cancelAnswerEdit(drafts, decision.id))
+                                setEditing(new Set([...editing].filter((id) => id !== decision.id)))
+                              }}
+                            >
+                              {t('manager.cancelEdit')}
+                            </button>
+                          ) : null}
+                          {decision.status === 'open' && ignoring?.id !== decision.id ? (
+                            <button
+                              type="button"
+                              className="btn ghost"
+                              data-act="manager-ignore"
+                              disabled={disabled || busy || !features.ignore}
+                              title={features.ignore ? undefined : t('manager.oldDeviceShort')}
+                              onClick={() => setIgnoring({ id: decision.id, reason: '' })}
+                            >
+                              {t('manager.ignore')}
+                            </button>
+                          ) : null}
+                        </div>
+                      </CardActions>
                       {decision.status === 'open' && ignoring?.id === decision.id ? (
                         <div className="mg-ignore" data-ignore-form>
                           <p className="dim">{t('manager.ignoreNote')}</p>
@@ -678,25 +684,27 @@ export function Decisions({
                               setIgnoring({ id: decision.id, reason: event.target.value })
                             }
                           />
-                          <div className="mg-actions">
-                            <button
-                              type="button"
-                              className="btn ghost"
-                              disabled={busy}
-                              onClick={() => setIgnoring(null)}
-                            >
-                              {t('manager.cancel')}
-                            </button>
-                            <button
-                              type="button"
-                              className="btn"
-                              data-act="manager-ignore-confirm"
-                              disabled={disabled || busy}
-                              onClick={() => void ignore(decision, ignoring.reason)}
-                            >
-                              {t('manager.ignoreConfirm')}
-                            </button>
-                          </div>
+                          <CardActions>
+                            <div className="mg-actions">
+                              <button
+                                type="button"
+                                className="btn ghost"
+                                disabled={busy}
+                                onClick={() => setIgnoring(null)}
+                              >
+                                {t('manager.cancel')}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn"
+                                data-act="manager-ignore-confirm"
+                                disabled={disabled || busy}
+                                onClick={() => void ignore(decision, ignoring.reason)}
+                              >
+                                {t('manager.ignoreConfirm')}
+                              </button>
+                            </div>
+                          </CardActions>
                         </div>
                       ) : null}
                     </>
@@ -706,24 +714,26 @@ export function Decisions({
                       {/* 先是答复、关闭或忽略的记录，再说留着的草稿怎么办 */}
                       {endedNote}
                       {decision.answer || decision.status === 'answered' ? (
-                        <button
-                          type="button"
-                          className="btn ghost"
-                          data-act="manager-edit-answer"
-                          disabled={disabled || busy}
-                          onClick={() => {
-                            setEditing(new Set([...editing, decision.id]))
-                            // 对着当前这一版改：留着的旧草稿版本不算数
-                            change(decision, {
-                              revision: decision.revision,
-                              editingRevision: decision.revision,
-                              optionId: decision.answer?.optionId ?? null,
-                              text: decision.answer?.text ?? '',
-                            })
-                          }}
-                        >
-                          {t('manager.editAnswer')}
-                        </button>
+                        <CardActions>
+                          <button
+                            type="button"
+                            className="btn ghost"
+                            data-act="manager-edit-answer"
+                            disabled={disabled || busy}
+                            onClick={() => {
+                              setEditing(new Set([...editing, decision.id]))
+                              // 对着当前这一版改：留着的旧草稿版本不算数
+                              change(decision, {
+                                revision: decision.revision,
+                                editingRevision: decision.revision,
+                                optionId: decision.answer?.optionId ?? null,
+                                text: decision.answer?.text ?? '',
+                              })
+                            }}
+                          >
+                            {t('manager.editAnswer')}
+                          </button>
+                        </CardActions>
                       ) : null}
                       {decision.landed.length ? (
                         <div className="mg-item-meta">
@@ -734,17 +744,21 @@ export function Decisions({
                         </div>
                       ) : null}
                       {decision.status !== 'answered' ? (
-                        <button
-                          type="button"
-                          className="btn ghost"
-                          disabled={disabled || busy}
-                          onClick={() => void reopen(decision)}
-                          data-act={
-                            decision.status === 'ignored' ? 'manager-unignore' : 'manager-reopen'
-                          }
-                        >
-                          {t(decision.status === 'ignored' ? 'manager.unignore' : 'manager.reopen')}
-                        </button>
+                        <CardActions>
+                          <button
+                            type="button"
+                            className="btn ghost"
+                            disabled={disabled || busy}
+                            onClick={() => void reopen(decision)}
+                            data-act={
+                              decision.status === 'ignored' ? 'manager-unignore' : 'manager-reopen'
+                            }
+                          >
+                            {t(
+                              decision.status === 'ignored' ? 'manager.unignore' : 'manager.reopen',
+                            )}
+                          </button>
+                        </CardActions>
                       ) : null}
                     </>
                   )}
@@ -780,14 +794,14 @@ export function Decisions({
         </p>
       ) : null}
       {part !== 'cards' && !unsent && !held && !heldQuestions && sent ? (
-        <footer className="mg-send" ref={footer} data-sent role="status">
+        <footer className="mg-send" ref={barRef} data-sent role="status">
           <span className="grow">
             <span aria-hidden="true">✓</span> {t('manager.sent', { n: sent })}
           </span>
         </footer>
       ) : null}
       {part !== 'cards' && (unsent || held || heldQuestions) ? (
-        <footer className="mg-send" ref={footer}>
+        <footer className="mg-send" ref={barRef}>
           <span className="grow">
             <button
               type="button"

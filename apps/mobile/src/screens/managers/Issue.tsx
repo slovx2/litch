@@ -57,6 +57,7 @@ import { Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { Byline } from './Byline'
+import { CardActionArea, CardActions } from './CardActions'
 import { animateNextLayout } from './card-motion'
 import { readChoice, writeChoice } from './choice-drafts'
 import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutcome'
@@ -150,6 +151,7 @@ export function Issue({
   bare = false,
   inline = false,
   hideDiscussion = false,
+  discussionCount,
 }: {
   manager: ManagerView
   post: ManagerPost
@@ -164,6 +166,8 @@ export function Issue({
   /** 分页列表已提供可折叠的卡头，详情只显示正文和讨论入口。 */
   inline?: boolean
   hideDiscussion?: boolean
+  /** 控制台抽屉里讨论入口打开的是 issue 评论：条数按评论算，和桌面一致 */
+  discussionCount?: number
 }) {
   const t = useT()
   const { c, font, radius, hit } = useTheme()
@@ -233,6 +237,9 @@ export function Issue({
     setCollapsed(!collapsed)
   }
   /** 正在填忽略理由；null 是没在填 */
+  // 请你做的回复框默认收起，点“回复”才展开；已有草稿或正在修改回复时一直展开
+  const [replyOpen, setReplyOpen] = useState(false)
+  const replyInput = useRef<TextInput>(null)
   const [requestIgnore, setRequestIgnore] = useState<{ revision: number; reason: string } | null>(
     null,
   )
@@ -489,9 +496,10 @@ export function Issue({
   const waiting = post.discussion.messages.some((q) => q.status === 'running')
   const unsent = Boolean(question.trim()) && !questionEnded
   const noTalk = !features.posts && !post.discussion.messages.length
+  const shownCount = discussionCount ?? replies
   const entryLabel = [
     t('manager.discussionOpen'),
-    replies ? t('manager.discussionCount', { n: replies }) : '',
+    shownCount ? t('manager.discussionCount', { n: shownCount }) : '',
     news ? t('manager.discussionNew') : '',
     waiting ? t('manager.discussionWaiting') : '',
     unsent ? t('manager.discussionDraft') : '',
@@ -499,6 +507,7 @@ export function Issue({
   ]
     .filter(Boolean)
     .join(' · ')
+  const replyShown = replyOpen || Boolean(reply.trim()) || (editing && request?.status !== 'open')
   const entry = (
     <Pressable
       accessibilityRole="button"
@@ -507,39 +516,28 @@ export function Issue({
       disabled={noTalk}
       testID={`post-discussion:${post.id}`}
       onPress={() => onTalk(true)}
-      hitSlop={{ top: 6, bottom: 6 }}
       style={({ pressed }) => [
         styles.entry,
-        // 转讨论的入口：强调色描边，醒目但不压过实心的快速处理主按钮
+        // 讨论入口：图标加条数，和桌面卡片上的入口一样克制；名称在读屏里
         {
-          minHeight: 36,
-          borderColor: noTalk ? c.line2 : c.accent,
-          borderRadius: radius.l,
-          backgroundColor: pressed || talking ? c.selBg : c.panel,
+          minHeight: hit,
+          minWidth: hit,
+          borderRadius: radius.m,
+          backgroundColor: pressed || talking ? c.selBg : 'transparent',
           opacity: noTalk ? 0.5 : 1,
         },
       ]}
     >
-      <Icon name="note" size={16} color={noTalk ? c.ink2 : c.accent} />
-      <Text
-        style={{
-          color: noTalk ? c.ink2 : c.accent,
-          fontSize: font.size.meta + 1,
-          fontWeight: '600',
-        }}
-      >
-        {t('manager.discussion')}
-      </Text>
-      {replies ? (
+      <Icon name="note" size={18} color={noTalk ? c.ink3 : c.ink2} />
+      {shownCount ? (
         <Text
           style={{
-            color: c.accent,
-            fontSize: font.size.small + 1,
-            fontWeight: '600',
+            color: c.ink2,
+            fontSize: font.size.meta,
             fontVariant: ['tabular-nums'],
           }}
         >
-          {replies}
+          {shownCount}
         </Text>
       ) : null}
       {/* 设备服务较旧、没有讨论可读：入口禁用，原因写在入口上（看板顶上另有一行说去设备详情升级） */}
@@ -675,7 +673,7 @@ export function Issue({
     </DiscussionDrawer>
   )
   return (
-    <View
+    <CardActionArea
       style={[
         styles.card,
         narrow ? styles.cardNarrow : null,
@@ -686,8 +684,8 @@ export function Issue({
       testID={`manager-issue:${post.id}`}
       onLayout={(event) => onPosition(event.nativeEvent.layout.y)}
     >
-      <View style={[styles.cardHeader, inline ? styles.headerInline : null]}>
-        {!inline ? (
+      {inline ? null : (
+        <View style={styles.cardHeader}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t(collapsed ? 'manager.postExpand' : 'manager.postCollapse')}
@@ -736,15 +734,21 @@ export function Issue({
               </Text>
             ) : null}
           </Pressable>
-        ) : null}
-        {!hideDiscussion && (!pendingReview || unreviewed) ? entry : null}
-      </View>
+          {!hideDiscussion && (!pendingReview || unreviewed) ? entry : null}
+        </View>
+      )}
+      {/* 内嵌在控制台抽屉里：讨论入口进卡尾操作栏，排在最后 */}
+      {inline && !hideDiscussion && (!pendingReview || unreviewed) && !collapsed ? (
+        <CardActions last>{entry}</CardActions>
+      ) : null}
       {pendingReview ? (
-        <Button
-          kind="plain"
-          label={t('suggestions.unreviewed')}
-          onPress={() => setUnreviewed(!unreviewed)}
-        />
+        <CardActions>
+          <Button
+            kind="plain"
+            label={t('suggestions.unreviewed')}
+            onPress={() => setUnreviewed(!unreviewed)}
+          />
+        </CardActions>
       ) : null}
       {collapsed ? (
         // 收起时摘要也能点开（整张卡可点）；读屏和键盘走卡头按钮，这里不重复朗读
@@ -788,11 +792,13 @@ export function Issue({
           )}
           {post.versions.length ? (
             <>
-              <Button
-                kind="plain"
-                label={t('manager.postHistory')}
-                onPress={() => setHistory(!history)}
-              />
+              <CardActions>
+                <Button
+                  kind="plain"
+                  label={t('manager.postHistory')}
+                  onPress={() => setHistory(!history)}
+                />
+              </CardActions>
               {history
                 ? post.versions.map((v) => (
                     <View key={`${v.revision}-${v.at}`}>
@@ -806,33 +812,37 @@ export function Issue({
             </>
           ) : null}
           {post.kind === 'report' && post.unread ? (
-            <Button
-              label={t(post.unread ? 'manager.markRead' : 'manager.reportRead')}
-              testID={`report-read:${post.id}`}
-              disabled={locked || !post.unread || !features.posts}
-              onPress={() =>
-                void run(() =>
-                  channel.command('managers.report.read', {
-                    deviceId: manager.deviceId,
-                    managerId: manager.id,
-                    id: post.id as `P-${number}`,
-                    revision: post.revision,
-                  }),
-                )
-              }
-            />
+            <CardActions primary>
+              <Button
+                label={t(post.unread ? 'manager.markRead' : 'manager.reportRead')}
+                testID={`report-read:${post.id}`}
+                disabled={locked || !post.unread || !features.posts}
+                onPress={() =>
+                  void run(() =>
+                    channel.command('managers.report.read', {
+                      deviceId: manager.deviceId,
+                      managerId: manager.id,
+                      id: post.id as `P-${number}`,
+                      revision: post.revision,
+                    }),
+                  )
+                }
+              />
+            </CardActions>
           ) : null}
           {post.kind === 'report' && post.unread ? oldReason('posts') : null}
           {suggestion ? (
-            <ProposalActs
-              deviceId={manager.deviceId}
-              sessionId={suggestion.source.threadId}
-              proposalId={suggestion.proposal.id}
-              sourceIsManager={suggestion.proposal.sourceIsManager}
-              worktree={suggestion.proposal.worktree ?? false}
-              prompt={suggestion.proposal.prompt}
-              wider={suggestion.proposal.widerSandbox}
-            />
+            <CardActions>
+              <ProposalActs
+                deviceId={manager.deviceId}
+                sessionId={suggestion.source.threadId}
+                proposalId={suggestion.proposal.id}
+                sourceIsManager={suggestion.proposal.sourceIsManager}
+                worktree={suggestion.proposal.worktree ?? false}
+                prompt={suggestion.proposal.prompt}
+                wider={suggestion.proposal.widerSandbox}
+              />
+            </CardActions>
           ) : null}
           {decision || request ? null : endedNote}
           {request ? (
@@ -840,19 +850,8 @@ export function Issue({
               {request.response ? <Markdown text={request.response.text} /> : null}
               {/* 先是你的回复，再说留着的草稿怎么办 */}
               {endedNote}
-              {request.status === 'open' ? (
-                <>
-                  <Button
-                    kind="plain"
-                    testID={`request-ignore:${request.id}`}
-                    label={t('manager.ignore')}
-                    disabled={locked || !features.requestIgnore}
-                    onPress={() => setRequestIgnore({ revision: request.revision, reason: '' })}
-                  />
-                  {oldReason('requestIgnore')}
-                </>
-              ) : null}
               {request.status === 'open' && requestIgnore ? (
+                // 确认忽略时收起作答区：卡上只留“确认忽略”和“取消”
                 <View testID={`request-ignore-form:${request.id}`} style={styles.askComposer}>
                   <Text style={{ color: c.ink2 }}>{t('manager.requestIgnoreNote')}</Text>
                   <TextInput
@@ -866,99 +865,144 @@ export function Issue({
                     editable={!locked}
                     onChangeText={(reason) => setRequestIgnore({ ...requestIgnore, reason })}
                   />
-                  <Button
-                    testID={`request-ignore-confirm:${request.id}`}
-                    label={t('manager.ignoreConfirm')}
-                    disabled={locked || !features.requestIgnore}
-                    onPress={() =>
-                      void run(async () => {
-                        const accepted = await submitManagerRequest(
-                          channel,
-                          manager.deviceId,
-                          manager.id,
-                          {
-                            requestId: request.id,
-                            revision: requestIgnore.revision,
-                            delivered: false,
-                            text: requestIgnore.reason,
-                            ignored: true,
-                          },
-                        )
-                        if (!accepted) throw new Error(t('manager.requestSubmitFailed'))
-                        setRequestIgnore(null)
-                      })
-                    }
-                  />
-                  <Button
-                    kind="plain"
-                    label={t('app.cancel')}
-                    disabled={locked}
-                    onPress={() => setRequestIgnore(null)}
-                  />
+                  <CardActions primary>
+                    <Button
+                      testID={`request-ignore-confirm:${request.id}`}
+                      label={t('manager.ignoreConfirm')}
+                      disabled={locked || !features.requestIgnore}
+                      onPress={() =>
+                        void run(async () => {
+                          const accepted = await submitManagerRequest(
+                            channel,
+                            manager.deviceId,
+                            manager.id,
+                            {
+                              requestId: request.id,
+                              revision: requestIgnore.revision,
+                              delivered: false,
+                              text: requestIgnore.reason,
+                              ignored: true,
+                            },
+                          )
+                          if (!accepted) throw new Error(t('manager.requestSubmitFailed'))
+                          setRequestIgnore(null)
+                        })
+                      }
+                    />
+                  </CardActions>
+                  <CardActions>
+                    <Button
+                      kind="quiet"
+                      label={t('app.cancel')}
+                      disabled={locked}
+                      onPress={() => setRequestIgnore(null)}
+                    />
+                  </CardActions>
                 </View>
-              ) : null}
-              {request.status !== 'cancelled' &&
-              !replyEnded &&
-              (request.status === 'open' || editing) ? (
+              ) : request.status !== 'cancelled' &&
+                !replyEnded &&
+                (request.status === 'open' || editing) ? (
                 <>
                   {answerConflict ? (
                     <View style={{ gap: 8 }}>
                       <Text style={{ color: c.ink2 }}>{t('manager.requestConflict')}</Text>
-                      <Button
-                        label={t('manager.confirm')}
-                        disabled={locked}
-                        onPress={() => {
-                          baseFile.write({ ...baseFile.read(), [draftKey]: request.revision })
-                          setConfirmedRevision(request.revision)
-                        }}
-                      />
+                      <CardActions>
+                        <Button
+                          label={t('manager.confirm')}
+                          disabled={locked}
+                          onPress={() => {
+                            baseFile.write({ ...baseFile.read(), [draftKey]: request.revision })
+                            setConfirmedRevision(request.revision)
+                          }}
+                        />
+                      </CardActions>
                     </View>
                   ) : null}
-                  <TextInput
-                    testID={`request-reply:${request.id}`}
-                    accessibilityLabel={t('manager.requestText')}
-                    style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
-                    multiline
-                    editable={features.feedback && !locked}
-                    value={reply}
-                    onChangeText={writeReply}
-                  />
-                  <Button
-                    testID={`request-deliver:${request.id}`}
-                    disabled={locked || !features.feedback || answerConflict}
-                    label={request.buttonLabel ?? t('manager.requestDone')}
-                    onPress={() => void submitReply(true)}
-                  />
-                  {reply.trim() ? (
-                    <Button
-                      kind="plain"
-                      disabled={locked || !features.feedback || answerConflict}
-                      label={t('manager.submit')}
-                      onPress={() => void submitReply(false)}
+                  {replyShown ? (
+                    <TextInput
+                      testID={`request-reply:${request.id}`}
+                      accessibilityLabel={t('manager.requestText')}
+                      placeholder={t('manager.requestText')}
+                      placeholderTextColor={c.ink3}
+                      style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
+                      multiline
+                      ref={replyInput}
+                      editable={features.feedback && !locked}
+                      value={reply}
+                      onChangeText={writeReply}
                     />
                   ) : null}
+                  <CardActions primary>
+                    <Button
+                      testID={`request-deliver:${request.id}`}
+                      disabled={locked || !features.feedback || answerConflict}
+                      label={request.buttonLabel ?? t('manager.requestDone')}
+                      onPress={() => void submitReply(true)}
+                    />
+                  </CardActions>
+                  {replyShown ? null : (
+                    <CardActions>
+                      <Button
+                        kind="quiet"
+                        testID={`request-reply-open:${request.id}`}
+                        disabled={locked || !features.feedback}
+                        label={t('manager.requestReply')}
+                        onPress={() => {
+                          setReplyOpen(true)
+                          // 展开后直接进入输入
+                          requestAnimationFrame(() => replyInput.current?.focus())
+                        }}
+                      />
+                    </CardActions>
+                  )}
+                  {request.status === 'open' ? (
+                    <CardActions>
+                      <Button
+                        kind="quiet"
+                        testID={`request-ignore:${request.id}`}
+                        label={t('manager.ignore')}
+                        disabled={locked || !features.requestIgnore}
+                        onPress={() => setRequestIgnore({ revision: request.revision, reason: '' })}
+                      />
+                    </CardActions>
+                  ) : null}
+                  {reply.trim() ? (
+                    <CardActions>
+                      <Button
+                        kind="plain"
+                        disabled={locked || !features.feedback || answerConflict}
+                        label={t('manager.submit')}
+                        onPress={() => void submitReply(false)}
+                      />
+                    </CardActions>
+                  ) : null}
+                  {request.status === 'open' ? oldReason('requestIgnore') : null}
                   {oldReason('feedback')}
                   {request.status !== 'open' ? (
-                    <Button
-                      kind="plain"
-                      label={t('manager.cancelEdit')}
-                      onPress={() => {
-                        writeReply('')
-                        setEditing(false)
-                      }}
-                    />
+                    <CardActions>
+                      <Button
+                        kind="quiet"
+                        label={t('manager.cancelEdit')}
+                        onPress={() => {
+                          writeReply('')
+                          setEditing(false)
+                        }}
+                      />
+                    </CardActions>
                   ) : null}
                 </>
               ) : request.status !== 'cancelled' && !replyEnded ? (
-                <Button
-                  kind="plain"
-                  disabled={locked || !features.feedback}
-                  label={t('manager.requestEdit')}
-                  onPress={() => {
-                    writeReply(request.response?.text ?? '')
-                    setEditing(true)
-                  }}
-                />
+                <CardActions>
+                  <Button
+                    kind="plain"
+                    disabled={locked || !features.feedback}
+                    label={t('manager.requestEdit')}
+                    onPress={() => {
+                      writeReply(request.response?.text ?? '')
+                      setEditing(true)
+                    }}
+                  />
+                </CardActions>
               ) : null}
             </>
           ) : null}
@@ -968,27 +1012,29 @@ export function Issue({
                 <>
                   {/* 修改答案时照样显示原来的答复，选项上也预先选中原来那一项 */}
                   {answerConflict ? (
-                    <View style={styles.actions}>
-                      <Text style={{ color: c.wait, fontSize: font.size.meta }}>
-                        {t('manager.conflict')}
-                      </Text>
-                      <IconButton
-                        icon="check"
-                        color={c.accent}
-                        label={t('manager.confirm')}
-                        testID={`decision-confirm:${decision.id}`}
-                        disabled={locked}
-                        onPress={() => {
-                          try {
-                            baseFile.write({ ...baseFile.read(), [draftKey]: revision })
-                            if (!decision.options.some((o) => o.id === choice)) setChoice(null)
-                            setConfirmedRevision(revision)
-                          } catch (e) {
-                            setError(String(e))
-                          }
-                        }}
-                      />
-                    </View>
+                    <CardActions>
+                      <View style={styles.actions}>
+                        <Text style={{ color: c.wait, fontSize: font.size.meta }}>
+                          {t('manager.conflict')}
+                        </Text>
+                        <IconButton
+                          icon="check"
+                          color={c.accent}
+                          label={t('manager.confirm')}
+                          testID={`decision-confirm:${decision.id}`}
+                          disabled={locked}
+                          onPress={() => {
+                            try {
+                              baseFile.write({ ...baseFile.read(), [draftKey]: revision })
+                              if (!decision.options.some((o) => o.id === choice)) setChoice(null)
+                              setConfirmedRevision(revision)
+                            } catch (e) {
+                              setError(String(e))
+                            }
+                          }}
+                        />
+                      </View>
+                    </CardActions>
                   ) : null}
                   <DecisionAnswer decision={decision} />
                   <DecisionHistory decision={decision} />
@@ -1018,33 +1064,38 @@ export function Issue({
                         value={reply}
                         onChangeText={writeReply}
                       />
-                      <View style={styles.actions}>
-                        <Button
-                          testID={`decision-submit:${decision.id}`}
-                          disabled={
-                            locked || answerConflict || resetSelection || (!choice && !reply.trim())
-                          }
-                          label={t('manager.submit')}
-                          onPress={() => void submitDecision(choice)}
-                        />
-                        {choice ? (
+                      <CardActions primary>
+                        <View style={styles.barGroup}>
                           <Button
-                            kind="plain"
-                            disabled={locked}
-                            label={t('manager.clearOption')}
-                            onPress={() => setChoice(null)}
+                            testID={`decision-submit:${decision.id}`}
+                            disabled={
+                              locked ||
+                              answerConflict ||
+                              resetSelection ||
+                              (!choice && !reply.trim())
+                            }
+                            label={t('manager.submit')}
+                            onPress={() => void submitDecision(choice)}
                           />
-                        ) : null}
-                        {decisionButtons?.ignore ? (
-                          <Button
-                            kind="plain"
-                            testID={`decision-ignore:${decision.id}`}
-                            disabled={locked || !features.ignore}
-                            label={t('manager.ignore')}
-                            onPress={() => setIgnoring('')}
-                          />
-                        ) : null}
-                      </View>
+                          {choice ? (
+                            <Button
+                              kind="quiet"
+                              disabled={locked}
+                              label={t('manager.clearOption')}
+                              onPress={() => setChoice(null)}
+                            />
+                          ) : null}
+                          {decisionButtons?.ignore ? (
+                            <Button
+                              kind="quiet"
+                              testID={`decision-ignore:${decision.id}`}
+                              disabled={locked || !features.ignore}
+                              label={t('manager.ignore')}
+                              onPress={() => setIgnoring('')}
+                            />
+                          ) : null}
+                        </View>
+                      </CardActions>
                       {decisionButtons?.ignore ? oldReason('ignore') : null}
                     </>
                   ) : null}
@@ -1066,32 +1117,34 @@ export function Issue({
                         value={ignoring}
                         onChangeText={setIgnoring}
                       />
-                      <View style={styles.actions}>
-                        <Button
-                          testID={`decision-ignore-confirm:${decision.id}`}
-                          disabled={locked}
-                          label={t('manager.ignoreConfirm')}
-                          onPress={() =>
-                            void run(async () => {
-                              await channel.command('managers.decision.ignore', {
-                                deviceId: manager.deviceId,
-                                managerId: manager.id,
-                                decisionId: decision.id,
-                                revision: decision.revision,
-                                ...(ignoring.trim() ? { reason: ignoring.trim() } : {}),
+                      <CardActions primary>
+                        <View style={styles.barGroup}>
+                          <Button
+                            testID={`decision-ignore-confirm:${decision.id}`}
+                            disabled={locked}
+                            label={t('manager.ignoreConfirm')}
+                            onPress={() =>
+                              void run(async () => {
+                                await channel.command('managers.decision.ignore', {
+                                  deviceId: manager.deviceId,
+                                  managerId: manager.id,
+                                  decisionId: decision.id,
+                                  revision: decision.revision,
+                                  ...(ignoring.trim() ? { reason: ignoring.trim() } : {}),
+                                })
+                                setIgnoring(null)
+                                setCollapsed(true)
                               })
-                              setIgnoring(null)
-                              setCollapsed(true)
-                            })
-                          }
-                        />
-                        <Button
-                          kind="plain"
-                          disabled={busy}
-                          label={t('manager.cancel')}
-                          onPress={() => setIgnoring(null)}
-                        />
-                      </View>
+                            }
+                          />
+                          <Button
+                            kind="quiet"
+                            disabled={busy}
+                            label={t('manager.cancel')}
+                            onPress={() => setIgnoring(null)}
+                          />
+                        </View>
+                      </CardActions>
                     </View>
                   ) : null}
                   {/* 按钮一直显示；不能点时写明为什么（离线、已结束由页顶那一行说） */}
@@ -1101,15 +1154,17 @@ export function Issue({
                     </Text>
                   ) : null}
                   {editing ? (
-                    <Button
-                      kind="plain"
-                      label={t('manager.cancelEdit')}
-                      onPress={() => {
-                        writeReply('')
-                        setChoice(null)
-                        setEditing(false)
-                      }}
-                    />
+                    <CardActions>
+                      <Button
+                        kind="quiet"
+                        label={t('manager.cancelEdit')}
+                        onPress={() => {
+                          writeReply('')
+                          setChoice(null)
+                          setEditing(false)
+                        }}
+                      />
+                    </CardActions>
                   ) : null}
                 </>
               ) : (
@@ -1118,37 +1173,41 @@ export function Issue({
                   {/* 先是答复、关闭或忽略的记录，再说留着的草稿怎么办 */}
                   {endedNote}
                   {decisionButtons?.edit ? (
-                    <Button
-                      kind="plain"
-                      disabled={locked}
-                      label={t('manager.editAnswer')}
-                      onPress={() => {
-                        // 对着当前这一版改：留着的旧草稿版本不算数
-                        editFile.write({ ...editFile.read(), [draftKey]: decision.revision })
-                        baseFile.write({ ...baseFile.read(), [draftKey]: decision.revision })
-                        writeReply(decision.answer?.text ?? '')
-                        setChoice(decision.answer?.optionId ?? null)
-                        setEditing(true)
-                      }}
-                    />
+                    <CardActions>
+                      <Button
+                        kind="plain"
+                        disabled={locked}
+                        label={t('manager.editAnswer')}
+                        onPress={() => {
+                          // 对着当前这一版改：留着的旧草稿版本不算数
+                          editFile.write({ ...editFile.read(), [draftKey]: decision.revision })
+                          baseFile.write({ ...baseFile.read(), [draftKey]: decision.revision })
+                          writeReply(decision.answer?.text ?? '')
+                          setChoice(decision.answer?.optionId ?? null)
+                          setEditing(true)
+                        }}
+                      />
+                    </CardActions>
                   ) : null}
                   {decisionButtons?.reopen || decisionButtons?.unignore ? (
-                    <Button
-                      kind="plain"
-                      testID={`decision-${decisionButtons.unignore ? 'unignore' : 'reopen'}:${decision.id}`}
-                      disabled={locked}
-                      label={t(decisionButtons.unignore ? 'manager.unignore' : 'manager.reopen')}
-                      onPress={() =>
-                        void run(async () => {
-                          await channel.command('managers.decision.reopen', {
-                            deviceId: manager.deviceId,
-                            managerId: manager.id,
-                            decisionId: decision.id,
+                    <CardActions>
+                      <Button
+                        kind="plain"
+                        testID={`decision-${decisionButtons.unignore ? 'unignore' : 'reopen'}:${decision.id}`}
+                        disabled={locked}
+                        label={t(decisionButtons.unignore ? 'manager.unignore' : 'manager.reopen')}
+                        onPress={() =>
+                          void run(async () => {
+                            await channel.command('managers.decision.reopen', {
+                              deviceId: manager.deviceId,
+                              managerId: manager.id,
+                              decisionId: decision.id,
+                            })
+                            setEditing(false)
                           })
-                          setEditing(false)
-                        })
-                      }
-                    />
+                        }
+                      />
+                    </CardActions>
                   ) : null}
                 </>
               )}
@@ -1162,7 +1221,7 @@ export function Issue({
           {error}
         </Text>
       ) : null}
-    </View>
+    </CardActionArea>
   )
 }
 const styles = StyleSheet.create({
@@ -1178,11 +1237,10 @@ const styles = StyleSheet.create({
   entry: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     alignSelf: 'flex-start',
-    gap: 5,
-    minHeight: 30,
-    paddingHorizontal: 10,
-    borderWidth: 1,
+    gap: 4,
+    paddingHorizontal: 8,
   },
   dot: { position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: 4 },
   card: { padding: 16, margin: 12, borderWidth: 1, gap: 12 },
@@ -1191,8 +1249,9 @@ const styles = StyleSheet.create({
   cardBare: { padding: 0, margin: 0, borderWidth: 0 },
   // 分页列表里展开的卡：卡头由列表画，这里接着卡头往下排，不再套一层边框
   cardInline: { margin: 0, borderWidth: 0, paddingTop: 0, paddingHorizontal: 12 },
-  headerInline: { justifyContent: 'flex-end' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 8 },
+  // 操作栏里的一组按钮：间距和操作栏一致，不另加内边距
+  barGroup: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   input: { borderWidth: 1, minHeight: 80, maxHeight: 160, padding: 10, textAlignVertical: 'top' },
   options: { gap: 8 },
   choice: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 10 },

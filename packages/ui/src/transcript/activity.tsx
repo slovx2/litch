@@ -19,7 +19,7 @@ import { useT } from '../app/appearance.ts'
 import { useElapsed } from '../app/clock.ts'
 import { duration, elapsed } from '../app/format.ts'
 import { ImageViewer } from '../app/ImageViewer.tsx'
-import { Caret, Check, Close, Icon, type IconName, Slash } from '../app/icons.tsx'
+import { Ban, Caret, Check, Close, Icon, type IconName } from '../app/icons.tsx'
 import { useKey, useKeys } from '../app/services.tsx'
 import { openDiffAt } from '../diff/state.ts'
 import { byteSize } from '../files/lines.ts'
@@ -181,7 +181,7 @@ function StepMark({ status, label }: { status: string; label: string }) {
       ) : status === 'failed' ? (
         <Close />
       ) : status === 'declined' ? (
-        <Slash />
+        <Ban />
       ) : (
         <Check />
       )}
