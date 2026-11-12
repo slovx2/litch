@@ -100,6 +100,8 @@ test('dsh：runtime/info 带结构化声明，原有字段原样保留', { timeo
     assert.deepEqual(extensions, [
       EXTENSION.filePreview,
       EXTENSION.fileBrowser,
+      EXTENSION.shortMedia,
+      EXTENSION.fileRealpath,
       EXTENSION.clientTools,
       EXTENSION.harnessConfig,
       EXTENSION.backgroundTasks,

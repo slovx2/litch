@@ -90,6 +90,8 @@ test('OpenCode：runtime/info 带结构化声明', { skip, timeout: 60000 }, asy
     assert.deepEqual(extensions, [
       'filePreview',
       'fileBrowser',
+      'shortMedia',
+      'fileRealpath',
       'declineWithNote',
       'clientTools',
       'harnessConfig',

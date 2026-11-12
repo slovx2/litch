@@ -75,6 +75,8 @@ test('DECL-001：runtime/info 带结构化声明，原有字段原样保留', as
       'modelRanking',
       'filePreview',
       'fileBrowser',
+      'shortMedia',
+      'fileRealpath',
       'inputDelivery',
       'declineWithNote',
       'planConfirmation',

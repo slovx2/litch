@@ -223,6 +223,8 @@ test('Pi：runtime/info 带结构化声明，原有字段原样保留', { timeou
     assert.deepEqual(extensions, [
       'filePreview',
       'fileBrowser',
+      'shortMedia',
+      'fileRealpath',
       'planConfirmation',
       'clientTools',
       'harnessConfig',

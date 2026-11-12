@@ -25,6 +25,8 @@ async function check(s: Scene): Promise<void> {
   assert.deepEqual(info.extensions, [
     'filePreview',
     'fileBrowser',
+    'shortMedia',
+    'fileRealpath',
     'clientTools',
     'threadCapabilities',
     'acpControls',

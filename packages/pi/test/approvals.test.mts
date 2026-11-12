@@ -36,6 +36,8 @@ test('APPROVAL-001：打开审批后的声明：两类审批、覆盖不到子�
     assert.deepEqual(extensions, [
       'filePreview',
       'fileBrowser',
+      'shortMedia',
+      'fileRealpath',
       'declineWithNote',
       'planConfirmation',
       'clientTools',
@@ -61,6 +63,8 @@ test('APPROVAL-001：打开审批后的声明：两类审批、覆盖不到子�
     assert.deepEqual(off.extensions, [
       'filePreview',
       'fileBrowser',
+      'shortMedia',
+      'fileRealpath',
       'planConfirmation',
       'clientTools',
       'harnessConfig',

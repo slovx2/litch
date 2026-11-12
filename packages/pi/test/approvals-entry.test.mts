@@ -84,6 +84,8 @@ test('APPROVAL-007：入口进程按环境变量定开关：值是 1 才算开�
         [
           'filePreview',
           'fileBrowser',
+          'shortMedia',
+          'fileRealpath',
           'planConfirmation',
           'clientTools',
           'harnessConfig',
@@ -96,6 +98,8 @@ test('APPROVAL-007：入口进程按环境变量定开关：值是 1 才算开�
         [
           'filePreview',
           'fileBrowser',
+          'shortMedia',
+          'fileRealpath',
           'planConfirmation',
           'clientTools',
           'harnessConfig',
@@ -109,6 +113,8 @@ test('APPROVAL-007：入口进程按环境变量定开关：值是 1 才算开�
         [
           'filePreview',
           'fileBrowser',
+          'shortMedia',
+          'fileRealpath',
           'planConfirmation',
           'clientTools',
           'harnessConfig',
@@ -121,6 +127,8 @@ test('APPROVAL-007：入口进程按环境变量定开关：值是 1 才算开�
         [
           'filePreview',
           'fileBrowser',
+          'shortMedia',
+          'fileRealpath',
           'declineWithNote',
           'planConfirmation',
           'clientTools',
