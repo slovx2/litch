@@ -84,12 +84,26 @@ export async function mockPlaces(titles: {
     kit.toggle()
     await until('面板打开', () => kit.sideOpen())
   }
+  one<HTMLElement>('[data-files-nav="project"]')?.click()
+  await until('回项目根再验工作区记忆', () => kit.rows().some((row) => row.path === 'docs'))
   const home = placeNow()
   await kit.scrollTree(0)
   await kit.expand('docs')
   await kit.open('docs/guide.md', true)
   await kit.expand('fixtures')
-  await kit.expand('fixtures/many', 60_000)
+  await kit.expand('fixtures/large-tree', 60_000)
+  await kit.rowShown('fixtures/large-tree/group-00')
+  const largeIndex = kit.rows().find((row) => row.path === 'fixtures/large-tree')?.index ?? -1
+  for (let g = 0; g < 15; g++) {
+    const group = `fixtures/large-tree/group-${String(g).padStart(2, '0')}`
+    await kit.scrollTree(largeIndex + 1 + g * 2000)
+    await kit.expand(group)
+    await kit.rowShown(`${group}/item-00000.txt`)
+  }
+  // 选中根目录，随后滚离；回来再滚到卡头时核对选中状态。
+  await kit.scrollTree(largeIndex)
+  await kit.collapse('fixtures/large-tree')
+  await kit.expand('fixtures/large-tree')
   await until('三万行', () => kit.rowCount() > 30_000, 60_000)
   // 点目录也会选中它：这时候选中的是最后点的那个
   const selectedBefore = kit.rows().find((row) => row.selected)?.path ?? ''
@@ -124,7 +138,7 @@ export async function mockPlaces(titles: {
       selectedBefore !== '' && kit.row(selectedBefore)?.getAttribute('aria-selected') === 'true',
     3000,
   )
-  await kit.collapse('fixtures/many')
+  await kit.collapse('fixtures/large-tree')
   await kit.collapse('fixtures')
 
   // ---------- 不属于项目的会话 ----------

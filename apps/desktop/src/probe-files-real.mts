@@ -1,5 +1,5 @@
 // 文件面板的验收，对着真的文件系统：隔离的设备夹具（聚合面，文件由设备进程读）和单个 harness 的入口。
-// 夹具自己的临时目录里由 scripts/check-files.mjs 摆好了一批文件（三万个条目的目录、六千行的源文件、
+// 夹具自己的临时目录里由 scripts/check-files.mjs 摆好了一批文件（单层超限目录、多目录三万行、六千行的源文件、
 // 超过上限的、不是文字的、几种符号链接、隐藏的），这里照着那份布置去量。编排在 probe-files-run.mts。
 // 这一段量树：懒加载、每层只问一次、大目录、符号链接、找文件、根之外的路径被拒。
 import type { FilesKit } from './probe-files-kit.mjs'
@@ -11,7 +11,9 @@ export interface RealTree {
   rootRows: string[]
   hiddenShown: string[]
   rootAsked: number
-  /** 三万个条目的目录：点下去到画出来多久、这段时间的帧间隔、行数、画了多少行、问过几次、头几行 */
+  /** 单层目录的截断项数与提示 */
+  limited: { entries: number; note: string }
+  /** 三万行树：最慢子目录展开耗时、帧间隔、行数、DOM数、根请求次数、头几行 */
   manyMs: number
   manyGaps: number[]
   manyRows: number
@@ -74,15 +76,14 @@ export async function realTree(session: string, outside: string): Promise<RealTr
 
   // ---------- 符号链接、空目录 ----------
   const childrenOf = async (relative: string) => {
-    await kit.expand(relative)
-    await until(`${relative} 里面的东西`, () =>
-      kit.rows().some((row) => row.path.startsWith(`${relative}/`)),
+    kit.click(await kit.rowShown(relative))
+    await until('显式软链目标根', () => kit.root() !== root && kit.rows().length > 0)
+    const names = kit.rows().map((row) => `${row.kind}:${row.name}`)
+    one<HTMLElement>('[data-files-nav="project"]')?.click()
+    await until(
+      '回项目根',
+      () => kit.root() === root && kit.rows().some((row) => row.path === 'empty'),
     )
-    const names = kit
-      .rows()
-      .filter((row) => row.path.startsWith(`${relative}/`))
-      .map((row) => `${row.kind}:${row.name}`)
-    await kit.collapse(relative)
     return names
   }
   const linkDir = await childrenOf('link-dir')
@@ -95,16 +96,41 @@ export async function realTree(session: string, outside: string): Promise<RealTr
   )
   await kit.collapse('empty')
 
-  // ---------- 三万个条目的目录 ----------
+  // 单层目录有意截断；大树性能用15组各1999项组成，不突破设备预算。
+  const beforeLimited = kit.rowCount()
+  await kit.expand('many')
+  await until('单层2000项与截断行', () => kit.rowCount() === beforeLimited + 2001)
+  const limitedIndex = kit.rows().find((row) => row.path === 'many')?.index ?? -1
+  await kit.scrollTree(limitedIndex + 2001)
+  const note = await until('截断提示', () =>
+    all('.ft-note').find(
+      (row) => row.dataset.kind === 'truncated' && row.dataset.path === kit.full('many'),
+    ),
+  )
+  const limited = { entries: kit.rowCount() - beforeLimited - 1, note: text(note) }
+  await kit.scrollTree(limitedIndex)
+  await kit.collapse('many')
+  await kit.scrollTree(0)
   const before = kit.rowCount()
-  const grown = await kit.frames(async () => {
-    const started = performance.now()
-    kit.click(await kit.rowShown('many'))
-    await until('三万行到了', () => kit.rowCount() - before >= 30_000, 90_000)
-    await frame()
-    return performance.now() - started
-  })
-  const manyIndex = kit.rows().find((row) => row.path === 'many')?.index ?? -1
+  await kit.expand('large-tree')
+  await until('15个子目录', () => kit.rowCount() === before + 15)
+  const manyIndex = kit.rows().find((row) => row.path === 'large-tree')?.index ?? -1
+  let manyMs = 0
+  const manyGaps: number[] = []
+  for (let g = 0; g < 15; g++) {
+    await kit.scrollTree(manyIndex + 1 + g * 2000)
+    const count = kit.rowCount()
+    const grown = await kit.frames(async () => {
+      const started = performance.now()
+      await kit.expand(`large-tree/group-${String(g).padStart(2, '0')}`)
+      await until('子目录1999项到了', () => kit.rowCount() === count + 1999)
+      await frame()
+      return performance.now() - started
+    })
+    manyMs = Math.max(manyMs, grown.value)
+    manyGaps.push(...grown.gaps)
+  }
+  await kit.scrollTree(manyIndex)
   const manyHead = kit
     .rows()
     .filter((row) => row.index > manyIndex)
@@ -112,7 +138,7 @@ export async function realTree(session: string, outside: string): Promise<RealTr
     .map((row) => row.name)
   const manyDom = all('.ft-row, .ft-note').length
   const manyRows = kit.rowCount()
-  const manyAsked = askedOf((await kit.check()).lists, 'many')
+  const manyAsked = askedOf((await kit.check()).lists, 'large-tree')
   const treeElement = kit.tree() as HTMLElement
   let blank = 0
   const rolled = await kit.frames(async () => {
@@ -130,13 +156,13 @@ export async function realTree(session: string, outside: string): Promise<RealTr
     }
   })
   await until('滚到底了', () => Number(treeElement.dataset.last) === kit.rowCount())
-  // many 里面的最后一项：它下面先是 30 个目录，再是三万个文件
-  const tailIndex = manyIndex + 30 + 30_000
+  // 最后一组的最后一项；每组1999个文件加目录行，共2000行。
+  const tailIndex = manyIndex + 30_000
   await kit.scrollTree(tailIndex - 3)
   const tail =
     (await until('最后那一项', () => kit.rows().find((row) => row.index === tailIndex))).name ?? ''
   await kit.scrollTree(manyIndex)
-  await kit.collapse('many')
+  await kit.collapse('large-tree')
   await kit.scrollTree(0)
 
   // ---------- 找文件 ----------
@@ -179,8 +205,9 @@ export async function realTree(session: string, outside: string): Promise<RealTr
     rootRows,
     hiddenShown,
     rootAsked,
-    manyMs: grown.value,
-    manyGaps: grown.gaps,
+    limited,
+    manyMs,
+    manyGaps,
     manyRows,
     manyDom,
     manyAsked,

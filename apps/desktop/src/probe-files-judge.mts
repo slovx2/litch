@@ -5,7 +5,7 @@ import type { SearchSeen, ViewSeen } from './probe-files-view.mjs'
 
 /**
  * 时间上的线。严的一套只在够快的机器上划（开发用的机器），都留了几倍的余量：
- * - 展开三万个条目的目录，点下去到画出来：模拟核心 1 秒（实测一百多毫秒），真的设备 4 秒（要真的读三万个目录项、过一道连接）；
+ * - 三万行树中单次展开目录，点下去到画出来：模拟核心 1 秒，真的设备 4 秒（每组1999项、过一道连接）；
  * - 展开、滚动、开大文件的时候两帧之间最长 300 毫秒：再长就是人看得出来的一顿。滚动时帧间隔的中位数过了 34 就是掉到三十帧以下；
  * - 六千行的文件，点下去到内容出来 1.5 秒、到颜色上完 4 秒（上色在工作线程里，不占界面）；
  * - 点对话里的链接到定位好 3 秒；找文件到出结果 6 秒（对面要现列一遍整棵树）。
@@ -101,18 +101,28 @@ export function judgeTree(tree: TreeSeen, lines: FileLines): string[] {
     tree.rootAsked === 1 && tree.askedAtStart.join('|') === '',
     `刚打开的时候应该只问过根这一层、只问一次：根 ${tree.rootAsked} 次，问过的有 ${JSON.stringify(tree.askedAtStart)}`,
   )
+  // 单层上限与多目录大树分别检查，性能线和DOM上限保持不变。
+  must(
+    tree.limited.entries === 2000 && tree.limited.asked === 1,
+    `有界目录项数或请求次数不对：${JSON.stringify(tree.limited)}`,
+  )
+  must(tree.limited.note.includes('仅显示前 2,000 项'), `缺少截断提示：${tree.limited.note}`)
   // ---- 三万个条目 ----
   const { many, scroll } = tree
-  must(many.rows > 30_000, `三万个条目的目录展开之后行数不对：${many.rows}`)
+  must(many.rows > 30_000, `多目录展开之后总行数不对：${many.rows}`)
   must(many.dom <= DOM_ROWS_MAX, `展开之后页面上画了 ${many.dom} 行，应该只画看得见的那些`)
   must(many.asked === 1, `三万个条目的那一层向设备问了 ${many.asked} 次，应该是 1 次`)
+  must(
+    many.childAsked.length === 15 && many.childAsked.every((n) => n === 1),
+    `子目录没有各读一次：${many.childAsked}`,
+  )
   must(many.head[0] === 'group-00', `展开之后头一行不是目录：${many.head.join(' ')}`)
   must(
     lines.expandMs === null || many.ms <= lines.expandMs,
-    `展开三万个条目的目录太慢：${ms(many.ms)}，线是 ${lines.expandMs} ms`,
+    `三万行树中单次展开目录太慢：${ms(many.ms)}，线是 ${lines.expandMs} ms`,
   )
-  failed.push(...judgeGaps('展开三万个条目的目录', many.gaps, lines, false))
-  must(scroll.tail === 'item-29959.txt', `滚到底，最后一行不对：${scroll.tail}`)
+  failed.push(...judgeGaps('三万行树中单次展开目录', many.gaps, lines, false))
+  must(scroll.tail === 'item-01998.txt', `滚到底，最后一行不对：${scroll.tail}`)
   must(
     scroll.mid === scroll.midWanted,
     `滚到中间，那一行画的不是它：${scroll.mid}，该是 ${scroll.midWanted}`,
@@ -175,13 +185,14 @@ export function judgeView(view: ViewSeen, lines: FileLines): string[] {
     if (!ok) failed.push(what)
   }
   must(view.none !== '', '没开文件的时候查看器里没有说明')
+  // 固定打开不替换已有预览，与 files-logic 单测的标签顺序规则一致。
   const wantSteps = [
     '单击 README.md：README.md*~',
     '单击 Makefile：Makefile*~',
-    '双击 package.json：package.json*',
-    '单击 AGENTS.md：package.json AGENTS.md*~',
-    '双击 AGENTS.md 的标签：package.json AGENTS.md*',
-    '单击 README.md：package.json AGENTS.md README.md*~',
+    '双击 package.json：Makefile~ package.json*',
+    '单击 AGENTS.md：AGENTS.md*~ package.json',
+    '双击 AGENTS.md 的标签：AGENTS.md* package.json',
+    '单击 README.md：AGENTS.md package.json README.md*~',
     '关掉 AGENTS.md：package.json README.md*~',
     '点 package.json 的标签：package.json* README.md~',
   ]

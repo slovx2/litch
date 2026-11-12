@@ -29,7 +29,7 @@ export interface RealSeen {
 export function realNumbers(seen: RealSeen): string {
   const { tree, view } = seen
   return [
-    `展开三万个条目的目录 ${ms(tree.manyMs)}（最长一帧 ${ms(longest(tree.manyGaps))}，${tree.manyRows} 行里画了 ${tree.manyDom} 行，这一层问了 ${tree.manyAsked} 次）`,
+    `三万行树中单次展开目录 ${ms(tree.manyMs)}（最长一帧 ${ms(longest(tree.manyGaps))}，${tree.manyRows} 行里画了 ${tree.manyDom} 行，这一层问了 ${tree.manyAsked} 次）`,
     `在里面滚动 帧间隔中位 ${median(tree.rollGaps).toFixed(1)} ms、最长 ${ms(longest(tree.rollGaps))}`,
     `找文件 ${ms(tree.searchMs)}`,
     `六千行的文件 内容 ${ms(view.longShownMs)}、上色 ${ms(view.longPaintedMs)}（${view.longMode}），这期间最长一帧 ${ms(longest(view.longGaps))}`,
@@ -69,16 +69,20 @@ function judgeRealTree(tree: RealTree, dirs: RealDirs, lines: FileLines): string
     tree.hiddenShown.includes('.config') && tree.hiddenShown.includes('.hidden.txt'),
     `打开“显示隐藏文件”没有多出隐藏的：${tree.hiddenShown.join(' ')}`,
   )
-  must(tree.manyRows > 30_000, `三万个条目的目录展开之后行数不对：${tree.manyRows}`)
+  must(
+    tree.limited.entries === 2000 && tree.limited.note.includes('仅显示前 2,000 项'),
+    `有界目录缺少2000项或提示：${JSON.stringify(tree.limited)}`,
+  )
+  must(tree.manyRows > 30_000, `多目录展开之后总行数不对：${tree.manyRows}`)
   must(tree.manyDom <= DOM_ROWS_MAX, `展开之后页面上画了 ${tree.manyDom} 行，应该只画看得见的那些`)
   must(tree.manyHead[0] === 'group-00', `展开之后头一行不是目录：${tree.manyHead.join(' ')}`)
-  must(tree.tail === 'item-29999.txt', `滚到底，最后一行不对：${tree.tail}`)
+  must(tree.tail === 'item-01998.txt', `滚到底，最后一行不对：${tree.tail}`)
   must(tree.blank === 0, `滚动的时候有 ${tree.blank} 帧看得见的地方是空的`)
   must(
     lines.realExpandMs === null || tree.manyMs <= lines.realExpandMs,
-    `展开三万个条目的目录太慢：${ms(tree.manyMs)}，线是 ${lines.realExpandMs} ms`,
+    `三万行树中单次展开目录太慢：${ms(tree.manyMs)}，线是 ${lines.realExpandMs} ms`,
   )
-  failed.push(...judgeGaps('展开三万个条目的目录', tree.manyGaps, lines, false))
+  failed.push(...judgeGaps('三万行树中单次展开目录', tree.manyGaps, lines, false))
   failed.push(...judgeGaps('在三万行里滚动', tree.rollGaps, lines, true))
   must(
     tree.linkDir.includes('file:long.ts'),
@@ -122,6 +126,10 @@ function judgeRealView(
   must(
     view.firstLine === 'notes line 1' && view.lines >= 20,
     `文字文件读到的不对：第一行 ${JSON.stringify(view.firstLine)}，${view.lines} 行`,
+  )
+  must(
+    view.brokenKind === 'other' && view.brokenHold.length > 0,
+    `断链没有显示原因：${view.brokenKind} ${view.brokenHold}`,
   )
   must(view.paint !== 'pending', '文字文件的上色一直没有结果')
   must(view.viaFileLink === 'notes line 1', `经过指向文件的符号链接读到的不对：${view.viaFileLink}`)
