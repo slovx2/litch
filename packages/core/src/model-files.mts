@@ -14,6 +14,8 @@ export type FileLinkFailure =
   | 'network'
 
 export interface FileLinkTarget {
+  /** 显式软链原路径；path 为已核实的实际目标。 */
+  linkPath?: string
   root: string
   path: string
   kind: 'file' | 'directory'
@@ -32,6 +34,7 @@ export interface FileLinkResolution {
 export type FileEntryKind = 'dir' | 'file' | 'other'
 
 export interface FileEntry {
+  link?: boolean
   name: string
   kind: FileEntryKind
 }
@@ -112,6 +115,7 @@ export interface FileSearchView {
  * loading（这一层正在取）、failed（没取到）、empty（空目录，或者里面只有隐藏的）、truncated（太多了，后面的没显示）
  */
 export interface FileRow {
+  link?: boolean
   /** 行的标识。目录和文件就是路径；说明行是所属目录的路径后面跟一个记号 */
   id: string
   /** 目录和文件自己的路径；说明行是它所属目录的路径 */

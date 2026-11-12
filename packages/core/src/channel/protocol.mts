@@ -1187,6 +1187,11 @@ export interface Commands {
     params: { deviceId: string; root: string; path: string }
     result: FileContent
   }
+  /** 用户主动打开目标时解析设备真实路径，不读取内容。 */
+  'files.target': {
+    params: { deviceId: string; root: string; path: string }
+    result: import('../model-files.mjs').FileLinkTarget
+  }
   /** 点击对话链接：在所属设备上核对全部候选，展开设备 home，遇到歧义交由界面选择。 */
   'files.resolve': {
     params: { deviceId: string; root: string; ref: FileRef; href: string }

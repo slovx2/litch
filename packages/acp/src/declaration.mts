@@ -171,6 +171,8 @@ export function declarationFor(
     extensions: [
       EXTENSION.filePreview,
       EXTENSION.fileBrowser,
+      EXTENSION.shortMedia,
+      EXTENSION.fileRealpath,
       EXTENSION.clientTools,
       EXTENSION.threadCapabilities,
       EXTENSION.acpControls,

@@ -4,6 +4,7 @@ import { open, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, relative, sep } from 'node:path'
 import { PREVIEW_HARD_BYTES, type PreviewFailure } from '../../protocol/src/file-preview.mjs'
 import { imageFormat, SVG_BYTES } from '../../protocol/src/media-images.mjs'
+import { shortMediaType } from '../../protocol/src/short-media.mjs'
 import { ProtocolError } from './protocol-contract.mjs'
 
 const reject = (kind: PreviewFailure, bytes?: number, limit?: number): never => {
@@ -26,7 +27,7 @@ const within = (root: string, path: string): boolean => {
 export async function readPreview(
   path: string,
   raw: unknown,
-  imageOnly = false,
+  imageOnly: boolean | 'media' = false,
 ): Promise<{ dataBase64: string }> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw))
     throw new ProtocolError(-32602, 'litchPreview 必须是对象')
@@ -64,7 +65,8 @@ export async function readPreview(
     if (imageOnly) {
       const head = Buffer.alloc(Math.min(opened.size, 4096))
       const probe = await handle.read(head, 0, head.length, 0)
-      const format = imageFormat(head.subarray(0, probe.bytesRead))
+      const sample = head.subarray(0, probe.bytesRead)
+      const format = imageOnly === 'media' ? shortMediaType(path, sample) : imageFormat(sample)
       if (!format) reject('notFile')
       if (format === 'svg' && opened.size > SVG_BYTES) reject('tooLarge', opened.size, SVG_BYTES)
     }

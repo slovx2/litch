@@ -1,4 +1,5 @@
 // 文件预览只增加 fs/readFile 的命名空间参数，不改变标准响应。
+export const SHORT_MEDIA_BYTES = 16 * 1024 * 1024
 export interface FilePreviewOption {
   root: string
   maxBytes: number
@@ -15,7 +16,7 @@ export const PREVIEW_LIMIT = {
   xlsx: 10 * 1024 * 1024,
   csv: 2 * 1024 * 1024,
   html: 1024 * 1024,
-  media: 16 * 1024 * 1024,
+  media: SHORT_MEDIA_BYTES,
 } as const
 export type PreviewKind = keyof typeof PREVIEW_LIMIT
 

@@ -110,6 +110,8 @@ function Browser({
   const [listing, setListing] = useState<PathPickerListing | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(true)
+  const [settled, setSettled] = useState<typeof target | null>(null)
+  const pending = busy || settled !== target
   useEffect(() => {
     const abort = new AbortController()
     setBusy(true)
@@ -128,7 +130,10 @@ function Browser({
         },
       )
       .finally(() => {
-        if (!abort.signal.aborted) setBusy(false)
+        if (!abort.signal.aborted) {
+          setBusy(false)
+          setSettled(target)
+        }
       })
     return () => abort.abort()
   }, [channel, deviceId, kind, target, t, bounded])
@@ -158,7 +163,7 @@ function Browser({
         <Button
           kind="plain"
           label={t('workspace.browse.up')}
-          disabled={busy || !listing?.parent}
+          disabled={pending || !listing?.parent}
           onPress={() => setTarget({ path: listing?.parent ?? null })}
         />
         <Button
@@ -167,7 +172,7 @@ function Browser({
           onPress={() => setTarget({ path: null })}
         />
       </View>
-      {busy ? (
+      {pending ? (
         <Loading text={t('workspace.browse.loading')} />
       ) : error ? (
         <Text accessibilityRole="alert" style={{ color: theme.c.err }}>
@@ -189,7 +194,7 @@ function Browser({
           />
         ))
       )}
-      {!busy && !error && listing?.entries.length === 0 ? (
+      {!pending && !error && listing?.entries.length === 0 ? (
         <Text style={{ color: theme.c.ink3 }}>{t('pathPicker.empty')}</Text>
       ) : null}
       {listing?.truncated ? (
@@ -200,7 +205,7 @@ function Browser({
         {kind === 'directory' ? (
           <Button
             label={t('pathPicker.selectDirectory')}
-            disabled={busy || !listing}
+            disabled={pending || !listing}
             testID="path-picker:select"
             onPress={() => listing && onPick(listing.path)}
           />

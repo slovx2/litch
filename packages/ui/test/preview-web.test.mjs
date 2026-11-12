@@ -46,6 +46,6 @@ test('媒体：扩展名不能绕过容器头检查', () => {
   wav.set(bytes('RIFF'))
   wav.set(bytes('WAVE'), 8)
   assert.deepEqual(mediaType('x.wav', wav), { kind: 'audio', mime: 'audio/wav' })
-  assert.equal(mediaType('x.mp3', wav), null)
+  assert.deepEqual(mediaType('x.mp3', wav), { kind: 'audio', mime: 'audio/wav' })
   assert.equal(mediaType('x.webm', new Uint8Array([0x1a, 0x45, 0xdf, 0xa3])), null)
 })

@@ -11,6 +11,9 @@ import { flattenTree, type TreeListing } from '../projection/files.mjs'
 import { insideRoot, normalizePath, parentPath, relativeTo } from '../text/paths.mjs'
 import type { KeyedStore } from './keyed-store.mjs'
 
+export const FILE_TREES_MAX = 16
+export const FILE_TREE_DIRECTORIES_MAX = 32
+
 export const fileKeys = {
   /** FileRow[]：这棵树摊平之后的行 */
   rows: (deviceId: string, root: string, scope = '') =>
@@ -48,6 +51,7 @@ export interface FileTrees {
 }
 
 interface Tree {
+  alive: boolean
   deviceId: string
   root: string
   scope: string
@@ -72,7 +76,7 @@ const sameView = (a: DirectoryView | null, b: DirectoryView): boolean => {
   for (let at = 0; at < a.entries.length; at++) {
     const x = a.entries[at]
     const y = b.entries[at]
-    if (x?.name !== y?.name || x?.kind !== y?.kind) return false
+    if (x?.name !== y?.name || x?.kind !== y?.kind || x?.link !== y?.link) return false
   }
   return true
 }
@@ -89,6 +93,7 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
     let tree = trees.get(key)
     if (!tree) {
       tree = {
+        alive: true,
         deviceId,
         root,
         scope,
@@ -102,7 +107,42 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
       }
       trees.set(key, tree)
     }
+    trees.delete(key)
+    trees.set(key, tree)
+    evictIdle(tree)
     return tree
+  }
+
+  const evictIdle = (protect?: Tree) => {
+    for (const [key, tree] of trees) {
+      if (trees.size <= FILE_TREES_MAX) break
+      if (tree.watchers > 0 || tree === protect) continue
+      tree.alive = false
+      tree.latest.clear()
+      tree.revealVersion++
+      for (const close of tree.watches.values()) close()
+      tree.watches.clear()
+      tree.listings.clear()
+      trees.delete(key)
+      store.delete(fileKeys.rows(tree.deviceId, tree.root, tree.scope))
+      store.delete(fileKeys.tree(tree.deviceId, tree.root, tree.scope))
+    }
+  }
+
+  /** 只保留最近展开的有限层；被收起的旧层缓存优先回收。 */
+  const trimTree = (tree: Tree) => {
+    while (tree.expanded.size >= FILE_TREE_DIRECTORIES_MAX) {
+      const oldest = tree.expanded.values().next().value
+      if (!oldest) break
+      for (const path of tree.expanded) if (insideRoot(oldest, path)) tree.expanded.delete(path)
+    }
+    const visible = new Set(visibleDirs(tree))
+    for (const path of tree.listings.keys()) {
+      if (tree.listings.size <= FILE_TREE_DIRECTORIES_MAX) break
+      if (visible.has(path)) continue
+      tree.listings.delete(path)
+      tree.latest.delete(path)
+    }
   }
 
   const stateOf = (tree: Tree): FileTreeState => {
@@ -118,6 +158,7 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
 
   /** 只发状态（取到没有、是不是正在刷新）。没变就不发 */
   const publishState = (tree: Tree) => {
+    if (!tree.alive) return
     const next = stateOf(tree)
     const before = store.get<FileTreeState>(fileKeys.tree(tree.deviceId, tree.root, tree.scope))
     if (
@@ -133,6 +174,8 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
 
   /** 行变了：重新摊平一遍发出去，状态顺带对一下 */
   const publish = (tree: Tree) => {
+    if (!tree.alive) return
+    trimTree(tree)
     syncWatches(tree)
     store.batch(() => {
       store.set(
@@ -149,6 +192,7 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
     const mine = ++seq
     tree.latest.set(path, mine)
     tree.listings.set(path, { state: 'loading', view: before?.view ?? null, error: null })
+    trimTree(tree)
     // 之前没有内容：先把“正在取”那一行画出来
     if (!before?.view) publish(tree)
     return channel
@@ -196,7 +240,7 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
       if (!view) return
       const prefix = dir.endsWith('/') ? dir : `${dir}/`
       for (const entry of view.entries) {
-        if (entry.kind !== 'dir') continue
+        if (entry.kind !== 'dir' || (!showHidden && entry.name.startsWith('.'))) continue
         const path = prefix + entry.name
         if (tree.expanded.has(path)) walk(path)
       }
@@ -206,7 +250,13 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
   }
 
   const syncWatches = (tree: Tree) => {
-    const visible = new Set(tree.watchers > 0 ? visibleDirs(tree) : [])
+    const otherWatches = [...trees.values()].reduce(
+      (sum, entry) => sum + (entry === tree ? 0 : entry.watches.size),
+      0,
+    )
+    const visible = new Set(
+      tree.watchers > 0 ? visibleDirs(tree).slice(0, Math.max(0, 128 - otherWatches)) : [],
+    )
     for (const [path, close] of tree.watches) {
       if (visible.has(path)) continue
       close()
@@ -263,6 +313,7 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
         closed = true
         tree.watchers--
         syncWatches(tree)
+        evictIdle()
       }
     },
 
@@ -271,6 +322,7 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
       const dir = normalizePath(path)
       if (dir === tree.root || !insideRoot(tree.root, dir) || tree.expanded.has(dir)) return
       tree.expanded.add(dir)
+      trimTree(tree)
       // 以前展开过的：它下面还记着展开的那些也一起对一遍
       if (tree.listings.get(dir)?.view) {
         publish(tree)
@@ -312,6 +364,7 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
         chain.unshift(dir)
       }
       for (const dir of [tree.root, ...chain]) {
+        if (chain.length >= FILE_TREE_DIRECTORIES_MAX) return false
         if (version !== tree.revealVersion) return false
         if (dir !== tree.root) tree.expanded.add(dir)
         if (!tree.listings.get(dir)?.view && !(await load(tree, dir, false))) {
@@ -350,6 +403,8 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
         if (tree.deviceId === deviceId) {
           tree.watchers = 0
           syncWatches(tree)
+          tree.alive = false
+          tree.latest.clear()
           trees.delete(key)
         }
       }

@@ -18,14 +18,7 @@ import { whyNot } from '../app/errors.ts'
 import { Caret, Icon } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { selectable, treeMove } from './nav.ts'
-import {
-  clearReveal,
-  openFile,
-  rememberTreeScroll,
-  selectPath,
-  treeScrollOf,
-  useTreeUi,
-} from './state.ts'
+import { clearReveal, rememberTreeScroll, selectPath, treeScrollOf, useTreeUi } from './state.ts'
 import { useVirtual } from './virtual.ts'
 
 /** 一行多高，像素。样式里的行高要和它一样（files.css 的 --ft-row） */
@@ -114,6 +107,7 @@ export function FileTree({
   uiKey,
   scope,
   onContext,
+  onOpenPath,
 }: {
   deviceId: string
   root: string
@@ -121,6 +115,7 @@ export function FileTree({
   scope: string
   /** 在一行上要菜单（右键，或者键盘上的菜单键） */
   onContext(context: RowContext): void
+  onOpenPath(path: string, pin?: boolean): void
 }) {
   const { replica } = useServices()
   const t = useT()
@@ -190,10 +185,11 @@ export function FileTree({
 
   const toggle = useCallback(
     (row: FileRow) => {
+      if (row.link) return onOpenPath(row.path)
       if (row.expanded) replica.files.collapse(deviceId, root, row.path, scope)
       else replica.files.expand(deviceId, root, row.path, scope)
     },
-    [replica, deviceId, root, scope],
+    [replica, deviceId, root, scope, onOpenPath],
   )
 
   const pick = useCallback(
@@ -209,15 +205,15 @@ export function FileTree({
         selectPath(uiKey, row.path)
         // 双击目录不是“展开又收起”：连着点的第二下不算
         if (detail <= 1) toggle(row)
-      } else openFile(uiKey, row.path)
+      } else onOpenPath(row.path)
     },
-    [replica, deviceId, root, scope, uiKey, toggle, scroller],
+    [replica, deviceId, root, scope, uiKey, toggle, scroller, onOpenPath],
   )
   const open = useCallback(
     (row: FileRow) => {
-      if (row.kind !== 'dir') openFile(uiKey, row.path, { pin: true })
+      if (row.kind !== 'dir' || row.link) onOpenPath(row.path, true)
     },
-    [uiKey],
+    [onOpenPath],
   )
   const menu = useCallback(
     (row: FileRow, _index: number, event: MouseEvent) => {
@@ -249,9 +245,9 @@ export function FileTree({
     if (move.do === 'select') {
       selectPath(uiKey, row.path)
       show(move.index)
-    } else if (move.do === 'expand') replica.files.expand(deviceId, root, row.path, scope)
+    } else if (move.do === 'expand') toggle(row)
     else if (move.do === 'collapse') replica.files.collapse(deviceId, root, row.path, scope)
-    else openFile(uiKey, row.path, { pin: move.do === 'open' })
+    else onOpenPath(row.path, move.do === 'open')
   }
 
   // 根那一层没取到：整块说明是怎么回事，给一个重试

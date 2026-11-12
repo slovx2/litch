@@ -33,6 +33,8 @@ const files = createFiles({
   home: () => config.home,
   knownRoot: () => false,
   browserSupported: () => true,
+  realpathSupported: () => true,
+  shortMediaSupported: () => true,
   previewSupported: () => true,
   log() {},
   fail: channelFailure,
@@ -51,6 +53,7 @@ const channel = {
     return () => {}
   },
   command(name: string, p: any) {
+    if (name === 'files.target') return files.target(p.root, p.path)
     if (name === 'files.resolve') return files.resolve(p.root, p.ref, p.href)
     if (name === 'files.read') return files.read(p.root, p.path)
     if (name === 'files.list') return files.list(p.root, p.path, p.fresh ?? false)

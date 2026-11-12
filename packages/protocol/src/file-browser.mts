@@ -7,3 +7,7 @@ export interface FileDirectoryResult {
   /** 只表示后面还有条目，不为计数继续扫描目录。 */
   truncated: boolean
 }
+/** 只响应用户主动打开目标的请求，不用于文档自动资源。 */
+export interface FileResolvedPath {
+  path: string
+}

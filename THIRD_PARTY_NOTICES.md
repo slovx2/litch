@@ -43,3 +43,5 @@ Antigravity TS 引擎的协议字段依据 Google LLC 发布的 google-antigravi
 （https://github.com/google-antigravity/antigravity-sdk-python ，提交
 75ba22bd00afae2f46393ff31f30c3f0df52982f，Apache-2.0）重新实现，未复制应用代码。
 SDK localharness 不随 Litch 分发；用户启用后按需从官方 PyPI 获取并保留 wheel 中的 LICENSE。
+
+手机文件另存使用 `expo-sharing 57.0.22`，MIT，Copyright (c) 2015-present 650 Industries, Inc. (Expo)；原始许可证保留在分发依赖内。

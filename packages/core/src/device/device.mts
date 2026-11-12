@@ -664,6 +664,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   }
   let fileAttachmentsSupported = false
   let fileDownloadSupported = false
+  let realpathSupported = false
+  let shortMediaSupported = false
   let fileBrowserSupported = false
   let filePreviewSupported = false
   let browserUploadSupported = false
@@ -1908,6 +1910,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     nativeDirect = false
     fileAttachmentsSupported = false
     fileDownloadSupported = false
+    realpathSupported = false
+    shortMediaSupported = false
     fileBrowserSupported = false
     filePreviewSupported = false
     browserUploadSupported = false
@@ -1940,6 +1944,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         fileAttachmentsSupported =
           info.device.extensions?.includes(EXTENSION.fileAttachments) === true
         fileDownloadSupported = info.device.extensions?.includes(EXTENSION.fileDownload) === true
+        realpathSupported = info.device.extensions?.includes(EXTENSION.fileRealpath) === true
+        shortMediaSupported = info.device.extensions?.includes(EXTENSION.shortMedia) === true
         fileBrowserSupported = info.device.extensions?.includes(EXTENSION.fileBrowser) === true
         filePreviewSupported = info.device.extensions?.includes(EXTENSION.filePreview) === true
         browserUploadSupported = info.device.extensions?.includes(EXTENSION.browserUpload) === true
@@ -1994,6 +2000,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         mode = 'single'
         activitySupported = false
         fileDownloadSupported = info.extensions?.includes(EXTENSION.fileDownload) === true
+        realpathSupported = info.extensions?.includes(EXTENSION.fileRealpath) === true
+        shortMediaSupported = info.extensions?.includes(EXTENSION.shortMedia) === true
         fileBrowserSupported = info.extensions?.includes(EXTENSION.fileBrowser) === true
         filePreviewSupported = info.extensions?.includes(EXTENSION.filePreview) === true
         harnesses = [harnessFromRuntimeInfo(info)]
@@ -2882,6 +2890,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   const files = createFiles({
     previewSupported: () => filePreviewSupported,
     browserSupported: () => fileBrowserSupported,
+    shortMediaSupported: () => shortMediaSupported,
+    realpathSupported: () => realpathSupported,
     imagesSupported: () => mediaImagesSupported,
     downloadSupported: () => fileDownloadSupported,
     attachmentsSupported: () => fileAttachmentsSupported,

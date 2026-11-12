@@ -57,7 +57,15 @@ export const treeKey = (deviceId: string, root: string, scope = ''): string =>
 export const treeUiNow = (key: string): TreeUi => trees.get(key) ?? EMPTY
 
 const publish = (key: string, next: TreeUi) => {
+  trees.delete(key)
   trees.set(key, next)
+  for (const id of trees.keys()) {
+    if (trees.size <= 32) break
+    if (listeners.get(id)?.size) continue
+    trees.delete(id)
+    treeScroll.delete(id)
+    for (const path of viewScroll.keys()) if (path.startsWith(`${id}\n`)) viewScroll.delete(path)
+  }
   for (const listener of listeners.get(key) ?? []) listener()
 }
 
@@ -143,7 +151,7 @@ export function openFile(key: string, path: string, options: OpenOptions = {}): 
   }
   publish(key, {
     selected: path,
-    tabs,
+    tabs: tabs.slice(-20),
     active: path,
     reveal: options.reveal ? path : ui.reveal,
   })
@@ -242,8 +250,9 @@ export function pickRoot(
   workspaceId: string | null,
   root: string,
   sessionId: string | null = null,
+  linkPath?: string,
 ): void {
-  setFileBrowserRoot(fileBrowserKey(deviceId, sessionId, workspaceId), root)
+  setFileBrowserRoot(fileBrowserKey(deviceId, sessionId, workspaceId), root, linkPath)
 }
 
 export function usePickedRoot(
@@ -261,6 +270,7 @@ export function usePickedRoot(
 export interface FileTarget {
   link?: FileLinkResolution
   kind?: 'file' | 'directory'
+  pin?: boolean
   fragment?: string
   deviceId: string
   workspaceId: string | null
@@ -275,7 +285,13 @@ export interface FileTarget {
 /** 打开侧面板的文件标签，在里面预览这个文件、定位到那一行，并且在树里把它露出来 */
 export function openInFiles(target: FileTarget): void {
   showSideTab(FILES_TAB)
-  pickRoot(target.deviceId, target.workspaceId, target.root, target.sessionId)
+  pickRoot(
+    target.deviceId,
+    target.workspaceId,
+    target.root,
+    target.sessionId,
+    target.link?.candidates.find((entry) => entry.path === target.path)?.linkPath,
+  )
   if (target.kind === 'directory') {
     revealPath(treeKey(target.deviceId, target.root, target.sessionId ?? ''), target.path)
     return
@@ -283,6 +299,7 @@ export function openInFiles(target: FileTarget): void {
   openFile(treeKey(target.deviceId, target.root, target.sessionId ?? ''), target.path, {
     ...(target.link ? { link: target.link } : {}),
     ...(target.fragment ? { fragment: target.fragment } : {}),
+    pin: target.pin === true,
     line: target.line ?? null,
     alt: target.alt ?? null,
     reveal: true,

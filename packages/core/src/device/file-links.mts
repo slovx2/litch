@@ -42,20 +42,18 @@ export async function resolveFileLink(
     // 根外文件以其父目录为新文件树根。预览仍只允许这个根内的真实路径与相对资源。
     const at = base && withinRoot(base, path) !== null ? base : (parentPath(path) ?? path)
     try {
-      const content = await files.read(at, path, signal)
+      const target = await files.target(at, path, signal)
+      const content = await files.read(target.root, target.path, signal)
       if (content.kind === 'missing') failures.push({ path, reason: 'missing' })
       else {
-        candidates.push({
-          path,
-          root: content.kind === 'directory' ? path : at,
-          kind: content.kind === 'directory' ? 'directory' : 'file',
-        })
+        candidates.push(target)
         contents.push(content)
       }
     } catch (error) {
       if (error instanceof ChannelError && error.code === 'cancelled') throw error
-      const reason =
-        error instanceof ChannelError && error.code === 'offline'
+      const reason = /ENOENT|ENOTDIR|no such file|os error 2\b/i.test(String(error))
+        ? 'missing'
+        : error instanceof ChannelError && error.code === 'offline'
           ? 'offline'
           : error instanceof ChannelError && error.code === 'unsupported'
             ? 'unsupported'

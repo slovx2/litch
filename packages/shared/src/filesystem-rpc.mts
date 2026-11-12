@@ -1,4 +1,14 @@
-import { cp, lstat, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import {
+  cp,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import { readDirectoryBounded } from './file-directory.mjs'
 import { readFileChunk } from './file-download.mjs'
@@ -6,6 +16,7 @@ import { readPreview } from './file-preview.mjs'
 import { declaredExtensions } from './harness-declaration.mjs'
 import { PathWatch } from './path-watch.mjs'
 import { ProtocolError, requiredString } from './protocol-contract.mjs'
+import { readShortMedia } from './short-media.mjs'
 import type { RpcPeer } from './types.mjs'
 
 function pathParam(params: Record<string, unknown>, key = 'path'): string {
@@ -29,6 +40,8 @@ function optionalBoolean(params: Record<string, unknown>, key: string, fallback:
 
 export class FilesystemRpc {
   private watchers = new Map<string, Map<string, PathWatch>>()
+  private realpathPeers = new Set<string>()
+  private shortMediaPeers = new Set<string>()
   private browserPeers = new Set<string>()
   private downloadPeers = new Set<string>()
   private downloads = 0
@@ -36,6 +49,10 @@ export class FilesystemRpc {
   private previews = 0
 
   declare(peer: RpcPeer, params: unknown): void {
+    if (declaredExtensions(params).has('fileRealpath')) this.realpathPeers.add(peer.id)
+    else this.realpathPeers.delete(peer.id)
+    if (declaredExtensions(params).has('shortMedia')) this.shortMediaPeers.add(peer.id)
+    else this.shortMediaPeers.delete(peer.id)
     if (declaredExtensions(params).has('fileBrowser')) this.browserPeers.add(peer.id)
     else this.browserPeers.delete(peer.id)
     if (declaredExtensions(params).has('fileDownload')) this.downloadPeers.add(peer.id)
@@ -51,9 +68,26 @@ export class FilesystemRpc {
     previewAllowed = this.previewPeers.has(peer.id),
     downloadAllowed = this.downloadPeers.has(peer.id),
     browserAllowed = this.browserPeers.has(peer.id),
+    shortMediaAllowed = this.shortMediaPeers.has(peer.id),
+    realpathAllowed = this.realpathPeers.has(peer.id),
   ): Promise<unknown> {
     switch (method) {
       case 'fs/readFile': {
+        if (params.litchShortMedia !== undefined) {
+          if (!shortMediaAllowed) throw new ProtocolError(-32602, 'shortMedia required')
+          if (params.litchReadRange !== undefined || params.litchPreview !== undefined)
+            throw new ProtocolError(-32602, 'Mixed file read options')
+          if (this.previews >= 4)
+            throw Object.assign(new ProtocolError(-32004, 'Media reads busy'), {
+              data: { litchShortMedia: { kind: 'busy' } },
+            })
+          this.previews++
+          try {
+            return await readShortMedia(pathParam(params), params.litchShortMedia)
+          } finally {
+            this.previews--
+          }
+        }
         if (params.litchReadRange !== undefined) {
           if (!downloadAllowed) throw new ProtocolError(-32602, 'fileDownload 扩展未声明')
           if (params.litchPreview !== undefined)
@@ -96,6 +130,8 @@ export class FilesystemRpc {
         }
       }
       case 'fs/getMetadata': {
+        if (params.litchResolve !== undefined && (!realpathAllowed || params.litchResolve !== true))
+          throw new ProtocolError(-32602, '真实路径解析需要声明 fileRealpath 且 litchResolve=true')
         const path = pathParam(params)
         const [metadata, link] = await Promise.all([stat(path), lstat(path)])
         return {
@@ -104,6 +140,9 @@ export class FilesystemRpc {
           isSymlink: link.isSymbolicLink(),
           createdAtMs: Math.trunc(metadata.birthtimeMs),
           modifiedAtMs: Math.trunc(metadata.mtimeMs),
+          ...(params.litchResolve === true
+            ? { litchResolved: { path: await realpath(path) } }
+            : {}),
         }
       }
       case 'fs/writeFile':
@@ -149,6 +188,8 @@ export class FilesystemRpc {
   }
 
   closePeer(peerId: string): void {
+    this.realpathPeers.delete(peerId)
+    this.shortMediaPeers.delete(peerId)
     this.browserPeers.delete(peerId)
     this.downloadPeers.delete(peerId)
     this.previewPeers.delete(peerId)
@@ -157,6 +198,8 @@ export class FilesystemRpc {
   }
 
   close(): void {
+    this.realpathPeers.clear()
+    this.shortMediaPeers.clear()
     this.browserPeers.clear()
     this.downloadPeers.clear()
     this.previewPeers.clear()

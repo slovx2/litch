@@ -60,6 +60,9 @@ test('33 条样本：隔离文件布局对照 S0、S1 与全部项目根；不�
         platform: () => 'linux',
         knownRoot: () => false,
         previewSupported: () => true,
+        browserSupported: () => true,
+        realpathSupported: () => true,
+        shortMediaSupported: () => true,
         fail: channelFailure,
         log() {},
         request: async (method, params) => {
@@ -70,6 +73,7 @@ test('33 条样本：隔离文件布局对照 S0、S1 与全部项目根；不�
             if (method === 'fs/getMetadata') {
               const info = await stat(disk(path))
               return {
+                litchResolved: { path },
                 isFile: info.isFile(),
                 isDirectory: info.isDirectory(),
                 isSymlink: false,

@@ -1,8 +1,10 @@
 import {
   baseName,
+  decodeBase64,
   observeFileChanges,
   PREVIEW_LIMIT,
   type FilePreview as PreviewResult,
+  shortMediaType,
 } from '@litch/core'
 import { useIsFocused } from '@react-navigation/native'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -10,6 +12,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WebView } from 'react-native-webview'
 import { byteSize } from '../../../../../../packages/ui/src/files/lines.ts'
+import { ShortMedia } from '../../../media/ShortMedia'
 import { useChannel } from '../../../shell/services'
 import { useT } from '../../../ui/i18n'
 import { Button, Empty } from '../../../ui/kit/controls'
@@ -22,6 +25,7 @@ import {
   previewFailure,
 } from './model'
 import { CopyPath, PreviewNotice } from './PreviewNotice'
+import { SavePhoneFile } from './SavePhoneFile'
 
 type Ready = Extract<PreviewResult, { kind: 'ready' }>
 type Loaded = { kind: 'loading' } | { kind: 'failed'; reason: PreviewFailure } | Ready
@@ -78,11 +82,39 @@ export function FilePreview({
   if (loaded.kind === 'failed')
     return (
       <PreviewNotice
+        deviceId={deviceId}
+        root={root}
         path={path}
         detail={t(`mobilePreview.${loaded.reason}`, { limit: byteSize(PREVIEW_LIMIT[format]) })}
         retry={() => setAttempt((n) => n + 1)}
       />
     )
+  if (format === 'media') {
+    const type = shortMediaType(path, decodeBase64(loaded.dataBase64))
+    if (!type || type.mime === 'video/webm')
+      return (
+        <PreviewNotice
+          deviceId={deviceId}
+          root={root}
+          path={path}
+          detail={t(type ? 'mobilePreview.mediaUnsupported' : 'mobilePreview.mediaInvalid')}
+        />
+      )
+    return (
+      <View testID={`files:media:${path}`} style={styles.wrap}>
+        <ShortMedia
+          key={`${path}:${attempt}`}
+          dataBase64={loaded.dataBase64}
+          type={type}
+          onFail={(reason) => setLoaded({ kind: 'failed', reason })}
+        />
+        <View style={styles.toolbar}>
+          <CopyPath path={path} />
+          <SavePhoneFile deviceId={deviceId} root={root} path={path} />
+        </View>
+      </View>
+    )
+  }
   return (
     <PreviewWeb
       key={`${path}:${attempt}`}

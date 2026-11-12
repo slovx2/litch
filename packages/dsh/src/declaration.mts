@@ -70,6 +70,8 @@ export const declaration: HarnessDeclaration = {
   extensions: [
     EXTENSION.filePreview,
     EXTENSION.fileBrowser,
+    EXTENSION.shortMedia,
+    EXTENSION.fileRealpath,
     EXTENSION.clientTools,
     EXTENSION.harnessConfig,
     EXTENSION.backgroundTasks,

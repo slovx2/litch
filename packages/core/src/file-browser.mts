@@ -6,17 +6,18 @@ export const fileBrowserKey = (
 ): string =>
   JSON.stringify([deviceId, sessionId ? ['session', sessionId] : ['workspace', workspaceId]])
 
-const positions = new Map<string, string>()
+const positions = new Map<string, { root: string; linkPath?: string }>()
 const listeners = new Set<() => void>()
 let version = 0
 export const fileBrowserVersion = () => version
 export const fileBrowserRoot = (key: string, defaultRoot: string | null): string | null =>
-  positions.get(key) ?? defaultRoot
-export function setFileBrowserRoot(key: string, path: string): void {
+  positions.get(key)?.root ?? defaultRoot
+export const fileBrowserLink = (key: string): string | null => positions.get(key)?.linkPath ?? null
+export function setFileBrowserRoot(key: string, path: string, linkPath?: string): void {
   const root = path
-  if (positions.get(key) === root) return
+  if (positions.get(key)?.root === root && positions.get(key)?.linkPath === linkPath) return
   positions.delete(key)
-  positions.set(key, root)
+  positions.set(key, { root, ...(linkPath ? { linkPath } : {}) })
   while (positions.size > 200) {
     const oldest = positions.keys().next().value
     if (oldest !== undefined) positions.delete(oldest)

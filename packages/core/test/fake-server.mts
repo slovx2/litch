@@ -116,6 +116,13 @@ export function fakeOpener(handlers: Record<string, Handler>) {
         new Proxy(handlers, {
           get(target, method: string) {
             const handler = target[method] ?? (method === 'initialize' ? () => INIT : undefined)
+            if (handler && method === 'fs/getMetadata')
+              return async (params: any) => {
+                const result = (await handler(params)) as any
+                return params.litchResolve && !result.litchResolved
+                  ? { ...result, litchResolved: { path: params.path } }
+                  : result
+              }
             if (!handler || method !== 'fs/readDirectory') return handler
             return async (params: any) => {
               const result = (await handler(params)) as any

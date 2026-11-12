@@ -11,12 +11,14 @@ import {
 } from '../src/screens/files/preview/model.ts'
 
 const binary = (path) => ({ kind: 'binary', path, group: 'binary', bytes: null })
-test('手机按共享后缀分流：图片/SVG/PDF；其他格式不进入预览', () => {
+test('手机按共享后缀分流：图片/SVG/PDF/短媒体；其他格式不进入预览', () => {
   for (const ext of ['png', 'jpg', 'jpeg', 'gif', 'webp', 'PNG', 'JPEG'])
     assert.equal(mobilePreviewFormat(binary(`/work/a.${ext}`)), 'image')
   assert.equal(mobilePreviewFormat(binary('/work/a.PDF')), 'pdf')
   assert.equal(mobilePreviewFormat(binary('/work/a.svg')), 'svg')
-  for (const ext of ['docx', 'xlsx', 'mp3', 'mp4', 'zip', 'html', 'bin'])
+  for (const ext of ['mp3', 'mp4', 'wav', 'webm'])
+    assert.equal(mobilePreviewFormat(binary(`/work/a.${ext}`)), 'media')
+  for (const ext of ['docx', 'xlsx', 'zip', 'html', 'bin'])
     assert.equal(mobilePreviewFormat(binary(`/work/a.${ext}`)), null)
   assert.equal(mobilePreviewFormat({ kind: 'missing', path: '/work/a.pdf' }), null)
   assert.equal(mobilePreviewFormat({ kind: 'directory', path: '/work/a.pdf' }), null)

@@ -901,6 +901,10 @@ export const en: Record<MessageKey, Entry> = {
   'files.noRoot':
     'No project folder. Pick a project, or open a session that has a working directory.',
   'files.boundedUnsupported': 'Upgrade the device service to browse files with bounded reads.',
+  'files.readChanged': 'The file changed while it was being read. Try again.',
+  'files.notFile': 'This path is not a regular file.',
+  'files.readBusy': 'The device is busy reading other files. Try again shortly.',
+  'files.readInvalid': 'The device returned invalid file data. Try again.',
   'files.nav.atRoot': 'Already at the filesystem root',
   'files.nav.up': 'Up',
   'files.nav.open': 'Open folder',

@@ -33,6 +33,7 @@ export {
 } from '../../protocol/src/device-pairing.mjs'
 export type { AttachmentState } from '../../protocol/src/file-attachments.mjs'
 export { attachmentDetail, MAX_ATTACHMENT_BYTES } from '../../protocol/src/file-attachments.mjs'
+export { SHORT_MEDIA_BYTES } from '../../protocol/src/file-preview.mjs'
 export type {
   PermissionLevel,
   ProjectPermission,
@@ -58,6 +59,12 @@ export {
 } from '../../protocol/src/session-mentions.mjs'
 // 设备设置里“任务卡”按 harness 的键：设置页那棵树、提案卡上的“对这个 harness 关闭任务卡”都写它
 export { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
+export {
+  SHORT_MEDIA_PIXELS,
+  SHORT_MEDIA_SECONDS,
+  type ShortMediaType,
+  shortMediaType,
+} from '../../protocol/src/short-media.mjs'
 // 日程怎么算：界面的表单拿它预览“下一次”、先查时区（和设备进程用的是同一份）
 export {
   isTaskTimeZone,
@@ -281,6 +288,7 @@ export {
 } from './draft-images.mjs'
 export {
   fileBrowserKey,
+  fileBrowserLink,
   fileBrowserRoot,
   fileBrowserVersion,
   setFileBrowserRoot,

@@ -37,6 +37,7 @@
     "expo-local-authentication": "57.0.3",
     "expo-localization": "57.0.2",
     "expo-secure-store": "57.0.4",
+    "expo-sharing": "57.0.22",
     "expo-status-bar": "57.0.1",
     "katex": "0.16.47",
     "marked": "18.0.14",
