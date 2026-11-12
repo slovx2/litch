@@ -472,3 +472,30 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+/* 导航始终显示设备与完整目录，长路径换行，不挤压操作按钮。 */
+.ft-navigation {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line-1);
+  flex: none;
+}
+.ft-location {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: calc(12px * var(--fs));
+  min-width: 0;
+}
+.ft-location .mono {
+  overflow-wrap: anywhere;
+  color: var(--ink-3);
+  user-select: text;
+}
+.ft-navigation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

@@ -170,6 +170,7 @@ export function declarationFor(
     // litch_ 命名空间的调用照 clientTools 的规矩挑执行方（client-tools.mts）。
     extensions: [
       EXTENSION.filePreview,
+      EXTENSION.fileBrowser,
       EXTENSION.clientTools,
       EXTENSION.threadCapabilities,
       EXTENSION.acpControls,

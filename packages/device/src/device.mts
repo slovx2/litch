@@ -360,7 +360,7 @@ export class DeviceServer {
       announce: (method, params, extension) => this.announce(method, params, extension),
     })
     const info = deviceInfo(this.version)
-    info.extensions.push(EXTENSION.filePreview)
+    info.extensions.push(EXTENSION.filePreview, EXTENSION.fileBrowser)
     info.extensions.push(EXTENSION.mediaImages, EXTENSION.browserUpload)
     info.extensions.push(EXTENSION.toolImages)
     info.extensions.push(EXTENSION.fileDownload)

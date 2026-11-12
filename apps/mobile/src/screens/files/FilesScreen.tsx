@@ -9,23 +9,27 @@ import {
   type FileContent,
   type FileLinkResolution,
   type FileLinkTarget,
+  fileBrowserKey,
+  fileBrowserRoot,
   keys,
   normalizePath,
   observeFileChanges,
-  pathTwin,
-  relativeTo,
+  parentPath,
+  setFileBrowserRoot,
   unrecognizedFileLink,
 } from '@litch/core'
 import { useIsFocused } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useCallback, useEffect, useState } from 'react'
-import { ScrollView } from 'react-native'
+import { ScrollView, Text, View } from 'react-native'
 import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Empty } from '../../ui/kit/controls'
 import { Screen } from '../../ui/kit/Screen'
+import { PathPicker } from '../../ui/PathPicker'
+import { useTheme } from '../../ui/theme'
 import { FileLinkReport } from './FileLinkReport'
 import { FileTreeView } from './FileTreeView'
 import { FileView } from './FileView'
@@ -48,10 +52,22 @@ export function FilesScreen({ navigation, route }: Props) {
     (target: FileLinkTarget) => setSelection({ key: requestKey, target }),
     [requestKey],
   )
-  const root = target?.root ?? normalizePath(route.params.root)
+  const browserKey = fileBrowserKey(deviceId, route.params.sessionId, route.params.workspaceId)
+  const defaultRoot = normalizePath(route.params.defaultRoot ?? route.params.root)
+  const root =
+    target?.root ??
+    normalizePath(
+      !route.params.path && !route.params.ref && !route.params.browsing
+        ? (fileBrowserRoot(browserKey, defaultRoot) ?? defaultRoot)
+        : route.params.root,
+    )
   const path = target?.path ?? normalizePath(route.params.path ?? root)
   const device = useKey<DeviceView>(keys.device(deviceId))
   const t = useT()
+  const theme = useTheme()
+  useEffect(() => {
+    if (root) setFileBrowserRoot(browserKey, root)
+  }, [browserKey, root])
   const channel = useChannel()
   const focused = useIsFocused()
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' })
@@ -128,12 +144,27 @@ export function FilesScreen({ navigation, route }: Props) {
     target,
   ])
 
-  const open = useCallback(
-    (to: string) => navigation.push('Files', { deviceId, root, path: to }),
-    [navigation, deviceId, root],
-  )
+  const changeRoot = (to: string) =>
+    navigation.replace('Files', {
+      deviceId,
+      root: normalizePath(to),
+      defaultRoot,
+      browsing: true,
+      ...(route.params.sessionId ? { sessionId: route.params.sessionId } : {}),
+      ...(route.params.workspaceId ? { workspaceId: route.params.workspaceId } : {}),
+    })
+  const open = (to: string) =>
+    navigation.push('Files', {
+      ...route.params,
+      root,
+      defaultRoot,
+      path: to,
+      ref: undefined,
+      href: undefined,
+      unrecognized: undefined,
+    })
+  const parent = parentPath(root)
 
-  const rel = relativeTo(root, path, pathTwin(device?.os ?? null))
   let body: React.ReactNode
   if (loaded.kind === 'loading') body = <Empty busy title={t('files.tree.loading')} />
   else if (loaded.kind === 'link')
@@ -166,6 +197,7 @@ export function FilesScreen({ navigation, route }: Props) {
       <FileTreeView
         deviceId={deviceId}
         root={root}
+        scope={route.params.sessionId ?? ''}
         path={path}
         showHidden={showHidden}
         onOpen={open}
@@ -193,7 +225,7 @@ export function FilesScreen({ navigation, route }: Props) {
             ? baseName(root) || root
             : baseName(path)
       }
-      subtitle={rel === '' ? root : rel}
+      subtitle={`${device ? t.text(device.name) : deviceId} · ${path}`}
       actions={
         loaded.kind === 'dir'
           ? [
@@ -209,6 +241,49 @@ export function FilesScreen({ navigation, route }: Props) {
       }
       testID="files"
     >
+      <View
+        style={{
+          gap: 6,
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+          borderBottomWidth: 1,
+          borderBottomColor: theme.c.line1,
+        }}
+      >
+        <Text
+          selectable
+          style={{
+            color: theme.c.ink3,
+            fontFamily: theme.font.mono,
+            fontSize: theme.font.size.meta,
+          }}
+        >
+          {root}
+        </Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          <Button
+            kind="plain"
+            testID="files:up"
+            label={t('files.nav.up')}
+            disabled={!parent}
+            onPress={() => parent && changeRoot(parent)}
+          />
+          <PathPicker
+            deviceId={deviceId}
+            value={root}
+            kind="directory"
+            bounded
+            onPick={changeRoot}
+          />
+          <Button
+            kind="plain"
+            testID="files:project"
+            label={t('files.nav.project')}
+            disabled={!defaultRoot}
+            onPress={() => changeRoot(defaultRoot)}
+          />
+        </View>
+      </View>
       {body}
       {loaded.kind !== 'link' && loaded.kind !== 'loading' && loaded.kind !== 'dir' ? (
         <FileLinkReport

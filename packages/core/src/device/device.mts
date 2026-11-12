@@ -664,6 +664,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   }
   let fileAttachmentsSupported = false
   let fileDownloadSupported = false
+  let fileBrowserSupported = false
   let filePreviewSupported = false
   let browserUploadSupported = false
   let mediaImagesSupported = false
@@ -1907,6 +1908,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     nativeDirect = false
     fileAttachmentsSupported = false
     fileDownloadSupported = false
+    fileBrowserSupported = false
     filePreviewSupported = false
     browserUploadSupported = false
     mediaImagesSupported = false
@@ -1938,6 +1940,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         fileAttachmentsSupported =
           info.device.extensions?.includes(EXTENSION.fileAttachments) === true
         fileDownloadSupported = info.device.extensions?.includes(EXTENSION.fileDownload) === true
+        fileBrowserSupported = info.device.extensions?.includes(EXTENSION.fileBrowser) === true
         filePreviewSupported = info.device.extensions?.includes(EXTENSION.filePreview) === true
         browserUploadSupported = info.device.extensions?.includes(EXTENSION.browserUpload) === true
         mediaImagesSupported = info.device.extensions?.includes(EXTENSION.mediaImages) === true
@@ -1991,6 +1994,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         mode = 'single'
         activitySupported = false
         fileDownloadSupported = info.extensions?.includes(EXTENSION.fileDownload) === true
+        fileBrowserSupported = info.extensions?.includes(EXTENSION.fileBrowser) === true
         filePreviewSupported = info.extensions?.includes(EXTENSION.filePreview) === true
         harnesses = [harnessFromRuntimeInfo(info)]
         manageable = false
@@ -2877,6 +2881,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   })
   const files = createFiles({
     previewSupported: () => filePreviewSupported,
+    browserSupported: () => fileBrowserSupported,
     imagesSupported: () => mediaImagesSupported,
     downloadSupported: () => fileDownloadSupported,
     attachmentsSupported: () => fileAttachmentsSupported,

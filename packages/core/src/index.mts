@@ -278,6 +278,13 @@ export {
   type DraftImageError,
   DraftImages,
 } from './draft-images.mjs'
+export {
+  fileBrowserKey,
+  fileBrowserRoot,
+  fileBrowserVersion,
+  setFileBrowserRoot,
+  subscribeFileBrowser,
+} from './file-browser.mjs'
 export { observeFileChanges } from './file-changes.mjs'
 export {
   managerReferenceIds,

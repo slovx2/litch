@@ -24,7 +24,27 @@ export async function readPathPicker(
   kind: PathPickerKind,
   target: string | null,
   signal?: AbortSignalLike,
+  bounded = false,
 ): Promise<PathPickerListing> {
+  if (bounded) {
+    const listing = await channel.command(
+      'folders.list',
+      { deviceId, path: target },
+      signal ? { signal } : undefined,
+    )
+    return {
+      path: listing.path,
+      parent: listing.parent,
+      total: listing.folders.length,
+      truncated: listing.truncated === true,
+      entries: listing.folders.map((name) => ({
+        name,
+        kind: 'dir',
+        targetKind: 'dir',
+        executable: null,
+      })),
+    }
+  }
   const listing = await channel.command(
     'paths.list',
     { deviceId, path: target },

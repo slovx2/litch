@@ -79,6 +79,7 @@ export function useSessionFileLinks(
           deviceId,
           ...(result ? { link: result } : {}),
           workspaceId,
+          sessionId: summary.id,
           root: target?.root ?? root,
           ...(target ? { kind: target.kind } : {}),
           path: target?.path ?? ref.path,
@@ -90,6 +91,7 @@ export function useSessionFileLinks(
   }, [
     deviceId,
     summary !== undefined,
+    summary?.id,
     summary?.worktree,
     workspaceId,
     cwd,

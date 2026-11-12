@@ -207,6 +207,7 @@ function useActions(store: SessionStore) {
           if (!root) return setFlash(t('detail.link.noFiles'))
           navigation.navigate('Files', {
             deviceId,
+            sessionId,
             root,
             path: file.path,
             ref: file,
@@ -221,6 +222,7 @@ function useActions(store: SessionStore) {
         else
           navigation.navigate('Files', {
             deviceId,
+            sessionId,
             root: root ?? '',
             href: url,
             unrecognized: true,

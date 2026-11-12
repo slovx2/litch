@@ -165,6 +165,7 @@ export class DeviceCalls {
         fields,
         this.connection.declares(EXTENSION.filePreview),
         this.connection.declares(EXTENSION.fileDownload),
+        this.connection.declares(EXTENSION.fileBrowser),
       )
     if (method.startsWith(DEVICE_PROCESS_PREFIX)) return this.deviceProcess(method, fields)
     const devices = this.layer.deviceProcesses

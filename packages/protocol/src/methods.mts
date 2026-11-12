@@ -670,7 +670,14 @@ export interface ClientRequests extends AcpControlsRequests {
   // 哪个 harness 掉线都不影响；单个 harness 的入口上是那个引擎进程在读；原生 codex 是它自己读。
   // 路径一律是对面机器上的绝对路径。协议不限制能读哪里：限制在工作区的根之内是客户端自己守的（core 的 device/files.mts）
   /** 只列这一层。条目只有名字和“是不是目录、是不是普通文件”，没有大小；符号链接在适配器上两样都不是 */
-  'fs/readDirectory': { params: FsReadDirectoryParams; result: FsReadDirectoryResponse }
+  'fs/readDirectory': {
+    params: FsReadDirectoryParams & {
+      litchDirectory?: import('./file-browser.mjs').FileDirectoryBudget
+    }
+    result: FsReadDirectoryResponse & {
+      litchDirectory?: import('./file-browser.mjs').FileDirectoryResult
+    }
+  }
   /** 标准请求整文件读取；声明 fileDownload 的连接可用 litchReadRange 有界分块读取。 */
   'fs/readFile': {
     params: FsReadFileParams & {

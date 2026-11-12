@@ -20,11 +20,13 @@ export function PathPicker({
   deviceId,
   value,
   kind,
+  bounded = false,
   disabled = false,
   onPick,
 }: {
   deviceId: string
   value: string
+  bounded?: boolean
   kind?: PathPickerKind | undefined
   disabled?: boolean
   onPick(path: string): void
@@ -41,7 +43,13 @@ export function PathPicker({
             key={selected}
             kind="plain"
             disabled={disabled}
-            label={t(selected === 'directory' ? 'pathPicker.directory' : 'pathPicker.file')}
+            label={t(
+              bounded
+                ? 'files.nav.open'
+                : selected === 'directory'
+                  ? 'pathPicker.directory'
+                  : 'pathPicker.file',
+            )}
             testID={`path-picker:${selected}`}
             onPress={() => setMode(selected)}
           />
@@ -52,6 +60,7 @@ export function PathPicker({
           key={`${deviceId}:${mode}`}
           deviceId={deviceId}
           kind={mode}
+          bounded={bounded}
           start={pathPickerStart(value, mode)}
           onPick={(path) => {
             onPick(path)
@@ -67,12 +76,14 @@ export function PathPicker({
 function Browser({
   deviceId,
   kind,
+  bounded,
   start,
   onPick,
   onClose,
 }: {
   deviceId: string
   kind: PathPickerKind
+  bounded: boolean
   start: string | null
   onPick(path: string): void
   onClose(): void
@@ -90,7 +101,7 @@ function Browser({
     setBusy(true)
     setError('')
     setListing(null)
-    readPathPicker(channel, deviceId, kind, target.path, abort.signal)
+    readPathPicker(channel, deviceId, kind, target.path, abort.signal, bounded)
       .then(
         (next) => {
           if (!abort.signal.aborted) {
@@ -106,10 +117,13 @@ function Browser({
         if (!abort.signal.aborted) setBusy(false)
       })
     return () => abort.abort()
-  }, [channel, deviceId, kind, target, t])
+  }, [channel, deviceId, kind, target, t, bounded])
   return (
     <Dialog visible onClose={onClose}>
-      <Text style={{ color: theme.c.ink }}>
+      <Text
+        testID={listing ? `path-picker:listing:${listing.path}` : undefined}
+        style={{ color: theme.c.ink }}
+      >
         {t(kind === 'directory' ? 'pathPicker.directory' : 'pathPicker.file')}
       </Text>
       <Field

@@ -115,7 +115,18 @@ export function fakeOpener(handlers: Record<string, Handler>) {
         server,
         new Proxy(handlers, {
           get(target, method: string) {
-            return target[method] ?? (method === 'initialize' ? () => INIT : undefined)
+            const handler = target[method] ?? (method === 'initialize' ? () => INIT : undefined)
+            if (!handler || method !== 'fs/readDirectory') return handler
+            return async (params: any) => {
+              const result = (await handler(params)) as any
+              if (!params.litchDirectory || result.litchDirectory) return result
+              const limit = params.litchDirectory.maxEntries
+              return {
+                ...result,
+                entries: result.entries.slice(0, limit),
+                litchDirectory: { truncated: result.entries.length > limit },
+              }
+            }
           },
         }),
       ),

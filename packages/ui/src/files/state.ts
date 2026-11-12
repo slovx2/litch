@@ -2,10 +2,21 @@
 // 选中的是哪一行、树滚到哪了、开着哪些文件（哪个是预览、正看着哪个、要定位到哪一行）。
 // 展开着哪些目录不在这里：那在数据副本里（核心的 replica/file-trees.mts）。
 // 这个文件不碰页面上的元素，只管数：预览和固定的规矩在这里，好单独测。
+
 import type { FileLinkResolution } from '@litch/core'
-import { useSyncExternalStore } from 'react'
+import { createContext, useSyncExternalStore } from 'react'
+import {
+  fileBrowserKey,
+  fileBrowserRoot,
+  fileBrowserVersion,
+  setFileBrowserRoot,
+  subscribeFileBrowser,
+} from '../../../core/src/file-browser.mts'
 import { showSideTab } from '../side/side.ts'
+import type { SidePlace } from '../side/tabs.ts'
 import { FILES_TAB } from '../side/tabs.ts'
+
+export const FileBrowserPlace = createContext<SidePlace | null>(null)
 
 export interface OpenFile {
   link?: FileLinkResolution
@@ -40,7 +51,8 @@ const trees = new Map<string, TreeUi>()
 const listeners = new Map<string, Set<() => void>>()
 
 /** 一棵树的标识：哪台设备上的哪个根 */
-export const treeKey = (deviceId: string, root: string): string => `${deviceId}\n${root}`
+export const treeKey = (deviceId: string, root: string, scope = ''): string =>
+  `${deviceId}\n${root}${scope ? `\n${scope}` : ''}`
 
 export const treeUiNow = (key: string): TreeUi => trees.get(key) ?? EMPTY
 
@@ -225,39 +237,23 @@ export const viewScrollOf = (key: string, path: string): number =>
 
 // ---------- 一个工作区有几个根的时候，看的是哪一个 ----------
 
-const pickedRoots = new Map<string, string>()
-const rootListeners = new Set<() => void>()
-let rootVersion = 0
-
-const placeKey = (deviceId: string, workspaceId: string | null): string =>
-  `${deviceId}\n${workspaceId ?? ''}`
-
-export function pickRoot(deviceId: string, workspaceId: string | null, root: string): void {
-  const key = placeKey(deviceId, workspaceId)
-  if (pickedRoots.get(key) === root) return
-  pickedRoots.set(key, root)
-  rootVersion++
-  for (const listener of rootListeners) listener()
+export function pickRoot(
+  deviceId: string,
+  workspaceId: string | null,
+  root: string,
+  sessionId: string | null = null,
+): void {
+  setFileBrowserRoot(fileBrowserKey(deviceId, sessionId, workspaceId), root)
 }
 
-/** 这个地方上次看的是哪个根。没挑过、或者挑的那个已经不在了，就是第一个 */
 export function usePickedRoot(
   deviceId: string,
   workspaceId: string | null,
   roots: readonly string[],
+  sessionId: string | null = null,
 ): string | null {
-  useSyncExternalStore(
-    (listener) => {
-      rootListeners.add(listener)
-      return () => {
-        rootListeners.delete(listener)
-      }
-    },
-    () => rootVersion,
-  )
-  const picked = pickedRoots.get(placeKey(deviceId, workspaceId))
-  // 对话链接可以打开项目根外的同设备目录；不把临时选择写回项目配置。
-  return picked ?? roots[0] ?? null
+  useSyncExternalStore(subscribeFileBrowser, fileBrowserVersion)
+  return fileBrowserRoot(fileBrowserKey(deviceId, sessionId, workspaceId), roots[0] ?? null)
 }
 
 // ---------- 别处要“在文件面板里打开这个文件” ----------
@@ -268,6 +264,7 @@ export interface FileTarget {
   fragment?: string
   deviceId: string
   workspaceId: string | null
+  sessionId?: string | null
   /** 文件在哪个根下面 */
   root: string
   path: string
@@ -278,12 +275,12 @@ export interface FileTarget {
 /** 打开侧面板的文件标签，在里面预览这个文件、定位到那一行，并且在树里把它露出来 */
 export function openInFiles(target: FileTarget): void {
   showSideTab(FILES_TAB)
-  pickRoot(target.deviceId, target.workspaceId, target.root)
+  pickRoot(target.deviceId, target.workspaceId, target.root, target.sessionId)
   if (target.kind === 'directory') {
-    revealPath(treeKey(target.deviceId, target.root), target.path)
+    revealPath(treeKey(target.deviceId, target.root, target.sessionId ?? ''), target.path)
     return
   }
-  openFile(treeKey(target.deviceId, target.root), target.path, {
+  openFile(treeKey(target.deviceId, target.root, target.sessionId ?? ''), target.path, {
     ...(target.link ? { link: target.link } : {}),
     ...(target.fragment ? { fragment: target.fragment } : {}),
     line: target.line ?? null,

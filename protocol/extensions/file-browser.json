@@ -1,0 +1,66 @@
+{
+  "extension": "fileBrowser",
+  "description": "用户主动浏览同设备任意目录的有界枚举，不改变项目或模型工具范围。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "fileBrowser"
+      }
+    }
+  },
+  "undeclared": "携带 litchDirectory 返回 -32602；标准 fs/readDirectory 的参数、行为与响应不变。",
+  "rules": [
+    "客户端只向 runtime/info 声明 fileBrowser 的设备发送参数，不回退到无界枚举。",
+    "设备用流式目录句柄最多枚举 maxEntries 加一项，及时关闭；不为统计总数继续扫描。",
+    "maxEntries 为 1 至 2000。truncated 表示还有条目，顺序是设备枚举顺序；客户端只排序已返回项。",
+    "不递归、不读取文件内容、不触发模型工具，不自动跟随目录符号链接。"
+  ],
+  "parts": [
+    {
+      "kind": "Param",
+      "on": "fs/readDirectory",
+      "name": "litchDirectory",
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["maxEntries"],
+        "properties": {
+          "maxEntries": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000
+          }
+        }
+      }
+    },
+    {
+      "kind": "Response",
+      "on": "fs/readDirectory（携带 litchDirectory）",
+      "response": {
+        "type": "object",
+        "required": ["entries", "litchDirectory"],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "maxItems": 2000
+          },
+          "litchDirectory": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["truncated"],
+            "properties": {
+              "truncated": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

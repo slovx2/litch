@@ -65,6 +65,7 @@ export const declaration: HarnessDeclaration = {
   // 详情设置（模型、权限、provider 与登录、MCP、AGENTS.md）读写 OpenCode 自己的配置和凭据（harness-settings.mts）。
   extensions: [
     EXTENSION.filePreview,
+    EXTENSION.fileBrowser,
     EXTENSION.declineWithNote,
     EXTENSION.clientTools,
     EXTENSION.harnessConfig,

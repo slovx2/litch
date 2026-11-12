@@ -44,6 +44,7 @@ export interface FolderListing {
   path: string
   parent: string | null
   folders: string[]
+  truncated?: boolean
 }
 
 /** 一层目录。目录在前，同类按名字排；隐藏的（名字以点开头）也在里面，显不显示由界面定 */
@@ -52,6 +53,8 @@ export interface DirectoryView {
   entries: FileEntry[]
   /** 这一层实际有多少项。比 entries 多就是太多了、后面的没给 */
   total: number
+  /** 设备已停止枚举，实际总数未知。 */
+  truncated?: boolean
 }
 
 /**
@@ -133,4 +136,6 @@ export interface FileTreeState {
   error: ChannelErrorShape | null
   /** 正在重新取（刷新）。界面上转一下 */
   refreshing: boolean
+  /** 当前层已被设备截断，搜索也只过滤这一层。 */
+  limited?: boolean
 }

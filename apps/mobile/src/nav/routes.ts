@@ -61,6 +61,10 @@ export type RootStackParamList = {
   /** 文件：浏览一个根下面的目录、看文件内容。path 是完整路径，是目录就列它，是文件就打开看；line 是打开后定位到第几行（从 1 起，对话区里的文件引用会带） */
   Files: {
     deviceId: string
+    sessionId?: string
+    workspaceId?: string | null
+    defaultRoot?: string
+    browsing?: boolean
     root: string
     path?: string
     line?: number

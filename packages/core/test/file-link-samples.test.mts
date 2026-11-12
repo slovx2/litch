@@ -59,7 +59,7 @@ test('33 条样本：隔离文件布局对照 S0、S1 与全部项目根；不�
         home: () => '/home/fixture',
         platform: () => 'linux',
         knownRoot: () => false,
-        previewSupported: () => false,
+        previewSupported: () => true,
         fail: channelFailure,
         log() {},
         request: async (method, params) => {

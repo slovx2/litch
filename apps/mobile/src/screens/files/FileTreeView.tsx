@@ -15,35 +15,37 @@ const EMPTY: FileRow[] = []
 export function FileTreeView({
   deviceId,
   root,
+  scope = '',
   path,
   showHidden,
   onOpen,
 }: {
   deviceId: string
   root: string
+  scope?: string
   path: string
   showHidden: boolean
   onOpen(path: string): void
 }) {
   const { files } = useReplica()
   const focused = useIsFocused()
-  const rows = useKey<FileRow[]>(keys.fileRows(deviceId, root)) ?? EMPTY
+  const rows = useKey<FileRow[]>(keys.fileRows(deviceId, root, scope)) ?? EMPTY
   const theme = useTheme()
   const t = useT()
   const list = useRef<FlatList<FileRow>>(null)
   const seek = useRef(path)
   const [refreshing, setRefreshing] = useState(false)
   useEffect(
-    () => (focused ? files.open(deviceId, root) : undefined),
-    [files, focused, deviceId, root],
+    () => (focused ? files.open(deviceId, root, scope) : undefined),
+    [files, focused, deviceId, root, scope],
   )
   useEffect(() => {
     files.setShowHidden(showHidden)
   }, [files, showHidden])
   useEffect(() => {
     seek.current = path
-    void files.reveal(deviceId, root, path, { directory: true, collapseOthers: true })
-  }, [files, deviceId, root, path])
+    void files.reveal(deviceId, root, path, { directory: true, collapseOthers: true, scope })
+  }, [files, deviceId, root, path, scope])
   const locate = () => {
     const index = rows.findIndex((row) => row.path === seek.current)
     if (index < 0) return
@@ -62,18 +64,20 @@ export function FileTreeView({
       refreshing={refreshing}
       onRefresh={() => {
         setRefreshing(true)
-        void files.refresh(deviceId, root).finally(() => setRefreshing(false))
+        void files.refresh(deviceId, root, scope).finally(() => setRefreshing(false))
       }}
       renderItem={({ item }) => {
         const selectable = item.kind === 'dir' || item.kind === 'file' || item.kind === 'other'
         const label = selectable
           ? item.name
           : t(
-              item.kind === 'loading'
-                ? 'files.tree.loading'
-                : item.kind === 'failed'
-                  ? 'files.tree.rootFailed'
-                  : 'files.tree.empty',
+              item.kind === 'truncated'
+                ? 'files.tree.limited'
+                : item.kind === 'loading'
+                  ? 'files.tree.loading'
+                  : item.kind === 'failed'
+                    ? 'files.tree.rootFailed'
+                    : 'files.tree.empty',
             )
         return (
           <Pressable
@@ -88,10 +92,10 @@ export function FileTreeView({
             }}
             onPress={() => {
               if (item.kind === 'dir') {
-                if (item.expanded) files.collapse(deviceId, root, item.path)
-                else files.expand(deviceId, root, item.path)
+                if (item.expanded) files.collapse(deviceId, root, item.path, scope)
+                else files.expand(deviceId, root, item.path, scope)
               } else if (selectable) onOpen(item.path)
-              else if (item.kind === 'failed') void files.refresh(deviceId, root)
+              else if (item.kind === 'failed') void files.refresh(deviceId, root, scope)
             }}
             style={({ pressed }) => ({
               height: ROW_HEIGHT,

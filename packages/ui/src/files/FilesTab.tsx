@@ -9,7 +9,11 @@ import {
   type FileTreeState,
   keys,
   normalizePath,
+  parentPath,
+  pathTwin,
   relativeTo,
+  type SessionSummary,
+  sessionFileScope,
 } from '@litch/core'
 import {
   type CSSProperties,
@@ -24,6 +28,7 @@ import {
 import { useT } from '../app/appearance.ts'
 import { Icon } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
+import { PathPicker } from '../path-picker/PathPicker.tsx'
 import type { SideTabProps } from '../side/tabs.ts'
 import { type FileAction, type FileSubject, runFileAction } from './actions.ts'
 import { ContextMenu } from './ContextMenu.tsx'
@@ -35,6 +40,7 @@ import { FileViewer } from './FileViewer.tsx'
 import { watchFilePanel } from './lifecycle.ts'
 import {
   clampTreeWidth,
+  FileBrowserPlace,
   openFile,
   pickRoot,
   revealPath,
@@ -51,18 +57,31 @@ interface Menu {
   y: number
 }
 
-function Files({ deviceId, root, shown }: { deviceId: string; root: string; shown: boolean }) {
+function Files({
+  deviceId,
+  root,
+  shown,
+  currentLayer,
+  scope,
+}: {
+  deviceId: string
+  root: string
+  shown: boolean
+  currentLayer: boolean
+  scope: string
+}) {
   const { replica, channel } = useServices()
   const t = useT()
-  const uiKey = treeKey(deviceId, root)
+  const uiKey = treeKey(deviceId, root, scope)
   const device = useKey<DeviceView>(keys.device(deviceId))
-  const state = useKey<FileTreeState>(keys.fileTree(deviceId, root))
+  const state = useKey<FileTreeState>(keys.fileTree(deviceId, root, scope))
   const showHidden = useKey<boolean>(keys.filesShowHidden) ?? false
   const treeWidth = useTreeWidth()
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const [menu, setMenu] = useState<Menu | null>(null)
-  const search = useFileSearch(deviceId, root, query)
+  const filterLayer = currentLayer || parentPath(root) === null || state?.limited === true
+  const search = useFileSearch(deviceId, root, query, filterLayer)
   // 结果换了一批：键盘从第一条走起。在画新结果的同一遍里就归零，不放到画完之后：
   // 放到之后的话，新结果刚出来那一帧里按的上下键会被后到的归零盖掉
   const [shownMatches, setShownMatches] = useState(search.matches)
@@ -78,8 +97,8 @@ function Files({ deviceId, root, shown }: { deviceId: string; root: string; show
 
   // 开始看这棵树：没取过根就去取，取过的重新对一遍
   useEffect(
-    () => (shown ? replica.files.open(deviceId, root) : undefined),
-    [replica, deviceId, root, shown],
+    () => (shown ? replica.files.open(deviceId, root, scope) : undefined),
+    [replica, deviceId, root, shown, scope],
   )
 
   // 给验收留的口子，界面自己不用：在这个元素上发一个 litch:files-check 事件，就把核心记的
@@ -210,7 +229,7 @@ function Files({ deviceId, root, shown }: { deviceId: string; root: string; show
               searching && search.matches[active] ? resultId(active) : undefined
             }
             aria-label={t('files.search')}
-            placeholder={t('files.search')}
+            placeholder={t(filterLayer ? 'files.nav.layerSearch' : 'files.search')}
             spellCheck={false}
             autoComplete="off"
             value={query}
@@ -236,7 +255,7 @@ function Files({ deviceId, root, shown }: { deviceId: string; root: string; show
             aria-label={t('files.refresh')}
             aria-busy={state?.refreshing === true}
             disabled={offline}
-            onClick={() => void replica.files.refresh(deviceId, root)}
+            onClick={() => void replica.files.refresh(deviceId, root, scope)}
           >
             <Icon name="reload" small />
           </button>
@@ -258,7 +277,13 @@ function Files({ deviceId, root, shown }: { deviceId: string; root: string; show
             }}
           />
         ) : (
-          <FileTree deviceId={deviceId} root={root} uiKey={uiKey} onContext={onContext} />
+          <FileTree
+            deviceId={deviceId}
+            root={root}
+            scope={scope}
+            uiKey={uiKey}
+            onContext={onContext}
+          />
         )}
         {/* biome-ignore lint/a11y/useSemanticElements: 这是一条能拖、也能用方向键挪的分隔条，hr 做不了 */}
         <div
@@ -298,7 +323,17 @@ export function FilesTab({ place, shown }: SideTabProps) {
   const { channel } = useServices()
   const [pageVisible, setPageVisible] = useState(document.visibilityState === 'visible')
   const roots = useMemo(() => place.roots.map(normalizePath), [place.roots])
-  const root = usePickedRoot(place.deviceId, place.workspaceId, roots)
+  const device = useKey<DeviceView>(keys.device(place.deviceId))
+  const summary = useKey<SessionSummary>(
+    place.sessionId ? keys.summary(place.deviceId, place.sessionId) : '',
+  )
+  const defaultRoot =
+    sessionFileScope(summary ?? { cwd: place.cwd ?? '' }, roots, pathTwin(device?.os))?.root ?? null
+  const defaults = defaultRoot ? [defaultRoot] : []
+  const root = usePickedRoot(place.deviceId, place.workspaceId, defaults, place.sessionId)
+  const changeRoot = (path: string) =>
+    pickRoot(place.deviceId, place.workspaceId, normalizePath(path), place.sessionId)
+  const parent = root ? parentPath(root) : null
   useEffect(() => {
     if (!shown || !root) return
     return watchFilePanel(
@@ -317,34 +352,73 @@ export function FilesTab({ place, shown }: SideTabProps) {
         void channel.command('files.reconcile', { deviceId: place.deviceId, root }).catch(() => {}),
     )
   }, [channel, place.deviceId, root, shown])
-  if (!root) return <div className="side-none dim">{t('files.noRoot')}</div>
   return (
     <>
-      {roots.length > 1 ? (
-        <div className="ft-roots">
-          <span className="dim">{t('files.root')}</span>
+      <div className="ft-navigation">
+        <div className="ft-location">
+          <b>{device ? t.text(device.name) : place.deviceId}</b>
+          <span className="mono">{root ?? t('files.noRoot')}</span>
+        </div>
+        <div className="ft-navigation-actions">
+          <button
+            className="btn"
+            type="button"
+            data-files-nav="up"
+            disabled={!parent}
+            title={!parent ? t('files.nav.atRoot') : undefined}
+            onClick={() => parent && changeRoot(parent)}
+          >
+            {t('files.nav.up')}
+          </button>
+          <PathPicker
+            deviceId={place.deviceId}
+            value={root ?? ''}
+            kind="directory"
+            bounded
+            onPick={changeRoot}
+          />
+          <button
+            className="btn"
+            type="button"
+            data-files-nav="project"
+            disabled={!defaultRoot}
+            title={!defaultRoot ? t('files.noRoot') : undefined}
+            onClick={() => defaultRoot && changeRoot(defaultRoot)}
+          >
+            {t('files.nav.project')}
+          </button>
+        </div>
+        {roots.length > 1 ? (
           <select
             aria-label={t('files.root')}
-            value={root}
-            onChange={(event) => pickRoot(place.deviceId, place.workspaceId, event.target.value)}
+            value={root ?? ''}
+            onChange={(event) => changeRoot(event.target.value)}
           >
-            {(roots.includes(root) ? roots : [root, ...roots]).map((entry) => (
+            {(root && !roots.includes(root) ? [root, ...roots] : roots).map((entry) => (
               <option key={entry} value={entry}>
                 {entry}
               </option>
             ))}
           </select>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
       {/* 换一棵树就整个换掉：搜索框里的字、菜单这些不跟过去；各棵树自己的状态记在别处（state.ts），回来还在 */}
-      <FileWatching.Provider value={shown && pageVisible}>
-        <Files
-          key={treeKey(place.deviceId, root)}
-          deviceId={place.deviceId}
-          root={root}
-          shown={shown && pageVisible}
-        />
-      </FileWatching.Provider>
+      <FileBrowserPlace.Provider value={place}>
+        <FileWatching.Provider value={shown && pageVisible}>
+          {root ? (
+            <Files
+              key={treeKey(place.deviceId, root, place.sessionId ?? '')}
+              deviceId={place.deviceId}
+              scope={place.sessionId ?? ''}
+              root={root}
+              shown={shown && pageVisible}
+              currentLayer={!roots.includes(root) && root !== defaultRoot}
+            />
+          ) : (
+            <div className="side-none dim">{t('files.noRoot')}</div>
+          )}
+        </FileWatching.Provider>
+      </FileBrowserPlace.Provider>
     </>
   )
 }

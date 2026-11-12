@@ -132,6 +132,7 @@ export type PhraseKey =
   | 'files.outside'
   | 'files.unknownRoot'
   | 'files.unsupported'
+  | 'files.boundedUnsupported'
   | 'files.save.unsupported'
   | 'files.save.changed'
   | 'files.save.notFile'

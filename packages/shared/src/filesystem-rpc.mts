@@ -1,5 +1,6 @@
 import { cp, lstat, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
+import { readDirectoryBounded } from './file-directory.mjs'
 import { readFileChunk } from './file-download.mjs'
 import { readPreview } from './file-preview.mjs'
 import { declaredExtensions } from './harness-declaration.mjs'
@@ -28,12 +29,15 @@ function optionalBoolean(params: Record<string, unknown>, key: string, fallback:
 
 export class FilesystemRpc {
   private watchers = new Map<string, Map<string, PathWatch>>()
+  private browserPeers = new Set<string>()
   private downloadPeers = new Set<string>()
   private downloads = 0
   private previewPeers = new Set<string>()
   private previews = 0
 
   declare(peer: RpcPeer, params: unknown): void {
+    if (declaredExtensions(params).has('fileBrowser')) this.browserPeers.add(peer.id)
+    else this.browserPeers.delete(peer.id)
     if (declaredExtensions(params).has('fileDownload')) this.downloadPeers.add(peer.id)
     else this.downloadPeers.delete(peer.id)
     if (declaredExtensions(params).has('filePreview')) this.previewPeers.add(peer.id)
@@ -46,6 +50,7 @@ export class FilesystemRpc {
     params: Record<string, unknown>,
     previewAllowed = this.previewPeers.has(peer.id),
     downloadAllowed = this.downloadPeers.has(peer.id),
+    browserAllowed = this.browserPeers.has(peer.id),
   ): Promise<unknown> {
     switch (method) {
       case 'fs/readFile': {
@@ -77,6 +82,10 @@ export class FilesystemRpc {
         return { dataBase64: (await readFile(pathParam(params))).toString('base64') }
       }
       case 'fs/readDirectory': {
+        if (params.litchDirectory !== undefined) {
+          if (!browserAllowed) throw new ProtocolError(-32602, 'fileBrowser 扩展未声明')
+          return readDirectoryBounded(pathParam(params), params.litchDirectory)
+        }
         const entries = await readdir(pathParam(params), { withFileTypes: true })
         return {
           entries: entries.map((entry) => ({
@@ -140,6 +149,7 @@ export class FilesystemRpc {
   }
 
   closePeer(peerId: string): void {
+    this.browserPeers.delete(peerId)
     this.downloadPeers.delete(peerId)
     this.previewPeers.delete(peerId)
     for (const watcher of this.watchers.get(peerId)?.values() ?? []) watcher.close()
@@ -147,6 +157,7 @@ export class FilesystemRpc {
   }
 
   close(): void {
+    this.browserPeers.clear()
     this.downloadPeers.clear()
     this.previewPeers.clear()
     for (const peerId of this.watchers.keys()) this.closePeer(peerId)

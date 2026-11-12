@@ -13,9 +13,11 @@ import type { KeyedStore } from './keyed-store.mjs'
 
 export const fileKeys = {
   /** FileRow[]：这棵树摊平之后的行 */
-  rows: (deviceId: string, root: string) => `files:${deviceId}:rows:${root}`,
+  rows: (deviceId: string, root: string, scope = '') =>
+    `files:${deviceId}:rows:${root}${scope ? `:${scope}` : ''}`,
   /** FileTreeState：根目录取到没有、是不是正在刷新 */
-  tree: (deviceId: string, root: string) => `files:${deviceId}:tree:${root}`,
+  tree: (deviceId: string, root: string, scope = '') =>
+    `files:${deviceId}:tree:${root}${scope ? `:${scope}` : ''}`,
   /** boolean：显不显示隐藏的文件 */
   showHidden: 'files:showHidden',
 }
@@ -25,18 +27,18 @@ export interface FileTrees {
    * 开始看一棵树：没取过根就去取，取过的重新对一遍（展开着的各层）。
    * 返回“不看了”的函数；不看了状态也留着，这次运行里再回来还是原样
    */
-  open(deviceId: string, root: string): () => void
-  expand(deviceId: string, root: string, path: string): void
-  collapse(deviceId: string, root: string, path: string): void
+  open(deviceId: string, root: string, scope?: string): () => void
+  expand(deviceId: string, root: string, path: string, scope?: string): void
+  collapse(deviceId: string, root: string, path: string, scope?: string): void
   /** 把一个路径上面的各级目录都展开，让它在树里看得见。各级都取到了是 true */
   reveal(
     deviceId: string,
     root: string,
     path: string,
-    options?: { directory?: boolean; collapseOthers?: boolean },
+    options?: { directory?: boolean; collapseOthers?: boolean; scope?: string },
   ): Promise<boolean>
   /** 不用缓存，把根和展开着的各层重新取一遍 */
-  refresh(deviceId: string, root: string): Promise<void>
+  refresh(deviceId: string, root: string, scope?: string): Promise<void>
   /** 显不显示隐藏的文件。所有的树一起变，不用重新取 */
   setShowHidden(show: boolean): void
   /** 一台设备重新连上了：正看着的树重新对一遍 */
@@ -48,6 +50,7 @@ export interface FileTrees {
 interface Tree {
   deviceId: string
   root: string
+  scope: string
   listings: Map<string, TreeListing>
   expanded: Set<string>
   /** 各层最近一次请求的代号：迟到的应答按它作废 */
@@ -59,7 +62,13 @@ interface Tree {
 }
 
 const sameView = (a: DirectoryView | null, b: DirectoryView): boolean => {
-  if (!a || a.total !== b.total || a.entries.length !== b.entries.length) return false
+  if (
+    !a ||
+    a.truncated !== b.truncated ||
+    a.total !== b.total ||
+    a.entries.length !== b.entries.length
+  )
+    return false
   for (let at = 0; at < a.entries.length; at++) {
     const x = a.entries[at]
     const y = b.entries[at]
@@ -74,14 +83,15 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
   let seq = 0
   store.set(fileKeys.showHidden, showHidden)
 
-  const treeOf = (deviceId: string, rawRoot: string): Tree => {
+  const treeOf = (deviceId: string, rawRoot: string, scope = ''): Tree => {
     const root = normalizePath(rawRoot)
-    const key = `${deviceId}\n${root}`
+    const key = `${deviceId}\n${root}\n${scope}`
     let tree = trees.get(key)
     if (!tree) {
       tree = {
         deviceId,
         root,
+        scope,
         listings: new Map(),
         expanded: new Set(),
         latest: new Map(),
@@ -102,20 +112,22 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
       phase,
       error: phase === 'failed' ? (top?.error ?? null) : null,
       refreshing: tree.refreshing > 0,
+      ...(top?.view?.truncated ? { limited: true } : {}),
     }
   }
 
   /** 只发状态（取到没有、是不是正在刷新）。没变就不发 */
   const publishState = (tree: Tree) => {
     const next = stateOf(tree)
-    const before = store.get<FileTreeState>(fileKeys.tree(tree.deviceId, tree.root))
+    const before = store.get<FileTreeState>(fileKeys.tree(tree.deviceId, tree.root, tree.scope))
     if (
       !before ||
       before.phase !== next.phase ||
       before.refreshing !== next.refreshing ||
+      before.limited !== next.limited ||
       before.error !== next.error
     ) {
-      store.set(fileKeys.tree(tree.deviceId, tree.root), next)
+      store.set(fileKeys.tree(tree.deviceId, tree.root, tree.scope), next)
     }
   }
 
@@ -124,7 +136,7 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
     syncWatches(tree)
     store.batch(() => {
       store.set(
-        fileKeys.rows(tree.deviceId, tree.root),
+        fileKeys.rows(tree.deviceId, tree.root, tree.scope),
         flattenTree(tree.root, tree.listings, tree.expanded, showHidden),
       )
       publishState(tree)
@@ -238,8 +250,8 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
   }
 
   return {
-    open(deviceId, root) {
-      const tree = treeOf(deviceId, root)
+    open(deviceId, root, scope) {
+      const tree = treeOf(deviceId, root, scope)
       tree.watchers++
       syncWatches(tree)
       // 第一次看：只取根。再回来看：把展开着的各层对一遍（刚取过的核心会直接给缓存）
@@ -254,8 +266,8 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
       }
     },
 
-    expand(deviceId, root, path) {
-      const tree = treeOf(deviceId, root)
+    expand(deviceId, root, path, scope) {
+      const tree = treeOf(deviceId, root, scope)
       const dir = normalizePath(path)
       if (dir === tree.root || !insideRoot(tree.root, dir) || tree.expanded.has(dir)) return
       tree.expanded.add(dir)
@@ -266,13 +278,13 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
       } else void load(tree, dir, false)
     },
 
-    collapse(deviceId, root, path) {
-      const tree = treeOf(deviceId, root)
+    collapse(deviceId, root, path, scope) {
+      const tree = treeOf(deviceId, root, scope)
       if (tree.expanded.delete(normalizePath(path))) publish(tree)
     },
 
     async reveal(deviceId, root, path, options = {}) {
-      const tree = treeOf(deviceId, root)
+      const tree = treeOf(deviceId, root, options.scope)
       const target = normalizePath(path)
       if (!insideRoot(tree.root, target)) return false
       // 明确打开隐藏目录也必须看得见；同步开关，界面上的隐藏项按钮与树保持一致。
@@ -312,8 +324,8 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
       return true
     },
 
-    refresh(deviceId, root) {
-      return reloadVisible(treeOf(deviceId, root), true)
+    refresh(deviceId, root, scope) {
+      return reloadVisible(treeOf(deviceId, root, scope), true)
     },
 
     setShowHidden(show) {

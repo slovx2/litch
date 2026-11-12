@@ -20,12 +20,14 @@ export function PathPicker({
   deviceId,
   value,
   kind,
+  bounded = false,
   local = false,
   disabled = false,
   onPick,
 }: {
   deviceId: string
   value: string
+  bounded?: boolean
   kind?: PathPickerKind | undefined
   /** “操作这台电脑”的访问范围属于客户端主机，不属于发请求的远程设备。 */
   local?: boolean
@@ -49,7 +51,7 @@ export function PathPicker({
   const browse = async (selected: PathPickerKind) => {
     setError('')
     const native =
-      local || device?.kind === 'local'
+      !bounded && (local || device?.kind === 'local')
         ? selected === 'directory'
           ? window.litchShell?.pickFolder
           : window.litchShell?.pickFile
@@ -62,7 +64,13 @@ export function PathPicker({
     const mine = ++request.current
     try {
       const picked = await native({
-        title: t(selected === 'directory' ? 'pathPicker.directory' : 'pathPicker.file'),
+        title: t(
+          bounded
+            ? 'files.nav.open'
+            : selected === 'directory'
+              ? 'pathPicker.directory'
+              : 'pathPicker.file',
+        ),
         defaultPath: value.trim(),
       })
       if (mine === request.current && picked) onPick(picked)
@@ -82,7 +90,13 @@ export function PathPicker({
           title={!local && device?.connection !== 'online' ? t('pathPicker.offline') : undefined}
           onClick={() => void browse(selected)}
         >
-          {t(selected === 'directory' ? 'pathPicker.directory' : 'pathPicker.file')}
+          {t(
+            bounded
+              ? 'files.nav.open'
+              : selected === 'directory'
+                ? 'pathPicker.directory'
+                : 'pathPicker.file',
+          )}
         </button>
       ))}
       {error ? (
@@ -96,6 +110,7 @@ export function PathPicker({
               key={`${deviceId}:${mode}`}
               deviceId={deviceId}
               kind={mode}
+              bounded={bounded}
               start={pathPickerStart(value, mode)}
               onPick={(path) => {
                 onPick(path)
@@ -113,12 +128,14 @@ export function PathPicker({
 function DevicePathDialog({
   deviceId,
   kind,
+  bounded,
   start,
   onPick,
   onClose,
 }: {
   deviceId: string
   kind: PathPickerKind
+  bounded: boolean
   start: string | null
   onPick(path: string): void
   onClose(): void
@@ -139,7 +156,7 @@ function DevicePathDialog({
     setBusy(true)
     setError('')
     setListing(null)
-    readPathPicker(channel, deviceId, kind, target.path, abort.signal)
+    readPathPicker(channel, deviceId, kind, target.path, abort.signal, bounded)
       .then(
         (next) => {
           if (abort.signal.aborted) return
@@ -154,7 +171,7 @@ function DevicePathDialog({
         if (!abort.signal.aborted) setBusy(false)
       })
     return () => abort.abort()
-  }, [channel, deviceId, kind, target, t])
+  }, [channel, deviceId, kind, target, t, bounded])
   const title = t(kind === 'directory' ? 'pathPicker.directory' : 'pathPicker.file')
   return (
     <dialog

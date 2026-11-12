@@ -15,6 +15,7 @@ import { type AttachmentUpload, uploadAttachment } from './attachments.mjs'
 //
 // 没有哪个 harness 声明过会不会这几个方法，所以是“试了才知道”：对面说不认识，就记到下次重连，期间不再去问。
 
+import { FILE_BROWSER_ENTRIES } from '../../../protocol/src/file-browser.mjs'
 import { FILE_DOWNLOAD_CHUNK, type FileReadChunk } from '../../../protocol/src/file-download.mjs'
 import type { ClientRequestMethod, ClientRequests } from '../../../protocol/src/index.mjs'
 import { createCancel } from '../channel/cancel.mjs'
@@ -62,6 +63,7 @@ import { createFileWatches } from './file-watches.mjs'
 export interface FilesHost {
   imagesSupported?(): boolean
   attachmentsSupported?(): boolean
+  browserSupported?(): boolean
   previewSupported?(): boolean
   downloadSupported?(): boolean
   clock: Clock
@@ -215,7 +217,7 @@ export function createFiles(host: FilesHost): Files {
     const full = normalizePath(path)
     const inside = isAbsolutePath(full) ? withinRoot(base, full, twin()) : null
     if (inside === null) {
-      throw new ChannelError('rejected', `路径不在工作区之内：${path}`, phrase('files.outside'))
+      throw new ChannelError('rejected', `路径不在当前浏览根内：${path}`, phrase('files.outside'))
     }
     return { root: base, path: inside }
   }
@@ -286,8 +288,31 @@ export function createFiles(host: FilesHost): Files {
     versions.set(path, version)
     tally(asked.lists, path)
     try {
-      const { entries } = await host.request('fs/readDirectory', { path })
-      const view = await resolveLinks(projectDirectory(path, Array.isArray(entries) ? entries : []))
+      if (!host.browserSupported?.())
+        throw new ChannelError(
+          'unsupported',
+          '设备不支持有界目录读取',
+          phrase('files.boundedUnsupported'),
+        )
+      const { entries, litchDirectory } = await host.request(
+        'fs/readDirectory',
+        {
+          path,
+          litchDirectory: { maxEntries: FILE_BROWSER_ENTRIES },
+        },
+        { timeoutMs: READ_TIMEOUT_MS },
+      )
+      if (
+        !litchDirectory ||
+        typeof litchDirectory.truncated !== 'boolean' ||
+        !Array.isArray(entries) ||
+        entries.length > FILE_BROWSER_ENTRIES
+      )
+        throw new ChannelError('remote', '有界目录响应无效')
+      const view = await resolveLinks({
+        ...projectDirectory(path, entries),
+        truncated: litchDirectory.truncated,
+      })
       if (mine === epoch && versions.get(path) === version) remember(path, view)
       return view
     } catch (error) {
@@ -308,8 +333,7 @@ export function createFiles(host: FilesHost): Files {
     })
   }
 
-  const fetchFile = async (path: string): Promise<FileContent> => {
-    tally(asked.reads, path)
+  const fetchFile = async (root: string, path: string): Promise<FileContent> => {
     try {
       let meta: ClientRequests['fs/getMetadata']['result']
       try {
@@ -321,17 +345,21 @@ export function createFiles(host: FilesHost): Files {
       if (meta.isDirectory === true) return { kind: 'directory', path }
       // 套接字、管道、设备这些不是普通文件，读了可能一直不返回：不去读
       if (meta.isFile !== true) return { kind: 'binary', path, group: 'binary', bytes: null }
-      // 看扩展名就知道不是文字的不读：协议读文件是整个读回来的，读之前也问不到它多大
+      // 已知二进制类型交给各自的受限预览，不尝试文本读取。
       const group = unreadableGroup(path)
       if (group) return { kind: 'binary', path, group, bytes: null }
-      const { dataBase64 } = await host.request(
-        'fs/readFile',
-        { path },
-        { timeoutMs: READ_TIMEOUT_MS },
-      )
-      const bytes = typeof dataBase64 === 'string' ? dataBase64 : ''
-      const content = projectFile(path, bytes)
-      if (content.kind === 'text') original.set(content, bytes)
+      // 普通文本复用设备的句柄、真实路径和限额读取，不回退到整文件 RPC。
+      const preview = await files.preview(root, path, 'source')
+      if (preview.kind === 'tooLarge') return preview
+      if (preview.kind === 'missing') return { kind: 'missing', path }
+      if (preview.kind !== 'ready')
+        throw new ChannelError(
+          'unsupported',
+          '设备无法有界读取此文件',
+          phrase('files.boundedUnsupported'),
+        )
+      const content = projectFile(path, preview.dataBase64)
+      if (content.kind === 'text') original.set(content, preview.dataBase64)
       return content
     } catch (error) {
       // 问元数据和读之间文件没了
@@ -557,7 +585,12 @@ export function createFiles(host: FilesHost): Files {
 
     async folders(given, signal) {
       // 不知道主目录（单个入口连的、旧的设备服务）从根开始
-      const path = given ?? host.home() ?? '/'
+      const path =
+        given === '~' || given?.startsWith('~/')
+          ? host.home()
+            ? host.home() + given.slice(1)
+            : given
+          : (given ?? host.home() ?? '/')
       if (typeof path !== 'string' || isNetworkPath(path)) {
         throw new ChannelError('unsupported', '网络共享上的目录还不支持', phrase('files.network'))
       }
@@ -569,6 +602,7 @@ export function createFiles(host: FilesHost): Files {
       return {
         path: view.path,
         parent: parentPath(view.path),
+        truncated: view.truncated === true,
         folders: view.entries.filter((entry) => entry.kind === 'dir').map((entry) => entry.name),
       }
     },
@@ -579,7 +613,7 @@ export function createFiles(host: FilesHost): Files {
       if (lacks.fs) throw unsupported('fs')
       let work = reading.get(at.path)
       if (!work) {
-        work = fetchFile(at.path)
+        work = fetchFile(at.root, at.path)
         reading.set(at.path, work)
         const mine = work
         const done = () => {
