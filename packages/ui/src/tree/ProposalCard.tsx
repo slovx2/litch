@@ -19,7 +19,7 @@ import {
   type ToolCallItem,
   type WrapUpSuggestionView,
 } from '@litch/core'
-import { type ComponentType, useEffect, useState } from 'react'
+import { type ComponentType, useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { badgeOf, nameOf } from '../app/device.ts'
 import { Icon, More } from '../app/icons.tsx'
@@ -51,6 +51,7 @@ export function ProposalActs({
   proposal,
   small,
   inbox,
+  noteFold,
   sourceParent,
 }: {
   deviceId: string
@@ -58,6 +59,8 @@ export function ProposalActs({
   proposal: SessionProposalView
   small?: boolean
   inbox?: boolean
+  /** 经理看板里：补充说明默认收起，点“补充说明”展开（同决策卡） */
+  noteFold?: boolean
   sourceParent?: Pick<SessionSummary, 'id' | 'title' | 'harness' | 'cwd' | 'workspaceId'>
 }) {
   const t = useT()
@@ -67,6 +70,9 @@ export function ProposalActs({
   const act = useProposalAct(deviceId, sessionId, proposal.id)
   const [editing, setEditing] = useState(false)
   const [note, setNote] = useState('')
+  const [noteOpen, setNoteOpen] = useState(false)
+  const noteFocus = useRef(false)
+  const noteShown = !noteFold || noteOpen || note !== ''
   // 卡上的工作树开关为准：设备按经理设置或普通会话规则给初值，用户仍可修改。
   const [worktree, setWorktree] = useState(proposal.worktree ?? proposal.worktreeDefault)
   const worktrees = useWorktreesOn(deviceId)
@@ -84,20 +90,28 @@ export function ProposalActs({
   }
   return (
     <>
-      <textarea
-        className="req-input prop-note"
-        aria-label={t('proposal.note')}
-        placeholder={t('proposal.note')}
-        rows={2}
-        value={note}
-        disabled={off}
-        onChange={(event) => setNote(event.target.value)}
-        onKeyDown={(event) => {
-          if (!submitQuestionOnEnter(event.nativeEvent)) return
-          event.preventDefault()
-          start()
-        }}
-      />
+      {noteShown ? (
+        <textarea
+          ref={(box) => {
+            // 点“补充说明”展开后直接进入输入
+            if (!box || !noteFocus.current) return
+            noteFocus.current = false
+            box.focus()
+          }}
+          className="req-input prop-note"
+          aria-label={t('proposal.note')}
+          placeholder={t('proposal.note')}
+          rows={2}
+          value={note}
+          disabled={off}
+          onChange={(event) => setNote(event.target.value)}
+          onKeyDown={(event) => {
+            if (!submitQuestionOnEnter(event.nativeEvent)) return
+            event.preventDefault()
+            start()
+          }}
+        />
+      ) : null}
       <div className="prop-acts" data-small={small === true}>
         <button
           type="button"
@@ -138,6 +152,20 @@ export function ProposalActs({
         >
           {t('proposal.dismiss')}
         </button>
+        {noteShown ? null : (
+          <button
+            type="button"
+            className="btn ghost"
+            data-act="note-open"
+            disabled={off}
+            onClick={() => {
+              noteFocus.current = true
+              setNoteOpen(true)
+            }}
+          >
+            {t('manager.addNote')}
+          </button>
+        )}
         <WorktreeCheck
           deviceId={deviceId}
           checked={worktree}

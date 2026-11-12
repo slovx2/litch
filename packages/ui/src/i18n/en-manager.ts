@@ -269,6 +269,8 @@ export const enManager = {
   'manager.draftMark.conflict': 'Review draft',
   'manager.draftMark.ended': 'Draft no longer applies',
   'manager.submit': 'Submit to manager',
+  /** 手机决策卡主按钮：英文窄屏放不下“Submit to manager”，用短的 */
+  'manager.submitDecision': 'Submit',
   'manager.submitting': 'Submitting…',
   'manager.conflict':
     'This decision has changed; review the latest version and confirm the answer again.',

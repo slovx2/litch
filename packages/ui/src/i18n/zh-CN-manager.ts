@@ -239,6 +239,8 @@ export const zhManager = {
   'manager.draftMark.conflict': '草稿待确认',
   'manager.draftMark.ended': '草稿已失效',
   'manager.submit': '提交给经理',
+  /** 手机决策卡主按钮：英文窄屏放不下“Submit to manager”，用短的 */
+  'manager.submitDecision': '提交给经理',
   'manager.submitting': '正在提交…',
   'manager.conflict': '决策已更新，请核对最新内容后重新确认答复',
   'manager.confirm': '确认当前版本',

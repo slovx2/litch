@@ -134,6 +134,7 @@ function SuggestionRow({
         proposal={proposal}
         inbox
         small={small}
+        noteFold={small}
         sourceParent={{
           id: source.threadId,
           harness: source.harness,

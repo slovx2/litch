@@ -199,7 +199,8 @@ export function IconButton({
   const { c, hit, radius, font } = useTheme()
   const inactive = disabled || busy
   const solid = tone === 'solid'
-  const ink = solid ? c.onAccent : (color ?? (selected || expanded ? c.ink : c.ink2))
+  // 选中、展开时底色是 selBg，前景配 selFg（复古暗色的 selBg 是浅色，用 ink 会看不见）
+  const ink = solid ? c.onAccent : (color ?? (selected || expanded ? c.selFg : c.ink2))
   return (
     <Pressable
       key={busy ? 'busy' : 'idle'}
