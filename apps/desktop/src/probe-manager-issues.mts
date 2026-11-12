@@ -411,7 +411,8 @@ export async function managerIssuesProbe() {
   assert(one('[data-issue-thread="pane"]')?.dataset.issue === decisionId, '抽屉打开了别的 issue')
   assert(one(decision) && !one('[data-issue-thread="page"]'), '抽屉替换了列表')
   assert(!one('[data-issue-thread="pane"] [data-issue-original]'), '抽屉重复正文与决策操作')
-  await click(`${decision} [data-act="issue-full"]`)
+  // 卡片上只留一个讨论入口；完整讨论在抽屉标题行
+  await click('.mg-talk-head [data-act="issue-full"]')
   await until('完整讨论页', () => one('[data-issue-thread="page"]')?.dataset.issue === decisionId)
   assert(!one('[data-issue-thread="pane"]') && cards().length === 0, '整页还保留抽屉或列表')
   await click('[data-act="issue-back"]')
@@ -453,7 +454,10 @@ export async function managerIssuesProbe() {
       'true'
     )
       await click(`[data-issue="${id}"] [data-act="issue-toggle"]`)
-    await click(`[data-issue="${id}"] [data-act="issue-full"]`)
+    if (one('[data-issue-thread="pane"]')?.dataset.issue !== id)
+      await click(`[data-issue="${id}"] [data-act="issue-discuss"]`)
+    await until(`${kind}讨论抽屉`, () => one('[data-issue-thread="pane"]')?.dataset.issue === id)
+    await click('.mg-talk-head [data-act="issue-full"]')
     const page = await until(`${kind}完整页主操作`, () => {
       const root = one('[data-issue-thread="page"]')
       return root?.querySelector(selector) ? root : null
