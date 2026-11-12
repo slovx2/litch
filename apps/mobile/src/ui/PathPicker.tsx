@@ -13,6 +13,7 @@ import { reasonOf } from '../../../../packages/ui/src/app/errors.ts'
 import { useChannel } from '../shell/services'
 import { useT } from './i18n'
 import { Button, Field, Loading } from './kit/controls'
+import { IconButton } from './kit/Icon'
 import { Dialog } from './kit/overlays'
 import { useTheme } from './theme'
 
@@ -21,12 +22,14 @@ export function PathPicker({
   value,
   kind,
   bounded = false,
+  compact = false,
   disabled = false,
   onPick,
 }: {
   deviceId: string
   value: string
   bounded?: boolean
+  compact?: boolean
   kind?: PathPickerKind | undefined
   disabled?: boolean
   onPick(path: string): void
@@ -38,22 +41,33 @@ export function PathPicker({
   return (
     <>
       <View style={styles.actions}>
-        {(kind ? [kind] : (['directory', 'file'] as const)).map((selected) => (
-          <Button
-            key={selected}
-            kind="plain"
-            disabled={disabled}
-            label={t(
-              bounded
-                ? 'files.nav.open'
-                : selected === 'directory'
-                  ? 'pathPicker.directory'
-                  : 'pathPicker.file',
-            )}
-            testID={`path-picker:${selected}`}
-            onPress={() => setMode(selected)}
-          />
-        ))}
+        {(kind ? [kind] : (['directory', 'file'] as const)).map((selected) =>
+          compact ? (
+            <IconButton
+              key={selected}
+              icon="folder"
+              label={t('files.nav.open')}
+              disabled={disabled}
+              testID={`path-picker:${selected}`}
+              onPress={() => setMode(selected)}
+            />
+          ) : (
+            <Button
+              key={selected}
+              kind="plain"
+              disabled={disabled}
+              label={t(
+                bounded
+                  ? 'files.nav.open'
+                  : selected === 'directory'
+                    ? 'pathPicker.directory'
+                    : 'pathPicker.file',
+              )}
+              testID={`path-picker:${selected}`}
+              onPress={() => setMode(selected)}
+            />
+          ),
+        )}
       </View>
       {mode ? (
         <Browser

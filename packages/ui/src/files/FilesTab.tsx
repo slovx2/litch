@@ -355,39 +355,52 @@ export function FilesTab({ place, shown }: SideTabProps) {
   return (
     <>
       <div className="ft-navigation">
-        <div className="ft-location">
-          <b>{device ? t.text(device.name) : place.deviceId}</b>
-          <span className="mono">{root ?? t('files.noRoot')}</span>
-        </div>
-        <div className="ft-navigation-actions">
-          <button
-            className="btn"
-            type="button"
-            data-files-nav="up"
-            disabled={!parent}
-            title={!parent ? t('files.nav.atRoot') : undefined}
-            onClick={() => parent && changeRoot(parent)}
-          >
-            {t('files.nav.up')}
-          </button>
-          <PathPicker
-            deviceId={place.deviceId}
-            value={root ?? ''}
-            kind="directory"
-            bounded
-            onPick={changeRoot}
-          />
-          <button
-            className="btn"
-            type="button"
-            data-files-nav="project"
-            disabled={!defaultRoot}
-            title={!defaultRoot ? t('files.noRoot') : undefined}
-            onClick={() => defaultRoot && changeRoot(defaultRoot)}
-          >
-            {t('files.nav.project')}
-          </button>
-        </div>
+        <button
+          className="ibtn"
+          type="button"
+          data-files-nav="up"
+          disabled={!parent}
+          title={t(parent ? 'files.nav.up' : 'files.nav.atRoot')}
+          aria-label={t('files.nav.up')}
+          onClick={() => parent && changeRoot(parent)}
+        >
+          <Icon name="up" small />
+        </button>
+        <PathPicker
+          deviceId={place.deviceId}
+          value={root ?? ''}
+          kind="directory"
+          bounded
+          compact
+          onPick={changeRoot}
+        />
+        <button
+          className="ibtn"
+          type="button"
+          data-files-nav="project"
+          disabled={!defaultRoot}
+          title={t(defaultRoot ? 'files.nav.project' : 'files.noRoot')}
+          aria-label={t('files.nav.project')}
+          onClick={() => defaultRoot && changeRoot(defaultRoot)}
+        >
+          <Icon name="tree" small />
+        </button>
+        <details className="ft-location">
+          <summary title={`${device ? t.text(device.name) : place.deviceId}\n${root ?? ''}`}>
+            {device?.kind !== 'local' ? (
+              <span className="ft-location-device">
+                {device ? t.text(device.name) : place.deviceId}
+              </span>
+            ) : null}
+            <span className="ft-location-path mono">
+              <bdi dir="ltr">{root ?? t('files.noRoot')}</bdi>
+            </span>
+          </summary>
+          <div className="ft-location-card">
+            <b>{device ? t.text(device.name) : place.deviceId}</b>
+            <code>{root ?? t('files.noRoot')}</code>
+          </div>
+        </details>
         {roots.length > 1 ? (
           <select
             aria-label={t('files.root')}

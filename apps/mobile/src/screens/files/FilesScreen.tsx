@@ -21,12 +21,14 @@ import {
 import { useIsFocused } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useCallback, useEffect, useState } from 'react'
-import { ScrollView, Text, View } from 'react-native'
+import { Pressable, ScrollView, Text, View } from 'react-native'
 import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Empty } from '../../ui/kit/controls'
+import { IconButton } from '../../ui/kit/Icon'
+import { Dialog } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { PathPicker } from '../../ui/PathPicker'
 import { useTheme } from '../../ui/theme'
@@ -65,6 +67,11 @@ export function FilesScreen({ navigation, route }: Props) {
   const device = useKey<DeviceView>(keys.device(deviceId))
   const t = useT()
   const theme = useTheme()
+  const [locationOpen, setLocationOpen] = useState(false)
+  const [locationWidth, setLocationWidth] = useState(0)
+  const pathChars = Math.max(8, Math.floor(locationWidth / (theme.font.size.small * 0.65)))
+  const shownRoot =
+    locationWidth && root.length > pathChars ? `…${root.slice(1 - pathChars)}` : root
   useEffect(() => {
     if (root) setFileBrowserRoot(browserKey, root)
   }, [browserKey, root])
@@ -225,7 +232,7 @@ export function FilesScreen({ navigation, route }: Props) {
             ? baseName(root) || root
             : baseName(path)
       }
-      subtitle={`${device ? t.text(device.name) : deviceId} · ${path}`}
+      subtitle={undefined}
       actions={
         loaded.kind === 'dir'
           ? [
@@ -242,48 +249,84 @@ export function FilesScreen({ navigation, route }: Props) {
       testID="files"
     >
       <View
+        testID="files:navigation"
         style={{
-          gap: 6,
-          paddingHorizontal: 12,
-          paddingVertical: 8,
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: 8,
           borderBottomWidth: 1,
           borderBottomColor: theme.c.line1,
         }}
       >
-        <Text
-          selectable
+        <IconButton
+          icon="up"
+          label={t('files.nav.up')}
+          testID="files:up"
+          disabled={!parent}
+          onPress={() => parent && changeRoot(parent)}
+        />
+        <PathPicker
+          deviceId={deviceId}
+          value={root}
+          kind="directory"
+          bounded
+          compact
+          onPick={changeRoot}
+        />
+        <IconButton
+          icon="branch"
+          label={t('files.nav.project')}
+          testID="files:project"
+          disabled={!defaultRoot}
+          onPress={() => changeRoot(defaultRoot)}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${device ? t.text(device.name) : deviceId} · ${root}`}
+          testID="files:location"
+          onPress={() => setLocationOpen(true)}
           style={{
-            color: theme.c.ink3,
-            fontFamily: theme.font.mono,
-            fontSize: theme.font.size.meta,
+            flex: 1,
+            minWidth: 0,
+            flexDirection: 'row',
+            alignItems: 'center',
+            minHeight: theme.hit,
           }}
+        >
+          {device?.kind !== 'local' ? (
+            <Text
+              numberOfLines={1}
+              style={{ maxWidth: 76, color: theme.c.ink2, fontSize: theme.font.size.small }}
+            >
+              {device ? t.text(device.name) : deviceId} ·{' '}
+            </Text>
+          ) : null}
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="head"
+            onLayout={(event) => setLocationWidth(event.nativeEvent.layout.width)}
+            style={{
+              color: theme.c.ink3,
+              flex: 1,
+              fontFamily: theme.font.mono,
+              fontSize: theme.font.size.small,
+            }}
+          >
+            {shownRoot}
+          </Text>
+        </Pressable>
+      </View>
+      <Dialog visible={locationOpen} onClose={() => setLocationOpen(false)}>
+        <Text style={{ color: theme.c.ink }}>{device ? t.text(device.name) : deviceId}</Text>
+        <Text
+          testID="files:full-location"
+          selectable
+          style={{ color: theme.c.ink, fontFamily: theme.font.mono }}
         >
           {root}
         </Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          <Button
-            kind="plain"
-            testID="files:up"
-            label={t('files.nav.up')}
-            disabled={!parent}
-            onPress={() => parent && changeRoot(parent)}
-          />
-          <PathPicker
-            deviceId={deviceId}
-            value={root}
-            kind="directory"
-            bounded
-            onPick={changeRoot}
-          />
-          <Button
-            kind="plain"
-            testID="files:project"
-            label={t('files.nav.project')}
-            disabled={!defaultRoot}
-            onPress={() => changeRoot(defaultRoot)}
-          />
-        </View>
-      </View>
+        <Button kind="plain" label={t('viewer.close')} onPress={() => setLocationOpen(false)} />
+      </Dialog>
       {body}
       {loaded.kind !== 'link' && loaded.kind !== 'loading' && loaded.kind !== 'dir' ? (
         <FileLinkReport

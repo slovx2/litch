@@ -324,6 +324,26 @@ try {
   assert.equal(listing.entries.length, 2000)
   assert.equal(listing.truncated, true)
   checks.push('设备 home 正确；2,003 项层只返回 2,000 项并标记截断')
+  const height = await read(
+    `document.querySelector(${JSON.stringify(mobile ? '[data-testid="files:navigation"]' : '.ft-navigation')}).getBoundingClientRect().height`,
+  )
+  assert.ok(height <= (mobile ? 45 : 34), `导航不应增加多行高度：${height}`)
+  await click(mobile ? '[data-testid="files:location"]' : '.ft-location summary')
+  await until(
+    () =>
+      read(
+        mobile
+          ? `document.querySelector('[data-testid="files:full-location"]')?.textContent===${JSON.stringify(sibling)}`
+          : "!!document.querySelector('.ft-location[open]')",
+      ),
+    'full location',
+  )
+  await click(mobile ? '[role="button"][aria-label="关闭"]' : '.ft-location summary')
+  if (mobile)
+    await read(
+      "[...document.querySelectorAll('[role=button]')].find(b=>b.textContent==='关闭')?.click()",
+    )
+  checks.push(`图标导航保持单行（${height}px），点路径可查看完整设备位置`)
   await call('Page.captureScreenshot', { format: 'png' }).then((result) =>
     writeFileSync(
       join(evidence, `${mobile ? 'mobile' : 'desktop'}-${remote ? 'ssh' : 'local'}.png`),

@@ -473,29 +473,69 @@
   overflow-wrap: anywhere;
 }
 
-/* 导航始终显示设备与完整目录，长路径换行，不挤压操作按钮。 */
+/* 导航只占一条工具栏；路径从前段截断，完整位置按需展开。 */
 .ft-navigation {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
   border-bottom: 1px solid var(--line-1);
   flex: none;
+  min-width: 0;
 }
 .ft-location {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  flex: 1;
+  position: relative;
   font-size: calc(12px * var(--fs));
   min-width: 0;
 }
-.ft-location .mono {
-  overflow-wrap: anywhere;
+.ft-location summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+  min-width: 0;
+}
+.ft-location summary::-webkit-details-marker {
+  display: none;
+}
+.ft-location-device {
+  flex: none;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+.ft-location-path {
+  flex: 1;
+  min-width: 0;
+  direction: rtl;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--ink-3);
+}
+.ft-location-card {
+  position: absolute;
+  z-index: 5;
+  top: 100%;
+  right: 0;
+  max-width: min(520px, 75vw);
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: var(--overlay);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  overflow-wrap: anywhere;
   user-select: text;
 }
-.ft-navigation-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.ft-navigation > select {
+  max-width: 30%;
+  min-width: 0;
 }

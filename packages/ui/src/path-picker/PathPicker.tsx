@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
+import { Icon } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import './path-picker.css'
 
@@ -21,6 +22,7 @@ export function PathPicker({
   value,
   kind,
   bounded = false,
+  compact = false,
   local = false,
   disabled = false,
   onPick,
@@ -28,6 +30,7 @@ export function PathPicker({
   deviceId: string
   value: string
   bounded?: boolean
+  compact?: boolean
   kind?: PathPickerKind | undefined
   /** “操作这台电脑”的访问范围属于客户端主机，不属于发请求的远程设备。 */
   local?: boolean
@@ -84,18 +87,39 @@ export function PathPicker({
         <button
           key={selected}
           type="button"
-          className="btn path-picker-trigger"
+          className={compact ? 'ibtn path-picker-trigger' : 'btn path-picker-trigger'}
           data-path-picker={selected}
           disabled={disabled || (!local && device?.connection !== 'online')}
-          title={!local && device?.connection !== 'online' ? t('pathPicker.offline') : undefined}
-          onClick={() => void browse(selected)}
-        >
-          {t(
+          title={
+            !local && device?.connection !== 'online'
+              ? t('pathPicker.offline')
+              : t(
+                  bounded
+                    ? 'files.nav.open'
+                    : selected === 'directory'
+                      ? 'pathPicker.directory'
+                      : 'pathPicker.file',
+                )
+          }
+          aria-label={t(
             bounded
               ? 'files.nav.open'
               : selected === 'directory'
                 ? 'pathPicker.directory'
                 : 'pathPicker.file',
+          )}
+          onClick={() => void browse(selected)}
+        >
+          {compact ? (
+            <Icon name="folder" small />
+          ) : (
+            t(
+              bounded
+                ? 'files.nav.open'
+                : selected === 'directory'
+                  ? 'pathPicker.directory'
+                  : 'pathPicker.file',
+            )
           )}
         </button>
       ))}
