@@ -266,6 +266,8 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
       uploads: new Map(),
       files: createFiles({
         browserSupported: () => true,
+        realpathSupported: () => true,
+        shortMediaSupported: () => true,
         previewSupported: () => deviceId !== NO_FILES,
         clock,
         online: () => host.device(deviceId)?.connection === 'online',
@@ -278,7 +280,11 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
           params: ClientRequests[M]['params'],
           options?: RpcRequestOptions,
         ) =>
-          answer(deviceId, remote, method, params, options) as Promise<ClientRequests[M]['result']>,
+          answer(deviceId, remote, method, params, options).then((result: any) =>
+            method === 'fs/getMetadata' && (params as any).litchResolve
+              ? { ...result, litchResolved: { path: (params as any).path } }
+              : result,
+          ) as Promise<ClientRequests[M]['result']>,
         fail: (error) => channelFailure(error),
         log() {},
         home: () => HOME,
@@ -335,6 +341,9 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
       const files = filesOf(deviceId, root)
       const view = await files.list(expand(root), expand(path), fresh === true, signal)
       return { ...view, path: outward(root, view.path) }
+    },
+    async 'files.target'({ deviceId, root, path }, signal) {
+      return filesOf(deviceId, root).target(expand(root), expand(path), signal)
     },
 
     async 'paths.list'({ deviceId, path }, signal) {

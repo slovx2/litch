@@ -65,6 +65,7 @@ export type RootStackParamList = {
     workspaceId?: string | null
     defaultRoot?: string
     browsing?: boolean
+    linkPath?: string
     root: string
     path?: string
     line?: number

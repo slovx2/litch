@@ -91,7 +91,7 @@ export function FileTreeView({
               void Clipboard.setStringAsync(item.path)
             }}
             onPress={() => {
-              if (item.kind === 'dir') {
+              if (item.kind === 'dir' && !item.link) {
                 if (item.expanded) files.collapse(deviceId, root, item.path, scope)
                 else files.expand(deviceId, root, item.path, scope)
               } else if (selectable) onOpen(item.path)

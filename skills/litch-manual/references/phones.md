@@ -368,3 +368,13 @@ Double-tap to zoom or reset; a single tap closes even while zoomed. Releasing a 
 Originals load from the session device only when opened, with a four-million-pixel limit per image.
 The device’s **Show images read by AI in conversations** privacy setting also applies to the phone;
 turning it off hides the thumbnails and closes the viewer.
+
+## 文件浏览与短音视频 / Files and short media
+
+文件页可逐层向上、输入任意会话设备目录或回项目。图标与路径同排；点路径查看完整设备位置。浏览不改变会话工作目录，冷启动回项目；远程路径始终由会话设备读取。每层最多 2,000 项，临时根仅筛选当前层。显式软链显示原路径与实际路径。
+
+MP3、WAV 和可解码 MP4 支持播放／暂停，上限 16 MiB、5 分钟、2000 万像素。离页或后台暂停；不提供进度拖动或流式。格式不支持、损坏或超限时显示原因，可另存到手机。另存逐块读取设备文件并写入应用缓存，完成后打开系统分享菜单；可取消，文件变化会停止。Office、HTML 不提供手机预览。
+
+Browse parent folders, enter any directory on the session device, or return to the project. Tap the compact path row for the full device location. Browsing does not change the session working directory. Remote paths always use the session device. Each folder lists at most 2,000 entries; temporary roots filter only the current folder. Explicitly opened symlinks show both paths.
+
+MP3, WAV and decodable MP4 support play/pause up to 16 MiB, five minutes and 20 million pixels. Leaving the page or backgrounding pauses playback. Seeking and streaming are unavailable. Unsupported, invalid or oversized files show a reason and can be saved through the phone’s share menu. Exports transfer device files in bounded chunks, support cancellation and stop if the source changes. Office and HTML previews are unavailable on phones.

@@ -20,6 +20,7 @@ import { useTheme } from '../../ui/theme'
 import { FilePreview } from './preview/FilePreview'
 import { mobilePreviewFormat } from './preview/model'
 import { CopyPath } from './preview/PreviewNotice'
+import { SavePhoneFile } from './preview/SavePhoneFile'
 
 const LINE_H = 18
 const FONT = 12
@@ -62,6 +63,7 @@ export function FileView({
           size: byteSize(content.bytes),
           limit: byteSize(content.limit),
         })}
+        action={<SavePhoneFile deviceId={deviceId} root={root} path={content.path} />}
       />
     )
   if (content.kind === 'binary')
@@ -74,7 +76,12 @@ export function FileView({
             ? ''
             : t('files.view.binary.sized', { size: byteSize(content.bytes) }),
         ].join('')}
-        action={<CopyPath path={content.path} />}
+        action={
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <CopyPath path={content.path} />
+            <SavePhoneFile deviceId={deviceId} root={root} path={content.path} />
+          </View>
+        }
       />
     )
   if (content.kind === 'missing')

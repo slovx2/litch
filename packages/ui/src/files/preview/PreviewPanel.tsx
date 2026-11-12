@@ -1,11 +1,14 @@
 import {
+  type DeviceView,
   decodeBase64,
   type FilePreview,
+  keys,
   languageOf,
   normalizePath,
   observeFileChanges,
   type PreviewKind,
   parentPath,
+  pathTwin,
   relativeTo,
   withinRoot,
 } from '@litch/core'
@@ -22,7 +25,7 @@ import {
 import { useT } from '../../app/appearance.ts'
 import { whyNot } from '../../app/errors.ts'
 import { Icon } from '../../app/icons.tsx'
-import { useServices } from '../../app/services.tsx'
+import { useKey, useServices } from '../../app/services.tsx'
 import { type FileAction, runFileAction } from '../actions.ts'
 import { CodeView } from '../CodeView.tsx'
 import { useFileWatching } from '../content.ts'
@@ -72,11 +75,17 @@ export function PreviewPanel({
   const { channel } = useServices()
   const watching = useFileWatching()
   const place = useContext(FileBrowserPlace)
+  const device = useKey<DeviceView>(keys.device(deviceId))
   const [linkError, setLinkError] = useState('')
-  const resourceRoot =
-    place?.roots.map(normalizePath).find((base) => withinRoot(base, tab.path) !== null) ??
-    parentPath(tab.path) ??
-    root
+  const twin = pathTwin(device?.os)
+  const projectRoot = place?.roots
+    .map(normalizePath)
+    .find((base) => withinRoot(base, tab.path, twin) !== null)
+  const resourceRoot = projectRoot
+    ? withinRoot(projectRoot, tab.path) !== null
+      ? projectRoot
+      : (twin(projectRoot) ?? projectRoot)
+    : (parentPath(tab.path) ?? root)
   const [refresh, setRefresh] = useState(0)
   const [error, setError] = useState('')
   const text = ['markdown', 'svg', 'html', 'csv'].includes(format)

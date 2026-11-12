@@ -10,6 +10,7 @@ import {
   type FileLinkResolution,
   type FileLinkTarget,
   fileBrowserKey,
+  fileBrowserLink,
   fileBrowserRoot,
   keys,
   normalizePath,
@@ -20,7 +21,7 @@ import {
 } from '@litch/core'
 import { useIsFocused } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
 import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
 import type { RootStackParamList } from '../../nav/routes'
@@ -68,13 +69,18 @@ export function FilesScreen({ navigation, route }: Props) {
   const t = useT()
   const theme = useTheme()
   const [locationOpen, setLocationOpen] = useState(false)
+  const [locationError, setLocationError] = useState('')
+  const locating = useRef<AbortController | null>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 换根或换设备时撤销尚未完成的旧导航。
+  useEffect(() => () => locating.current?.abort(), [deviceId, root])
+  const linkPath = target?.linkPath ?? route.params.linkPath ?? fileBrowserLink(browserKey)
   const [locationWidth, setLocationWidth] = useState(0)
   const pathChars = Math.max(8, Math.floor(locationWidth / (theme.font.size.small * 0.65)))
   const shownRoot =
     locationWidth && root.length > pathChars ? `…${root.slice(1 - pathChars)}` : root
   useEffect(() => {
-    if (root) setFileBrowserRoot(browserKey, root)
-  }, [browserKey, root])
+    if (root) setFileBrowserRoot(browserKey, root, target?.linkPath ?? route.params.linkPath)
+  }, [browserKey, root, target?.linkPath, route.params.linkPath])
   const channel = useChannel()
   const focused = useIsFocused()
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' })
@@ -118,6 +124,10 @@ export function FilesScreen({ navigation, route }: Props) {
           if (result.status === 'ready' && found) setTarget(found)
           else setLoaded({ kind: 'link', result })
         }, failed)
+    } else if (route.params.path && !target) {
+      void channel.command('files.target', { deviceId, root, path }).then((found) => {
+        if (live) setTarget(found)
+      }, failed)
     } else if (path === root) void asDir()
     else {
       const read = async () => {
@@ -151,15 +161,36 @@ export function FilesScreen({ navigation, route }: Props) {
     target,
   ])
 
-  const changeRoot = (to: string) =>
-    navigation.replace('Files', {
-      deviceId,
-      root: normalizePath(to),
-      defaultRoot,
-      browsing: true,
-      ...(route.params.sessionId ? { sessionId: route.params.sessionId } : {}),
-      ...(route.params.workspaceId ? { workspaceId: route.params.workspaceId } : {}),
-    })
+  const changeRoot = (to: string) => {
+    locating.current?.abort()
+    const abort = new AbortController()
+    locating.current = abort
+    setLocationError('')
+    const full = normalizePath(to)
+    void channel
+      .command('files.target', { deviceId, root: full, path: full }, { signal: abort.signal })
+      .then(
+        (found) => {
+          if (abort.signal.aborted) return
+          if (found.kind !== 'directory') {
+            setLocationError(t('files.tree.rootFailed'))
+            return
+          }
+          navigation.replace('Files', {
+            deviceId,
+            root: found.root,
+            defaultRoot,
+            browsing: true,
+            ...(found.linkPath ? { linkPath: found.linkPath } : {}),
+            ...(route.params.sessionId ? { sessionId: route.params.sessionId } : {}),
+            ...(route.params.workspaceId ? { workspaceId: route.params.workspaceId } : {}),
+          })
+        },
+        (error) => {
+          if (!abort.signal.aborted) setLocationError(reasonOf(error, t))
+        },
+      )
+  }
   const open = (to: string) =>
     navigation.push('Files', {
       ...route.params,
@@ -323,10 +354,15 @@ export function FilesScreen({ navigation, route }: Props) {
           selectable
           style={{ color: theme.c.ink, fontFamily: theme.font.mono }}
         >
-          {root}
+          {linkPath ? `${linkPath} → ${path}` : root}
         </Text>
         <Button kind="plain" label={t('viewer.close')} onPress={() => setLocationOpen(false)} />
       </Dialog>
+      {locationError ? (
+        <Text accessibilityRole="alert" style={{ color: theme.c.err }}>
+          {locationError}
+        </Text>
+      ) : null}
       {body}
       {loaded.kind !== 'link' && loaded.kind !== 'loading' && loaded.kind !== 'dir' ? (
         <FileLinkReport

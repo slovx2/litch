@@ -1,6 +1,19 @@
 import type { Entry } from '../../../../../packages/ui/src/i18n/types.ts'
 
 export const zhCN = {
+  'mobilePreview.play': '播放',
+  'mobilePreview.pause': '暂停',
+  'mobilePreview.mediaInvalid': '无法播放：文件已损坏，或系统不支持其编码。',
+  'mobilePreview.mediaDuration': '预览仅支持 5 分钟以内的短音视频，可另存后播放。',
+  'mobilePreview.mediaSize': '视频超过预览像素上限，可另存后播放。',
+  'mobilePreview.mediaUnsupported':
+    '手机支持 MP3、PCM WAV 与常见 H.264/AAC MP4；此格式请另存后播放。',
+  'mobilePreview.save': '另存文件',
+  'mobilePreview.exportUnavailable': '当前界面不支持系统另存，请在手机应用中操作。',
+  'mobilePreview.exportDiskFull': '手机存储空间不足，请释放空间后重试。',
+  'mobilePreview.saving': '正在读取 {size} / {total}',
+  'mobilePreview.cancelSave': '取消另存',
+  'mobilePreview.saveFailed': '另存失败：{reason}',
   'mobilePreview.unsupportedFormat': '此格式暂不支持在手机上预览，可在桌面查看',
   'mobilePreview.unsupported': '此设备尚不支持文件预览，请升级设备服务后重试。',
   'mobilePreview.loading': '正在加载预览…',
@@ -27,6 +40,21 @@ export const zhCN = {
 } as const
 
 export const en: Record<keyof typeof zhCN, Entry> = {
+  'mobilePreview.play': 'Play',
+  'mobilePreview.pause': 'Pause',
+  'mobilePreview.mediaInvalid': 'The file is damaged or its codec is not supported by this device.',
+  'mobilePreview.mediaDuration':
+    'Preview supports clips up to 5 minutes. Save the file to play it.',
+  'mobilePreview.mediaSize': 'This video exceeds the preview pixel limit. Save it to play it.',
+  'mobilePreview.mediaUnsupported':
+    'Mobile supports MP3, PCM WAV, and common H.264/AAC MP4. Save this file to play it.',
+  'mobilePreview.save': 'Save file',
+  'mobilePreview.exportUnavailable':
+    'System export is unavailable here. Open this file in the mobile app.',
+  'mobilePreview.exportDiskFull': 'There is not enough free space. Free up storage and try again.',
+  'mobilePreview.saving': 'Reading {size} / {total}',
+  'mobilePreview.cancelSave': 'Cancel save',
+  'mobilePreview.saveFailed': 'Could not save: {reason}',
   'mobilePreview.unsupportedFormat':
     'This format cannot be previewed on mobile yet. View it on desktop.',
   'mobilePreview.unsupported': 'Update the device service to enable file previews, then try again.',

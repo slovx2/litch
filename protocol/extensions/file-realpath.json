@@ -1,0 +1,43 @@
+{
+  "extension": "fileRealpath",
+  "description": "只在用户主动打开文件或目录时返回同设备真实目标，不改变文档自动资源范围。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "fileRealpath" }
+    }
+  },
+  "undeclared": "携带 litchResolve 返回 -32602；标准 fs/getMetadata 不增加字段。",
+  "rules": [
+    "服务 runtime/info 声明 fileRealpath 后才能发送 litchResolve=true；不以 fileBrowser 代替此能力。",
+    "litchResolved.path 由同一设备的 realpath 返回，权限按设备进程用户。不读取正文，不注册为模型工具。",
+    "客户端验证绝对路径并保留原链接路径；显式文件以真实目标父目录、目录以真实目标为临时根。",
+    "后续普通文件、大小、句柄身份与读取期间变更检查仍由受限读取执行；自动资源不调用此显式解析。"
+  ],
+  "parts": [
+    {
+      "kind": "Param",
+      "on": "fs/getMetadata",
+      "name": "litchResolve",
+      "schema": { "const": true }
+    },
+    {
+      "kind": "Response",
+      "on": "fs/getMetadata（携带 litchResolve）",
+      "response": {
+        "type": "object",
+        "required": ["litchResolved"],
+        "properties": {
+          "litchResolved": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path"],
+            "properties": { "path": { "type": "string" } }
+          }
+        }
+      }
+    }
+  ]
+}

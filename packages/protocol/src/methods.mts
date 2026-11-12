@@ -682,6 +682,7 @@ export interface ClientRequests extends AcpControlsRequests {
   'fs/readFile': {
     params: FsReadFileParams & {
       litchPreview?: import('./file-preview.mjs').FilePreviewOption
+      litchShortMedia?: import('./file-preview.mjs').FilePreviewOption
       litchReadRange?: import('./file-download.mjs').FileReadRange
     }
     result: FsReadFileResponse & {
@@ -689,7 +690,12 @@ export interface ClientRequests extends AcpControlsRequests {
     }
   }
   /** 跟着符号链接走到底之后是什么；`isSymlink` 说的是这个路径本身 */
-  'fs/getMetadata': { params: FsGetMetadataParams; result: FsGetMetadataResponse }
+  'fs/getMetadata': {
+    params: FsGetMetadataParams & { litchResolve?: true }
+    result: FsGetMetadataResponse & {
+      litchResolved?: import('./file-browser.mjs').FileResolvedPath
+    }
+  }
   /** fileAttachments 扩展：按连接登记打开的会话视图，保护其上传附件。 */
   'litch/attachments/watch': {
     params: { threadId: string; open: boolean }

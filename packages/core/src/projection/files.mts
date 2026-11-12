@@ -211,6 +211,7 @@ export function flattenTree(
         id: path,
         path,
         name: entry.name,
+        ...(entry.link ? { link: true } : {}),
         depth,
         kind: entry.kind,
         expanded: open,

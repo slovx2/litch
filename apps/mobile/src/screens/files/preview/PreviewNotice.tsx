@@ -4,6 +4,7 @@ import { Text, View } from 'react-native'
 import { useT } from '../../../ui/i18n'
 import { Button, Empty } from '../../../ui/kit/controls'
 import { useTheme } from '../../../ui/theme'
+import { SavePhoneFile } from './SavePhoneFile'
 
 export function CopyPath({ path }: { path: string }) {
   const t = useT()
@@ -30,10 +31,14 @@ export function CopyPath({ path }: { path: string }) {
 }
 
 export function PreviewNotice({
+  deviceId,
+  root,
   path,
   detail,
   retry,
 }: {
+  deviceId?: string
+  root?: string
   path: string
   detail: string
   retry?: () => void
@@ -54,6 +59,7 @@ export function PreviewNotice({
             />
           ) : null}
           <CopyPath path={path} />
+          {deviceId && root ? <SavePhoneFile deviceId={deviceId} root={root} path={path} /> : null}
         </View>
       }
     />

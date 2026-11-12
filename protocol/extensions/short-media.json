@@ -1,0 +1,38 @@
+{
+  "extension": "shortMedia",
+  "description": "短媒体在设备句柄上先探测内容，再有界读取；文件页和后续对话播放器共用。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "shortMedia" }
+    }
+  },
+  "undeclared": "携带 litchShortMedia 返回 -32602；标准 fs/readFile 不受影响。",
+  "rules": [
+    "只向 runtime/info 声明 shortMedia 的服务发送参数；不回退整文件或 shell。",
+    "root 与 path 必须为同设备绝对路径；真实目标仍需在资源根内，拒绝非普通文件。",
+    "maxBytes 为 1 至 16777216。复用 filePreview 的打开句柄、身份和前后变更核对；先检查大小、读取最多 4096 字节探测头，非媒体不读取正文。",
+    "以内容识别 WAV、MP3、MP4、WebM，扩展名不能改变识别结果；实际编码由本机播放器核验。手机当前只播放前三类，WebM 提示另存。",
+    "播放器另守 300 秒、2000 万像素、单边 16384 的预算，不自动播放、不提供 seek 或流式读取，不允许网络和主动内容。",
+    "与 filePreview 共用最多四次读取并发。成功仍只返回 dataBase64；失败 data.litchShortMedia.kind 为 tooLarge/outside/notFile/changed/busy，tooLarge 附 bytes/limit。",
+    "此能力只供已认证界面主动请求，不注册为模型工具，不主动发送正文。"
+  ],
+  "parts": [
+    {
+      "kind": "Param",
+      "on": "fs/readFile",
+      "name": "litchShortMedia",
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["root", "maxBytes"],
+        "properties": {
+          "root": { "type": "string", "minLength": 1 },
+          "maxBytes": { "type": "integer", "minimum": 1, "maximum": 16777216 }
+        }
+      }
+    }
+  ]
+}

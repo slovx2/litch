@@ -171,6 +171,8 @@ function DevicePathDialog({
   const [input, setInput] = useState(start ?? '~')
   const [listing, setListing] = useState<PathPickerListing | null>(null)
   const [busy, setBusy] = useState(true)
+  const [settled, setSettled] = useState<typeof target | null>(null)
+  const pending = busy || settled !== target
   const [error, setError] = useState('')
   useEffect(() => {
     if (dialog.current && !dialog.current.open) dialog.current.showModal()
@@ -192,7 +194,10 @@ function DevicePathDialog({
         },
       )
       .finally(() => {
-        if (!abort.signal.aborted) setBusy(false)
+        if (!abort.signal.aborted) {
+          setBusy(false)
+          setSettled(target)
+        }
       })
     return () => abort.abort()
   }, [channel, deviceId, kind, target, t, bounded])
@@ -201,6 +206,7 @@ function DevicePathDialog({
     <dialog
       ref={dialog}
       className="modal path-picker-dialog"
+      data-device-path={pending ? undefined : listing?.path}
       aria-label={title}
       onClose={onClose}
       onCancel={(event) => {
@@ -238,7 +244,7 @@ function DevicePathDialog({
           <button
             type="button"
             className="btn"
-            disabled={busy || !listing?.parent}
+            disabled={pending || !listing?.parent}
             onClick={() => setTarget({ path: listing?.parent ?? null })}
           >
             {t('workspace.browse.up')}
@@ -247,7 +253,7 @@ function DevicePathDialog({
             {t('workspace.browse.home')}
           </button>
         </div>
-        {busy ? (
+        {pending ? (
           <p role="status">{t('workspace.browse.loading')}</p>
         ) : error ? (
           <p className="err" role="alert">
@@ -279,7 +285,7 @@ function DevicePathDialog({
             ))}
           </ul>
         )}
-        {!busy && !error && listing?.entries.length === 0 ? (
+        {!pending && !error && listing?.entries.length === 0 ? (
           <p className="form-note">{t('pathPicker.empty')}</p>
         ) : null}
         {listing?.truncated ? <p className="form-note">{t('pathPicker.truncated')}</p> : null}
@@ -292,7 +298,7 @@ function DevicePathDialog({
           <button
             type="button"
             className="btn primary"
-            disabled={busy || !listing}
+            disabled={pending || !listing}
             onClick={() => listing && onPick(listing.path)}
           >
             {t('pathPicker.selectDirectory')}

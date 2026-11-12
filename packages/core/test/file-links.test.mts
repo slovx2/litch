@@ -20,6 +20,9 @@ function fixture(home: string | null = '/remote/home') {
     home: () => home,
     knownRoot: () => false,
     previewSupported: () => true,
+    browserSupported: () => true,
+    realpathSupported: () => true,
+    shortMediaSupported: () => true,
     fail: channelFailure,
     log() {},
     request: async (method, params) => {
@@ -29,7 +32,14 @@ function fixture(home: string | null = '/remote/home') {
       if (!data.has(path)) throw new RpcError(-32603, 'ENOENT: no such file')
       return (
         method === 'fs/getMetadata'
-          ? { isFile: true, isDirectory: false, isSymlink: false, createdAtMs: 0, modifiedAtMs: 0 }
+          ? {
+              isFile: true,
+              isDirectory: false,
+              isSymlink: false,
+              createdAtMs: 0,
+              modifiedAtMs: 0,
+              litchResolved: { path },
+            }
           : { dataBase64: textToBase64(data.get(path) ?? '') }
       ) as never
     },
@@ -112,7 +122,7 @@ test('核心按 deviceId 分派同一个根外路径；SSH 会话不会尝试本
         protocolVersion: '0.163.0',
         cliBuild: '0.99.1',
         capabilities: [],
-        extensions: ['fileBrowser', 'filePreview'],
+        extensions: ['fileBrowser', 'fileRealpath', 'filePreview', 'shortMedia'],
         releaseReady: true,
       }),
       'thread/list': () => ({ data: [], nextCursor: null }),

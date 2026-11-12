@@ -1,7 +1,7 @@
 // 隔离正式组件 + 本机/回环 SSH 文件读取。无个人模型、配置或浏览器；证据保留在指定目录。
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
-import { globSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { execFileSync, spawn } from 'node:child_process'
+import { globSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -17,13 +17,55 @@ const evidence = process.env.LITCH_FILES_NAV_EVIDENCE ?? join(work, 'evidence')
 mkdirSync(evidence, { recursive: true })
 const remote = process.argv.includes('--ssh')
 const mobile = process.argv.includes('--mobile')
+const media = process.argv.includes('--media')
 const project = join(work, 'project'),
   sibling = join(work, 'sibling'),
   many = join(work, 'many')
 for (const path of [project, sibling, many, join(work, 'home')]) mkdirSync(path)
 writeFileSync(join(sibling, 'outside.txt'), 'OUTSIDE-DEVICE-CONTENT\n')
 writeFileSync(join(project, 'inside.txt'), 'INSIDE-PROJECT\n')
-for (let n = 0; n < 2003; n++) writeFileSync(join(many, `${n}.txt`), '')
+const manyCount = Number(process.env.LITCH_FILES_NAV_MANY ?? 2003)
+for (let n = 0; n < manyCount; n++) writeFileSync(join(many, `${n}.txt`), '')
+if (media) {
+  symlinkSync(join(sibling, 'outside.txt'), join(project, 'linked.txt'))
+  symlinkSync(sibling, join(project, 'linked-dir'))
+  symlinkSync(project, join(project, 'loop'))
+  const wav = Buffer.alloc(44 + 16000)
+  wav.write('RIFF')
+  wav.writeUInt32LE(wav.length - 8, 4)
+  wav.write('WAVEfmt ', 8)
+  wav.writeUInt32LE(16, 16)
+  wav.writeUInt16LE(1, 20)
+  wav.writeUInt16LE(1, 22)
+  wav.writeUInt32LE(8000, 24)
+  wav.writeUInt32LE(16000, 28)
+  wav.writeUInt16LE(2, 32)
+  wav.writeUInt16LE(16, 34)
+  wav.write('data', 36)
+  wav.writeUInt32LE(16000, 40)
+  writeFileSync(join(sibling, 'clip.wav'), wav)
+  writeFileSync(join(sibling, 'invalid.mp4'), '<html>Not media</html>')
+  execFileSync('/opt/homebrew/bin/ffmpeg', [
+    '-v',
+    'error',
+    '-f',
+    'lavfi',
+    '-i',
+    'color=c=blue:s=160x90:d=1',
+    '-f',
+    'lavfi',
+    '-i',
+    'sine=frequency=440:duration=1',
+    '-c:v',
+    'libx264',
+    '-pix_fmt',
+    'yuv420p',
+    '-c:a',
+    'aac',
+    '-shortest',
+    join(sibling, 'clip.mp4'),
+  ])
+}
 const bundle = async (entry, name, platform = 'node', extra = {}) => {
   const path = join(work, name)
   await build({
@@ -43,9 +85,12 @@ const bundle = async (entry, name, platform = 'node', extra = {}) => {
       {
         name: 'fixture-preview-registry',
         setup(b) {
-          b.onLoad({ filter: /files\/preview\/registry\.ts$/ }, () => ({
-            contents: 'export const rendererFor=()=>undefined;',
+          b.onLoad({ filter: /files\/preview\/registry\.ts$/ }, (a) => ({
+            contents: media
+              ? "export const rendererFor=format=>format==='media'?()=>import('./renderers/media.tsx'):format==='markdown'?()=>import('./renderers/markdown.tsx'):undefined;"
+              : 'export const rendererFor=()=>undefined;',
             loader: 'js',
+            resolveDir: dirname(a.path),
           }))
         },
       },
@@ -59,7 +104,9 @@ const backend = await bundle('packages/shared/src/filesystem-rpc.mts', 'rpc.mjs'
 const { FilesystemRpc } = await import(backend)
 const rpc = new FilesystemRpc(),
   peer = { id: 'fixture', send() {}, close() {} }
-rpc.declare(peer, { capabilities: { litchExtensions: ['fileBrowser', 'filePreview'] } })
+rpc.declare(peer, {
+  capabilities: { litchExtensions: ['fileBrowser', 'fileRealpath', 'filePreview', 'shortMedia'] },
+})
 let sshFixture, sshLink, browser, cdp, vite
 const errors = [],
   checks = []
@@ -294,6 +341,14 @@ try {
       () => read(`!!document.querySelector('[data-testid="path-picker:listing:${sibling}"]')`),
       'picker loaded',
     )
+  if (!mobile)
+    await until(
+      () =>
+        read(
+          `document.querySelector('.path-picker-dialog')?.dataset.devicePath===${JSON.stringify(sibling)}`,
+        ),
+      'desktop picker loaded',
+    )
   await read(
     mobile
       ? "[...document.querySelectorAll('[role=button]')].find(b=>b.dataset.testid==='path-picker:select')?.click()"
@@ -323,7 +378,7 @@ try {
   )
   assert.equal(listing.entries.length, 2000)
   assert.equal(listing.truncated, true)
-  checks.push('设备 home 正确；2,003 项层只返回 2,000 项并标记截断')
+  checks.push(`设备 home 正确；${manyCount} 项层只返回 2,000 项并标记截断`)
   const height = await read(
     `document.querySelector(${JSON.stringify(mobile ? '[data-testid="files:navigation"]' : '.ft-navigation')}).getBoundingClientRect().height`,
   )
@@ -350,6 +405,142 @@ try {
       Buffer.from(result.data, 'base64'),
     ),
   )
+  if (media) {
+    const linked = join(project, 'linked.txt')
+    const resolved = await read(`window.__filesNav.resolve(${JSON.stringify(linked)})`)
+    assert.equal(resolved.candidates[0].linkPath, linked)
+    assert.equal(resolved.candidates[0].path, realpathSync(outside))
+    const automatic = await read(
+      `window.__filesNav.channel.command('files.preview',{deviceId:'fixture',root:${JSON.stringify(project)},path:${JSON.stringify(linked)},format:'source'})`,
+    )
+    assert.equal(automatic.kind, 'outside')
+    for (const name of ['linked-dir', 'loop']) {
+      const target = await read(
+        `window.__filesNav.channel.command('files.target',{deviceId:'fixture',root:${JSON.stringify(project)},path:${JSON.stringify(join(project, name))}})`,
+      )
+      assert.equal(target.root, realpathSync(name === 'loop' ? project : sibling))
+    }
+    checks.push('显式软链跟随实际目标；自动资源拒绝越界；目录软链与循环不递归扫描')
+    if (mobile)
+      await read(
+        `window.__filesNav.navigation.replace('Files',{deviceId:'fixture',root:${JSON.stringify(project)},path:${JSON.stringify(linked)},defaultRoot:${JSON.stringify(project)},sessionId:'one',workspaceId:'project'})`,
+      )
+    else {
+      await read(`window.__filesNav.open(${JSON.stringify(project)},'directory')`)
+      await until(
+        () => read(`!!document.querySelector('[role="treeitem"][data-path="${linked}"]')`),
+        'symlink row',
+      )
+      await click(`[role="treeitem"][data-path="${linked}"]`)
+    }
+    await until(
+      () =>
+        read(
+          mobile
+            ? `document.querySelector('[data-testid="files:location"]')?.getAttribute('aria-label')?.includes(${JSON.stringify(realpathSync(sibling))})`
+            : `document.querySelector('.files')?.dataset.root===${JSON.stringify(realpathSync(sibling))}`,
+        ),
+      'symlink navigation',
+    )
+    await click(mobile ? '[data-testid="files:location"]' : '.ft-location summary')
+    await until(
+      () =>
+        read(
+          `document.querySelector(${JSON.stringify(mobile ? '[data-testid="files:full-location"]' : '.ft-location-card')})?.textContent?.includes(${JSON.stringify(linked + ' → ')})`,
+        ),
+      'symlink provenance',
+    )
+    await call('Page.captureScreenshot', { format: 'png' }).then((result) =>
+      writeFileSync(
+        join(evidence, `${mobile ? 'mobile' : 'desktop'}-symlink-${remote ? 'ssh' : 'local'}.png`),
+        Buffer.from(result.data, 'base64'),
+      ),
+    )
+    if (mobile)
+      await read(
+        "[...document.querySelectorAll('[role=button]')].find(b=>b.textContent==='关闭')?.click()",
+      )
+    else await click('.ft-location summary')
+    checks.push('两端文件页显式点开软链后切到真实根，位置详情展示原路径 → 实际路径')
+    const show = async (path) => {
+      if (mobile)
+        await read(
+          `window.__filesNav.navigation.replace('Files',{deviceId:'fixture',root:${JSON.stringify(sibling)},path:${JSON.stringify(path)},defaultRoot:${JSON.stringify(project)},sessionId:'one',workspaceId:'project'})`,
+        )
+      else await read(`window.__filesNav.open(${JSON.stringify(path)})`)
+    }
+    if (!mobile)
+      for (const file of ['preview.css', 'web.css'])
+        await read(
+          `(()=>{const style=document.createElement('style');style.textContent=${JSON.stringify(readFileSync(join(root, 'packages/ui/src/files/preview', file), 'utf8'))};document.head.append(style)})()`,
+        )
+    const play = mobile ? '[data-testid="files:media-play"]' : '[data-media-play]'
+    for (const name of ['clip.wav', 'clip.mp4']) {
+      await show(join(sibling, name))
+      await until(
+        () =>
+          read(
+            mobile
+              ? `!!document.querySelector('[data-testid="files:media:${join(sibling, name)}"]')`
+              : `document.querySelector('.fv-file')?.dataset.path===${JSON.stringify(join(sibling, name))}`,
+          ),
+        `media identity ${name}`,
+      )
+      await until(
+        () =>
+          read(
+            `(()=>{const b=document.querySelector(${JSON.stringify(play)});return b && !b.disabled && b.getAttribute('aria-disabled')!=='true'})()`,
+          ),
+        `media ready ${name}`,
+        30000,
+      )
+      const rect = await read(
+        `(()=>{const b=document.querySelector(${JSON.stringify(play)}).getBoundingClientRect();return {x:b.x+b.width/2,y:b.y+b.height/2}})()`,
+      )
+      await call('Input.dispatchMouseEvent', {
+        type: 'mousePressed',
+        button: 'left',
+        clickCount: 1,
+        ...rect,
+      })
+      await call('Input.dispatchMouseEvent', {
+        type: 'mouseReleased',
+        button: 'left',
+        clickCount: 1,
+        ...rect,
+      })
+      await until(
+        () =>
+          read(
+            `document.querySelector(${JSON.stringify(play)})?.getAttribute('aria-label')==='暂停'`,
+          ),
+        `media playing ${name}`,
+      )
+      if (name === 'clip.mp4')
+        await call('Page.captureScreenshot', { format: 'png' }).then((result) =>
+          writeFileSync(
+            join(
+              evidence,
+              `${mobile ? 'mobile' : 'desktop'}-media-${remote ? 'ssh' : 'local'}.png`,
+            ),
+            Buffer.from(result.data, 'base64'),
+          ),
+        )
+    }
+    checks.push('真实 PCM WAV 与 H.264/AAC MP4 从设备读取，播放器就绪且播放事件到达；无 seek 控件')
+    await show(join(sibling, 'invalid.mp4'))
+    await until(
+      () =>
+        read(
+          mobile
+            ? "document.body.textContent.includes('损坏') || document.body.textContent.includes('无法播放')"
+            : "document.querySelector('.fv-file')?.dataset.kind==='invalid'",
+        ),
+      'invalid media',
+    )
+    if (mobile) assert.ok(await read('!!document.querySelector(\'[data-testid="files:save"]\')'))
+    checks.push('伪 MP4 设备探测拒绝；手机保留另存入口')
+  }
   assert.deepEqual(errors, [])
   writeFileSync(
     join(evidence, `${mobile ? 'mobile' : 'desktop'}-${remote ? 'ssh' : 'local'}.json`),

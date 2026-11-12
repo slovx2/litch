@@ -7,6 +7,8 @@ import {
   type DeviceView,
   type FileMatch,
   type FileTreeState,
+  fileBrowserKey,
+  fileBrowserLink,
   keys,
   normalizePath,
   parentPath,
@@ -20,12 +22,14 @@ import {
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react'
 import { useT } from '../app/appearance.ts'
+import { reasonOf } from '../app/errors.ts'
 import { Icon } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { PathPicker } from '../path-picker/PathPicker.tsx'
@@ -41,13 +45,14 @@ import { watchFilePanel } from './lifecycle.ts'
 import {
   clampTreeWidth,
   FileBrowserPlace,
-  openFile,
+  openInFiles,
   pickRoot,
   revealPath,
   setTreeWidth,
   TREE_MIN,
   treeKey,
   usePickedRoot,
+  useTreeUi,
   useTreeWidth,
 } from './state.ts'
 
@@ -73,6 +78,42 @@ function Files({
   const { replica, channel } = useServices()
   const t = useT()
   const uiKey = treeKey(deviceId, root, scope)
+  const place = useContext(FileBrowserPlace)
+  const [openError, setOpenError] = useState('')
+  const opening = useRef<AbortController | null>(null)
+  useEffect(() => () => opening.current?.abort(), [])
+  const openPath = useCallback(
+    (path: string, pin = false) => {
+      opening.current?.abort()
+      const abort = new AbortController()
+      opening.current = abort
+      setOpenError('')
+      void channel.command('files.target', { deviceId, root, path }, { signal: abort.signal }).then(
+        (target) => {
+          if (abort.signal.aborted) return
+          openInFiles({
+            deviceId,
+            workspaceId: place?.workspaceId ?? null,
+            sessionId: scope,
+            ...target,
+            pin,
+            link: {
+              status: 'ready',
+              href: path,
+              path,
+              attempted: [path],
+              candidates: [target],
+              failures: [],
+            },
+          })
+        },
+        (error) => {
+          if (!abort.signal.aborted) setOpenError(reasonOf(error, t))
+        },
+      )
+    },
+    [channel, deviceId, root, scope, place?.workspaceId, t],
+  )
   const device = useKey<DeviceView>(keys.device(deviceId))
   const state = useKey<FileTreeState>(keys.fileTree(deviceId, root, scope))
   const showHidden = useKey<boolean>(keys.filesShowHidden) ?? false
@@ -154,7 +195,7 @@ function Files({
       setQuery('')
       return
     }
-    openFile(uiKey, match.path, { pin, reveal: true })
+    openPath(match.path, pin)
   }
 
   const onSearchKey = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -283,6 +324,7 @@ function Files({
             scope={scope}
             uiKey={uiKey}
             onContext={onContext}
+            onOpenPath={openPath}
           />
         )}
         {/* biome-ignore lint/a11y/useSemanticElements: 这是一条能拖、也能用方向键挪的分隔条，hr 做不了 */}
@@ -303,6 +345,11 @@ function Files({
           }}
         />
       </div>
+      {openError ? (
+        <div className="err" role="alert">
+          {openError}
+        </div>
+      ) : null}
       <FileViewer deviceId={deviceId} root={root} uiKey={uiKey} />
       {menu ? (
         <ContextMenu
@@ -331,9 +378,45 @@ export function FilesTab({ place, shown }: SideTabProps) {
     sessionFileScope(summary ?? { cwd: place.cwd ?? '' }, roots, pathTwin(device?.os))?.root ?? null
   const defaults = defaultRoot ? [defaultRoot] : []
   const root = usePickedRoot(place.deviceId, place.workspaceId, defaults, place.sessionId)
-  const changeRoot = (path: string) =>
-    pickRoot(place.deviceId, place.workspaceId, normalizePath(path), place.sessionId)
+  const [locationError, setLocationError] = useState('')
+  const locating = useRef<AbortController | null>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 切换会话与设备时撤销旧导航。
+  useEffect(() => {
+    setLocationError('')
+    return () => locating.current?.abort()
+  }, [place.deviceId, place.sessionId])
+  const changeRoot = (path: string) => {
+    locating.current?.abort()
+    const abort = new AbortController()
+    locating.current = abort
+    setLocationError('')
+    const full = normalizePath(path)
+    void channel
+      .command(
+        'files.target',
+        { deviceId: place.deviceId, root: full, path: full },
+        { signal: abort.signal },
+      )
+      .then(
+        (target) => {
+          if (abort.signal.aborted) return
+          if (target.kind !== 'directory') {
+            setLocationError(t('files.tree.rootFailed'))
+            return
+          }
+          pickRoot(place.deviceId, place.workspaceId, target.root, place.sessionId, target.linkPath)
+        },
+        (error) => {
+          if (!abort.signal.aborted) setLocationError(reasonOf(error, t))
+        },
+      )
+  }
   const parent = root ? parentPath(root) : null
+  const treeUi = useTreeUi(treeKey(place.deviceId, root ?? '', place.sessionId ?? ''))
+  const activeFile = treeUi.tabs.find((tab) => tab.path === treeUi.active)
+  const linkPath =
+    fileBrowserLink(fileBrowserKey(place.deviceId, place.sessionId, place.workspaceId)) ??
+    activeFile?.link?.candidates.find((target) => target.path === activeFile.path)?.linkPath
   useEffect(() => {
     if (!shown || !root) return
     return watchFilePanel(
@@ -386,7 +469,9 @@ export function FilesTab({ place, shown }: SideTabProps) {
           <Icon name="tree" small />
         </button>
         <details className="ft-location">
-          <summary title={`${device ? t.text(device.name) : place.deviceId}\n${root ?? ''}`}>
+          <summary
+            title={`${device ? t.text(device.name) : place.deviceId}\n${linkPath ? `${linkPath} → ` : ''}${root ?? ''}`}
+          >
             {device?.kind !== 'local' ? (
               <span className="ft-location-device">
                 {device ? t.text(device.name) : place.deviceId}
@@ -398,7 +483,9 @@ export function FilesTab({ place, shown }: SideTabProps) {
           </summary>
           <div className="ft-location-card">
             <b>{device ? t.text(device.name) : place.deviceId}</b>
-            <code>{root ?? t('files.noRoot')}</code>
+            <code>
+              {linkPath ? `${linkPath} → ${activeFile?.path ?? root}` : (root ?? t('files.noRoot'))}
+            </code>
           </div>
         </details>
         {roots.length > 1 ? (
@@ -416,6 +503,11 @@ export function FilesTab({ place, shown }: SideTabProps) {
         ) : null}
       </div>
       {/* 换一棵树就整个换掉：搜索框里的字、菜单这些不跟过去；各棵树自己的状态记在别处（state.ts），回来还在 */}
+      {locationError ? (
+        <p className="err" role="alert">
+          {locationError}
+        </p>
+      ) : null}
       <FileBrowserPlace.Provider value={place}>
         <FileWatching.Provider value={shown && pageVisible}>
           {root ? (

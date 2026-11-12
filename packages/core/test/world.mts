@@ -17,7 +17,7 @@ export const runtimeInfo = (fields: Record<string, unknown> = {}) => ({
   protocolVersion: '0.163.0',
   cliBuild: '0.99.1',
   capabilities: [],
-  extensions: ['fileBrowser', 'filePreview'],
+  extensions: ['fileBrowser', 'fileRealpath', 'filePreview', 'shortMedia'],
   releaseReady: true,
   ...fields,
 })

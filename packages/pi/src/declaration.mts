@@ -97,6 +97,8 @@ export function harnessDeclaration(
     extensions: [
       EXTENSION.filePreview,
       EXTENSION.fileBrowser,
+      EXTENSION.shortMedia,
+      EXTENSION.fileRealpath,
       ...extensions,
       ...(backgroundShell ? [EXTENSION.backgroundTasks] : []),
     ],

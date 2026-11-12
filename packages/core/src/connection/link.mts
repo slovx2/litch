@@ -219,6 +219,8 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.acpControls,
                 EXTENSION.filePreview,
                 EXTENSION.fileBrowser,
+                EXTENSION.shortMedia,
+                EXTENSION.fileRealpath,
                 EXTENSION.mediaImages,
                 EXTENSION.browserUpload,
                 EXTENSION.toolImages,

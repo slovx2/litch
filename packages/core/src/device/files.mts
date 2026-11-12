@@ -27,6 +27,7 @@ import type {
   FileContent,
   FileEntry,
   FileLinkResolution,
+  FileLinkTarget,
   FileMatch,
   FileSearchView,
   FolderListing,
@@ -54,6 +55,7 @@ import {
   parentPath,
   pathTwin,
   relativeTo,
+  samePath,
   withinRoot,
 } from '../text/paths.mjs'
 import { lacksMethod } from './faults.mjs'
@@ -63,6 +65,8 @@ import { createFileWatches } from './file-watches.mjs'
 export interface FilesHost {
   imagesSupported?(): boolean
   attachmentsSupported?(): boolean
+  realpathSupported?(): boolean
+  shortMediaSupported?(): boolean
   browserSupported?(): boolean
   previewSupported?(): boolean
   downloadSupported?(): boolean
@@ -85,6 +89,8 @@ export interface FilesHost {
 }
 
 export interface Files {
+  target(root: string, path: string, signal?: AbortSignalLike): Promise<FileLinkTarget>
+
   image(source: string, signal?: AbortSignalLike): Promise<FilePreview>
   /** 复用文件面板的路径范围校验；只返回规范路径，不读文件。 */
   locate(root: string, path: string): { root: string; path: string }
@@ -135,7 +141,7 @@ export interface Files {
 /** 一层目录取到之后这么久之内再要，直接给上次的 */
 export const LIST_TTL_MS = 5000
 /** 缓存里最多留这么多层目录，多了从最早的丢 */
-const CACHE_MAX = 400
+const CACHE_MAX = 64
 /** 一层里既不是目录也不是文件的条目（多半是符号链接），最多去问这么多个指向哪儿 */
 export const LINK_PROBES = 64
 const LINK_PARALLEL = 8
@@ -245,7 +251,7 @@ export function createFiles(host: FilesHost): Files {
   const resolveLinks = async (view: DirectoryView): Promise<DirectoryView> => {
     const unknown = view.entries.filter((entry) => entry.kind === 'other').slice(0, LINK_PROBES)
     if (unknown.length === 0) return view
-    const resolved = new Map<string, FileEntry['kind']>()
+    const resolved = new Map<string, Pick<FileEntry, 'kind' | 'link'>>()
     let next = 0
     const worker = async () => {
       for (;;) {
@@ -255,8 +261,10 @@ export function createFiles(host: FilesHost): Files {
           const meta = await host.request('fs/getMetadata', {
             path: joinPath(view.path, entry.name),
           })
-          if (meta.isDirectory === true) resolved.set(entry.name, 'dir')
-          else if (meta.isFile === true) resolved.set(entry.name, 'file')
+          if (meta.isDirectory === true)
+            resolved.set(entry.name, { kind: 'dir', ...(meta.isSymlink ? { link: true } : {}) })
+          else if (meta.isFile === true)
+            resolved.set(entry.name, { kind: 'file', ...(meta.isSymlink ? { link: true } : {}) })
         } catch {
           // 断了的链接、没权限看的：照旧当“别的”
         }
@@ -264,11 +272,10 @@ export function createFiles(host: FilesHost): Files {
     }
     await Promise.all(Array.from({ length: Math.min(LINK_PARALLEL, unknown.length) }, worker))
     if (resolved.size === 0) return view
-    const entries = view.entries.map((entry) =>
-      entry.kind === 'other' && resolved.has(entry.name)
-        ? { name: entry.name, kind: resolved.get(entry.name) ?? 'other' }
-        : entry,
-    )
+    const entries = view.entries.map((entry) => {
+      const target = resolved.get(entry.name)
+      return entry.kind === 'other' && target ? { name: entry.name, ...target } : entry
+    })
     return { ...view, entries: sortEntries(entries) }
   }
 
@@ -352,6 +359,16 @@ export function createFiles(host: FilesHost): Files {
       const preview = await files.preview(root, path, 'source')
       if (preview.kind === 'tooLarge') return preview
       if (preview.kind === 'missing') return { kind: 'missing', path }
+      if (preview.kind === 'outside')
+        throw new ChannelError('rejected', '真实路径超出资源目录', phrase('files.outside'))
+      if (preview.kind === 'changed')
+        throw new ChannelError('rejected', '文件读取期间发生变化', phrase('files.readChanged'))
+      if (preview.kind === 'notFile')
+        throw new ChannelError('rejected', '不是普通文件', phrase('files.notFile'))
+      if (preview.kind === 'busy')
+        throw new ChannelError('remote', '设备读取繁忙', phrase('files.readBusy'))
+      if (preview.kind === 'invalid')
+        throw new ChannelError('remote', '设备读取响应无效', phrase('files.readInvalid'))
       if (preview.kind !== 'ready')
         throw new ChannelError(
           'unsupported',
@@ -394,6 +411,42 @@ export function createFiles(host: FilesHost): Files {
   }
 
   const files: Files = {
+    async target(root, path, signal) {
+      const at = locate(root, path)
+      mustBeOnline()
+      if (!host.realpathSupported?.())
+        throw new ChannelError(
+          'unsupported',
+          '设备不支持真实目标解析',
+          phrase('files.boundedUnsupported'),
+        )
+      const meta = await host.request(
+        'fs/getMetadata',
+        { path: at.path, litchResolve: true },
+        { timeoutMs: READ_TIMEOUT_MS, ...(signal ? { signal } : {}) },
+      )
+      const resolved = meta.litchResolved?.path
+      if (typeof resolved === 'string' && (isNetworkPath(resolved) || /^[\\/]{2}/.test(resolved)))
+        throw new ChannelError('unsupported', '不支持网络共享目标', phrase('files.network'))
+      if (meta.isDirectory !== true && meta.isFile !== true)
+        throw new ChannelError('rejected', '不是普通文件或目录', phrase('files.notFile'))
+      if (
+        typeof resolved !== 'string' ||
+        !isAbsolutePath(resolved) ||
+        /^[\\/]{2}/.test(resolved) ||
+        /[\0\r\n]/.test(resolved)
+      )
+        throw new ChannelError('remote', '设备的真实路径响应无效')
+      const real = normalizePath(resolved)
+      const same = samePath(real, at.path) || samePath(twin()(real) ?? real, at.path)
+      const target = same ? at.path : real
+      return {
+        path: target,
+        root: meta.isDirectory ? target : same ? at.root : (parentPath(target) ?? target),
+        kind: meta.isDirectory ? 'directory' : 'file',
+        ...(!same ? { linkPath: at.path } : {}),
+      }
+    },
     reconcile(root) {
       watches.reconcile(locate(root, root).root)
     },
@@ -546,7 +599,8 @@ export function createFiles(host: FilesHost): Files {
     async preview(root, path, format, signal) {
       const at = locate(root, path)
       mustBeOnline()
-      if (!host.previewSupported?.()) return { kind: 'unsupported', path: at.path }
+      if (format === 'media' ? !host.shortMediaSupported?.() : !host.previewSupported?.())
+        return { kind: 'unsupported', path: at.path }
       if (!Object.hasOwn(PREVIEW_LIMIT, format)) return { kind: 'invalid', path: at.path }
       const limit = PREVIEW_LIMIT[format]
       try {
@@ -555,7 +609,9 @@ export function createFiles(host: FilesHost): Files {
           'fs/readFile',
           {
             path: at.path,
-            litchPreview: { root: at.root, maxBytes: limit },
+            ...(format === 'media'
+              ? { litchShortMedia: { root: at.root, maxBytes: limit } }
+              : { litchPreview: { root: at.root, maxBytes: limit } }),
           },
           { timeoutMs: READ_TIMEOUT_MS, ...(signal ? { signal } : {}) },
         )
@@ -569,11 +625,16 @@ export function createFiles(host: FilesHost): Files {
         if (isMissing(error)) return { kind: 'missing', path: at.path }
         const data =
           error instanceof RpcError
-            ? (error.data as { litchPreview?: { kind?: string; bytes?: number } } | null)
+            ? (error.data as {
+                litchPreview?: { kind?: string; bytes?: number }
+                litchShortMedia?: { kind?: string; bytes?: number }
+              } | null)
             : null
-        const reason = data?.litchPreview
+        const reason = format === 'media' ? data?.litchShortMedia : data?.litchPreview
         if (reason?.kind === 'tooLarge')
           return { kind: 'tooLarge', path: at.path, bytes: reason.bytes ?? limit + 1, limit }
+        if (format === 'media' && reason?.kind === 'notFile')
+          return { kind: 'invalid', path: at.path }
         if (reason && ['outside', 'notFile', 'changed', 'busy'].includes(reason.kind ?? ''))
           return { kind: reason.kind as 'outside' | 'notFile' | 'changed' | 'busy', path: at.path }
         throw failed(error, 'fs')

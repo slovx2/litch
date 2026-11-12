@@ -1339,6 +1339,10 @@ export function createCore(options: CoreOptions): Core {
           const { deviceId, root, path } = params as Commands['files.read']['params']
           return await deviceOf(deviceId).files.read(root, path, signal)
         }
+        case 'files.target': {
+          const { deviceId, root, path } = params as Commands['files.target']['params']
+          return await deviceOf(deviceId).files.target(root, path, signal)
+        }
         case 'files.resolve': {
           const { deviceId, root, ref, href } = params as Commands['files.resolve']['params']
           return await deviceOf(deviceId).files.resolve(root, ref, href, signal)
