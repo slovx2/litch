@@ -3,11 +3,12 @@ import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { appendFileSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
 import {
-  api,
   downloadArtifact,
   fileHash,
+  gh,
   pages,
   validateArtifact,
 } from '../../../scripts/ci/release-artifacts.mjs'
@@ -217,30 +218,64 @@ export async function finishCheckpoint(
   })
 }
 
+/** 只用于刚上传、已拿到 ID 的检查点；404 可能是元数据尚未可见，其他错误立即失败。 */
+export async function bindCheckpoint(
+  dir,
+  context = checkpointContext(),
+  {
+    id = process.env.CHECKPOINT_ID,
+    digest = process.env.CHECKPOINT_DIGEST,
+    execute = gh,
+    sleep = delay,
+    now = Date.now,
+    log = console.error,
+  } = {},
+) {
+  assert.match(String(id), /^[1-9]\d*$/, '缺少刚上传的检查点 ID')
+  const path = `repos/${context.repository}/actions/artifacts/${id}`
+  const deadline = now() + 180_000
+  const maxAttempts = 5
+  let metadata
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const remaining = deadline - now()
+    if (remaining <= 0) throw new Error(`读取新检查点超过3分钟：${path}`)
+    try {
+      metadata = JSON.parse(
+        execute(['api', path], {
+          timeout: Math.min(30_000, remaining),
+          killSignal: 'SIGKILL',
+        }),
+      )
+      break
+    } catch (error) {
+      // gh 的进程退出码不是 HTTP 状态；只认 stderr 里明确的 HTTP 状态，避免误重试。
+      const status = /\(HTTP (\d{3})\)/.exec(String(error.stderr ?? ''))?.[1]
+      const waitMs = 1000 * 2 ** (attempt - 1)
+      if (status !== '404' || attempt === maxAttempts || now() + waitMs >= deadline) throw error
+      log(`新检查点暂不可见：${path}，尝试${attempt}/${maxAttempts}；${waitMs}ms后重试`)
+      await sleep(waitMs)
+    }
+  }
+  const artifact = validateArtifact(metadata, {
+    run: context.run,
+    sha: context.sha,
+    name: `macos-notarized-${context.attempt}`,
+    digest: digest.startsWith('sha256:') ? digest : `sha256:${digest}`,
+  })
+  write(join(dir, 'source.json'), {
+    id: artifact.id,
+    name: artifact.name,
+    digest: artifact.digest,
+    attempt: context.attempt,
+  })
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [mode, dir, out] = process.argv.slice(2)
   if (mode === 'find') {
     const found = await findCheckpoint(dir)
     appendFileSync(process.env.GITHUB_OUTPUT, `restored=${found}\n`)
-  } else if (mode === 'bind') {
-    const context = checkpointContext()
-    const artifact = validateArtifact(
-      api(`repos/${context.repository}/actions/artifacts/${process.env.CHECKPOINT_ID}`),
-      {
-        run: context.run,
-        sha: context.sha,
-        name: `macos-notarized-${context.attempt}`,
-        digest: process.env.CHECKPOINT_DIGEST.startsWith('sha256:')
-          ? process.env.CHECKPOINT_DIGEST
-          : `sha256:${process.env.CHECKPOINT_DIGEST}`,
-      },
-    )
-    write(join(dir, 'source.json'), {
-      id: artifact.id,
-      name: artifact.name,
-      digest: artifact.digest,
-      attempt: context.attempt,
-    })
-  } else if (mode === 'finish') await finishCheckpoint(dir, out)
+  } else if (mode === 'bind') await bindCheckpoint(dir)
+  else if (mode === 'finish') await finishCheckpoint(dir, out)
   else throw new Error('macos-checkpoint: find|finish DIR [OUT]')
 }
