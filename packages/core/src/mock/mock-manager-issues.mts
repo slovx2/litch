@@ -1,5 +1,6 @@
 import {
   type ManagerIssue,
+  type ManagerIssueFollowUpState,
   type ManagerIssueQuery,
   managerIssueHasDiscussion,
 } from '../../../protocol/src/manager-issues.mjs'
@@ -24,6 +25,7 @@ export class MockManagerIssues {
   private readonly caches = new Map<string, ManagerIssuesView>()
   private readonly queries = new Map<string, Map<string, ManagerIssueQuery>>()
   private readonly idem = new Map<string, unknown>()
+  private readonly followUps = new Map<string, ManagerIssueFollowUpState>()
   private seq = 0
   view(key: string) {
     return this.caches.get(key)
@@ -65,8 +67,9 @@ export class MockManagerIssues {
           (previous ? previous.revision - (previous.quick.revision ?? post.revision) : 0),
         createdAt: post.createdAt,
         updatedAt: post.updatedAt,
-        followUp: previous?.followUp ?? {
-          state: post.kind === 'report' || status === 'open' || status === 'pending' ? 'on' : 'off',
+        followUp: this.followUps.get(JSON.stringify([key, id])) ?? {
+          state:
+            post.kind === 'report' || status === 'open' || status === 'endorsed' ? 'on' : 'off',
           changedAt: post.createdAt,
           changedBy: 'manager',
         },
@@ -104,8 +107,8 @@ export class MockManagerIssues {
                 : {
                     suggestion: {
                       proposalId: post.proposalId!,
-                      canStart: status === 'pending',
-                      reviewed: true,
+                      canStart: post.fields.canStart === true,
+                      reviewed: post.fields.reviewed === true,
                     },
                   }),
         },
@@ -124,6 +127,18 @@ export class MockManagerIssues {
       for (const issue of this.seed(key, added))
         if (fresh || issue.kind !== 'ordinary') records.set(issue.id, issue)
     return records
+  }
+  /** 帖子权威变化后同步已订阅的页与详情；不能只刷新旧看板而留下过时的 issue 状态。 */
+  sync(key: string, board: ManagerBoardView) {
+    const cache = this.caches.get(key)
+    if (!cache) return
+    const records = this.data(key, board)
+    for (const id of Object.keys(cache.details)) {
+      const issue = records.get(id)
+      if (issue) cache.details[id] = copyValue(issue)
+    }
+    for (const [queryKey, query] of this.queries.get(key) ?? [])
+      cache.pages[queryKey] = this.cached(records, query)
   }
   /** 缓存里的页：加载过更多时保留从头到已加载处的全部条目（与核心缓存的合并结果同形）。 */
   private cached(records: Map<string, ManagerIssue>, query: ManagerIssueQuery) {
@@ -325,6 +340,7 @@ export class MockManagerIssues {
         })
       } else if (name === 'managers.issue.follow') {
         issue.followUp = { state: p.state, changedAt: at, changedBy: 'user' }
+        this.followUps.set(JSON.stringify([key, issue.id]), issue.followUp)
         issue.revision++
         issue.timeline.push({
           id: `change:mock-${++this.seq}`,

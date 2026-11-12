@@ -42,7 +42,7 @@ let endpoint = ''
 child.stderr.on('data', (chunk) => {
   endpoint += String(chunk)
 })
-let cdp
+let cdp, diagnose
 try {
   const ws = await until(
     () => endpoint.match(/DevTools listening on (ws:\/\/[^\s]+)/)?.[1],
@@ -89,6 +89,68 @@ try {
     )
     const picture = await call('Page.captureScreenshot', { format: 'png' })
     writeFileSync(join(output, `M9-${name}.png`), Buffer.from(picture.data, 'base64'))
+  }
+  diagnose = async () => {
+    writeFileSync(
+      join(output, 'failure.json'),
+      JSON.stringify(
+        await read(`({
+      body: document.body.innerText,
+      cards: [...document.querySelectorAll('[data-issue]')].map(e=>e.outerHTML),
+      tabs: [...document.querySelectorAll('[data-board-tab]')].map(e=>e.outerHTML),
+    })`),
+        null,
+        2,
+      ),
+    )
+    await shot('failure')
+  }
+  const openCard = async (id) => {
+    const head = `[data-issue="${id}"] > [data-act="issue-toggle"]`
+    await wait(head)
+    if (
+      (await read(
+        `document.querySelector(${JSON.stringify(head)}).getAttribute('aria-expanded')`,
+      )) !== 'true'
+    )
+      await click(head)
+    await wait(`[data-issue-detail="${id}"]`)
+  }
+  const openDiscussion = async (id) => {
+    await openCard(id)
+    const pane = `.mg-talk-pane[data-post="${id}"]`
+    if (!(await read(`!!document.querySelector(${JSON.stringify(pane)})`)))
+      await click(`[data-issue="${id}"] [data-act="issue-discuss"]`)
+    await wait(`${pane} [data-issue-comment-input]`)
+  }
+  const setStatus = async (group) => {
+    const selector = `[data-issue-filter-status="${group}"]`
+    if (!(await read(`!!document.querySelector(${JSON.stringify(selector)})`)))
+      await click('[data-act="issue-filter-open"]')
+    await click(selector)
+    if (
+      await read(
+        `document.querySelector('[data-act="issue-filter-open"]')?.getAttribute('aria-expanded') === 'true'`,
+      )
+    )
+      await click('[data-act="issue-filter-open"]')
+  }
+  const issueCount = () => read("document.querySelectorAll('[data-issue]').length")
+  const firstIssue = () => read("document.querySelector('[data-issue]').dataset.issue")
+  const reportRelationsInFlow = async () => {
+    await wait('[data-relations="P-1"]')
+    assert.equal(
+      await read("getComputedStyle(document.querySelector('[data-relations=P-1]')).float"),
+      'none',
+      '关联区沿正文流排布，不再随宽度浮动',
+    )
+    assert.ok(
+      await read(`(()=>{
+      const e=document.querySelector('[data-relations=P-1]');
+      return e.scrollWidth <= e.clientWidth + 1;
+    })()`),
+      '报告关联区不横向溢出',
+    )
   }
   const say = async (text) => {
     await wait('.main .dock textarea.cmp-text')
@@ -151,14 +213,12 @@ try {
   )
   await shot('manager-entry')
   await click('[data-board-tab="reports"]')
+  // 分页卡片默认收起；先展开报告，再检查正文里的关联区。
+  await openCard('P-1')
+  await wait('[data-report="P-1"]')
   assert.equal(await read("document.querySelector('.mg-board').getBoundingClientRect().width"), 560)
-  await until(
-    () =>
-      read(
-        "document.querySelector('[data-relations=P-1]').dataset.wide==='true' && getComputedStyle(document.querySelector('[data-relations=P-1]')).float==='right'",
-      ),
-    '1440 默认 560 看板关联靠右',
-  )
+  await reportRelationsInFlow()
+  assert.equal(await read("document.querySelector('[data-relations=P-1]').open"), false)
   await shot('report-default-1440')
 
   await click('[data-board-tab="suggestions"]')
@@ -183,21 +243,19 @@ try {
   assert.equal(await read("document.querySelectorAll('[data-suggestion-manager]').length"), 1)
   await shot('manager-summary')
   await click('[data-suggestion-manager="m1"] .suggestion-manager-open')
-  await wait('.mg-board .suggestion-row')
+  await wait('[data-issue-console]')
   assert.equal(
     await read(
-      "document.querySelector('[data-board-tab=\"suggestions\"]').getAttribute('aria-pressed')",
+      "document.querySelector('[data-board-tab=suggestions]').getAttribute('aria-pressed')",
     ),
     'true',
   )
-  assert.equal(await read("document.querySelectorAll('.mg-board .suggestion-row').length"), 2)
-  assert.equal(await read("document.querySelector('[data-suggestions-unreviewed]').open"), false)
-  assert.equal(
-    await read('document.querySelector(\'[data-board-tab="suggestions"] .pill\') === null'),
-    true,
-  )
-  await click('[data-suggestions-unreviewed] > summary')
-
+  // 建议页默认“待处理”（已审核待开始）；经理待审核建议现在由“进行中”筛选查看。
+  await wait('[data-issue-empty]')
+  await setStatus('doing')
+  await until(async () => (await issueCount()) === 2, '两条待审核建议')
+  const sourceSuggestion = await firstIssue()
+  await openCard(sourceSuggestion)
   await click('.mg-board .suggestion-row [data-act="open-source"]')
   await wait('.arch-bar')
   await call('Input.dispatchKeyEvent', {
@@ -206,41 +264,38 @@ try {
     code: 'Escape',
     windowsVirtualKeyCode: 27,
   })
-  await wait('.mg-board .suggestion-row')
+  await openCard(sourceSuggestion)
   assert.equal(
     await read(
-      "document.querySelector('[data-board-tab=\"suggestions\"]').getAttribute('aria-pressed')",
+      "document.querySelector('[data-board-tab=suggestions]').getAttribute('aria-pressed')",
     ),
     'true',
     '归档预览返回建议页签',
   )
-  await click('[data-suggestions-unreviewed] > summary')
-  await click('.mg-board .suggestion-row [data-act="edit"]')
+  await click('.mg-board [data-issue-type="suggestion"] [data-act="edit"]')
   await wait('.spawn-dialog')
   await read(
     "document.querySelector('.spawn-dialog').close();document.querySelector('.spawn-dialog').dispatchEvent(new Event('cancel',{cancelable:true}))",
   )
-  await click('.mg-board .suggestion-row [data-act="dismiss"]')
-  await until(
-    () => read("document.querySelectorAll('.mg-board .suggestion-row').length === 1"),
-    '看板忽略建议',
-  )
+  await click('.mg-board [data-issue-type="suggestion"] [data-act="dismiss"]')
+  await until(async () => (await issueCount()) === 1, '看板忽略后待审核建议减少')
   await shot('manager-suggestions')
   await say('收尾建议')
-  await until(
-    () => read("document.querySelectorAll('.mg-board .suggestion-row').length === 3"),
-    '经理自己的建议默认审核',
-  )
+  await setStatus('todo')
+  await until(async () => (await issueCount()) === 2, '经理自己的建议默认审核、待开始')
   assert.equal(
     await read('document.querySelector(\'[data-board-tab="suggestions"] .pill\').textContent'),
     '2',
   )
   for (const skin of ['standard', 'human', 'retro']) {
     await read(`window.__litchLook.set({skin:${JSON.stringify(skin)}})`)
-    await read("document.querySelector('[data-suggestions-unreviewed]').open=false")
-    await shot(`review-collapsed-${skin}`)
-    await click('[data-suggestions-unreviewed] > summary')
+    await setStatus('doing')
+    assert.equal(await issueCount(), 1)
+    await shot(`review-pending-${skin}`)
+    await openCard(await firstIssue())
     await shot(`review-expanded-${skin}`)
+    await setStatus('todo')
+    assert.equal(await issueCount(), 2)
   }
   await click('.sb-btn.suggestions')
   await wait('[data-suggestion-manager="m1"]')
@@ -321,6 +376,7 @@ try {
   assert.equal(await read("document.querySelector('.mg-body').scrollTop"), 0)
   // 概览顶上一行是控制台四类计数，点“请你做”切到请求页签
   await click('[data-overview-count="requests"]')
+  await openCard('R-1')
   await wait('[data-manager-request="R-1"]')
   assert.equal(
     await read(
@@ -523,29 +579,31 @@ try {
           )
         }
         if (tab === 'decisions') {
-          // 帖子讨论在看板底部分屏里：先点卡片标题行的讨论入口
-          await click('[data-decision="D-15"] [data-act="post-discussion"]')
-          await click('.mg-talk-pane[data-post="D-15"] [data-question-mode="manager"]')
+          // 统一 issue 抽屉把“问经理”和“评论”放在同一个讨论输入区。
+          await openDiscussion('D-15')
+          await click('.mg-talk-pane [data-issue-mode="ask"]')
           assert.ok(
-            await read("!document.querySelector('.mg-decision-filter').classList.contains('seg')"),
+            await read(
+              "!!document.querySelector('[data-issue-filters] [role=radiogroup]') || !!document.querySelector('[data-act=issue-filter-open]')",
+            ),
           )
           assert.ok(
             await read(
-              "document.querySelector('.mg-talk-pane[data-post=\"D-15\"] .mg-post-compose textarea').placeholder.includes('经理')",
+              "document.querySelector('.mg-talk-pane [data-issue-comment-input]').placeholder.includes('经理')",
             ),
           )
           await read(
-            "document.querySelector('[data-decision=\"D-15\"]').scrollIntoView({block:'start'})",
+            "document.querySelector('[data-issue=\"D-15\"]').scrollIntoView({block:'start'})",
           )
           await shot(`questions-manager-${skin}-${theme}`)
-          await click('.mg-talk-pane[data-post="D-15"] [data-question-mode="temporary"]')
+          await click('.mg-talk-pane [data-issue-mode="comment"]')
           assert.ok(
             await read(
-              "document.querySelector('.mg-talk-pane[data-post=\"D-15\"] .mg-post-compose textarea').placeholder.includes('临时')",
+              "document.querySelector('.mg-talk-pane [data-issue-comment-input]').placeholder.includes('评论')",
             ),
           )
-          await shot(`questions-temporary-${skin}-${theme}`)
-          await click('.mg-talk-pane[data-post="D-15"] [data-act="discussion-close"]')
+          await shot(`questions-comment-${skin}-${theme}`)
+          await click('.mg-talk-pane [data-act="discussion-close"]')
         }
       }
       await click('[data-board-tab="items"]')
@@ -565,6 +623,7 @@ try {
     }
   }
   await click('[data-board-tab="reports"]')
+  await openCard('P-1')
   await wait('[data-report="P-1"]')
   await click('[data-report="P-1"] [data-board-reference="I-2"]')
   assert.equal(await read("document.activeElement?.getAttribute('data-manager-item')"), 'I-2')
@@ -587,13 +646,8 @@ try {
       code: 'ArrowLeft',
       windowsVirtualKeyCode: 37,
     })
-  await until(
-    () =>
-      read(
-        "document.querySelector('[data-relations=P-1]').dataset.wide==='true' && getComputedStyle(document.querySelector('[data-relations=P-1]')).float==='right'",
-      ),
-    '1440 窗口常用宽度关联靠右',
-  )
+  await reportRelationsInFlow()
+  assert.equal(await read("document.querySelector('[data-relations=P-1]').open"), false)
   await call('Input.dispatchKeyEvent', {
     type: 'keyDown',
     key: 'Tab',
@@ -635,10 +689,8 @@ try {
     code: 'End',
     windowsVirtualKeyCode: 35,
   })
-  await until(
-    () => read("getComputedStyle(document.querySelector('[data-relations=P-1]')).float==='right'"),
-    '宽看板关联靠右',
-  )
+  await reportRelationsInFlow()
+  await click('[data-relations="P-1"] > summary')
   assert.equal(await read("document.querySelector('[data-relations=P-1]').open"), true)
   await shot('report-wide-relations')
   await click('[data-relations="P-1"] [data-relation-target="manager-k1"]')
@@ -646,7 +698,7 @@ try {
   assert.ok(await read("document.querySelector('.mg-origin').textContent.includes('相关议题')"))
   await click('.mg-origin button')
   await wait('[data-report="P-1"]')
-  assert.equal(await read("document.activeElement?.getAttribute('data-report')"), 'P-1')
+  assert.equal(await read("document.activeElement?.getAttribute('data-issue')"), 'P-1')
   await size(1600)
 
   // 原帖操作与追问同屏、混合提交、单项取消修改，均操作正式界面。
@@ -656,30 +708,31 @@ try {
     )
     await new Promise((r) => setTimeout(r, 120))
   }
-  const question = '.mg-talk-pane[data-post="D-15"] [data-act="manager-question-input"]'
-  const questionTab = '[data-decision="D-15"] [data-act="post-discussion"]'
+  const question = '.mg-talk-pane[data-post="D-15"] [data-issue-comment-input]'
   await click('[data-board-tab="decisions"]')
-  if (!(await read(`!!document.querySelector(${JSON.stringify(question)})`)))
-    await click(questionTab)
+  await openDiscussion('D-15')
   assert.equal(await read("document.querySelectorAll('[data-decision-tab]').length"), 0)
   await fill(question, '此次修改的依据？')
-  assert.ok(
-    await read(
-      `document.querySelector('[data-decision="D-15"] [data-act="post-discussion"]').hasAttribute('data-unsent')`,
-    ),
+  assert.equal(
+    await read(`document.querySelector(${JSON.stringify(question)}).value`),
+    '此次修改的依据？',
   )
   await click('[data-board-tab="requests"]')
+  await openCard('R-1')
   // 回复框默认收起：先点“回复”展开
   if (!(await read('!!document.querySelector(\'[data-act="manager-request-text"]\')')))
     await click('[data-act="manager-request-reply-open"]')
   await fill('[data-act="manager-request-text"]', '真机复验 **通过**。')
   await click('[data-act="manager-request-deliver"]')
   await click('[data-act="manager-submit"]')
+  await setStatus('done')
+  await openCard('R-1')
   await wait('[data-act="manager-request-edit"]')
   assert.ok(
     await read("document.querySelector('.mg-request-response strong')?.textContent === '通过'"),
   )
   assert.ok(await read("!!document.querySelector('.mg-request-response time[datetime][title]')"))
+  console.log('请你做：先展开回复、填写、交付与批量提交通过')
   assert.equal(await read('document.querySelector(\'[data-board-tab="requests"] .pill\')'), null)
   assert.ok(
     await read(
@@ -687,7 +740,8 @@ try {
     ),
   )
   await click('[data-board-tab="decisions"]')
-  await click('.mg-decision-filter button:nth-child(2)')
+  await setStatus('done')
+  await openCard('D-13')
   assert.ok(
     await read(
       '!!document.querySelector(\'[data-decision="D-13"] .mg-item-meta-row .mg-item-links li\')',
@@ -696,7 +750,7 @@ try {
   )
   assert.ok(
     await read(
-      `(()=>{const card=document.querySelector('[data-decision="D-13"]');const answer=card.querySelector('.mg-answer');const edit=card.querySelector('[data-act="manager-edit-answer"]');return !!answer.querySelector('time[datetime][title]')&&!!card.querySelector('footer time[datetime][title]')&&!!(answer.compareDocumentPosition(edit)&Node.DOCUMENT_POSITION_FOLLOWING)})()`,
+      `(()=>{const card=document.querySelector('[data-issue="D-13"]');const answer=card.querySelector('.mg-answer');const edit=card.querySelector('[data-act="manager-edit-answer"]');return !!answer.querySelector('time[datetime][title]')&&!!card.querySelector('footer time[datetime][title]')&&!!(answer.compareDocumentPosition(edit)&Node.DOCUMENT_POSITION_FOLLOWING)})()`,
     ),
   )
   await shot('answered-landed-metadata')
@@ -714,30 +768,17 @@ try {
     }
   await read("window.__litchLook.set({skin:'standard'})")
   await size(1600)
-  if (!(await read(`!!document.querySelector(${JSON.stringify(question)})`)))
-    await click(questionTab)
+  await openDiscussion('D-15')
   await fill(question, '保留的追问草稿')
-  await click('[data-decision="D-15"] [data-act="manager-edit-answer"]')
+  await click('[data-issue="D-15"] [data-act="manager-edit-answer"]')
   await fill('[data-decision="D-15"] [data-act="manager-answer"]', '放弃这次答案修改')
-  await click('[data-decision="D-15"] [data-act="manager-cancel-answer-edit"]')
-  assert.ok(
-    await read(
-      `!!document.querySelector('[data-decision="D-15"] [data-act="manager-edit-answer"]')`,
-    ),
-  )
-  if (!(await read(`!!document.querySelector(${JSON.stringify(question)})`)))
-    await click(questionTab)
   assert.equal(
-    await read(`document.querySelector(${JSON.stringify(question)}).value`),
-    '保留的追问草稿',
-  )
-  assert.ok(
     await read(
-      "document.querySelector('.mg-sidebar-counts').textContent.includes('2 待处理') && document.querySelector('.mg-sidebar-drafts[data-manager-draft-count]').textContent==='1 项草稿'",
+      "document.querySelector('.mg-sidebar-drafts[data-manager-draft-count]').textContent",
     ),
+    '1 项草稿',
   )
   await read("window.__litchLook.set({lang:'en'})")
-  // 草稿数是可点的定位按钮，末尾的箭头只作装饰
   assert.equal(
     await read("document.querySelector('.mg-send .mg-send-count').firstChild.textContent"),
     '1 draft',
@@ -750,7 +791,21 @@ try {
   )
   await shot('draft-and-attention-en')
   await read("window.__litchLook.set({lang:'zh-CN'})")
+  await click('[data-issue="D-15"] [data-act="manager-cancel-answer-edit"]')
+  await openDiscussion('D-15')
+  assert.equal(
+    await read(`document.querySelector(${JSON.stringify(question)}).value`),
+    '保留的追问草稿',
+  )
+  assert.ok(
+    await read(
+      "document.querySelector('.mg-sidebar-counts').textContent.includes('2 待处理') && !document.querySelector('.mg-sidebar-drafts[data-manager-draft-count]')",
+    ),
+    '取消答案修改清草稿，讨论草稿独立保留',
+  )
   await click('[data-board-tab="requests"]')
+  await setStatus('done')
+  await openCard('R-1')
   assert.equal(
     await read(
       "document.querySelector('.mg-request-response header').textContent.includes('已交付')",
@@ -765,33 +820,33 @@ try {
     await read("document.querySelector('.mg-request-response strong')?.textContent === '通过'"),
   )
   await click('[data-board-tab="decisions"]')
-  if (!(await read(`!!document.querySelector(${JSON.stringify(question)})`)))
-    await click(questionTab)
+  await openDiscussion('D-15')
   assert.equal(
     await read(`document.querySelector(${JSON.stringify(question)}).value`),
     '保留的追问草稿',
   )
-  await click('.mg-talk-pane[data-post="D-15"] [data-question-mode="temporary"]')
+  await click('.mg-talk-pane [data-issue-mode="ask"]')
   await fill(question, '再确认影响范围')
-  await click('.mg-talk-pane[data-post="D-15"] [data-act="post-question-send"]')
+  await click('.mg-talk-pane [data-act="issue-comment"]')
   await until(
     () =>
-      read(
-        "Array.from(document.querySelectorAll('.mg-post-timeline b')).some(e=>e.textContent.startsWith('助手（临时对话）'))",
-      ),
-    '临时对话标明发言人',
+      read("!!document.querySelector('.mg-talk-pane [data-timeline=question] .mg-issue-answer')"),
+    '经理追问回复进入统一讨论时间线',
   )
-  assert.ok(
-    await read("!document.querySelector('[data-decision=D-15] .mg-post-compose')"),
-    '追问提交后收起',
+  assert.equal(
+    await read(`document.querySelector(${JSON.stringify(question)}).value`),
+    '',
+    '发送后清空输入',
   )
 
   for (const skin of ['standard', 'human', 'retro']) {
     await read(`window.__litchLook.set({skin:${JSON.stringify(skin)},theme:'light',lang:'zh-CN'})`)
     await shot(`question-speakers-${skin}`)
     await click('[data-board-tab="requests"]')
+    await openCard('R-1')
     await shot(`request-response-${skin}`)
     await click('[data-board-tab="decisions"]')
+    await openDiscussion('D-15')
     await size(760)
     await click('.mg-narrow button:last-child')
     await noOverflow()
@@ -840,6 +895,9 @@ try {
   console.log(
     '经理看板与集中建议验收通过：汇总卡、Markdown 与编号跳转、已落地元信息、待办计数、单项取消修改、通用追问与报告关联、回复 Markdown 与发言人、最窄输入框、拖动收起/恢复、三皮肤明暗及窄窗口、留存枚举。',
   )
+} catch (error) {
+  await diagnose?.()
+  throw error
 } finally {
   cdp?.close()
   const ended = new Promise((resolve) => child.once('exit', resolve))
