@@ -17,7 +17,14 @@ void app
   .whenReady()
   .then(async () => {
     app.dock?.hide()
-    const stage = process.argv.at(-1)
+    step = '解析验收阶段'
+    // 启动器会在末尾追加 Chromium 隔离参数；脚本后的第一个参数才是验收阶段。
+    const stage = process.argv[2]
+    assert.ok(
+      typeof stage === 'string' &&
+        ['seed', 'read', 'logout', 'read-logout', 'clear', 'read-clear', 'crash'].includes(stage),
+      '未知验收阶段',
+    )
     const server = createServer((request, response) => {
       if (request.url === '/login')
         response.setHeader('Set-Cookie', [
@@ -39,6 +46,7 @@ void app
     const sites = [`http://127.0.0.1:${address.port}`, `http://localhost:${address.port}`] as const
     step = '安装浏览器'
     const browser = await installBrowser({ isUiUrl: () => false, userData: profile })
+    step = '创建验收标签'
     browser.host.setNavigationGate(() => true)
     const user = browser.host.open({ deviceId: 'one', threadId: 'user' }, 'user') as HostTab
     const agent = browser.host.open({ deviceId: 'two', threadId: 'agent' }, 'agent') as HostTab
@@ -96,6 +104,7 @@ void app
       assert.equal(saved.cookies.length, 3)
       assert.ok(saved.cookies.every((cookie: { session: boolean }) => cookie.session))
     } else if (stage === 'read') {
+      step = '恢复登录态核对'
       for (const site of sites)
         assert.equal(await loggedIn(site), true, '首次请求即带上恢复的登录态')
       const all = await snapshot()
@@ -116,22 +125,28 @@ void app
         hasCrossSiteAncestor: true,
       })
     } else if (stage === 'logout') {
+      step = '注销登录'
       for (const site of sites) await user.load(`${site}/logout`, 10000)
       await browser.flushData()
     } else if (stage === 'read-logout') {
+      step = '注销状态核对'
       for (const site of sites) assert.equal(await loggedIn(site), false)
       assert.equal((await cookies.get({ name: 'login-persistent' })).length, 2)
     } else if (stage === 'clear') {
+      step = '清除浏览数据'
       await browser.settings.clearData()
       assert.equal((await snapshot()).length, 0)
     } else if (stage === 'read-clear') {
+      step = '清除状态核对'
       for (const site of sites) assert.equal(await loggedIn(site), false)
       assert.equal((await snapshot()).length, 0)
-    } else throw new Error('未知验收阶段')
+    }
+    step = '刷新浏览数据'
     await browser.flushData()
     console.log(`LITCH_COOKIE_STATE ${JSON.stringify({ stage, ok: true })}`)
     if (stage === 'crash') process.kill(process.pid, 'SIGKILL')
     else {
+      step = '关闭验收标签'
       browser.host.close(user.id)
       browser.host.close(agent.id)
       server.close()
