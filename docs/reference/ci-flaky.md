@@ -9,6 +9,19 @@ issue 正文计数及 CI 写权限；原来的 `nightly-triage` issue 保留用�
 它们没有 GitHub run/job ID，不加入 `cases.events`，也不参与按独立 CI run 累计的三次阈值；
 `summary` 仍只汇总 CI 事件。本地观察次数按各用例的独立执行标识核对，不能充作 CI 次数。
 
+## CI 记录摘录
+
+### 2026-11-12：DSH 子代理通知超时（unit 首次）
+
+- 用例：`packages/dsh/test/subagents.test.mts` 的“dsh 子代理：派出去是子代理条目、接收方是子会话号；子会话按父地址打开、可继续的能接着发消息；分叉不当子代理”。
+- CI run [43169949880](https://github.com/slovx2/litch/actions/runs/43169949880)，attempt 1 的
+  [unit / job 131020590118](https://github.com/slovx2/litch/actions/runs/43169949880/job/131020590118)，
+  checkout `30f4a4340cc6406e80d938b34406354507128dd2`，作业开始于 `2026-11-12T06:41:56Z`（push）。
+- 约 22.8 秒后报“等待通知超时: turn/completed”。同作业另见一次 DSH MCP 握手 `fetch failed`，尚未确认两者因果。
+- 仅重跑失败作业后，同 SHA、同用例在 attempt 2 的
+  [unit / job 131025228708](https://github.com/slovx2/litch/actions/runs/43169949880/job/131025228708) 通过。
+  账本按 `unit + 完整用例名` 计为第 1 个独立 run；已有 `gate / unit` 同名记录保持独立。
+
 ## 本地观察
 
 ### 2026-11-11：Claude 后台回合收尾

@@ -412,6 +412,32 @@
     },
     {
       "job": "unit",
+      "test": "dsh 子代理：派出去是子代理条目、接收方是子会话号；子会话按父地址打开、可继续的能接着发消息；分叉不当子代理",
+      "status": "active",
+      "events": [
+        {
+          "runId": 43169949880,
+          "attempt": 1,
+          "jobId": 131020590118,
+          "sha": "30f4a4340cc6406e80d938b34406354507128dd2",
+          "date": "2026-11-12T06:41:56Z",
+          "trigger": "push",
+          "url": "https://github.com/slovx2/litch/actions/runs/43169949880/job/131020590118",
+          "failure": "packages/dsh/test/subagents.test.mts：等待通知超时: turn/completed，耗时22.8秒；同一作业另见一次dsh MCP握手fetch failed，尚未确认两者因果。",
+          "evidence": {
+            "kind": "same-sha-pass",
+            "runId": 43169949880,
+            "attempt": 2,
+            "jobId": 131025228708,
+            "sha": "30f4a4340cc6406e80d938b34406354507128dd2",
+            "reference": "https://github.com/slovx2/litch/actions/runs/43169949880/job/131025228708",
+            "note": "同run attempt 2仅重跑失败作业；unit成功，日志确认同checkout SHA 30f4a4340cc6406e80d938b34406354507128dd2的同用例通过。unit 作业下该用例首次独立 CI run 偶发记录；gate / unit 历史按规则分别计数。"
+          }
+        }
+      ]
+    },
+    {
+      "job": "unit",
       "test": "端到端（Pi）：没有客户端连着时到点跑出会话，模型在任务的回合里调 litch_tasks；客户端回合里调的也由设备答",
       "status": "active",
       "events": [
