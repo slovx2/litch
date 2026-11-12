@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { test } from 'node:test'
@@ -87,6 +88,49 @@ function temp(t) {
   t.after(() => rmSync(dir, { recursive: true, force: true }))
   return dir
 }
+
+test('策略哈希递归包含新增子目录与二进制，保持排序和测试文件过滤', (t) => {
+  const dir = temp(t)
+  mkdirSync(join(dir, 'scripts/ci'), { recursive: true })
+  mkdirSync(join(dir, '.github/workflows'), { recursive: true })
+  writeFileSync(join(dir, 'scripts/ci/top.mjs'), 'top')
+  writeFileSync(join(dir, '.github/workflows/ci.yml'), 'workflow')
+  execFileSync('git', ['-C', dir, 'init', '--quiet'])
+  execFileSync('git', ['-C', dir, 'add', 'scripts/ci', '.github/workflows'])
+  const module = new URL('./release-candidate.mjs', import.meta.url).href
+  const hash = () =>
+    execFileSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `import { policyHash } from ${JSON.stringify(module)}; console.log(policyHash())`,
+      ],
+      { cwd: dir, encoding: 'utf8' },
+    ).trim()
+  const flat = hash()
+  mkdirSync(join(dir, 'scripts/ci/vendor/nested'), { recursive: true })
+  const binary = 'scripts/ci/vendor/nested/package.deb'
+  writeFileSync(join(dir, binary), Buffer.from([0, 255, 128, 1]))
+  const nested = hash()
+  assert.notEqual(nested, flat, '新增尚未提交的子目录文件也必须纳入')
+  const expected = createHash('sha256')
+  for (const name of ['.github/workflows/ci.yml', 'scripts/ci/top.mjs', binary].sort())
+    expected
+      .update(`${name}\0`)
+      .update(readFileSync(join(dir, name)))
+      .update('\0')
+  assert.equal(nested, expected.digest('hex'), '路径去重后仍按全局名称排序')
+  execFileSync('git', ['-C', dir, 'add', binary])
+  assert.equal(hash(), nested, '已暂存文件不能重复计入')
+  writeFileSync(join(dir, 'scripts/ci/vendor/ignored.test.mjs'), 'test one')
+  assert.equal(hash(), nested)
+  writeFileSync(join(dir, 'scripts/ci/vendor/ignored.test.mjs'), 'test two')
+  assert.equal(hash(), nested, '各层.test.mjs仍排除')
+  writeFileSync(join(dir, binary), Buffer.from([0, 255, 128, 2]))
+  assert.notEqual(hash(), nested, '子目录二进制内容变化必须改变哈希')
+})
+
 async function fixture(t, mode = 'standard') {
   const dir = temp(t)
   const artifacts = {}

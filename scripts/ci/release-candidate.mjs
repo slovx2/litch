@@ -53,7 +53,14 @@ export function policyHash() {
     .trim()
     .split('\n')
   // 包含新增尚未提交文件，开发测试与提交后相同；忽略测试文件。
-  for (const name of readdirSync('scripts/ci')) names.push(`scripts/ci/${name}`)
+  const collect = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const name = `${directory}/${entry.name}`
+      if (entry.isDirectory()) collect(name)
+      else names.push(name)
+    }
+  }
+  collect('scripts/ci')
   const hash = createHash('sha256')
   for (const name of [...new Set(names)].filter((name) => !name.endsWith('.test.mjs')).sort())
     hash.update(`${name}\0`).update(readFileSync(name)).update('\0')
