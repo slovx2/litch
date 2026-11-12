@@ -12,7 +12,10 @@ import { Cdp, until } from './chrome-m0/cdp.mjs'
 import { mobileFilesPlugin } from './files-navigation-mobile-fixture.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const work = mkdtempSync(join(tmpdir(), 'litch-files-navigation-'))
+// macOS 的 Unix socket 路径有长度上限，SSH 夹具还会在此目录下再建入口。
+const work = mkdtempSync(
+  join(process.platform === 'darwin' ? '/tmp' : tmpdir(), 'litch-files-navigation-'),
+)
 const evidence = process.env.LITCH_FILES_NAV_EVIDENCE ?? join(work, 'evidence')
 mkdirSync(evidence, { recursive: true })
 const remote = process.argv.includes('--ssh')
@@ -21,6 +24,7 @@ const project = join(work, 'project'),
   sibling = join(work, 'sibling'),
   many = join(work, 'many')
 for (const path of [project, sibling, many, join(work, 'home')]) mkdirSync(path)
+mkdirSync(join(sibling, 'nested'))
 writeFileSync(join(sibling, 'outside.txt'), 'OUTSIDE-DEVICE-CONTENT\n')
 writeFileSync(join(project, 'inside.txt'), 'INSIDE-PROJECT\n')
 for (let n = 0; n < 2003; n++) writeFileSync(join(many, `${n}.txt`), '')
@@ -292,6 +296,15 @@ try {
   if (mobile)
     await until(
       () => read(`!!document.querySelector('[data-testid="path-picker:listing:${sibling}"]')`),
+      'picker loaded',
+    )
+  // 输入框先更新；目录回包后选择按钮才可用，不能把草稿值当成加载完成。
+  else
+    await until(
+      () =>
+        read(
+          "!!document.querySelector('.path-picker-entries')?.textContent.includes('nested/') && document.querySelector('.path-picker-dialog .primary')?.disabled===false",
+        ),
       'picker loaded',
     )
   await read(
