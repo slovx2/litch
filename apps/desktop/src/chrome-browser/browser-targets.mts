@@ -28,6 +28,7 @@ export interface BrowserTargetsOptions {
   /** 在 Google Chrome 里打开网址（扩展页、商店页都要在 Chrome 里开，不能交给默认浏览器）。 */
   openInChrome(url: string): Promise<void>
   openDirectory(directory: string): Promise<void>
+  onSessionReleased?(owner: { deviceId: string; threadId: string; turnId: string }): Promise<void>
 }
 export class BrowserTargets {
   private sites
@@ -78,6 +79,8 @@ export class BrowserTargets {
       bridge: this.bridge,
       sites: this.sites,
       allowed: (invocation) => this.allowed(invocation),
+      onSessionReleased: (optionsOwner) =>
+        this.options.onSessionReleased?.(optionsOwner) ?? Promise.resolve(),
     })
     // 已安装时更新宿主本次连接地址；扩展重连后必须重新认领标签，不恢复旧租约。
     if (await this.installer.prepared()) await this.installer.prepare()

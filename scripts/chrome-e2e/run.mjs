@@ -13,6 +13,7 @@ import { buildChromeExtension } from '../../apps/desktop/scripts/build-chrome.mj
 import { Cdp, until } from '../chrome-m0/cdp.mjs'
 import { concurrentClaim } from './concurrent-claim.mjs'
 import { fixtures } from './fixtures.mjs'
+import { chromeHandoff } from './handoff.mjs'
 import { inputChecks } from './input-check.mjs'
 import { chromeLifecycle } from './lifecycle.mjs'
 import { remoteCheck } from './remote-check.mjs'
@@ -292,6 +293,27 @@ try {
     return result
   }
   let tabId
+  report.handoff = await chromeHandoff({
+    executor,
+    targetId,
+    origin: site.origin,
+    invocation,
+    context,
+    check,
+    cdp,
+    identity,
+  })
+  if (process.argv.includes('--handoff-only')) {
+    report.success = true
+    await cleanup()
+    report.elapsedMs = Date.now() - started
+    if (!noEvidence) {
+      writeFileSync(join(output, 'report.json'), JSON.stringify(report, null, 2))
+      writeFileSync(join(outputBase, 'report.json'), JSON.stringify({ ...report, output }, null, 2))
+    }
+    console.log(JSON.stringify(report, null, 2))
+    process.exit(0)
+  }
   report.remoteUpload = await remoteUploadChecks({
     driver,
     executor,

@@ -35,6 +35,10 @@ export interface ChromeExecutorOptions {
   productName: string
   sites?: SiteBook
   allowed(invocation: ClientToolInvocation): boolean
+  /** 最后一张标签交还后，宿主同步交还该会话的原生输入所有权。 */
+  onSessionReleased?(owner: { deviceId: string; threadId: string; turnId: string }): Promise<void>
+  idleMs?: number
+  now?(): number
 }
 const session = (invocation: ClientToolInvocation): string =>
   JSON.stringify([invocation.device.id, invocation.threadId])
@@ -72,6 +76,7 @@ export class ChromeExecutor implements BrowserExecutor {
     { turn: string; fingerprint: string; promise: Promise<ClientToolCallResponse> }
   >()
   private endedTurns = new Set<string>()
+  private activity = new Map<string, { at: number; running: number }>()
   private timer: ReturnType<typeof setInterval>
   private off: () => void
   private options: ChromeExecutorOptions
@@ -106,6 +111,7 @@ export class ChromeExecutor implements BrowserExecutor {
       }
     })
     this.timer = setInterval(() => {
+      void this.collectIdle().catch(() => {})
       for (const page of this.pages.values())
         if (page.valid)
           void page.request('renew', {}, false).catch(() => {
@@ -121,6 +127,54 @@ export class ChromeExecutor implements BrowserExecutor {
       for (const [id, token] of this.tokens) if (token.expires < Date.now()) this.tokens.delete(id)
     }, 4000)
     this.timer.unref()
+  }
+  private inUse(page: ChromePage): ChromeBridgeError {
+    const title = page.grant.sessionTitle || page.grant.owner.threadId
+    return new ChromeBridgeError(
+      'busy',
+      `This Chrome tab is owned by session ${JSON.stringify(title)}. Ask that session to call release(tabId) or finish/stop its turn. You can open a separate tab with navigate(targetId, url).`,
+    )
+  }
+  private async released(page: ChromePage): Promise<void> {
+    const owner = page.grant.owner
+    if (
+      ![...this.pages.values()].some(
+        (other) =>
+          other.valid &&
+          other.grant.owner.deviceId === owner.deviceId &&
+          other.grant.owner.threadId === owner.threadId,
+      )
+    )
+      await this.options.onSessionReleased?.(owner)
+  }
+  /** 续租仅维持传输存活；模型不再调用工具时，不能无限持有标签。 */
+  async collectIdle(): Promise<void> {
+    const now = (this.options.now ?? Date.now)()
+    for (const page of this.pages.values()) {
+      const activity = this.activity.get(
+        JSON.stringify([
+          page.grant.owner.deviceId,
+          page.grant.owner.threadId,
+          page.grant.owner.turnId,
+        ]),
+      )
+      if (
+        !page.valid ||
+        page.paused ||
+        this.busy.has(page.id) ||
+        activity?.running ||
+        !activity ||
+        now - activity.at < (this.options.idleMs ?? 300_000)
+      )
+        continue
+      this.busy.add(page.id)
+      try {
+        await page.release()
+        await this.released(page)
+      } finally {
+        this.busy.delete(page.id)
+      }
+    }
   }
   state(page: ChromePage): TabState {
     let state = this.states.get(page.id)
@@ -262,7 +316,7 @@ export class ChromeExecutor implements BrowserExecutor {
         old.paused ||
         this.busy.has(old.id)
       )
-        throw new ChromeBridgeError('busy', 'This tab is in use.')
+        throw this.inUse(old)
       original = old.grant.original
       keep = old.grant.keep
       await old.release()
@@ -392,10 +446,7 @@ export class ChromeExecutor implements BrowserExecutor {
             JSON.stringify([owned.grant.owner.deviceId, owned.grant.owner.threadId]) !==
               session(invocation))
         )
-          throw new ChromeBridgeError(
-            'busy',
-            'This tab is in use by another operation or conversation.',
-          )
+          throw this.inUse(owned)
         await this.approve(invocation, context, tab.origins)
         try {
           if (owned && owned.grant.owner.turnId === invocation.turnId) {
@@ -526,7 +577,15 @@ export class ChromeExecutor implements BrowserExecutor {
           'Too many calls are retained for active turns. End an active turn before continuing.',
         ),
       )
-    const promise = this.execute(invocation, context)
+    const activityKey = turn
+    const activity = this.activity.get(activityKey) ?? { at: 0, running: 0 }
+    this.activity.set(activityKey, activity)
+    activity.at = (this.options.now ?? Date.now)()
+    activity.running++
+    const promise = this.execute(invocation, context).finally(() => {
+      activity.at = (this.options.now ?? Date.now)()
+      activity.running--
+    })
     const entry = { turn, fingerprint, promise }
     this.calls.set(key, entry)
     const response = await promise
@@ -677,8 +736,10 @@ export class ChromeExecutor implements BrowserExecutor {
           !released.valid &&
           JSON.stringify([released.grant.owner.deviceId, released.grant.owner.threadId]) ===
             session(invocation)
-        )
+        ) {
+          await this.released(released)
           return ok('The Chrome tab was already released.')
+        }
       }
       let page: ChromePage
       if (
@@ -720,7 +781,9 @@ export class ChromeExecutor implements BrowserExecutor {
             'targetUnavailable',
             `Chrome control is disabled in ${this.options.productName} Settings → Chrome.`,
           )
-        return await executePageTool(this, page, invocation, context, args)
+        const result = await executePageTool(this, page, invocation, context, args)
+        if (!page.valid) await this.released(page)
+        return result
       } finally {
         page.unbind()
         // 审批检查与实际请求之间也可能取消；这时桥还没有收到请求，需主动释放租约。
@@ -755,6 +818,7 @@ export class ChromeExecutor implements BrowserExecutor {
   turnEnded(turn: { deviceId: string; threadId: string; turnId: string }): void {
     const identity = JSON.stringify([turn.deviceId, turn.threadId, turn.turnId])
     this.endedTurns.add(identity)
+    this.activity.delete(identity)
     if (this.endedTurns.size > 512)
       this.endedTurns.delete(this.endedTurns.values().next().value ?? '')
     for (const [key, call] of this.calls) if (call.turn === identity) this.calls.delete(key)
@@ -764,16 +828,22 @@ export class ChromeExecutor implements BrowserExecutor {
         page.grant.owner.threadId === turn.threadId &&
         page.grant.owner.turnId === turn.turnId
       )
-        void page.release(!page.grant.original && !page.grant.keep).catch(() => {
-          page.valid = false
-        })
+        void page
+          .release(!page.grant.original && !page.grant.keep)
+          .then(() => this.released(page))
+          .catch(() => {
+            page.valid = false
+          })
     const ended = JSON.stringify([turn.deviceId, turn.threadId])
     for (const [id, token] of this.tokens) if (token.session === ended) this.tokens.delete(id)
     this.sites.turnEnded(ended, turn.turnId)
   }
   releaseAll(): void {
     for (const page of this.pages.values()) {
-      void page.release().catch(() => {})
+      void page
+        .release()
+        .then(() => this.released(page))
+        .catch(() => {})
       page.valid = false
     }
   }
@@ -783,8 +853,9 @@ export class ChromeExecutor implements BrowserExecutor {
       if (page.valid && (!deviceId || page.grant.owner.deviceId === deviceId))
         void page
           .request('stop', {}, false)
-          .finally(() => {
+          .finally(async () => {
             page.valid = false
+            await this.released(page)
           })
           .catch(() => {})
   }

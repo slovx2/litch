@@ -8,6 +8,7 @@ export interface ClientToolInvocation {
   namespace: string | null
   tool: string
   arguments: unknown
+  sessionTitle?: string | null
   device: { id: string }
 }
 export type ClientToolAnswer = 'once' | 'session' | 'always' | 'decline'

@@ -411,6 +411,12 @@ New popups are unclaimed and require source approval before observation or actio
 
 ### Chrome 标签组与操作标记
 
+不同会话可以同时操作各自认领的标签；同一标签只允许一个会话认领。占用错误显示会话标题及释放方法。交接时，原会话应对全部 Chrome 标签调用 `release(tabId)`；最后一张交还完成后，macOS 的 Computer Use 输入所有权也同步释放，不必结束回合。正在执行的原生输入先撤销并退出，不能由另一会话强制抢占。
+
+回合完成、打断或失败会释放该回合的 Chrome 标签和原生输入。Chrome 连续 5 分钟没有工具调用时交还标签；正在执行工具或等待人工登录时不回收。macOS Computer Use 的应用占用空闲 60 秒后可回收，执行中的动作仍互斥。重新使用已交还标签须重新认领，旧引用失效。
+
+Sessions can operate separate claimed tabs concurrently; each tab has one owner. Busy errors name the owning session and explain release. To hand off Chrome, release every claimed tab. Releasing the last tab also returns that session's macOS Computer Use input ownership without ending the turn. Active native input must cancel and finish before another session can use the lane. There is no forced takeover by an agent. Turn completion, interruption and failure release its leases. Chrome tabs return after five minutes without tool calls, except during an active call or manual sign-in. Idle macOS app ownership expires after 60 seconds; running actions remain exclusive. Reclaim returned tabs before using fresh references.
+
 代理打开或认领的标签按会话放进 `Litch · 会话标题简写` 标签组。同一会话跨多个 Chrome 窗口时，每个窗口各有一组，不搬动窗口。
 
 新标签默认在现有普通窗口的后台创建，不切换当前标签；没有普通窗口时新建不获取焦点的窗口。认领、导航、点击、输入和批量操作不主动激活 Chrome。可自行点开标签组查看，或在对话里明确要求“显示给我看”，代理才调用 `show` 激活对应窗口与标签。后台输入不需要通过 `show` 才能生效。

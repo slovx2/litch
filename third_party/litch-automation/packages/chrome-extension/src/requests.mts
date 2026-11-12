@@ -112,7 +112,12 @@ async function executeRequest(state: ExtensionState, request: ChromeRequest): Pr
       throw new ChromeFault('cancelled', 'The user stopped Chrome control for this turn.')
     const existing = [...state.grants.values()].find((one) => one.tabId === grant.tabId)
     if (existing || state.tabLocks.has(grant.tabId))
-      throw new ChromeFault('busy', 'This Chrome tab is already claimed.')
+      throw new ChromeFault(
+        'busy',
+        existing
+          ? `This Chrome tab is owned by session ${JSON.stringify(existing.sessionTitle || existing.owner.threadId)}. Ask that session to call release(tabId) or finish/stop its turn.`
+          : 'Another operation is preparing this Chrome tab. Wait for that operation to finish.',
+      )
     const unlock = lockTab(state, grant.tabId)
     grant.expiresAt = Date.now() + 15_000
     state.grants.set(grant.leaseId, grant)

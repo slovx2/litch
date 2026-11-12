@@ -162,6 +162,7 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
       ...params,
       app: params.app.trim(),
       session,
+      sessionTitle: invocation.sessionTitle ?? invocation.threadId,
       turnId: invocation.turnId,
       actionId: invocation.id,
     }

@@ -203,6 +203,7 @@ test('任何应用都直接交给助手，不问用户：浏览器、密码管�
       app,
       element: 2,
       session: 'local/thread-1',
+      sessionTitle: request.threadId,
       turnId: request.turnId,
       actionId: request.id,
     })
@@ -215,6 +216,7 @@ test('远程设备的会话也不问', async () => {
   const remote = { id: 'box', name: 'Build box', kind: 'ssh' as const, target: 'box' }
   const { ctx, asks } = context()
   const request = invocation('press_key', { app: 'TextEdit', key: 'cmd+s' }, remote)
+  request.sessionTitle = '登录复测'
   const response = await executor.call(request, ctx)
   assert.equal(response.success, true)
   assert.equal(asks.length, 0)
@@ -223,6 +225,7 @@ test('远程设备的会话也不问', async () => {
     app: 'TextEdit',
     key: 'cmd+s',
     session: 'box/thread-1',
+    sessionTitle: '登录复测',
     turnId: request.turnId,
     actionId: request.id,
   })
@@ -251,6 +254,7 @@ test('get_app_state：文字加截图（data: 地址）', async () => {
     app: 'TextEdit',
     full: true,
     session: 'local/thread-1',
+    sessionTitle: request.threadId,
     turnId: request.turnId,
     actionId: request.id,
   })

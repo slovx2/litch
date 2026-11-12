@@ -22,7 +22,8 @@ extension Engine {
       guard same else { throw RPCError(.stale, "The accessible window changed. Call get_app_state again.") }
     }
     let owner = ownerPrefix(session)
-    let token = try InputOwnership.shared.acquire(pid: app.processIdentifier, owner: owner)
+    let token = try InputOwnership.shared.acquire(pid: app.processIdentifier, owner: owner,
+      title: params["sessionTitle"]?.stringValue ?? session)
     let actionId = params["actionId"]?.stringValue ?? UUID().uuidString
     defer {
       InputOwnership.shared.release(token)
