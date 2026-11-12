@@ -100,6 +100,11 @@ test('新会话切页前准备自己的选择器：第一帧保留计划模式�
     values.set('settings:local:new', settings)
     values.set('session:local:new', { ...meta, can: { images: true } })
     assert.equal(read(), null, '能力更新后不使用旧版本的选择器')
+    values.set('device:local', { connection: 'offline' })
+    assert.equal(read(), options, '断线后改本地设置仍可用最后取得的选择器')
+    assert.equal(read('new', 'other'), null, '离线缓存不跨设备')
+    assert.equal(read('new', 'local', 'other'), null, '离线缓存不跨引擎')
+    values.set('device:local', { connection: 'online' })
 
     const failed = prepare('failed')
     pending.shift().reject(new Error('设备断开'))

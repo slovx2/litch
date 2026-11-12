@@ -5,6 +5,7 @@ import App from './App'
 import { AntigravityQuotaPreview } from './preview/AntigravityQuota.web.tsx'
 import { CjkEmphasisPreview } from './preview/CjkEmphasis.web.tsx'
 import { CollapsedTurnPreview } from './preview/CollapsedTurn.web.tsx'
+import { ComposeStatePreview } from './preview/ComposeState.web.tsx'
 import { applyPrefs, runScene } from './preview/frame.web.ts'
 import { PreviewIndex } from './preview/Index.web.tsx'
 import { ManagerEventsPreview } from './preview/ManagerEvents.web.tsx'
@@ -41,6 +42,7 @@ function PreviewApp() {
 }
 
 export default function Root() {
+  if (inFrame && params.get('scene') === 'compose-state') return <ComposeStatePreview />
   if (inFrame && params.get('scene') === 'antigravity-quota')
     return <AntigravityQuotaPreview params={params} />
   if (inFrame && params.get('scene') === 'cjk-emphasis') return <CjkEmphasisPreview />

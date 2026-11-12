@@ -60,6 +60,7 @@ export function ExtraChip({ extra, onRemove, onInline, ...context }: ChipProps) 
       <li className="cmp-file-card">
         <FileCard
           {...context}
+          pending={extra.dataBase64 !== undefined}
           file={{
             ...extra,
             kind: extra.folder ? 'folder' : 'file',

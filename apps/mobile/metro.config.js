@@ -17,6 +17,8 @@ config.watchFolders = [
   path.join(repo, 'packages/ui/src'),
   // 两端的 Markdown 验收使用同一份语料；只有网页预览引用。
   path.join(repo, 'packages/ui/test/fixtures'),
+  // 只有网页预览引用真实核心的内存 JSON-RPC 夹具；preview:check 检查不进入原生包。
+  path.join(repo, 'packages/core/test'),
 ]
 const CORE_ENTRY = path.join(repo, 'packages/core/src/index.mts')
 config.resolver.sourceExts = [...config.resolver.sourceExts, 'mts']

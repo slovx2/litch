@@ -889,6 +889,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     }
     ops.push({ op: 'item.add', turnId: viewId, item: view })
     emit(live, ops)
+    // 自动压缩只结束条目，普通回合仍会继续；此时恢复用户留下的插话意图。
+    if (view.kind === 'compaction' && !streaming) pump(live)
   }
 
   /** 往一个条目上追加文本。条目还不在（对面没发“开始”就直接出字）时先补一个空的 */
@@ -1802,7 +1804,19 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     }
   }
 
-  /** 重连载入时记住的“现在发送”，只在新快照到达后使用真实回合号。每条只尝试一次。 */
+  const isCompacting = (live: Live): boolean =>
+    Boolean(
+      live.compactSwitch ||
+        live.compacting > 0 ||
+        (live.view &&
+          isRunning(live.view)?.itemIds.some(
+            (id) =>
+              live.view?.items[id]?.kind === 'compaction' &&
+              live.view?.items[id]?.status === 'inProgress',
+          )),
+    )
+
+  /** 同步或压缩期间记住的“现在发送”，恢复后使用真实回合号。每条只尝试一次。 */
   const insertImmediate = async (live: Live): Promise<void> => {
     if (
       !live.immediate.size ||
@@ -1814,18 +1828,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     )
       return
     if (!live.view?.live || !isRunning(live.view)) return
-    if (
-      live.compactSwitch ||
-      live.compacting > 0 ||
-      isRunning(live.view)?.itemIds.some(
-        (id) =>
-          live.view?.items[id]?.kind === 'compaction' &&
-          live.view?.items[id]?.status === 'inProgress',
-      )
-    ) {
-      setNote(live, phrase('session.inputCompacting'))
-      return
-    }
+    if (isCompacting(live)) return
     const starting = live.starting ? live.startingInput.get(live.starting) : undefined
     if (starting) {
       const revision = live.pauseRevision
@@ -1846,9 +1849,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         if (
           live.view.note &&
           typeof live.view.note !== 'string' &&
-          ['session.inputSyncing', 'session.inputCompacting', 'session.inputNoSteer'].includes(
-            live.view.note.key,
-          )
+          ['session.inputSyncing', 'session.inputNoSteer'].includes(live.view.note.key)
         )
           setNote(live, null)
         await sessionsApi.steer(live.id, id)
@@ -1866,7 +1867,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     if (
       live.stale ||
       live.loading ||
-      live.compactSwitch ||
+      isCompacting(live) ||
       live.paused ||
       live.needsTurnCheck ||
       live.dispatching.length
@@ -2530,7 +2531,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         setNote(live, phrase('session.steerHeld'))
         return
       }
-      const insert = now && (live.stale || live.loading !== null || !!isRunning(live.view))
+      const insert =
+        now && (live.stale || live.loading !== null || isCompacting(live) || !!isRunning(live.view))
       const held = live.queued.some((entry) => entry.delivery === 'held')
       if (held || live.paused) {
         live.paused = false
@@ -2545,7 +2547,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         held ||
         live.stale ||
         live.loading ||
-        live.compactSwitch ||
+        isCompacting(live) ||
         isRunning(live.view) ||
         live.queued.length > 0
       ) {
@@ -2606,8 +2608,10 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         setNote(live, phrase('session.inputSyncing'))
         return
       }
-      if (live.compactSwitch || live.compacting > 0)
-        throw new ChannelError('rejected', '压缩期间不能插话', phrase('session.inputCompacting'))
+      if (isCompacting(live)) {
+        live.immediate.add(messageId)
+        return
+      }
       const starting = live.starting ? live.startingInput.get(live.starting) : undefined
       if (starting) {
         const revision = live.pauseRevision
@@ -2683,6 +2687,15 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
           { op: 'item.remove', turnId: running.id, itemId: key },
           { op: 'queue.set', queued: live.queued },
         ])
+        // 请求发出后服务端才进入压缩：明确拒绝并未受理，留给压缩结束事件恢复。
+        if (
+          error instanceof RpcError &&
+          error.code === -32009 &&
+          error.message === '正在压缩上下文，请等待压缩结束后发送'
+        ) {
+          if (!live.paused) live.immediate.add(messageId)
+          return
+        }
         if (staleTurn) {
           const idle = await reconcileTurns(live)
           // 用户可能在对账期间移除消息；不要把它恢复回来，也不要覆盖其他消息的结果。

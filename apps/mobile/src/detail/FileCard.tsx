@@ -18,11 +18,13 @@ export function FileCard({
   deviceId,
   onPress,
   onRemove,
+  pending = false,
 }: {
   file: UserAttachment
   deviceId?: string | undefined
   onPress(): void
   onRemove?(): void
+  pending?: boolean
 }) {
   const { c, radius, font } = useTheme()
   const t = useT()
@@ -60,8 +62,8 @@ export function FileCard({
         accessibilityRole="button"
         accessibilityLabel={name}
         onPress={() => void open()}
-        disabled={state === 'cleaned'}
-        accessibilityState={{ disabled: state === 'cleaned' }}
+        disabled={pending || state === 'cleaned'}
+        accessibilityState={{ disabled: pending || state === 'cleaned' }}
         style={styles.open}
       >
         <Icon name={file.kind === 'folder' ? 'folder' : 'file'} size={18} color={c.ink2} />
@@ -74,7 +76,11 @@ export function FileCard({
             {name}
           </Text>
           <Text numberOfLines={1} style={{ color: c.ink3, fontFamily: font.ui }}>
-            {state === 'cleaned' ? t('attachment.cleaned') : detail}
+            {pending
+              ? t('composer.file.pending')
+              : state === 'cleaned'
+                ? t('attachment.cleaned')
+                : detail}
           </Text>
         </View>
       </Pressable>

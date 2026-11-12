@@ -12,7 +12,7 @@ const facts = (more = {}) => ({
   pathOf: localPath,
   isFolder: () => false,
   room: 16,
-  upload: async () => {
+  stage: async () => {
     throw new Error('不该上传')
   },
   ...more,
@@ -54,7 +54,7 @@ test('远程无访问能力：保留内容字节上传，空文件也接受', as
   const result = await readFiles(
     [file('binary.bin', new Uint8Array([0, 255, 1])), file('empty.txt', '')],
     facts({
-      upload: async (f) => {
+      stage: async (f) => {
         seen.push([...new Uint8Array(await f.arrayBuffer())])
         return { kind: 'file', name: f.name, path: `/remote/${f.name}` }
       },
@@ -72,7 +72,7 @@ test('上传上限、失败和附件数量不会产生假卡片', async () => {
   const result = await readFiles(
     [big, file('bad')],
     facts({
-      upload: async () => {
+      stage: async () => {
         calls++
         throw new Error('offline')
       },
@@ -82,7 +82,7 @@ test('上传上限、失败和附件数量不会产生假卡片', async () => {
   assert.deepEqual(result.refused, { why: 'size', name: 'big' })
   assert.equal(calls, 1)
   assert.deepEqual((await readFiles([file('bad')], facts())).refused, {
-    why: 'upload',
+    why: 'read',
     name: 'bad',
   })
   assert.equal((await readFiles([file('a')], facts({ room: 0 }))).refused.why, 'count')
@@ -132,7 +132,7 @@ test('本机拿不到磁盘路径时，文本和二进制都上传为设备文�
       local: true,
       machine: null,
       pathOf: () => '',
-      upload: async (selected) => {
+      stage: async (selected) => {
         seen.push({ name: selected.name, bytes: [...new Uint8Array(await selected.arrayBuffer())] })
         return { kind: 'file', name: selected.name, path: `/device/attachments/${selected.name}` }
       },
@@ -200,7 +200,7 @@ test('远程无法访问本机时，拒绝目录仍继续上传同批普通文�
     [folder, text],
     facts({
       isFolder: (f) => f === folder,
-      upload: async (selected) => {
+      stage: async (selected) => {
         uploaded.push(selected.name)
         return { kind: 'file', name: selected.name, path: `/remote/${selected.name}` }
       },

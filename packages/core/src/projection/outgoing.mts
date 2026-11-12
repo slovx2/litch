@@ -39,6 +39,8 @@ const short = (value: unknown): value is string =>
 
 /** 附带项是界面给的，形状再查一遍：不对的不发，也不带着多余的字段出去 */
 function checkExtra(extra: MessageExtra): MessageExtra {
+  if (extra?.kind === 'file' && extra.dataBase64 !== undefined)
+    throw new ChannelError('rejected', '本地附件尚未上传')
   if (extra?.kind === 'skill' && short(extra.name) && short(extra.path)) {
     return { kind: 'skill', name: extra.name, path: extra.path }
   }

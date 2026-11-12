@@ -1,12 +1,12 @@
-// 选文件、拖放和粘贴共用三种去向：设备路径、控制端路径、通过 fs 协议上传。
+// 选文件、拖放和粘贴共用三种去向：设备路径、控制端路径、本地暂存（发送时上传）。
 import type { MessageExtra } from '@litch/core'
 import { MAX_ATTACHMENT_BYTES } from '../../../protocol/src/file-attachments.mts'
 
 /**
  * 没带成的原因：
- * folder：无法访问的文件夹；size：超出上传上限；read：取不到路径；count：附件已满；upload：上传失败。
+ * folder：无法访问的文件夹；size：超出上传上限；read：取不到路径或读不到内容；count：附件已满。
  */
-export type FileRefusal = 'folder' | 'size' | 'read' | 'count' | 'upload'
+export type FileRefusal = 'folder' | 'size' | 'read' | 'count'
 
 /**
  * 远程设备能不能操作这台电脑（litch_machine）：on 打开了；off 关着（设备设置里能打开）；
@@ -25,7 +25,7 @@ export interface FileFacts {
   isFolder(file: File): boolean
   /** 还能带几样 */
   room: number
-  upload(file: File): Promise<Extract<MessageExtra, { kind: 'file' }>>
+  stage(file: File): Promise<Extract<MessageExtra, { kind: 'file' }>>
 }
 
 export interface FilesResult {
@@ -86,9 +86,9 @@ export async function readFiles(files: File[], facts: FileFacts): Promise<FilesR
       if (file.size > MAX_ATTACHMENT_BYTES) made = 'size'
       else {
         try {
-          made = await facts.upload(file)
+          made = await facts.stage(file)
         } catch {
-          made = 'upload'
+          made = 'read'
         }
       }
     } else if (plan === 'client') made = clientRef(name, path, folder)

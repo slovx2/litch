@@ -2083,8 +2083,7 @@ export const en: Record<MessageKey, Entry> = {
     'Queued message not sent: {message}. It will be retried with your next message.',
   'session.inputSyncing':
     'Syncing session state. Your message is saved and will be sent after syncing.',
-  'session.inputCompacting':
-    'Compacting context. Your message is queued until compaction finishes.',
+  'composer.file.pending': 'Uploads on send; preview available after upload',
   'session.inputNoSteer':
     'This session cannot accept mid-turn messages. Your message is queued until the turn ends.',
   'session.steerQueued':

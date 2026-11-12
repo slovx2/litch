@@ -1,19 +1,18 @@
 import {
-  type CoreChannel,
   type ImageAttachment,
   MAX_ATTACHMENT_BYTES,
   type MessageExtra,
+  stageAttachment,
 } from '@litch/core'
 import { getDocumentAsync } from 'expo-document-picker'
 import { File } from 'expo-file-system'
 
 export type FileExtra = Extract<MessageExtra, { kind: 'file' }>
 
-/** 手机沙箱的路径不能交给远程模型；选取的文件始终经设备协议上传。 */
-export async function pickFile(
-  channel: CoreChannel,
-  deviceId: string,
-): Promise<FileExtra | (ImageAttachment & { kind: 'image' }) | null> {
+/** 手机沙箱路径不交给模型；先读到草稿，发送时再上传。 */
+export async function pickFile(): Promise<
+  FileExtra | (ImageAttachment & { kind: 'image' }) | null
+> {
   const result = await getDocumentAsync({ copyToCacheDirectory: true, multiple: false })
   if (result.canceled) return null
   const asset = result.assets[0]
@@ -28,12 +27,7 @@ export async function pickFile(
     const data = await file.base64()
     if (image)
       return { kind: 'image', name: asset.name, url: `data:${asset.mimeType};base64,${data}` }
-    return await channel.command('files.uploadAttachment', {
-      deviceId,
-      name: asset.name,
-      dataBase64: data,
-      ...(asset.mimeType ? { mimeType: asset.mimeType } : {}),
-    })
+    return stageAttachment(asset.name, data, asset.mimeType)
   } finally {
     // copyToCacheDirectory 创建的临时副本，不删除用户原文件。
     try {

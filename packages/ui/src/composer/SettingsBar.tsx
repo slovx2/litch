@@ -21,6 +21,7 @@ import { type ProjectPermissionController, useProjectPermission } from './projec
 
 /** 按设备、harness、会话和设置版本缓存，不能把同一 harness 的不同后端混在一起。 */
 const known = new Map<string, ComposeOptions>()
+const lastKnown = new Map<string, ComposeOptions>()
 
 function composeOptionsKey(
   deviceId: string,
@@ -43,6 +44,7 @@ export async function prepareSessionComposeOptions(
   if (!meta) return
   const settings = replica.store.get<SessionSettings>(keys.settings(deviceId, sessionId))
   const key = composeOptionsKey(deviceId, meta.harness, sessionId, settings, meta)
+  const source = `${deviceId}\n${meta.harness}\n${sessionId}`
   try {
     const value = await channel.command(
       'device.composeOptions',
@@ -50,6 +52,7 @@ export async function prepareSessionComposeOptions(
       { signal },
     )
     known.set(key, value)
+    lastKnown.set(source, value)
   } catch {
     // 进入会话后照常重问，不把选择器加载失败报成新建失败。
   }
@@ -72,6 +75,7 @@ export function useComposeOptions(
   const meta = useKey<SessionMeta>(sessionId ? keys.session(deviceId, sessionId) : '')
   const settings = useKey<SessionSettings>(sessionId ? keys.settings(deviceId, sessionId) : '')
   const key = composeOptionsKey(deviceId, harness, sessionId, settings, meta)
+  const source = `${deviceId}\n${harness ?? ''}\n${sessionId ?? ''}`
   const [asked, setAsked] = useState<{ key: string; value: ComposeOptions } | null>(null)
   useEffect(() => {
     if (!reachable) return
@@ -84,14 +88,17 @@ export function useComposeOptions(
       )
       .then((value) => {
         known.set(key, value)
+        lastKnown.set(source, value)
         setAsked({ key, value })
       })
       // 问不到就不显示选择器，发消息不受影响
       .catch(() => {})
     return () => controller.abort()
-  }, [channel, deviceId, harness, sessionId, key, reachable])
+  }, [channel, deviceId, harness, sessionId, key, source, reachable])
   // 刚换了 harness、新的那份还没问回来：不拿上一个 harness 的清单顶着
-  return asked?.key === key ? asked.value : (known.get(key) ?? null)
+  return asked?.key === key
+    ? asked.value
+    : (known.get(key) ?? (!reachable ? lastKnown.get(source) : null) ?? null)
 }
 
 /**

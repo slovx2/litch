@@ -34,9 +34,11 @@ export function FileCard({
   sessionId,
   cwd,
   children,
+  pending = false,
 }: AttachmentContext & {
   file: UserAttachment
   children?: ReactNode
+  pending?: boolean
 }) {
   const t = useT()
   const { channel } = useServices()
@@ -114,17 +116,27 @@ export function FileCard({
           type="button"
           className="attachment-card-open"
           onClick={() => void open()}
-          disabled={!file.path || state === 'cleaned'}
+          disabled={pending || !file.path || state === 'cleaned'}
           aria-busy={busy}
-          title={[file.path, file.client ? t('chip.client') : ''].filter(Boolean).join('\n')}
+          title={
+            pending
+              ? t('composer.file.pending')
+              : [file.path, file.client ? t('chip.client') : ''].filter(Boolean).join('\n')
+          }
         >
           <Icon name={file.kind === 'folder' ? 'folder' : 'file'} />
           <span className="attachment-card-info">
             <span className="ell">{name}</span>
-            <small className="ell">{state === 'cleaned' ? t('attachment.cleaned') : detail}</small>
+            <small className="ell">
+              {pending
+                ? t('composer.file.pending')
+                : state === 'cleaned'
+                  ? t('attachment.cleaned')
+                  : detail}
+            </small>
           </span>
         </button>
-        {targetId && root && file.path && state !== 'cleaned' ? (
+        {!pending && targetId && root && file.path && state !== 'cleaned' ? (
           <FileDestination
             subject={{
               deviceId: targetId,

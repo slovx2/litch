@@ -31,6 +31,13 @@ const say = (prompt: string) =>
 
 export const SCENES: Scene[] = [
   {
+    id: 'compose-state',
+    group: '会话',
+    name: '离线草稿与压缩插话',
+    note: '真实核心、JSON-RPC 假设备；离线附件保留本地，压缩结束后自动插话',
+    steps: [],
+  },
+  {
     id: 'manager-line-suggestions',
     group: '经理',
     name: '工作线建议',

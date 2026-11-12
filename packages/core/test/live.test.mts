@@ -3090,7 +3090,7 @@ test('I-304 有待发时新发插队消息不再绕过 now；不含待发时其�
   env.core.stop()
 })
 
-test('I-304 压缩期间的立即发送保留并说明原因；完成后只开一个新回合', async () => {
+test('压缩期间立即发送正常待发；手动压缩回合结束后只开一个新回合', async () => {
   const env = setup([
     thread({
       id: 'a',
@@ -3108,8 +3108,76 @@ test('I-304 压缩期间的立即发送保留并说明原因；完成后只开�
   await settle()
   await env.command('session.send', { ...where, text: '压缩时输入', now: true })
   assert.equal(env.sent('turn/steer').length, 0)
-  assert.deepEqual(session.seen.view?.note, { key: 'session.inputCompacting' })
+  assert.equal(session.seen.view?.note, null)
   env.peer.last().notify('turn/completed', { threadId: 'a', turn: finished('compact') })
+  await settle()
+  assert.equal(env.sent('turn/start').length, 1)
+  env.core.stop()
+})
+
+for (const engine of ['claude', 'codex', 'pi', 'opencode', 'dsh', 'acp'])
+  test(`${engine} 自动压缩完成后恢复插话，不等整个回合结束且不重复`, async () => {
+    const compact = { type: 'contextCompaction', id: 'c' } as ThreadItem
+    const env = setup([thread({ id: 'a', turns: [turn('working', [], { status: 'inProgress' })] })])
+    runtime(env.handlers, engine)
+    env.core.start()
+    await settle()
+    const session = watch(env.core)
+    await settle()
+    env.peer.last().notify('item/started', { threadId: 'a', turnId: 'working', item: compact })
+    await settle()
+    await env.command('session.send', { ...where, text: '压缩时插话', now: true })
+    assert.equal(env.sent('turn/steer').length, 0)
+    env.peer.last().notify('item/completed', { threadId: 'a', turnId: 'working', item: compact })
+    await settle()
+    assert.equal(env.sent('turn/steer').length, 1)
+    assert.equal(session.seen.view?.note, null)
+    assert.equal(env.sent('turn/start').length, 0)
+    assert.equal(session.seen.view?.queued.length, 0)
+    env.peer.last().notify('item/completed', { threadId: 'a', turnId: 'working', item: compact })
+    await settle()
+    assert.equal(env.sent('turn/steer').length, 1)
+    env.core.stop()
+  })
+
+test('插话请求与压缩开始竞态：明确未受理时静默等待完成，不丢失意图', async () => {
+  const compact = { type: 'contextCompaction', id: 'c' } as ThreadItem
+  const env = setup([thread({ id: 'a', turns: [turn('working', [], { status: 'inProgress' })] })])
+  runtime(env.handlers, 'claude')
+  env.core.start()
+  await settle()
+  const session = watch(env.core)
+  await settle()
+  env.handlers['turn/steer'] = () => {
+    env.peer.last().notify('item/started', { threadId: 'a', turnId: 'working', item: compact })
+    throw new RpcFailure(-32009, '正在压缩上下文，请等待压缩结束后发送')
+  }
+  await env.command('session.send', { ...where, text: '压缩前一刻插话', now: true })
+  assert.equal(session.seen.view?.note, null)
+  assert.equal(session.seen.view?.queued.length, 1)
+  env.handlers['turn/steer'] = () => ({ turnId: 'working' })
+  env.peer.last().notify('item/completed', { threadId: 'a', turnId: 'working', item: compact })
+  await settle()
+  assert.equal(env.sent('turn/steer').length, 2)
+  assert.equal(session.seen.view?.queued.length, 0)
+  env.core.stop()
+})
+
+test('明确选择排队的消息不因压缩完成而插话，整个回合结束后自动发出', async () => {
+  const compact = { type: 'contextCompaction', id: 'c' } as ThreadItem
+  const env = setup([thread({ id: 'a', turns: [turn('working', [], { status: 'inProgress' })] })])
+  runtime(env.handlers, 'claude')
+  env.core.start()
+  await settle()
+  watch(env.core)
+  await settle()
+  env.peer.last().notify('item/started', { threadId: 'a', turnId: 'working', item: compact })
+  await settle()
+  await env.command('session.send', { ...where, text: '下一回合处理' })
+  env.peer.last().notify('item/completed', { threadId: 'a', turnId: 'working', item: compact })
+  await settle()
+  assert.equal(env.sent('turn/steer').length, 0)
+  env.peer.last().notify('turn/completed', { threadId: 'a', turn: finished('working') })
   await settle()
   assert.equal(env.sent('turn/start').length, 1)
   env.core.stop()
