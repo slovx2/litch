@@ -139,14 +139,36 @@
   max-height: 9.5lh;
   overflow: hidden;
 }
-.suggestion-card .prop-acts {
-  align-items: center;
-  margin-top: 0;
-  padding-top: 10px;
-  border-top: 1px solid var(--line-1);
+/* 看板卡尾：建议的按钮、工作树开关和讨论入口同在操作区一行（同决策卡），放不下才换行，讨论入口跟在末尾；
+   补充说明在按钮上面单独一行，错误与重试在最下面 */
+.mg-card-actions .prop-acts {
+  display: contents;
 }
-[data-skin="retro"] .suggestion-card .prop-acts {
-  border-top-style: dashed;
+.mg-card-actions:has(.prop-acts) {
+  gap: 6px;
+}
+/* 复古英文最宽：这一行的无框按钮左右留白收到 8px，工作树开关不再额外空开 */
+.mg-card-actions .prop-acts .btn.ghost {
+  padding-inline: 8px;
+}
+.mg-card-actions .prop-acts .wt-check {
+  margin-left: 0;
+}
+.prop-more-acts {
+  position: relative;
+}
+.prop-more-acts > .pick-pop {
+  left: auto;
+  right: 0;
+  min-width: 140px;
+}
+.mg-card-actions .prop-note {
+  order: -2;
+  margin-top: 0;
+}
+.mg-card-actions :is(.prop-err, .limit-note) {
+  width: 100%;
+  order: 9;
 }
 /* 收起时摘要给两行：背景首句常常一行放不下 */
 .suggestion-card > .mg-post-summary {

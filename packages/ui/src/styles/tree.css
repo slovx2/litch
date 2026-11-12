@@ -389,11 +389,6 @@ button.sev-title {
 .prop-acts[data-small="true"] {
   margin-top: 2px;
 }
-.prop-acts[data-small="true"] .btn {
-  height: round(calc(24px * var(--fs)), 1px);
-  padding: 0 8px;
-  font-size: calc(12px * var(--fs));
-}
 .prop-err {
   margin: 4px 0 0;
   font-size: calc(12px * var(--fs));

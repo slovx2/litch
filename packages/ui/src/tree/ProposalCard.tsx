@@ -52,6 +52,7 @@ export function ProposalActs({
   small,
   inbox,
   noteFold,
+  moreMenu,
   sourceParent,
 }: {
   deviceId: string
@@ -61,6 +62,8 @@ export function ProposalActs({
   inbox?: boolean
   /** 经理看板里：补充说明默认收起，点“补充说明”展开（同决策卡） */
   noteFold?: boolean
+  /** 经理看板里：“编辑后开始”“忽略”收进行尾的“⋯”（同手机），一行放得下 */
+  moreMenu?: boolean
   sourceParent?: Pick<SessionSummary, 'id' | 'title' | 'harness' | 'cwd' | 'workspaceId'>
 }) {
   const t = useT()
@@ -125,7 +128,7 @@ export function ProposalActs({
         {!proposal.sourceIsManager ? (
           <button
             type="button"
-            className="btn"
+            className="btn ghost"
             data-act="here"
             disabled={off}
             onClick={() => act.here()}
@@ -133,25 +136,29 @@ export function ProposalActs({
             {t(inbox ? 'suggestions.here' : 'proposal.here')}
           </button>
         ) : null}
-        <button
-          type="button"
-          className="btn"
-          data-act="edit"
-          // 弹窗要父会话的摘要（harness、项目、标题）
-          disabled={off || !parent}
-          onClick={() => setEditing(true)}
-        >
-          {t('proposal.edit')}
-        </button>
-        <button
-          type="button"
-          className="btn ghost"
-          data-act="dismiss"
-          disabled={off}
-          onClick={() => act.dismiss()}
-        >
-          {t('proposal.dismiss')}
-        </button>
+        {moreMenu ? null : (
+          <>
+            <button
+              type="button"
+              className="btn ghost"
+              data-act="edit"
+              // 弹窗要父会话的摘要（harness、项目、标题）
+              disabled={off || !parent}
+              onClick={() => setEditing(true)}
+            >
+              {t('proposal.edit')}
+            </button>
+            <button
+              type="button"
+              className="btn ghost"
+              data-act="dismiss"
+              disabled={off}
+              onClick={() => act.dismiss()}
+            >
+              {t('proposal.dismiss')}
+            </button>
+          </>
+        )}
         {noteShown ? null : (
           <button
             type="button"
@@ -172,6 +179,14 @@ export function ProposalActs({
           disabled={off}
           onChange={setWorktree}
         />
+        {moreMenu ? (
+          <ProposalMore
+            editDisabled={off || !parent}
+            dismissDisabled={off}
+            onEdit={() => setEditing(true)}
+            onDismiss={() => act.dismiss()}
+          />
+        ) : null}
       </div>
       {worktreeBlock ? <p className="prop-err err">{t(worktreeBlock)}</p> : null}
       {act.limit ? (
@@ -381,6 +396,70 @@ function ProposalView({
         <StartedChild deviceId={deviceId} childId={childId} title={title} />
       ) : null}
     </div>
+  )
+}
+
+/** 看板建议卡行尾的“⋯”：编辑后开始、忽略。往上弹、靠右，不压到下面的卡外 */
+function ProposalMore({
+  editDisabled,
+  dismissDisabled,
+  onEdit,
+  onDismiss,
+}: {
+  editDisabled: boolean
+  dismissDisabled: boolean
+  onEdit(): void
+  onDismiss(): void
+}) {
+  const t = useT()
+  const { open, setOpen, root, trigger, pop, onKeyDown } = usePopover()
+  const pick = (run: () => void) => () => {
+    setOpen(false)
+    run()
+  }
+  return (
+    <span className="prop-more-acts" ref={root}>
+      <button
+        ref={trigger}
+        type="button"
+        className="ibtn"
+        data-act="proposal-more"
+        title={t('proposal.more')}
+        aria-label={t('proposal.more')}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <More />
+      </button>
+      {open ? (
+        // biome-ignore lint/a11y/noStaticElementInteractions: 键盘事件是从里面的按钮冒上来的
+        <div className="pick-pop" ref={pop} onKeyDown={onKeyDown}>
+          <div role="menu" aria-label={t('proposal.more')} className="pick-list">
+            <button
+              type="button"
+              role="menuitem"
+              className="pick-opt"
+              data-act="edit"
+              disabled={editDisabled}
+              onClick={pick(onEdit)}
+            >
+              {t('proposal.edit')}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="pick-opt"
+              data-act="dismiss"
+              disabled={dismissDisabled}
+              onClick={pick(onDismiss)}
+            >
+              {t('proposal.dismiss')}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </span>
   )
 }
 

@@ -240,13 +240,13 @@ messages arrived while you were away. Other board tabs retain their own scroll p
 - **Background tasks**: while background tasks run, a small pill above the input box shows a breathing
   mark and their count (screen readers say "N background tasks running"); tap it to open the
   Background tasks page. 输入框上方的小胶囊只写记号和个数，点开看后台任务。
-- **Suggested task cards**: a waiting card shows **Start** and **Do it here**; **Edit and start**,
+- **Suggested task cards**: a waiting card shows **Start** and **Do it here**; **Edit first**,
   **Dismiss** and turning task cards off are under ⋯ at the card's top right. The "New worktree" switch
-  sits beside the buttons (it moves below them on narrow screens); its explanation is on the Edit and
-  start page. 卡上只有“开始”“在这里做”，其余在右上角“⋯”里。
+  sits beside the buttons (it moves below them on narrow screens); its explanation is on the Edit first
+  page. 卡上只有“开始”“在这里做”，其余在右上角“⋯”里。
   When the target harness cannot run as strictly as the parent session, Start is dimmed and its
   screen-reader name gives the reason; it becomes available once the parent session's access is raised.
-  Do it here and Edit and start (to pick another harness) still work.
+  Do it here and Edit first (to pick another harness) still work.
   目标 harness 收不到父会话那么严时，“开始”置灰，读屏名称写明原因；放宽父会话权限后可点。
 - **New session**: harnesses are a row of pills (swipe sideways when they do not fit). A dimmed pill
   cannot be used on this device; tap it to see why. Long-press a pill to see its version.

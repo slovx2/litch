@@ -71,7 +71,7 @@ export function OfferActs({
         {!proposal.sourceIsManager ? (
           <button
             type="button"
-            className="btn"
+            className="btn ghost"
             data-act="here"
             disabled={off}
             onClick={() => act.answer('here')}

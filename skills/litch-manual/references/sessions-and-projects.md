@@ -724,7 +724,7 @@ woken to continue.
   checkbox, preset this way, and what is checked there wins. "Do it here" always stays in the current
   session and folder. A handed-off task gets a worktree only on harnesses that can fork into another
   folder (Codex, Claude Code); elsewhere it shares the folder. On the phone the cards, the offer card
-  and "Edit and start" have the same "New worktree" switch.
+  and "Edit first" have the same "New worktree" switch.
   At most three unsolicited suggestions and four total cards can be raised per turn. To start one,
   click its card or tell the model which one. The model withdraws stale proposals. Wrap-up precedes
   the final answer and may carry no suggestions. A missed wrap-up can trigger one reminder turn.
@@ -759,7 +759,7 @@ woken to continue.
   Reports still arrive while waking is off; enabling it rechecks eligible queued reports under the
   normal wake rules, without overriding stops, failures, scheduled turns or wake limits.
   `list` and `read` include the current `wake_parent` value. Desktop session details and mobile rows
-  show “Wake off”. The spawn dialog and Edit and start also let you choose the initial setting. Waking happens on the
+  show “Wake off”. The spawn dialog and Edit first also let you choose the initial setting. Waking happens on the
   device, also when no desktop or phone is connected. Background tasks still running in the parent or a
   sub-session after its turn do not hold it back. Turns run by scheduled tasks report but do not wake;
   a scheduled run in the parent itself carries the reports waiting there. After you stop the parent's
@@ -879,9 +879,9 @@ only a path reads the current file on first view. Deleted files, evicted images 
 harness cannot be recovered; this includes large Codex MCP results already truncated to text.
 
 
-建议卡在桌面和手机的对话、看板及建议列表中默认只展示标题与背景首句摘要；没有背景时取任务首句。对话和建议列表里点击“展开简报”查看完整背景和任务，点击“收起简报”返回摘要。经理看板的建议卡和决策卡一样只有一个卡头（短编号如 `S-315bc783` 加标题，完整编号在悬停提示里），展开后依次是来源会话、设备、目录与创建时间一行小字，背景和任务两段（长的点“展开全文”），最后是操作区。开始、编辑后开始和忽略仍在操作区，展开不会执行任务。
+建议卡在桌面和手机的对话、看板及建议列表中默认只展示标题与背景首句摘要；没有背景时取任务首句。对话和建议列表里点击“展开简报”查看完整背景和任务，点击“收起简报”返回摘要。经理看板的建议卡和决策卡一样只有一个卡头（短编号如 `S-315bc783` 加标题，完整编号在悬停提示里），展开后依次是来源会话、设备、目录与创建时间一行小字，背景和任务两段（长的点“展开全文”），最后是操作区。“开始”在操作区，“编辑后开始”和“忽略”在操作区行尾的“⋯”里，展开不会执行任务。
 
-Suggestion cards in desktop and phone conversations, boards and suggestion lists show the title and the first sentence of the background by default, falling back to the task when there is no background. In conversations and suggestion lists, Show full brief reveals the complete background and task; Show less restores the summary. On a manager board a suggestion card has a single header like a decision card (a short ID such as `S-315bc783` plus the title; hover for the full ID). Expanding it shows one small line with the source session, device, folder and age, then the Background and Task sections (Show all for long ones), then the actions. Start, Edit and start, and Dismiss remain in the action area. Expanding never starts work.
+Suggestion cards in desktop and phone conversations, boards and suggestion lists show the title and the first sentence of the background by default, falling back to the task when there is no background. In conversations and suggestion lists, Show full brief reveals the complete background and task; Show less restores the summary. On a manager board a suggestion card has a single header like a decision card (a short ID such as `S-315bc783` plus the title; hover for the full ID). Expanding it shows one small line with the source session, device, folder and age, then the Background and Task sections (Show all for long ones), then the actions. Start is in the action area; Edit first and Dismiss are under ⋯ at its end. Expanding never starts work.
 
 提卡时，背景第一句写清问题及值得处理的理由；这是用户看到的卡片摘要。简报只写该任务的背景、目标与约束，不重复通用工作规矩。
 
