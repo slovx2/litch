@@ -42,7 +42,7 @@ let endpoint = ''
 child.stderr.on('data', (chunk) => {
   endpoint += String(chunk)
 })
-let cdp
+let cdp, diagnose
 try {
   const ws = await until(
     () => endpoint.match(/DevTools listening on (ws:\/\/[^\s]+)/)?.[1],
@@ -89,6 +89,61 @@ try {
     )
     const picture = await call('Page.captureScreenshot', { format: 'png' })
     writeFileSync(join(output, `M9-${name}.png`), Buffer.from(picture.data, 'base64'))
+  }
+  diagnose = async () => {
+    writeFileSync(
+      join(output, 'failure.json'),
+      JSON.stringify(
+        await read(`({
+      body: document.body.innerText,
+      cards: [...document.querySelectorAll('[data-issue]')].map(e=>e.outerHTML),
+      tabs: [...document.querySelectorAll('[data-board-tab]')].map(e=>e.outerHTML),
+    })`),
+        null,
+        2,
+      ),
+    )
+    await shot('failure')
+  }
+  const openCard = async (id) => {
+    const head = `[data-issue="${id}"] > [data-act="issue-toggle"]`
+    await wait(head)
+    if (
+      (await read(
+        `document.querySelector(${JSON.stringify(head)}).getAttribute('aria-expanded')`,
+      )) !== 'true'
+    )
+      await click(head)
+    await wait(`[data-issue-detail="${id}"]`)
+  }
+  const setStatus = async (group) => {
+    const selector = `[data-issue-filter-status="${group}"]`
+    if (!(await read(`!!document.querySelector(${JSON.stringify(selector)})`)))
+      await click('[data-act="issue-filter-open"]')
+    await click(selector)
+    if (
+      await read(
+        `document.querySelector('[data-act="issue-filter-open"]')?.getAttribute('aria-expanded') === 'true'`,
+      )
+    )
+      await click('[data-act="issue-filter-open"]')
+  }
+  const issueCount = () => read("document.querySelectorAll('[data-issue]').length")
+  const firstIssue = () => read("document.querySelector('[data-issue]').dataset.issue")
+  const reportRelationsInFlow = async () => {
+    await wait('[data-relations="P-1"]')
+    assert.equal(
+      await read("getComputedStyle(document.querySelector('[data-relations=P-1]')).float"),
+      'none',
+      '关联区沿正文流排布，不再随宽度浮动',
+    )
+    assert.ok(
+      await read(`(()=>{
+      const e=document.querySelector('[data-relations=P-1]');
+      return e.scrollWidth <= e.clientWidth + 1;
+    })()`),
+      '报告关联区不横向溢出',
+    )
   }
   const say = async (text) => {
     await wait('.main .dock textarea.cmp-text')
@@ -151,14 +206,12 @@ try {
   )
   await shot('manager-entry')
   await click('[data-board-tab="reports"]')
+  // 分页卡片默认收起；先展开报告，再检查正文里的关联区。
+  await openCard('P-1')
+  await wait('[data-report="P-1"]')
   assert.equal(await read("document.querySelector('.mg-board').getBoundingClientRect().width"), 560)
-  await until(
-    () =>
-      read(
-        "document.querySelector('[data-relations=P-1]').dataset.wide==='true' && getComputedStyle(document.querySelector('[data-relations=P-1]')).float==='right'",
-      ),
-    '1440 默认 560 看板关联靠右',
-  )
+  await reportRelationsInFlow()
+  assert.equal(await read("document.querySelector('[data-relations=P-1]').open"), false)
   await shot('report-default-1440')
 
   await click('[data-board-tab="suggestions"]')
@@ -183,21 +236,19 @@ try {
   assert.equal(await read("document.querySelectorAll('[data-suggestion-manager]').length"), 1)
   await shot('manager-summary')
   await click('[data-suggestion-manager="m1"] .suggestion-manager-open')
-  await wait('.mg-board .suggestion-row')
+  await wait('[data-issue-console]')
   assert.equal(
     await read(
-      "document.querySelector('[data-board-tab=\"suggestions\"]').getAttribute('aria-pressed')",
+      "document.querySelector('[data-board-tab=suggestions]').getAttribute('aria-pressed')",
     ),
     'true',
   )
-  assert.equal(await read("document.querySelectorAll('.mg-board .suggestion-row').length"), 2)
-  assert.equal(await read("document.querySelector('[data-suggestions-unreviewed]').open"), false)
-  assert.equal(
-    await read('document.querySelector(\'[data-board-tab="suggestions"] .pill\') === null'),
-    true,
-  )
-  await click('[data-suggestions-unreviewed] > summary')
-
+  // 建议页默认“待处理”（已审核待开始）；经理待审核建议现在由“进行中”筛选查看。
+  await wait('[data-issue-empty]')
+  await setStatus('doing')
+  await until(async () => (await issueCount()) === 2, '两条待审核建议')
+  const sourceSuggestion = await firstIssue()
+  await openCard(sourceSuggestion)
   await click('.mg-board .suggestion-row [data-act="open-source"]')
   await wait('.arch-bar')
   await call('Input.dispatchKeyEvent', {
@@ -206,25 +257,21 @@ try {
     code: 'Escape',
     windowsVirtualKeyCode: 27,
   })
-  await wait('.mg-board .suggestion-row')
+  await openCard(sourceSuggestion)
   assert.equal(
     await read(
-      "document.querySelector('[data-board-tab=\"suggestions\"]').getAttribute('aria-pressed')",
+      "document.querySelector('[data-board-tab=suggestions]').getAttribute('aria-pressed')",
     ),
     'true',
     '归档预览返回建议页签',
   )
-  await click('[data-suggestions-unreviewed] > summary')
-  await click('.mg-board .suggestion-row [data-act="edit"]')
+  await click('.mg-board [data-issue-type="suggestion"] [data-act="edit"]')
   await wait('.spawn-dialog')
   await read(
     "document.querySelector('.spawn-dialog').close();document.querySelector('.spawn-dialog').dispatchEvent(new Event('cancel',{cancelable:true}))",
   )
-  await click('.mg-board .suggestion-row [data-act="dismiss"]')
-  await until(
-    () => read("document.querySelectorAll('.mg-board .suggestion-row').length === 1"),
-    '看板忽略建议',
-  )
+  await click('.mg-board [data-issue-type="suggestion"] [data-act="dismiss"]')
+  await until(async () => (await issueCount()) === 1, '看板忽略后待审核建议减少')
   await shot('manager-suggestions')
   await say('收尾建议')
   await until(
@@ -840,6 +887,9 @@ try {
   console.log(
     '经理看板与集中建议验收通过：汇总卡、Markdown 与编号跳转、已落地元信息、待办计数、单项取消修改、通用追问与报告关联、回复 Markdown 与发言人、最窄输入框、拖动收起/恢复、三皮肤明暗及窄窗口、留存枚举。',
   )
+} catch (error) {
+  await diagnose?.()
+  throw error
 } finally {
   cdp?.close()
   const ended = new Promise((resolve) => child.once('exit', resolve))
