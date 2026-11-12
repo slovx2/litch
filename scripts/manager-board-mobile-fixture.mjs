@@ -18,7 +18,7 @@ export async function installManagerBoardMobileFixture({
     throw new Error('手机看板临时夹具已存在，请先结束上一轮验收')
   let source = readFileSync(boot, 'utf8')
   source = `import { managerBoardFixture } from '../preview/ManagerBoardFixture.web'\n${drafts ? "import { jsonFile } from './json-file'\n" : ''}${source}`
-  if (links) source = `import { navigationRef } from './dev-links'\n${source}`
+  if (links || consoleCards) source = `import { navigationRef } from './dev-links'\n${source}`
   source = source.replace(
     'const served = serve(\n      createMockCore({',
     'const fixture = managerBoardFixture(\n      createMockCore({',
@@ -33,6 +33,7 @@ export async function installManagerBoardMobileFixture({
     )
     ${drafts ? 'for (const [name, value] of Object.entries(fixture.drafts.mobile)) jsonFile(name).write(value)' : ''}
     Object.assign(globalThis, { __managerBoardFixture: fixture.state })
+    ${consoleCards ? 'Object.assign(globalThis, { __managerBoardNavigation: navigationRef })' : ''}
     ${links ? "Object.assign(globalThis, { __managerLinks: { ...fixture.state, jump: (issue: string) => navigationRef.navigate('ManagerConsole', { deviceId: 'local', managerId: 'm1', issue }) } })" : ''}
     const served = serve(fixture.core)`,
   )

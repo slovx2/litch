@@ -1,5 +1,5 @@
 import { knownFileRef } from '@litch/core'
-import { useIsFocused, useNavigation } from '@react-navigation/native'
+import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { createContext, useContext, useEffect, useState } from 'react'
 import { Alert, Linking, Pressable, Text, View } from 'react-native'
@@ -45,11 +45,10 @@ export function IssueRelations({
   basis?: ManagerLink[]
 }) {
   const links = useWebLinkMenu()
-  const focused = useIsFocused()
   const context = useContext(IssueContext)
   const [expanded, setExpanded] = useState(false)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 切换条目或重新进入页面时恢复收起。
-  useEffect(() => setExpanded(false), [id, kind, focused])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 只在切换条目时收起；打开关联页面再返回时保留阅读状态。
+  useEffect(() => setExpanded(false), [id, kind])
   const [preview, setPreview] = useState('')
   const [error, setError] = useState('')
   const t = useT()
