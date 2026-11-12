@@ -110,6 +110,7 @@ export async function chromeHandoff({
     await success('c', 'snapshot', { tabId: pageId })
     await success('c', 'click', { tabId: pageId, x: 40, y: 40 })
     pointer.before = await inspect()
+    assert.equal(pointer.before, 1)
     const worker = targets.find(
       (target) =>
         target.type === 'service_worker' &&
@@ -134,9 +135,58 @@ export async function chromeHandoff({
     pageId = await claim('d', url)
     await success('d', 'click', { tabId: pageId, x: 40, y: 240 })
     pointer.afterReclaim = await inspect()
+    assert.equal(pointer.afterReclaim, 1)
     await success('d', 'release', { tabId: pageId })
     pointer.afterRelease = await inspect()
+    assert.equal(pointer.afterRelease, 0)
+    // 不发 release 模拟外部断线：页面中的到期器独立清理，不需要重连调试器。
+    pageId = await claim('e', url)
+    await success('e', 'click', { tabId: pageId, x: 40, y: 200 })
+    assert.equal(await inspect(), 1)
+    const workerSession = await cdp.call('Target.attachToTarget', {
+      targetId: worker.targetId,
+      flatten: true,
+    })
+    const disconnectedAt = Date.now()
+    try {
+      await cdp.call(
+        'Runtime.evaluate',
+        { expression: `chrome.debugger.detach({tabId:${nativeTab}})`, awaitPromise: true },
+        workerSession.sessionId,
+      )
+    } finally {
+      await cdp.call('Target.detachFromTarget', { sessionId: workerSession.sessionId })
+    }
+    await until(async () => (await inspect()) === 0, 'disconnected pointer expires', 5000)
+    pointer.expiryMs = Date.now() - disconnectedAt
+    assert.ok(pointer.expiryMs <= 3000, JSON.stringify(pointer))
+    await success('e', 'release', { tabId: pageId })
     console.log(`POINTER_HANDOFF_EVIDENCE ${JSON.stringify(pointer)}`)
   })
+  const nativeTabs = [
+    ...new Set(
+      [...executor.pages.values()]
+        .filter((page) => page.grant.owner.threadId.startsWith('handoff-'))
+        .map((page) => page.grant.tabId),
+    ),
+  ]
+  const worker = (await cdp.call('Target.getTargets')).targetInfos.find(
+    (target) =>
+      target.type === 'service_worker' &&
+      target.url.startsWith(`chrome-extension://${identity.id}/`),
+  )
+  const { sessionId } = await cdp.call('Target.attachToTarget', {
+    targetId: worker.targetId,
+    flatten: true,
+  })
+  try {
+    await cdp.call(
+      'Runtime.evaluate',
+      { expression: `chrome.tabs.remove(${JSON.stringify(nativeTabs)})`, awaitPromise: true },
+      sessionId,
+    )
+  } finally {
+    await cdp.call('Target.detachFromTarget', { sessionId })
+  }
   return { pointer }
 }

@@ -426,6 +426,9 @@ New tabs open in the background of an existing normal window without switching i
 用户控制期间自行移动了窗口或分组时，保留用户的新布局。代理临时标签仍在回合结束关闭；标记保留的标签交还给用户并移出代理组。
 
 空闲的代理组为蓝色；执行操作时组变橙色，组名显示 `▶ AI` 和正在操作的标签标题，当前标签对应的扩展工具栏图标显示 `AI`。网页的标题与 favicon 不会被改写。
+网页中的虚拟指针在最后一次更新后 2 秒到期。正常交还同步移除指针，重新认领先清除旧节点。外部撤销调试连接后不抢回连接，页面自行清理；后台计时器被节流或页面被冻结时，DOM 清理可能延迟，动画按时间线隐藏过期指针，页面恢复绘制或再次认领时不保留旧指针。
+
+The virtual pointer expires two seconds after its last update. Normal release removes it synchronously, and reclaiming a tab clears stale nodes first. If another debugger disconnects Litch, the page expires its own pointer without taking back the connection. Background timer throttling or a frozen page can delay DOM removal; its animation hides the expired pointer on the next rendered frame, and reclaiming clears it synchronously.
 操作失败也会撤销活动标记。扩展启动时读取恢复记录，清理上次遗留分组和徽标；恢复未完成的记录保留并重试。点击扩展图标仍是停止控制。
 
 升级开发版扩展：先更新 Litch，在设置的 Chrome 页准备扩展，再到 `chrome://extensions` 重新加载 Litch Browser。新增 `tabGroups` 权限允许管理标签组；Chrome 如提示“查看和管理标签组”，确认后才能继续使用。重载会释放现有认领，代理需要重新列出并认领标签。

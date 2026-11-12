@@ -298,7 +298,7 @@ try {
     targetId,
     origin: site.origin,
     invocation,
-    context,
+    context: { ...context, ask: async () => 'once' },
     check,
     cdp,
     identity,
@@ -429,6 +429,8 @@ try {
         writeFileSync(join(output, 'page.png'), Buffer.from(image.imageUrl.split(',')[1], 'base64'))
     })
     await check('isolated world 公共光标 / 截图不含光标 / AX 无光标', async () => {
+      // 光标空闲后自行到期；先做一次无业务副作用的滚动，再检查本次呈现。
+      await success('scroll', { tabId, dy: 1, x: 10, y: 10 })
       const page = executor.pages.get(tabId)
       const target = (await cdp.call('Target.getTargets')).targetInfos.find(
         (target) => target.type === 'page' && target.url === `${site.origin}/`,
