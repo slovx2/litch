@@ -111,11 +111,11 @@ try {
     const text = (id) =>
       read(`document.querySelector('[data-testid="${id}"]')?.textContent ?? null`)
     await wait('[data-testid="draft-bar"]')
-    assert.equal(await text('draft-summary:D-2'), '✎ 选了「先发，补验放下一版」 · 写了追问')
-    assert.equal(await text('draft-summary:D-3'), '✎ 写了说明')
-    assert.equal(await text('draft-summary:D-5'), '✎ 写了追问')
+    assert.equal(await text('draft-summary:D-2'), '选了「先发，补验放下一版」 · 写了追问')
+    assert.equal(await text('draft-summary:D-3'), '写了说明')
+    assert.equal(await text('draft-summary:D-5'), '写了追问')
     assert.equal(await text('draft-summary:D-1'), null)
-    assert.match(await text('draft-bar'), /3 项草稿 ↓ · 1 项失效/)
+    assert.match(await text('draft-bar'), /3 项草稿 · 1 项失效/)
     // 提交条在滚动区下面贴底，不压在卡片上
     const layout = await read(
       `(()=>{const bar=document.querySelector('[data-testid="draft-bar"]').getBoundingClientRect();const list=document.querySelector('[data-testid="manager-board-scroll"]').getBoundingClientRect();return {bottom:Math.round(innerHeight-bar.bottom),seam:Math.round(bar.top-list.bottom)}})()`,
@@ -234,6 +234,18 @@ try {
     )
     await click('[data-testid="manager-issue:R-2"] textarea')
     assert.equal(await read(`!!document.querySelector('[data-testid="manager-issue:R-2"]')`), true)
+    const returnState = () =>
+      read(`({
+        routes: window.__managerBoardNavigation.getRootState().routes.map(r => ({ key: r.key, name: r.name })),
+        selected: document.querySelector('[data-testid="paging-detail:R-2"]')?.dataset.testid,
+        y: document.querySelector('[data-testid="manager-board-scroll"]').scrollTop,
+      })`)
+    // 留在长卡片中段；外部文件的临时根不能吞掉入口，关联区也不能因失焦而收起。
+    await read(`document.querySelector('[data-testid="manager-board-scroll"]').scrollTop = 180`)
+    await read('new Promise(r=>setTimeout(r,150))')
+    const origin = await returnState()
+    assert.equal(origin.y, 180)
+    assert.equal(origin.selected, 'paging-detail:R-2')
     for (const [path, expected] of [
       ['/outside/STORE.md', '隔离文件预览'],
       ['/outside/folder', 'STORE.md'],
@@ -251,6 +263,13 @@ try {
       )
       await click('[data-testid="files"] [data-testid="header:back"]')
       await wait('[data-testid="relation:/outside/STORE.md"]')
+      await until(async () => {
+        const actual = await returnState()
+        return Math.abs(actual.y - origin.y) < 2
+      }, `从 ${path} 返回原滚动位置`)
+      const actual = await returnState()
+      assert.deepEqual(actual.routes, origin.routes, '返回同一控制台路由，不丢失入口栈')
+      assert.equal(actual.selected, origin.selected, '返回后仍展开原卡片')
     }
     await click(selector)
     assert.equal(await read(`!!document.querySelector('[data-testid="manager-issue:R-2"]')`), false)

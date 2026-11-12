@@ -28,7 +28,13 @@ export interface CommentsProbe {
   /** 点片：编辑框贴着片在它上面，改评论生效，定位原文闪了，点记号也打开编辑框 */
   chipEdit: { above: boolean; saved: boolean; located: boolean; badgeOpens: boolean }
   /** ⌘回车直接发：对话里多了一条只带这一条评论的消息，输入框里的字和别的评论没动 */
-  direct: { cards: number; textKept: boolean; chipsKept: number }
+  direct: {
+    cards: number
+    textKept: boolean
+    chipsKept: number
+    composerFocused: boolean
+    buttonFocused: boolean
+  }
   /** 一起发出去：卡片两张、下面是打的字；片、底色、记号都没了 */
   sent: { cards: string[]; rest: string; cleared: boolean; unmarked: boolean }
   /** 回答里的 [N]：画成记号的、照原文的；悬停看得到引用；点了跳原文闪一下 */
@@ -120,6 +126,7 @@ export async function commentsProbe(session: string): Promise<CommentsProbe> {
     meta = false,
     end = '',
     buttonSave = false,
+    directButton = false,
   ) => {
     if (end) {
       const [endNode, endAt] = textAt(root, end)
@@ -132,19 +139,19 @@ export async function commentsProbe(session: string): Promise<CommentsProbe> {
     const field = await until('评论框', () => (document.activeElement === note() ? note() : null))
     write(field, words)
     await frame()
-    if (buttonSave) one<HTMLButtonElement>('.cmt-edit [data-act=save]')?.click()
+    if (directButton) one<HTMLButtonElement>('.cmt-edit [data-act=send]')?.click()
+    else if (buttonSave) one<HTMLButtonElement>('.cmt-edit [data-act=save]')?.click()
     else press(field, 'Enter', meta ? { metaKey: true } : {})
     await until('编辑框关上', () => !editor())
-    if (!meta)
-      await until('评论确认后焦点回到输入框末尾', () => {
-        const input = area()
-        return (
-          input &&
-          document.activeElement === input &&
-          input.selectionStart === input.value.length &&
-          input.selectionEnd === input.value.length
-        )
-      })
+    await until('评论确认后焦点回到输入框末尾', () => {
+      const input = area()
+      return (
+        input &&
+        document.activeElement === input &&
+        input.selectionStart === input.value.length &&
+        input.selectionEnd === input.value.length
+      )
+    })
     await clearSelection()
   }
   const lastTurn = () => all('.main .tr .turn').at(-1)
@@ -287,6 +294,8 @@ export async function commentsProbe(session: string): Promise<CommentsProbe> {
     cards: directCards,
     textKept: area()?.value === '还没写完的话',
     chipsKept: chips().length,
+    composerFocused: document.activeElement === area(),
+    buttonFocused: false,
   }
 
   // 八、一起发出去
@@ -344,6 +353,16 @@ export async function commentsProbe(session: string): Promise<CommentsProbe> {
     reopened: Boolean(one('.proc-body [data-comment-item]', all('.main .tr .turn').at(-3))),
     flashed: cardFlash,
   }
+
+  // 在原有原文跳转验收后再验证按钮直接发送，避免额外消息改变上面的相对回合位置。
+  const buttonSource = await until('重新展开的过程说明', () =>
+    one<HTMLElement>('.proc-body [data-comment-item]', all('.main .tr .turn').at(-3)),
+  )
+  const buttonBefore = all('.main .tr .turn').length
+  await comment(buttonSource, '重试逻辑', '按钮直接发', false, '', false, true)
+  await until('按钮直接发出的消息', () => all('.main .tr .turn').length > buttonBefore)
+  await idle()
+  direct.buttonFocused = document.activeElement === area()
 
   // 十一、十条之后点不了
   const words = ['重试', '固定', '三次', '网络', '指数', '退避', '超时', '服务端', '重复', '下单']
@@ -467,6 +486,10 @@ export function judgeComments(probe: CommentsProbe, reloaded: CommentsReloaded):
   check(probe.chipEdit.saved, '在片上改的评论没存上')
   check(probe.chipEdit.located, '“定位原文”没有让原文闪一下')
   check(probe.chipEdit.badgeOpens, '点原文上的记号没有打开编辑框')
+  check(
+    probe.direct.composerFocused && probe.direct.buttonFocused,
+    '直接发送评论后焦点没有回到输入框',
+  )
   check(probe.direct.cards === 1, `⌘回车直接发的那条消息带了 ${probe.direct.cards} 张卡片`)
   check(probe.direct.textKept, '⌘回车直接发把输入框里的字动了')
   check(probe.direct.chipsKept === 2, `⌘回车直接发之后输入框上剩 ${probe.direct.chipsKept} 片`)

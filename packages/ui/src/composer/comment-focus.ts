@@ -1,4 +1,4 @@
-// 只由用户确认评论时触发；草稿恢复、发送失败回填和取消都不请求焦点。
+// 用户确认评论或直接发送结束时触发（包括失败回填）；普通草稿恢复和取消不请求焦点。
 const listeners = new Map<string, Set<() => void>>()
 
 export function requestCommentFocus(key: string): void {

@@ -1,6 +1,7 @@
 // 评论在界面里的几样共用的东西：订阅一个会话的评论草稿、变成随消息带的附带项、直接发出去一条。
 import { type CoreChannel, MAX_COMMENTS, type MessageExtra } from '@litch/core'
 import { useCallback, useSyncExternalStore } from 'react'
+import { requestCommentFocus } from '../../composer/comment-focus.ts'
 import {
   type DraftComment,
   editDraftComments,
@@ -44,21 +45,27 @@ export const removeComment = (key: string, id: string): void =>
  * 只把这一条直接发出去：输入框里别的东西不动。回合在跑时和输入框的发送一样跟着“回合进行中发消息”的设置：
  * now（useRunningSend 说插得进去）就插进正在跑的回合，否则核心照常排队
  */
-export const sendComment = (
+export const sendComment = async (
   channel: CoreChannel,
   deviceId: string,
   sessionId: string,
   comment: DraftComment,
   now: boolean,
-): Promise<unknown> =>
-  channel.command('session.send', {
-    deviceId,
-    sessionId,
-    text: '',
-    images: [],
-    extras: [commentExtra(comment)],
-    ...(now ? { now: true } : {}),
-  })
+): Promise<unknown> => {
+  try {
+    return await channel.command('session.send', {
+      deviceId,
+      sessionId,
+      text: '',
+      images: [],
+      extras: [commentExtra(comment)],
+      ...(now ? { now: true } : {}),
+    })
+  } finally {
+    // 复用确认评论的下一帧聚焦；失败时调用方会先在微任务中回填评论，再移到输入框末尾。
+    requestCommentFocus(commentKey(deviceId, sessionId))
+  }
+}
 
 /** 会话的键 */
 export const commentKey = (deviceId: string, sessionId: string): string =>
