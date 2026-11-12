@@ -7,7 +7,13 @@ import { isAllowedCdp } from '../../browser/src/browser/cdp-allow.mjs'
 import { isInputCommand } from '../../browser/src/browser/input-command.mjs'
 import { createBackgroundTab } from './background-tab.mjs'
 import { chromeOrigin } from './origin.mjs'
-import { disposePointer, planPointer, pointerCommand, withoutPointer } from './pointer.mjs'
+import {
+  clearPointerNodes,
+  disposePointer,
+  planPointer,
+  pointerCommand,
+  withoutPointer,
+} from './pointer.mjs'
 import {
   attach,
   ChromeFault,
@@ -112,7 +118,12 @@ async function executeRequest(state: ExtensionState, request: ChromeRequest): Pr
       throw new ChromeFault('cancelled', 'The user stopped Chrome control for this turn.')
     const existing = [...state.grants.values()].find((one) => one.tabId === grant.tabId)
     if (existing || state.tabLocks.has(grant.tabId))
-      throw new ChromeFault('busy', 'This Chrome tab is already claimed.')
+      throw new ChromeFault(
+        'busy',
+        existing
+          ? `This Chrome tab is owned by session ${JSON.stringify(existing.sessionTitle || existing.owner.threadId)}. Ask that session to call release(tabId) or finish/stop its turn.`
+          : 'Another operation is preparing this Chrome tab. Wait for that operation to finish.',
+      )
     const unlock = lockTab(state, grant.tabId)
     grant.expiresAt = Date.now() + 15_000
     state.grants.set(grant.leaseId, grant)
@@ -134,6 +145,7 @@ async function executeRequest(state: ExtensionState, request: ChromeRequest): Pr
       await saveAttached(state)
       await cdp(state, grant.tabId, 'Page.enable')
       await cdp(state, grant.tabId, 'Runtime.enable')
+      await clearPointerNodes(state, grant.tabId)
       // 后台/最小化窗口没有可绘制的焦点；只模拟已租用标签，不激活浏览器窗口。
       await cdp(state, grant.tabId, 'Emulation.setFocusEmulationEnabled', { enabled: true })
       const current = await tabState(state, grant.tabId)
