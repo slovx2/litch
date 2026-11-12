@@ -191,6 +191,7 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
       if (method === 'fs/readFile' && outside) return { dataBase64: outside }
       if (method === 'fs/readDirectory' && path === OUTSIDE_FILE_ROOT)
         return {
+          litchDirectory: { truncated: false },
           entries: Object.keys(OUTSIDE_FILE_DATA).map((file) => ({
             fileName: file.slice(OUTSIDE_FILE_ROOT.length + 1),
             isDirectory: false,
@@ -208,6 +209,7 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
         if (first) names.add(first)
       }
       return {
+        litchDirectory: { truncated: false },
         entries: [...names].map((name) => ({ fileName: name, isDirectory: true, isFile: false })),
       }
     }
@@ -222,7 +224,8 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
       }
       return {
         // 符号链接两样都不是：适配器列目录时就是这样回的，核心会再去问它指向什么
-        entries: entries.map((entry) => ({
+        litchDirectory: { truncated: entries.length > 2000 },
+        entries: entries.slice(0, 2000).map((entry) => ({
           fileName: entry.name,
           isDirectory: entry.kind === 'dir',
           isFile: entry.kind === 'file',
@@ -262,6 +265,7 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
       short: new Set(),
       uploads: new Map(),
       files: createFiles({
+        browserSupported: () => true,
         previewSupported: () => deviceId !== NO_FILES,
         clock,
         online: () => host.device(deviceId)?.connection === 'online',

@@ -1,6 +1,6 @@
 // 找文件。问的是设备上的模糊搜索（整棵树里找），不是在已经展开的那些行里过滤。
 // 打字的时候等一小会儿再问（防抖在这里）；接着打字，上一次没回来的就取消掉（取消在核心）。
-import type { ChannelErrorShape, FileMatch } from '@litch/core'
+import { type ChannelErrorShape, type FileMatch, joinPath } from '@litch/core'
 import { type MouseEvent, type ReactNode, useEffect, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { whyNot } from '../app/errors.ts'
@@ -21,7 +21,12 @@ export interface Search {
 
 const IDLE: Search = { status: 'idle', query: '', matches: [], error: null }
 
-export function useFileSearch(deviceId: string, root: string, raw: string): Search {
+export function useFileSearch(
+  deviceId: string,
+  root: string,
+  raw: string,
+  currentLayer = false,
+): Search {
   const { channel } = useServices()
   const [search, setSearch] = useState<Search>(IDLE)
   const query = raw.trim()
@@ -35,7 +40,24 @@ export function useFileSearch(deviceId: string, root: string, raw: string): Sear
     setSearch((before) => ({ ...before, status: 'searching', error: null }))
     const abort = new AbortController()
     const timer = window.setTimeout(() => {
-      channel.command('files.search', { deviceId, root, query }, { signal: abort.signal }).then(
+      const work = currentLayer
+        ? channel
+            .command('files.list', { deviceId, root, path: root }, { signal: abort.signal })
+            .then((view) => ({
+              query,
+              matches: view.entries
+                .filter((entry) => entry.name.toLowerCase().includes(query.toLowerCase()))
+                .map(
+                  (entry): FileMatch => ({
+                    path: joinPath(root, entry.name),
+                    relative: entry.name,
+                    kind: entry.kind === 'dir' ? 'dir' : 'file',
+                    indices: null,
+                  }),
+                ),
+            }))
+        : channel.command('files.search', { deviceId, root, query }, { signal: abort.signal })
+      work.then(
         (found) => {
           if (abort.signal.aborted) return
           setSearch({ status: 'ready', query: found.query, matches: found.matches, error: null })
@@ -50,7 +72,7 @@ export function useFileSearch(deviceId: string, root: string, raw: string): Sear
       window.clearTimeout(timer)
       abort.abort()
     }
-  }, [channel, deviceId, root, query])
+  }, [channel, deviceId, root, query, currentLayer])
 
   return search
 }

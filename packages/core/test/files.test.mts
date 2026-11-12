@@ -127,7 +127,9 @@ test('列目录：断了的链接照旧算“别的”；路径不带 harness（
     view.entries.map((entry) => `${entry.kind}:${entry.name}`),
     ['other:dangling', 'file:index.ts'],
   )
-  assert.deepEqual(sent('fs/readDirectory'), [{ path: `${ROOT}/src` }])
+  assert.deepEqual(sent('fs/readDirectory'), [
+    { path: `${ROOT}/src`, litchDirectory: { maxEntries: 2000 } },
+  ])
 })
 
 test('列目录：几秒之内再要直接给上次的；说了不用缓存、或者过了时限才重新问', async () => {
@@ -249,7 +251,9 @@ test('macOS 上根的另一种写法（/private/tmp 和 /tmp）：路径换成�
       continue
     }
     assert.equal(((await read) as FileContent).path, `${root}/a.md`)
-    assert.deepEqual(world.sent('fs/readFile'), [{ path: `${root}/a.md` }])
+    assert.deepEqual(world.sent('fs/readFile'), [
+      { path: `${root}/a.md`, litchPreview: { root, maxBytes: MAX_TEXT_BYTES } },
+    ])
     assert.deepEqual(found.matches, [
       { path: `${root}/a.md`, relative: 'a.md', kind: 'file', indices: null },
     ])
@@ -294,8 +298,8 @@ test('Windows 设备：盘符和反斜杠的路径理成 C:/… 去取，不分�
     path: 'd:/work/repo',
   })
   assert.deepEqual(world.sent('fs/readDirectory'), [
-    { path: 'C:/users/me/app/src' },
-    { path: 'D:/Work/Repo' },
+    { path: 'C:/users/me/app/src', litchDirectory: { maxEntries: 2000 } },
+    { path: 'D:/Work/Repo', litchDirectory: { maxEntries: 2000 } },
   ])
   const content = (await world.command('files.read', {
     deviceId: 'local',
@@ -336,7 +340,10 @@ test('认得的根：会话的工作目录，和工作区的根（末尾带不�
   })
   await command('files.list', { deviceId: 'local', root: '/srv/repo', path: '/srv/repo/pkg' })
   await command('files.list', { deviceId: 'local', root: '/work/app/', path: '/work/app' })
-  assert.deepEqual(sent('fs/readDirectory'), [{ path: '/srv/repo/pkg' }, { path: '/work/app' }])
+  assert.deepEqual(sent('fs/readDirectory'), [
+    { path: '/srv/repo/pkg', litchDirectory: { maxEntries: 2000 } },
+    { path: '/work/app', litchDirectory: { maxEntries: 2000 } },
+  ])
 })
 
 test('读文件：文字带着语言；先问是什么，再读；同时读同一个只读一次', async () => {
@@ -550,10 +557,16 @@ test('挑目录（添加项目）：根之外的也列，只给目录名（指�
   dirs['/work'] = [dir('app'), file('notes.txt'), dir('lib')]
   const folders = (path: string | null) =>
     command('folders.list', { deviceId: 'local', path }) as Promise<FolderListing>
-  assert.deepEqual(await folders('/work/'), { path: '/work', parent: '/', folders: ['app', 'lib'] })
+  assert.deepEqual(await folders('/work/'), {
+    path: '/work',
+    parent: '/',
+    truncated: false,
+    folders: ['app', 'lib'],
+  })
   assert.deepEqual(await folders(ROOT), {
     path: ROOT,
     parent: '/work',
+    truncated: false,
     folders: ['.git', 'docs-link', 'src'],
   })
   const before = paths('fs/readDirectory').length

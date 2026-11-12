@@ -66,7 +66,9 @@ const Row = memo(function Row({
       row.note?.kind === 'failed'
         ? t('files.tree.failed', { reason: whyNot(row.note.error, t) })
         : row.note?.kind === 'truncated'
-          ? t('files.tree.truncated', { n: row.note.hidden })
+          ? row.note.hidden < 0
+            ? t('files.tree.limited')
+            : t('files.tree.truncated', { n: row.note.hidden })
           : t(row.kind === 'loading' ? 'files.tree.loading' : 'files.tree.empty')
     return (
       <div className="ft-note" data-kind={row.kind} data-path={row.path} style={indent}>
@@ -110,18 +112,20 @@ export function FileTree({
   deviceId,
   root,
   uiKey,
+  scope,
   onContext,
 }: {
   deviceId: string
   root: string
   uiKey: string
+  scope: string
   /** 在一行上要菜单（右键，或者键盘上的菜单键） */
   onContext(context: RowContext): void
 }) {
   const { replica } = useServices()
   const t = useT()
-  const rows = useKey<FileRow[]>(keys.fileRows(deviceId, root)) ?? NO_ROWS
-  const state = useKey<FileTreeState>(keys.fileTree(deviceId, root))
+  const rows = useKey<FileRow[]>(keys.fileRows(deviceId, root, scope)) ?? NO_ROWS
+  const state = useKey<FileTreeState>(keys.fileTree(deviceId, root, scope))
   const ui = useTreeUi(uiKey)
   const virtual = useVirtual(rows.length, ROW_HEIGHT)
   const { scroller, show, onScroll, sync } = virtual
@@ -166,6 +170,7 @@ export function FileTree({
     clearReveal(uiKey, path)
     void replica.files
       .reveal(deviceId, root, path, {
+        scope,
         directory: ui.revealDirectory === true,
         collapseOthers: ui.revealDirectory === true,
       })
@@ -173,7 +178,7 @@ export function FileTree({
         // 没找到（上面的目录不在了）：不滚
         if (!found && seeking.current === path) seeking.current = null
       })
-  }, [replica, deviceId, root, uiKey, ui.reveal, ui.revealDirectory])
+  }, [replica, deviceId, root, scope, uiKey, ui.reveal, ui.revealDirectory])
   useLayoutEffect(() => {
     const path = seeking.current
     if (!path) return
@@ -185,18 +190,18 @@ export function FileTree({
 
   const toggle = useCallback(
     (row: FileRow) => {
-      if (row.expanded) replica.files.collapse(deviceId, root, row.path)
-      else replica.files.expand(deviceId, root, row.path)
+      if (row.expanded) replica.files.collapse(deviceId, root, row.path, scope)
+      else replica.files.expand(deviceId, root, row.path, scope)
     },
-    [replica, deviceId, root],
+    [replica, deviceId, root, scope],
   )
 
   const pick = useCallback(
     (row: FileRow, detail: number) => {
       if (row.kind === 'failed') {
         // 没取到的那一层再试一次：收起再展开就会重新去取
-        replica.files.collapse(deviceId, root, row.path)
-        replica.files.expand(deviceId, root, row.path)
+        replica.files.collapse(deviceId, root, row.path, scope)
+        replica.files.expand(deviceId, root, row.path, scope)
         return
       }
       scroller.current?.focus({ preventScroll: true })
@@ -206,7 +211,7 @@ export function FileTree({
         if (detail <= 1) toggle(row)
       } else openFile(uiKey, row.path)
     },
-    [replica, deviceId, root, uiKey, toggle, scroller],
+    [replica, deviceId, root, scope, uiKey, toggle, scroller],
   )
   const open = useCallback(
     (row: FileRow) => {
@@ -244,8 +249,8 @@ export function FileTree({
     if (move.do === 'select') {
       selectPath(uiKey, row.path)
       show(move.index)
-    } else if (move.do === 'expand') replica.files.expand(deviceId, root, row.path)
-    else if (move.do === 'collapse') replica.files.collapse(deviceId, root, row.path)
+    } else if (move.do === 'expand') replica.files.expand(deviceId, root, row.path, scope)
+    else if (move.do === 'collapse') replica.files.collapse(deviceId, root, row.path, scope)
     else openFile(uiKey, row.path, { pin: move.do === 'open' })
   }
 
@@ -261,7 +266,7 @@ export function FileTree({
             type="button"
             className="btn"
             data-side-focus
-            onClick={() => void replica.files.refresh(deviceId, root)}
+            onClick={() => void replica.files.refresh(deviceId, root, scope)}
           >
             {t('files.retry')}
           </button>

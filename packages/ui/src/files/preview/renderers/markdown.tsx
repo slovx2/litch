@@ -158,7 +158,7 @@ export default function MarkdownPreview(props: PreviewRendererProps) {
   const policy = useMemo<MarkdownPolicy>(
     () => ({
       link(href: string, children: ReactNode) {
-        const target = documentTarget(props.scope.root, props.scope.path, href)
+        const target = documentTarget(props.scope.root, props.scope.path, href, true)
         if (target.kind === 'external')
           return <ExternalLink href={target.href}>{children}</ExternalLink>
         if (target.kind !== 'local')

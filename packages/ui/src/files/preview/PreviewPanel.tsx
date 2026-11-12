@@ -2,11 +2,23 @@ import {
   decodeBase64,
   type FilePreview,
   languageOf,
+  normalizePath,
   observeFileChanges,
   type PreviewKind,
+  parentPath,
   relativeTo,
+  withinRoot,
 } from '@litch/core'
-import { Component, lazy, type ReactNode, Suspense, useEffect, useMemo, useState } from 'react'
+import {
+  Component,
+  lazy,
+  type ReactNode,
+  Suspense,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { useT } from '../../app/appearance.ts'
 import { whyNot } from '../../app/errors.ts'
 import { Icon } from '../../app/icons.tsx'
@@ -16,7 +28,13 @@ import { CodeView } from '../CodeView.tsx'
 import { useFileWatching } from '../content.ts'
 import { FileDestination } from '../FileDestination.tsx'
 import { byteSize, splitLines } from '../lines.ts'
-import { type OpenFile, openFile, retargetFile, setFileMode } from '../state.ts'
+import {
+  FileBrowserPlace,
+  type OpenFile,
+  openInFiles,
+  retargetFile,
+  setFileMode,
+} from '../state.ts'
 import type { PreviewScope } from './contract.ts'
 import { rendererFor } from './registry.ts'
 import { PreviewResources } from './resources.ts'
@@ -53,6 +71,12 @@ export function PreviewPanel({
   const t = useT()
   const { channel } = useServices()
   const watching = useFileWatching()
+  const place = useContext(FileBrowserPlace)
+  const [linkError, setLinkError] = useState('')
+  const resourceRoot =
+    place?.roots.map(normalizePath).find((base) => withinRoot(base, tab.path) !== null) ??
+    parentPath(tab.path) ??
+    root
   const [refresh, setRefresh] = useState(0)
   const [error, setError] = useState('')
   const text = ['markdown', 'svg', 'html', 'csv'].includes(format)
@@ -63,8 +87,8 @@ export function PreviewPanel({
   const [loaded, setLoaded] = useState<{ reading: string; value: FilePreview } | null>(null)
   const content = loaded?.reading === reading ? loaded.value : null
   const scope = useMemo<PreviewScope>(
-    () => ({ deviceId, root, path: tab.path }),
-    [deviceId, root, tab.path],
+    () => ({ deviceId, root: resourceRoot, path: tab.path }),
+    [deviceId, resourceRoot, tab.path],
   )
   const [resources, setResources] = useState<PreviewResources | null>(null)
   const Renderer = useMemo(() => {
@@ -185,13 +209,35 @@ export function PreviewPanel({
           resources={resources}
           fragment={tab.fragment}
           jump={tab.jump}
-          open={(path, line, fragment) =>
-            openFile(uiKey, path, {
-              ...(line ? { line } : {}),
-              ...(fragment ? { fragment } : {}),
-              reveal: true,
-            })
-          }
+          open={(path, line, fragment) => {
+            setLinkError('')
+            void channel
+              .command('files.resolve', {
+                deviceId,
+                root,
+                ref: { path, line: line ?? null, alt: null },
+                href: path,
+              })
+              .then(
+                (result) => {
+                  const found = result.candidates[0]
+                  if (result.status !== 'ready' || !found) {
+                    setLinkError(t(`files.link.error.${result.failures[0]?.reason ?? 'read'}`))
+                    return
+                  }
+                  openInFiles({
+                    deviceId,
+                    workspaceId: place?.workspaceId ?? null,
+                    sessionId: place?.sessionId ?? null,
+                    ...found,
+                    link: result,
+                    line: line ?? null,
+                    ...(fragment ? { fragment } : {}),
+                  })
+                },
+                (error) => setLinkError(String(error)),
+              )
+          }}
         />
       </Suspense>
     )
@@ -291,6 +337,11 @@ export function PreviewPanel({
           <Icon name="reload" small />
         </button>
       </div>
+      {linkError ? (
+        <p role="alert" className="err">
+          {linkError}
+        </p>
+      ) : null}
       <PreviewBoundary key={`${tab.path}:${source}:${refresh}`} fallback={invalid}>
         {body}
       </PreviewBoundary>

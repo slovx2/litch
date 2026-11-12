@@ -218,6 +218,7 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.modelRanking,
                 EXTENSION.acpControls,
                 EXTENSION.filePreview,
+                EXTENSION.fileBrowser,
                 EXTENSION.mediaImages,
                 EXTENSION.browserUpload,
                 EXTENSION.toolImages,

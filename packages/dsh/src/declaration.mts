@@ -69,6 +69,7 @@ export const declaration: HarnessDeclaration = {
   // 后台作业的集合、回合的来历只给声明了 backgroundTasks 的连接（protocol.mts 的 withBackground）。
   extensions: [
     EXTENSION.filePreview,
+    EXTENSION.fileBrowser,
     EXTENSION.clientTools,
     EXTENSION.harnessConfig,
     EXTENSION.backgroundTasks,

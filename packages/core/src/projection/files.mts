@@ -218,10 +218,10 @@ export function flattenTree(
       })
       if (open) walk(path, depth + 1)
     }
-    if (view.total > view.entries.length) {
+    if (view.truncated || view.total > view.entries.length) {
       note(dir, depth, 'truncated', {
         kind: 'truncated',
-        hidden: view.total - view.entries.length,
+        hidden: view.truncated ? -1 : view.total - view.entries.length,
       })
     } else if (shown === 0) note(dir, depth, 'empty', null)
   }

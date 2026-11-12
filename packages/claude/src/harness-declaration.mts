@@ -122,6 +122,7 @@ export function harnessDeclaration(runtime: RuntimeBackendType): HarnessDeclarat
     extensions: [
       EXTENSION.modelRanking,
       EXTENSION.filePreview,
+      EXTENSION.fileBrowser,
       EXTENSION.inputDelivery,
       EXTENSION.declineWithNote,
       ...(claudeBackendMode() === 'tui' ? [] : [EXTENSION.planConfirmation]),

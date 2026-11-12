@@ -7,7 +7,12 @@ export type DocumentTarget =
   | { kind: 'blocked'; outside?: true }
 
 /** 文件内链接使用文件目录，不使用会话 cwd；URL 解码后再次拒绝 scheme/UNC/NUL。 */
-export function documentTarget(root: string, path: string, href: string): DocumentTarget {
+export function documentTarget(
+  root: string,
+  path: string,
+  href: string,
+  explicit = false,
+): DocumentTarget {
   if (/^https?:\/\//i.test(href)) return { kind: 'external', href }
   const hash = href.indexOf('#')
   let name: string, fragment: string
@@ -28,11 +33,11 @@ export function documentTarget(root: string, path: string, href: string): Docume
       ? normalizePath(name)
       : joinPath(parentPath(path) ?? root, name)
   const safe = withinRoot(root, full)
-  if (safe === null) return { kind: 'blocked', outside: true }
+  if (safe === null && !explicit) return { kind: 'blocked', outside: true }
   const line = Number(location?.[1] ?? colon?.[1])
   return {
     kind: 'local',
-    path: safe,
+    path: safe ?? full,
     ...(Number.isSafeInteger(line) && line > 0 ? { line } : {}),
     ...(!location && fragment ? { fragment } : {}),
   }

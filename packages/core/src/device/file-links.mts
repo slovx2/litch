@@ -47,7 +47,7 @@ export async function resolveFileLink(
       else {
         candidates.push({
           path,
-          root: at,
+          root: content.kind === 'directory' ? path : at,
           kind: content.kind === 'directory' ? 'directory' : 'file',
         })
         contents.push(content)

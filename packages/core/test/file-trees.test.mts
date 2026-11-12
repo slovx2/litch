@@ -12,10 +12,25 @@ import {
   keys,
   serveChannel,
 } from '../src/index.mjs'
-import { MANY_ENTRIES } from '../src/mock/sample-files.mjs'
 import { fakeClock, settle } from './helpers.mjs'
 
 const ROOT = '~/work/litch'
+
+test('同项目会话的展开状态隔离，目录读取仍共用设备缓存', async () => {
+  const { files, store, flush, asked } = await setup()
+  const one = files.open('local', ROOT, 'one')
+  const two = files.open('local', ROOT, 'two')
+  await flush()
+  files.expand('local', ROOT, `${ROOT}/docs`, 'one')
+  await flush()
+  const a = store.get<FileRow[]>(keys.fileRows('local', ROOT, 'one')) ?? []
+  const b = store.get<FileRow[]>(keys.fileRows('local', ROOT, 'two')) ?? []
+  assert.equal(a.find((row) => row.name === 'docs')?.expanded, true)
+  assert.equal(b.find((row) => row.name === 'docs')?.expanded, false)
+  assert.equal((await asked()).lists[ROOT], 1)
+  one()
+  two()
+})
 
 async function setup(deviceId = 'local', root = ROOT) {
   const time = fakeClock()
@@ -250,7 +265,7 @@ test('列不了的目录：下面是一行说明，带着原因；空目录是�
   assert.equal(under(`${ROOT}/fixtures/empty`)?.kind, 'empty')
 })
 
-test('几万个条目的目录：展开只要一次，行全都在', async () => {
+test('几万个条目的目录：展开只要一次，设备枚举截断并显示原因', async () => {
   const { files, flush, rows, asked } = await setup()
   files.open('local', ROOT)
   await flush()
@@ -261,7 +276,12 @@ test('几万个条目的目录：展开只要一次，行全都在', async () =>
   const inside = rows().filter(
     (row) => row.depth === 2 && row.path.startsWith(`${ROOT}/fixtures/many/`),
   )
-  assert.equal(inside.length, MANY_ENTRIES)
+  assert.equal(inside.length, 2000)
+  assert.ok(
+    rows().some(
+      (row) => row.kind === 'truncated' && row.note?.kind === 'truncated' && row.note.hidden === -1,
+    ),
+  )
   assert.equal(inside[0]?.kind, 'dir')
   assert.equal(inside[inside.length - 1]?.kind, 'file')
   assert.equal((await asked()).lists[`${ROOT}/fixtures/many`], 1)

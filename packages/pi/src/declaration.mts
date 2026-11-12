@@ -96,6 +96,7 @@ export function harnessDeclaration(
     // 后台 shell 开着时，后台任务的集合、回合的来历只给声明了 backgroundTasks 的连接。
     extensions: [
       EXTENSION.filePreview,
+      EXTENSION.fileBrowser,
       ...extensions,
       ...(backgroundShell ? [EXTENSION.backgroundTasks] : []),
     ],

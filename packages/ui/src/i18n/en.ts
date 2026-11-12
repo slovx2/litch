@@ -900,6 +900,13 @@ export const en: Record<MessageKey, Entry> = {
   'diffs.note.sent.comment': 'Comment: ',
   'files.noRoot':
     'No project folder. Pick a project, or open a session that has a working directory.',
+  'files.boundedUnsupported': 'Upgrade the device service to browse files with bounded reads.',
+  'files.nav.atRoot': 'Already at the filesystem root',
+  'files.nav.up': 'Up',
+  'files.nav.open': 'Open folder',
+  'files.nav.project': 'Back to project',
+  'files.nav.layerSearch': 'Filter this folder',
+  'files.tree.limited': 'Showing the first 2,000 items. Enter a full path to open another folder.',
   'files.root': 'Root',
   'files.tree': 'File tree',
   'files.tree.resize': 'Drag to resize the file tree',
@@ -2061,9 +2068,8 @@ export const en: Record<MessageKey, Entry> = {
   'terminal.notRunning': 'This terminal isn’t running.',
   'terminal.endOffline':
     'The device isn’t connected, so the terminal can’t be ended. Try again once connected, or hide it.',
-  'files.outside': 'This path is outside the project.',
-  'files.unknownRoot':
-    'This folder isn’t a project on this device or the working directory of any session.',
+  'files.outside': 'This path is outside the current browsing folder.',
+  'files.unknownRoot': 'Choose an absolute folder path on this device.',
   'files.unsupported': 'The other side doesn’t support reading folders and files.',
   'files.searchUnsupported':
     'The other side doesn’t support file search. The file tree still works.',

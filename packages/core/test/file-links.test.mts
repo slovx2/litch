@@ -19,7 +19,7 @@ function fixture(home: string | null = '/remote/home') {
     platform: () => 'linux',
     home: () => home,
     knownRoot: () => false,
-    previewSupported: () => false,
+    previewSupported: () => true,
     fail: channelFailure,
     log() {},
     request: async (method, params) => {
@@ -52,16 +52,13 @@ function fixture(home: string | null = '/remote/home') {
   }
 }
 
-test('同设备根外、home 与旧服务：只用标准 fs；不读取客户端 home', async () => {
+test('同设备根外与 home：使用有界读取，不读取客户端 home', async () => {
   const f = fixture()
   f.data.set('/outside/result.md', 'done')
   f.data.set('/remote/home/result.md', 'home')
   assert.equal((await f.resolve('/outside/result.md')).candidates[0]?.root, '/outside')
   assert.equal((await f.resolve('~/result.md')).candidates[0]?.path, '/remote/home/result.md')
-  assert.equal(
-    (await f.files.preview('/outside', '/outside/result.md', 'markdown')).kind,
-    'unsupported',
-  )
+  assert.equal((await f.files.preview('/outside', '/outside/result.md', 'markdown')).kind, 'ready')
   assert.deepEqual((await fixture(null).resolve('~/result.md')).failures, [
     { path: '~/result.md', reason: 'home' },
   ])
@@ -115,6 +112,7 @@ test('核心按 deviceId 分派同一个根外路径；SSH 会话不会尝试本
         protocolVersion: '0.163.0',
         cliBuild: '0.99.1',
         capabilities: [],
+        extensions: ['fileBrowser', 'filePreview'],
         releaseReady: true,
       }),
       'thread/list': () => ({ data: [], nextCursor: null }),

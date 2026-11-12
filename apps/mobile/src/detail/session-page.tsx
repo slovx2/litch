@@ -3,7 +3,14 @@
 // 会话的数据只来自订阅（F2）。键盘：对话区和下面那一块（卡片加输入区）各包一层 KeyboardStickyView、用同一个偏移，
 // 在 UI 线程上同一帧跟着键盘平移，两者之间的距离一直不变（原型的 sticky 方案，T3）。下面那一块变高（卡片来了、
 // 输入框多了一行）时对话区跟着变矮，倒置列表的底就是偏移 0，内容贴着它走，不用 JS 追底。
-import { type DeviceView, keys, type SessionSummary, type WorkspaceView } from '@litch/core'
+import {
+  type DeviceView,
+  keys,
+  pathTwin,
+  type SessionSummary,
+  sessionFileScope,
+  type WorkspaceView,
+} from '@litch/core'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
@@ -172,7 +179,9 @@ export function useSessionPage({
   const links = issues ?? origin?.issues ?? null
   // 文件页开在会话所在工作区的根上（会话的工作目录可能是它下面的一层）；不属于工作区的开在工作目录上
   const workspace = workspaces?.find((entry) => entry.id === summary?.workspaceId)
-  const filesRoot = workspace?.roots[0] ?? cwd
+  const filesRoot = summary
+    ? sessionFileScope(summary, workspace?.roots ?? [], pathTwin(device?.os))?.root
+    : cwd
 
   // 输入框还拿着焦点、只是键盘被收起时 focus() 什么都不做：先放掉焦点再拿，键盘才会出来
   const revise = () => {
@@ -217,7 +226,13 @@ export function useSessionPage({
           {
             label: t('compose.menu.files'),
             testID: 'detail:menu:files',
-            onPress: () => navigation.navigate('Files', { deviceId, root: filesRoot }),
+            onPress: () =>
+              navigation.navigate('Files', {
+                deviceId,
+                sessionId,
+                workspaceId: summary?.workspaceId,
+                root: filesRoot,
+              }),
           },
         ]
       : []),
