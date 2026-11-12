@@ -12,6 +12,7 @@ import { Icon } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
+import { CardActions } from './CardActions.tsx'
 import { DiscussionHistory } from './DiscussionHistory.tsx'
 import { DraftEnded } from './DraftEnded.tsx'
 import { useManagerFeatures } from './data.ts'
@@ -436,24 +437,26 @@ export function PostDiscussion({
       {endedNote}
       {!compact ? history(false) : null}
       {!direct && !compact ? (
-        <button
-          type="button"
-          className="btn ghost"
-          data-act="post-ask"
-          aria-expanded={open && !old}
-          aria-controls={`${inputId}-compose`}
-          disabled={old}
-          title={old ? t('manager.oldDeviceShort') : undefined}
-          onClick={() => setOpen(!open)}
-        >
-          {/* 展开收起只看箭头和 aria-expanded，文字一直是“追问”：下面不再另写标签 */}
-          <span aria-hidden="true">{open && !old ? '▾' : '▸'}</span> {t('manager.postAsk')}
-          {value.trim() && !ended ? ` · ${t('manager.draft')}` : ''}
-        </button>
+        <CardActions>
+          <button
+            type="button"
+            className="btn ghost"
+            data-act="post-ask"
+            aria-expanded={open && !old}
+            aria-controls={`${inputId}-compose`}
+            disabled={old}
+            title={old ? t('manager.oldDeviceShort') : undefined}
+            onClick={() => setOpen(!open)}
+          >
+            {/* 展开收起只看箭头和 aria-expanded，文字一直是“追问”：下面不再另写标签 */}
+            <span aria-hidden="true">{open && !old ? '▾' : '▸'}</span> {t('manager.postAsk')}
+            {value.trim() && !ended ? ` · ${t('manager.draft')}` : ''}
+          </button>
+        </CardActions>
       ) : null}
       {oldReason}
-      {expanded && !old ? compose : null}
-      {forwardButton}
+      {expanded && !old ? <CardActions>{compose}</CardActions> : null}
+      <CardActions>{forwardButton}</CardActions>
       {errorNote}
     </section>
   )

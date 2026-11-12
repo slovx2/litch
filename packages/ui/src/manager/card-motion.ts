@@ -147,7 +147,7 @@ function measure(root: HTMLElement): Snapshot {
 }
 
 /** 放回原处收拢的旧节点：不可交互、读屏跳过，去掉标识免得被当成还在的卡查到 */
-function ghostOf(node: HTMLElement): HTMLElement {
+function ghostOf(node: HTMLElement, height: number): HTMLElement {
   for (const name of node.getAttributeNames())
     if (name.startsWith('data-')) node.removeAttribute(name)
   for (const inner of node.querySelectorAll('[id], [data-act], [data-testid]')) {
@@ -155,6 +155,9 @@ function ghostOf(node: HTMLElement): HTMLElement {
     inner.removeAttribute('data-act')
     inner.removeAttribute('data-testid')
   }
+  // Portal 操作栏会随 React 卸载而清空，退出副本按卸载前的卡高收拢，避免下方卡片跳动。
+  node.style.boxSizing = 'border-box'
+  node.style.height = `${height}px`
   node.dataset.motionGhost = ''
   node.inert = true
   node.setAttribute('aria-hidden', 'true')
@@ -186,7 +189,7 @@ function play(root: HTMLElement, before: Snapshot, anchor: string | null) {
       else if (was.next.isConnected && was.next.parentElement === root)
         root.insertBefore(was.node, was.next)
       else continue
-      const ghost = ghostOf(was.node)
+      const ghost = ghostOf(was.node, height)
       const animation = fold(ghost, height, gap, true)
       const drop = () => ghost.remove()
       animation.addEventListener('finish', drop)

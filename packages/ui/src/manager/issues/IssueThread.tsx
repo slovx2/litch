@@ -17,6 +17,7 @@ import { reasonOf } from '../../app/errors.ts'
 import { Icon } from '../../app/icons.tsx'
 import { useServices } from '../../app/services.tsx'
 import { BoardMarkdown } from '../BoardMarkdown.tsx'
+import { CardActionScope, CardActions } from '../CardActions.tsx'
 import { useDiscussionPane } from '../discussion-pane.ts'
 import { RelationLink } from '../RelationLink.tsx'
 import type { IssueCommands } from './data.ts'
@@ -272,79 +273,91 @@ export function IssueThread({
           })
       : undefined
   return (
-    <section
-      className="mg-issue-thread"
-      data-issue-thread={mode}
-      data-issue={mode === 'inline' ? undefined : issue.id}
-    >
-      {bodySlot
-        ? createPortal(
-            <button
-              type="button"
-              className="btn ghost"
-              data-act="discussion-body"
-              aria-expanded={bodyOpen}
-              onClick={() => {
-                if (onShowBody?.()) setBodyOpen(false)
-                else setBodyOpen(!bodyOpen)
-              }}
-            >
-              {t(bodyOpen ? 'issue.body.hide' : 'issue.body.view')}
-            </button>,
-            bodySlot,
-          )
-        : null}
-      {openingError ? (
-        <p role="alert" className="err">
-          {openingError}
-        </p>
-      ) : null}
-      {mode === 'page' ? (
-        <header className="mg-issue-page-head">
-          <button
-            type="button"
-            className="ibtn"
-            data-act="issue-back"
-            title={t('manager.back')}
-            aria-label={t('manager.back')}
-            onClick={onBack}
-          >
-            <span aria-hidden="true">‹</span>
-          </button>
-          <h2 className="mg-paging-title">
-            <b className="mono mg-issue-id">{issue.id}</b> {issue.title}
-          </h2>
-        </header>
-      ) : null}
-      {mode === 'page' ? (
-        <IssueMeta
-          head={managerIssueHead(issue)}
-          comments={issue.discussion.comments.length}
-          withKind
-        />
-      ) : null}
-      {mode !== 'pane' || bodyOpen ? (
-        <div data-issue-original={issue.id}>
-          {body}
-          <IssueControls issue={issue} disabled={disabled} reason={reason} commands={commands} />
-          <IssueRelationsRow manager={manager} issue={issue} onOpenItem={onOpenItem} />
-        </div>
-      ) : null}
-      {onFull && mode !== 'pane' ? (
-        <div className="mg-issue-acts">
-          <FullDiscussionButton onClick={onFull} />
-        </div>
-      ) : null}
-      <IssueDiscussion
-        issue={issue}
-        changes={changes}
-        draftKey={JSON.stringify([manager.deviceId, manager.id, issue.id])}
-        disabled={disabled}
-        reason={reason}
-        special={special}
-        onComment={(body) => commands.comment({ id: issue.id, revision: issue.revision, body })}
-        onAsk={ask}
-      />
-    </section>
+    <CardActionScope active={mode !== 'pane'}>
+      {(footer) => (
+        <section
+          className="mg-issue-thread"
+          data-issue-thread={mode}
+          data-issue={mode === 'inline' ? undefined : issue.id}
+        >
+          {bodySlot
+            ? createPortal(
+                <button
+                  type="button"
+                  className="btn ghost"
+                  data-act="discussion-body"
+                  aria-expanded={bodyOpen}
+                  onClick={() => {
+                    if (onShowBody?.()) setBodyOpen(false)
+                    else setBodyOpen(!bodyOpen)
+                  }}
+                >
+                  {t(bodyOpen ? 'issue.body.hide' : 'issue.body.view')}
+                </button>,
+                bodySlot,
+              )
+            : null}
+          {openingError ? (
+            <p role="alert" className="err">
+              {openingError}
+            </p>
+          ) : null}
+          {mode === 'page' ? (
+            <header className="mg-issue-page-head">
+              <button
+                type="button"
+                className="ibtn"
+                data-act="issue-back"
+                title={t('manager.back')}
+                aria-label={t('manager.back')}
+                onClick={onBack}
+              >
+                <span aria-hidden="true">‹</span>
+              </button>
+              <h2 className="mg-paging-title">
+                <b className="mono mg-issue-id">{issue.id}</b> {issue.title}
+              </h2>
+            </header>
+          ) : null}
+          {mode === 'page' ? (
+            <IssueMeta
+              head={managerIssueHead(issue)}
+              comments={issue.discussion.comments.length}
+              withKind
+            />
+          ) : null}
+          {mode !== 'pane' || bodyOpen ? (
+            <div data-issue-original={issue.id}>
+              {body}
+              <IssueControls
+                issue={issue}
+                disabled={disabled}
+                reason={reason}
+                commands={commands}
+              />
+              <IssueRelationsRow manager={manager} issue={issue} onOpenItem={onOpenItem} />
+            </div>
+          ) : null}
+          {onFull && mode !== 'pane' ? (
+            <CardActions>
+              <div className="mg-issue-acts">
+                <FullDiscussionButton onClick={onFull} />
+              </div>
+            </CardActions>
+          ) : null}
+          <IssueDiscussion
+            issue={issue}
+            changes={changes}
+            draftKey={JSON.stringify([manager.deviceId, manager.id, issue.id])}
+            disabled={disabled}
+            reason={reason}
+            special={special}
+            onComment={(body) => commands.comment({ id: issue.id, revision: issue.revision, body })}
+            onAsk={ask}
+          />
+          {footer}
+        </section>
+      )}
+    </CardActionScope>
   )
 }

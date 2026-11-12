@@ -10,6 +10,7 @@ import {
 } from 'react'
 import type { ManagerView } from '../../../core/src/model-manager.mts'
 import { useT } from '../app/appearance.ts'
+import { CardActionScope } from './CardActions.tsx'
 import { animateHeight, reveal, scrollHost, useCardPress } from './card-motion.ts'
 import { DiscussionSlotContext, useDiscussionPane } from './discussion-pane.ts'
 import {
@@ -76,44 +77,49 @@ export function PostCard({
   }, [collapsed])
   const press = useCardPress()
   return (
-    <article
-      {...props}
-      ref={card}
-      data-post-card={id}
-      data-post-collapsed={collapsed}
-      data-card-press={collapsed && !inline ? '' : undefined}
-      data-discussion-open={pane?.openId === id || undefined}
-      onFocus={(event) => {
-        // 编号跳转把焦点交给卡片时，直接显示目标内容。
-        if (event.target === event.currentTarget) change(false)
-      }}
-      // 收起时整张卡代理鼠标点击；键盘由卡头按钮负责（Enter、空格，带 aria-expanded）
-      {...(collapsed && !inline ? press(toggle) : {})}
-    >
-      {/* 展开时点卡头空白处也能收起；按钮和讨论入口照常 */}
-      <header {...(!collapsed && !inline ? press(toggle) : {})}>
-        <button
-          type="button"
-          className="mg-post-toggle"
-          hidden={inline}
-          data-act="post-collapse"
-          aria-expanded={!collapsed}
-          aria-controls={bodyId}
-          title={t(collapsed ? 'manager.postExpand' : 'manager.postCollapse')}
-          onClick={toggle}
+    <CardActionScope active={!collapsed}>
+      {(footer) => (
+        <article
+          {...props}
+          ref={card}
+          data-post-card={id}
+          data-post-collapsed={collapsed}
+          data-card-press={collapsed && !inline ? '' : undefined}
+          data-discussion-open={pane?.openId === id || undefined}
+          onFocus={(event) => {
+            // 编号跳转把焦点交给卡片时，直接显示目标内容。
+            if (event.target === event.currentTarget) change(false)
+          }}
+          // 收起时整张卡代理鼠标点击；键盘由卡头按钮负责（Enter、空格，带 aria-expanded）
+          {...(collapsed && !inline ? press(toggle) : {})}
         >
-          <span aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
-          {heading}
-        </button>
-        {pane ? <span className="mg-talk-slot" ref={setSlot} /> : null}
-      </header>
-      {collapsed ? <p className="mg-post-summary ell">{postSummary(text)}</p> : null}
-      <div id={bodyId} className="mg-post-body" hidden={collapsed}>
-        {children}
-      </div>
-      <DiscussionSlotContext.Provider value={slot}>
-        {discussion?.(collapsed)}
-      </DiscussionSlotContext.Provider>
-    </article>
+          {/* 展开时点卡头空白处也能收起；按钮和讨论入口照常 */}
+          <header {...(!collapsed && !inline ? press(toggle) : {})}>
+            <button
+              type="button"
+              className="mg-post-toggle"
+              hidden={inline}
+              data-act="post-collapse"
+              aria-expanded={!collapsed}
+              aria-controls={bodyId}
+              title={t(collapsed ? 'manager.postExpand' : 'manager.postCollapse')}
+              onClick={toggle}
+            >
+              <span aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
+              {heading}
+            </button>
+            {pane ? <span className="mg-talk-slot" ref={setSlot} /> : null}
+          </header>
+          {collapsed ? <p className="mg-post-summary ell">{postSummary(text)}</p> : null}
+          <div id={bodyId} className="mg-post-body" hidden={collapsed}>
+            {children}
+          </div>
+          <DiscussionSlotContext.Provider value={slot}>
+            {discussion?.(collapsed)}
+          </DiscussionSlotContext.Provider>
+          {footer}
+        </article>
+      )}
+    </CardActionScope>
   )
 }

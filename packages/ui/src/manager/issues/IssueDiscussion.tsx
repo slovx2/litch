@@ -8,6 +8,7 @@ import { reasonOf } from '../../app/errors.ts'
 import { Icon } from '../../app/icons.tsx'
 import { Stamp } from '../../transcript/Stamp.tsx'
 import { BoardMarkdown } from '../BoardMarkdown.tsx'
+import { CardActions } from '../CardActions.tsx'
 import { submitQuestionOnEnter } from '../post-presentation.ts'
 import { RelationsContext } from '../Relations.tsx'
 
@@ -159,62 +160,64 @@ export function IssueDiscussion({
           {t(issue.kind === 'report' ? 'issue.follow.reportPausedNote' : 'issue.follow.pausedNote')}
         </p>
       ) : null}
-      <div className="mg-post-compose mg-issue-compose">
-        {onAsk ? (
-          <fieldset className="mg-question-modes" aria-label={t('issue.mode')}>
-            <button
-              type="button"
-              aria-pressed={!asking}
-              data-issue-mode="comment"
-              onClick={() => setAsking(false)}
-            >
-              {t('issue.comments')}
-            </button>
-            <button
-              type="button"
-              aria-pressed={asking}
-              data-issue-mode="ask"
-              onClick={() => setAsking(true)}
-            >
-              {t('issue.ask')}
-            </button>
-          </fieldset>
-        ) : null}
-        <textarea
-          className="req-input mg-post-input grow-input"
-          rows={2}
-          value={text}
-          disabled={disabled}
-          title={disabled ? reason : undefined}
-          placeholder={
-            disabled ? reason : t(asking ? 'issue.ask.placeholder' : 'issue.comment.placeholder')
-          }
-          aria-label={t('issue.comment.placeholder')}
-          data-issue-comment-input
-          onChange={(event) => edit(event.target.value)}
-          onKeyDown={(event) => {
-            if (!submitQuestionOnEnter(event.nativeEvent)) return
-            event.preventDefault()
-            void send()
-          }}
-        />
-        <button
-          type="button"
-          className="ibtn mg-post-send"
-          data-act="issue-comment"
-          title={disabled ? reason : t(asking ? 'issue.ask.send' : 'issue.comment.send')}
-          aria-label={t(asking ? 'issue.ask.send' : 'issue.comment.send')}
-          disabled={disabled || busy || !text.trim()}
-          onClick={() => void send()}
-        >
-          <Icon name="send" small />
-        </button>
-        {error ? (
-          <p className="err" role="alert">
-            {error}
-          </p>
-        ) : null}
-      </div>
+      <CardActions>
+        <div className="mg-post-compose mg-issue-compose">
+          {onAsk ? (
+            <fieldset className="mg-question-modes" aria-label={t('issue.mode')}>
+              <button
+                type="button"
+                aria-pressed={!asking}
+                data-issue-mode="comment"
+                onClick={() => setAsking(false)}
+              >
+                {t('issue.comments')}
+              </button>
+              <button
+                type="button"
+                aria-pressed={asking}
+                data-issue-mode="ask"
+                onClick={() => setAsking(true)}
+              >
+                {t('issue.ask')}
+              </button>
+            </fieldset>
+          ) : null}
+          <textarea
+            className="req-input mg-post-input grow-input"
+            rows={2}
+            value={text}
+            disabled={disabled}
+            title={disabled ? reason : undefined}
+            placeholder={
+              disabled ? reason : t(asking ? 'issue.ask.placeholder' : 'issue.comment.placeholder')
+            }
+            aria-label={t('issue.comment.placeholder')}
+            data-issue-comment-input
+            onChange={(event) => edit(event.target.value)}
+            onKeyDown={(event) => {
+              if (!submitQuestionOnEnter(event.nativeEvent)) return
+              event.preventDefault()
+              void send()
+            }}
+          />
+          <button
+            type="button"
+            className="ibtn mg-post-send"
+            data-act="issue-comment"
+            title={disabled ? reason : t(asking ? 'issue.ask.send' : 'issue.comment.send')}
+            aria-label={t(asking ? 'issue.ask.send' : 'issue.comment.send')}
+            disabled={disabled || busy || !text.trim()}
+            onClick={() => void send()}
+          >
+            <Icon name="send" small />
+          </button>
+          {error ? (
+            <p className="err" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
+      </CardActions>
     </section>
   )
 }

@@ -1632,3 +1632,27 @@
 .mg-sidebar-drafts:hover {
   text-decoration: underline;
 }
+
+/* 卡尾保留真实高度；sticky 的包含块是整张卡，滚出时不会留在相邻卡上。 */
+.mg-card-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  margin-top: 10px;
+  background: var(--raised);
+  border-top: 1px solid var(--line-2);
+}
+.mg-card-actions:empty {
+  display: none;
+}
+.mg-card-actions :is(.mg-actions, .mg-issue-acts) {
+  display: contents;
+}
+.mg-card-actions .mg-post-compose {
+  width: 100%;
+}

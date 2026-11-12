@@ -144,6 +144,14 @@ note, while Submit to manager sends a written reply. Success clears that respons
 failure keeps it and explains the error. Other cards and discussion drafts remain available for
 batch submission on desktop and phone.
 
+决策、建议、请你做、报告和 issue 的长卡片操作栏会吸附在当前可视区域底部，
+滑到卡尾时回归原位；操作栏随所属卡片离开，不遮挡正文末行。手机按可用视口避让安全区和键盘。
+
+On desktop and phone, long decision, suggestion, For you, report and issue cards keep their actions
+at the bottom of the visible area. Actions remain within their card and return to their original
+position at its end, leaving the final content lines visible. Phone layouts account for the safe
+area and keyboard.
+
 ### 看板键盘提交 / Board keyboard submission
 
 桌面看板的评论、讨论与追问、决策补充文字、请你做回复、忽略理由用 Enter 提交，Shift+Enter 换行。

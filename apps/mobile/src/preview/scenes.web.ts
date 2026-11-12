@@ -31,6 +31,13 @@ const say = (prompt: string) =>
 
 export const SCENES: Scene[] = [
   {
+    id: 'board-actions',
+    group: '经理',
+    name: '长卡片操作栏',
+    note: '五类卡片吸底、卡片边界与末行留白',
+    steps: [],
+  },
+  {
     id: 'board-mermaid',
     group: '经理',
     name: '看板 Mermaid',

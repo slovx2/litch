@@ -6,6 +6,7 @@ import type { ManagerView } from '../../../../core/src/model-manager.mts'
 import type { ManagerIssue, ManagerIssueHead } from '../../../../protocol/src/manager-issues.mts'
 import { useT } from '../../app/appearance.ts'
 import { Icon } from '../../app/icons.tsx'
+import { CardActionScope, CardActions } from '../CardActions.tsx'
 import type { IssueCommands } from './data.ts'
 import { IssueMeta } from './IssueMeta.tsx'
 import { FullDiscussionButton, IssueThread } from './IssueThread.tsx'
@@ -69,78 +70,85 @@ export function IssueCard({
   }, [open, issue, commands, disabled, manager.deviceId, manager.id])
   const comments = issue?.discussion.comments.length ?? 0
   return (
-    <article
-      className="mg-card mg-issue"
-      data-issue={head.id}
-      data-issue-type={head.kind}
-      data-unread={head.unread || undefined}
-      data-linked={linked || undefined}
-      data-talking={talking || undefined}
-      data-motion-key={head.id}
-      tabIndex={-1}
-    >
-      <button
-        className="mg-paging-head"
-        type="button"
-        aria-expanded={open}
-        data-act="issue-toggle"
-        onClick={onToggle}
-      >
-        <span className="mg-paging-caret" aria-hidden="true">
-          {open ? '▾' : '▸'}
-        </span>
-        <span className="mg-paging-title">
-          <b className="mono mg-issue-id">{head.id}</b> {head.title}
-        </span>
-        {head.unread ? (
-          <span
-            className="mg-issue-dot"
-            role="img"
-            aria-label={t(head.kind === 'report' ? 'issue.status.unread' : 'issue.unread')}
-            title={t(head.kind === 'report' ? 'issue.status.unread' : 'issue.unread')}
-          />
-        ) : null}
-      </button>
-      <IssueMeta head={head} comments={comments} />
-      {!open ? (
-        head.preview ? (
-          <p className="mg-paging-preview">{head.preview}</p>
-        ) : null
-      ) : !issue ? (
-        <p className="dim">{t('manager.loading')}</p>
-      ) : special ? (
-        <div className="mg-issue-detail" data-issue-detail={head.id}>
-          {quick}
-          <div className="mg-issue-acts">
-            {/* 转讨论的入口：强调色描边按钮，醒目但不压过快速处理的实心主按钮 */}
-            <button
-              type="button"
-              className="btn mg-issue-discuss"
-              data-act="issue-discuss"
-              aria-pressed={talking}
-              onClick={onTalk}
-            >
-              <Icon name="note" small /> {t('issue.discuss.open')}
-              {comments ? <span className="mg-issue-count">{comments}</span> : null}
-            </button>
-            <FullDiscussionButton onClick={onFull} />
-          </div>
-        </div>
-      ) : (
-        <div className="mg-issue-detail" data-issue-detail={head.id}>
-          <IssueThread
-            mode="inline"
-            manager={manager}
-            issue={issue}
-            disabled={disabled}
-            reason={reason}
-            commands={commands}
-            onOpenItem={onOpenItem}
-            onFull={onFull}
-            postRevision={postRevision}
-          />
-        </div>
+    <CardActionScope>
+      {(footer) => (
+        <article
+          className="mg-card mg-issue"
+          data-issue={head.id}
+          data-issue-type={head.kind}
+          data-unread={head.unread || undefined}
+          data-linked={linked || undefined}
+          data-talking={talking || undefined}
+          data-motion-key={head.id}
+          tabIndex={-1}
+        >
+          <button
+            className="mg-paging-head"
+            type="button"
+            aria-expanded={open}
+            data-act="issue-toggle"
+            onClick={onToggle}
+          >
+            <span className="mg-paging-caret" aria-hidden="true">
+              {open ? '▾' : '▸'}
+            </span>
+            <span className="mg-paging-title">
+              <b className="mono mg-issue-id">{head.id}</b> {head.title}
+            </span>
+            {head.unread ? (
+              <span
+                className="mg-issue-dot"
+                role="img"
+                aria-label={t(head.kind === 'report' ? 'issue.status.unread' : 'issue.unread')}
+                title={t(head.kind === 'report' ? 'issue.status.unread' : 'issue.unread')}
+              />
+            ) : null}
+          </button>
+          <IssueMeta head={head} comments={comments} />
+          {!open ? (
+            head.preview ? (
+              <p className="mg-paging-preview">{head.preview}</p>
+            ) : null
+          ) : !issue ? (
+            <p className="dim">{t('manager.loading')}</p>
+          ) : special ? (
+            <div className="mg-issue-detail" data-issue-detail={head.id}>
+              {quick}
+              <CardActions>
+                <div className="mg-issue-acts">
+                  {/* 转讨论的入口：强调色描边按钮，醒目但不压过快速处理的实心主按钮 */}
+                  <button
+                    type="button"
+                    className="btn mg-issue-discuss"
+                    data-act="issue-discuss"
+                    aria-pressed={talking}
+                    onClick={onTalk}
+                  >
+                    <Icon name="note" small /> {t('issue.discuss.open')}
+                    {comments ? <span className="mg-issue-count">{comments}</span> : null}
+                  </button>
+                  <FullDiscussionButton onClick={onFull} />
+                </div>
+              </CardActions>
+            </div>
+          ) : (
+            <div className="mg-issue-detail" data-issue-detail={head.id}>
+              <IssueThread
+                mode="inline"
+                manager={manager}
+                issue={issue}
+                disabled={disabled}
+                reason={reason}
+                commands={commands}
+                onOpenItem={onOpenItem}
+                onFull={onFull}
+                postRevision={postRevision}
+              />
+            </div>
+          )}
+          {footer}
+        </article>
       )}
-    </article>
+    </CardActionScope>
   )
 }

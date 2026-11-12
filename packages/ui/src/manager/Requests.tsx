@@ -16,6 +16,7 @@ import { useT } from '../app/appearance.ts'
 import { useServices } from '../app/services.tsx'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
+import { CardActions } from './CardActions.tsx'
 import { useCardMotion } from './card-motion.ts'
 import { DraftEnded } from './DraftEnded.tsx'
 import { useManagerFeatures } from './data.ts'
@@ -206,18 +207,20 @@ export function Requests({
               </div>
             ) : null}
             {request.status === 'open' ? (
-              <button
-                type="button"
-                className="btn ghost"
-                data-act="manager-request-ignore"
-                disabled={locked || !features.requestIgnore}
-                title={!features.requestIgnore ? t('manager.oldDeviceShort') : undefined}
-                onClick={() =>
-                  setIgnoring({ id: request.id, revision: request.revision, reason: '' })
-                }
-              >
-                {t('manager.ignore')}
-              </button>
+              <CardActions>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  data-act="manager-request-ignore"
+                  disabled={locked || !features.requestIgnore}
+                  title={!features.requestIgnore ? t('manager.oldDeviceShort') : undefined}
+                  onClick={() =>
+                    setIgnoring({ id: request.id, revision: request.revision, reason: '' })
+                  }
+                >
+                  {t('manager.ignore')}
+                </button>
+              </CardActions>
             ) : null}
             {request.status === 'open' && ignoring?.id === request.id ? (
               <section className="mg-conflict" data-request-ignore-form>
@@ -238,23 +241,27 @@ export function Requests({
                   }}
                   onChange={(event) => setIgnoring({ ...ignoring, reason: event.target.value })}
                 />
-                <button
-                  type="button"
-                  className="btn"
-                  data-act="manager-request-ignore-confirm"
-                  disabled={locked || !features.requestIgnore}
-                  onClick={() => void submit(request, false, true)}
-                >
-                  {t('manager.ignoreConfirm')}
-                </button>
-                <button
-                  type="button"
-                  className="btn ghost"
-                  disabled={locked}
-                  onClick={() => setIgnoring(null)}
-                >
-                  {t('manager.cancel')}
-                </button>
+                <CardActions>
+                  <button
+                    type="button"
+                    className="btn"
+                    data-act="manager-request-ignore-confirm"
+                    disabled={locked || !features.requestIgnore}
+                    onClick={() => void submit(request, false, true)}
+                  >
+                    {t('manager.ignoreConfirm')}
+                  </button>
+                </CardActions>
+                <CardActions>
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    disabled={locked}
+                    onClick={() => setIgnoring(null)}
+                  >
+                    {t('manager.cancel')}
+                  </button>
+                </CardActions>
               </section>
             ) : null}
             {request.status !== 'cancelled' && editing ? (
@@ -276,53 +283,60 @@ export function Requests({
                   placeholder={t('manager.requestText')}
                   onChange={(event) => change(request, { text: event.target.value })}
                 />
-                <button
-                  type="button"
-                  className="btn primary"
-                  data-act="manager-request-deliver"
-                  disabled={locked || old || state === 'conflict'}
-                  title={
-                    oldTitle ?? (state === 'conflict' ? t('manager.requestConflict') : undefined)
-                  }
-                  onClick={() => void submit(request, true)}
-                >
-                  {submitting === request.id
-                    ? t('manager.submitting')
-                    : (request.buttonLabel ?? t('manager.requestDone'))}
-                </button>
-                {draft?.text.trim() ? (
+                <CardActions>
                   <button
                     type="button"
-                    className="btn ghost"
-                    data-act="manager-request-reply"
+                    className="btn primary"
+                    data-act="manager-request-deliver"
                     disabled={locked || old || state === 'conflict'}
                     title={
                       oldTitle ?? (state === 'conflict' ? t('manager.requestConflict') : undefined)
                     }
-                    onClick={() => void submit(request, false)}
+                    onClick={() => void submit(request, true)}
                   >
-                    {t('manager.submit')}
+                    {submitting === request.id
+                      ? t('manager.submitting')
+                      : (request.buttonLabel ?? t('manager.requestDone'))}
                   </button>
+                </CardActions>
+                {draft?.text.trim() ? (
+                  <CardActions>
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      data-act="manager-request-reply"
+                      disabled={locked || old || state === 'conflict'}
+                      title={
+                        oldTitle ??
+                        (state === 'conflict' ? t('manager.requestConflict') : undefined)
+                      }
+                      onClick={() => void submit(request, false)}
+                    >
+                      {t('manager.submit')}
+                    </button>
+                  </CardActions>
                 ) : null}
                 {request.response && draft ? (
-                  <button
-                    type="button"
-                    className="btn ghost"
-                    data-act="manager-request-cancel-edit"
-                    disabled={locked}
-                    onClick={() => {
-                      try {
-                        const next = { ...drafts }
-                        delete next[request.id]
-                        write(next)
-                        setError('')
-                      } catch {
-                        setError(t('manager.savedFail'))
-                      }
-                    }}
-                  >
-                    {t('manager.cancelEdit')}
-                  </button>
+                  <CardActions>
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      data-act="manager-request-cancel-edit"
+                      disabled={locked}
+                      onClick={() => {
+                        try {
+                          const next = { ...drafts }
+                          delete next[request.id]
+                          write(next)
+                          setError('')
+                        } catch {
+                          setError(t('manager.savedFail'))
+                        }
+                      }}
+                    >
+                      {t('manager.cancelEdit')}
+                    </button>
+                  </CardActions>
                 ) : null}
                 {old ? (
                   <p className="dim" data-old-device-reason>
@@ -331,21 +345,23 @@ export function Requests({
                 ) : null}
               </>
             ) : request.status !== 'cancelled' ? (
-              <button
-                type="button"
-                className="btn ghost"
-                data-act="manager-request-edit"
-                disabled={locked || old}
-                title={oldTitle}
-                onClick={() =>
-                  change(request, {
-                    delivered: request.response?.delivered ?? false,
-                    text: request.response?.text ?? '',
-                  })
-                }
-              >
-                {t('manager.requestEdit')}
-              </button>
+              <CardActions>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  data-act="manager-request-edit"
+                  disabled={locked || old}
+                  title={oldTitle}
+                  onClick={() =>
+                    change(request, {
+                      delivered: request.response?.delivered ?? false,
+                      text: request.response?.text ?? '',
+                    })
+                  }
+                >
+                  {t('manager.requestEdit')}
+                </button>
+              </CardActions>
             ) : null}
           </PostCard>
         )

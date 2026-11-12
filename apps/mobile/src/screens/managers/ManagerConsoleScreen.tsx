@@ -43,11 +43,12 @@ import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Empty } from '../../ui/kit/controls'
 import { Icon } from '../../ui/kit/Icon'
-import { KeyboardArea, KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
+import { KeyboardArea } from '../../ui/kit/KeyboardForm'
 import { Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { rememberBoardScroll } from './board-return'
+import { BoardActionScrollView } from './CardActions'
 import { DraftSubmitBar } from './DraftSubmitBar'
 import { Issue } from './Issue'
 import { IssueContext } from './IssueRelations'
@@ -629,7 +630,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
               })}
             </Text>
           ) : null}
-          <KeyboardFormScrollView
+          <BoardActionScrollView
             testID="manager-board-scroll"
             ref={scroll}
             style={[
@@ -750,7 +751,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
             ) : (
               <Empty busy title={t('manager.loading')} />
             )}
-          </KeyboardFormScrollView>
+          </BoardActionScrollView>
           {/* 批量提交条在滚动区下面，不随卡片滚动，也不挡住最后一张卡 */}
           {tab === 'console' && board && view ? (
             <DraftSubmitBar
