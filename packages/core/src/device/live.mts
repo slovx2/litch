@@ -3045,10 +3045,9 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       } finally {
         cancelTimer?.()
         delete live.compactSwitch
-        if (thenConfigure) {
-          pump(live)
-          release(live)
-        }
+        // 请求被拒绝时可能还没收到任何压缩事件，也要释放这段等待期间的普通待发消息。
+        pump(live)
+        if (thenConfigure) release(live)
       }
       host.touched(live.id)
     },
