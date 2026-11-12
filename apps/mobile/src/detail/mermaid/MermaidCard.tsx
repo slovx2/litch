@@ -16,6 +16,7 @@ import {
 } from 'react-native'
 import { useT } from '../../ui/i18n'
 import { Loading } from '../../ui/kit/controls'
+import { Icon } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import { TranscriptContext } from '../context'
 import { type DrawBox, type Drawing, drawer, drawKey, TIMED_OUT } from './drawer'
@@ -143,9 +144,31 @@ export const MermaidCard = memo(function MermaidCard({
             </Pressable>
           </View>
         )}
-        <Pressable onPress={copy} style={styles.tab} hitSlop={8} testID="mermaid-card:copy">
-          <Text style={meta}>{t(copied === source ? 'code.copied' : 'code.copy')}</Text>
-        </Pressable>
+        {/* 复制、放大只放图标，名称给读屏；放大和点图是同一个查看页 */}
+        <View style={styles.tools}>
+          <Pressable
+            onPress={copy}
+            style={styles.tool}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t(copied === source ? 'code.copied' : 'code.copy')}
+            testID="mermaid-card:copy"
+          >
+            <Icon name={copied === source ? 'check' : 'copy'} size={16} />
+          </Pressable>
+          {figure && viewMermaid ? (
+            <Pressable
+              onPress={() => viewMermaid(source, figure.svg)}
+              style={styles.tool}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('mermaid.zoom')}
+              testID="mermaid-card:zoom"
+            >
+              <Icon name="maximize" size={16} />
+            </Pressable>
+          ) : null}
+        </View>
       </View>
       {showSource ? (
         <SourceText source={source} />
@@ -204,6 +227,8 @@ const styles = StyleSheet.create({
   },
   tabs: { flexDirection: 'row', gap: 2 },
   tab: { paddingHorizontal: 8, paddingVertical: 4 },
+  tools: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' },
+  tool: { padding: 5 },
   reason: { flex: 1, paddingHorizontal: 4 },
   figure: {
     height: FIGURE_HEIGHT,

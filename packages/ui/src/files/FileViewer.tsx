@@ -11,7 +11,7 @@ import { CodeView } from './CodeView.tsx'
 import { ContextMenu } from './ContextMenu.tsx'
 import { useFileContent } from './content.ts'
 import { FileDestination, fileActionLabel, useFileActions } from './FileDestination.tsx'
-import { FileLinkDetails } from './FileLinkDetails.tsx'
+import { FileLinkInfo } from './FileLinkDetails.tsx'
 import { byteSize, splitLines } from './lines.ts'
 import { PreviewPanel } from './preview/PreviewPanel.tsx'
 import { rendererFor } from './preview/registry.ts'
@@ -118,6 +118,7 @@ function SourceFileBody({
         <span className="ell grow" title={tab.path}>
           {relative}
         </span>
+        {tab.link ? <FileLinkInfo result={tab.link} /> : null}
         <button type="button" className="mini" data-tool="mention" onClick={() => act('mention')}>
           {t('files.action.mention')}
         </button>
@@ -338,7 +339,6 @@ export function FileViewer({
       </div>
       {active ? (
         <>
-          {active.link ? <FileLinkDetails result={active.link} /> : null}
           <FileBody key={active.path} deviceId={deviceId} root={root} uiKey={uiKey} tab={active} />
         </>
       ) : null}

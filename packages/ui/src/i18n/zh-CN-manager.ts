@@ -204,6 +204,7 @@ export const zhManager = {
   'manager.unignore': '撤销忽略',
   'manager.reopenedBy': '经理重新打开',
   'manager.recommend': '推荐',
+  'manager.addNote': '补充说明',
   'manager.answer': '补充说明或填写答复',
   'manager.basis': '依据',
   'manager.checked': '上次核对 {time}',

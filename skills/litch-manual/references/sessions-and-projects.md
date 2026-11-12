@@ -839,9 +839,9 @@ External navigation selects the tree row when automatic location is enabled. Whe
 
 ## 发送普通文件
 
-Markdown 显式链接始终使用括号内的地址；标签中的路径、网址、行内代码和强调仅用于显示。桌面文件链接无法打开时，弹层先显示主要原因和目标路径，“技术详情”默认折叠，可展开查看原始链接、规范化路径与读取记录，底部可复制路径或关闭。
+Markdown 显式链接始终使用括号内的地址；标签中的路径、网址、行内代码和强调仅用于显示。桌面文件链接无法打开时，弹层先显示主要原因和目标路径，“技术详情”默认折叠，可展开查看原始链接、规范化路径与读取记录，底部可复制路径或关闭。从链接打开的文件，文件标题栏有一个信息图标，点开浮层显示同样的技术详情并可复制完整路径，点外面或按 Esc 收起。
 
-Explicit Markdown links use the written destination, even when the label looks like a path or URL. On desktop, file-link errors show the main reason and target first. Technical details are collapsed, with copy-path and close actions below.
+Explicit Markdown links use the written destination, even when the label looks like a path or URL. On desktop, file-link errors show the main reason and target first. Technical details are collapsed, with copy-path and close actions below. A file opened from a link has an info icon in its header; it opens the same technical details in a popover with Copy full path, and closes on Escape or a click outside.
 
 桌面可通过选择文件、拖放或粘贴添加文件；手机在输入框“＋”中选择“添加文件”。输入区与发送后的消息均显示文件卡，包含文件名和类型或大小，长名称截断。点卡片在文件面板预览；不支持的格式仍可从桌面文件面板另存。图片沿用图片附件规则。
 

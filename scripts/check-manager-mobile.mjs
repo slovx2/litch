@@ -752,6 +752,11 @@ try {
     '设备服务较旧：请你做的交付禁用并写原因',
   )
   await tapId('manager-category:decision')
+  await wait('[data-testid="decision-submit:D-17"]')
+  // 有选项的决策补充说明默认收起，先展开
+  await read(
+    `document.querySelector('[data-testid="manager-issue:D-17"] textarea') || document.querySelector('[data-testid="decision-note-open:D-17"]')?.click()`,
+  )
   await wait('[data-testid="manager-issue:D-17"] textarea')
   await read(
     `(()=>{const input=document.querySelector('[data-testid="manager-issue:D-17"] textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'旧设备上照常答复');input.dispatchEvent(new Event('input',{bubbles:true}))})()`,

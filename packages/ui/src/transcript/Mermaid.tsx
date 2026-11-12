@@ -1,6 +1,6 @@
 import { memo, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
-import { Close } from '../app/icons.tsx'
+import { Check, Close, Icon } from '../app/icons.tsx'
 import { drawMermaid, firstLine, useLook } from './mermaid.ts'
 import { SearchCodeContext } from './search/context.ts'
 
@@ -86,12 +86,27 @@ export const MermaidBlock = memo(function MermaidBlock({
               </button>
             </span>
           ) : null}
-          <button type="button" className="mini" onClick={copy}>
-            {t(copied ? 'code.copied' : 'code.copy')}
+          {/* 复制、放大只放图标，名称在悬停提示和读屏里；复制成功时换成对勾 */}
+          <button
+            type="button"
+            className="ibtn"
+            data-act="mermaid-copy"
+            title={t(copied ? 'code.copied' : 'code.copy')}
+            aria-label={t(copied ? 'code.copied' : 'code.copy')}
+            onClick={copy}
+          >
+            {copied ? <Check /> : <Icon name="copy" small />}
           </button>
           {svg !== null ? (
-            <button type="button" className="mini" onClick={() => setZoomed(true)}>
-              {t('mermaid.zoom')}
+            <button
+              type="button"
+              className="ibtn"
+              data-act="mermaid-zoom"
+              title={t('mermaid.zoom')}
+              aria-label={t('mermaid.zoom')}
+              onClick={() => setZoomed(true)}
+            >
+              <Icon name="maximize" small />
             </button>
           ) : null}
         </span>

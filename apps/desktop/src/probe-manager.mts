@@ -114,6 +114,17 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const UNSENT_BAR = '.mg-send:not([data-sent])'
   const one = <T extends Element = HTMLElement>(selector: string) =>
     document.querySelector<T>(selector)
+  /** 决策卡只读：输入框禁用；有选项的决策补充说明收起，“补充说明”按钮禁用 */
+  const DECISION_LOCKED =
+    '.mg-decision textarea:disabled, .mg-decision [data-act="manager-answer-open"]:disabled'
+  /** 有选项的决策补充说明默认收起：找不到输入框时点“补充说明”，下一轮轮询再取 */
+  const answerBox = (scope: string | Element | null) => {
+    const root = typeof scope === 'string' ? one(`[data-decision="${scope}"]`) : scope
+    const box = root?.querySelector<HTMLTextAreaElement>('[data-act="manager-answer"]')
+    if (box) return box
+    root?.querySelector<HTMLElement>('[data-act="manager-answer-open"]')?.click()
+    return null
+  }
   // 经理设定在概览页末尾的卡片里；不在概览页时先切过去
   const rulesText = () => {
     const card = one('[data-manager-rules]')
@@ -597,6 +608,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     dialog.querySelector<HTMLButtonElement>('.btn.ghost')?.click()
     await until('取消重置', () => !one('dialog[open]'))
   }
+  await until('展开 D-15 补充说明', () => answerBox('D-15'))
   let boardFont = true
   const fontMeasurements: unknown[] = []
   for (const skin of ['retro', 'human', 'standard']) {
@@ -727,6 +739,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       Boolean(one('.mg-conflict')) &&
       one<HTMLButtonElement>('[data-act="manager-submit"]')?.disabled === true,
   )
+  await until('展开补充说明', () => answerBox('D-15'))
   fill(answerInput(), '新版仍需核对这段补充')
   const answerEnter = new KeyboardEvent('keydown', {
     key: 'Enter',
@@ -847,12 +860,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   eventsClean = cleanChat() && eventsClean
   await click('.mg-decision-filter [data-filter="answered"]')
   await click('[data-decision="D-15"] [data-act="manager-edit-answer"]')
-  fill(
-    await until('修改答案输入框', () =>
-      one<HTMLTextAreaElement>('[data-decision="D-15"] [data-act="manager-answer"]'),
-    ),
-    '修改后的答案：先核对影响',
-  )
+  fill(await until('修改答案输入框', () => answerBox('D-15')), '修改后的答案：先核对影响')
   await until(
     '修改答案可提交',
     () => !one<HTMLButtonElement>('[data-act="manager-submit"]')?.disabled,
@@ -1135,8 +1143,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     for (const glyph of grow?.querySelectorAll('[aria-hidden="true"]') ?? []) glyph.remove()
     return grow?.textContent?.trim() ?? ''
   }
-  const draftArea = () =>
-    one<HTMLTextAreaElement>('[data-decision="D-17"] [data-act="manager-answer"]')
+  const draftArea = () => answerBox('D-17')
   const hadBar = sendBar()
   fill(await until('D-17 的答复框', draftArea), '先放着的草稿')
   await until('草稿进了提交栏', () => sendBar() && sendBar() !== hadBar)
@@ -2014,10 +2021,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const endedReadOnly = Boolean(
     await until(
       '已结束看板只读',
-      () =>
-        one('.mg-readonly') &&
-        one('.mg-decision textarea:disabled') &&
-        !one('[data-act="manager-settings"]'),
+      () => one('.mg-readonly') && one(DECISION_LOCKED) && !one('[data-act="manager-settings"]'),
     ),
   )
   await click('[data-manager-id="m1"] .mg-pick')
@@ -2026,12 +2030,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await click('.mg-decision-filter [data-filter="open"]')
   // 同批答复首尾两项，保留中间的待定项；焦点应落到它，栏位和可视区域都留在决策列表。
   for (const id of ['D-17', 'D-12']) {
-    fill(
-      await until(`${id} 批量答复框`, () =>
-        one<HTMLTextAreaElement>(`[data-decision="${id}"] [data-act="manager-answer"]`),
-      ),
-      '批量答复后继续处理待定决策',
-    )
+    fill(await until(`${id} 批量答复框`, () => answerBox(id)), '批量答复后继续处理待定决策')
   }
   await until(
     '批量答复可提交',
@@ -2060,7 +2059,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       one('.mg-readonly')?.textContent?.includes('正在收尾') &&
       !one('.mg-title button:not([data-act="manager-board-toggle"])') &&
       !one('.mg-chat textarea.cmp-text') &&
-      one('.mg-decision textarea:disabled') &&
+      one(DECISION_LOCKED) &&
       one('.mg-sidebar-group:first-child [data-manager-id="m1"]')?.textContent?.includes('结束中'),
   )
   eventsClean = cleanChat() && eventsClean
@@ -2076,7 +2075,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const endCompleted = Boolean(
     one('.mg-title')?.textContent?.includes('已结束') &&
       !one('.mg-chat textarea.cmp-text') &&
-      one('.mg-decision textarea:disabled') &&
+      one(DECISION_LOCKED) &&
       !one('.mg-sidebar-group:first-child [data-manager-id="m1"]'),
   )
   const endEvent = Boolean(
@@ -2134,12 +2133,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     ),
     answered: false,
   }
-  fill(
-    await until('旧设备上的答复框', () =>
-      oldCard.querySelector<HTMLTextAreaElement>('[data-act="manager-answer"]'),
-    ),
-    '旧设备上照常答复',
-  )
+  fill(await until('旧设备上的答复框', () => answerBox(oldCard)), '旧设备上照常答复')
   ;(
     await until('旧设备上的提交按钮', () => {
       const button = one<HTMLButtonElement>('[data-act="manager-submit"]')
