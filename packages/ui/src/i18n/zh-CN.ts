@@ -64,7 +64,7 @@ export const zhCN = {
   'service.install.done': '设备服务已安装并连接。',
   'service.install.failed': '{step}失败。远端返回：',
 
-  'files.link.details': '链接详情',
+  'files.link.details': '技术详情',
   'files.link.href': '原始链接',
   'files.link.path': '规范化路径',
   'files.link.attempted': '已尝试的路径',

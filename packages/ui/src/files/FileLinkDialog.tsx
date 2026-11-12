@@ -2,6 +2,7 @@ import type { FileLinkResolution, FileLinkTarget } from '@litch/core'
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useT } from '../app/appearance.ts'
+import { runFileAction } from './actions.ts'
 import { FileLinkDetails } from './FileLinkDetails.tsx'
 
 /** 门户避免对话正文的段落、链接等标签约束影响模态框布局。 */
@@ -16,6 +17,8 @@ export function FileLinkDialog({
 }) {
   const t = useT()
   const dialog = useRef<HTMLDialogElement>(null)
+  const failure = result.failures[0]
+  const target = result.path || failure?.path || result.href
   useEffect(() => {
     dialog.current?.showModal()
   }, [])
@@ -30,7 +33,13 @@ export function FileLinkDialog({
         {t(result.status === 'choose' ? 'files.link.choose' : 'files.link.failed')}
       </div>
       <div className="modal-body">
-        <FileLinkDetails result={result} expanded />
+        {result.status !== 'choose' ? (
+          <p>
+            {t(`files.link.error.${failure?.reason ?? 'missing'}`)}
+            <br />
+            {target}
+          </p>
+        ) : null}
         {result.candidates.map((candidate) => (
           <button
             key={candidate.path}
@@ -41,15 +50,16 @@ export function FileLinkDialog({
             {candidate.path}
           </button>
         ))}
-        {result.failures.map((failure) => (
-          <p key={failure.path}>
-            {t(`files.link.error.${failure.reason}`)}
-            <br />
-            {failure.path}
-          </p>
-        ))}
+        <FileLinkDetails result={result} copy={false} />
       </div>
       <div className="modal-foot">
+        <button
+          type="button"
+          className="btn"
+          onClick={() => runFileAction('copyFull', { path: target, relative: '' })}
+        >
+          {t('files.action.copyFull')}
+        </button>
         <button type="button" className="btn" onClick={onClose}>
           {t('workspace.cancel')}
         </button>

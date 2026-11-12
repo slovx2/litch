@@ -68,7 +68,7 @@ export const en: Record<MessageKey, Entry> = {
   'service.install.done': 'Device service installed and connected.',
   'service.install.failed': '{step} failed. Remote output:',
 
-  'files.link.details': 'Link details',
+  'files.link.details': 'Technical details',
   'files.link.href': 'Original link',
   'files.link.path': 'Normalized path',
   'files.link.attempted': 'Attempted paths',

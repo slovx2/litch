@@ -468,6 +468,10 @@
 .file-link-dialog .modal-body {
   overflow-wrap: anywhere;
 }
+.file-link-dialog[open] {
+  flex-direction: column;
+  min-width: 0;
+}
 .file-link-dialog .btn {
   white-space: normal;
   overflow-wrap: anywhere;

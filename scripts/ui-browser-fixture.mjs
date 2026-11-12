@@ -26,6 +26,7 @@ export async function browserFixture({ page, width = 1100, height = 940, evidenc
     ? null
     : await createServer({
         root: new URL('../packages/ui', import.meta.url).pathname,
+        cacheDir: join(work, 'vite'),
         server: { host: '127.0.0.1', port: 0, hmr: false },
         logLevel: 'error',
       })
@@ -85,7 +86,14 @@ export async function browserFixture({ page, width = 1100, height = 940, evidenc
       mobile: false,
     })
     await call('Page.navigate', { url: external ? page : `${vite.resolvedUrls.local[0]}${page}` })
-    const wait = (expression) => until(() => read(expression), expression)
+    const wait = (expression) =>
+      until(() => read(expression), expression).catch(async (error) => {
+        console.error(
+          await read('({url:location.href,body:document.body.innerText.slice(0,2000)})'),
+          errors,
+        )
+        throw error
+      })
     const click = (selector) => read(`document.querySelector(${JSON.stringify(selector)}).click()`)
     const shot = async (name) => {
       if (!evidence) return
