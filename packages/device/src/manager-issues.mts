@@ -145,7 +145,8 @@ export class ManagerIssues {
       createdAt: post.createdAt,
       updatedAt: post.updatedAt,
       followUp: {
-        state: status === 'open' || status === 'endorsed' ? 'on' : 'off',
+        // 报告只有已阅标记，不能据此暂停跟进；显式开关从 issue_meta 读取。
+        state: post.kind === 'report' || status === 'open' || status === 'endorsed' ? 'on' : 'off',
         changedAt: post.createdAt,
         changedBy: 'manager',
       },

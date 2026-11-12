@@ -156,7 +156,7 @@ export function IssueDiscussion({
       {special ? <p className="mg-issue-note">{t('issue.comment.note')}</p> : null}
       {issue.followUp.state === 'off' ? (
         <p className="mg-issue-note" data-follow-note>
-          {t('issue.follow.pausedNote')}
+          {t(issue.kind === 'report' ? 'issue.follow.reportPausedNote' : 'issue.follow.pausedNote')}
         </p>
       ) : null}
       <div className="mg-post-compose mg-issue-compose">

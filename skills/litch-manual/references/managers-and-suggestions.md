@@ -40,6 +40,10 @@ issue 页签默认只勾类型“issue”（X-n）；类型是多选，带勾的
 看板较窄时筛选栏收成“筛选”按钮，按钮上显示生效的筛选数，点开是同样的几项，旁边有“清除筛选”。清除筛选回到页签默认条件，保留排序。
 点击对话中的 D-n、R-n、P-n、S- 或 X-n 链接，会切到目标实际所属的类别和状态，保留排序，清除作者、未读和跟进等可能隐藏目标的过滤。目标置于当前列表顶部并展开，收起后仍保留；手动改过滤或打开其他条目时结束定位。
 展开 X-n 可查看原帖、状态与跟进、关联、评论及输入框；其他类型保留快速处理按钮，可打开底部讨论或完整讨论页。
+报告默认开启跟进，与是否已阅无关。报告下的用户评论会送达经理：
+经理正在运行时插入当前回合，空闲时沿用现有唤醒规则。只有用户或经理显式暂停跟进后，
+才显示暂停提示并停止自动投递；评论仍保存。恢复跟进不回放暂停期间的评论。
+经理自己的评论不会唤醒自己。
 桌面讨论抽屉只显示标题、讨论消息、问题和回复框，不重复上方已显示的正文与选项。标题行的“查看正文”会在上方列表定位并展开议题；当前列表没有该议题时，正文与对应操作在抽屉内按需展开，默认收起。完整讨论页保留原帖和处理入口。手机切到讨论后正文默认收起，可用“查看正文”展开；完整讨论页也先折叠正文。
 决策提交答复（可只选选项）、请你做交付或回复、建议开始或编辑后开始、报告标为已阅仍在正文区域，评论不会代替这些操作。
 依据与关联默认只显示标题和数量，点击展开；重新进入页面时恢复收起。活动只显示经理对正文、选项、推荐等内容和状态的实质更新，不重复显示用户答复、关联或依据变更、讨论开关；没有有效时间的活动不显示，历史数据仍保留。
@@ -58,6 +62,11 @@ Every tab starts on To do: Open for Decisions, For you and Issues, Ready to star
 On a narrow board the bar collapses into a **Filter** button showing how many filters apply; it opens the same controls, with **Clear filters** beside it. Clearing returns to the tab's defaults and keeps the sort order.
 Conversation links to D-n, R-n, P-n, S- or X-n select the target's actual category and status, preserve sorting, and clear author, unread and follow-up filters that could hide it. The target opens at the top of the list and remains after collapsing. Changing filters or opening another entry ends this placement.
 X-n opens its description, status, follow-up, links and comments; other types keep their quick actions and can open a discussion drawer or full page.
+Follow-up is enabled by default for reports, regardless of read status.
+Comments on reports reach the manager in its current turn when running, or use the existing wake rules
+when idle. Only an explicit pause by the user or manager shows a paused notice and stops automatic
+delivery; comments remain saved. Resuming does not replay comments from the paused period.
+Manager comments never wake the manager itself.
 Desktop discussion drawers show the title, messages, questions and reply field without repeating the description or options above. **View description** locates and expands the issue in the list; if it is absent from that list, the description and its actions can be expanded inside the drawer and start collapsed. Full discussion pages retain the original content and actions. On phones, descriptions start collapsed in discussion drawers and full discussion pages.
 The description retains the relevant action: submit a decision answer (an option alone is enough), deliver or reply to a request, start or edit a suggestion, and mark a report as read. Comments do not replace these actions.
 Evidence and links initially show only their title and count. Click to expand; reopening the page collapses them again. Activity shows substantive manager edits and status changes, omitting duplicate user responses, link or evidence changes, discussion toggles, and entries without a valid timestamp. The underlying history is retained.

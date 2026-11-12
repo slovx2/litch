@@ -96,7 +96,7 @@ export function threadFixture(platform, kind, options = {}) {
       },
       relations: [],
       timeline: [],
-      followUp: { state: 'on' },
+      followUp: { state: options.followUp ?? 'on' },
     },
     quick:
       kind === 'ordinary' ? undefined : element('quick', { children: '虚构背景正文与决策选项' }),
