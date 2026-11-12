@@ -3,6 +3,7 @@
 import type { CommentExtra } from '@litch/core'
 import { useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native'
+import { requestCommentFocus } from '../../../../../packages/ui/src/composer/comment-focus'
 import { useT } from '../../ui/i18n'
 import { Icon } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
@@ -83,6 +84,9 @@ export function CommentChips({
         onSubmit={(note) => {
           if (editing === null || !current) return
           onChange(comments.map((each, at) => (at === editing ? { ...each, note } : each)))
+        }}
+        onSaved={() => {
+          if (hub) requestCommentFocus(hub.draftKey)
         }}
         onRemove={() => editing !== null && remove(editing)}
         onLocate={hub && target && located ? () => hub.jump(target) : undefined}

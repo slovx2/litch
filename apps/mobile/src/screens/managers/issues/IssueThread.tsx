@@ -376,7 +376,7 @@ export function IssueThread({
       ) : null}
       {issue.followUp.state === 'off' ? (
         <Text style={{ color: c.wait, fontSize: font.size.meta }} testID="issue-follow-note">
-          {t('issue.follow.pausedNote')}
+          {t(issue.kind === 'report' ? 'issue.follow.reportPausedNote' : 'issue.follow.pausedNote')}
         </Text>
       ) : null}
     </View>

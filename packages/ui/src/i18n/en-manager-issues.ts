@@ -46,6 +46,8 @@ export const enManagerIssues = {
   'issue.follow.resume': 'Resume follow-up',
   'issue.follow.pausedNote':
     'Follow-up is paused. Comments are still saved but do not wake the manager.',
+  'issue.follow.reportPausedNote':
+    'Follow-up was paused for this report. Comments are still saved but do not wake the manager.',
   'issue.order.newest': 'Newest',
   'issue.order.updated': 'Recently updated',
   'issue.order.oldest': 'Oldest',

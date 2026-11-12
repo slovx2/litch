@@ -32,7 +32,11 @@ On desktop, click the sidebar clock or focus it and press Enter/Space to view it
 
 ## 手机输入与键盘
 
+确认添加或保存文字评论后，浮层关闭，焦点回到会话输入框末尾，可直接继续输入；手机同时打开键盘。取消评论不抢会话输入框的焦点。
+
 评论和消息编辑弹窗在键盘上方滚动；添加评论只保存在草稿中，不请求 AI 数据同意。iOS 未同意数据使用时，发送编辑后的消息会提示去同意并保留编辑内容；同意后由用户再次发送。
+
+After adding or saving a text comment, the editor closes and focus returns to the end of the conversation draft. Phones also open the keyboard. Cancelling does not take focus to the conversation input.
 
 Comment and message-edit dialogs scroll above the keyboard. Adding a comment only updates the draft and does not request AI data consent. On iOS, sending without data consent shows a review entry and keeps the edited text. After agreeing, send again.
 

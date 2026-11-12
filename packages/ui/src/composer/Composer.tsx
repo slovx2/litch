@@ -55,6 +55,7 @@ import {
 import { CommentChip, ExtraChip, useExtraLabel } from './Chips.tsx'
 import { type Compaction, ContextMeter } from './ContextMeter.tsx'
 import { type DraftSnapshot, draftShortcut, hasDraft } from './clear-draft.ts'
+import { focusCommentInput, onCommentFocus, requestCommentFocus } from './comment-focus.ts'
 import { DraftText } from './DraftText.tsx'
 import {
   dropDraft,
@@ -290,6 +291,19 @@ export function Composer(props: ComposerProps) {
       }),
     [draftKey],
   )
+  useEffect(() => {
+    let frame = 0
+    const off = onCommentFocus(draftKey, () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        focusCommentInput(input.current)
+      })
+    })
+    return () => {
+      off()
+      cancelAnimationFrame(frame)
+    }
+  }, [draftKey])
   const device = useKey<DeviceView>(keys.device(deviceId))
   // 别处往输入框里加一样东西（文件面板的“加入对话”）：变成带着的一片，焦点回到输入框。
   // 带了行号的片上放不下，写成字插在光标那里。文件和工作目录可能是同一个目录的两种写法（pathTwin）
@@ -934,7 +948,10 @@ export function Composer(props: ComposerProps) {
                 comment={comment}
                 n={index + 1}
                 queue={queuing}
-                onSave={(note) => updateComment(draftKey, comment.id, note)}
+                onSave={(note) => {
+                  updateComment(draftKey, comment.id, note)
+                  requestCommentFocus(draftKey)
+                }}
                 onRemove={() => {
                   removeComment(draftKey, comment.id)
                   input.current?.focus()

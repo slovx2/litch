@@ -216,3 +216,19 @@ test('评论整条消息直接弹评论框；长引用用共享截断规则，�
   assert.equal(hub.selecting, 'message')
   assert.equal(hub.replying, null)
 })
+
+test('评论确认的输入框焦点按会话隔离，取消不发出请求', async () => {
+  const { onCommentFocus, requestCommentFocus } = await import(
+    '../../../packages/ui/src/composer/comment-focus.ts'
+  )
+  let focused = 0
+  const off = onCommentFocus('nebula\nthread', () => focused++)
+  assert.equal(focused, 0)
+  requestCommentFocus('other\nthread')
+  assert.equal(focused, 0)
+  requestCommentFocus('nebula\nthread')
+  assert.equal(focused, 1)
+  off()
+  requestCommentFocus('nebula\nthread')
+  assert.equal(focused, 1)
+})

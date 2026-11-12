@@ -9,6 +9,7 @@ import { Bubble, Icon } from '../../app/icons.tsx'
 import { useKey, useServices } from '../../app/services.tsx'
 import { showToast } from '../../app/toasts.tsx'
 import { quoteToParent, startAside, useAside } from '../../aside/state.ts'
+import { requestCommentFocus } from '../../composer/comment-focus.ts'
 import type { DraftComment } from '../../composer/drafts.ts'
 import { useRunningSend } from '../../composer/send-mode.ts'
 import { CommentEditor } from './Editor.tsx'
@@ -318,6 +319,7 @@ export const CommentLayer = memo(function CommentLayer({
           onCancel={() => setEditing(null)}
           onSave={(note) => {
             addComment(key, draftOf(from, note))
+            requestCommentFocus(key)
             setEditing(null)
             clearSelection()
           }}
@@ -344,6 +346,7 @@ export const CommentLayer = memo(function CommentLayer({
         onCancel={() => setEditing(null)}
         onSave={(note) => {
           updateComment(key, comment.id, note)
+          requestCommentFocus(key)
           setEditing(null)
         }}
         onDelete={() => {

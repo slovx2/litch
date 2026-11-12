@@ -2,6 +2,7 @@
 // - 选字后点“回复”：写评论的对话框，“加上”后加到输入框上面。
 // - 看一条发出去的评论：卡片、回答里的 [N] 点出来的，引用全文和评论，能找到原文的可以滚过去。
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { requestCommentFocus } from '../../../../../packages/ui/src/composer/comment-focus'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
 import { Dialog } from '../../ui/kit/overlays'
@@ -29,6 +30,7 @@ function Replying({ hub }: { hub: CommentsHub }) {
       quote={replying?.quote ?? ''}
       note=""
       onSubmit={(note) => hub.replied(note)}
+      onSaved={() => requestCommentFocus(hub.draftKey)}
       onClose={() => hub.replying && hub.replied(null)}
     />
   )

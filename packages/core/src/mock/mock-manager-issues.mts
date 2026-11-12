@@ -66,7 +66,7 @@ export class MockManagerIssues {
         createdAt: post.createdAt,
         updatedAt: post.updatedAt,
         followUp: previous?.followUp ?? {
-          state: status === 'open' || status === 'pending' ? 'on' : 'off',
+          state: post.kind === 'report' || status === 'open' || status === 'pending' ? 'on' : 'off',
           changedAt: post.createdAt,
           changedBy: 'manager',
         },

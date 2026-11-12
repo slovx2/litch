@@ -112,3 +112,15 @@ for (const kind of kinds) {
     assert.equal(f.original(), false)
   })
 }
+
+for (const kind of kinds) {
+  test(`${kind}：按设备跟进状态显示提示，报告仅显式暂停才提示`, () => {
+    for (const state of ['on', 'off']) {
+      const tree = threadFixture('mobile', kind, { followUp: state }).render()
+      assert.equal(
+        tree.some((node) => node.props?.testID === 'issue-follow-note'),
+        state === 'off',
+      )
+    }
+  })
+}

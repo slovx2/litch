@@ -8,6 +8,7 @@ import {
 } from '../../protocol/src/manager-issues.mjs'
 import { ChannelError } from '../src/channel/protocol.mjs'
 import { createManagers, type ManagersHost } from '../src/device/manager.mjs'
+import { mockPosts, sampleReport } from '../src/mock/manager-posts.mjs'
 import { MockManagerIssues } from '../src/mock/mock-manager-issues.mjs'
 import { sampleManagers } from '../src/mock/sample-manager.mjs'
 import type { ManagerBoardTopicView } from '../src/model-manager.mjs'
@@ -314,4 +315,82 @@ test('讨论子能力门禁：旧 I-255 白名单接受默认列表、混合记�
   await new Promise((resolve) => setTimeout(resolve, 75))
   assert.ok(calls.slice(start).some((c) => c.method === M.list))
   assert.ok(calls.slice(start).every((c) => !('discussionsOnly' in c.params)))
+})
+
+test('mock 报告默认跟进，其他类型保持状态推导，显式暂停后筛选与回复一致', () => {
+  const board = sampleManagers('local', 1700000000, 'zh-CN').boards[0]!
+  const report = sampleReport(1700000000, 'zh-CN')
+  board.posts = [...mockPosts(board), report]
+  for (const status of ['open', 'answered', 'ignored', 'expired', 'withdrawn'] as const) {
+    const changed = structuredClone(board)
+    changed.decisions[0]!.status = status
+    const issue = (
+      new MockManagerIssues().command(
+        'd/m',
+        changed,
+        'managers.issue.read',
+        {
+          managerId: board.managerId,
+          id: changed.decisions[0]!.id,
+        },
+        10,
+      ) as { issue: ManagerIssue }
+    ).issue
+    assert.equal(issue.followUp.state, status === 'open' ? 'on' : 'off', status)
+  }
+  const mock = new MockManagerIssues()
+  const read = () =>
+    (
+      mock.command(
+        'd/m',
+        board,
+        'managers.issue.read',
+        {
+          managerId: board.managerId,
+          id: report.id,
+        },
+        10,
+      ) as { issue: ManagerIssue }
+    ).issue
+  const list = (followUp: 'on' | 'off') =>
+    (
+      mock.command(
+        'd/m',
+        board,
+        'managers.issues.list',
+        {
+          managerId: board.managerId,
+          kinds: ['decision', 'request', 'report', 'suggestion'],
+          followUp,
+          order: 'newest',
+          limit: 100,
+        },
+        10,
+      ) as { page: { total: number; entries: { id: string }[] } }
+    ).page
+  assert.equal(read().followUp.state, 'on')
+  const before = list('on').total
+  const pausedBefore = list('off').total
+  const params = { managerId: board.managerId, id: report.id, revision: report.revision }
+  mock.command('d/m', board, 'managers.issue.follow', { ...params, state: 'off' }, 11)
+  assert.equal(read().followUp.state, 'off')
+  assert.equal(list('on').total, before - 1)
+  assert.equal(list('off').total, pausedBefore + 1)
+  assert.ok(list('off').entries.some((one) => one.id === report.id))
+  assert.equal(mock.reply('d/m', report.id, '暂停时不自动回复', 12), false)
+  report.unread = false
+  assert.equal(read().followUp.state, 'off', '标已阅不覆盖显式开关')
+  mock.command(
+    'd/m',
+    board,
+    'managers.issue.follow',
+    {
+      ...params,
+      revision: read().revision,
+      state: 'on',
+    },
+    13,
+  )
+  assert.equal(mock.reply('d/m', report.id, '恢复后回复', 14), true)
+  assert.equal(list('off').total, pausedBefore)
 })

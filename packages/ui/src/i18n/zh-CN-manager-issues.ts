@@ -45,6 +45,7 @@ export const zhManagerIssues = {
   'issue.follow.pause': '暂停跟进',
   'issue.follow.resume': '恢复跟进',
   'issue.follow.pausedNote': '跟进已暂停：评论照常保存，但不会唤醒经理。',
+  'issue.follow.reportPausedNote': '此报告的跟进已被暂停：评论仍会保存，但不会唤醒经理。',
   'issue.order.newest': '最新创建',
   'issue.order.updated': '最近更新',
   'issue.order.oldest': '最早创建',

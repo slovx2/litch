@@ -16,9 +16,15 @@ export interface CommentsProbe {
   /** 从过程里的说明一直选到最终回答：只取开头那条，选区缩到那条里面 */
   across: { shown: boolean; clipped: boolean }
   /** 编辑框：焦点在评论框里，引用对，Shift+回车不加，Esc 不加 */
-  editor: { focused: boolean; quote: boolean; shiftKept: boolean; escDropped: boolean }
+  editor: {
+    focused: boolean
+    quote: boolean
+    shiftKept: boolean
+    escDropped: boolean
+    cancelRestored: boolean
+  }
   /** 回车加进去：片（编号、引用开头、评论开头），原文上的底色和记号 */
-  added: { chips: string[]; marked: string[]; badges: string[] }
+  added: { chips: string[]; marked: string[]; badges: string[]; composerFocused: boolean }
   /** 点片：编辑框贴着片在它上面，改评论生效，定位原文闪了，点记号也打开编辑框 */
   chipEdit: { above: boolean; saved: boolean; located: boolean; badgeOpens: boolean }
   /** ⌘回车直接发：对话里多了一条只带这一条评论的消息，输入框里的字和别的评论没动 */
@@ -107,7 +113,14 @@ export async function commentsProbe(session: string): Promise<CommentsProbe> {
   }
   /** 选中 word，点“评论”，写上 words，按 key（Enter、或者带 ⌘ 的 Enter） */
   /** 从 word 的开头选到 end 的末尾（代码块里上了色，几个词各在各的节点里）；不给 end 就只选 word */
-  const comment = async (root: Element, word: string, words: string, meta = false, end = '') => {
+  const comment = async (
+    root: Element,
+    word: string,
+    words: string,
+    meta = false,
+    end = '',
+    buttonSave = false,
+  ) => {
     if (end) {
       const [endNode, endAt] = textAt(root, end)
       await select(textAt(root, word), [endNode, endAt + end.length])
@@ -119,8 +132,19 @@ export async function commentsProbe(session: string): Promise<CommentsProbe> {
     const field = await until('评论框', () => (document.activeElement === note() ? note() : null))
     write(field, words)
     await frame()
-    press(field, 'Enter', meta ? { metaKey: true } : {})
+    if (buttonSave) one<HTMLButtonElement>('.cmt-edit [data-act=save]')?.click()
+    else press(field, 'Enter', meta ? { metaKey: true } : {})
     await until('编辑框关上', () => !editor())
+    if (!meta)
+      await until('评论确认后焦点回到输入框末尾', () => {
+        const input = area()
+        return (
+          input &&
+          document.activeElement === input &&
+          input.selectionStart === input.value.length &&
+          input.selectionEnd === input.value.length
+        )
+      })
     await clearSelection()
   }
   const lastTurn = () => all('.main .tr .turn').at(-1)
@@ -195,6 +219,11 @@ export async function commentsProbe(session: string): Promise<CommentsProbe> {
 
   // 四、编辑框：焦点、引用、Shift+回车、Esc
   await selectWord(answer, '每次立刻重来')
+  const previousFocus = document.createElement('button')
+  previousFocus.textContent = '取消焦点验收'
+  previousFocus.style.cssText = 'position:fixed;left:-10000px'
+  document.body.append(previousFocus)
+  previousFocus.focus({ preventScroll: true })
   ;(await until('“评论”', () => one<HTMLButtonElement>('.cmt-pop [data-act="comment"]'))).click()
   const focusedField = await until('评论框拿到焦点', () =>
     document.activeElement === note() ? note() : null,
@@ -206,18 +235,22 @@ export async function commentsProbe(session: string): Promise<CommentsProbe> {
   if (focusedField) press(focusedField, 'Escape')
   await frame()
   const escDropped = !editor() && chips().length === 0
+  await until('取消后恢复原焦点', () => document.activeElement === previousFocus)
+  const cancelRestored = document.activeElement === previousFocus
+  previousFocus.remove()
   await clearSelection()
 
   // 五、加两条：一条带评论，一条（代码块里的）不带
   await comment(answer, '每次立刻重来', '为什么是三次？')
   const code = await until('代码块', () => one('.code', answer))
-  await comment(code, 'const', '', false, 'delay')
+  await comment(code, 'const', '', false, 'delay', true)
   await until('两片', () => chips().length === 2)
   await until('原文上的两处底色', () => marked().length === 2)
   const added = {
     chips: chips().map((chip) => text(one('.cmp-chip-open', chip))),
     marked: marked(),
     badges: all('.main .tr .cmt-badge').map((badge) => text(badge)),
+    composerFocused: document.activeElement === area(),
   }
 
   // 六、点片改评论、定位原文；点记号也打开编辑框
@@ -339,7 +372,13 @@ export async function commentsProbe(session: string): Promise<CommentsProbe> {
     pop: popResult,
     refused: { user: userRefused, command: commandRefused },
     across,
-    editor: { focused: Boolean(focusedField), quote: quoteOk, shiftKept, escDropped },
+    editor: {
+      focused: Boolean(focusedField),
+      quote: quoteOk,
+      shiftKept,
+      escDropped,
+      cancelRestored,
+    },
     added,
     chipEdit: { above, saved, located, badgeOpens },
     direct,
@@ -410,7 +449,9 @@ export function judgeComments(probe: CommentsProbe, reloaded: CommentsReloaded):
   check(probe.editor.focused, '编辑框打开时焦点不在评论框里')
   check(probe.editor.quote, '编辑框里的引用不对')
   check(probe.editor.shiftKept, 'Shift+回车把评论加进去了')
+  check(probe.added.composerFocused, '评论确认后焦点没有回到对话输入框')
   check(probe.editor.escDropped, 'Esc 之后还是加进去了')
+  check(probe.editor.cancelRestored, '取消评论没有恢复原焦点')
   check(
     probe.added.chips.length === 2 &&
       /^1每次立刻重来为什么是三次？$/.test(probe.added.chips[0] ?? '') &&

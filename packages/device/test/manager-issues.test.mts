@@ -704,3 +704,243 @@ test('新设备对未声明讨论子能力的连接不回传标记，并拒绝�
     await env.close()
   }
 })
+
+test('报告默认跟进：用户评论插话或唤醒一次，显式暂停及经理评论不唤醒', async () => {
+  const { env, client, managerId, threadId } = await setup()
+  try {
+    const { posts, issues, store } = env.device.managers
+    const post = posts.tool(managerId, 'report', {
+      title: '星云验收报告',
+      body: '隔离报告正文',
+      why: '记录验收',
+    }).post
+    const read = () => issues.get(managerId, post.id)
+    const deliveries = () =>
+      env.pi.seen.filter(
+        (frame) =>
+          ['turn/start', 'turn/steer'].includes(frame.method) &&
+          JSON.stringify(frame.params).includes('星云报告评论'),
+      )
+    assert.equal(read().followUp.state, 'on')
+    const currentTurn = env.pi.current(threadId)!.id
+    const comment = {
+      managerId,
+      id: post.id,
+      revision: read().revision,
+      body: '星云报告评论：请核对验收',
+      idempotencyKey: 'nebula-report-running',
+    }
+    await client.call(M.comment, comment)
+    await env.device.managers.settleDeliveries(managerId)
+    assert.equal(deliveries().length, 1)
+    assert.equal(deliveries()[0]!.method, 'turn/steer')
+    assert.equal(env.pi.current(threadId)!.id, currentTurn)
+    await client.call(M.comment, comment)
+    await env.device.managers.settleDeliveries(managerId)
+    assert.equal(deliveries().length, 1, '幂等重试不重复插话')
+    posts.read(managerId, post.id, post.revision)
+    assert.equal(read().followUp.state, 'on', '已阅报告仍默认跟进')
+
+    env.pi.end(threadId, 'completed', '完成')
+    await until(() => !env.device.sessionTree.isActive(threadId), '报告评论前经理空闲')
+    await client.call(M.comment, {
+      ...comment,
+      body: '星云报告评论：空闲时继续核对',
+      idempotencyKey: 'nebula-report-idle',
+    })
+    await until(() => env.pi.running(threadId), '报告评论唤醒经理')
+    await env.device.managers.settleDeliveries(managerId)
+    assert.equal(deliveries().length, 2)
+    assert.equal(deliveries()[1]!.method, 'turn/start')
+    assert.equal(store.deliveries(managerId).length, 0)
+    assert.equal(read().unread, false, '用户评论保留报告已阅状态')
+
+    const paused = (
+      await client.call(M.follow, {
+        managerId,
+        id: post.id,
+        revision: read().revision,
+        state: 'off',
+      })
+    ).issue
+    await env.device.managers.settleDeliveries(managerId)
+    env.pi.end(threadId, 'completed', '完成')
+    await until(() => !env.device.sessionTree.isActive(threadId), '暂停后经理空闲')
+    const calls = env.pi.seen.length
+    const saved = (
+      await client.call(M.comment, {
+        ...comment,
+        revision: paused.revision,
+        body: '星云报告评论：暂停期间仅保存',
+        idempotencyKey: 'nebula-report-paused',
+      })
+    ).issue
+    await env.device.managers.settleDeliveries(managerId)
+    assert.equal(saved.discussion.comments.length, 3)
+    assert.equal(env.pi.seen.length, calls)
+    assert.equal(env.pi.running(threadId), false)
+    assert.equal(store.deliveries(managerId).length, 0)
+    const resumed = (
+      await client.call(M.follow, {
+        managerId,
+        id: post.id,
+        revision: saved.revision,
+        state: 'on',
+      })
+    ).issue
+    issues.call(
+      M.comment,
+      {
+        managerId,
+        id: post.id,
+        revision: resumed.revision,
+        body: '经理记录核对结果',
+        why: '记录',
+      },
+      'manager',
+    )
+    await env.device.managers.settleDeliveries(managerId)
+    assert.equal(env.pi.running(threadId), false, '经理评论不唤醒自己')
+    assert.equal(env.pi.seen.length, calls, '恢复跟进不回放历史评论')
+  } finally {
+    await env.close()
+  }
+})
+
+test('报告缺省开启且不持久化推导暂停；其他类型保持状态推导与显式开关', async () => {
+  const { env, client, managerId, threadId } = await setup()
+  let second: ReturnType<typeof rig> | undefined
+  try {
+    const { store, writer, posts, issues } = env.device.managers
+    writer.tool(managerId, 'add', {
+      kind: 'decision',
+      decision: { title: '星云决策', background: '' },
+    })
+    writer.tool(managerId, 'add', {
+      kind: 'request',
+      request: { title: '星云请求', description: '' },
+      revision: 0,
+      why: '请求',
+    })
+    const report = posts.tool(managerId, 'report', {
+      title: '星云报告',
+      body: '报告正文',
+      why: '汇报',
+    }).post
+    const proposal = env.device.sessionTree.propose({
+      threadId,
+      title: '星云建议',
+      background: '后续任务',
+      prompt: '核对验收',
+      kind: 'fresh',
+      harness: 'pi',
+      model: null,
+      cwd: env.stateDir,
+      wakeParent: false,
+    })
+    const ordinary = (
+      await client.call(M.create, {
+        managerId,
+        title: '星云普通议题',
+        body: '',
+        followUp: 'off',
+      })
+    ).issue
+    const suggestionId = `S-${proposal.id}`
+    for (const status of ['open', 'answered', 'ignored', 'expired', 'withdrawn'] as const) {
+      const decision = store.object(managerId, 'D-1')!
+      store.saveObject(managerId, { ...decision, status } as typeof decision)
+      assert.equal(
+        issues.get(managerId, 'D-1').followUp.state,
+        status === 'open' ? 'on' : 'off',
+        status,
+      )
+      if (status !== 'open') {
+        await env.device.managers.settleDeliveries(managerId)
+        const sent = env.pi.seen.length
+        await client.call(M.comment, {
+          managerId,
+          id: 'D-1',
+          revision: issues.get(managerId, 'D-1').revision,
+          body: `已处理决策的评论 ${status}`,
+        })
+        await env.device.managers.settleDeliveries(managerId)
+        assert.equal(env.pi.seen.length, sent, '已处理决策评论不插话或唤醒')
+      }
+    }
+    for (const id of ['R-1', report.id, suggestionId]) {
+      assert.equal(issues.get(managerId, id).followUp.state, 'on', id)
+      assert.equal(store.issueMeta(managerId, id), null)
+    }
+    posts.read(managerId, report.id, report.revision)
+    assert.equal(issues.get(managerId, report.id).followUp.state, 'on', '已阅报告仍跟进')
+    // 老版本评论/打开讨论只保存这两个字段，不会把 special() 的推导状态写入 meta。
+    store.saveIssueMeta(managerId, report.id, {
+      revision: 1,
+      updatedAt: report.updatedAt,
+      discussionOpened: true,
+    })
+    const pausedReport = posts.tool(managerId, 'report', {
+      title: '显式暂停报告',
+      body: '报告正文',
+      why: '汇报',
+    }).post
+    const page = (followUp: 'on' | 'off') =>
+      issues.list(managerId, {
+        managerId,
+        kinds: ['ordinary', 'decision', 'suggestion', 'request', 'report'],
+        followUp,
+        order: 'newest',
+      })
+    assert.equal(page('on').total, 4)
+    assert.deepEqual(
+      page('off')
+        .entries.map((one) => one.id)
+        .sort(),
+      ['D-1', ordinary.id].sort(),
+    )
+    const paused = (
+      await client.call(M.follow, {
+        managerId,
+        id: pausedReport.id,
+        revision: issues.get(managerId, pausedReport.id).revision,
+        state: 'off',
+      })
+    ).issue
+    assert.equal(page('on').total, 3)
+    assert.equal(page('off').total, 3)
+    assert.equal(issues.get(managerId, pausedReport.id).followUp.changedBy, 'user')
+    await env.device.close()
+    second = rig({ pi: env.pi }, {}, { stateDir: env.stateDir })
+    assert.equal(second.device.managers.issues.get(managerId, report.id).followUp.state, 'on')
+    assert.equal(
+      second.device.managers.issues.get(managerId, pausedReport.id).followUp.state,
+      'off',
+    )
+    assert.equal(
+      second.device.managers.issues.get(managerId, pausedReport.id).revision,
+      paused.revision,
+    )
+    assert.equal(second.device.managers.issues.get(managerId, ordinary.id).followUp.state, 'off')
+    // 由经理显式暂停同样保持关闭，不与默认状态混淆。
+    second.device.managers.issues.call(
+      M.follow,
+      {
+        managerId,
+        id: report.id,
+        revision: second.device.managers.issues.get(managerId, report.id).revision,
+        state: 'off',
+        why: '暂不跟进',
+      },
+      'manager',
+    )
+    assert.equal(
+      second.device.managers.issues.get(managerId, report.id).followUp.changedBy,
+      'manager',
+    )
+    assert.equal(second.device.managers.issues.get(managerId, report.id).followUp.state, 'off')
+  } finally {
+    if (second) await second.close()
+    else await env.close()
+  }
+})
