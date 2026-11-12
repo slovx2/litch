@@ -12,6 +12,7 @@ import {
   MAX_COMMENTS,
   type MessageExtra,
   parentPath,
+  uploadDraftAttachments,
 } from '@litch/core'
 import {
   type ReactNode,
@@ -335,7 +336,8 @@ export function ComposeBox({
     draft.clear()
     onError(null)
     setSending(true)
-    onSend(text, images, [...comments, ...sessions, ...files])
+    uploadDraftAttachments(channel, mentions?.deviceId ?? '', [...comments, ...sessions, ...files])
+      .then((ready) => onSend(text, images, ready))
       .catch((reason: unknown) => {
         draft.refill(text, images, comments, sessions, files)
         onError(t('composer.failed', { reason: whyNot(reason, t) }))
@@ -344,10 +346,6 @@ export function ComposeBox({
   }
 
   const addImages = async () => {
-    if (imagesOff) {
-      onError(imagesOff)
-      return
-    }
     const picked = await pickImages(MAX_IMAGES - draft.images.length)
     if (!picked) return
     if (picked.images.length)
@@ -371,10 +369,9 @@ export function ComposeBox({
     setUploading(true)
     onError(null)
     try {
-      const file = await pickFile(channel, mentions.deviceId)
+      const file = await pickFile()
       if (file?.kind === 'image') {
-        if (imagesOff) onError(imagesOff)
-        else if (draft.images.length >= MAX_IMAGES)
+        if (draft.images.length >= MAX_IMAGES)
           onError(t('composer.image.count', { max: MAX_IMAGES }))
         else draft.setImages((list) => [...list, { name: file.name, url: file.url }])
       } else if (file) draft.setFiles((list) => [...list, file])
@@ -415,7 +412,6 @@ export function ComposeBox({
       testID: `${testID}-image`,
       afterDismiss: true,
       onPress: () => void addImages(),
-      ...(imagesOff ? { disabled: imagesOff } : {}),
     },
     ...(settings?.onUsage
       ? [
@@ -473,6 +469,7 @@ export function ComposeBox({
         <FileCard
           key={file.path}
           deviceId={mentions?.deviceId}
+          pending={file.dataBase64 !== undefined}
           file={{ ...file, kind: file.folder ? 'folder' : 'file', label: file.name }}
           onPress={() => {
             if (mentions)
@@ -521,6 +518,7 @@ export function ComposeBox({
                 accessibilityRole="button"
                 accessibilityLabel={t('tool.image.view')}
                 testID={`${testID}-image-view-${index}`}
+                style={styles.thumbImage}
                 onPress={() => setViewingImage(image.url)}
               >
                 <Image source={{ uri: image.url }} style={styles.thumbImage} resizeMode="cover" />

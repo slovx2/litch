@@ -64,7 +64,7 @@ export const zhCN = {
   'service.install.done': '设备服务已安装并连接。',
   'service.install.failed': '{step}失败。远端返回：',
 
-  'files.link.details': '链接详情',
+  'files.link.details': '技术详情',
   'files.link.href': '原始链接',
   'files.link.path': '规范化路径',
   'files.link.attempted': '已尝试的路径',
@@ -1986,7 +1986,7 @@ export const zhCN = {
   'session.archived': '此对话已归档，只读。恢复后即可继续。',
   'session.queueFailed': '排队的消息发送失败：{message}。发送下一条时会重试。',
   'session.inputSyncing': '正在同步会话状态，消息已保留；同步完成后立即发送。',
-  'session.inputCompacting': '正在压缩上下文，消息已排队，压缩结束后发送。',
+  'composer.file.pending': '发送时上传，上传后可预览',
   'session.inputNoSteer': '当前会话不支持插队，消息已排队，回合结束后发送。',
   'session.steerQueued': '没能插进正在进行的回合（{message}），已排队，回合结束后发送。',
   'session.steerHeld':

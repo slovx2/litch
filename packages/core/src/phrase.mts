@@ -8,7 +8,6 @@ export type PhraseKey =
   | 'modelRanking.limitUnranked'
   | 'notice.signInRequired'
   | 'session.inputSyncing'
-  | 'session.inputCompacting'
   | 'session.inputNoSteer'
   | 'session.archiveChildrenRunning'
   | 'permission.project.timeout'

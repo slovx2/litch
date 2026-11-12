@@ -1,7 +1,10 @@
 import { managerRequestStatus } from '@litch/core'
 // 议题正文：沿用对话 Markdown，#D-n 等编号点按跳转、长按看标题与状态。
-import { useContext } from 'react'
-import { Alert, Linking } from 'react-native'
+import { useContext, useMemo, useState } from 'react'
+import { Alert, Linking, View } from 'react-native'
+import { MermaidCard } from '../../detail/mermaid/MermaidCard'
+import { type MermaidShown, MermaidViewer } from '../../detail/mermaid/MermaidViewer'
+import { splitMermaid } from '../../detail/mermaid/segments'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 import { WebLinkMarkdown as EnrichedMarkdownText } from '../../ui/WebLinkMenu'
@@ -14,12 +17,15 @@ export function Markdown({ text, situation }: { text: string; situation?: boolea
   const theme = useTheme()
   const t = useT()
   const context = useContext(IssueContext)
+  const segments = useMemo(() => splitMermaid(text), [text])
+  const [shown, setShown] = useState<MermaidShown | null>(null)
   const ids = new Set([
     ...(context?.board.posts ?? []).map((p) => p.id),
     ...(context?.board.items ?? []).map((i) => i.id),
   ])
-  return (
+  const prose = (text: string, key: number) => (
     <EnrichedMarkdownText
+      key={key}
       markdown={issueLinks(text, ids, context?.features.paging)}
       flavor="github"
       markdownStyle={situation ? situationMarkdownStyle(theme) : issueMarkdownStyle(theme)}
@@ -52,5 +58,21 @@ export function Markdown({ text, situation }: { text: string; situation?: boolea
         else if (/^https?:\/\//.test(url)) void Linking.openURL(url)
       }}
     />
+  )
+  return (
+    <View>
+      {segments.map((segment) =>
+        segment.kind === 'md' ? (
+          prose(segment.text, segment.at)
+        ) : (
+          <MermaidCard
+            key={segment.at}
+            source={segment.source}
+            onOpen={(source, svg) => setShown({ source, svg })}
+          />
+        ),
+      )}
+      {shown ? <MermaidViewer shown={shown} onClose={() => setShown(null)} /> : null}
+    </View>
   )
 }

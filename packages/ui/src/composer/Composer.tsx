@@ -10,7 +10,9 @@ import {
   type RequestView,
   type SessionMeta,
   type SessionSettings,
+  stageAttachment,
   type TurnView,
+  uploadDraftAttachments,
 } from '@litch/core'
 import {
   type ClipboardEvent,
@@ -356,7 +358,7 @@ export function Composer(props: ComposerProps) {
 
   // 选的模型不收图片：带着图就不让发，免得发出去才报错
   const model = options?.models.find((entry) => entry.id === props.settings.model)
-  // 这个 harness 声明了自己收不了图片：图片加不上，草稿里留着图的也不让发（device 在上面取过）
+  // 能力只约束发送；选图、预览和删除都是本地草稿操作。
   // 本机或启用了操作本机工具时发送路径；其余普通文件上传，文件夹不展开。
   const local = device?.kind === 'local'
   const machine: MachineReach = device?.machine ? (device.machine.enabled ? 'on' : 'off') : null
@@ -445,20 +447,14 @@ export function Composer(props: ComposerProps) {
     const pictures = files.filter((file) => !folders.has(file) && IMAGE_TYPES.includes(file.type))
     const others = files.filter((file) => folders.has(file) || !IMAGE_TYPES.includes(file.type))
     void Promise.all([
-      noImages ? null : readImages(pictures, MAX_IMAGES - images.length, named),
+      readImages(pictures, MAX_IMAGES - images.length, named),
       readFiles(others, {
         local,
         machine,
         pathOf: (file) => window.litchShell?.pathOf(file) ?? '',
         isFolder: (file) => folders.has(file),
         room: EXTRAS_LIMIT - extras.length - comments.length,
-        upload: async (file) =>
-          channel.command('files.uploadAttachment', {
-            deviceId,
-            name: file.name,
-            mimeType: file.type,
-            dataBase64: await fileBase64(file),
-          }),
+        stage: async (file) => stageAttachment(file.name, await fileBase64(file), file.type),
       }),
     ])
       .then(([shots, rest]) => {
@@ -475,13 +471,11 @@ export function Composer(props: ComposerProps) {
         }
         if (rest.extras.length > 0) setExtras((current) => mergeExtras(current, rest.extras))
         setError(
-          shots === null && pictures.length > 0
-            ? t('composer.image.refused')
-            : shots?.refused
-              ? refusalText(shots.refused)
-              : rest.refused
-                ? fileRefusalText(rest.refused)
-                : null,
+          shots?.refused
+            ? refusalText(shots.refused)
+            : rest.refused
+              ? fileRefusalText(rest.refused)
+              : null,
         )
       })
       .finally(() => {
@@ -522,7 +516,8 @@ export function Composer(props: ComposerProps) {
     setError(null)
     setBusy(true)
     // 评论排在最前面（核心并进正文时也是写在最前面）
-    onSend(content, attached, [...commented.map(commentExtra), ...carried], text)
+    uploadDraftAttachments(channel, deviceId, [...commented.map(commentExtra), ...carried])
+      .then((ready) => onSend(content, attached, ready, text))
       .catch((reason: unknown) => {
         setText((current) => (current && content ? `${content}\n${current}` : content || current))
         setImages((current) => [...attached, ...current].slice(0, MAX_IMAGES))
@@ -532,7 +527,21 @@ export function Composer(props: ComposerProps) {
         setError(failure ? failure(why) : t('composer.failed', { reason: why }))
       })
       .finally(() => setBusy(false))
-  }, [onSend, failure, draftKey, sessionId, text, images, extras, comments, t, disarm, version])
+  }, [
+    channel,
+    deviceId,
+    onSend,
+    failure,
+    draftKey,
+    sessionId,
+    text,
+    images,
+    extras,
+    comments,
+    t,
+    disarm,
+    version,
+  ])
 
   const interrupt = useInterrupt(
     `${draftKey}:${props.turnId ?? ''}`,

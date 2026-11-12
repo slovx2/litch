@@ -6,6 +6,20 @@ import { fileHref, fileRefFromHref, isWebUrl, linkify, parseFileHref } from '../
 
 const scope = { root: '/w/proj', cwd: '/w/proj' }
 
+test('显式 Markdown 链接标签在手机保持完整，不改写成第二条路径或网址', () => {
+  for (const label of [
+    'nebula-link-test/',
+    'docs/report.md',
+    '`nebula-link-test/`',
+    '**docs/** *report.md*',
+    'https://nebula.example.invalid/docs/report.md',
+  ]) {
+    const text = `[${label}](/tmp/nebula-link-test/)`
+    assert.equal(linkify(text, scope), text)
+    assert.equal(fileRefFromHref('/tmp/nebula-link-test/', scope)?.path, '/tmp/nebula-link-test')
+  }
+})
+
 test('33 条匿名真实写法经手机标准点击或自动改写保留同一组候选', async () => {
   const samples = JSON.parse(
     await readFile(

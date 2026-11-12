@@ -272,6 +272,7 @@ export {
   type ViewStore,
 } from './device/view-store.mjs'
 export { projectWorkspaces, resolveWorkspace } from './device/workspaces.mjs'
+export { stageAttachment, uploadDraftAttachments } from './draft-attachments.mjs'
 export {
   DRAFT_IMAGE_LIMIT,
   type DraftImageEntries,

@@ -1,10 +1,36 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { RpcFailure } from './fake-server.mjs'
 import { settle } from './helpers.mjs'
 import { finished, setup, started, watch, where } from './world.mjs'
 
 const patch = { model: 'konstants/opus', effort: 'high' }
 const item = { type: 'contextCompaction', id: 'compact:1' } as const
+
+test('普通压缩请求尚未开始就失败，期间的插话自动恢复发送，不等不存在的完成事件', async () => {
+  const control: { fail(): void } = { fail() {} }
+  const world = setup(undefined, {
+    'thread/compact/start': () =>
+      new Promise((_resolve, reject) => {
+        control.fail = () => reject(new RpcFailure(-32000, '隔离压缩请求失败'))
+      }),
+  })
+  world.core.start()
+  await settle()
+  const session = watch(world.core)
+  await settle()
+  const done = world.command('session.compact', where)
+  void done.catch(() => {})
+  await settle()
+  await world.command('session.send', { ...where, text: '压缩等待中输入', now: true })
+  assert.equal(world.sent('turn/start').length, 0)
+  control.fail()
+  await assert.rejects(done)
+  await settle()
+  assert.equal(world.sent('turn/start').length, 1)
+  assert.equal(session.seen.view?.queued.length, 0)
+  world.core.stop()
+})
 
 async function prepare(delayed = false) {
   let accept!: () => void

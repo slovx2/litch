@@ -14,6 +14,7 @@ import { downHarness } from './availability'
 
 /** 问过的记着，进同一台设备的另一个会话时设置条不用等一下才出来。每个 harness 各记各的 */
 const known = new Map<string, ComposeOptions>()
+const lastKnown = new Map<string, ComposeOptions>()
 
 export function useComposeOptions(
   deviceId: string,
@@ -27,6 +28,7 @@ export function useComposeOptions(
   const settings = useKey<SessionSettings>(sessionId ? keys.settings(deviceId, sessionId) : '')
   const revision = JSON.stringify([settings, meta?.can])
   const key = `${deviceId}\n${harness ?? ''}\n${sessionId ?? ''}\n${revision}`
+  const source = `${deviceId}\n${harness ?? ''}\n${sessionId ?? ''}`
   const [asked, setAsked] = useState<{ key: string; value: ComposeOptions } | null>(null)
   useEffect(() => {
     if (!reachable) return
@@ -39,6 +41,7 @@ export function useComposeOptions(
       })
       .then((value) => {
         known.set(key, value)
+        lastKnown.set(source, value)
         if (live) setAsked({ key, value })
       })
       // 问不到就不显示选择器，发消息不受影响
@@ -46,9 +49,11 @@ export function useComposeOptions(
     return () => {
       live = false
     }
-  }, [channel, deviceId, harness, sessionId, key, reachable])
+  }, [channel, deviceId, harness, sessionId, key, source, reachable])
   // 刚换了 harness、新的那份还没问回来：不拿上一个 harness 的清单顶着
-  return asked?.key === key ? asked.value : (known.get(key) ?? null)
+  return asked?.key === key
+    ? asked.value
+    : (known.get(key) ?? (!reachable ? lastKnown.get(source) : null) ?? null)
 }
 
 /** 不带设置新建会话时对面会用的模型、强度、权限档。不记着，每次现问；还没问到、问不到是 null */

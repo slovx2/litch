@@ -39,39 +39,46 @@ function parse(source: string, previous: Parsed | null, final: boolean): Parsed 
   return { prefix: stable.map((token) => token.raw).join(''), stable, all }
 }
 
-function inline(tokens: Token[] | undefined): ReactNode {
+function inline(tokens: Token[] | undefined, inLink = false): ReactNode {
   return tokens?.map((token, index) => {
     const key = index
     switch (token.type) {
       case 'strong':
-        return <strong key={key}>{inline((token as Tokens.Strong).tokens)}</strong>
+        return <strong key={key}>{inline((token as Tokens.Strong).tokens, inLink)}</strong>
       case 'em':
-        return <em key={key}>{inline((token as Tokens.Em).tokens)}</em>
+        return <em key={key}>{inline((token as Tokens.Em).tokens, inLink)}</em>
       case 'del':
-        return <del key={key}>{inline((token as Tokens.Del).tokens)}</del>
+        return <del key={key}>{inline((token as Tokens.Del).tokens, inLink)}</del>
       case 'codespan':
         // 整段是工作区里的文件路径的能点开（FileLinks.tsx）
-        return <PolicyCodeSpan key={key} text={(token as Tokens.Codespan).text} />
+        return inLink ? (
+          <code key={key}>{(token as Tokens.Codespan).text}</code>
+        ) : (
+          <PolicyCodeSpan key={key} text={(token as Tokens.Codespan).text} />
+        )
       case 'br':
         return <br key={key} />
       case 'link': {
         const link = token as Tokens.Link
+        // 显式 href 是唯一导航目标；标签仅展示格式，不能再次识别路径、网址或编号。
+        if (inLink) return <span key={key}>{inline(link.tokens, true)}</span>
         return (
           <PolicyLink key={key} href={link.href}>
-            {inline(link.tokens)}
+            {inline(link.tokens, true)}
           </PolicyLink>
         )
       }
       case 'image': {
         // 明确的图片语法才进入受控加载；HTML 与普通链接保持原行为。
         const image = token as Tokens.Image
+        if (inLink) return image.text
         return <PolicyImage key={key} href={image.href} alt={image.text} />
       }
       case 'text': {
         const text = token as Tokens.Text
-        if (text.tokens) return <span key={key}>{inline(text.tokens)}</span>
+        if (text.tokens) return <span key={key}>{inline(text.tokens, inLink)}</span>
         // 可能是这一回合用户提到的会话（SessionMentions.tsx）：对得上的画成片，其余照下面的办
-        return <PolicyText key={key} text={text.text} />
+        return inLink ? text.text : <PolicyText key={key} text={text.text} />
       }
       default:
         // 转义字符、行内 HTML 和以后新出的类型：按原文显示

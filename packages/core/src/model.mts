@@ -580,6 +580,8 @@ export type MessageExtra =
       client?: boolean
       size?: number
       mimeType?: string
+      /** 尚未发送的本地文件内容；发送前上传并替换 path，不进入协议正文或会话队列。 */
+      dataBase64?: string
     }
   /**
    * 选中回答里的一段文字加的评论。quote 是选中的原文，note 是用户写的评论（可以是空的），

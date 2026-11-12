@@ -227,13 +227,13 @@ messages arrived while you were away. Other board tabs retain their own scroll p
   “添加图片”打开系统照片选择器；iOS 的 HEIC 照片转为 JPEG 后加入草稿，单张按转换后大小限制为 8 MiB。
   无法打开相册与无法读取选中图片会分别提示；读取失败时先在系统照片中下载原图，再重新选择。
   照片选择器只读取用户选中的项目，不要求开放整个照片库。聊天目前没有直接拍照入口。
-  图片随消息发往会话设备；“添加文件”中的普通文件则先上传到该设备。发送失败会保留草稿并显示原因。
+  设备未连接时仍可选图、预览图片、移除附件、编辑草稿和选项；只有发送需要连接。图片随消息发往会话设备；普通文件先留在本地草稿，点发送时才上传。发送失败会保留草稿并显示原因。
 
   **Add images** opens the system photo picker. iOS HEIC photos are converted to JPEG, with an
   8 MiB limit per converted image. Separate messages explain picker and image-reading failures;
   download a cloud-only original in Photos before selecting it again. Full-library access is not
   required. Chat does not currently offer a camera action. Images travel with the message, while
-  ordinary files selected through **Add file** upload to the session device first. Failed sends
+  ordinary files selected through **Add file** stay in the local draft and upload on send. Offline drafts still support image picking, image preview, removal and editing. Failed sends
   retain the draft and show the reason.
 - **Scheduled task**: a session run by a scheduled task (or targeted by one) shows a ⏱ clock in the
   title bar; tap it to open the task. 定时任务跑出的会话在标题栏显示时钟，点开是任务详情。

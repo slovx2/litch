@@ -2,6 +2,12 @@
 
 ## Managers
 
+### 看板中的 Mermaid / Mermaid on the board
+
+经理看板的报告、决策背景与讨论、issue 正文与评论、请你做和建议正文支持 Mermaid 代码围栏，图表沿用对话区主题，可切换源码、复制和放大。语法或渲染失败时显示源码。桌面和手机相同。
+
+Manager board Markdown supports Mermaid diagrams in reports, decisions, discussions, issues, requests and suggestions. Diagrams use the conversation renderer and theme, with source, copy and full-screen controls. Rendering errors fall back to source on desktop and phone.
+
 ### issue 与评论 / Issues and comments
 
 issue 使用经理内独立递增的 `X-n`，用于双方共同维护的长期讨论。决策 `D-n`、请你做 `R-n`、

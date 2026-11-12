@@ -3,7 +3,7 @@
 // 缩略图是藏着的画图页画好的 PNG（drawer.ts、MermaidHost.tsx），卡片里只有原生的 Image：滚动时不碰 WebView。
 // 进了屏幕（in-view.ts）才去要，画过的直接从缓存拿。行会被列表回收给别的内容，状态都对着原文记，原文换了就作废。
 import * as Clipboard from 'expo-clipboard'
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useContext, useEffect, useRef, useState } from 'react'
 import {
   Image,
   type LayoutChangeEvent,
@@ -17,7 +17,7 @@ import {
 import { useT } from '../../ui/i18n'
 import { Loading } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
-import { useTranscript } from '../context'
+import { TranscriptContext } from '../context'
 import { type DrawBox, type Drawing, drawer, drawKey, TIMED_OUT } from './drawer'
 import { useInView } from './in-view'
 import { mermaidLook } from './look'
@@ -33,11 +33,18 @@ const MAX_UPSCALE = 1.25
 /** 上一次量到的卡片宽度：滑回来的卡片第一帧就能对上缓存，不用等量完 */
 let lastWidth = 0
 
-export const MermaidCard = memo(function MermaidCard({ source }: { source: string }) {
+export const MermaidCard = memo(function MermaidCard({
+  source,
+  onOpen,
+}: {
+  source: string
+  onOpen?(source: string, svg: string): void
+}) {
   const theme = useTheme()
   const { c, font, radius } = theme
   const t = useT()
-  const { viewMermaid } = useTranscript()
+  const transcript = useContext(TranscriptContext)
+  const viewMermaid = onOpen ?? transcript?.viewMermaid
   const card = useRef<View>(null)
   const { seen: inView, measure } = useInView(card, source)
   const look = mermaidLook(theme)
@@ -144,8 +151,8 @@ export const MermaidCard = memo(function MermaidCard({ source }: { source: strin
         <SourceText source={source} />
       ) : (
         <Pressable
-          disabled={!figure}
-          onPress={() => figure && viewMermaid(source, figure.svg)}
+          disabled={!figure || !viewMermaid}
+          onPress={() => figure && viewMermaid?.(source, figure.svg)}
           accessibilityRole="imagebutton"
           accessibilityLabel={t('mermaid.label')}
           accessibilityHint={t('detail.mermaid.open')}
