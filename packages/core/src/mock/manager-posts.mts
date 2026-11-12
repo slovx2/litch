@@ -1,6 +1,7 @@
 // 模拟帖子保留真实字段和交互语义，时间已是客户端毫秒。
 
 import type { ManagerPost } from '../../../protocol/src/manager-posts.mjs'
+import { managerSuggestionIssueStatus } from '../../../protocol/src/suggestion-inbox.mjs'
 import type { ManagerBoardView } from '../model-manager.mjs'
 import type { SuggestionView } from '../model-suggestions.mjs'
 export function mockPosts(
@@ -85,15 +86,25 @@ export function mockPosts(
       }),
     ),
     ...suggestions.map(
-      ({ proposal, source }): ManagerPost => ({
+      ({ proposal, source, managerReview }): ManagerPost => ({
         id: `S-${proposal.id}`,
         kind: 'suggestion',
         title: proposal.title,
         body: proposal.prompt,
         revision: 1,
         createdAt: proposal.createdAt,
-        updatedAt: proposal.createdAt,
-        fields: { title: proposal.title, body: proposal.prompt, status: proposal.status },
+        updatedAt: proposal.settledAt ?? proposal.createdAt,
+        fields: {
+          title: proposal.title,
+          body: proposal.prompt,
+          status: managerSuggestionIssueStatus(
+            proposal.status,
+            managerReview?.state ?? null,
+            proposal.sourceIsManager === true,
+          ),
+          canStart: proposal.status === 'pending' && managerReview?.state !== 'dismissed',
+          reviewed: managerReview !== undefined && managerReview.state !== 'pending',
+        },
         proposalId: proposal.id,
         sourceThreadId: source.threadId,
         discussion: previous.find((p) => p.proposalId === proposal.id)?.discussion ?? empty(),

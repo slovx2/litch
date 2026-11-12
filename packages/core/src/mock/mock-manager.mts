@@ -40,7 +40,7 @@ const POSTS_COMMANDS = new Set([
 export interface MockManagerHost
   extends Pick<MockTasksHost, 'clock' | 'lang' | 'devices' | 'device' | 'spawn'> {
   summaries?(deviceId: string): readonly import('../model.mjs').SessionSummary[]
-  suggestions?(deviceId: string): readonly SuggestionView[]
+  suggestions?(deviceId: string, includeSettled?: boolean): readonly SuggestionView[]
   say(deviceId: string, threadId: string, prompt: string, answer: string): void
   add(deviceId: string, session: ManagerSessionSummary): void
   mark(deviceId: string, threadId: string, manager: ManagerView): void
@@ -186,9 +186,10 @@ export function createMockManagers(host: MockManagerHost) {
       }
       board.posts = mockPosts(
         board,
-        host.suggestions?.(deviceId).filter((s) => s.managerId === managerId) ?? [],
+        host.suggestions?.(deviceId, true).filter((s) => s.managerId === managerId) ?? [],
       )
     }
+    if (board) issues.sync(key(deviceId, managerId), board)
     return {
       deviceId,
       managerId,
