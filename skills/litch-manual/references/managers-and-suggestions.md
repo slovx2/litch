@@ -10,6 +10,9 @@ Manager board Markdown supports Mermaid diagrams in reports, decisions, discussi
 
 ### issue 与评论 / Issues and comments
 
+概览中的决策、建议、请你做和报告计数分别打开对应类别；普通 issue 列表默认仍只显示普通 issue。
+Decision, suggestion, request and report counts in Overview open their corresponding categories. The ordinary issue list still defaults to ordinary issues only.
+
 issue 使用经理内独立递增的 `X-n`，用于双方共同维护的长期讨论。决策 `D-n`、请你做 `R-n`、
 报告 `P-n` 和建议 `S-…` 保持原编号；`I-n` 仍是经理内部事项。用户和经理各自只能编辑自己的评论，旧正文保留审计。issue 支持开放、进行中、受阻、
 已解决、已关闭五种状态。状态与跟进开关独立，评论不会自动回答决策、交付请求或标记报告已阅。

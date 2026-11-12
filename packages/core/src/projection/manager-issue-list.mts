@@ -92,6 +92,15 @@ export function managerIssueKindFilter(kind: ManagerIssueKind): ManagerIssueFilt
   }
 }
 
+/** 概览入口的预设：显式类型决定目标页签，普通 issue 的默认范围不扩大。 */
+export function managerIssuePreset(patch: Partial<ManagerIssueFilter>): {
+  kind: ManagerIssueKind
+  filter: ManagerIssueFilter
+} {
+  const kind = patch.kinds?.length === 1 ? (patch.kinds[0] ?? 'ordinary') : 'ordinary'
+  return { kind, filter: { ...managerIssueKindFilter(kind), statuses: [], ...patch } }
+}
+
 /** 编号定位采用目标的真实类型和状态，清掉可能隐藏它的条件，只保留该页签的排序。 */
 export function managerIssueLinkFilter(
   issue: Pick<ManagerIssue, 'kind' | 'status'>,

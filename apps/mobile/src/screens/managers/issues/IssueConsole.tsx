@@ -31,6 +31,7 @@ import {
   managerIssueKindFilter,
   managerIssueLinkFilter,
   managerIssuePageKey,
+  managerIssuePreset,
   supportedManagerIssueFilter,
 } from '../../../../../../packages/core/src/projection/manager-issue-list.mts'
 import type {
@@ -204,10 +205,8 @@ export function useIssueConsole({
   useEffect(() => {
     if (!preset || preset.version === applied) return
     setApplied(preset.version)
-    setFilter(
-      { ...kindFilter('ordinary'), statuses: [], ...preset.patch, kinds: ['ordinary'] },
-      'ordinary',
-    )
+    const next = managerIssuePreset(preset.patch)
+    setFilter(next.filter, next.kind)
   }, [preset, applied, setFilter])
   const ordinary = kind === 'ordinary'
   const activeFilters = issueActiveFilterCount(filter, kind)

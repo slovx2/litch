@@ -721,7 +721,12 @@ try {
   )
   await tapId('overview-count:request')
   await wait('[data-testid="issue-capsule:ordinary"]')
-  assert.equal(await checked('issue-capsule:ordinary'), 'true', '概览计数进入 issue 筛选')
+  assert.equal(await checked('issue-capsule:request'), 'true', '概览计数跳到请你做')
+  await wait('[data-testid="issue-card:R-1"]')
+  assert.ok(
+    await read(`!document.querySelector('[data-testid^="issue-card:X-"]')`),
+    '请求入口不混入普通 issue',
+  )
   // 比应用旧的设备服务（本机在跑旧版）：页顶写明哪些不可用、去设备详情升级；入口禁用并写原因，答复照常
   await call('Page.navigate', {
     url: url.replace('scene=manager-console', 'scene=manager-old-device'),
