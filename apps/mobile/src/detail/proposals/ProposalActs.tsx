@@ -148,25 +148,33 @@ export function ProposalActsRow({
   tail,
   blocked = null,
   explain = false,
+  noteFold = false,
 }: {
   acts: ProposalActsState
   tail?: ReactNode
   blocked?: string | null
   explain?: boolean
+  /** 经理看板里：补充说明默认收起，点“补充说明”展开（同决策卡） */
+  noteFold?: boolean
 }) {
   const { c, font } = useTheme()
   const t = useT()
   const { deviceId, proposalId, act, off, worktree } = acts
+  const [noteOpen, setNoteOpen] = useState(false)
+  const noteShown = !noteFold || noteOpen || acts.note !== ''
   return (
     <>
-      <ProposalNote
-        value={acts.note}
-        onChange={acts.setNote}
-        disabled={off}
-        onStart={() => {
-          if (!blocked) acts.start()
-        }}
-      />
+      {noteShown ? (
+        <ProposalNote
+          value={acts.note}
+          onChange={acts.setNote}
+          disabled={off}
+          focus={noteOpen}
+          onStart={() => {
+            if (!blocked) acts.start()
+          }}
+        />
+      ) : null}
       <View style={styles.acts}>
         <Button
           label={t(act.starting ? 'proposal.starting' : 'proposal.start')}
@@ -186,6 +194,15 @@ export function ProposalActsRow({
             testID={`proposal:${proposalId}:here`}
           />
         ) : null}
+        {noteShown ? null : (
+          <Button
+            kind="quiet"
+            label={t('manager.addNote')}
+            disabled={off}
+            onPress={() => setNoteOpen(true)}
+            testID={`proposal:${proposalId}:note-open`}
+          />
+        )}
         <View style={styles.tail}>
           <WorktreeSwitch
             deviceId={deviceId}
@@ -260,6 +277,10 @@ export function ProposalActs(props: {
   prompt: string
   /** 提案上的 widerSandbox：父会话现在比它严就开不成，原因写在按钮下面 */
   wider: SandboxLevel | null
+  /** 经理看板里：补充说明默认收起 */
+  noteFold?: boolean
+  /** 按钮行最末（“⋯”之后）再放的东西，经理看板放讨论入口 */
+  extra?: ReactNode
 }) {
   return props.wider ? (
     <WiderActs {...props} wider={props.wider} />
@@ -276,6 +297,8 @@ function WiderActs(props: {
   sourceIsManager?: boolean
   prompt: string
   wider: SandboxLevel
+  noteFold?: boolean
+  extra?: ReactNode
 }) {
   const blocked = useBlocked(props.deviceId, props.sessionId, props.wider)
   return <ListActs {...props} blocked={blocked} />
@@ -289,6 +312,8 @@ function ListActs({
   blocked,
   sourceIsManager,
   prompt,
+  noteFold,
+  extra,
 }: {
   deviceId: string
   sessionId: string
@@ -297,6 +322,8 @@ function ListActs({
   sourceIsManager?: boolean
   prompt: string
   blocked: string | null
+  noteFold?: boolean
+  extra?: ReactNode
 }) {
   const acts = useProposalActs(deviceId, sessionId, proposalId, worktree, sourceIsManager, prompt)
   const [open, setOpen] = useState(false)
@@ -306,10 +333,14 @@ function ListActs({
         acts={acts}
         blocked={blocked}
         explain
+        noteFold={noteFold}
         tail={
-          acts.menu.length > 0 ? (
-            <MoreButton onPress={() => setOpen(true)} testID={`proposal:${proposalId}:more`} />
-          ) : null
+          <>
+            {acts.menu.length > 0 ? (
+              <MoreButton onPress={() => setOpen(true)} testID={`proposal:${proposalId}:more`} />
+            ) : null}
+            {extra}
+          </>
         }
       />
       <Sheet visible={open} actions={acts.menu} onClose={() => setOpen(false)} />

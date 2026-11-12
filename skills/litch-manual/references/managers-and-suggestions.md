@@ -147,7 +147,7 @@ batch submission on desktop and phone.
 决策、建议、请你做、报告和 issue 的长卡片操作栏会吸附在当前可视区域底部，下方有批量提交栏时贴在它的上沿；
 滑到卡尾时回归原位；操作栏随所属卡片离开，不遮挡正文末行。手机按可用视口避让安全区和键盘。
 操作栏的排法统一：主操作（交付按钮、标记已阅、提交给经理）在最前，忽略、回复等次要操作是不带边框的小按钮，
-唯一的讨论入口是末端的讨论图标和评论数；完整讨论从讨论抽屉的标题行进入。请你做的回复框默认收起，点“回复”展开，已有草稿时保持展开。有选项的决策，补充说明框默认收起，点“补充说明”展开并进入输入，已写内容时保持展开；没有选项的开放题，补充说明框就是答复，始终显示。
+唯一的讨论入口是末端的讨论图标和评论数；完整讨论从讨论抽屉的标题行进入。请你做的回复框默认收起，点“回复”展开，已有草稿时保持展开。有选项的决策，补充说明框默认收起，点“补充说明”展开并进入输入，已写内容时保持展开；没有选项的开放题，补充说明框就是答复，始终显示。看板上的建议卡同样把“补充说明（选填）”收起，点“补充说明”展开；手机控制台抽屉里经理未审核的建议与桌面一致，卡头标“待审核”，正文和操作直接显示，讨论图标排在开始那一行末尾。桌面类别分段始终一行，看板过窄时横向滚动，选中的类别自动滚入可见区。
 
 On desktop and phone, long decision, suggestion, For you, report and issue cards keep their actions
 at the bottom of the visible area, or just above the batch submit bar when it is shown. Actions remain
@@ -159,6 +159,11 @@ comment count at the end. Open the full discussion from the discussion drawer's 
 reply box stays collapsed until you choose Reply, and stays open while it holds a draft.
 For a decision with options, the note box stays collapsed until you choose Add note, and stays open
 while it holds text. An open question without options always shows the box, since the note is the answer.
+Suggestion cards on the board collapse **Additional instructions (optional)** the same way, behind
+**Add note**. In the phone console sheet, a suggestion awaiting manager review shows its body and actions
+directly, as on desktop, with **Awaiting review** in its header; the discussion icon ends the Start row.
+The desktop category tabs stay on one row and scroll sideways when the board is too narrow, keeping the
+selected category in view.
 
 ### 看板键盘提交 / Board keyboard submission
 
@@ -706,7 +711,7 @@ recorded it from chat). Unchosen options are collapsed under **Other options**. 
 a **Closed** block with who closed it and why; a reopened decision shows all options for answering,
 with the **Previous answer** above them and a collapsed **Previously closed** block that keeps the
 reason it was closed. Desktop and phone behave the same. On phone, answering a decision means
-choosing one option and then tapping **Submit to manager** (until you choose or write something, a
+choosing one option and then tapping **Submit** (until you choose or write something, a
 note below the button says so); the chosen option and the text are kept as local drafts if you
 leave, and the card is marked **Draft**. When editing an answer, the previous answer stays visible and its
 option is preselected.

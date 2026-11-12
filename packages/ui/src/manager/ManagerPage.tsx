@@ -249,6 +249,15 @@ export function ManagerPage({
             reports: 'report',
           } as const
         )[tab as 'decisions'] ?? reading.category)
+  // 类别分段放不下时横向滚动：选中的类别滚进可见区
+  const inboxTabs = useRef<HTMLDivElement>(null)
+  const pickedTab = issueMode ? issueKind : activeTab
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 选中项变化时重新对齐
+  useEffect(() => {
+    inboxTabs.current
+      ?.querySelector<HTMLElement>('[aria-pressed="true"]')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [pickedTab])
   const pickIssueKind = (kind: ManagerIssueKind) => {
     reading.ordinary = kind === 'ordinary'
     if (kind !== 'ordinary') reading.category = kind
@@ -576,7 +585,7 @@ export function ManagerPage({
         </div>
         {consoleTab ? (
           <div className="mg-inbox-bar">
-            <div className="mg-inbox-tabs seg">
+            <div className="mg-inbox-tabs seg" ref={inboxTabs}>
               {(['decisions', 'suggestions', 'requests', 'reports'] as const).map((kind) => (
                 <button
                   type="button"

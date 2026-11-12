@@ -391,6 +391,8 @@ export function Issue({
   )
   const suggestion = suggestions.find((s) => s.proposal.id === post.proposalId)
   const pendingReview = suggestion?.managerReview?.state === 'pending'
+  // 控制台抽屉里（inline）同桌面分页详情：待审核状态写在卡头，正文和操作直接显示；列表里仍可收起
+  const reviewFold = pendingReview && !inline
   const writeQuestion = (text: string) => {
     try {
       const drafts = draftFile.read() ?? {}
@@ -737,17 +739,18 @@ export function Issue({
               </Text>
             ) : null}
           </Pressable>
-          {!hideDiscussion && (!pendingReview || unreviewed) ? entry : null}
+          {!hideDiscussion && (!reviewFold || unreviewed) ? entry : null}
         </View>
       )}
       {/* 内嵌在控制台抽屉里：讨论入口进卡尾操作栏，排在最后 */}
-      {inline && !hideDiscussion && (!pendingReview || unreviewed) && !collapsed ? (
+      {/* 建议卡的讨论入口并进开始那一行的末尾（ProposalActs 的 extra），不另起一行 */}
+      {inline && !hideDiscussion && !suggestion && !collapsed ? (
         <CardActions last>{entry}</CardActions>
       ) : null}
-      {pendingReview ? (
+      {reviewFold ? (
         <CardActions>
           <Button
-            kind="plain"
+            kind="quiet"
             label={t('suggestions.unreviewed')}
             onPress={() => setUnreviewed(!unreviewed)}
           />
@@ -778,7 +781,7 @@ export function Issue({
           </Text>
         </Fold>
       ) : null}
-      {(!pendingReview || unreviewed) && !collapsed ? (
+      {(!reviewFold || unreviewed) && !collapsed ? (
         <>
           {suggestion ? <SuggestionMeta row={suggestion} /> : null}
           <IssueRelations id={post.id} />
@@ -844,6 +847,8 @@ export function Issue({
                 worktree={suggestion.proposal.worktree ?? false}
                 prompt={suggestion.proposal.prompt}
                 wider={suggestion.proposal.widerSandbox}
+                noteFold
+                extra={inline && !hideDiscussion ? entry : null}
               />
             </CardActions>
           ) : null}
@@ -1080,7 +1085,7 @@ export function Issue({
                               resetSelection ||
                               (!choice && !reply.trim())
                             }
-                            label={t('manager.submit')}
+                            label={t('manager.submitDecision')}
                             onPress={() => void submitDecision(choice)}
                           />
                           {noteShown ? null : (
@@ -1234,7 +1239,7 @@ export function Issue({
           ) : null}
         </>
       ) : null}
-      {!pendingReview || unreviewed ? discussion : null}
+      {!reviewFold || unreviewed ? discussion : null}
       {error ? (
         <Text accessibilityRole="alert" style={{ color: c.err }}>
           {error}

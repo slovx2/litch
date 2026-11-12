@@ -1,6 +1,6 @@
 // 通用的小控件：按钮、列表行、分组标题、输入框、空状态。圆角、字体、选中样式都跟皮肤走（src/ui/theme.ts）；记号在 marks.tsx。
 // 各页面共用；要加新的通用控件就加在 src/ui/kit/ 下（谁先要谁加，合并时由主线检查有没有重复）。
-import { isValidElement, type ReactNode } from 'react'
+import { isValidElement, type ReactNode, type Ref } from 'react'
 import {
   ActivityIndicator,
   Platform,
@@ -325,7 +325,7 @@ export function Field({
   hint,
   error,
   ...input
-}: TextInputProps & { label: string; hint?: string; error?: string }) {
+}: TextInputProps & { ref?: Ref<TextInput>; label: string; hint?: string; error?: string }) {
   const theme = useTheme()
   const { c } = theme
   return (

@@ -1,5 +1,5 @@
-import { useRef } from 'react'
-import { Platform } from 'react-native'
+import { useEffect, useRef } from 'react'
+import { Platform, type TextInput } from 'react-native'
 import { submitQuestionOnEnter } from '../../../../../packages/ui/src/manager/post-presentation.ts'
 import { useT } from '../../ui/i18n'
 import { Field } from '../../ui/kit/controls'
@@ -10,16 +10,25 @@ export function ProposalNote({
   onChange,
   disabled,
   onStart,
+  focus = false,
 }: {
   value: string
   onChange(value: string): void
   disabled: boolean
   onStart(): void
+  /** 刚点“补充说明”展开：挂上后直接进入输入 */
+  focus?: boolean
 }) {
   const t = useT()
   const skipSubmit = useRef(false)
+  const box = useRef<TextInput>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 只在挂上时取一次焦点
+  useEffect(() => {
+    if (focus) box.current?.focus()
+  }, [])
   return (
     <Field
+      ref={box}
       label={t('proposal.note')}
       accessibilityLabel={t('proposal.note')}
       testID="proposal-note"
