@@ -94,11 +94,16 @@ if (!process.versions.electron) {
         assert.ok(large.buttonsFit, `${skin} 评论按钮裁字`)
         results.push({ skin, normal, large })
         await shot(`comment-max-${skin}`)
-        await run(() =>
+        await run(async () => {
           document
             .querySelector('.cmt-edit-text')
-            .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
-        )
+            .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+          // 取消会在下一帧把焦点交还原控件；完成后才能开始下一轮选字，避免新选区被清掉。
+          await window.m7.until(() => !document.querySelector('.cmt-edit'))
+          await window.m7.settle()
+          if (document.activeElement !== document.querySelector('.dock .cmp-text'))
+            throw new Error('取消评论后焦点没有回到会话输入框')
+        })
       }
       // 右下角和低矮窗口下重新定位，引用展开、长评论仍可滚动访问按钮。
       win.setSize(760, 540)
