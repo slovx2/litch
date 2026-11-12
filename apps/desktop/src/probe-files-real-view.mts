@@ -56,8 +56,8 @@ export async function realView(args: {
 }): Promise<RealView> {
   const kit = (window as unknown as { __filesKit: FilesKit }).__filesKit
   const { until, one, all, text, frame } = kit
-  // macOS 的临时目录可能以 /var 或 /private/var 返回；两者是同一设备路径。
-  const canonical = (path: string) => path.replace(/^\/private(?=\/var\/)/, '')
+  // macOS 的 /var、/tmp 及其 /private 别名都指向同一临时路径。
+  const canonical = (path: string) => path.replace(/^\/private(?=\/(?:var|tmp)\/)/, '')
   const relative = (path: string) =>
     canonical(path).startsWith(`${canonical(kit.root())}/`)
       ? canonical(path).slice(canonical(kit.root()).length + 1)
