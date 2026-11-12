@@ -326,11 +326,11 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   const quotable = names.includes('在输入框里引用')
   // 本机分组只记在这台客户端上，和设备能不能整理无关：单独核对，不算进设备的整理项
   const localGroup = (name: string | null) =>
-    name === '加入本机分组' ||
+    name === '加入本地分组' ||
     name === '上移' ||
     name === '下移' ||
     (name?.startsWith('从“') === true && name.endsWith('”移出'))
-  const joinable = names.includes('加入本机分组')
+  const joinable = names.includes('加入本地分组')
   const organizing = names
     .slice(0, -3)
     .filter(

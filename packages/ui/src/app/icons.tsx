@@ -136,6 +136,10 @@ export const Close = glyph('M4 4l8 8M12 4l-8 8')
 /** 勾：多选的选项里挑中了 */
 export const Check = glyph('M3.5 8.5l3 3 6-7')
 export const Plus = glyph('M8 3.5v9M3.5 8h9')
+/** 问号：圆圈里一个问号，旁边浮出说明（HelpTip） */
+export const Help = glyph(
+  'M8 13.5a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zM6.4 6.4a1.6 1.6 0 1 1 2.3 1.4c-.5.3-.7.6-.7 1.1v.4M8 11v.3',
+)
 /** 图片：一个画框，里面一道山和一个太阳 */
 export const Picture = glyph('M2.5 3.5h11v9h-11zM2.5 10.5l3-3 2.5 2.5 1.5-1.5 4 4M10.5 6.2v.1')
 /** 归档：一个带盖的盒子 */

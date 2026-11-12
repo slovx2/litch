@@ -584,8 +584,8 @@ export function judgeMockFull(probe: MockFullProbe): string[] {
   must(probe.leftNote.length > 0, '信息卡里没有说它的会话是上次留下的')
   must(probe.downRows >= 1, '不可用的 harness 的会话那一行看不出用不了')
   must(
-    probe.downRowMenu === '置顶|移到组…|加入本机分组',
-    `不可用的 harness 的会话那一行，菜单里该只剩“置顶”“移到组”“加入本机分组”：${probe.downRowMenu}`,
+    probe.downRowMenu === '置顶|移到组…|加入本地分组',
+    `不可用的 harness 的会话那一行，菜单里该只剩“置顶”“移到组”“加入本地分组”：${probe.downRowMenu}`,
   )
   must(
     probe.defaultHarness === 'Claude Code',

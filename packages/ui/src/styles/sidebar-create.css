@@ -1,0 +1,50 @@
+/* 侧栏“+”新建菜单（sidebar/CreateMenu.tsx）与菜单项旁的问号说明（app/HelpTip.tsx） */
+/* “+”新建菜单：样子和筛选、“更多”一样，夹在两者之间；空白处右键弹的也是它 */
+.sb-create {
+  position: relative;
+  flex: none;
+  margin-left: -6px;
+}
+.sb-create > .ibtn[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--ink);
+}
+.sb-create .pick-pop {
+  min-width: 180px;
+}
+.sb-create .pick-opt b {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+/* 名字后面的问号（app/HelpTip.tsx）：淡色小图标，悬停浮出说明 */
+.help-q {
+  flex: none;
+  display: inline-flex;
+  color: var(--ink-3);
+  cursor: help;
+}
+.help-q:hover {
+  color: var(--ink);
+}
+.help-q > svg.ic {
+  width: 13px;
+  height: 13px;
+}
+.help-tip {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: max-content;
+  max-width: min(240px, calc(100vw - 16px));
+  padding: 6px 9px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--overlay);
+  box-shadow: var(--shadow);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: normal;
+  line-height: 18px;
+  pointer-events: none;
+}

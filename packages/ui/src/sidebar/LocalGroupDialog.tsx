@@ -1,4 +1,4 @@
-// 新建一个本机分组，或者给它改名。本机分组只存在这台客户端上，可以混装任何设备的会话；只问名字，不问设备。
+// 新建一个本地分组，或者给它改名。本地分组只存在这台客户端上，可以混装任何设备的会话；只问名字，不问设备。
 import { GROUP_NAME_MAX, type LocalGroup, type SessionRef } from '@litch/core'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'

@@ -58,6 +58,7 @@ import { TitleSearchButton } from '../search/FindButton.tsx'
 import { useBrowserWants } from '../side/browser/store.ts'
 import { SpawnDialog } from '../tree/SpawnDialog.tsx'
 import { offerUndo } from './archive-undo.ts'
+import { CreateMenu } from './CreateMenu.tsx'
 import { cwdMark } from './cwd.ts'
 import {
   type Band,
@@ -119,6 +120,7 @@ import {
   useSidebarShowActive,
 } from './state.ts'
 import { TallyMarks, TreeUnreadContext } from './TallyMarks.tsx'
+import { TreeSum } from './TreeSum.tsx'
 import { kidsShown, MAX_DEPTH, nestedUnder, treeUnread, withAncestors } from './tree.ts'
 import { WorkspaceActions } from './WorkspaceActions.tsx'
 import { WorkspaceDialog } from './WorkspaceDialog.tsx'
@@ -159,7 +161,7 @@ interface RowProps {
   onFold?(): void
   projectionTime?: { kind: 'recent' | 'unread'; at: number } | undefined
   deviceLabel?: string | undefined
-  /** 快捷区（置顶、本机分组）的行：行首一个设备连线色块，设备名在悬停与读屏中保留 */
+  /** 快捷区（置顶、本地分组）的行：行首一个设备连线色块，设备名在悬停与读屏中保留 */
   tick?: boolean
   /** 快捷区里的位置：菜单里多上移、下移 */
   place?: ShortcutPlace | undefined
@@ -216,7 +218,7 @@ const SessionRow = memo(function SessionRow({
   const [spawning, setSpawning] = useState(false)
   /** 开着“新建组”的对话框：建好之后把这个会话放进去 */
   const [grouping, setGrouping] = useState(false)
-  /** 开着“新建本机分组”的对话框：建好时这个会话已经在里面 */
+  /** 开着“新建本地分组”的对话框：建好时这个会话已经在里面 */
   const [localGrouping, setLocalGrouping] = useState(false)
   const field = useRef<HTMLInputElement>(null)
   const menu = useRef<RowMenuHandle>(null)
@@ -364,7 +366,7 @@ const SessionRow = memo(function SessionRow({
         },
       })
   }
-  // 本机分组：只记在这台客户端上，设备没连着也能做。已在某个组里的多一项移出
+  // 本地分组：只记在这台客户端上，设备没连着也能做。已在某个组里的多一项移出
   if (organizer?.status === 'ok') {
     const home = groupOfMember(organizer, { deviceId, sessionId })
     actions.push({
@@ -383,7 +385,7 @@ const SessionRow = memo(function SessionRow({
     })
     if (home) actions.push({ id: 'unlocal', title: t('local.leave', { name: home.name }) })
   }
-  // 快捷区里的先后（置顶区、本机组）：键盘和菜单排序
+  // 快捷区里的先后（置顶区、本地分组）：键盘和菜单排序
   if (place && place.index > 0) actions.push({ id: 'up', title: t('section.up') })
   if (place && place.index < place.count - 1) actions.push({ id: 'down', title: t('section.down') })
   // 在眼前的输入框里引用这个会话（写成 @[标题]）：只引用得了同一台设备上的别的会话，输入区自己判断。
@@ -505,7 +507,7 @@ const SessionRow = memo(function SessionRow({
         data-parent={
           nested ? (summary.lineage?.parentId ?? summary.nativeLineage?.parentId ?? '') : undefined
         }
-        // 都能拖进本机分组；能整理的设备上还能拖进置顶、设备分组，或者拖回自己的项目（落点自己判断）
+        // 都能拖进本地分组；能整理的设备上还能拖进置顶、设备分组，或者拖回自己的项目（落点自己判断）
         draggable
         onDragStart={(event) =>
           beginDrag(event, {
@@ -1001,13 +1003,7 @@ function ProjectedDeviceBlock({
   const { kind, block, byProject } = projection
   const deviceId = block.deviceId
   const projections = useKey<SidebarProjections>(keys.sidebarProjections(deviceId))
-  // 这台设备上经理会话的标识：主项是经理的，记号列画经理框（只认身份，不改归并与选中）
-  const managerIds = useKey<string[]>(keys.managerIds(deviceId)) ?? NO_IDS
-  const managerThreads = new Set(
-    useKeys<ManagerView>(managerIds.map((id) => keys.manager(deviceId, id))).map(
-      (entry) => entry?.threadId,
-    ),
-  )
+  const managerThreads = useManagerThreads(deviceId)
   const device = useKey<DeviceView>(keys.device(deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
   const sections = useKey<SectionView[]>(keys.sections(deviceId)) ?? NO_SECTIONS
@@ -1017,7 +1013,7 @@ function ProjectedDeviceBlock({
   const [editing, setEditing] = useState<WorkspaceView | null>(null)
   const [grouping, setGrouping] = useState<{ then(id: string): void } | null>(null)
   const t = useT()
-  // 跨设备的区：和置顶区、本机分组同一套规矩，行首设备色块，多台设备时写设备名（离线带上）
+  // 跨设备的区：和置顶区、本地分组同一套规矩，行首设备色块，多台设备时写设备名（离线带上）
   const deviceLabel = useShortcutDeviceLabel(deviceId)
   if (!device) return null
   const workspace = workspaces.find((entry) => entry.id === block.workspaceId)
@@ -1073,16 +1069,7 @@ function ProjectedDeviceBlock({
         {kids.length > 0 ? (
           <div className="tree-kids">
             {shut ? (
-              <button
-                type="button"
-                className="tree-sum"
-                aria-expanded="false"
-                title={t('tree.unfold', { n: kids.length })}
-                onClick={fold}
-              >
-                <Caret />
-                <span className="ell">{t('tree.tucked', { n: kids.length })}</span>
-              </button>
+              <TreeSum kids={kids.length} tucked={kids.length} onUnfold={fold} />
             ) : (
               kids.map((id) => tree(id, depth + 1))
             )}
@@ -1163,6 +1150,16 @@ function ProjectedDeviceBlock({
   )
 }
 
+/** 这台设备上经理会话的标识：主项是经理的，记号列画经理框（只认身份，不改归并与选中） */
+function useManagerThreads(deviceId: string): ReadonlySet<string | undefined> {
+  const managerIds = useKey<string[]>(keys.managerIds(deviceId)) ?? NO_IDS
+  return new Set(
+    useKeys<ManagerView>(managerIds.map((id) => keys.manager(deviceId, id))).map(
+      (entry) => entry?.threadId,
+    ),
+  )
+}
+
 /** 设备不止一台时，快捷区的行写上设备名（只有一台时色块就够了） */
 function useShortcutDeviceLabel(deviceId: string): string | undefined {
   const t = useT()
@@ -1171,7 +1168,7 @@ function useShortcutDeviceLabel(deviceId: string): string | undefined {
   return device && many ? t.text(device.name) : undefined
 }
 
-/** 快捷区（全局置顶、本机分组）里的一行会话：和设备树同一种行，多设备色块，设备名留在悬停和读屏信息中 */
+/** 快捷区（全局置顶、本地分组）里的一行会话：和设备树同一种行，多设备色块，设备名留在悬停和读屏信息中 */
 function ShortcutSession({
   props,
   onSelect,
@@ -1180,11 +1177,14 @@ function ShortcutSession({
   onSelect(selection: Selection): void
 }) {
   const deviceLabel = useShortcutDeviceLabel(props.deviceId)
+  // 经理会话放进置顶、本地分组：和“最近 / 未读”一样画经理框
+  const managerThreads = useManagerThreads(props.deviceId)
   return (
     <SessionRow
       deviceId={props.deviceId}
       sessionId={props.sessionId}
       source={props.source}
+      manager={!props.nested && managerThreads.has(props.sessionId)}
       onSelect={onSelect}
       nested={props.nested}
       kids={props.kids}
@@ -1521,18 +1521,12 @@ function DeviceGroup(props: GroupProps) {
           <div className="tree-kids">
             {visible.map((id) => tree(id, depth + 1))}
             {tucked > 0 ? (
-              <button
-                type="button"
-                className="tree-sum"
-                aria-expanded="false"
-                title={t('tree.unfold', { n: kids.length })}
-                onClick={() => fold(sessionId)}
-              >
-                <Caret />
-                <span className="ell">
-                  {t(visible.length > 0 ? 'tree.tuckedMore' : 'tree.tucked', { n: tucked })}
-                </span>
-              </button>
+              <TreeSum
+                kids={kids.length}
+                tucked={tucked}
+                more={visible.length > 0}
+                onUnfold={() => fold(sessionId)}
+              />
             ) : null}
           </div>
         ) : null}
@@ -2257,6 +2251,13 @@ function DeviceGroup(props: GroupProps) {
   )
 }
 
+/** 侧栏里右键点在空白处：不在任何一行、按钮、提示或菜单上 */
+const blankSpot = (target: EventTarget | null): boolean =>
+  target instanceof Element &&
+  !target.closest(
+    '.row-line, button, a, input, textarea, [role="menu"], [popover], .band-empty, .dev-note, .sc-note, .filter-hid, .ss-more, .info-card',
+  )
+
 interface SidebarProps {
   mode: 'chat' | 'manager'
   onMode(mode: 'chat' | 'manager'): void
@@ -2338,6 +2339,8 @@ export function Sidebar(props: SidebarProps) {
   }, [])
   // 没开着哪一页、也没选中会话：主区域里就是新建对话页
   const composing = page === null && selection === null
+  /** 顶上“+”的那份新建菜单：空白处右键也弹它 */
+  const createMenu = useRef<RowMenuHandle>(null)
   const shownIds = focus && deviceIds.includes(focus.deviceId) ? [focus.deviceId] : deviceIds
   return (
     <SidebarReveal value={reveal}>
@@ -2396,11 +2399,21 @@ export function Sidebar(props: SidebarProps) {
               </button>
               <TitleSearchButton />
               <HarnessFilter />
+              <CreateMenu handle={createMenu} onCompose={() => onCompose(null)} />
               <SidebarMore />
             </>
           )}
         </div>
-        <div className="sb-scroll">
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: 空白处右键是“+”菜单的快捷方式，键盘走顶上的按钮 */}
+        <div
+          className="sb-scroll"
+          onContextMenu={(event) => {
+            // 只认空白处：点在条目（会话、分组、设备、提示）上的右键照旧归各自的菜单
+            if (props.mode !== 'chat' || !blankSpot(event.target)) return
+            event.preventDefault()
+            createMenu.current?.openAt(event.clientX, event.clientY)
+          }}
+        >
           {props.mode === 'manager' ? (
             <ManagerSidebar
               managers={props.managers}

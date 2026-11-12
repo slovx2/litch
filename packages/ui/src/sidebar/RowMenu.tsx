@@ -1,5 +1,14 @@
-import { type RefObject, useEffect, useImperativeHandle, useLayoutEffect, useState } from 'react'
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useLayoutEffect,
+  useState,
+} from 'react'
 import { wireStyle } from '../app/device.ts'
+import { HelpTip } from '../app/HelpTip.tsx'
 import { Check, More } from '../app/icons.tsx'
 import { usePopover } from '../app/popover.ts'
 
@@ -23,6 +32,8 @@ export interface RowAction {
   choices?: { title: string; back: string; options: RowChoice[] }
   /** 现在做不了：淡下去。给了字的，下面一行写为什么 */
   disabled?: string | true
+  /** 名字后面一个问号，悬停浮出这句说明（读屏随这一项念出） */
+  help?: string
 }
 
 export interface RowChoice {
@@ -38,10 +49,22 @@ interface RowMenuProps {
   actions: RowAction[]
   onAction(id: string, choice?: string): void
   handle?: RefObject<RowMenuHandle | null>
+  /** 按钮上的图标，默认是“更多” */
+  icon?: ReactNode
+  /** 外框的类名，默认是行尾的 row-more（悬停才出） */
+  className?: string
 }
 
 /** 侧栏一行行尾的“更多”：点开是这一行能做的事。在行上点右键出的也是这一份，只是弹在鼠标那里 */
-export function RowMenu({ label, actions, onAction, handle }: RowMenuProps) {
+export function RowMenu({
+  label,
+  actions,
+  onAction,
+  handle,
+  icon,
+  className = 'row-more',
+}: RowMenuProps) {
+  const helpId = useId()
   const [asking, setAsking] = useState<RowAction | null>(null)
   /** 正在“再挑一个”的那一项 */
   const [choosing, setChoosing] = useState<RowAction | null>(null)
@@ -124,7 +147,7 @@ export function RowMenu({ label, actions, onAction, handle }: RowMenuProps) {
   }
 
   return (
-    <div className={open ? 'row-more on' : 'row-more'} ref={root}>
+    <div className={open ? `${className} on` : className} ref={root}>
       <button
         ref={trigger}
         type="button"
@@ -142,7 +165,7 @@ export function RowMenu({ label, actions, onAction, handle }: RowMenuProps) {
           }
         }}
       >
-        <More />
+        {icon ?? <More />}
       </button>
       {open ? (
         // biome-ignore lint/a11y/noStaticElementInteractions: 键盘事件是从里面的按钮冒上来的
@@ -218,11 +241,15 @@ export function RowMenu({ label, actions, onAction, handle }: RowMenuProps) {
                   className="pick-opt"
                   data-action={action.id}
                   aria-disabled={action.disabled !== undefined || undefined}
+                  aria-describedby={action.help ? `${helpId}-${action.id}` : undefined}
                   onClick={() => run(action)}
                 >
                   <b>
                     {action.title}
                     {action.checked ? <Check /> : null}
+                    {action.help ? (
+                      <HelpTip id={`${helpId}-${action.id}`} text={action.help} />
+                    ) : null}
                   </b>
                   {typeof action.disabled === 'string' ? <span>{action.disabled}</span> : null}
                 </button>

@@ -185,7 +185,7 @@ export async function organizeProbe(second: string): Promise<OrganizeProbe> {
   await until('这一行显示成用不了', isDown)
   const downPop = await menuOf(lineOf(TIMEOUT), TIMEOUT)
   seen.downMenu = items(downPop)
-  const downMenu = seen.downMenu === '置顶|移到组…|加入本机分组'
+  const downMenu = seen.downMenu === '置顶|移到组…|加入本地分组'
   one<HTMLButtonElement>('.pick-opt[data-action="pin"]', downPop)?.click()
   const pinnedWhileDown =
     Boolean(await until('掉线的时候置了顶', () => groupOf(TIMEOUT) === ':pinned')) && isDown()

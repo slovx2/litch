@@ -77,7 +77,7 @@ export function tallyParts(tally: GroupTally): TallyPart[] {
   return parts.filter((part) => part.count > 0)
 }
 
-/** 几个会话合起来的状况：快捷区（置顶、本机分组）跨设备，没有按组算好的键，按摘要现数 */
+/** 几个会话合起来的状况：快捷区（置顶、本地分组）跨设备，没有按组算好的键，按摘要现数 */
 export function tallySummaries(
   summaries: readonly (
     | Pick<SessionSummary, 'status' | 'waitingFor' | 'unread' | 'background'>

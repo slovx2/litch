@@ -1,4 +1,4 @@
-/* 侧栏最上面的快捷区：全局置顶、本机分组（sidebar/Shortcuts.tsx）。标题行沿用“未读 / 最近”的画法，
+/* 侧栏最上面的快捷区：全局置顶、各个本地分组（sidebar/Shortcuts.tsx）。标题行沿用“未读 / 最近”的画法，
    里面的对话不按设备分层，每行行首一个设备连线色块（颜色是设备的线色，和状态记号分开） */
 .sc-group {
   margin-bottom: 8px;
@@ -97,4 +97,20 @@
 /* 快捷区项目行的设备名比投影里的略宽；会话行不常显设备名。 */
 .sc-body .projection-device {
   max-width: 14ch;
+}
+/* 本地分组的标题行：行尾的“更多”平时藏着，悬停、聚焦、菜单开着才出（投影标题是常显的） */
+.sc-head.projection-head > .row-more {
+  opacity: 0;
+}
+.sc-head.projection-head:hover > .row-more,
+.sc-head.projection-head > .row-more:is(:focus-within, .on) {
+  opacity: 1;
+}
+/* 本地分组文件读不了：一行提示，占在各组上面 */
+.sc-fault {
+  margin-inline: 8px;
+}
+/* 还没有组时拖着会话露出的落点 */
+.band-empty.sc-new {
+  margin: 0 8px 8px;
 }
