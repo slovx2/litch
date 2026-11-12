@@ -771,6 +771,13 @@ try {
   await openDiscussion('D-15')
   await fill(question, '保留的追问草稿')
   await click('[data-issue="D-15"] [data-act="manager-edit-answer"]')
+  // 有选项的决策先展开补充说明，再验证修改与取消，不能直接填写尚未挂载的输入框。
+  if (
+    !(await read(
+      '!!document.querySelector(\'[data-decision="D-15"] [data-act="manager-answer"]\')',
+    ))
+  )
+    await click('[data-issue="D-15"] [data-act="manager-answer-open"]')
   await fill('[data-decision="D-15"] [data-act="manager-answer"]', '放弃这次答案修改')
   assert.equal(
     await read(
