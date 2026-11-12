@@ -4,9 +4,9 @@
 
 ### 看板中的 Mermaid / Mermaid on the board
 
-经理看板的报告、决策背景与讨论、issue 正文与评论、请你做和建议正文支持 Mermaid 代码围栏，图表沿用对话区主题，可切换源码、复制和放大。语法或渲染失败时显示源码。桌面和手机相同。
+经理看板的报告、决策背景与讨论、issue 正文与评论、请你做和建议正文支持 Mermaid 代码围栏，图表沿用对话区主题，卡头可切换图和源码，复制和放大是图标按钮（悬停或读屏显示名称）。语法或渲染失败时显示源码。桌面和手机相同。
 
-Manager board Markdown supports Mermaid diagrams in reports, decisions, discussions, issues, requests and suggestions. Diagrams use the conversation renderer and theme, with source, copy and full-screen controls. Rendering errors fall back to source on desktop and phone.
+Manager board Markdown supports Mermaid diagrams in reports, decisions, discussions, issues, requests and suggestions. Diagrams use the conversation renderer and theme. The card header switches between diagram and source; copy and enlarge are icon buttons, named in tooltips and for screen readers. Rendering errors fall back to source on desktop and phone.
 
 ### issue 与评论 / Issues and comments
 
@@ -147,7 +147,7 @@ batch submission on desktop and phone.
 决策、建议、请你做、报告和 issue 的长卡片操作栏会吸附在当前可视区域底部，下方有批量提交栏时贴在它的上沿；
 滑到卡尾时回归原位；操作栏随所属卡片离开，不遮挡正文末行。手机按可用视口避让安全区和键盘。
 操作栏的排法统一：主操作（交付按钮、标记已阅、提交给经理）在最前，忽略、回复等次要操作是不带边框的小按钮，
-唯一的讨论入口是末端的讨论图标和评论数；完整讨论从讨论抽屉的标题行进入。请你做的回复框默认收起，点“回复”展开，已有草稿时保持展开。
+唯一的讨论入口是末端的讨论图标和评论数；完整讨论从讨论抽屉的标题行进入。请你做的回复框默认收起，点“回复”展开，已有草稿时保持展开。有选项的决策，补充说明框默认收起，点“补充说明”展开并进入输入，已写内容时保持展开；没有选项的开放题，补充说明框就是答复，始终显示。
 
 On desktop and phone, long decision, suggestion, For you, report and issue cards keep their actions
 at the bottom of the visible area, or just above the batch submit bar when it is shown. Actions remain
@@ -157,6 +157,8 @@ the main action (the delivery button, Mark as read or Submit to manager) comes f
 such as Ignore and Reply are borderless, and the only discussion entry is the discussion icon with its
 comment count at the end. Open the full discussion from the discussion drawer's title row. The For you
 reply box stays collapsed until you choose Reply, and stays open while it holds a draft.
+For a decision with options, the note box stays collapsed until you choose Add note, and stays open
+while it holds text. An open question without options always shows the box, since the note is the answer.
 
 ### 看板键盘提交 / Board keyboard submission
 

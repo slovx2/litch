@@ -492,19 +492,45 @@
 .file-link-details summary:hover {
   color: var(--ink-2);
 }
-.file-link-details dl {
+.file-link-details dl,
+.file-link-pop dl {
   margin: 6px 0 0;
 }
-.file-link-details dt {
+.file-link-details dt,
+.file-link-pop dt {
   color: var(--ink-3);
 }
-.file-link-details dd {
+.file-link-details dd,
+.file-link-pop dd {
   margin: 0 0 6px;
   font-family: var(--mono);
 }
-.file-link-details .file-link-reason {
+.file-link-details .file-link-reason,
+.file-link-pop .file-link-reason {
   color: var(--err);
   font-family: var(--ui);
+}
+/* 文件查看器标题栏 info 图标的浮层：顶层 popover，位置由脚本按图标算 */
+.file-link-pop {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: max-content;
+  max-width: min(420px, calc(100vw - 16px));
+  max-height: min(60vh, 420px);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--overlay);
+  box-shadow: var(--shadow);
+  color: var(--ink-2);
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
+}
+.file-link-pop dl {
+  margin-top: 0;
 }
 .file-link-dialog .modal-body {
   overflow-wrap: anywhere;

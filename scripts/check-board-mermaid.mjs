@@ -23,7 +23,7 @@ await browserFixture(
       await wait('!!document.querySelector("[data-testid=mermaid-viewer]")')
       await shot('mobile-board-mermaid-viewer')
     } else {
-      await wait('document.querySelectorAll(".mmd svg").length===6')
+      await wait('document.querySelectorAll(".mmd-fig svg").length===6')
       await wait('!!document.querySelector(".mmd-err")')
       assert.equal(
         await read(
@@ -35,7 +35,7 @@ await browserFixture(
         await read(
           `window.__litchLook.set({skin:${JSON.stringify(skin)},theme:'dark',lang:'zh-CN'})`,
         )
-        await wait('document.querySelectorAll(".mmd svg").length===6')
+        await wait('document.querySelectorAll(".mmd-fig svg").length===6')
         await shot('desktop-board-mermaid-' + skin)
       }
     }

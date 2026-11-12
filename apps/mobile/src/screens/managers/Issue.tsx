@@ -239,6 +239,8 @@ export function Issue({
   /** 正在填忽略理由；null 是没在填 */
   // 请你做的回复框默认收起，点“回复”才展开；已有草稿或正在修改回复时一直展开
   const [replyOpen, setReplyOpen] = useState(false)
+  // 有选项的决策，补充说明默认收起；开放题（没有选项）输入框就是答复，一直显示
+  const [noteOpen, setNoteOpen] = useState(false)
   const replyInput = useRef<TextInput>(null)
   const [requestIgnore, setRequestIgnore] = useState<{ revision: number; reason: string } | null>(
     null,
@@ -507,6 +509,7 @@ export function Issue({
   ]
     .filter(Boolean)
     .join(' · ')
+  const noteShown = !decision?.options.length || noteOpen || Boolean(reply.trim())
   const replyShown = replyOpen || Boolean(reply.trim()) || (editing && request?.status !== 'open')
   const entry = (
     <Pressable
@@ -1054,16 +1057,19 @@ export function Issue({
                           />
                         ))}
                       </View>
-                      <TextInput
-                        testID={`decision-input:${decision.id}`}
-                        accessibilityLabel={t('manager.answer')}
-                        placeholder={t('manager.answer')}
-                        placeholderTextColor={c.ink3}
-                        style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
-                        multiline
-                        value={reply}
-                        onChangeText={writeReply}
-                      />
+                      {noteShown ? (
+                        <TextInput
+                          ref={replyInput}
+                          testID={`decision-input:${decision.id}`}
+                          accessibilityLabel={t('manager.answer')}
+                          placeholder={t('manager.answer')}
+                          placeholderTextColor={c.ink3}
+                          style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
+                          multiline
+                          value={reply}
+                          onChangeText={writeReply}
+                        />
+                      ) : null}
                       <CardActions primary>
                         <View style={styles.barGroup}>
                           <Button
@@ -1077,6 +1083,19 @@ export function Issue({
                             label={t('manager.submit')}
                             onPress={() => void submitDecision(choice)}
                           />
+                          {noteShown ? null : (
+                            <Button
+                              kind="quiet"
+                              testID={`decision-note-open:${decision.id}`}
+                              disabled={locked}
+                              label={t('manager.addNote')}
+                              onPress={() => {
+                                setNoteOpen(true)
+                                // 展开后直接进入输入
+                                requestAnimationFrame(() => replyInput.current?.focus())
+                              }}
+                            />
+                          )}
                           {choice ? (
                             <Button
                               kind="quiet"

@@ -42,6 +42,7 @@ import type { PreviewScope } from './contract.ts'
 import { rendererFor } from './registry.ts'
 import { PreviewResources } from './resources.ts'
 import './preview.css'
+import { FileLinkInfo } from '../FileLinkDetails.tsx'
 
 class PreviewBoundary extends Component<
   { children: ReactNode; fallback: ReactNode },
@@ -301,6 +302,7 @@ export function PreviewPanel({
         <span className="ell grow" title={tab.path}>
           {relativeTo(root, tab.path)}
         </span>
+        {tab.link ? <FileLinkInfo result={tab.link} /> : null}
         {text ? (
           <span className="seg">
             <button

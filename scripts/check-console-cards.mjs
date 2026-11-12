@@ -160,7 +160,10 @@ try {
       ['D-2', 'D-5'],
     )
     assert.equal(
-      await read(`document.querySelector('[data-testid="manager-issue:D-3"] textarea').value`),
+      // 有选项的决策清空后补充说明收起，输入框不在或为空都算清空
+      await read(
+        `document.querySelector('[data-testid="manager-issue:D-3"] textarea')?.value ?? ''`,
+      ),
       '',
     )
     await until(

@@ -114,6 +114,11 @@ try {
     })
     await wait('[data-testid="decision-submit:D-20"]')
     const frameMs = await until(() => read('window.__managerFirstFrame'), '手机首帧')
+    // 有选项的决策补充说明默认收起，先展开
+    await read(
+      `document.querySelector('[data-testid="manager-issue:D-20"] textarea') || document.querySelector('[data-testid="decision-note-open:D-20"]')?.click()`,
+    )
+    await wait('[data-testid="manager-issue:D-20"] textarea')
     await read(
       `(()=>{let e=document.querySelector('[data-testid="manager-issue:D-20"] textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,'按此执行');e.dispatchEvent(new Event('input',{bubbles:true}));window.__managerBoardFixture.fail=true})()`,
     )
@@ -174,6 +179,10 @@ try {
       15,
     )
     await click('[data-decision="D-20"] .mg-post-history summary')
+    await read(
+      `(()=>{const d=document.querySelector('[data-decision="D-20"]');return d?.querySelector('textarea') || (d?.closest('[data-issue]') ?? d)?.querySelector('[data-act="manager-answer-open"]')?.click()})()`,
+    )
+    await wait('[data-decision="D-20"] textarea')
     await read(
       `(()=>{let e=document.querySelector('[data-decision="D-20"] textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,'按此执行');e.dispatchEvent(new Event('input',{bubbles:true}));window.__managerBoardFixture.fail=true})()`,
     )

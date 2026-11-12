@@ -226,6 +226,7 @@ export const enManager = {
   'manager.unignore': 'Undo ignore',
   'manager.reopenedBy': 'Reopened by the manager',
   'manager.recommend': 'Recommended',
+  'manager.addNote': 'Add note',
   'manager.answer': 'Add context or write an answer',
   'manager.basis': 'Basis',
   'manager.checked': 'Last checked {time}',

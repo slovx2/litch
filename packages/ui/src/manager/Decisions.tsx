@@ -110,6 +110,9 @@ export function Decisions({
   const [editing, setEditing] = useState<Set<string>>(new Set())
   /** 正在填忽略理由的那张卡 */
   const [ignoring, setIgnoring] = useState<{ id: ManagerDecisionId; reason: string } | null>(null)
+  // 有选项的决策，补充说明默认收起，点“补充说明”才展开；开放题（没有选项）输入框就是答复，一直显示
+  const [noting, setNoting] = useState<ReadonlySet<string>>(new Set())
+  const noteFocus = useRef<string | null>(null)
   const cards = useRef<HTMLDivElement>(null)
   const listHead = useRef<HTMLDivElement>(null)
   const [submittedFocus, setSubmittedFocus] = useState<{
@@ -607,23 +610,48 @@ export function Decisions({
                           </button>
                         ) : null}
                       </fieldset>
-                      <textarea
-                        data-act="manager-answer"
-                        className="req-input"
-                        rows={2}
-                        aria-label={t('manager.answer')}
-                        placeholder={t('manager.answer')}
-                        disabled={disabled || busy}
-                        value={draft?.text ?? ''}
-                        onKeyDown={(event) => {
-                          if (!submitQuestionOnEnter(event.nativeEvent)) return
-                          event.preventDefault()
-                          if (draft?.optionId || draft?.text.trim()) void submit()
-                        }}
-                        onChange={(event) => change(decision, { text: event.target.value })}
-                      />
+                      {!decision.options.length || draft?.text || noting.has(decision.id) ? (
+                        <textarea
+                          ref={(box) => {
+                            if (!box || noteFocus.current !== decision.id) return
+                            noteFocus.current = null
+                            box.focus()
+                          }}
+                          data-act="manager-answer"
+                          className="req-input"
+                          rows={2}
+                          aria-label={t('manager.answer')}
+                          placeholder={t('manager.answer')}
+                          disabled={disabled || busy}
+                          value={draft?.text ?? ''}
+                          onKeyDown={(event) => {
+                            if (!submitQuestionOnEnter(event.nativeEvent)) return
+                            event.preventDefault()
+                            if (draft?.optionId || draft?.text.trim()) void submit()
+                          }}
+                          onChange={(event) => change(decision, { text: event.target.value })}
+                        />
+                      ) : null}
                       <CardActions>
                         <div className="mg-actions">
+                          {decision.options.length &&
+                          !draft?.text &&
+                          !noting.has(decision.id) &&
+                          ignoring?.id !== decision.id ? (
+                            <button
+                              type="button"
+                              className="btn ghost"
+                              data-act="manager-answer-open"
+                              disabled={disabled || busy}
+                              onClick={() => {
+                                // 展开后直接进入输入：输入框挂上时由 ref 取焦点
+                                noteFocus.current = decision.id
+                                setNoting(new Set([...noting, decision.id]))
+                              }}
+                            >
+                              {t('manager.addNote')}
+                            </button>
+                          ) : null}
                           {singleSubmit ? (
                             <button
                               type="button"
