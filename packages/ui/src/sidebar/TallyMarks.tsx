@@ -32,7 +32,7 @@ export function TallyMarks({ deviceId, group }: TallyProps) {
   return <TallyView tally={tally} />
 }
 
-/** 汇总的画法：快捷区（置顶、本机分组）收起时按自己算的数也用它 */
+/** 汇总的画法：快捷区（置顶、本地分组）收起时按自己算的数也用它 */
 export function TallyView({ tally }: { tally: GroupTally }) {
   const t = useT()
   if (isQuiet(tally)) return null

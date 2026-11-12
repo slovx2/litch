@@ -56,7 +56,7 @@ const moveTo = <T,>(list: readonly T[], from: number, to: number): T[] => {
 }
 
 const groupOf = (file: OrganizerFile, groupId: string): LocalGroup =>
-  file.groups.find((group) => group.id === groupId) ?? refuse('notFound', '本机分组不存在')
+  file.groups.find((group) => group.id === groupId) ?? refuse('notFound', '本地分组不存在')
 
 const checkedRef = (ref: SessionRef): SessionRef =>
   typeof ref?.deviceId === 'string' &&
@@ -116,7 +116,7 @@ export function applyOrganizer(
     }
     case 'group.move': {
       const from = file.groups.findIndex((entry) => entry.id === action.groupId)
-      if (from < 0) refuse('notFound', '本机分组不存在')
+      if (from < 0) refuse('notFound', '本地分组不存在')
       const groups = moveTo(file.groups, from, action.to)
       if (groups.every((entry, index) => entry === file.groups[index])) return file
       return next({ groups })
@@ -149,7 +149,7 @@ export function applyOrganizer(
       const member = checkedRef(action.member)
       const group =
         file.groups.find((entry) => entry.members.some((ref) => sameRef(ref, member))) ??
-        refuse('notFound', '会话不在本机分组里')
+        refuse('notFound', '会话不在本地分组里')
       const from = group.members.findIndex((ref) => sameRef(ref, member))
       const members = moveTo(group.members, from, action.to)
       if (members.every((ref, index) => ref === group.members[index])) return file

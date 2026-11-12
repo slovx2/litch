@@ -1,9 +1,8 @@
-// 侧栏最上面的快捷区：全局置顶，和本机分组。两处都不按设备分层，对话直接平铺，每行带设备的连线色块和设备名。
-// 置顶资格在各台设备上，这里只合并显示、在本机排先后；本机分组只存在这台客户端上，可以混装任何设备的会话。
+// 侧栏最上面的快捷区：全局置顶，和本地分组。两处都不按设备分层，对话直接平铺，每行带设备的连线色块和设备名。
+// 置顶资格在各台设备上，这里只合并显示、在本机排先后；本地分组只存在这台客户端上，可以混装任何设备的会话。
 // 会话行和项目那一行的画法在 Sidebar.tsx（renderSession、renderWorkspace），这里管排布、收起、拖放和占位行。
 import {
   type DeviceView,
-  GROUPS_FOLD,
   keys,
   type LocalGroup,
   memberState,
@@ -30,7 +29,7 @@ import type { Page } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { wireStyle } from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
-import { Caret, Plus } from '../app/icons.tsx'
+import { Caret } from '../app/icons.tsx'
 import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import {
@@ -53,6 +52,7 @@ import { useSidebarReveal } from './reveal-context.ts'
 import { organize, useCovers, useMergedPins, useOrganizer } from './shortcuts.ts'
 import { toggleSidebarFold, useSidebarFolds } from './state.ts'
 import { TallyView } from './TallyMarks.tsx'
+import { TreeSum } from './TreeSum.tsx'
 import { tallySummaries } from './tally.ts'
 import { MAX_DEPTH } from './tree.ts'
 
@@ -67,7 +67,7 @@ export interface ShortcutPlace {
 export interface ShortcutRowProps {
   deviceId: string
   sessionId: string
-  /** 置顶区的行和设备树的行不会同时出现，算作 tree；本机组的行另算，免得和设备目录里那一行一起高亮 */
+  /** 置顶区的行和设备树的行不会同时出现，算作 tree；本地分组的行另算，免得和设备目录里那一行一起高亮 */
   source: 'tree' | 'local'
   nested: boolean
   kids: number
@@ -170,26 +170,31 @@ function SessionTree({
         place,
         origin,
       })}
-      {kids.length > 0 && !shut ? (
+      {kids.length > 0 ? (
         <div className="tree-kids">
-          {kids.map((kid) => (
-            <SessionTree
-              key={kid}
-              deviceId={deviceId}
-              sessionId={kid}
-              depth={depth + 1}
-              source={source}
-              origin={origin}
-              render={render}
-            />
-          ))}
+          {shut ? (
+            // 和设备目录、“最近 / 未读”同一行“› N 个子会话”（经理的工作线也这样收着）
+            <TreeSum kids={kids.length} tucked={kids.length} onUnfold={fold} />
+          ) : (
+            kids.map((kid) => (
+              <SessionTree
+                key={kid}
+                deviceId={deviceId}
+                sessionId={kid}
+                depth={depth + 1}
+                source={source}
+                origin={origin}
+                render={render}
+              />
+            ))
+          )}
         </div>
       ) : null}
     </div>
   )
 }
 
-/** 一节的标题行：小箭头和名字是收起、展开的按钮；收起时行尾汇总，行尾可放按钮 */
+/** 一节的标题行：小箭头和名字是收起、展开的按钮；收起时行尾汇总，行尾可放按钮。给了 drag 的整行可拖（排先后） */
 function SectionHead({
   name,
   label,
@@ -198,6 +203,7 @@ function SectionHead({
   tally,
   tools,
   drop,
+  drag,
 }: {
   name: string
   label: string
@@ -206,12 +212,17 @@ function SectionHead({
   tally?: ReactNode
   tools?: ReactNode
   drop?: boolean
+  drag?: { onDragStart(event: DragEvent): void; onDragEnd(): void }
 }) {
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: 拖标题行排先后；键盘走行尾菜单里的上移、下移
     <div
       className="row-line projection-head sc-head"
       data-shortcut-head={name}
       data-drop={drop ? 'into' : undefined}
+      draggable={drag ? true : undefined}
+      onDragStart={drag?.onDragStart}
+      onDragEnd={drag?.onDragEnd}
     >
       <button type="button" className="dev-row" aria-expanded={!closed} onClick={onToggle}>
         <span className={closed ? 'arr wire-sq shut' : 'arr wire-sq'}>
@@ -226,7 +237,7 @@ function SectionHead({
   )
 }
 
-/** 几个会话合起来的状况：收起的置顶区、本机组行尾用 */
+/** 几个会话合起来的状况：收起的置顶区、本地分组行尾用 */
 function RefsTally({ refs }: { refs: readonly SessionRef[] }) {
   const summaries = useKeys<SessionSummary>(
     refs.map((ref) => keys.summary(ref.deviceId, ref.sessionId)),
@@ -500,11 +511,11 @@ function PinnedWorkspace({
 }
 
 /**
- * 本机分组：只存在这台客户端上。没有组时整节不出（建组在会话菜单和侧栏“更多”里），拖着会话时露出来当落点。
+ * 本地分组：只存在这台客户端上。每个组自己是侧栏最外层的一块，和“置顶”并列，没有再套一层总标题。
+ * 没有组时什么都不出（新建在顶上的“+”菜单、会话菜单里），只在拖着会话时露出一块落点。
  * 组里的会话照样留在设备目录里；置顶了的不在这里画，只数一下
  */
 function LocalGroupsSection({ renderSession, onPage }: ShortcutsProps) {
-  const { channel } = useServices()
   const t = useT()
   const organizer = useOrganizer()
   const dragging = useDragging()
@@ -516,78 +527,53 @@ function LocalGroupsSection({ renderSession, onPage }: ShortcutsProps) {
   if (!organizer) return null
   const groups = organizer.groups
   const blocked = organizer.status !== 'ok'
-  const draggingSession = dragging?.kind === 'session'
-  if (groups.length === 0 && !blocked && !draggingSession) return null
-  const closed = organizer.folds[GROUPS_FOLD] === true
-  const add = blocked ? null : (
-    <button
-      type="button"
-      className="ibtn row-add"
-      title={t('local.add')}
-      aria-label={t('local.add')}
-      onClick={() => setCreating([])}
-    >
-      <Plus />
-    </button>
-  )
   return (
-    <section className="sc-group" data-shortcuts="groups">
-      <SectionHead
-        name="groups"
-        label={t('local.title')}
-        closed={closed}
-        onToggle={() => void organize(channel, { type: 'fold', key: GROUPS_FOLD, closed: !closed })}
-        tally={<RefsTally refs={groups.flatMap((group) => group.members)} />}
-        tools={add}
-      />
-      {closed ? null : (
-        <div className="sc-body">
-          {blocked ? (
-            <div className="dev-note">
-              {t(organizer.status === 'newer' ? 'fault.organizerNewer' : 'fault.organizerBlocked')}
-            </div>
-          ) : null}
-          {groups.map((group, index) => (
-            <LocalGroupBlock
-              key={group.id}
-              group={group}
-              index={index}
-              count={groups.length}
-              folded={organizer.folds[group.id] === true}
-              over={over}
-              setOver={setOver}
-              renderSession={renderSession}
-              onPage={onPage}
-            />
-          ))}
-          {groups.length === 0 && draggingSession ? (
-            // 还没有组：拖进来就新建一个组放进去
-            // biome-ignore lint/a11y/noStaticElementInteractions: 拖放的落点；键盘走会话菜单里的“新建本机分组…”
-            <div
-              className="band-empty"
-              data-drop={over?.zone === ':new' ? 'into' : undefined}
-              onDragOver={(event) => {
-                if (draggedItem()?.kind !== 'session') return
-                event.preventDefault()
-                if (over?.zone !== ':new') setOver({ zone: ':new', mode: 'into' })
-              }}
-              onDrop={(event) => {
-                const item = draggedItem()
-                if (item?.kind !== 'session') return
-                event.preventDefault()
-                endDrag()
-                setCreating([{ deviceId: item.deviceId, sessionId: item.id }])
-              }}
-            >
-              {t('local.dropNew')}
-            </div>
-          ) : null}
+    <>
+      {blocked ? (
+        <div className="dev-note sc-fault">
+          {t(organizer.status === 'newer' ? 'fault.organizerNewer' : 'fault.organizerBlocked')}
         </div>
-      )}
+      ) : null}
+      {groups.map((group, index) => (
+        <LocalGroupBlock
+          key={group.id}
+          group={group}
+          index={index}
+          count={groups.length}
+          folded={organizer.folds[group.id] === true}
+          over={over}
+          setOver={setOver}
+          renderSession={renderSession}
+          onPage={onPage}
+        />
+      ))}
+      {groups.length === 0 && !blocked && dragging?.kind === 'session' ? (
+        // 还没有组：拖进来就新建一个组放进去
+        // biome-ignore lint/a11y/noStaticElementInteractions: 拖放的落点；键盘走会话菜单里的“新建本地分组…”
+        <div
+          className="band-empty sc-new"
+          data-shortcuts="local-new"
+          data-drop={over?.zone === ':new' ? 'into' : undefined}
+          onDragOver={(event) => {
+            if (draggedItem()?.kind !== 'session') return
+            event.preventDefault()
+            if (over?.zone !== ':new') setOver({ zone: ':new', mode: 'into' })
+          }}
+          onDrop={(event) => {
+            const item = draggedItem()
+            if (item?.kind !== 'session') return
+            event.preventDefault()
+            endDrag()
+            setCreating([{ deviceId: item.deviceId, sessionId: item.id }])
+          }}
+        >
+          {t('local.dropNew')}
+        </div>
+      ) : null}
       {creating ? (
         <LocalGroupDialog group={null} members={creating} onClose={() => setCreating(null)} />
       ) : null}
-    </section>
+    </>
   )
 }
 
@@ -717,53 +703,49 @@ function LocalGroupBlock({
   })
   const line = over?.zone === zone && over.mode !== 'into' ? over.mode : undefined
   return (
-    <div className="sc-local" data-local-group={group.id} data-drop={line} {...groupZone}>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: 拖组头排先后；键盘走组菜单里的上移、下移 */}
-      <div
-        className="row-line head-line sec-line"
-        data-drop={over?.zone === zone && over.mode === 'into' ? 'into' : undefined}
-        draggable
-        onDragStart={(event) => {
-          event.dataTransfer.setData(DRAG_TYPE, group.id)
-          event.dataTransfer.effectAllowed = 'move'
-          startDrag({
-            deviceId: '',
-            kind: 'localGroup',
-            id: group.id,
-            workspaceId: null,
-            pinned: false,
-            sectionId: null,
-          })
+    <section
+      className="sc-group sc-local"
+      data-shortcuts="local"
+      data-local-group={group.id}
+      data-drop={line}
+      {...groupZone}
+    >
+      <SectionHead
+        name={`local:${group.id}`}
+        label={group.name}
+        closed={folded}
+        onToggle={() => void organize(channel, { type: 'fold', key: group.id, closed: !folded })}
+        tally={<RefsTally refs={visible} />}
+        drop={over?.zone === zone && over.mode === 'into'}
+        drag={{
+          onDragStart(event) {
+            event.dataTransfer.setData(DRAG_TYPE, group.id)
+            event.dataTransfer.effectAllowed = 'move'
+            startDrag({
+              deviceId: '',
+              kind: 'localGroup',
+              id: group.id,
+              workspaceId: null,
+              pinned: false,
+              sectionId: null,
+            })
+          },
+          onDragEnd: endDrag,
         }}
-        onDragEnd={endDrag}
-      >
-        <button
-          type="button"
-          className="head-toggle sec-row"
-          aria-expanded={!folded}
-          onClick={() => void organize(channel, { type: 'fold', key: group.id, closed: !folded })}
-        >
-          <Caret />
-          <span className="sec-label name ell">{group.name}</span>
-        </button>
-        <span className="grow head-fill" />
-        {folded ? (
-          <span className="head-tally">
-            <RefsTally refs={visible} />
-          </span>
-        ) : null}
-        <RowMenu
-          label={t('local.menu')}
-          actions={actions}
-          onAction={(id) => {
-            if (id === 'rename') setRenaming(true)
-            else if (id === 'up' || id === 'down') shiftGroup(id === 'up' ? -1 : 1)
-            else void organize(channel, { type: 'group.delete', groupId: group.id })
-          }}
-        />
-      </div>
+        tools={
+          <RowMenu
+            label={t('local.menu')}
+            actions={actions}
+            onAction={(id) => {
+              if (id === 'rename') setRenaming(true)
+              else if (id === 'up' || id === 'down') shiftGroup(id === 'up' ? -1 : 1)
+              else void organize(channel, { type: 'group.delete', groupId: group.id })
+            }}
+          />
+        }
+      />
       {folded ? null : (
-        <>
+        <div className="sc-body">
           {visible.map((ref) => {
             const at = group.members.indexOf(ref)
             const name = `member:${group.id}:${ref.deviceId}:${ref.sessionId}`
@@ -803,14 +785,14 @@ function LocalGroupBlock({
             <div className="sc-note dim">{t('local.pinnedMore', { count: pinned })}</div>
           ) : null}
           {group.members.length === 0 ? <div className="band-empty">{t('local.empty')}</div> : null}
-        </>
+        </div>
       )}
       {renaming ? <LocalGroupDialog group={group} onClose={() => setRenaming(false)} /> : null}
-    </div>
+    </section>
   )
 }
 
-/** 本机组里的一个成员：能画的画成会话行，画不了的（未加载、已删除、设备没了、已归档）是一行占位，可以移出 */
+/** 本地分组里的一个成员：能画的画成会话行，画不了的（未加载、已删除、设备没了、已归档）是一行占位，可以移出 */
 function MemberEntry({
   member,
   group,

@@ -116,7 +116,7 @@ Chat and Managers are navigation trees. The content follows the last conversatio
 Only the clicked row is selected, including for keyboard navigation and screen readers. Other copies stay unselected.
 List updates preserve the selected location; removing that projection item selects the same conversation in the tree.
 未查看的完成回合显示未读，打开对话或标为已读后清除。支持已读同步的设备会保存读到的回合：桌面或手机查看后，连着同一设备的其他客户端同步清除；重连时补齐。之后的新结果会重新显示未读。
-桌面右键设备可“全部标为已读”，右键会话可“标为已读”，后者包含其所有层级的子会话和工作线；经理行也支持。手机在设备、会话、经理及置顶/本机分组的长按菜单中提供对应入口，设备会话页的“更多”也可清整台设备。“未读”标题菜单可清当前客户端全部设备的未读。没有未读时不显示相应操作。标记不会打开会话，也不会清除运行或待处理状态；之后的新结果仍会重新标未读。
+桌面右键设备可“全部标为已读”，右键会话可“标为已读”，后者包含其所有层级的子会话和工作线；经理行也支持。手机在设备、会话、经理及置顶/本地分组的长按菜单中提供对应入口，设备会话页的“更多”也可清整台设备。“未读”标题菜单可清当前客户端全部设备的未读。没有未读时不显示相应操作。标记不会打开会话，也不会清除运行或待处理状态；之后的新结果仍会重新标未读。
 
 On desktop, right-click a device to mark all its sessions as read, or a session to mark it and all descendants as read. Manager rows support the same action. On mobile, use the corresponding long-press menus or the device session page’s More menu. The Unread group menu clears unread marks across devices in this client. These actions appear only when there is unread content. They do not open sessions or clear running and pending states; new results can become unread again. Read state is local to each client and does not sync across devices.
 桌面和手机收起项目时，未读数按展开后的实际会话树汇总。跨项目的子会话计入它显示所在的父会话项目；父项被筛掉、子项单列时，计回子项所在项目。被筛掉、已归档及普通列表不显示的经理工作线不计入。未读后代所需的父链不会被子树折叠或“显示更多”藏住；打开未读子会话清除它自己的标记，打开父会话不会代清子会话。
@@ -259,12 +259,17 @@ able to organize); only the order is local: drag rows, or use Move up / Move dow
 on this computer only. A pinned session appears only in Pinned, not again under its device,
 in Recent, Unread or a local group. Pinning still takes a session out of its device group, as before.
 
-Local groups are folders that live only in this desktop app (nothing is synced or sent to devices) and can mix sessions from any device. Create one from a session's menu
-(Add to local group → New local group…) or the **+** on the Local groups header; rename, reorder and
-delete it from its menu (deleting removes only the group). Add sessions by dragging them onto a group
+Local groups are folders that live only in this desktop app (nothing is synced or sent to devices) and can mix sessions from any device. Each group is its own block at the top level of
+the sidebar, next to Pinned; with no groups nothing is shown. Create one from the **+** menu at the top of
+the sidebar (New local group…; the **?** beside it explains what local groups are), by right-clicking an
+empty part of the sidebar, or from a session's menu (Add to local group → New local group…). Collapse a
+group from its title; rename, reorder (drag the title or Move up / Move down) and delete it from the
+**…** on its title (deleting removes only the group). Add sessions by dragging them onto a group
 or from the session menu, reorder by dragging or Move up / Move down, and remove with "Remove from …".
 This works while a device is offline. Sessions in a local group still appear under their device. A
-member that is pinned is counted as "N more in Pinned" and returns to its place when unpinned. Members
+member that is pinned is counted as "N more in Pinned" and returns to its place when unpinned. Managers, scheduled-task
+sessions and sub-session trees look the same as in Recent: a manager keeps its frame, and collapsed
+sub-sessions or work lines show as "N sub-sessions". Members
 that can't be shown stay as a placeholder you can remove: not loaded yet, archived, deleted, not in the
 list, or device removed. The file is `sidebar-organizer.json` in the app data folder (a `.bak` keeps the
 previous version); if it is damaged or from a newer Litch, local groups are read-only and the file is
@@ -272,8 +277,9 @@ left untouched.
 
 置顶区在侧栏最上方，合并所有设备的置顶对话和项目，每行有设备色块和设备名，色块与子会话展开箭头分开显示；置顶资格仍存在各设备上，先后只在本机排序。置顶项目展开后和设备里的项目一样先列前 5 个对话，其余收在“显示更多”后面，可再收起；子会话跟着父会话显示，不占条数；从搜索或通知打开收着的对话时会自动露出。
 「最近」「未读」的行用同一个设备标记（按项目聚合时项目行也带）；登记了多台设备时才写设备名。设备离线时色块画成虚线，行上不写“离线”，以免挤占标题；悬停设备名和读屏仍会说明“离线”。
-桌面本机分组只保存在此客户端（不同客户端之间不同步），可混装各设备的对话，设备离线时也能整理；组里的对话照常显示在原设备下，已置顶的只在置顶区显示。
-手机首页不提供设备之上的置顶和本机分组，也不提供加入本机分组的长按入口。置顶会话、置顶项目和设备已有分区仍在各设备的列表里显示，原置顶／取消置顶和移出设备分区等操作保留。手机原有本机分组文件不删除；设备端置顶和分区数据不改变，桌面继续照常使用。
+桌面本地分组只保存在此客户端（不同客户端之间不同步），可混装各设备的对话，设备离线时也能整理；组里的对话照常显示在原设备下，已置顶的只在置顶区显示。每个本地分组直接是侧栏最外层的一块，与「置顶」并列，没有分组时不显示。从侧栏顶部的“+”菜单（“新建本地分组…”旁的问号说明用途）、侧栏空白处右键或会话菜单“加入本地分组 → 新建本地分组…”新建；组标题可收起，标题行尾的“…”可重命名、上移下移、删除，也可拖动标题排序。经理会话、定时任务会话和子会话树在组里的样子与「最近」一致：经理保留经理框，收起的子会话和工作线显示为“N 个子会话”。
+侧栏顶部的“+”菜单汇集常用的新建入口：新对话、添加项目（多台在线设备时先选设备）、新建本地分组、添加设备，各项打开与原入口相同的页面或对话框；在侧栏空白处右键弹出同一份菜单，在会话、分组、设备等条目上右键仍是各自的菜单。
+手机首页不提供设备之上的置顶和本地分组，也不提供加入本地分组的长按入口。置顶会话、置顶项目和设备已有分区仍在各设备的列表里显示，原置顶／取消置顶和移出设备分区等操作保留。手机原有本地分组文件不删除；设备端置顶和分区数据不改变，桌面继续照常使用。
 
 Phone home screens no longer show cross-device Pins or Local groups, and session menus no longer offer local-group actions. Pinned sessions, pinned projects, and existing device sections remain inside each device's list, with the existing pin, unpin, and remove-from-section actions. Existing phone-local group files are retained. Device pin and section data is unchanged and remains available on desktop.
 

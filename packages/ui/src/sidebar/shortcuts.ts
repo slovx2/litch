@@ -1,4 +1,4 @@
-// 快捷区（全局置顶、本机分组）在桌面侧栏里取数据、发整理命令的几样小东西。
+// 快捷区（全局置顶、本地分组）在桌面侧栏里取数据、发整理命令的几样小东西。
 // 合并规则在核心（organizer/pins.mts、shortcuts.mts），这里只把副本里的键接上。
 import {
   type CoreChannel,
@@ -39,7 +39,7 @@ export function organize(
   })
 }
 
-/** 这个会话在哪个本机组里（最多一个） */
+/** 这个会话在哪个本地分组里（最多一个） */
 export const groupOfMember = (
   organizer: OrganizerView | undefined,
   ref: SessionRef,
