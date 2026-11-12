@@ -150,7 +150,7 @@ batch submission on desktop and phone.
 决策、建议、请你做、报告和 issue 的长卡片操作栏会吸附在当前可视区域底部，下方有批量提交栏时贴在它的上沿；
 滑到卡尾时回归原位；操作栏随所属卡片离开，不遮挡正文末行。手机按可用视口避让安全区和键盘。
 操作栏的排法统一：主操作（交付按钮、标记已阅、提交给经理）在最前，忽略、回复等次要操作是不带边框的小按钮，
-唯一的讨论入口是末端的讨论图标和评论数；完整讨论从讨论抽屉的标题行进入。请你做的回复框默认收起，点“回复”展开，已有草稿时保持展开。有选项的决策，补充说明框默认收起，点“补充说明”展开并进入输入，已写内容时保持展开；没有选项的开放题，补充说明框就是答复，始终显示。看板上的建议卡同样把“补充说明（选填）”收起，点“补充说明”展开；手机控制台抽屉里经理未审核的建议与桌面一致，卡头标“待审核”，正文和操作直接显示，讨论图标排在开始那一行末尾。桌面类别分段始终一行，看板过窄时横向滚动，选中的类别自动滚入可见区。
+唯一的讨论入口是末端的讨论图标和评论数；完整讨论从讨论抽屉的标题行进入。请你做的回复框默认收起，点“回复”展开，已有草稿时保持展开。有选项的决策，补充说明框默认收起，点“补充说明”展开并进入输入，已写内容时保持展开；没有选项的开放题，补充说明框就是答复，始终显示。看板上的建议卡同样把“补充说明（选填）”收起，点“补充说明”展开；建议卡操作区一行依次是“开始”“在来源会话里做”“补充说明”“新工作树”“⋯”（编辑后开始、忽略）和讨论图标，桌面和手机相同，放不下时换行，讨论图标始终在末尾；会话内提案卡和全局建议页仍平铺全部按钮，次要按钮同为无框；手机控制台抽屉里经理未审核的建议与桌面一致，卡头标“待审核”，正文和操作直接显示，讨论图标排在开始那一行末尾。桌面类别分段始终一行，看板过窄时横向滚动，选中的类别自动滚入可见区。
 
 On desktop and phone, long decision, suggestion, For you, report and issue cards keep their actions
 at the bottom of the visible area, or just above the batch submit bar when it is shown. Actions remain
@@ -163,7 +163,10 @@ reply box stays collapsed until you choose Reply, and stays open while it holds 
 For a decision with options, the note box stays collapsed until you choose Add note, and stays open
 while it holds text. An open question without options always shows the box, since the note is the answer.
 Suggestion cards on the board collapse **Additional instructions (optional)** the same way, behind
-**Add note**. In the phone console sheet, a suggestion awaiting manager review shows its body and actions
+**Add note**. A suggestion's action row reads Start, Do in source, Add note, New worktree, ⋯ (Edit first and Dismiss)
+and the discussion icon, on desktop and phone; when it wraps, the discussion icon stays last. Suggestion
+cards in conversations and on the global Suggestions page keep every button visible, with the same
+borderless secondary buttons. In the phone console sheet, a suggestion awaiting manager review shows its body and actions
 directly, as on desktop, with **Awaiting review** in its header; the discussion icon ends the Start row.
 The desktop category tabs stay on one row and scroll sideways when the board is too narrow, keeping the
 selected category in view.
@@ -535,7 +538,7 @@ sessions remain. This does not authorize archiving unrelated sessions. There is 
 ## Suggested tasks
 
 A suggestion is a proposed task, not work already started and not a manager board item. Its card
-offers **Start**, **Edit and start**, **Do it here**, and **Dismiss** (on the phone the card shows Start and
+offers **Start**, **Edit first**, **Do it here**, and **Dismiss** (on the phone and on the manager board the card shows Start and
 Do it here, the other two are under ⋯). The brief shows the background and task; expand it before starting. Missing choices inherit from the parent at the time you start it
 (a different harness uses its own model/effort defaults). Worktree behavior and session authorization
 are in `sessions-and-projects.md`.

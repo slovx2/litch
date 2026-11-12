@@ -463,7 +463,9 @@ export async function managerIssuesProbe() {
       return root?.querySelector(selector) ? root : null
     })
     assert(page.querySelector(selector)?.getBoundingClientRect().height, `${kind}主按钮被裁掉`)
-    if (kind === 'suggestion') assert(page.querySelector('[data-act="edit"]'), '建议缺少编辑后开始')
+    // 看板建议卡的“编辑后开始”收在行尾的“⋯”里
+    if (kind === 'suggestion')
+      assert(page.querySelector('[data-act="proposal-more"]'), '建议缺少收着编辑后开始的“⋯”')
     const activity = [...page.querySelectorAll('[data-timeline="event"]')]
       .map((row) => row.textContent)
       .join('\n')

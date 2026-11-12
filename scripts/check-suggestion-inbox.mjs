@@ -272,12 +272,15 @@ try {
     'true',
     '归档预览返回建议页签',
   )
-  await click('.mg-board [data-issue-type="suggestion"] [data-act="edit"]')
+  // 看板建议卡的“编辑后开始”“忽略”收在行尾的“⋯”里
+  await click('.mg-board [data-issue-type="suggestion"] [data-act="proposal-more"]')
+  await click('.mg-board [data-issue-type="suggestion"] .prop-more-acts [data-act="edit"]')
   await wait('.spawn-dialog')
   await read(
     "document.querySelector('.spawn-dialog').close();document.querySelector('.spawn-dialog').dispatchEvent(new Event('cancel',{cancelable:true}))",
   )
-  await click('.mg-board [data-issue-type="suggestion"] [data-act="dismiss"]')
+  await click('.mg-board [data-issue-type="suggestion"] [data-act="proposal-more"]')
+  await click('.mg-board [data-issue-type="suggestion"] .prop-more-acts [data-act="dismiss"]')
   await until(async () => (await issueCount()) === 1, '看板忽略后待审核建议减少')
   await shot('manager-suggestions')
   await say('收尾建议')

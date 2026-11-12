@@ -149,6 +149,7 @@ export function ProposalActsRow({
   blocked = null,
   explain = false,
   noteFold = false,
+  inbox = false,
 }: {
   acts: ProposalActsState
   tail?: ReactNode
@@ -156,6 +157,8 @@ export function ProposalActsRow({
   explain?: boolean
   /** 经理看板里：补充说明默认收起，点“补充说明”展开（同决策卡） */
   noteFold?: boolean
+  /** 建议列表与经理看板：在来源会话里做（同桌面） */
+  inbox?: boolean
 }) {
   const { c, font } = useTheme()
   const t = useT()
@@ -187,8 +190,8 @@ export function ProposalActsRow({
         />
         {!acts.sourceIsManager ? (
           <Button
-            kind="plain"
-            label={t('proposal.here')}
+            kind="quiet"
+            label={t(inbox ? 'suggestions.here' : 'proposal.here')}
             disabled={off}
             onPress={() => act.here()}
             testID={`proposal:${proposalId}:here`}
@@ -333,6 +336,7 @@ function ListActs({
         acts={acts}
         blocked={blocked}
         explain
+        inbox
         noteFold={noteFold}
         tail={
           <>
@@ -398,7 +402,7 @@ export function OfferActs({
         />
         {!sourceIsManager ? (
           <Button
-            kind="plain"
+            kind="quiet"
             label={t('proposals.offer.here')}
             disabled={off}
             onPress={() => act.answer('here')}

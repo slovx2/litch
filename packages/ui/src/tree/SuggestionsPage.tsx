@@ -135,6 +135,7 @@ function SuggestionRow({
         inbox
         small={small}
         noteFold={small}
+        moreMenu={small}
         sourceParent={{
           id: source.threadId,
           harness: source.harness,
