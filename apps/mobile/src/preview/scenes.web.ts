@@ -31,6 +31,13 @@ const say = (prompt: string) =>
 
 export const SCENES: Scene[] = [
   {
+    id: 'board-mermaid',
+    group: '经理',
+    name: '看板 Mermaid',
+    note: '复用对话的图卡、源码回退与全屏查看',
+    steps: [],
+  },
+  {
     id: 'compose-state',
     group: '会话',
     name: '离线草稿与压缩插话',
