@@ -1,6 +1,6 @@
 // 模拟核心的示例文件树。内容全是编出来的，每个工作区的根下面都是这同一棵。
 // 里面特意放了几样给界面试边角用的：
-// - fixtures/many：三万个条目的目录，试“展开不卡”；
+// - fixtures/many：三万个条目的单层目录，试有界截断；fixtures/large-tree：15组目录各1999项，试大树虚拟滚动；
 // - fixtures/long.ts：六千行的源文件，试大文件上色不卡；fixtures/minified.js：一行特别长的；
 // - fixtures/big.log：超过显示上限的文件；fixtures/blob.dat：里面不是文字的；docs/images/shot.png：看扩展名就不读的；
 // - fixtures/latin1.txt：不是 UTF-8 的；fixtures/gone.txt：列得出来、读的时候已经没了的；
@@ -13,6 +13,9 @@ import type { SampleLang } from './sample-text.mjs'
 export const MANY_ENTRIES = 30_000
 const MANY_DIRS = 40
 const MANY_DIR = 'fixtures/many'
+const LARGE_TREE = 'fixtures/large-tree'
+const LARGE_GROUPS = 15
+const LARGE_FILES = 1999
 
 export type SampleData = string | Uint8Array
 
@@ -315,7 +318,7 @@ function staticFiles(lang: SampleLang): Map<string, () => SampleData> {
 }
 
 /** 没有文件在里面、但要有的目录 */
-const EXTRA_DIRS = ['fixtures/empty', 'fixtures/locked', MANY_DIR]
+const EXTRA_DIRS = ['fixtures/empty', 'fixtures/locked', MANY_DIR, LARGE_TREE]
 
 export function sampleFiles(lang: SampleLang): SampleFiles {
   const files = staticFiles(lang)
@@ -338,6 +341,9 @@ export function sampleFiles(lang: SampleLang): SampleFiles {
       : { name: `item-${pad(index - MANY_DIRS, 5)}.txt`, kind: 'file' }
   /** fixtures/many 下面的路径是什么：它里面的东西不放进表里，按名字现算 */
   const inMany = (relative: string): 'dir' | 'file' | null => {
+    const group = /^fixtures\/large-tree\/group-(\d{2})(?:\/item-(\d{5})\.txt)?$/.exec(relative)
+    if (group && Number(group[1]) < LARGE_GROUPS)
+      return group[2] === undefined ? 'dir' : Number(group[2]) < LARGE_FILES ? 'file' : null
     if (!relative.startsWith(`${MANY_DIR}/`)) return null
     const rest = relative.slice(MANY_DIR.length + 1)
     if (/^group-\d\d$/.test(rest)) return Number(rest.slice(6)) < MANY_DIRS ? 'dir' : null
@@ -367,6 +373,16 @@ export function sampleFiles(lang: SampleLang): SampleFiles {
     list(relative) {
       const real = resolve(relative)
       if (kind(real) !== 'dir') return null
+      if (real === LARGE_TREE)
+        return Array.from({ length: LARGE_GROUPS }, (_, n) => ({
+          name: `group-${pad(n, 2)}`,
+          kind: 'dir' as const,
+        }))
+      if (real.startsWith(`${LARGE_TREE}/`))
+        return Array.from({ length: LARGE_FILES }, (_, n) => ({
+          name: `item-${pad(n, 5)}.txt`,
+          kind: 'file' as const,
+        }))
       if (real === MANY_DIR) return Array.from({ length: MANY_ENTRIES }, (_, n) => manyName(n))
       if (inMany(real) === 'dir')
         return [1, 2, 3].map((n) => ({ name: `note-${n}.md`, kind: 'file' }))
@@ -399,6 +415,12 @@ export function sampleFiles(lang: SampleLang): SampleFiles {
       for (let n = 0; n < MANY_ENTRIES; n++) {
         const entry = manyName(n)
         out.push({ path: `${MANY_DIR}/${entry.name}`, kind: entry.kind === 'dir' ? 'dir' : 'file' })
+      }
+      for (let g = 0; g < LARGE_GROUPS; g++) {
+        const dir = `${LARGE_TREE}/group-${pad(g, 2)}`
+        out.push({ path: dir, kind: 'dir' })
+        for (let n = 0; n < LARGE_FILES; n++)
+          out.push({ path: `${dir}/item-${pad(n, 5)}.txt`, kind: 'file' })
       }
       return out
     },

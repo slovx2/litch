@@ -56,8 +56,12 @@ export async function realView(args: {
 }): Promise<RealView> {
   const kit = (window as unknown as { __filesKit: FilesKit }).__filesKit
   const { until, one, all, text, frame } = kit
+  // macOS 的临时目录可能以 /var 或 /private/var 返回；两者是同一设备路径。
+  const canonical = (path: string) => path.replace(/^\/private(?=\/var\/)/, '')
   const relative = (path: string) =>
-    path.startsWith(`${kit.root()}/`) ? path.slice(kit.root().length + 1) : path
+    canonical(path).startsWith(`${canonical(kit.root())}/`)
+      ? canonical(path).slice(canonical(kit.root()).length + 1)
+      : path
   const lineText = (line: number) => one(`.cl[data-line="${line}"] .lc`)?.textContent ?? ''
 
   await kit.open('notes.txt')
@@ -66,16 +70,21 @@ export async function realView(args: {
   const language = view.dataset.language ?? ''
   const lines = Number(view.dataset.lines ?? 0)
   const firstLine = lineText(1)
-  await kit.open('link-file')
+  kit.click(await kit.rowShown('link-file'))
+  await until(
+    '软链文件目标与原路径标记',
+    () =>
+      one('.fv-file')?.getAttribute('data-path')?.endsWith('/notes.txt') &&
+      text(one('.fv .file-link-pop')).includes('link-file'),
+  )
+  await kit.viewed('notes.txt')
   await kit.painted()
   const viaFileLink = lineText(1)
-  const brokenKind = kit.rows().find((row) => row.path === 'link-broken')?.kind ?? '（树上没有）'
+  const broken = await kit.rowShown('link-broken')
+  const brokenKind = broken.dataset.kind ?? ''
   let brokenHold = ''
-  if (kit.row('link-broken')) {
-    await kit.open('link-broken')
-    brokenHold =
-      (await until('断链的占位', () => one<HTMLElement>('.fv-hold[data-hold]'))).dataset.hold ?? ''
-  }
+  kit.click(broken)
+  brokenHold = text(await until('断链原因', () => one('.files [role="alert"]')))
 
   await kit.expand('src')
   const longRow = await kit.rowShown('src/long.ts')

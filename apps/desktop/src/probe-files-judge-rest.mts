@@ -371,7 +371,7 @@ export function mockNumbers(seen: MockSeen): string {
   const { many, scroll } = seen.tree
   const { long } = seen.view
   return [
-    `展开三万个条目的目录 ${ms(many.ms)}（最长一帧 ${ms(longest(many.gaps))}，${many.rows} 行里画了 ${many.dom} 行，这一层问了 ${many.asked} 次）`,
+    `三万行树中单次展开目录 ${ms(many.ms)}（最长一帧 ${ms(longest(many.gaps))}，${many.rows} 行里画了 ${many.dom} 行，这一层问了 ${many.asked} 次）`,
     `在里面滚动 帧间隔中位 ${median(scroll.gaps).toFixed(1)} ms、最长 ${ms(longest(scroll.gaps))}（${scroll.gaps.length} 帧）`,
     `六千行的文件 内容 ${ms(long.shownMs)}、上色 ${ms(long.paintedMs)}（${long.mode}），这期间最长一帧 ${ms(longest(long.gaps))}，滚动最长一帧 ${ms(longest(long.rollGaps))}`,
     `点对话里的链接到定位好 最长 ${ms(longest(seen.links.jumps.map((jump) => jump.ms)))}`,

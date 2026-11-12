@@ -11,6 +11,7 @@ import {
   managerIssueKindFilter,
   managerIssueLinkFilter,
   managerIssuePageKey,
+  managerIssuePreset,
   managerIssueQuery,
   managerIssueStatusFilters,
   managerIssueStatusOptions,
@@ -57,6 +58,23 @@ test('类别首次默认只看开放、待开始或未读，全部最后；通�
   }
   assert.deepEqual(DEFAULT_MANAGER_ISSUE_FILTER.statuses, [])
   assert.deepEqual(MANAGER_ISSUE_SUMMARY_FILTERS.unread.statuses, [])
+})
+
+test('概览预设保留显式 kinds 并切换页签，不影响 ordinary 默认范围', () => {
+  for (const kind of ['decision', 'suggestion', 'request', 'report'] as const) {
+    const patch = { kinds: [kind], unread: true }
+    const next = managerIssuePreset(patch)
+    assert.equal(next.kind, kind)
+    assert.deepEqual(next.filter.kinds, [kind])
+    assert.equal(next.filter.unread, true)
+    assert.equal(next.filter.discussionsOnly, undefined)
+    assert.deepEqual(patch, { kinds: [kind], unread: true })
+  }
+  assert.deepEqual(managerIssuePreset({}).filter.kinds, ['ordinary'])
+  assert.deepEqual(managerIssueKindFilter('ordinary').kinds, ['ordinary'])
+  const mixed = managerIssuePreset({ kinds: ['decision', 'report'] })
+  assert.equal(mixed.kind, 'ordinary')
+  assert.deepEqual(mixed.filter.kinds, ['decision', 'report'])
 })
 
 test('建议默认排除待审核，待开始在首位，待审核仍可单独选择', () => {

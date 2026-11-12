@@ -189,18 +189,51 @@ try {
     const { store, keys } = window.__managerOpen
     return store.get(keys.children('local'))?.m1 ?? []
   })
-  // Pi 示例刻意超出父会话权限；选择同 harness 的 CHANGELOG 卡，验真实可启动路径。
-  const proposal = await until(
+  // 经理建议现在是 issue 摘要卡，默认不挂载操作区；先按标题找到并展开。
+  // Pi 示例刻意超出父会话权限；仍选择同 harness 的 CHANGELOG，验正式开始路径。
+  const issue = await until(
     () =>
       run(() => {
-        const title = [...document.querySelectorAll('.suggestion-row .prop-title')].find(
-          (node) => node.textContent === '整理 CHANGELOG',
+        const card = [...document.querySelectorAll('[data-issue-type="suggestion"]')].find((node) =>
+          node.querySelector('[data-act="issue-toggle"]')?.textContent.includes('整理 CHANGELOG'),
         )
-        return title?.closest('[data-proposal]')?.getAttribute('data-proposal')
+        return card?.getAttribute('data-issue')
       }),
     '可开始的 CHANGELOG 建议',
   )
-  await click(`.suggestion-row [data-proposal="${proposal}"] [data-act="start"]`)
+  const toggle = `[data-issue="${issue}"] > [data-act="issue-toggle"]`
+  assert.equal(
+    await run((s) => document.querySelector(s).getAttribute('aria-expanded'), toggle),
+    'false',
+    '建议列表默认收起',
+  )
+  await click(toggle)
+  const proposal = await until(
+    () =>
+      run((id) => {
+        const card = document.querySelector(
+          `[data-issue-detail="${CSS.escape(id)}"] [data-proposal]`,
+        )
+        return card?.getAttribute('data-proposal')
+      }, issue),
+    '建议详情与正式操作区',
+  )
+  const shape = await run((id) => {
+    const { store, keys } = window.__managerOpen
+    const row = store.get(keys.suggestions)?.find((one) => one.proposal.id === id)
+    return (
+      row && {
+        source: row.source.threadId,
+        sourceHarness: row.source.harness,
+        harness: row.proposal.harness ?? row.source.harness,
+      }
+    )
+  }, proposal)
+  assert.equal(shape?.source, 'm1', '建议来源仍是当前经理')
+  assert.equal(shape.harness, shape.sourceHarness, '启动同 harness 的建议')
+  // 操作栏统一汇入外层 issue 卡尾，不再位于内部 data-proposal 节点下。
+  const start = `[data-issue="${issue}"] [data-act="start"]`
+  await click(start)
   const child = await until(
     () =>
       run((old) => {

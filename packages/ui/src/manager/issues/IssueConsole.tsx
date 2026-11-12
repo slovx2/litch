@@ -12,6 +12,7 @@ import {
   managerIssueKindFilter,
   managerIssueLinkFilter,
   managerIssuePageKey,
+  managerIssuePreset,
   supportedManagerIssueFilter,
 } from '../../../../core/src/projection/manager-issue-list.mts'
 import type { ManagerIssueId, ManagerIssueKind } from '../../../../protocol/src/manager-issues.mts'
@@ -169,11 +170,10 @@ export function IssueConsole({
     saved.preset = preset.version
     saved.full = null
     setFullState(null)
-    setFilter(
-      { ...issueKindFilter('ordinary'), statuses: [], ...preset.patch, kinds: ['ordinary'] },
-      'ordinary',
-    )
-  }, [preset, saved, setFilter])
+    const next = managerIssuePreset(preset.patch)
+    setFilter(next.filter, next.kind)
+    if (next.kind !== kind) onKind(next.kind)
+  }, [preset, saved, setFilter, kind, onKind])
   const reading = useRef<string | null>(null)
   // 编号跳转：类型不在当前过滤里就切到那一类，展开并滚到它
   useEffect(() => {

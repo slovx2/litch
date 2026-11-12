@@ -185,6 +185,7 @@ export async function mockLinks(session: string, toolSession: string): Promise<L
   const relative = (path: string) =>
     path.startsWith(`${kit.root()}/`) ? path.slice(kit.root().length + 1) : path
   await kit.openSession(session)
+  const projectRoot = kit.root()
   const turnsBefore = all('.turn').length
   await kit.say('看文件')
   const turn = await until(
@@ -267,9 +268,7 @@ export async function mockLinks(session: string, toolSession: string): Promise<L
 
   kit.click(anchors.find((anchor) => text(anchor) === '文档目录') as HTMLElement)
   const directoryExpanded = await kit.seen(
-    () =>
-      kit.rows().some((row) => row.path === 'docs/guide.md') &&
-      !kit.rows().some((row) => row.path.startsWith('fixtures/')),
+    () => kit.root() === `${projectRoot}/docs` && kit.rows().some((row) => row.path === 'guide.md'),
     10_000,
   )
   kit.click(anchors.find((anchor) => text(anchor) === '缺失文件') as HTMLElement)

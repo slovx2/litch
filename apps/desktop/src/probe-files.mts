@@ -1,11 +1,11 @@
 // 文件面板的验收，对着模拟核心里的示例文件树（packages/core/src/mock/sample-files.mts）。
-// 这一段量侧面板的开合和文件树：懒加载、每层只问一次、三万个条目的目录展开和滚动时的帧间隔、说明行、
+// 这一段量侧面板的开合和文件树：懒加载、每层只问一次、多目录共三万行的展开和滚动时的帧间隔、说明行、
 // 符号链接、隐藏文件、键盘、刷新。分几段送进页面里执行，编排在 probe-files-run.mts。
 // 页面里用的那套手在 probe-files-kit.mts；和别的验收一样，下面的函数不能引用函数外面的东西。
 import type { FilesKit } from './probe-files-kit.mjs'
 
 export interface ManySeen {
-  /** 点下去到三万行到了、画出来，一共多久（毫秒） */
+  /** 15次子目录展开中，点下去到画出来的最长时间（毫秒） */
   ms: number
   gaps: number[]
   /** 树里一共多少行（摊平之后） */
@@ -16,6 +16,7 @@ export interface ManySeen {
   asked: number
   /** 前几行的名字：目录在前 */
   head: string[]
+  childAsked: number[]
 }
 
 export interface ScrollSeen {
@@ -48,6 +49,7 @@ export interface TreeSeen {
   /** 根这一层问过几次；这时候一共问过哪些目录（相对路径） */
   rootAsked: number
   askedAtStart: string[]
+  limited: { entries: number; note: string; asked: number }
   many: ManySeen
   scroll: ScrollSeen
   /** 收起再马上展开：还是只问过一次，行数也没变 */
@@ -104,24 +106,62 @@ export async function mockTree(session: string): Promise<TreeSeen> {
     path === rootPath ? '' : path.slice(rootPath.length + 1),
   )
 
-  // ---------- 三万个条目的目录 ----------
+  // ---------- 单层上限：只显示前2000项和截断原因 ----------
   await kit.expand('fixtures')
   await kit.rowShown('fixtures/many')
+  const beforeLimited = kit.rowCount()
+  await kit.expand('fixtures/many')
+  await until('单层2000项与截断行', () => kit.rowCount() === beforeLimited + 2001)
+  const limitedIndex = kit.rows().find((row) => row.path === 'fixtures/many')?.index ?? -1
+  await kit.scrollTree(limitedIndex + 2001)
+  const limitedNote = await until('有界目录的截断提示', () =>
+    all('.ft-note').find(
+      (row) => row.dataset.kind === 'truncated' && row.dataset.path === kit.full('fixtures/many'),
+    ),
+  )
+  const limited = {
+    entries: kit.rowCount() - beforeLimited - 1,
+    note: text(limitedNote),
+    asked: askedOf((await kit.check()).lists, 'fixtures/many'),
+  }
+  await kit.scrollTree(limitedIndex)
+  await kit.collapse('fixtures/many')
+  await kit.scrollTree(0)
+
+  // ---------- 15组目录各1999项，累计三万行；不突破单层读取预算 ----------
+  const large = 'fixtures/large-tree'
   const before = kit.rowCount()
-  const grown = await kit.frames(async () => {
-    const started = performance.now()
-    kit.click((await kit.rowShown('fixtures/many')) as HTMLElement)
-    await until('三万行到了', () => kit.rowCount() - before >= 30_000, 60_000)
-    await frame()
-    return performance.now() - started
-  })
-  const manyIndex = kit.rows().find((row) => row.path === 'fixtures/many')?.index ?? -1
+  await kit.expand(large)
+  await until('大树的15组目录', () => kit.rowCount() === before + 15)
+  const manyIndex = kit.rows().find((row) => row.path === large)?.index ?? -1
+  const groups = Array.from(
+    { length: 15 },
+    (_, g) => `${large}/group-${String(g).padStart(2, '0')}`,
+  )
+  let ms = 0
+  const gaps: number[] = []
+  for (let g = 0; g < groups.length; g++) {
+    await kit.scrollTree(manyIndex + 1 + g * 2000)
+    const count = kit.rowCount()
+    const grown = await kit.frames(async () => {
+      const started = performance.now()
+      await kit.expand(groups[g] as string)
+      await until('子目录1999项到了', () => kit.rowCount() === count + 1999)
+      await frame()
+      return performance.now() - started
+    })
+    ms = Math.max(ms, grown.value)
+    gaps.push(...grown.gaps)
+  }
+  await kit.scrollTree(manyIndex)
+  const checks = (await kit.check()).lists
   const many: ManySeen = {
-    ms: grown.value,
-    gaps: grown.gaps,
+    ms,
+    gaps,
     rows: kit.rowCount(),
     dom: all('.ft-row, .ft-note').length,
-    asked: askedOf((await kit.check()).lists, 'fixtures/many'),
+    asked: checks[kit.full(large)] ?? 0,
+    childAsked: groups.map((path) => checks[kit.full(path)] ?? 0),
     head: kit
       .rows()
       .filter((row) => row.index > manyIndex)
@@ -132,16 +172,16 @@ export async function mockTree(session: string): Promise<TreeSeen> {
   // 先验刚读完的缓存。低优先级下后面 90 帧滚动可能超过缓存有效期，
   // 滚完才验“马上再展开”会把正常的到期重读误判成重复请求。
   await kit.scrollTree(manyIndex)
-  await kit.collapse('fixtures/many')
+  await kit.collapse(large)
   const afterCollapse = kit.rowCount()
   const again = await kit.frames(async () => {
     const started = performance.now()
-    kit.click((await kit.rowShown('fixtures/many')) as HTMLElement)
+    kit.click((await kit.rowShown(large)) as HTMLElement)
     await until('又是三万行', () => kit.rowCount() - before >= 30_000, 60_000)
     return performance.now() - started
   })
   const reexpand = {
-    asked: askedOf((await kit.check()).lists, 'fixtures/many'),
+    asked: (await kit.check()).lists[kit.full(large)] ?? 0,
     rows: kit.rowCount(),
     ms: again.value,
   }
@@ -169,26 +209,26 @@ export async function mockTree(session: string): Promise<TreeSeen> {
     }
   })
   await until('滚到底了', () => Number(treeElement.dataset.last) === total)
-  // many 里面的最后一项：它下面先是 40 个目录，再是 29960 个文件
+  // 最后一组的最后一项。
   const tailIndex = manyIndex + 30_000
   await kit.scrollTree(tailIndex - 3)
   const tail =
     (await until('最后那一项', () => kit.rows().find((row) => row.index === tailIndex))).name ?? ''
-  // 中间挑一行：many 下面先是 40 个目录，再是文件，第 12345 个文件该是 item-12345.txt
-  const midIndex = manyIndex + 1 + 40 + 12_345
+  // 第6组的第1234个文件，检查虚拟窗口和实际行映射。
+  const midIndex = manyIndex + 1 + 6 * 2000 + 1 + 1234
   await kit.scrollTree(midIndex)
   const mid = await until('中间那一行', () => kit.rows().find((row) => row.index === midIndex))
   const scroll: ScrollSeen = {
     gaps: rolled.gaps,
     tail,
     mid: mid.name,
-    midWanted: 'item-12345.txt',
+    midWanted: 'item-01234.txt',
     domMax,
     blank,
   }
 
   await kit.scrollTree(manyIndex)
-  await kit.collapse('fixtures/many')
+  await kit.collapse(large)
 
   // ---------- 说明行、符号链接 ----------
   const noteUnder = async (relativePath: string, kind: string) =>
@@ -277,6 +317,7 @@ export async function mockTree(session: string): Promise<TreeSeen> {
     rootRows,
     rootAsked,
     askedAtStart,
+    limited,
     many,
     scroll,
     reexpand,

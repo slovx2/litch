@@ -300,7 +300,13 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
     const remote = remoteOf(deviceId)
     if (typeof root === 'string' && root) {
       const full = normalizePath(expand(root))
-      remote.roots.add(full)
+      // 文档资源会用父目录作受限读取根；它不是另一份示例工作区，不能覆盖原树的相对路径。
+      if (
+        host.knownRoot(deviceId, full) ||
+        host.knownRoot(deviceId, shrink(full)) ||
+        ![...remote.roots].some((known) => insideRoot(known, full))
+      )
+        remote.roots.add(full)
       if (full !== normalizePath(root)) remote.short.add(full)
     }
     return remote.files
@@ -343,7 +349,13 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
       return { ...view, path: outward(root, view.path) }
     },
     async 'files.target'({ deviceId, root, path }, signal) {
-      return filesOf(deviceId, root).target(expand(root), expand(path), signal)
+      const target = await filesOf(deviceId, root).target(expand(root), expand(path), signal)
+      return {
+        ...target,
+        root: outward(root, target.root),
+        path: outward(root, target.path),
+        ...(target.linkPath ? { linkPath: outward(root, target.linkPath) } : {}),
+      }
     },
 
     async 'paths.list'({ deviceId, path }, signal) {

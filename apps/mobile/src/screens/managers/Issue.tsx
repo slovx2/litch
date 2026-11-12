@@ -17,7 +17,7 @@ import {
 } from '@litch/core'
 import { useIsFocused } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { useContext, useEffect, useRef, useState } from 'react'
+import { type RefObject, useContext, useEffect, useRef, useState } from 'react'
 import {
   Pressable,
   ScrollView,
@@ -133,8 +133,12 @@ function OptionChoice({
 }
 
 // 抽屉打开才挂载输入框；增高钩子随输入框挂载，重开已有草稿也会立即测量。
-function QuestionInput(props: TextInputProps) {
-  const input = useRef<TextInput>(null)
+function QuestionInput({
+  inputRef,
+  ...props
+}: TextInputProps & { inputRef?: RefObject<TextInput | null> }) {
+  const ownInput = useRef<TextInput>(null)
+  const input = inputRef ?? ownInput
   const grow = useGrow(input, props.value ?? '')
   return <TextInput {...props} ref={input} {...grow} />
 }
@@ -927,14 +931,14 @@ export function Issue({
                     </View>
                   ) : null}
                   {replyShown ? (
-                    <TextInput
+                    <QuestionInput
                       testID={`request-reply:${request.id}`}
                       accessibilityLabel={t('manager.requestText')}
                       placeholder={t('manager.requestText')}
                       placeholderTextColor={c.ink3}
                       style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
                       multiline
-                      ref={replyInput}
+                      inputRef={replyInput}
                       editable={features.feedback && !locked}
                       value={reply}
                       onChangeText={writeReply}
@@ -1063,8 +1067,8 @@ export function Issue({
                         ))}
                       </View>
                       {noteShown ? (
-                        <TextInput
-                          ref={replyInput}
+                        <QuestionInput
+                          inputRef={replyInput}
                           testID={`decision-input:${decision.id}`}
                           accessibilityLabel={t('manager.answer')}
                           placeholder={t('manager.answer')}

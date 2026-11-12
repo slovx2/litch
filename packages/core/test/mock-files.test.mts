@@ -288,3 +288,45 @@ test('“看文件”的回答：该认的路径都认出来、都在示例树�
     }
   }
 })
+
+test('大树性能夹具由15个有界目录组成，累计三万项且单层不截断', async () => {
+  const { list } = setup()
+  const root = `${ROOT}/fixtures/large-tree`
+  const groups = await list(root)
+  assert.equal(groups.entries.length, 15)
+  assert.equal(groups.truncated, false)
+  let rows = groups.entries.length
+  for (const group of groups.entries) {
+    assert.equal(group.kind, 'dir')
+    const children = await list(`${root}/${group.name}`)
+    assert.equal(children.entries.length, 1999)
+    assert.equal(children.truncated, false)
+    assert.equal(children.entries[0]?.name, 'item-00000.txt')
+    assert.equal(children.entries.at(-1)?.name, 'item-01998.txt')
+    rows += children.entries.length
+  }
+  assert.equal(rows, 30_000)
+})
+
+test('子目录作为预览资源根不会覆盖原示例树，切回源码仍读取同一文件', async () => {
+  const { list, run, read } = setup()
+  await list(ROOT)
+  const preview = await run<FilePreview>('files.preview', {
+    root: `${ROOT}/docs`,
+    path: `${ROOT}/docs/snippet.html`,
+    format: 'html',
+  })
+  assert.equal(preview.kind, 'ready')
+  const source = await read('docs/snippet.html')
+  assert.equal(source.kind, 'text')
+  if (source.kind === 'text') assert.match(source.text, /<script>window.__litchLeak = 2<\/script>/)
+})
+
+test('模拟文件目标保留项目根的波浪号写法，打开文件不误入单层临时根模式', async () => {
+  const { run } = setup()
+  const target = await run<{ root: string; path: string }>('files.target', {
+    path: `${ROOT}/docs/guide.md`,
+  })
+  assert.equal(target.root, ROOT)
+  assert.equal(target.path, `${ROOT}/docs/guide.md`)
+})

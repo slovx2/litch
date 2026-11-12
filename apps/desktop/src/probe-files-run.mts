@@ -176,7 +176,7 @@ async function runReal(window: BrowserWindow, mode: FilesMode): Promise<RealSeen
   const tree = await inPage(window, realTree, session, dirs.outside)
   // 重新展开会重建监视并补读，不再保证整个过程只读一次。用真实磁盘变更验新语义，
   // 缓存的请求次数由核心假时钟测试负责，避免把合法的监视补读当成缓存失效。
-  const marker = join(dirs.app, 'many', '000-refresh.txt')
+  const marker = join(dirs.app, 'large-tree', 'group-00', '000-refresh.txt')
   let refreshed: RealSeen['refreshed']
   try {
     writeFileSync(marker, '只由文件探针创建\n', { flag: 'wx' })
@@ -200,12 +200,12 @@ async function runReal(window: BrowserWindow, mode: FilesMode): Promise<RealSeen
 async function reopenedDirectory(): Promise<number> {
   const kit = (window as unknown as { __filesKit: FilesKit }).__filesKit
   await kit.scrollTree(0)
-  const row = await kit.rowShown('many')
+  const row = await kit.rowShown('large-tree')
   const index = Number(row.id.replace('ft-row-', ''))
-  await kit.expand('many')
+  await kit.expand('large-tree')
   await kit.until('重新展开目录有三万项', () => kit.rowCount() > 30_000)
-  await kit.scrollTree(index + 25)
-  await kit.rowShown('many/000-refresh.txt')
+  await kit.scrollTree(index + 1)
+  await kit.rowShown('large-tree/group-00/000-refresh.txt')
   return kit.rowCount()
 }
 
@@ -213,10 +213,10 @@ async function removedFromDirectory(expectedRows: number): Promise<void> {
   const kit = (window as unknown as { __filesKit: FilesKit }).__filesKit
   await kit.until(
     '监视自动移除已删除文件',
-    () => kit.rowCount() === expectedRows && !kit.row('many/000-refresh.txt'),
+    () => kit.rowCount() === expectedRows && !kit.row('large-tree/group-00/000-refresh.txt'),
   )
   await kit.scrollTree(0)
-  await kit.collapse('many')
+  await kit.collapse('large-tree')
 }
 
 async function run(

@@ -8,7 +8,8 @@ import { withChromiumTestArgs } from '../../../third_party/litch-automation/scri
 //
 // 后两种要的文件由这里摆进夹具自己的临时目录（只往那里面写，夹具退出时连目录一起删）：
 //   work/app/            项目的根（夹具造的会话就在这里）
-//     many/              三万个条目：30 个目录 group-00…，再加 item-00000.txt…
+//     many/              超过单层2000项：验证设备枚举截断及提示
+//     large-tree/        15个目录各1999项，累计三万行，验证虚拟滚动
 //     src/long.ts        六千行；src/app.ts 一个小的
 //     lib/deep/nested/needle-file.ts   给“找文件”找的，藏在没展开过的目录里
 //     notes.txt          二十行文字；big.log 超过显示上限；blob.dat 不是文字；shot.png 看扩展名就不读
@@ -102,6 +103,14 @@ function arrange(root) {
   for (let n = 0; n < MANY_DIRS; n++) dir('work/app/many', `group-${pad(n, 2)}`)
   for (let n = 0; n < MANY_FILES; n++)
     closeSync(openSync(inside('work/app/many', `item-${pad(n, 5)}.txt`), 'w'))
+
+  dir('work/app/large-tree')
+  for (let g = 0; g < 15; g++) {
+    const group = `group-${pad(g, 2)}`
+    dir('work/app/large-tree', group)
+    for (let n = 0; n < 1999; n++)
+      closeSync(openSync(inside('work/app/large-tree', group, `item-${pad(n, 5)}.txt`), 'w'))
+  }
 
   dir('work/app/src')
   put(
@@ -297,7 +306,9 @@ async function runOne(kind) {
   await fixture?.stop()
   // 我们摆进去的那些（三万个文件）要跟着夹具的临时目录一起没了。只看我们摆的：
   // 入口夹具收尾时引擎还在退出，会在删完之后又写回几个它自己的小目录，那不是这里摆的
-  for (const mine of dirs ? [join(dirs.app, 'many'), dirs.outside] : []) {
+  for (const mine of dirs
+    ? [join(dirs.app, 'many'), join(dirs.app, 'large-tree'), dirs.outside]
+    : []) {
     if (existsSync(mine)) outside.push(`摆进夹具临时目录的文件没删掉：${mine}`)
   }
   // 临时的用户数据目录在这里面

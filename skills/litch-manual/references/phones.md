@@ -1,8 +1,8 @@
 # Phones (Android and iOS, pairing by QR code)
 
-消息输入框占满添加按钮与右侧操作键之间的空间；空闲、运行中插话与讨论追问都随内容增高，达到上限后在框内滚动，清空后恢复。
+消息输入框占满添加按钮与右侧操作键之间的空间；空闲、运行中插话与讨论追问都随内容增高，达到上限后在框内滚动，清空后恢复。经理议题的评论、决策补充说明和“请你做”的回复也按此规则显示；重新打开草稿时按已有内容恢复高度。
 
-The message field fills the space between the add button and the actions on the right. Idle messages, mid-turn input, and discussion questions grow with their content, scroll within the field at the height limit, and shrink when cleared.
+The message field fills the space between the add button and the actions on the right. Idle messages, mid-turn input, and discussion questions grow with their content, scroll within the field at the height limit, and shrink when cleared. Manager issue comments, decision notes and request replies follow the same rule; reopening a draft restores the height needed for its content.
 
 iOS 手机设置的“关于”提供“隐私政策”和“支持与反馈”，在系统浏览器打开公开页面。
 iOS 的更新由 App Store 或 TestFlight 管理。隐私查询、删除请求及内容举报发至 admin@datawake.cc。

@@ -3,7 +3,7 @@
 // 抽屉里放在底部固定，完整页放在页尾。触控区不小于主题的 hit。
 import type { ManagerView } from '@litch/core'
 import { useIsFocused } from '@react-navigation/native'
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import { managerIssueActivity } from '../../../../../../packages/core/src/projection/manager-issue-activity.mts'
 import { MANAGER_ISSUE_STATUSES } from '../../../../../../packages/core/src/projection/manager-issue-list.mts'
@@ -13,6 +13,7 @@ import type {
   ManagerOrdinaryStatus,
 } from '../../../../../../packages/protocol/src/manager-issues.mts'
 import { stamp } from '../../../../../../packages/ui/src/app/format.ts'
+import { useGrow } from '../../../detail/composer/grow'
 import { useT } from '../../../ui/i18n'
 import { Chip } from '../../../ui/kit/controls'
 import { Fold, IconButton } from '../../../ui/kit/Icon'
@@ -401,6 +402,8 @@ export function IssueComposer({
   const { c, font, radius, hit } = useTheme()
   const key = JSON.stringify([manager.deviceId, manager.id, issue.id])
   const [text, setText] = useState(() => drafts.get(key) ?? '')
+  const input = useRef<TextInput>(null)
+  const grow = useGrow(input, text)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const edit = (value: string) => {
@@ -426,6 +429,8 @@ export function IssueComposer({
     <View style={styles.composer}>
       <View style={styles.composeRow}>
         <TextInput
+          ref={input}
+          {...grow}
           value={text}
           onChangeText={edit}
           editable={!disabled}
