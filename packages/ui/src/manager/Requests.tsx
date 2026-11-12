@@ -51,6 +51,8 @@ export function Requests({
     null,
   )
   const [submitting, setSubmitting] = useState<string | null>(null)
+  // 回复框默认收起，点“回复”才展开；已有草稿或正在修改回复时一直展开
+  const [replying, setReplying] = useState<string | null>(null)
   const inFlight = useRef(false)
   const [error, setError] = useState('')
   const root = useRef<HTMLDivElement>(null)
@@ -111,6 +113,8 @@ export function Requests({
       setSubmitting(null)
     }
   }
+  const replyShown = (request: ManagerRequestView, draft: ManagerSubmittedRequest | undefined) =>
+    replying === request.id || Boolean(draft?.text.trim()) || Boolean(request.response && draft)
   const sorted = sortManagerIssues(requests, order, (r) => ({
     at: r.createdAt,
     pending: r.status === 'open',
@@ -206,22 +210,6 @@ export function Requests({
                 </button>
               </div>
             ) : null}
-            {request.status === 'open' ? (
-              <CardActions>
-                <button
-                  type="button"
-                  className="btn ghost"
-                  data-act="manager-request-ignore"
-                  disabled={locked || !features.requestIgnore}
-                  title={!features.requestIgnore ? t('manager.oldDeviceShort') : undefined}
-                  onClick={() =>
-                    setIgnoring({ id: request.id, revision: request.revision, reason: '' })
-                  }
-                >
-                  {t('manager.ignore')}
-                </button>
-              </CardActions>
-            ) : null}
             {request.status === 'open' && ignoring?.id === request.id ? (
               <section className="mg-conflict" data-request-ignore-form>
                 <p>{t('manager.requestIgnoreNote')}</p>
@@ -244,7 +232,7 @@ export function Requests({
                 <CardActions>
                   <button
                     type="button"
-                    className="btn"
+                    className="btn primary"
                     data-act="manager-request-ignore-confirm"
                     disabled={locked || !features.requestIgnore}
                     onClick={() => void submit(request, false, true)}
@@ -264,25 +252,28 @@ export function Requests({
                 </CardActions>
               </section>
             ) : null}
-            {request.status !== 'cancelled' && editing ? (
+            {/* 确认忽略时收起作答区：卡上只留“确认忽略”和“取消” */}
+            {ignoring?.id === request.id ? null : request.status !== 'cancelled' && editing ? (
               <>
-                <textarea
-                  disabled={locked || old}
-                  title={oldTitle}
-                  className="req-input"
-                  rows={2}
-                  data-act="manager-request-text"
-                  value={draft?.text ?? ''}
-                  onKeyDown={(event) => {
-                    if (!submitQuestionOnEnter(event.nativeEvent)) return
-                    event.preventDefault()
-                    if (!locked && !old && state !== 'conflict' && draft?.text.trim())
-                      void submit(request, false)
-                  }}
-                  aria-label={t('manager.requestText')}
-                  placeholder={t('manager.requestText')}
-                  onChange={(event) => change(request, { text: event.target.value })}
-                />
+                {replyShown(request, draft) ? (
+                  <textarea
+                    disabled={locked || old}
+                    title={oldTitle}
+                    className="req-input"
+                    rows={2}
+                    data-act="manager-request-text"
+                    value={draft?.text ?? ''}
+                    onKeyDown={(event) => {
+                      if (!submitQuestionOnEnter(event.nativeEvent)) return
+                      event.preventDefault()
+                      if (!locked && !old && state !== 'conflict' && draft?.text.trim())
+                        void submit(request, false)
+                    }}
+                    aria-label={t('manager.requestText')}
+                    placeholder={t('manager.requestText')}
+                    onChange={(event) => change(request, { text: event.target.value })}
+                  />
+                ) : null}
                 <CardActions>
                   <button
                     type="button"
@@ -299,6 +290,47 @@ export function Requests({
                       : (request.buttonLabel ?? t('manager.requestDone'))}
                   </button>
                 </CardActions>
+                {replyShown(request, draft) ? null : (
+                  <CardActions>
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      data-act="manager-request-reply-open"
+                      aria-expanded={false}
+                      disabled={locked || old}
+                      title={oldTitle}
+                      onClick={() => {
+                        setReplying(request.id)
+                        // 展开后直接进入输入
+                        requestAnimationFrame(() =>
+                          root.current
+                            ?.querySelector<HTMLTextAreaElement>(
+                              `[data-manager-request="${request.id}"] [data-act="manager-request-text"]`,
+                            )
+                            ?.focus(),
+                        )
+                      }}
+                    >
+                      {t('manager.requestReply')}
+                    </button>
+                  </CardActions>
+                )}
+                {request.status === 'open' ? (
+                  <CardActions>
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      data-act="manager-request-ignore"
+                      disabled={locked || !features.requestIgnore}
+                      title={!features.requestIgnore ? t('manager.oldDeviceShort') : undefined}
+                      onClick={() =>
+                        setIgnoring({ id: request.id, revision: request.revision, reason: '' })
+                      }
+                    >
+                      {t('manager.ignore')}
+                    </button>
+                  </CardActions>
+                ) : null}
                 {draft?.text.trim() ? (
                   <CardActions>
                     <button

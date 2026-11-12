@@ -22,6 +22,7 @@ import { BoardLinks } from './BoardLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferences } from './BoardReferences.tsx'
 import { CardActions } from './CardActions.tsx'
+import { useBatchBarInset } from './card-action-viewport.ts'
 import { useCardMotion } from './card-motion.ts'
 import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutcome.tsx'
 import { DraftEnded } from './DraftEnded.tsx'
@@ -151,6 +152,8 @@ export function Decisions({
     return () => clearTimeout(timer)
   }, [sent])
   const footer = useRef<HTMLElement>(null)
+  // 批量栏吸底时，卡尾操作栏贴在它的上沿
+  const barRef = useBatchBarInset(footer)
   const located = useRef<HTMLElement | null>(null)
   /** 点草稿数：滚到当前位置之后的下一张有草稿的卡，到底了回到第一张 */
   const locateDraft = () => {
@@ -791,14 +794,14 @@ export function Decisions({
         </p>
       ) : null}
       {part !== 'cards' && !unsent && !held && !heldQuestions && sent ? (
-        <footer className="mg-send" ref={footer} data-sent role="status">
+        <footer className="mg-send" ref={barRef} data-sent role="status">
           <span className="grow">
             <span aria-hidden="true">✓</span> {t('manager.sent', { n: sent })}
           </span>
         </footer>
       ) : null}
       {part !== 'cards' && (unsent || held || heldQuestions) ? (
-        <footer className="mg-send" ref={footer}>
+        <footer className="mg-send" ref={barRef}>
           <span className="grow">
             <button
               type="button"

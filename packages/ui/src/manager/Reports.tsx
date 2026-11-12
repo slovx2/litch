@@ -81,7 +81,7 @@ export function Reports({
             <CardActions>
               <button
                 type="button"
-                className="btn"
+                className="btn primary"
                 disabled={disabled || !!busy || !features.posts}
                 title={features.posts ? undefined : t('manager.oldDeviceShort')}
                 data-act="report-read"

@@ -405,27 +405,6 @@ fieldset.mg-issue-status {
   color: var(--ink-2);
 }
 
-.mg-issue-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: calc(12px * var(--fs));
-}
-/* 转讨论：强调色描边，比实心主按钮轻，比幽灵按钮醒目 */
-.mg-issue-discuss {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--accent);
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
-  font-weight: 500;
-}
-.mg-issue-discuss:hover,
-.mg-issue-discuss[aria-pressed="true"] {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-}
 .mg-issue-count {
   min-width: 1.6em;
   padding: 0 5px;
@@ -437,9 +416,10 @@ fieldset.mg-issue-status {
   background: color-mix(in srgb, var(--ink-3) 18%, transparent);
   text-align: center;
 }
-.mg-issue-discuss .mg-issue-count {
-  color: inherit;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+/* 讨论入口按下（抽屉开着）时和看板卡头的讨论入口一样高亮 */
+.mg-issue-discuss[aria-pressed="true"] {
+  background: var(--sel);
+  color: var(--ink);
 }
 
 /* 关联：一行小标签 */
@@ -499,6 +479,9 @@ fieldset.mg-issue-status {
   gap: 6px;
   font-size: calc(12.5px * var(--fs));
   color: var(--ink-2);
+}
+.mg-issue-talk-head .mg-issue-full {
+  margin-inline-start: auto;
 }
 .mg-issue-timeline {
   list-style: none;

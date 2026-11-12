@@ -144,13 +144,19 @@ note, while Submit to manager sends a written reply. Success clears that respons
 failure keeps it and explains the error. Other cards and discussion drafts remain available for
 batch submission on desktop and phone.
 
-决策、建议、请你做、报告和 issue 的长卡片操作栏会吸附在当前可视区域底部，
+决策、建议、请你做、报告和 issue 的长卡片操作栏会吸附在当前可视区域底部，下方有批量提交栏时贴在它的上沿；
 滑到卡尾时回归原位；操作栏随所属卡片离开，不遮挡正文末行。手机按可用视口避让安全区和键盘。
+操作栏的排法统一：主操作（交付按钮、标记已阅、提交给经理）在最前，忽略、回复等次要操作是不带边框的小按钮，
+唯一的讨论入口是末端的讨论图标和评论数；完整讨论从讨论抽屉的标题行进入。请你做的回复框默认收起，点“回复”展开，已有草稿时保持展开。
 
 On desktop and phone, long decision, suggestion, For you, report and issue cards keep their actions
-at the bottom of the visible area. Actions remain within their card and return to their original
-position at its end, leaving the final content lines visible. Phone layouts account for the safe
-area and keyboard.
+at the bottom of the visible area, or just above the batch submit bar when it is shown. Actions remain
+within their card and return to their original position at its end, leaving the final content lines
+visible. Phone layouts account for the safe area and keyboard. Every card uses the same action layout:
+the main action (the delivery button, Mark as read or Submit to manager) comes first, secondary actions
+such as Ignore and Reply are borderless, and the only discussion entry is the discussion icon with its
+comment count at the end. Open the full discussion from the discussion drawer's title row. The For you
+reply box stays collapsed until you choose Reply, and stays open while it holds a draft.
 
 ### 看板键盘提交 / Board keyboard submission
 

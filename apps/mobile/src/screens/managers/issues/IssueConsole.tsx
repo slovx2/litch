@@ -511,6 +511,7 @@ export function IssueSheetDrawer({
           bare
           inline
           hideDiscussion={talking}
+          discussionCount={issue.discussion.comments.length}
         />
       </IssueContext.Provider>
     ) : undefined
@@ -575,9 +576,6 @@ export function IssueSheetDrawer({
             onOpenItem={onOpenItem}
           />
         )}
-        {!talking ? (
-          <Button kind="plain" label={t('issue.full.open')} testID="issue-full" onPress={onFull} />
-        ) : null}
       </View>
     </DiscussionDrawer>
   )

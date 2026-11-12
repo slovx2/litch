@@ -1,12 +1,13 @@
 import '../src/styles/index.css'
 import '../src/styles/manager.css'
 import { type CoreChannel, createReplica } from '@litch/core'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { sampleReport } from '../../core/src/mock/manager-posts.mts'
 import { sampleManagers } from '../../core/src/mock/sample-manager.mts'
 import { ServicesProvider } from '../src/app/services.tsx'
 import { CardActionScope, CardActions } from '../src/manager/CardActions.tsx'
+import { useBatchBarInset } from '../src/manager/card-action-viewport.ts'
 import { ManagerFeaturesContext } from '../src/manager/data.ts'
 import { Reports } from '../src/manager/Reports.tsx'
 
@@ -31,8 +32,23 @@ const channel = {
   close() {},
 } as unknown as CoreChannel
 Object.assign(window, { __boardActionCalls: calls })
+/** 与看板批量栏同样的吸底条：用于验证卡尾贴在它的上沿 */
+function BatchBar() {
+  const own = useRef<HTMLElement | null>(null)
+  const ref = useBatchBarInset(own)
+  return (
+    <footer className="mg-send" ref={ref} data-batch-bar>
+      <span className="grow">星云项目 · 2 项未提交</span>
+      <button className="btn primary" type="button">
+        提交
+      </button>
+    </footer>
+  )
+}
 function Fixture() {
   const [count, setCount] = useState(0)
+  const [batch, setBatch] = useState(false)
+  Object.assign(window, { __boardBatch: setBatch })
   return (
     <ServicesProvider value={{ channel, replica: createReplica(channel), shell: 'browser' }}>
       <ManagerFeaturesContext.Provider value={{ posts: true, feedback: true, ignore: true }}>
@@ -47,7 +63,7 @@ function Fixture() {
           }}
         >
           <header style={{ padding: 16 }}>星云项目 · 经理看板</header>
-          <div data-scroll style={{ overflowY: 'auto', flex: 1, minHeight: 0, padding: 16 }}>
+          <div data-scroll className="mg-body" style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
             <Reports manager={manager} posts={[report]} disabled={false} />
             {['决策', '建议', '请你做', 'issue'].map((kind) => (
               <CardActionScope key={kind}>
@@ -90,6 +106,7 @@ function Fixture() {
                 )}
               </CardActionScope>
             ))}
+            {batch ? <BatchBar /> : null}
           </div>
         </main>
       </ManagerFeaturesContext.Provider>

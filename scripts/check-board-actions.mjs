@@ -32,10 +32,7 @@ await browserFixture(
     )
     await settle()
     let g = await geometry()
-    assert.ok(
-      Math.abs(g.actions.bottom - g.viewport.bottom + (mobile ? 0 : 16)) < 3,
-      JSON.stringify(g),
-    )
+    assert.ok(Math.abs(g.actions.bottom - g.viewport.bottom) < 3, JSON.stringify(g))
     await shot(mobile ? 'mobile-middle' : 'desktop-middle')
     // 操作栏要能真正命中按钮，而不只是看起来移动了。
     const point = await read(
@@ -79,7 +76,7 @@ await browserFixture(
       const bounds = await read(
         `(()=>{const c=document.querySelectorAll(${JSON.stringify(selector)})[${i}],a=c.querySelector(${JSON.stringify(actions)}),s=document.querySelector(${JSON.stringify(scroll)});return [a.getBoundingClientRect().bottom,s.getBoundingClientRect().bottom]})()`,
       )
-      assert.ok(Math.abs(bounds[0] - bounds[1] + (mobile ? 0 : 16)) < 3, JSON.stringify(bounds))
+      assert.ok(Math.abs(bounds[0] - bounds[1]) < 3, JSON.stringify(bounds))
     }
     // 缩短可用视口（与键盘避让后的几何一致），操作栏随可视底部更新。
     await call('Emulation.setDeviceMetricsOverride', {
@@ -92,10 +89,25 @@ await browserFixture(
     const resized = await read(
       `(()=>{const c=document.querySelectorAll(${JSON.stringify(selector)})[3],a=c.querySelector(${JSON.stringify(actions)}),s=document.querySelector(${JSON.stringify(scroll)});return [a.getBoundingClientRect().bottom,s.getBoundingClientRect().bottom]})()`,
     )
-    assert.ok(Math.abs(resized[0] - resized[1] + (mobile ? 0 : 16)) < 3, JSON.stringify(resized))
+    assert.ok(Math.abs(resized[0] - resized[1]) < 3, JSON.stringify(resized))
     // 已滚出的上一卡片，其操作条也必须完全离开视口。
     g = await geometry()
     assert.ok(g.actions.bottom < g.viewport.top, JSON.stringify(g))
+    if (!mobile) {
+      // 有批量栏时，卡尾贴在批量栏的上沿，而不是可视底边。
+      await read('window.__boardBatch(true)')
+      await wait('!!document.querySelector("[data-batch-bar]")')
+      await read(
+        `(()=>{const c=document.querySelectorAll(${JSON.stringify(selector)})[1],s=document.querySelector(${JSON.stringify(scroll)});s.scrollTop+=c.getBoundingClientRect().top-s.getBoundingClientRect().top+(c.getBoundingClientRect().height-s.getBoundingClientRect().height)/2})()`,
+      )
+      await settle()
+      const stacked = await read(
+        `(()=>{const c=document.querySelectorAll(${JSON.stringify(selector)})[1],a=c.querySelector(${JSON.stringify(actions)}),b=document.querySelector('[data-batch-bar]'),s=document.querySelector(${JSON.stringify(scroll)});return {actions:a.getBoundingClientRect().bottom,bar:b.getBoundingClientRect().top,barBottom:b.getBoundingClientRect().bottom,viewport:s.getBoundingClientRect().bottom}})()`,
+      )
+      assert.ok(Math.abs(stacked.actions - stacked.bar) < 3, JSON.stringify(stacked))
+      assert.ok(Math.abs(stacked.barBottom - stacked.viewport) < 3, JSON.stringify(stacked))
+      await shot('desktop-batch')
+    }
     console.log(
       `PASS ${mobile ? 'mobile' : 'desktop'} five card types, bounded actions, footer reserve and pointer hit`,
     )

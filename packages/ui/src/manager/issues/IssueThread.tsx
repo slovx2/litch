@@ -17,7 +17,7 @@ import { reasonOf } from '../../app/errors.ts'
 import { Icon } from '../../app/icons.tsx'
 import { useServices } from '../../app/services.tsx'
 import { BoardMarkdown } from '../BoardMarkdown.tsx'
-import { CardActionScope, CardActions } from '../CardActions.tsx'
+import { CardActionScope } from '../CardActions.tsx'
 import { useDiscussionPane } from '../discussion-pane.ts'
 import { RelationLink } from '../RelationLink.tsx'
 import type { IssueCommands } from './data.ts'
@@ -184,17 +184,19 @@ export function IssueRelationsRow({
   )
 }
 
-/** “打开完整讨论”：小图标加文字，次要样式 */
+/** “打开完整讨论”：只放图标，名称在悬停提示和读屏里 */
 export function FullDiscussionButton({ onClick }: { onClick(): void }) {
   const t = useT()
   return (
     <button
       type="button"
-      className="btn ghost mg-issue-btn"
+      className="ibtn mg-issue-full"
       data-act="issue-full"
+      title={t('issue.full.open')}
+      aria-label={t('issue.full.open')}
       onClick={onClick}
     >
-      <Icon name="expand" small /> {t('issue.full.open')}
+      <Icon name="expand" small />
     </button>
   )
 }
@@ -297,6 +299,10 @@ export function IssueThread({
                 bodySlot,
               )
             : null}
+          {/* 抽屉里完整讨论的入口放在抽屉标题行；卡片上只留一个讨论入口 */}
+          {bodySlot && onFull
+            ? createPortal(<FullDiscussionButton onClick={onFull} />, bodySlot)
+            : null}
           {openingError ? (
             <p role="alert" className="err">
               {openingError}
@@ -338,13 +344,6 @@ export function IssueThread({
               <IssueRelationsRow manager={manager} issue={issue} onOpenItem={onOpenItem} />
             </div>
           ) : null}
-          {onFull && mode !== 'pane' ? (
-            <CardActions>
-              <div className="mg-issue-acts">
-                <FullDiscussionButton onClick={onFull} />
-              </div>
-            </CardActions>
-          ) : null}
           <IssueDiscussion
             issue={issue}
             changes={changes}
@@ -354,6 +353,9 @@ export function IssueThread({
             special={special}
             onComment={(body) => commands.comment({ id: issue.id, revision: issue.revision, body })}
             onAsk={ask}
+            headAction={
+              onFull && mode !== 'pane' ? <FullDiscussionButton onClick={onFull} /> : undefined
+            }
           />
           {footer}
         </section>

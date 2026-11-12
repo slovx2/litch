@@ -63,6 +63,8 @@ export function DiscussionDrawer({
   const { height } = useWindowDimensions()
   const [full, setFull] = useState(false)
   const [drag, setDrag] = useState(0)
+  // 滑入动画结束的次数：卡尾操作栏据此重量位置
+  const [shown, setShown] = useState(0)
   const scroll = useRef<KeyboardAwareScrollViewRef>(null)
   // 手势回调只建一次，读最新的档位和关闭函数用 ref
   const state = useRef({ full, onClose })
@@ -90,7 +92,13 @@ export function DiscussionDrawer({
     onClose()
   }
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={close}
+      onShow={() => setShown((value) => value + 1)}
+    >
       <ModalKeyboardArea style={styles.bottom}>
         <Pressable
           accessibilityRole="button"
@@ -172,6 +180,7 @@ export function DiscussionDrawer({
           </View>
           <BoardActionScrollView
             ref={scroll}
+            settled={`${shown}:${full}:${sheet}`}
             style={styles.fill}
             contentContainerStyle={styles.body}
             keyboardShouldPersistTaps="handled"

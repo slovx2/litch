@@ -34,8 +34,13 @@ export function BoardActionScrollView({
   onScroll,
   onLayout,
   onContentSizeChange,
+  settled,
   ...props
-}: KeyboardAwareScrollViewProps & { ref?: Ref<KeyboardAwareScrollViewRef> }) {
+}: KeyboardAwareScrollViewProps & {
+  ref?: Ref<KeyboardAwareScrollViewRef>
+  /** 外层滑入动画结束时换一个值：动画中量到的窗口位置不准，结束后重量一次 */
+  settled?: unknown
+}) {
   const box = useRef<View>(null)
   const scroll = useSharedValue(0)
   const [revision, changed] = useState(0)
@@ -53,10 +58,14 @@ export function BoardActionScrollView({
       )
     })
   }, [height, keyboard, insets.bottom])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: settled 变了要重量，卡片随新视口重算。
   useLayoutEffect(() => {
-    const frame = requestAnimationFrame(measure)
+    const frame = requestAnimationFrame(() => {
+      measure()
+      changed((value) => value + 1)
+    })
     return () => cancelAnimationFrame(frame)
-  }, [measure])
+  }, [measure, settled])
   const value = useMemo(() => ({ ...bounds, scroll, revision }), [bounds, scroll, revision])
   return (
     <View ref={box} collapsable={false} style={styles.fill} onLayout={measure}>
@@ -86,9 +95,11 @@ export function BoardActionScrollView({
   )
 }
 
-type ActionEntry = { node: ReactNode; full: boolean }
+/** 排位：主按钮在最前，讨论入口靠右排在最后，其余按挂载顺序 */
+type Place = 'first' | 'normal' | 'last'
+type ActionEntry = { node: ReactNode; full: boolean; place: Place }
 type ActionsScope = {
-  register(id: string, node: ReactNode, full: boolean): void
+  register(id: string, node: ReactNode, full: boolean, place: Place): void
   remove(id: string): void
 }
 const Actions = createContext<ActionsScope | null>(null)
@@ -107,7 +118,8 @@ function OwnActionArea({ children, onLayout, ...props }: ViewProps) {
   const [entries, setEntries] = useState(() => new Map<string, ActionEntry>())
   const scope = useMemo<ActionsScope>(
     () => ({
-      register: (id, node, full) => setEntries((old) => new Map(old).set(id, { node, full })),
+      register: (id, node, full, place) =>
+        setEntries((old) => new Map(old).set(id, { node, full, place })),
       remove: (id) =>
         setEntries((old) => {
           const next = new Map(old)
@@ -182,11 +194,16 @@ function OwnActionArea({ children, onLayout, ...props }: ViewProps) {
               movement,
             ]}
           >
-            {[...entries].map(([id, { node, full }]) => (
-              <View key={id} style={[styles.group, full && styles.full]}>
-                {node}
-              </View>
-            ))}
+            {[...entries]
+              .sort(([, a], [, b]) => RANK[a.place] - RANK[b.place])
+              .map(([id, { node, full, place }]) => (
+                <View
+                  key={id}
+                  style={[styles.group, full && styles.full, place === 'last' && styles.last]}
+                >
+                  {node}
+                </View>
+              ))}
           </Animated.View>
         ) : null}
       </Actions.Provider>
@@ -195,15 +212,30 @@ function OwnActionArea({ children, onLayout, ...props }: ViewProps) {
 }
 
 /** 操作节点只挂载一次，移到同一卡片尾部，保留按钮自身状态、可访问性和点击行为。 */
-export function CardActions({ children, full = false }: { children: ReactNode; full?: boolean }) {
+export function CardActions({
+  children,
+  full = false,
+  primary = false,
+  last = false,
+}: {
+  children: ReactNode
+  full?: boolean
+  /** 卡片的主操作：排在操作栏最前 */
+  primary?: boolean
+  /** 讨论入口：靠右排在最后 */
+  last?: boolean
+}) {
   const scope = useContext(Actions)
   const id = useId()
+  const place: Place = primary ? 'first' : last ? 'last' : 'normal'
   useLayoutEffect(() => {
-    scope?.register(id, children, full)
-  }, [scope, id, children, full])
+    scope?.register(id, children, full, place)
+  }, [scope, id, children, full, place])
   useLayoutEffect(() => () => scope?.remove(id), [scope, id])
   return scope ? null : children
 }
+
+const RANK: Record<Place, number> = { first: -1, normal: 0, last: 1 }
 
 const styles = StyleSheet.create({
   fill: { flex: 1, minHeight: 0 },
@@ -218,5 +250,6 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   group: { flexShrink: 1, maxWidth: '100%' },
+  last: { marginLeft: 'auto' },
   full: { width: '100%' },
 })

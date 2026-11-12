@@ -9,7 +9,7 @@ import { Icon } from '../../app/icons.tsx'
 import { CardActionScope, CardActions } from '../CardActions.tsx'
 import type { IssueCommands } from './data.ts'
 import { IssueMeta } from './IssueMeta.tsx'
-import { FullDiscussionButton, IssueThread } from './IssueThread.tsx'
+import { IssueThread } from './IssueThread.tsx'
 
 export function IssueCard({
   manager,
@@ -115,20 +115,24 @@ export function IssueCard({
             <div className="mg-issue-detail" data-issue-detail={head.id}>
               {quick}
               <CardActions>
-                <div className="mg-issue-acts">
-                  {/* 转讨论的入口：强调色描边按钮，醒目但不压过快速处理的实心主按钮 */}
-                  <button
-                    type="button"
-                    className="btn mg-issue-discuss"
-                    data-act="issue-discuss"
-                    aria-pressed={talking}
-                    onClick={onTalk}
-                  >
-                    <Icon name="note" small /> {t('issue.discuss.open')}
-                    {comments ? <span className="mg-issue-count">{comments}</span> : null}
-                  </button>
-                  <FullDiscussionButton onClick={onFull} />
-                </div>
+                {/* 唯一的讨论入口：图标加条数，排在操作栏末端；完整讨论从抽屉标题行进入 */}
+                <button
+                  type="button"
+                  className="mg-talk-entry mg-issue-discuss"
+                  data-act="issue-discuss"
+                  aria-pressed={talking}
+                  aria-label={[
+                    t('issue.discuss.open'),
+                    comments ? t('manager.discussionCount', { n: comments }) : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                  title={t('issue.discuss.open')}
+                  onClick={onTalk}
+                >
+                  <Icon name="note" small />
+                  {comments ? <span className="mg-talk-count">{comments}</span> : null}
+                </button>
               </CardActions>
             </div>
           ) : (

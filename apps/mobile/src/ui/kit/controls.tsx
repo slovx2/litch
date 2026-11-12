@@ -29,8 +29,9 @@ export function Button({
 }: {
   label: string
   onPress(): void
-  /** solid 实心（主要动作）；plain 只有边框；danger 危险动作（去掉、删除） */
-  kind?: 'solid' | 'plain' | 'danger'
+  /** solid 实心（主要动作）；plain 只有边框；danger 危险动作（去掉、删除）；
+   *  quiet 没有边框的次要动作（卡片操作栏里主按钮旁的忽略、回复），触控高度照旧 */
+  kind?: 'solid' | 'plain' | 'danger' | 'quiet'
   disabled?: boolean
   busy?: boolean
   /** 读屏名称和字不一样时给（比如不能点时写明原因）；不给就读字 */
@@ -40,8 +41,9 @@ export function Button({
   const { c, hit, radius, font } = useTheme()
   const inactive = disabled || busy
   const bg = kind === 'solid' ? c.accentSolid : 'transparent'
-  const fg = kind === 'solid' ? c.onAccent : kind === 'danger' ? c.err : c.ink
-  const border = kind === 'danger' ? c.err : c.line3
+  const fg =
+    kind === 'solid' ? c.onAccent : kind === 'danger' ? c.err : kind === 'quiet' ? c.ink2 : c.ink
+  const border = kind === 'danger' ? c.err : kind === 'quiet' ? 'transparent' : c.line3
   return (
     <Pressable
       // 安卓上忙过一次之后，读屏的“忙”不会随 busy 变回 false 清掉（uiautomator 里一直挂着 busy）：
@@ -55,6 +57,7 @@ export function Button({
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
+        kind === 'quiet' ? styles.quiet : null,
         {
           minHeight: hit,
           borderRadius: radius.m,
@@ -65,7 +68,15 @@ export function Button({
       ]}
     >
       {busy ? <ActivityIndicator size="small" color={fg} /> : null}
-      <Text style={[styles.buttonText, { color: fg, fontFamily: font.ui }]}>{label}</Text>
+      <Text
+        style={[
+          styles.buttonText,
+          kind === 'quiet' ? styles.quietText : null,
+          { color: fg, fontFamily: font.ui },
+        ]}
+      >
+        {label}
+      </Text>
     </Pressable>
   )
 }
@@ -438,6 +449,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   buttonText: { fontSize: 15, fontWeight: '600' },
+  quiet: { paddingHorizontal: 10 },
+  quietText: { fontWeight: '400' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
