@@ -111,11 +111,11 @@ try {
     const text = (id) =>
       read(`document.querySelector('[data-testid="${id}"]')?.textContent ?? null`)
     await wait('[data-testid="draft-bar"]')
-    assert.equal(await text('draft-summary:D-2'), '✎ 选了「先发，补验放下一版」 · 写了追问')
-    assert.equal(await text('draft-summary:D-3'), '✎ 写了说明')
-    assert.equal(await text('draft-summary:D-5'), '✎ 写了追问')
+    assert.equal(await text('draft-summary:D-2'), '选了「先发，补验放下一版」 · 写了追问')
+    assert.equal(await text('draft-summary:D-3'), '写了说明')
+    assert.equal(await text('draft-summary:D-5'), '写了追问')
     assert.equal(await text('draft-summary:D-1'), null)
-    assert.match(await text('draft-bar'), /3 项草稿 ↓ · 1 项失效/)
+    assert.match(await text('draft-bar'), /3 项草稿 · 1 项失效/)
     // 提交条在滚动区下面贴底，不压在卡片上
     const layout = await read(
       `(()=>{const bar=document.querySelector('[data-testid="draft-bar"]').getBoundingClientRect();const list=document.querySelector('[data-testid="manager-board-scroll"]').getBoundingClientRect();return {bottom:Math.round(innerHeight-bar.bottom),seam:Math.round(bar.top-list.bottom)}})()`,
