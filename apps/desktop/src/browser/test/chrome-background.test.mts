@@ -34,7 +34,7 @@ test('没有普通窗口时创建不获取焦点的窗口，不依赖浏览器�
   assert.deepEqual(calls, [{ url: 'about:blank', type: 'normal', focused: false }])
 })
 
-test('登录等待只暂停并关闭焦点模拟，不调用标签或窗口激活', async () => {
+test('登录等待关闭焦点模拟并清理代理指针，不调用标签或窗口激活', async () => {
   const commands: unknown[] = []
   const state = {
     epoch: 'epoch',
@@ -89,5 +89,16 @@ test('登录等待只暂停并关闭焦点模拟，不调用标签或窗口激�
     args: {},
   })
   assert.equal(state.paused.has('lease'), true)
-  assert.deepEqual(commands, [['Emulation.setFocusEmulationEnabled', { enabled: false }]])
+  // 交给用户登录前移除代理指针；只清理自动化标记，不触碰网页表单，也不激活窗口。
+  assert.deepEqual(commands, [
+    ['Emulation.setFocusEmulationEnabled', { enabled: false }],
+    [
+      'Runtime.evaluate',
+      {
+        expression:
+          "document.querySelectorAll('[data-litch-chrome-pointer]').forEach(node => node.remove())",
+        timeout: 1000,
+      },
+    ],
+  ])
 })
