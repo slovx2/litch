@@ -49,7 +49,7 @@ import type {
   TodoStep,
 } from '../model.mjs'
 import type { TerminalsAlive } from '../model-terminal.mjs'
-import type { SessionEventView } from '../model-tree.mjs'
+import { proposalStatus, type SessionEventView } from '../model-tree.mjs'
 import {
   createOrganizerHost,
   memoryOrganizerStore,
@@ -484,6 +484,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   const suggestionSinks = new Map<string, Set<HostSink>>()
   const suggestionsView = (
     deviceId: string,
+    includeSettled = false,
   ): import('../model-suggestions.mjs').SuggestionsView => {
     const sidebar = sidebars.get(deviceId)
     return {
@@ -499,10 +500,16 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           const mark = managerMark(source)
           const project = sidebar?.workspaces.find((w) => w.id === source.workspaceId)
           return (view.proposals ?? [])
-            .filter((p) => p.status === 'pending' && !p.offer && p.expiresAt > clock.now())
+            .filter(
+              (p) =>
+                !p.offer &&
+                (includeSettled || (p.status === 'pending' && p.expiresAt > clock.now())),
+            )
             .map((proposal) => ({
               deviceId,
-              proposal,
+              proposal: includeSettled
+                ? { ...proposal, status: proposalStatus(proposal, clock.now()) }
+                : proposal,
               source: {
                 threadId: source.id,
                 title: typeof source.title === 'string' ? source.title : source.id,
@@ -2209,7 +2216,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   const managers = createMockManagers({
     issues: options.managerIssues !== false,
     summaries: (deviceId) => sidebars.get(deviceId)?.sessions ?? [],
-    suggestions: (deviceId) => suggestionsView(deviceId).suggestions,
+    suggestions: (deviceId, includeSettled) =>
+      suggestionsView(deviceId, includeSettled).suggestions,
     ...tasksHost,
     say(deviceId, threadId, prompt, answer) {
       const view = loadSession(deviceId, threadId)

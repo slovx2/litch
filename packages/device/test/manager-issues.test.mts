@@ -12,8 +12,9 @@ import {
   MANAGER_ISSUE_NOTIFICATION as N,
 } from '../../protocol/src/manager-issues.mjs'
 import { managerQuestionToolAllowed } from '../../protocol/src/manager-question.mjs'
-import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
+import { parseSessionEvent, SESSION_TREE_METHOD } from '../../protocol/src/session-tree.mjs'
 import { MANAGER_SCHEMA_VERSION } from '../src/manager-store.mjs'
+import { startChild } from '../src/session-start.mjs'
 import { rig } from './helpers.mjs'
 import { refuseSteer, treeRig, until } from './tree-kit.mjs'
 
@@ -942,5 +943,54 @@ test('报告缺省开启且不持久化推导暂停；其他类型保持状态�
   } finally {
     if (second) await second.close()
     else await env.close()
+  }
+})
+
+test('忽略待审核建议后 issue 进行中筛选移除，详情与分页计数保持一致', async () => {
+  const { env, managerId, threadId } = await setup()
+  try {
+    const client = env.connect()
+    await client.initialize(['harness', 'sessionTree', 'litchManager', 'litchManagerIssues'])
+    const source = await startChild(
+      env.device.sessionTree,
+      threadId,
+      {
+        title: '星云工作线',
+        prompt: '隔离验证',
+        kind: 'fresh',
+        worktree: false,
+        wakeParent: false,
+      },
+      'user',
+    )
+    const proposal = env.device.sessionTree.propose({
+      threadId: source.threadId,
+      title: '待审核建议',
+      background: '隔离背景',
+      prompt: '隔离任务',
+      kind: 'fresh',
+      harness: 'pi',
+      model: null,
+      cwd: env.stateDir,
+      wakeParent: false,
+    })
+    const query = { managerId, kinds: ['suggestion'], statuses: ['pending'] }
+    const before = (await client.call(M.list, query)).page
+    assert.equal(before.total, 1)
+    assert.equal(before.entries[0].id, `S-${proposal.id}`)
+    await client.call(SESSION_TREE_METHOD.proposalDismiss, { proposalId: proposal.id })
+    const after = (await client.call(M.list, query)).page
+    assert.equal(after.total, 0)
+    assert.equal(after.entries.length, 0)
+    const dropped = (await client.call(M.list, { ...query, statuses: ['dismissed'] })).page
+    assert.equal(dropped.total, 1)
+    assert.equal(dropped.entries[0].id, `S-${proposal.id}`)
+    assert.equal(
+      (await client.call(M.read, { managerId, id: `S-${proposal.id}` })).issue.status,
+      'dismissed',
+    )
+    assert.equal(env.device.managers.paging.summary(managerId).counts.suggestion.dismissed, 1)
+  } finally {
+    await env.close()
   }
 })

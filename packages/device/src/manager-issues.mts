@@ -18,6 +18,7 @@ import {
 } from '../../protocol/src/manager-issues.mjs'
 import type { ManagerPost } from '../../protocol/src/manager-posts.mjs'
 import { formatSessionEvent } from '../../protocol/src/session-tree.mjs'
+import { managerSuggestionIssueStatus } from '../../protocol/src/suggestion-inbox.mjs'
 import type { DeviceManagers } from './manager.mjs'
 import { addRelations, projectedRelations } from './manager-relations.mjs'
 import { isRequest } from './manager-requests.mjs'
@@ -125,13 +126,9 @@ export class ManagerIssues {
         : (object?.status ??
           (post.kind === 'report' ? (post.unread ? 'unread' : 'read') : post.fields.status))
     const status = (
-      post.kind === 'suggestion' && rawStatus === 'pending' && (review || ownSuggestion)
-        ? (review?.state ?? 'endorsed')
-        : rawStatus === 'here'
-          ? 'started'
-          : rawStatus === 'withdrawn' && post.kind === 'suggestion'
-            ? 'dismissed'
-            : rawStatus
+      post.kind === 'suggestion'
+        ? managerSuggestionIssueStatus(String(rawStatus), review?.state ?? null, ownSuggestion)
+        : rawStatus
     ) as ManagerIssue['status']
     return {
       id,
