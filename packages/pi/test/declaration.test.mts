@@ -222,6 +222,7 @@ test('Pi：runtime/info 带结构化声明，原有字段原样保留', { timeou
     // 没打开审批时不发审批，仍支持文件预览、计划确认（只对声明了的连接问）、客户端工具和详情设置。
     assert.deepEqual(extensions, [
       'filePreview',
+      'fileBrowser',
       'planConfirmation',
       'clientTools',
       'harnessConfig',

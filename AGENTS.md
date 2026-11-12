@@ -35,6 +35,7 @@
 ## 协议与 harness
 
 - 协议扩展只增不改；服务端主动发的扩展内容只发给声明过的连接（按投递到的那条连接算）；名字带自己的前缀；没改过的官方桌面端必须始终能连。扩展定义在 `protocol/extensions/`，改形状要同步改定义和 `packages/protocol/src/` 里的类型。
+- 修改引擎扩展声明时，同步核对全部引擎的精确扩展清单与顺序，并跑全部引擎包单测。
 - 与上游的兼容性由 `npm run test:compat` 守着，出入清单 `protocol/compat/baseline.json` 只许变短。新的出入要改成按声明发，不往清单里加。
 - 加 harness：Go 层只在 `harness_table.go` 的登记表里加一行，名字和徽标只写在 `packages/protocol/src/harness-identity.json`。优先接厂商自家界面用的原生接口，单独写引擎包；ACP 只作备选或快速接入。
 - 引擎在 `runtime/info` 里自报的能力声明必须如实，改了能力要同步改声明。

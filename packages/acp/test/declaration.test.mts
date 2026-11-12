@@ -22,6 +22,14 @@ async function declared(s: Scene, supported: boolean, method: string, params: un
 
 async function check(s: Scene): Promise<void> {
   const info = await s.desktop.call('runtime/info', {})
+  assert.deepEqual(info.extensions, [
+    'filePreview',
+    'fileBrowser',
+    'clientTools',
+    'threadCapabilities',
+    'acpControls',
+    'backgroundTasks',
+  ])
   const features = info.features as HarnessFeatures
   const presets = info.permissionPresets as PermissionPreset[]
   const caps = s.server.runtime.known

@@ -81,24 +81,46 @@ test('APPROVAL-007：入口进程按环境变量定开关：值是 1 才算开�
       [
         undefined,
         silent,
-        ['filePreview', 'planConfirmation', 'clientTools', 'harnessConfig', 'backgroundTasks'],
+        [
+          'filePreview',
+          'fileBrowser',
+          'planConfirmation',
+          'clientTools',
+          'harnessConfig',
+          'backgroundTasks',
+        ],
       ],
       [
         '0',
         silent,
-        ['filePreview', 'planConfirmation', 'clientTools', 'harnessConfig', 'backgroundTasks'],
+        [
+          'filePreview',
+          'fileBrowser',
+          'planConfirmation',
+          'clientTools',
+          'harnessConfig',
+          'backgroundTasks',
+        ],
       ],
       // 只认 1：别的写法不算开，免得写错了的值悄悄变成“会问”的声明。
       [
         'true',
         silent,
-        ['filePreview', 'planConfirmation', 'clientTools', 'harnessConfig', 'backgroundTasks'],
+        [
+          'filePreview',
+          'fileBrowser',
+          'planConfirmation',
+          'clientTools',
+          'harnessConfig',
+          'backgroundTasks',
+        ],
       ],
       [
         '1',
         asking,
         [
           'filePreview',
+          'fileBrowser',
           'declineWithNote',
           'planConfirmation',
           'clientTools',

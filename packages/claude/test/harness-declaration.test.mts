@@ -74,6 +74,7 @@ test('DECL-001：runtime/info 带结构化声明，原有字段原样保留', as
     assert.deepEqual(extensions, [
       'modelRanking',
       'filePreview',
+      'fileBrowser',
       'inputDelivery',
       'declineWithNote',
       'planConfirmation',

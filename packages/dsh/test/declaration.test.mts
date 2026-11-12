@@ -99,6 +99,7 @@ test('dsh：runtime/info 带结构化声明，原有字段原样保留', { timeo
     // harness 详情设置读写 dsh 自己的配置（harness-config.test.mts）
     assert.deepEqual(extensions, [
       EXTENSION.filePreview,
+      EXTENSION.fileBrowser,
       EXTENSION.clientTools,
       EXTENSION.harnessConfig,
       EXTENSION.backgroundTasks,
