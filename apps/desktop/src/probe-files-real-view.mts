@@ -75,7 +75,7 @@ export async function realView(args: {
     '软链文件目标与原路径标记',
     () =>
       one('.fv-file')?.getAttribute('data-path')?.endsWith('/notes.txt') &&
-      text(one('.fv .file-link-details')).includes('link-file'),
+      text(one('.fv .file-link-pop')).includes('link-file'),
   )
   await kit.viewed('notes.txt')
   await kit.painted()
