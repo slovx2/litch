@@ -19,6 +19,7 @@ import { KeyboardStickyView, useKeyboardState } from 'react-native-keyboard-cont
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { whyNot } from '../../../../packages/ui/src/app/errors.ts'
 import { readWhileOpen } from '../../../../packages/ui/src/app/read.ts'
+import { onCommentFocus } from '../../../../packages/ui/src/composer/comment-focus'
 import { acquireStore, releaseStore } from '../core/store-cache'
 import { experiment } from '../experiment'
 import { usePane } from '../nav/pane'
@@ -37,7 +38,7 @@ import { CommentOverlays } from './comments/CommentOverlays'
 import { CommentsContext } from './comments/context'
 import { CommentsHub } from './comments/hub'
 import { SelectBar } from './comments/SelectBar'
-import { draftKey } from './composer/drafts'
+import { draftKey, loadDraft } from './composer/drafts'
 import type { IssueLinks } from './issue-links'
 import { IssueLinksContext } from './issue-links-context'
 import { readingMemory } from './reading-position'
@@ -136,6 +137,25 @@ export function useSessionPage({
   const [usageOpen, setUsageOpen] = useState(false)
   const [treeOpen, setTreeOpen] = useState(false)
   const input = useRef<TextInput>(null)
+  useEffect(() => {
+    let frame = 0
+    const off = onCommentFocus(draftKey(deviceId, sessionId), () => {
+      if (!active || !navigation.isFocused()) return
+      cancelAnimationFrame(frame)
+      input.current?.blur()
+      frame = requestAnimationFrame(() => {
+        if (!navigation.isFocused()) return
+        const field = input.current
+        const end = loadDraft(draftKey(deviceId, sessionId)).length
+        field?.focus()
+        field?.setNativeProps({ selection: { start: end, end } })
+      })
+    })
+    return () => {
+      off()
+      cancelAnimationFrame(frame)
+    }
+  }, [active, deviceId, sessionId, navigation])
 
   // 输入时优先给卡片留空间；再留 84 点对话会把短屏上的卡片正文压到不足一行。
   const [composerHeight, setComposerHeight] = useState(0)

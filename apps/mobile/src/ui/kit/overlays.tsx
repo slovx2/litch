@@ -185,6 +185,7 @@ export function Dialog({
   onClose,
   onRequestClose = onClose,
   onShow,
+  onDismiss,
   consentHost = true,
   children,
 }: {
@@ -194,6 +195,8 @@ export function Dialog({
   onRequestClose?(): void
   /** 对话框出来以后（安卓上这时才拿得到窗口焦点，输入框此时拿焦点键盘才会出来） */
   onShow?(): void
+  /** iOS 原生窗口关闭完成后回调。 */
+  onDismiss?(): void
   /** 同意框自身不能再次注册承载点；其他弹窗中的发送复用最上层原生窗口。 */
   consentHost?: boolean
   children: ReactNode
@@ -207,6 +210,7 @@ export function Dialog({
       animationType="fade"
       onRequestClose={onRequestClose}
       onShow={onShow}
+      onDismiss={onDismiss}
     >
       <Pressable style={styles.scrim} onPress={onClose} />
       <ModalKeyboardArea style={styles.center}>

@@ -1,7 +1,7 @@
 // 写评论、改评论的对话框：上面是引用的那段（太长的可以在框里滚），下面一个多行输入框。
 // 新加评论的按钮是“加上”；改输入框上的评论片时是“保存”，另有“删掉”，能找到原文的还有“定位原文”。
-import { useEffect, useRef, useState } from 'react'
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
 import { Dialog } from '../../ui/kit/overlays'
@@ -13,6 +13,7 @@ export function CommentEditor({
   quote,
   note,
   onSubmit,
+  onSaved,
   onRemove,
   onLocate,
   onClose,
@@ -24,6 +25,8 @@ export function CommentEditor({
   /** 打开时输入框里的字 */
   note: string
   onSubmit(note: string): void
+  /** 确认保存且评论窗口关闭后，交还给会话输入框。取消不调用。 */
+  onSaved?(): void
   onRemove?(): void
   /** 滚到原文去。找不到原文时不给 */
   onLocate?(): void
@@ -34,6 +37,18 @@ export function CommentEditor({
   const t = useT()
   const [value, setValue] = useState(note)
   const input = useRef<TextInput>(null)
+  const saved = useRef(false)
+  const complete = useCallback(() => {
+    if (!saved.current) return
+    saved.current = false
+    onSaved?.()
+  }, [onSaved])
+  useEffect(() => {
+    // Android 不提供 Modal.onDismiss；visible=false 提交后的下一帧才切换原生输入焦点。
+    if (visible || Platform.OS === 'ios') return
+    const frame = requestAnimationFrame(complete)
+    return () => cancelAnimationFrame(frame)
+  }, [visible, complete])
   // 新加的一打开就写：autoFocus 在安卓的对话框里只给光标不出键盘（那时对话框的窗口还没拿到焦点），
   // 对话框出来以后放掉焦点再拿一次
   const focus = () => {
@@ -47,7 +62,7 @@ export function CommentEditor({
     if (visible) setValue(note)
   }, [visible, note])
   return (
-    <Dialog visible={visible} onClose={onClose} onShow={focus}>
+    <Dialog visible={visible} onClose={onClose} onShow={focus} onDismiss={complete}>
       <Text style={[styles.title, { color: c.ink }]}>
         {index === null ? t('comment.editor.new') : t('comment.ref', { n: index })}
       </Text>
@@ -110,6 +125,7 @@ export function CommentEditor({
           onPress={() => {
             // 先交上去再关：关掉在“回复”那里等于取消
             onSubmit(value.trim())
+            saved.current = true
             onClose()
           }}
         />

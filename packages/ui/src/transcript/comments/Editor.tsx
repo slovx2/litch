@@ -1,7 +1,14 @@
 // 写评论的那个小框：上面是引用的原文（最多三行，多的折起），下面写评论。
 // 新加的从选区旁弹出；改已有的从输入框上的片、原文上的记号弹出，多“定位原文”“删除”两样。
 // 回车：加进（存好）；Shift+回车换行；⌘/Ctrl+回车：只把这一条直接发出去；Esc 或点外面：不要。
-import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import { createPortal } from 'react-dom'
 import { useT } from '../../app/appearance.ts'
 
@@ -31,7 +38,7 @@ const MARGIN = 8
 const mac = () => /Mac|iPhone|iPad/.test(navigator.platform)
 
 export function CommentEditor(props: EditorProps) {
-  const { quote, mode, side, onSave, onSend, onCancel } = props
+  const { quote, mode, side, onSave, onSend } = props
   const t = useT()
   const [note, setNote] = useState(props.note ?? '')
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null)
@@ -40,9 +47,20 @@ export function CommentEditor(props: EditorProps) {
   const card = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLTextAreaElement>(null)
   const quoteBox = useRef<HTMLDivElement>(null)
+  const previousFocus = useRef(
+    document.activeElement instanceof HTMLElement ? document.activeElement : null,
+  )
+
   // 回调每次都是新的：放进引用里，事件监听不用跟着重挂
   const latest = useRef(props)
   latest.current = props
+  const cancel = useCallback(() => {
+    latest.current.onCancel()
+    requestAnimationFrame(() => {
+      const target = previousFocus.current
+      if (target?.isConnected) target.focus({ preventScroll: true })
+    })
+  }, [])
 
   // 贴着锚点放：横向和它的左边对齐、不出窗口；竖向按 side 放，放不下换一边
   useLayoutEffect(() => {
@@ -95,11 +113,11 @@ export function CommentEditor(props: EditorProps) {
       if (!(target instanceof Node)) return
       if (card.current?.contains(target)) return
       if (latest.current.owner?.()?.contains(target)) return
-      latest.current.onCancel()
+      cancel()
     }
     document.addEventListener('pointerdown', onDown, true)
     return () => document.removeEventListener('pointerdown', onDown, true)
-  }, [])
+  }, [cancel])
 
   // 引用超过三行才给“展开”
   // biome-ignore lint/correctness/useExhaustiveDependencies: 引用变了要重新量
@@ -118,7 +136,7 @@ export function CommentEditor(props: EditorProps) {
       // 只关自己，别让外面的 Esc（拒绝审批）跟着动
       event.preventDefault()
       event.stopPropagation()
-      onCancel()
+      cancel()
       return
     }
     if (event.key !== 'Enter' || event.shiftKey) return
