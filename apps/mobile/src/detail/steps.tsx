@@ -327,9 +327,7 @@ export const StepCell = memo(function StepCell({ row }: Props<'step'>) {
           >
             {label}
           </Text>
-          {time ? (
-            <Text style={[styles.stepState, { color: c.ink3 }]}>{time}</Text>
-          ) : null}
+          {time ? <Text style={[styles.stepState, { color: c.ink3 }]}>{time}</Text> : null}
         </Pressable>
         {!row.expanded && item.kind === 'toolCall' && item.images ? (
           <ToolImages images={item.images} gallery={row.gallery ?? item.images} />

@@ -16,7 +16,9 @@ export function FileLinkDetails({
   const reasons = new Map(result.failures.map((failure) => [failure.path, failure.reason]))
   const tried = [
     ...result.attempted,
-    ...result.failures.map((failure) => failure.path).filter((path) => !result.attempted.includes(path)),
+    ...result.failures
+      .map((failure) => failure.path)
+      .filter((path) => !result.attempted.includes(path)),
   ]
   return (
     <details className="file-link-details" open={expanded || undefined}>
