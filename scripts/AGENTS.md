@@ -104,6 +104,10 @@ plain `.mjs` / shell.
 - `.mjs` scripts are Biome-formatted (`npm run format` covers `scripts/`); the
   shell scripts (`codex-shim`, `codex-harness-adapter-mode`) are left untouched.
 
+## 手机经理控制台验收
+
+`npm run client:check:manager-mobile` 先生成手机 WebView 资源，再自动分配空闲端口，启动本工作树的隔离 Expo 预览并运行正式页面验收，结束或中断时清理自有进程。需要先安装 `apps/mobile` 依赖和隔离 Chrome for Testing（可用 `LITCH_CHROME_BINARY` 指定）。入口是 `check-manager-mobile-run.mjs`，生命周期实现与单测在 `manager-mobile-runner*`；不设置 `CI=1`，不改现有服务器或工作树配置。
+
 ## 搜索失败诊断
 
 `client:check:search` 不进 CI（`ci.yml`、`full.yml` 都不跑）：在 GitHub 共享 runner 上不稳定，原因未查清。改动搜索、对话滚动或回合窗口后在本地单独跑 `npm run client:check:search`。前提是 `npm run client:setup` 装好界面依赖，以及一份隔离的 Chrome for Testing：用 `LITCH_CHROME_BINARY` 指定，否则取 `~/Library/Caches/ms-playwright/chromium-*` 里最新的一份。脚本自己起回环 Vite，也可以用 `LITCH_SEARCH_UI` 指向已经起好的夹具。

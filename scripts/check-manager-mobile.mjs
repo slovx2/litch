@@ -1,4 +1,5 @@
-// 手机控制台的正式页面预览；隔离无头浏览器，先运行 mobile preview。
+// 手机控制台的正式页面预览；npm run client:check:manager-mobile 自动起停隔离预览。
+// 已有预览也可直接传 URL：node scripts/check-manager-mobile.mjs '<完整预览 URL>'
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import { globSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
