@@ -250,7 +250,8 @@ export class ToolImages {
         : typeof value.threadId === 'string'
           ? `${owner.split(':')[0]}:${value.threadId}`
           : owner
-    for (const key of ['thread', 'turn', 'item'])
+    // 恢复首屏放在内嵌分页里；沿用本次应答确定的会话归属和外层连接能力闸。
+    for (const key of ['thread', 'turn', 'item', 'initialTurnsPage'])
       if (isObject(value[key])) changed = (await this.decorate(value[key], nextOwner)) || changed
     for (const key of ['turns', 'items', 'data'])
       if (Array.isArray(value[key]))
