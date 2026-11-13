@@ -14,8 +14,15 @@
       }
     }
   },
-  "undeclared": "不自动注入登记工具，不提供任务的 litchWake 和集合的 nativeWake 字段。同线程的标准回合和工具条目仍按上游协议投递。",
+  "undeclared": "不自动注入登记工具，不提供任务的 litchWake 和集合的 nativeWake 字段。活动回合的后台插话仍是原生 userMessage，正文带 litch-background-completed 标签，不带条目级 litchOrigin。同线程的标准回合和工具条目仍按上游协议投递。",
   "parts": [
+    {
+      "kind": "ItemField",
+      "name": "litchOrigin",
+      "on": "userMessage 条目（item/started、item/completed、thread/read、thread/resume、thread/turns/list）",
+      "description": "仅给声明 nativeBackgroundWake 的连接，只在设备提交的后台完成插话上带 backgroundTask；不改变整个回合来源。类型见 NativeBackgroundInput。",
+      "properties": { "litchOrigin": { "type": "string", "const": "backgroundTask" } }
+    },
     {
       "kind": "TaskField",
       "name": "litchWake",
@@ -73,7 +80,7 @@
   ],
   "rules": [
     "动态命名空间 litch_background 的 watch/read/cancel 由设备执行，工具定义包含在 thread/start.dynamicTools；恢复、分叉沿用原有工具，不继承运行中任务登记。",
-    "任务命令仍由原生 exec_command 执行；常驻服务器和无限监听不登记；等待单次消息、邮件或构建完成后退出的有限命令必须登记。完成先合批，空闲时用原生 turn/start.toolOutput 投递，回合来历按 backgroundTasks 声明给出 backgroundTask。",
+    "任务命令仍由原生 exec_command 执行；常驻服务器和无限监听不登记；等待单次消息、邮件或构建完成后退出的有限命令必须登记。完成先合批，空闲时用原生 turn/start.toolOutput 投递，回合来历按 backgroundTasks 声明给出 backgroundTask。活动回合用 turn/steer 投递同一 batch payload，正文包 litch-background-completed 标签，条目级 litchOrigin 按 nativeBackgroundWake 声明给出 backgroundTask。审批、提问、停止或经理暂停时仍等待；原生明确拒绝插话时该批次只回退到空闲路径，投递结果不明不重试。",
     "按完成顺序合批，300ms 合并窗口，每批最多四个任务，正文序列化后不超过 16KiB；同一线程接续启动间隔至少两秒。以上为单批大小与时间节流，不是续跑次数上限。任务 id 是一次登记的一次完成标识，结果包含原回合/条目、目的、退出码、时长和有界输出；上游可能先行截断，不能保证完整日志。",
     "与 backgroundTasks 的内存集合不同，显式登记与来源凭据保存在设备会话库。每线程保留最近五十条已交付/取消/失效登记；未交付登记不因此淘汰。",
     "litchWake 仅给同时声明 backgroundTasks 和 nativeBackgroundWake 的连接，实时集合与历史快照一致。",

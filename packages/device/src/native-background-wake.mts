@@ -3,15 +3,17 @@ import { randomUUID } from 'node:crypto'
 import type { LitchBackground, LitchBackgroundTask } from '../../protocol/src/background-tasks.mjs'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import {
+  formatBackgroundCompletion,
   NATIVE_BACKGROUND_OPTION,
   NATIVE_BACKGROUND_TOOLS,
   NATIVE_BACKGROUND_NAMESPACE as NS,
+  parseBackgroundCompletion,
 } from '../../protocol/src/native-background-wake.mjs'
 import type { DeviceToolCall } from './device-tools.mjs'
 import type { EngineLink } from './engine-link.mjs'
 import type { NativeBackgroundStore, NativeBackgroundTask } from './native-background-store.mjs'
 import type { SessionStore } from './session-store.mjs'
-import { isObject } from './wire.mjs'
+import { isObject, UpstreamRpcError } from './wire.mjs'
 
 interface Command {
   itemId: string
@@ -30,7 +32,9 @@ export interface NativeBackgroundHost {
   sessions: Pick<SessionStore, 'option' | 'setOption' | 'tools'>
   link(harness: string): Promise<EngineLink>
   watch(harness: string, threadId: string): Promise<unknown>
-  canContinue(threadId: string): boolean
+  canContinue(threadId: string, allowActive?: boolean): boolean
+  blockedReason?(threadId: string, allowActive?: boolean): string | null
+  confirmIdle?(threadId: string): Promise<boolean>
   changed(threadId: string): void
   log(message: string): void
   settleMs?: number
@@ -53,6 +57,7 @@ export class NativeBackgroundWake {
   private readonly sending = new Map<string, string>()
   private readonly checking = new Set<string>()
   private readonly rescheduled = new Set<string>()
+  private readonly idleOnly = new Set<string>()
   private readonly completedTurns = new Set<string>()
   private readonly lastStarted = new Map<string, number>()
   private closed = false
@@ -142,6 +147,7 @@ export class NativeBackgroundWake {
     }
   }
   block(threadId: string): void {
+    this.trace('blocked', threadId)
     this.stopped.add(threadId)
     this.epochs.set(threadId, (this.epochs.get(threadId) ?? 0) + 1)
     for (const task of this.live.values())
@@ -160,7 +166,10 @@ export class NativeBackgroundWake {
           ? result.turnId
           : null
     if (!id) return
-    if (turn?.status === 'inProgress' && !this.completedTurns.has(id)) this.active.set(threadId, id)
+    if (turn?.status === 'inProgress' && !this.completedTurns.has(id)) {
+      this.active.set(threadId, id)
+      this.schedule(threadId)
+    }
     if (user) this.host.store.userTurn(threadId, id)
   }
 
@@ -178,6 +187,7 @@ export class NativeBackgroundWake {
         )
           this.block(id)
         this.active.set(id, turn.id)
+        this.schedule(id)
       }
     }
     if (method === 'turn/completed' && typeof turn?.id === 'string') {
@@ -504,9 +514,17 @@ export class NativeBackgroundWake {
     }
     return tasks.length ? { tasks, wakesOnFinish: false } : base
   }
-  decorate(threadId: string, value: Record<string, unknown>): boolean {
+  decorate(
+    threadId: string,
+    value: Record<string, unknown>,
+    inputs = true,
+    origins = true,
+  ): boolean {
     let changed = false
-    if (isObject(value.thread)) changed = this.decorate(String(value.thread.id), value.thread)
+    if (isObject(value.thread))
+      changed = this.decorate(String(value.thread.id), value.thread, inputs, origins)
+    const item = isObject(value.item) ? value.item : value
+    if (inputs) changed = this.decorateInput(threadId, item) || changed
     const turns = Array.isArray(value.turns)
       ? value.turns
       : Array.isArray(value.data)
@@ -516,16 +534,28 @@ export class NativeBackgroundWake {
           : typeof value.id === 'string'
             ? [value]
             : []
-    for (const turn of turns)
-      if (
-        isObject(turn) &&
-        typeof turn.id === 'string' &&
-        this.host.store.isWake(threadId, turn.id)
-      ) {
+    for (const turn of turns) {
+      if (!isObject(turn)) continue
+      if (inputs) changed = this.decorateInput(threadId, turn) || changed
+      if (origins && typeof turn.id === 'string' && this.host.store.isWake(threadId, turn.id)) {
         turn.litchOrigin = 'backgroundTask'
         changed = true
       }
+      if (Array.isArray(turn.items))
+        for (const entry of turn.items)
+          if (isObject(entry)) changed = this.decorate(threadId, entry, inputs, origins) || changed
+    }
     return changed
+  }
+  private decorateInput(threadId: string, item: Record<string, unknown>): boolean {
+    if (
+      item.type !== 'userMessage' ||
+      typeof item.clientId !== 'string' ||
+      !this.host.store.isInput(threadId, item.clientId)
+    )
+      return false
+    item.litchOrigin = 'backgroundTask'
+    return true
   }
   schedule(threadId: string): void {
     if (this.closed || !this.pending(threadId)) return
@@ -540,52 +570,58 @@ export class NativeBackgroundWake {
       (this.lastStarted.get(threadId) ?? 0) + (this.host.startIntervalMs ?? 2000) - Date.now(),
     )
     this.trace('scheduled', threadId, { delayMs })
-    const timer = setTimeout(
-      () => {
-        this.timers.delete(threadId)
-        this.checking.add(threadId)
-        void this.drain(threadId).then(
-          (sent) => {
-            this.checking.delete(threadId)
-            const again = this.rescheduled.delete(threadId)
-            if (again || (sent && !this.active.has(threadId))) this.schedule(threadId)
-          },
-          (error) => {
-            this.checking.delete(threadId)
-            this.rescheduled.delete(threadId)
-            this.host.log(`后台结果未续跑：${String(error)}`)
-          },
-        )
-      },
-      delayMs,
-    )
+    const timer = setTimeout(() => {
+      this.timers.delete(threadId)
+      this.checking.add(threadId)
+      void this.drain(threadId).then(
+        (sent) => {
+          this.checking.delete(threadId)
+          const again = this.rescheduled.delete(threadId)
+          if (again || sent) this.schedule(threadId)
+        },
+        (error) => {
+          this.checking.delete(threadId)
+          this.rescheduled.delete(threadId)
+          this.host.log(`后台结果未续跑：${String(error)}`)
+        },
+      )
+    }, delayMs)
     timer.unref()
     this.timers.set(threadId, timer)
   }
+  schedulePending(): void {
+    for (const id of new Set(
+      [...this.live.values()]
+        .filter((task) => task.state === 'pending')
+        .map((task) => task.threadId),
+    ))
+      this.schedule(id)
+  }
   private async drain(threadId: string): Promise<boolean> {
-    const canContinue = this.host.canContinue(threadId)
+    const running = this.active.get(threadId)
+    const canContinue = this.host.canContinue(threadId, !!running)
     this.trace('drain', threadId, {
       activeTurnId: this.active.get(threadId) ?? null,
       stopped: this.stopped.has(threadId),
       canContinue,
+      reason: this.host.blockedReason?.(threadId, !!running) ?? null,
     })
-    if (
-      this.closed ||
-      this.stopped.has(threadId) ||
-      this.active.has(threadId) ||
-      !canContinue
-    )
-      return false
-    const tasks = [...this.live.values()]
+    if (this.closed || this.stopped.has(threadId) || !canContinue) return false
+    const pending = [...this.live.values()]
       .filter((t) => t.threadId === threadId && t.state === 'pending')
       .sort((a, b) => (a.endedAt ?? 0) - (b.endedAt ?? 0))
-      .slice(0, 4)
+    const tasks = pending.filter((t) => t.batchId === pending[0]?.batchId).slice(0, 4)
     const first = tasks[0]
-    if (!first || !this.enabled(first.harness)) return false
+    if (!first) return false
+    if (!this.enabled(first.harness)) {
+      this.trace('disabled', threadId)
+      return false
+    }
+    if (running && first.batchId && this.idleOnly.has(first.batchId)) return false
     const epoch = this.epochs.get(threadId) ?? 0
     const link = await this.host.link(first.harness)
     // request 包装统一取得短锁；拿到锁后再检查状态，而不是持锁再调用同一入口造成死锁。
-    const batchId = randomUUID()
+    const batchId = first.batchId ?? randomUUID()
     const payload = {
       batchId,
       events: tasks.map((t) => ({
@@ -626,8 +662,40 @@ export class NativeBackgroundWake {
       if (largest.key === 'output') largest.event.truncated = true
       else largest.event.purposeTruncated = true
     }
+    for (const task of tasks)
+      if (!task.batchId) {
+        task.batchId = batchId
+        this.save(task)
+      }
     this.sending.set(threadId, batchId)
     try {
+      if (running) {
+        try {
+          await link.request('turn/steer', {
+            threadId,
+            expectedTurnId: running,
+            clientUserMessageId: `litch-background-${batchId}`,
+            input: [{ type: 'text', text: formatBackgroundCompletion(payload), text_elements: [] }],
+            __litchWakeEpoch: epoch,
+          })
+          this.trace('delivered', threadId, { batchId, method: 'turn/steer', turnId: running })
+          return true
+        } catch (error) {
+          if (!(error instanceof WakeNotReady) && !steerRejected(error)) throw error
+          this.idleOnly.add(batchId)
+          this.trace('steer-rejected', threadId, { batchId, turnId: running })
+          // 明确拒绝后只查一次权威空闲状态，避免漏到/迟到的结束通知留下旧 active。
+          // 比较回合号，查询期间换了新回合时不能清掉它。
+          if (
+            steerRejected(error) &&
+            (await this.host.confirmIdle?.(threadId)) &&
+            this.active.get(threadId) === running
+          )
+            this.active.delete(threadId)
+          // 明确拒绝才回退；原生尚在活动时由空闲闸留队，结束事件再触发一次。
+        }
+      }
+      if (this.active.has(threadId)) return false
       await link.request('turn/start', {
         threadId,
         input: [],
@@ -661,7 +729,9 @@ export class NativeBackgroundWake {
   ): Promise<any> {
     if (!isObject(params)) return send(params)
     this.input(method, params, false)
-    if (method !== 'turn/start' || typeof params.threadId !== 'string') return send(params)
+    const steer = method === 'turn/steer' && typeof params.__litchWakeEpoch === 'number'
+    if ((method !== 'turn/start' && !steer) || typeof params.threadId !== 'string')
+      return send(params)
     const id = params.threadId
     const release = await this.acquire(id)
     const { __litchWakeEpoch: epoch, ...plain } = params
@@ -669,18 +739,21 @@ export class NativeBackgroundWake {
     try {
       if (batchId) {
         const link = await this.host.link(this.liveTask(id)?.harness ?? 'codex')
-        const read = await link.request('thread/read', { threadId: id, includeTurns: false })
+        const read = steer
+          ? null
+          : await link.request('thread/read', { threadId: id, includeTurns: false })
         if (
           this.closed ||
           this.stopped.has(id) ||
-          this.active.has(id) ||
+          (steer ? this.active.get(id) !== plain.expectedTurnId : this.active.has(id)) ||
           epoch !== (this.epochs.get(id) ?? 0) ||
-          !this.host.canContinue(id) ||
-          read?.thread?.status?.type !== 'idle'
+          !this.host.canContinue(id, steer) ||
+          (!steer && read?.thread?.status?.type !== 'idle')
         )
           throw new WakeNotReady()
-        const output =
-          isObject(plain.toolOutput) && typeof plain.toolOutput.output === 'string'
+        const output = steer
+          ? parseBackgroundCompletion(String((plain.input as { text: string }[])[0]?.text))
+          : isObject(plain.toolOutput) && typeof plain.toolOutput.output === 'string'
             ? JSON.parse(plain.toolOutput.output)
             : null
         // 等锁/查 idle 时模型可能已经读过结果，或用户取消/关闭；只发仍未消费的事件。
@@ -689,10 +762,19 @@ export class NativeBackgroundWake {
         )
         if (!events.length || !this.enabled(this.liveTask(id)?.harness ?? 'codex'))
           throw new WakeNotReady()
-        plain.toolOutput = {
-          ...(plain.toolOutput as Record<string, unknown>),
-          output: JSON.stringify({ ...output, events }),
-        }
+        if (steer)
+          plain.input = [
+            {
+              type: 'text',
+              text: formatBackgroundCompletion({ ...output, events }),
+              text_elements: [],
+            },
+          ]
+        else
+          plain.toolOutput = {
+            ...(plain.toolOutput as Record<string, unknown>),
+            output: JSON.stringify({ ...output, events }),
+          }
         const ids = new Set(events.map((e: { taskId: string }) => e.taskId))
         for (const task of this.live.values())
           if (task.threadId === id && task.state === 'pending' && ids.has(task.id)) {
@@ -700,12 +782,27 @@ export class NativeBackgroundWake {
             task.batchId = batchId
             this.save(task)
           }
+        if (steer) this.host.store.rememberInput(id, String(plain.clientUserMessageId), batchId)
         this.lastStarted.set(id, Date.now())
+        this.trace('sending', id, { batchId, method })
       }
-      const result = await send(plain)
+      let result: any
+      try {
+        result = await send(plain)
+      } catch (error) {
+        // 原生明确拒绝意味着未接纳；超时或断线保留 unknown，不能再送一份。
+        if (steer && batchId && steerRejected(error))
+          for (const task of this.live.values())
+            if (task.threadId === id && task.batchId === batchId && task.state === 'unknown') {
+              task.state = this.stopped.has(id) ? 'paused' : 'pending'
+              this.save(task)
+            }
+        throw error
+      }
       this.accepted(id, result)
-      if (batchId && typeof result?.turn?.id === 'string') {
-        this.host.store.rememberTurn(id, result.turn.id, batchId)
+      if (batchId && (steer || typeof result?.turn?.id === 'string')) {
+        this.idleOnly.delete(batchId)
+        if (!steer) this.host.store.rememberTurn(id, result.turn.id, batchId)
         for (const task of this.live.values())
           if (task.threadId === id && task.batchId === batchId) {
             task.state = 'delivered'
@@ -734,3 +831,12 @@ export class NativeBackgroundWake {
   }
 }
 class WakeNotReady extends Error {}
+
+function steerRejected(error: unknown): boolean {
+  return (
+    error instanceof UpstreamRpcError &&
+    /no active turn to steer|expected active turn id|cannot steer a (review|compact) turn/.test(
+      error.message,
+    )
+  )
+}

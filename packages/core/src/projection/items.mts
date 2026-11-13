@@ -1,5 +1,9 @@
 import { parseFileAttachments } from '../../../protocol/src/file-attachments.mjs'
 import { inputDelivery } from '../../../protocol/src/input-delivery.mjs'
+import {
+  type NativeBackgroundInput,
+  parseBackgroundCompletion,
+} from '../../../protocol/src/native-background-wake.mjs'
 import { wrapQuestionFields } from '../../../protocol/src/pending-history.mjs'
 import { toolImagesOf } from '../../../protocol/src/tool-images.mjs'
 import { imageInfo } from '../image-info.mjs'
@@ -775,6 +779,29 @@ function projectPlainItem(item: ThreadItem, streaming = false): ItemView {
   const open: ItemStatus = streaming ? 'inProgress' : 'completed'
   switch (item.type) {
     case 'userMessage': {
+      if ((item as ThreadItem & Partial<NativeBackgroundInput>).litchOrigin === 'backgroundTask') {
+        const text = item.content
+          .filter((part) => part.type === 'text')
+          .map((part) => part.text)
+          .join('\n')
+        const completion = parseBackgroundCompletion(text)
+        return {
+          id,
+          kind: 'userMessage',
+          text: '',
+          attachments: [],
+          event: {
+            kind: 'background-completed',
+            notes: [],
+            ...(completion
+              ? {
+                  summary: completion.events.map((event) => event.title).join(' · '),
+                  body: completion.events.map((event) => event.output).join('\n\n'),
+                }
+              : {}),
+          },
+        }
+      }
       const delivery = inputDelivery(item)
       return {
         ...userMessage(id, item.content, (item as { litchPeer?: unknown }).litchPeer),

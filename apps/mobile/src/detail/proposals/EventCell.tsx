@@ -28,6 +28,7 @@ const HEAD: Partial<Record<string, Key>> = {
   notes: 'tree.event.notes',
   wake: 'tree.event.wake',
   remind: 'proposals.remind',
+  'background-completed': 'background.completed',
   'manager-answers': 'manager.event.answers',
   'manager-ignored': 'manager.event.ignored',
   'manager-suggestions': 'manager.event.suggestions',

@@ -3,6 +3,7 @@ import {
   deviceMachineEnabled,
   deviceToolSwitches,
 } from '../../protocol/src/client-tools-settings.mjs'
+import { MANAGER_NOTIFICATION } from '../../protocol/src/manager.mjs'
 import { PATH_PICKER_EXTENSION } from '../../protocol/src/path-picker.mjs'
 import { THREAD_READ_STATE } from '../../protocol/src/thread-read-state.mjs'
 import { protectedAttachmentOwners } from './attachment-active.mjs'
@@ -544,6 +545,7 @@ export class DeviceServer {
       index: this.index,
       workspaces: this.workspaces,
       store: new SessionStore(this.sessionsDb),
+      pendingChanged: (threadId) => this.nativeBackground?.schedule(threadId),
       worktrees: this.worktrees,
       enabled: () => this.sessionTreeOn(),
       tasksEnabled: () => this.tasks !== null,
@@ -583,7 +585,11 @@ export class DeviceServer {
       sessions: this.sessionTree.store,
       link: (harness) => this.sessionTree.link(harness),
       watch: (harness, threadId) => this.sessionTree.watch(harness, threadId),
-      canContinue: (threadId) => this.sessionTree.canAutoContinue(threadId),
+      confirmIdle: (threadId) => this.sessionTree.idle(threadId),
+      canContinue: (threadId, allowActive) =>
+        this.sessionTree.canAutoContinue(threadId, allowActive),
+      blockedReason: (threadId, allowActive) =>
+        this.sessionTree.autoContinueBlock(threadId, allowActive),
       changed: (threadId) => {
         this.background.refresh(threadId)
         if (!this.nativeBackground.pending(threadId) && !this.sessionTree.isActive(threadId))
@@ -853,6 +859,7 @@ export class DeviceServer {
    * （第一次导入时会有成百上千条，不该追着刚连上的客户端发）。
    */
   private announce(method: string, params: unknown, extension?: string): void {
+    if (method === MANAGER_NOTIFICATION.changed) this.nativeBackground?.schedulePending()
     if (method === 'thread/project/updated' || method === 'project/changed')
       this.sessionTree?.suggestions.changed()
     const audience = [...this.sessions].filter((session) => session.ready)

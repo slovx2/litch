@@ -9,6 +9,7 @@ import type { EngineLink } from '../src/engine-link.mjs'
 import { NativeBackgroundStore } from '../src/native-background-store.mjs'
 import { NativeBackgroundWake } from '../src/native-background-wake.mjs'
 import { openSessionDatabase, SessionStore } from '../src/session-store.mjs'
+import { UpstreamRpcError } from '../src/wire.mjs'
 
 const pause = (ms = 20) => new Promise((resolve) => setTimeout(resolve, ms))
 function fixture(startIntervalMs = 0) {
@@ -19,9 +20,12 @@ function fixture(startIntervalMs = 0) {
   sessions.setTools('t', [NATIVE_BACKGROUND_TOOLS])
   const terminals = new Map<string, string>()
   const starts: any[] = []
+  const steers: any[] = []
   let idle = true
   let fail = false
   let readHook: (() => void | Promise<void>) | undefined
+  let steerHook: (() => void | Promise<void>) | undefined
+  let allowed = true
   const wire = async (method: string, params: any): Promise<any> => {
     if (method === 'thread/backgroundTerminals/list')
       return { data: [...terminals].map(([itemId, processId]) => ({ itemId, processId })) }
@@ -35,6 +39,11 @@ function fixture(startIntervalMs = 0) {
       idle = false
       return { turn: { id: `wake-${starts.length}`, status: 'inProgress' } }
     }
+    if (method === 'turn/steer') {
+      steers.push(params)
+      await steerHook?.()
+      return { turnId: params.expectedTurnId }
+    }
     return {}
   }
   const link = {
@@ -47,7 +56,8 @@ function fixture(startIntervalMs = 0) {
     sessions,
     link: async () => link,
     watch: async () => {},
-    canContinue: () => true,
+    canContinue: () => allowed,
+    confirmIdle: async () => idle,
     changed: () => {},
     log: () => {},
     settleMs: 1,
@@ -109,6 +119,7 @@ function fixture(startIntervalMs = 0) {
     store,
     sessions,
     starts,
+    steers,
     command,
     finish,
     watch,
@@ -122,6 +133,12 @@ function fixture(startIntervalMs = 0) {
     },
     onRead: (hook: () => void | Promise<void>) => {
       readHook = hook
+    },
+    onSteer: (hook: () => void | Promise<void>) => {
+      steerHook = hook
+    },
+    allowed: (value: boolean) => {
+      allowed = value
     },
     close: () => {
       wake.close()
@@ -150,6 +167,207 @@ test('NATIVE-WAKE-013 idle 查询期间回合结束重排检查，不丢失最�
     assert.equal(f.store.list('t')[0]?.state, 'delivered')
   } finally {
     f.close()
+  }
+})
+
+test('NATIVE-WAKE-014 活动回合立即插话，完成历史只标消息，不篡改用户回合来源', async () => {
+  const f = fixture()
+  try {
+    f.event('turn/started', { turn: { id: 'original' } })
+    f.command('job')
+    await f.watch('job')
+    const ended = Date.now()
+    f.finish('job', 'background output')
+    for (let i = 0; i < 50 && !f.steers.length; i++) await pause(10)
+    assert.equal(f.steers.length, 1)
+    assert.ok(Date.now() - ended < 1000, '活动回合不等待 turn/completed')
+    assert.equal(f.starts.length, 0)
+    assert.equal(f.store.list('t')[0]?.state, 'delivered')
+    const steer = f.steers[0]
+    assert.equal(steer.expectedTurnId, 'original')
+    assert.match(steer.input[0].text, /^<litch-background-completed>.*background output/)
+    const item = { id: 'native-id', clientId: steer.clientUserMessageId, type: 'userMessage' }
+    const history: any = { data: [{ id: 'original', items: [{ ...item }] }] }
+    f.wake.decorate('t', history)
+    assert.equal(history.data[0].litchOrigin, undefined)
+    assert.equal(history.data[0].items[0].litchOrigin, 'backgroundTask')
+    const legacy: any = { item: { ...item } }
+    f.wake.decorate('t', legacy, false)
+    assert.equal(legacy.item.litchOrigin, undefined)
+    f.finish('job')
+    f.idle(true)
+    f.event('turn/completed', { turn: { id: 'original', status: 'completed' } })
+    await pause()
+    assert.equal(f.steers.length + f.starts.length, 1)
+    // 任务保留策略不能使历史消息失去来源凭据。
+    f.store.recover()
+    assert.equal(f.store.isInput('t', steer.clientUserMessageId), true)
+  } finally {
+    f.close()
+  }
+})
+
+test('NATIVE-WAKE-018 活动回合超过一批的结果持续投递，不等当前回合结束', async () => {
+  const f = fixture()
+  try {
+    f.event('turn/started', { turn: { id: 'original' } })
+    for (let i = 0; i < 9; i++) {
+      f.command(String(i))
+      await f.watch(String(i))
+    }
+    for (let i = 0; i < 9; i++) f.finish(String(i))
+    for (let i = 0; i < 50 && f.steers.length < 3; i++) await pause(10)
+    assert.equal(f.steers.length, 3)
+    assert.equal(f.starts.length, 0)
+    assert.ok(f.store.list('t').every((task) => task.state === 'delivered'))
+  } finally {
+    f.close()
+  }
+})
+
+test('NATIVE-WAKE-019 空闲查询撞上新回合开始，结果转为插话而不是等新回合结束', async () => {
+  const f = fixture()
+  try {
+    f.command('job')
+    await f.watch('job')
+    let first = true
+    f.onRead(() => {
+      if (!first) return
+      first = false
+      f.wake.input('turn/start', { threadId: 't' }, true)
+      f.event('turn/started', { turn: { id: 'user-new' } })
+    })
+    f.finish('job')
+    for (let i = 0; i < 50 && !f.steers.length; i++) await pause(10)
+    assert.equal(f.steers.length, 1)
+    assert.equal(f.steers[0].expectedTurnId, 'user-new')
+    assert.equal(f.starts.length, 0)
+  } finally {
+    f.close()
+  }
+})
+
+test('NATIVE-WAKE-020 明确无活动回合且权威查询为空闲，结束通知迟到也能回退一次', async () => {
+  const f = fixture()
+  try {
+    f.event('turn/started', { turn: { id: 'original' } })
+    f.idle(false)
+    f.command('job')
+    await f.watch('job')
+    f.onSteer(() => {
+      f.idle(true)
+      throw new UpstreamRpcError({ code: -32600, message: 'no active turn to steer' })
+    })
+    f.finish('job')
+    for (let i = 0; i < 50 && !f.starts.length; i++) await pause(10)
+    assert.equal(f.steers.length, 1)
+    assert.equal(f.starts.length, 1)
+    f.event('turn/completed', { turn: { id: 'original', status: 'completed' } })
+    await pause()
+    assert.equal(f.starts.length, 1)
+    assert.equal(f.store.list('t')[0]?.state, 'delivered')
+  } finally {
+    f.close()
+  }
+})
+
+test('NATIVE-WAKE-015 原生明确拒绝后仅回退空闲路径，同一批次不重复插话', async () => {
+  for (const message of [
+    'no active turn to steer',
+    'expected active turn id `old` but found `new`',
+    'cannot steer a compact turn',
+    'cannot steer a review turn',
+  ]) {
+    const f = fixture()
+    try {
+      f.event('turn/started', { turn: { id: 'original' } })
+      f.idle(false)
+      f.command('job')
+      await f.watch('job')
+      f.onSteer(() => {
+        throw new UpstreamRpcError({ code: -32600, message })
+      })
+      f.finish('job')
+      await pause(50)
+      assert.equal(f.steers.length, 1)
+      assert.equal(f.starts.length, 0)
+      assert.equal(f.store.list('t')[0]?.state, 'pending')
+      f.wake.schedule('t')
+      await pause()
+      assert.equal(f.steers.length, 1)
+      f.idle(true)
+      f.event('turn/completed', { turn: { id: 'original', status: 'completed' } })
+      await pause()
+      assert.equal(f.starts.length, 1)
+      const batch = f.steers[0].input[0].text.slice(
+        '<litch-background-completed>'.length,
+        -'</litch-background-completed>'.length,
+      )
+      assert.equal(f.starts[0].toolOutput.output, batch)
+    } finally {
+      f.close()
+    }
+  }
+})
+
+test('NATIVE-WAKE-016 插话应答撞上回合结束，成功只消费一次，明确拒绝只开一次空闲回合', async () => {
+  for (const rejected of [false, true]) {
+    const f = fixture()
+    try {
+      f.event('turn/started', { turn: { id: 'original' } })
+      f.command('job')
+      await f.watch('job')
+      f.onSteer(async () => {
+        f.idle(true)
+        f.event('turn/completed', { turn: { id: 'original', status: 'completed' } })
+        await setImmediate()
+        if (rejected)
+          throw new UpstreamRpcError({ code: -32600, message: 'no active turn to steer' })
+      })
+      f.finish('job')
+      await pause(50)
+      assert.equal(f.steers.length, 1)
+      assert.equal(f.starts.length, rejected ? 1 : 0)
+      assert.equal(f.store.list('t')[0]?.state, 'delivered')
+    } finally {
+      f.close()
+    }
+  }
+})
+
+test('NATIVE-WAKE-017 活动回合的停止、待答和不明投递仍保留保护边界', async () => {
+  for (const mode of ['block', 'pending', 'unknown']) {
+    const f = fixture()
+    try {
+      f.event('turn/started', { turn: { id: 'original' } })
+      f.command('job')
+      await f.watch('job')
+      if (mode === 'block') f.wake.block('t')
+      if (mode === 'pending') f.allowed(false)
+      if (mode === 'unknown')
+        f.onSteer(() => {
+          throw new Error('response lost')
+        })
+      f.finish('job')
+      await pause()
+      assert.equal(f.steers.length, mode === 'unknown' ? 1 : 0)
+      if (mode === 'pending') {
+        f.allowed(true)
+        f.wake.schedule('t')
+        await pause()
+        assert.equal(f.steers.length, 1)
+      }
+      f.idle(true)
+      f.event('turn/completed', { turn: { id: 'original', status: 'completed' } })
+      await pause()
+      assert.equal(f.starts.length, 0)
+      assert.equal(
+        f.store.list('t')[0]?.state,
+        mode === 'block' ? 'paused' : mode === 'unknown' ? 'unknown' : 'delivered',
+      )
+    } finally {
+      f.close()
+    }
   }
 })
 
@@ -492,10 +710,17 @@ test('NATIVE-WAKE-009 多批完成不丢事件；迟到的 turn/started 不重�
       f.event('turn/started', { turn: { id: `wake-${i}`, status: 'inProgress' } })
       await pause()
     }
-    assert.equal(f.starts.length, 3)
-    const ids = f.starts.flatMap((p) =>
-      JSON.parse(p.toolOutput.output).events.map((e: any) => e.taskId),
-    )
+    assert.equal(f.starts.length + f.steers.length, 3)
+    const batches = [
+      ...f.starts.map((p) => p.toolOutput.output),
+      ...f.steers.map((p) =>
+        p.input[0].text.slice(
+          '<litch-background-completed>'.length,
+          -'</litch-background-completed>'.length,
+        ),
+      ),
+    ]
+    const ids = batches.flatMap((batch) => JSON.parse(batch).events.map((e: any) => e.taskId))
     assert.equal(new Set(ids).size, 9)
     assert.equal(ids.length, 9)
   } finally {
