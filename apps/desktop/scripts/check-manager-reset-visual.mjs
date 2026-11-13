@@ -60,6 +60,14 @@ async function run() {
     await click('[data-sidebar-mode="manager"]')
     await click('[data-manager-id="m1"] .mg-pick')
     await wait('[data-act="manager-reset"]')
+    const badges = await evaluate(() => ({
+      sidebar: document
+        .querySelector('.mg-sidebar-manager[data-manager-id="m1"] .chip')
+        ?.textContent?.trim(),
+      title: document.querySelector('.crumb .chip')?.textContent?.trim(),
+    }))
+    if (badges.sidebar !== 'CC' || badges.title !== 'CC')
+      throw new Error(`Incorrect Claude Code badge: ${JSON.stringify(badges)}`)
     for (const lang of ['zh-CN', 'en']) {
       for (const skin of process.env.LITCH_VISUAL_SKIN
         ? [process.env.LITCH_VISUAL_SKIN]
@@ -160,6 +168,27 @@ async function run() {
       ))
     )
       throw new Error('App did not follow the incoming Codex manager')
+    const codexDefault = await evaluate(() => {
+      const dialog = document.querySelector('dialog[open]')
+      const settings = dialog.querySelectorAll('.reset-target-preview > span')
+      return {
+        title: dialog.getAttribute('aria-label'),
+        unchanged: settings[0]?.textContent === settings[1]?.textContent,
+        text: dialog.textContent,
+        submit: dialog.querySelector('.confirm-yes').textContent,
+        enabled: !dialog.querySelector('.confirm-yes').disabled,
+      }
+    })
+    if (
+      codexDefault.title !== '重置经理会话' ||
+      !codexDefault.unchanged ||
+      !codexDefault.enabled ||
+      codexDefault.submit !== '重置经理会话' ||
+      !codexDefault.text.includes('创建新会话') ||
+      codexDefault.text.includes('完整历史')
+    )
+      throw new Error('Unchanged Codex settings did not use the replacement reset flow')
+    await shot('codex-default-replace')
     await click('.reset-target-settings summary')
     await select('[data-reset-field="harness"]', 'claude-code')
     await wait('[data-reset-field="model"] option[value="claude-sonnet-4-6"]')
@@ -282,7 +311,7 @@ async function run() {
     await wait('.reset-target-status[role="alert"]')
     await shot('handover-failed')
     console.log(
-      'RESET_OK skins=3 languages=2 summaryRetry=locked permissionUnknown=blocked previewFailure=blocked delayedPreview=blocked handoverFailure=shown reload=locked stalePreview=blocked claudeModel=replace waiting=cancelled bidirectional=passed defaultRefresh=passed footer=visible',
+      'RESET_OK skins=3 languages=2 summaryRetry=locked permissionUnknown=blocked previewFailure=blocked delayedPreview=blocked handoverFailure=shown reload=locked stalePreview=blocked claudeModel=replace waiting=cancelled bidirectional=passed defaultRefresh=passed defaultReplace=passed badges=CC footer=visible',
     )
   } finally {
     clearTimeout(deadline)
