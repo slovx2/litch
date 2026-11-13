@@ -89,6 +89,7 @@ export function createMockManagers(host: MockManagerHost) {
       requestIgnore: !old,
       issues: !old && host.issues !== false,
       issueDiscussions: !old && host.issues !== false,
+      resetTarget: !old,
     }
   }
   const oldDevice = () =>
@@ -340,6 +341,93 @@ export function createMockManagers(host: MockManagerHost) {
     const manager = data.managers.find((m) => m.id === managerId)
     const board = data.boards.find((b) => b.managerId === managerId)
     if (!manager || !board) throw new ChannelError('notFound', t('经理不存在', 'Manager not found'))
+    if (name === 'managers.reset.preview') {
+      if (!has.resetTarget) throw oldDevice()
+      const { target: requested } = params as Commands['managers.reset.preview']['params']
+      const source = {
+        harness: manager.harness,
+        model: manager.model,
+        effort: manager.effort,
+        permission: manager.permission ?? ':danger-full-access',
+      }
+      const target = requested ?? { ...source }
+      const candidates = ['claude-code', 'codex', 'pi', 'opencode', 'dsh', 'acp'].map((harness) => {
+        const enabled = ['claude-code', 'codex'].includes(harness)
+        const id =
+          harness === 'codex'
+            ? 'gpt-6.1'
+            : harness === 'claude-code'
+              ? 'claude-sonnet-4-6'
+              : 'default'
+        return {
+          harness,
+          enabled,
+          reasons: enabled
+            ? []
+            : [
+                {
+                  code: 'notValidated',
+                  message: 'This harness has not passed manager handover acceptance.',
+                },
+              ],
+          defaultModel: id,
+          permissions: [':read-only', ':workspace', ':danger-full-access'],
+          models: [{ id, name: id, efforts: ['low', 'medium', 'high'], defaultEffort: 'medium' }],
+        }
+      })
+      const candidate = candidates.find((one) => one.harness === target.harness)
+      const resolved = {
+        ...target,
+        model: target.model ?? candidate?.defaultModel ?? null,
+        effort: target.effort ?? 'medium',
+      }
+      const reasons = candidate?.reasons.slice() ?? [
+        { code: 'unavailableHarness', message: 'Harness unavailable.' },
+      ]
+      if (target.permission !== source.permission)
+        reasons.push({ code: 'permissionMismatch', message: 'The manager permission is fixed.' })
+      const dispatch = target.dispatch ?? manager.dispatch
+      const effective = (harness: string, model: string | null, effort: string | null) => ({
+        harness: dispatch.harness ?? harness,
+        model: dispatch.model ?? (!dispatch.harness || dispatch.harness === harness ? model : null),
+        effort:
+          dispatch.effort ?? (!dispatch.harness || dispatch.harness === harness ? effort : null),
+      })
+      const before = effective(source.harness, source.model, source.effort)
+      const after = effective(resolved.harness, resolved.model, resolved.effort)
+      return {
+        managerId,
+        cwd: manager.cwd,
+        source,
+        target: resolved,
+        candidates,
+        reasons,
+        canSubmit: !reasons.length,
+        expectedThreadId: manager.threadId,
+        expectedSettingsHash: JSON.stringify({
+          threadId: manager.threadId,
+          source,
+          target: resolved,
+          dispatch,
+        }),
+        mode:
+          JSON.stringify(source) === JSON.stringify(resolved) && source.harness === 'claude-code'
+            ? 'refresh'
+            : 'replace',
+        capabilityChanges: [
+          {
+            capability: 'nativeBackground',
+            before: source.harness === 'claude-code',
+            after: resolved.harness === 'claude-code',
+          },
+        ],
+        dispatchChanges: (['harness', 'model', 'effort'] as const).flatMap((field) =>
+          before[field] === after[field]
+            ? []
+            : [{ field, before: before[field], after: after[field] }],
+        ),
+      } satisfies import('../../../protocol/src/manager.mjs').ManagerResetPreview
+    }
     if (name.startsWith('managers.issue.') || name === 'managers.issues.list') {
       if (!has.issues) throw oldDevice()
       boardView(deviceId, managerId)
@@ -534,12 +622,57 @@ export function createMockManagers(host: MockManagerHost) {
         throw new ChannelError('busy', 'Manager reset is applying', phrase('manager.resetApplying'))
       result = { manager }
     } else if (name === 'managers.reset') {
+      const input = params as Commands['managers.reset']['params']
+      const previous = manager.reset?.operation
+      if (input.target && previous?.requestId === input.requestId) return { manager: copy(manager) }
+      let operation: import('../../../protocol/src/manager.mjs').ManagerResetOperation | undefined
+      let mode = manager.harness === 'claude-code' ? ('refresh' as const) : ('replace' as const)
+      if (input.target) {
+        const preview = (await run('managers.reset.preview', {
+          deviceId,
+          managerId,
+          target: input.target,
+        })) as import('../../../protocol/src/manager.mjs').ManagerResetPreview
+        if (
+          !preview.canSubmit ||
+          input.expectedThreadId !== preview.expectedThreadId ||
+          input.expectedSettingsHash !== preview.expectedSettingsHash ||
+          !input.requestId
+        )
+          throw new ChannelError('invalid', 'Manager reset preview changed; preview again.')
+        mode = preview.mode
+        const oldId = manager.threadId
+        if (mode === 'replace') {
+          manager.historyThreadIds = [...(manager.historyThreadIds ?? []), oldId]
+          manager.threadId = host.spawn(deviceId, {
+            harness: preview.target.harness,
+            cwd: manager.cwd,
+            workspaceId: null,
+            title: manager.name,
+            permission: preview.target.permission,
+          })
+          for (const line of board.lines)
+            if (line.parentThreadId === oldId) line.parentThreadId = manager.threadId
+        }
+        operation = {
+          requestId: input.requestId,
+          source: { ...preview.source, threadId: oldId },
+          target: preview.target,
+          expectedSettingsHash: preview.expectedSettingsHash,
+          candidateThreadId: manager.threadId,
+          committed: true,
+          handover: 'accepted',
+        }
+        Object.assign(manager, preview.target)
+        host.mark(deviceId, manager.threadId, manager)
+      }
       manager.reset = {
-        mode: manager.reset?.mode ?? (manager.harness === 'claude-code' ? 'refresh' : 'replace'),
+        mode,
         current: 'mock-current',
         applied: 'mock-current',
         outdated: false,
         phase: 'ready',
+        ...(operation ? { operation } : {}),
       }
       result = { manager }
     } else if (name === 'managers.end') {
@@ -943,6 +1076,7 @@ export function createMockManagers(host: MockManagerHost) {
         'managers.update',
         'managers.end',
         'managers.reset',
+        'managers.reset.preview',
         'managers.reset.cancel',
         'managers.answers.submit',
         'managers.feedback.submit',

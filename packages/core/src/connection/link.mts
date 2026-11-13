@@ -244,6 +244,7 @@ export function createLink(options: LinkOptions): Link {
                 // deviceTasks：声明了才收得到定时任务和运行的变化通知（litch/task/changed、litch/task/run/changed）
                 EXTENSION.deviceTasks,
                 EXTENSION.manager,
+                EXTENSION.managerResetTarget,
                 EXTENSION.managerPaging,
                 EXTENSION.managerIssues,
                 EXTENSION.managerIssueDiscussions,

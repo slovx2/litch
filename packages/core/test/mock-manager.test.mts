@@ -15,6 +15,52 @@ import type {
 } from '../src/model-manager.mjs'
 import { fakeClock } from './helpers.mjs'
 
+test('模拟接班预览解析目标、禁用未验 harness，并换线程保留看板与历史', async () => {
+  const { clock } = fakeClock()
+  const devices = sampleApp('zh-CN', clock.now()).devices
+  const service = createMockManagers({
+    clock,
+    lang: 'zh-CN',
+    devices: () => devices,
+    device: (id) => devices.find((d) => d.id === id),
+    add() {},
+    mark() {},
+    ending: () => 'ending',
+    spawn: () => 'handover-thread',
+    say() {},
+  })
+  const params = { deviceId: 'local', managerId: 'm1' }
+  const read = async (target?: import('../../protocol/src/manager.mjs').ManagerResetTarget) =>
+    (await service.command('managers.reset.preview', {
+      ...params,
+      ...(target ? { target } : {}),
+    })) as import('../../protocol/src/manager.mjs').ManagerResetPreview
+  const initial = await read()
+  assert.equal(initial.candidates.find((one) => one.harness === 'pi')?.enabled, false)
+  const preview = await read({
+    harness: initial.source.harness === 'codex' ? 'claude-code' : 'codex',
+    model: null,
+    effort: null,
+    permission: initial.source.permission!,
+  })
+  assert.equal(preview.canSubmit, true)
+  assert.equal(preview.mode, 'replace')
+  assert.ok(preview.target.model)
+  const request = {
+    ...params,
+    target: preview.target,
+    expectedThreadId: preview.expectedThreadId,
+    expectedSettingsHash: preview.expectedSettingsHash,
+    requestId: 'switch-1',
+  }
+  const switched = (await service.command('managers.reset', request)) as { manager: ManagerView }
+  assert.equal(switched.manager.threadId, 'handover-thread')
+  assert.equal(switched.manager.harness, preview.target.harness)
+  assert.ok(switched.manager.historyThreadIds?.includes(initial.expectedThreadId))
+  assert.equal(switched.manager.reset?.operation?.handover, 'accepted')
+  assert.deepEqual(await service.command('managers.reset', request), switched)
+})
+
 test('转交讨论展示议题与各方发言，明确不是决策授权，不发送内部状态字段', () => {
   const text = forwardedManagerQuestion('D-15', '确认范围', {
     messages: [

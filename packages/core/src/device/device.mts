@@ -1966,6 +1966,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
           info.device.extensions?.includes(EXTENSION.harnessProjectPermissions) === true
         managersOn = info.device.extensions?.includes(EXTENSION.manager) === true
         managerFeatures = {
+          resetTarget: info.device.extensions?.includes(EXTENSION.managerResetTarget) === true,
           paging: info.device.extensions?.includes(EXTENSION.managerPaging) === true,
           issues: info.device.extensions?.includes(EXTENSION.managerIssues) === true,
           issueDiscussions:

@@ -705,13 +705,15 @@ export function createManagers(host: ManagersHost) {
       const result = await guarded(() => host.request(MANAGER_METHOD.resetCancel, { managerId }))
       return { manager: settle(result.manager) }
     },
-    async reset(managerId: string, boardOnly?: boolean) {
-      const result = await guarded(() =>
-        host.request(MANAGER_METHOD.reset, {
-          managerId,
-          ...(boardOnly === undefined ? {} : { boardOnly }),
-        }),
-      )
+    async previewReset(
+      input: import('../../../protocol/src/manager.mjs').ManagerResetPreviewParams,
+    ) {
+      requires('resetTarget', MANAGER_METHOD.resetPreview)
+      return guarded(() => host.request(MANAGER_METHOD.resetPreview, input))
+    },
+    async reset(input: import('../../../protocol/src/manager.mjs').ManagerResetParams) {
+      if (input.target) requires('resetTarget', MANAGER_METHOD.reset)
+      const result = await guarded(() => host.request(MANAGER_METHOD.reset, input))
       return { manager: settle(result.manager) }
     },
     async end(managerId: string) {
