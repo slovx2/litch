@@ -47,15 +47,20 @@ export const enManager = {
   'manager.resetTarget': 'Incoming manager',
   'manager.resetPermission': 'Permissions (fixed)',
   'manager.resetFixed': 'Device, working directory and current permissions stay the same.',
-  'manager.resetTargetNote': 'Cancel while waiting. Sending a message cancels the wait. Cancellation is unavailable once summarizing starts. Switching applies the device’s current manager tools and instructions.',
-  'manager.resetTargetReplace': 'Wait for the manager’s turn, background tasks and temporary questions to finish, then create a new session. The board and worklines remain, and worklines keep running. The previous conversation becomes read-only history. The incoming manager receives a handover summary and current work index, and can read the board and previous history as needed. Conversation details outside the summary or board do not automatically enter the new session.',
-  'manager.resetTargetSummaryFailed': 'The handover summary failed. Continue with {target} using only the board and current work index?',
-  'manager.resetTargetLocked': 'The handover target is locked. Continuing with the board uses the settings already confirmed.',
+  'manager.resetTargetNote':
+    'Cancel while waiting. Sending a message cancels the wait. Cancellation is unavailable once summarizing starts. Switching applies the device’s current manager tools and instructions.',
+  'manager.resetTargetReplace':
+    'Wait for the manager’s turn, background tasks and temporary questions to finish, then create a new session. The board and worklines remain, and worklines keep running. The previous conversation becomes read-only history. The incoming manager receives a handover summary and current work index, and can read the board and previous history as needed. Conversation details outside the summary or board do not automatically enter the new session.',
+  'manager.resetTargetSummaryFailed':
+    'The handover summary failed. Continue with {target} using only the board and current work index?',
+  'manager.resetTargetLocked':
+    'The handover target is locked. Continuing with the board uses the settings already confirmed.',
   'manager.resetTargetWaiting': 'Waiting for handover: {source} → {target}',
   'manager.resetHandoverFailed': 'Switched; handover did not succeed',
   'manager.resetCapabilities': 'Capability changes',
   'manager.resetDispatchChanges': 'Workline default changes',
-  'manager.resetDispatchNote': 'Defaults set to follow the manager change with the incoming manager. Existing worklines keep their settings.',
+  'manager.resetDispatchNote':
+    'Defaults set to follow the manager change with the incoming manager. Existing worklines keep their settings.',
   'manager.resetSupported': 'Supported',
   'manager.resetUnsupported': 'Unsupported',
   'manager.resetNoEffort': 'No reasoning effort',
@@ -63,7 +68,8 @@ export const enManager = {
   'manager.resetPreviewRetry': 'Check again',
   'manager.resetUnavailable': 'Unavailable',
   'manager.resetNotValidated': 'Manager handover has not been validated for this runtime',
-  'manager.resetPermissionUnknown': 'Current permissions could not be verified. Switching is unavailable.',
+  'manager.resetPermissionUnknown':
+    'Current permissions could not be verified. Switching is unavailable.',
   'manager.resetPermissionMismatch': 'Does not support the current permissions',
   'manager.resetPermissionClaude': 'Uses Claude Code’s permission and approval rules.',
   'manager.resetPermissionCodex': 'Uses Codex’s sandbox and approval rules.',

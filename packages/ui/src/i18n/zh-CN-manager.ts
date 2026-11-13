@@ -45,9 +45,12 @@ export const zhManager = {
   'manager.resetTarget': '接班经理',
   'manager.resetPermission': '权限（固定）',
   'manager.resetFixed': '设备、工作目录和当前权限保持不变。',
-  'manager.resetTargetNote': '等待期间可取消；发送消息会取消等待。摘要开始后不能取消。切换将应用本设备当前版本的经理工具和指令。',
-  'manager.resetTargetReplace': '等待经理回合、后台任务和临时追问结束后创建新会话。看板和工作线保留，工作线继续运行。旧对话保留为只读历史。新经理接收交接摘要和当前工作索引，可按需读取看板及旧历史；未写入摘要或看板的对话细节不会自动进入新会话。',
-  'manager.resetTargetSummaryFailed': '交接摘要生成失败。是否仍交由 {target}，仅根据看板和当前工作索引接手？',
+  'manager.resetTargetNote':
+    '等待期间可取消；发送消息会取消等待。摘要开始后不能取消。切换将应用本设备当前版本的经理工具和指令。',
+  'manager.resetTargetReplace':
+    '等待经理回合、后台任务和临时追问结束后创建新会话。看板和工作线保留，工作线继续运行。旧对话保留为只读历史。新经理接收交接摘要和当前工作索引，可按需读取看板及旧历史；未写入摘要或看板的对话细节不会自动进入新会话。',
+  'manager.resetTargetSummaryFailed':
+    '交接摘要生成失败。是否仍交由 {target}，仅根据看板和当前工作索引接手？',
   'manager.resetTargetLocked': '接班目标已锁定。仅根据看板继续时，将使用原确认的设置。',
   'manager.resetTargetWaiting': '等待交接：{source} → {target}',
   'manager.resetHandoverFailed': '已切换，接班未成功',

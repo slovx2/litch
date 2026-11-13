@@ -1,0 +1,65 @@
+/* 接班确认使用页面皮肤，长路径与候选原因在窗口内换行。 */
+.modal.reset-target-dialog {
+  width: min(calc(580px * var(--fs)), calc(100vw - 48px));
+  flex-direction: column;
+  max-height: calc(100dvh - var(--modal-top) - 24px);
+}
+.reset-target-dialog .confirm-body {
+  overflow-wrap: anywhere;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.reset-target-settings,
+.reset-target-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.reset-target-settings summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.reset-target-settings fieldset {
+  display: grid;
+  gap: 8px;
+  border: 0;
+  padding: 8px 0;
+  margin: 0;
+  min-width: 0;
+}
+.reset-target-settings label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.reset-target-settings select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
+  color: var(--ink);
+  background: var(--raised);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  font: inherit;
+}
+.reset-target-preview ul {
+  margin: 0;
+  padding-inline-start: 20px;
+}
+.reset-target-status {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+  font-size: calc(12px * var(--fs));
+}
+.reset-target-actions {
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line-2);
+}
