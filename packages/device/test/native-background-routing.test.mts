@@ -1,69 +1,118 @@
 // 真实设备路由上的注入、隔离与持久指令，原生上游用协议夹具。
 import assert from 'node:assert/strict'
+import { join } from 'node:path'
 import test from 'node:test'
 import { NativeBackgroundStore } from '../src/native-background-store.mjs'
 import { openSessionDatabase } from '../src/session-store.mjs'
+import { listenUnix } from '../src/sockets.mjs'
 import { codexRig, sentTo } from './codex-kit.mjs'
 import { codexThread, FakeCodex } from './fake-codex.mjs'
 import { installConfig } from './fake-codex-config.mjs'
-import { settle } from './helpers.mjs'
+import { settle, TestClient } from './helpers.mjs'
 
-test('NATIVE-WAKE-ROUTE-004 后台插话来源只给声明连接，实时、完整历史和条目分页一致', async () => {
-  const fake = new FakeCodex()
-  fake.cliVersion = '0.166.0'
-  const item = {
-    id: 'native-item',
-    type: 'userMessage',
-    clientId: 'bg-client',
-    content: [
-      {
-        type: 'text',
-        text: '<litch-background-completed>{}</litch-background-completed>',
-        text_elements: [],
-      },
-    ],
-  }
-  const stored = codexThread(99, 400, {
-    status: { type: 'idle' },
-    turns: [{ id: 'original', status: 'completed', items: [item] }],
-  })
-  fake.threads.push(stored)
-  fake.handlers['thread/read'] = () => ({ thread: stored })
-  fake.handlers['thread/items/list'] = () => ({ data: [item], nextCursor: null })
-  const env = codexRig({ fake })
-  const db = openSessionDatabase(env.stateDir)
-  new NativeBackgroundStore(db).rememberInput(stored.id, 'bg-client', 'batch')
-  try {
-    const peers = await Promise.all(
-      [['harness', 'nativeBackgroundWake'], ['harness', 'backgroundTasks'], ['harness']].map(
-        async (extensions) => {
-          const client = env.connect()
+for (const remote of [false, true])
+  test(`NATIVE-WAKE-ROUTE-004 ${remote ? '远程套接字转发' : '直连'}后台插话来源只给声明连接，实时与重载一致`, async () => {
+    const fake = new FakeCodex()
+    fake.cliVersion = '0.166.0'
+    const item = {
+      id: 'native-item',
+      type: 'userMessage',
+      clientId: 'bg-client',
+      content: [
+        {
+          type: 'text',
+          text: '<litch-background-completed>{}</litch-background-completed>',
+          text_elements: [],
+        },
+      ],
+    }
+    const stored = codexThread(99, 400, {
+      status: { type: 'idle' },
+      turns: [
+        { id: 'original', status: 'completed', items: [item] },
+        { id: 'wake', status: 'completed', items: [] },
+      ],
+    })
+    fake.threads.push(stored)
+    fake.handlers['thread/read'] = () => ({ thread: stored })
+    fake.handlers['thread/resume'] = (params) =>
+      params.excludeTurns
+        ? {
+            thread: { ...stored, turns: [] },
+            initialTurnsPage: { data: stored.turns, nextCursor: null },
+          }
+        : { thread: stored }
+    fake.handlers['thread/items/list'] = () => ({ data: [item], nextCursor: null })
+    const env = codexRig({ fake })
+    const socket = join(env.stateDir, 'relay.sock')
+    const server = remote ? await listenUnix(socket, (wire) => env.device.attach(wire)) : null
+    const db = openSessionDatabase(env.stateDir)
+    new NativeBackgroundStore(db).rememberInput(stored.id, 'bg-client', 'batch')
+    new NativeBackgroundStore(db).rememberTurn(stored.id, 'wake', 'idle-batch')
+    try {
+      const peers = await Promise.all(
+        [
+          ['harness', 'nativeBackgroundWake', 'backgroundTasks', 'toolImages'],
+          ['harness', 'backgroundTasks'],
+          ['harness'],
+        ].map(async (extensions) => {
+          const client = remote ? await TestClient.overSocket(socket) : env.connect()
           await client.initialize(extensions)
           await client.call('thread/resume', { threadId: stored.id })
           return client
-        },
-      ),
-    )
-    fake.notify('item/completed', { threadId: stored.id, turnId: 'original', item })
-    await settle()
-    for (const [index, client] of peers.entries()) {
-      const marker = index === 0 ? 'backgroundTask' : undefined
-      const live = client.notifications.findLast(
-        (frame: any) => frame.method === 'item/completed',
-      ) as any
-      assert.equal(live?.params.item.litchOrigin, marker)
-      const history = await client.call('thread/read', { threadId: stored.id, includeTurns: true })
-      assert.equal(history.thread.turns[0].items[0].litchOrigin, marker)
-      const turns = await client.call('thread/turns/list', { threadId: stored.id })
-      assert.equal(turns.data[0].items[0].litchOrigin, marker)
-      const items = await client.call('thread/items/list', { threadId: stored.id })
-      assert.equal(items.data[0].litchOrigin, marker)
+        }),
+      )
+      fake.notify('item/started', { threadId: stored.id, turnId: 'original', item })
+      fake.notify('item/completed', { threadId: stored.id, turnId: 'original', item })
+      await settle()
+      for (const [index, client] of peers.entries()) {
+        const marker = index === 0 ? 'backgroundTask' : undefined
+        const live = client.notifications.findLast(
+          (frame: any) => frame.method === 'item/completed',
+        ) as any
+        assert.equal(live?.params.item.litchOrigin, marker)
+        assert.equal(
+          (client.notifications.findLast((frame) => frame.method === 'item/started')?.params as any)
+            ?.item.litchOrigin,
+          marker,
+        )
+        const resumed = await client.call('thread/resume', { threadId: stored.id })
+        assert.equal(resumed.thread.turns[0].items[0].litchOrigin, marker)
+        const paged = await client.call('thread/resume', {
+          threadId: stored.id,
+          excludeTurns: true,
+          initialTurnsPage: { limit: 10, sortDirection: 'desc', itemsView: 'full' },
+        })
+        assert.equal(paged.initialTurnsPage.data[0].items[0].litchOrigin, marker)
+        assert.equal(
+          paged.initialTurnsPage.data[0].litchOrigin,
+          undefined,
+          '插话不改变普通回合来源',
+        )
+        assert.equal(
+          paged.initialTurnsPage.data[1].litchOrigin,
+          index < 2 ? 'backgroundTask' : undefined,
+        )
+        const history = await client.call('thread/read', {
+          threadId: stored.id,
+          includeTurns: true,
+        })
+        assert.equal(history.thread.turns[0].items[0].litchOrigin, marker)
+        const turns = await client.call('thread/turns/list', { threadId: stored.id })
+        assert.equal(
+          turns.data.find((turn: any) => turn.id === 'original').items[0].litchOrigin,
+          marker,
+        )
+        const items = await client.call('thread/items/list', { threadId: stored.id })
+        assert.equal(items.data[0].litchOrigin, marker)
+        client.close()
+      }
+    } finally {
+      db.close()
+      await server?.close()
+      await env.close()
     }
-  } finally {
-    db.close()
-    await env.close()
-  }
-})
+  })
 
 test('NATIVE-WAKE-ROUTE-001 仅新声明连接的新建原生会话注入，恢复补规则，配置关闭不动原生配置', async () => {
   const fake = new FakeCodex()

@@ -263,6 +263,7 @@ const device = new DeviceServer({
 device.titles.setEnabled('codex', false)
 let client = new TestClient(device)
 const legacy = new TestClient(device)
+const observer = activeDelivery ? new TestClient(device) : null
 try {
   await client.initialize([
     'harness',
@@ -273,6 +274,7 @@ try {
     'litchManager',
   ])
   await legacy.initialize(['harness', 'backgroundTasks'])
+  await observer?.initialize(['harness', 'backgroundTasks', 'nativeBackgroundWake', 'toolImages'])
   let parentId
   let thread
   if (entry === 'manager-line') {
@@ -381,13 +383,14 @@ try {
     `registered task visible before completion: ${JSON.stringify(registered)}; samples=${samples.length}`,
   )
   await legacy.call('thread/resume', { threadId: thread.id })
+  await observer?.call('thread/resume', { threadId: thread.id })
   assert.ok(!JSON.stringify(legacy.notifications).includes('litchWake'))
   client.close()
   legacy.close()
   writeFileSync(join(dirs.work, 'release-background'), '')
   for (let i = 0; i < (sleepSeconds + 15) * 20 && !continued; i++) await pause(50)
   assert.ifError(scriptError)
-  assert.ok(continued, 'all UI clients disconnected; device still delivers completion')
+  assert.ok(continued, 'device delivers completion with or without subscribed UI clients')
   const processExitMarkerAt = Number(readFileSync(join(dirs.work, 'command-exit-at'), 'utf8'))
   console.log(
     JSON.stringify({
@@ -401,8 +404,52 @@ try {
     }),
   )
   await pause(200)
+  if (observer) {
+    const echoes = observer.notifications.filter(
+      (frame) =>
+        ['item/started', 'item/completed'].includes(frame.method) &&
+        frame.params.item?.type === 'userMessage' &&
+        frame.params.item.content?.some((part) =>
+          part.text?.startsWith('<litch-background-completed>'),
+        ),
+    )
+    console.log(
+      'active completion echoes',
+      JSON.stringify(
+        echoes.map((frame) => ({
+          method: frame.method,
+          item: { ...frame.params.item, content: undefined },
+        })),
+      ),
+    )
+    assert.ok(echoes.length, '保持连接的客户端收到后台插话实时条目')
+    assert.ok(echoes.every((frame) => frame.params.item.litchOrigin === 'backgroundTask'))
+  }
   client = new TestClient(device)
   await client.initialize(['harness', 'backgroundTasks', 'nativeBackgroundWake'])
+  if (activeDelivery) {
+    const paged = await client.call('thread/resume', {
+      threadId: thread.id,
+      excludeTurns: true,
+      initialTurnsPage: { limit: 10, sortDirection: 'desc', itemsView: 'full' },
+    })
+    const injected = paged.initialTurnsPage.data
+      .flatMap((turn) => turn.items)
+      .find((item) => item.type === 'userMessage' && item.clientId?.startsWith('litch-background-'))
+    console.log(
+      'initialTurnsPage origin',
+      JSON.stringify({
+        id: injected?.id,
+        clientId: injected?.clientId,
+        litchOrigin: injected?.litchOrigin,
+      }),
+    )
+    assert.equal(
+      injected?.litchOrigin,
+      'backgroundTask',
+      '桌面与手机默认的恢复首屏必须带后台消息来源',
+    )
+  }
   const resumed = await client.call('thread/resume', { threadId: thread.id })
   const automatic = resumed.thread.turns.find((t) => t.litchOrigin === 'backgroundTask')
   if (activeDelivery) {
@@ -504,11 +551,12 @@ try {
     }),
   )
   console.log(
-    `PASS native background continuation (${entry ?? 'client'}, sleep=${sleepSeconds}s): final tools, explicit watch, no UI clients, exit output, origin persistence, restart does not replay`,
+    `PASS native background continuation (${entry ?? 'client'}, sleep=${sleepSeconds}s): final tools, explicit watch, ${activeDelivery ? 'realtime and initialTurnsPage' : 'no UI clients'}, exit output, origin persistence, restart does not replay`,
   )
 } finally {
   client.close()
   legacy.close()
+  observer?.close()
   await device.close()
   model.close()
   processHandle.kill('SIGTERM')

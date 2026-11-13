@@ -9,6 +9,7 @@ import {
   type ThreadItem,
   type Turn,
 } from '../../protocol/src/index.mjs'
+import { formatBackgroundCompletion } from '../../protocol/src/native-background-wake.mjs'
 import {
   type ComposeOptions,
   createCore,
@@ -29,6 +30,75 @@ import { watchSession } from './wire.mjs'
 
 const never = { aborted: false, addEventListener() {} }
 const where = { deviceId: 'local', sessionId: 'a' }
+
+test('后台完成插话：实时与 resume 内嵌首屏保持事件且不产生待发', async () => {
+  const env = setup([thread({ id: 'a', turns: [turn('working', [], { status: 'inProgress' })] })])
+  const text = formatBackgroundCompletion({
+    batchId: 'nebula-batch',
+    events: [
+      {
+        taskId: 'nebula-job',
+        originalTurnId: 'before',
+        itemId: 'cmd',
+        title: '星云构建',
+        purpose: '读取构建结果',
+        purposeTruncated: false,
+        status: 'completed',
+        exitCode: 0,
+        signal: 'unknown',
+        durationMs: 500,
+        output: '构建完成，检查通过。',
+        outputMayBeTruncated: false,
+        truncated: false,
+      },
+    ],
+  })
+  const input = {
+    ...userText('background', text),
+    clientId: 'litch-background-nebula-batch',
+    litchOrigin: 'backgroundTask',
+  }
+  env.core.start()
+  try {
+    await settle()
+    const session = watch(env.core)
+    await settle()
+    const assertEvent = () => {
+      const item = session.seen.view?.items['working:background']
+      assert.equal(item?.kind === 'userMessage' && item.event?.kind, 'background-completed')
+      assert.equal(item?.kind === 'userMessage' && item.text, '')
+      assert.equal(session.seen.view?.queued.length, 0)
+      assert.equal(session.seen.view?.turns[0]?.origin, undefined)
+    }
+    env.peer.last().notify('item/started', {
+      threadId: 'a',
+      turnId: 'working',
+      item: { ...input, litchOrigin: 'backgroundTask' },
+    })
+    await settle()
+    assertEvent()
+    env.peer.last().notify('item/completed', { threadId: 'a', turnId: 'working', item: input })
+    await settle()
+    assertEvent()
+    env.world.threads[0] = thread({
+      id: 'a',
+      turns: [turn('working', [input], { status: 'inProgress' })],
+    })
+    env.handlers['thread/resume'] = () => ({
+      thread: { ...env.world.threads[0], turns: [] },
+      initialTurnsPage: { data: env.world.threads[0]?.turns, nextCursor: null },
+    })
+    env.peer.last().drop()
+    await settle()
+    env.time.advance(500)
+    await settle()
+    assertEvent()
+    const init = env.sent('initialize')[0] as { capabilities: { litchExtensions: string[] } }
+    assert.ok(init.capabilities.litchExtensions.includes('nativeBackgroundWake'))
+  } finally {
+    env.core.stop()
+  }
+})
 
 test('真实 Codex 事件形状：空 reasoning 与 compaction 独立投影，空白摘要不显示，后续可读摘要不丢失', async () => {
   const { core, peer, handlers } = setup([

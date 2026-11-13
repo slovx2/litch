@@ -523,6 +523,18 @@ export class NativeBackgroundWake {
     let changed = false
     if (isObject(value.thread))
       changed = this.decorate(String(value.thread.id), value.thread, inputs, origins)
+    // 两端恢复默认 excludeTurns + initialTurnsPage；首屏不在 thread.turns 里，
+    // 须沿同一连接的声明装饰内嵌页，否则重开会话会把后台插话画成普通用户消息。
+    if (isObject(value.initialTurnsPage))
+      changed =
+        this.decorate(
+          isObject(value.thread) && typeof value.thread.id === 'string'
+            ? value.thread.id
+            : threadId,
+          value.initialTurnsPage,
+          inputs,
+          origins,
+        ) || changed
     const item = isObject(value.item) ? value.item : value
     if (inputs) changed = this.decorateInput(threadId, item) || changed
     const turns = Array.isArray(value.turns)
