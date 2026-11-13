@@ -7,9 +7,11 @@ import { globSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
+import { verifyPinnedRecent } from './check-local-workspace-recent.mjs'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
 
 const mobile = process.argv.includes('--mobile')
+const recent = process.argv.includes('--recent')
 const base = process.env.LITCH_LOCAL_WORKSPACE_UI ?? `http://127.0.0.1:${mobile ? 5289 : 5299}`
 if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(base)) throw new Error('只接受回环夹具')
 const output = resolve(
@@ -108,7 +110,12 @@ try {
     )
     await shot(mobile ? 'mobile-failure.png' : 'desktop-failure.png')
   }
-  if (mobile) {
+  if (recent) {
+    await verifyPinnedRecent({ call, base, run, click, exists, shot, until })
+    report.checks.push(
+      '查看置顶会话后进入最近；置顶项目内的会话也进入最近，未读仍排除，每个主项只有一行',
+    )
+  } else if (mobile) {
     await call('Emulation.setDeviceMetricsOverride', {
       width: 430,
       height: 932,
@@ -279,7 +286,10 @@ try {
   throw error
 } finally {
   writeFileSync(
-    join(output, mobile ? 'mobile-report.json' : 'desktop-report.json'),
+    join(
+      output,
+      mobile ? 'mobile-report.json' : recent ? 'recent-report.json' : 'desktop-report.json',
+    ),
     JSON.stringify(report, null, 2),
   )
   cdp?.close()

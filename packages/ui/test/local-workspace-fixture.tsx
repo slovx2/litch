@@ -5,6 +5,7 @@ import {
   createMockCore,
   createPortPair,
   createReplica,
+  createSidebarActivity,
   emptyOrganizer,
   keys,
   memoryOrganizerStore,
@@ -41,8 +42,13 @@ serveChannel(
   },
   { clock: browserClock },
 )
-const channel = connectChannel(ui)
-const replica = createReplica(channel)
+const activity = createSidebarActivity(connectChannel(ui), browserClock, {
+  load: () => [],
+  save() {},
+})
+if (new URLSearchParams(location.search).has('recent')) activity.setForeground(true)
+const channel = activity.channel
+const replica = createReplica(channel, activity)
 replica.start()
 Object.assign(window, {
   __localWorkspace: { channel, store: replica.store, keys, organizer, commands },

@@ -98,7 +98,7 @@ const workspace = (id: string, pinned: boolean): WorkspaceView => ({
   sectionId: null,
 })
 
-test('置顶覆盖：置顶会话、置顶项目里的会话和它们的子会话；投影里不再出现', () => {
+test('置顶覆盖：未读排除；最近收纳置顶会话、项目里的会话，子会话仍归并', () => {
   const groups = { ':pinned': ['p'], w1: ['in'], w2: ['plain'], '': ['kid'] }
   const children = { p: ['kid'] }
   const cover = pinCover(groups, [workspace('w1', true), workspace('w2', false)], children)
@@ -111,14 +111,23 @@ test('置顶覆盖：置顶会话、置顶项目里的会话和它们的子会�
       summary('plain', { workspaceId: 'w2', unread: true }),
     ].map((row) => [row.id, row]),
   )
-  const projected = projectSidebarGroups('mac', sessions, () => 5, new Set(cover))
+  const projected = projectSidebarGroups(
+    'mac',
+    sessions,
+    (id) => ({ p: 8, kid: 9, in: 7, plain: 5 })[id] ?? 0,
+    new Set(cover),
+  )
   assert.deepEqual(
     projected.unread.map((row) => row.sessionId),
     ['plain'],
   )
   assert.deepEqual(
-    projected.recent.map((row) => row.sessionId),
-    ['plain'],
+    projected.recent.map((row) => [row.sessionId, row.at]),
+    [
+      ['p', 9],
+      ['in', 7],
+      ['plain', 5],
+    ],
   )
   assert.deepEqual(
     pinSourceOf('mac', groups, [workspace('w1', true)]),

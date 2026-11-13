@@ -257,7 +257,7 @@ Unread an offline device shows a dashed bar instead of the word "offline", so th
 the device name's tooltip and screen readers still say "offline". Pinning still lives on each device (pin and unpin need the device online and
 able to organize); only the order is local: drag rows, or use Move up / Move down, and the order is kept
 on this computer only. A pinned session appears only in Pinned, not again under its device,
-in Recent, Unread or a local group. Pinning still takes a session out of its device group, as before.
+in Unread or a local group. Recent still includes pinned sessions and sessions in pinned projects after you view or interact with them, with one row per main conversation. Pinning still takes a session out of its device group, as before.
 
 Local groups are folders that live only in this desktop app (nothing is synced or sent to devices) and can mix sessions and projects from any device. Each group is its own block at the top level of
 the sidebar, next to Pinned; with no groups nothing is shown. Create one from the **+** menu at the top of
@@ -277,7 +277,7 @@ left untouched.
 
 置顶区在侧栏最上方，合并所有设备的置顶对话和项目，每行有设备色块和设备名，色块与子会话展开箭头分开显示；置顶资格仍存在各设备上，先后只在本机排序。置顶项目展开后和设备里的项目一样先列前 5 个对话，其余收在“显示更多”后面，可再收起；子会话跟着父会话显示，不占条数；从搜索或通知打开收着的对话时会自动露出。
 「最近」「未读」的行用同一个设备标记（按项目聚合时项目行也带）；登记了多台设备时才写设备名。设备离线时色块画成虚线，行上不写“离线”，以免挤占标题；悬停设备名和读屏仍会说明“离线”。
-桌面本地分组只保存在此客户端（不同客户端之间不同步），可混装各设备的对话和项目，设备离线时也能整理；组里的对话和项目照常显示在原设备下，已置顶的只在置顶区显示。每个本地分组直接是侧栏最外层的一块，与「置顶」并列，没有分组时不显示。从侧栏顶部的“+”菜单（“新建本地分组…”旁的问号说明用途）、侧栏空白处右键或对话、项目菜单“加入本地分组 → 新建本地分组…”新建；组标题可收起，标题行尾的“…”可重命名、上移下移、删除，也可拖动标题排序。经理会话、定时任务会话和子会话树在组里的样子与「最近」一致：经理保留经理框，收起的子会话和工作线显示为“N 个子会话”。
+桌面本地分组只保存在此客户端（不同客户端之间不同步），可混装各设备的对话和项目，设备离线时也能整理；组里的对话和项目照常显示在原设备下，已置顶的在分组内不重复显示。「最近」仍收录查看或主动操作过的置顶对话及置顶项目内的对话，同一主对话只显示一行；「未读」继续排除置顶区已有的对话。每个本地分组直接是侧栏最外层的一块，与「置顶」并列，没有分组时不显示。从侧栏顶部的“+”菜单（“新建本地分组…”旁的问号说明用途）、侧栏空白处右键或对话、项目菜单“加入本地分组 → 新建本地分组…”新建；组标题可收起，标题行尾的“…”可重命名、上移下移、删除，也可拖动标题排序。经理会话、定时任务会话和子会话树在组里的样子与「最近」一致：经理保留经理框，收起的子会话和工作线显示为“N 个子会话”。
 项目可从置顶区、设备目录或另一个本地分组拖入，组内也可拖动排序；项目菜单可加入或移出本地分组。项目可展开查看对话；显式加入分组的对话优先于项目内的同一对话，跨本地分组只显示一行。每个成员最多属于一个本地分组。置顶项目加入本地分组后仍在置顶区显示，组内计入“另有 N 个在置顶区”，取消置顶后回到组内原来的位置。
 侧栏顶部的“+”菜单汇集常用的新建入口：新对话、添加项目（多台在线设备时先选设备）、新建本地分组、添加设备，各项打开与原入口相同的页面或对话框；在侧栏空白处右键弹出同一份菜单，在会话、分组、设备等条目上右键仍是各自的菜单。
 手机首页不提供设备之上的置顶和本地分组，也不提供加入本地分组的长按入口。置顶会话、置顶项目和设备已有分区仍在各设备的列表里显示，原置顶／取消置顶和移出设备分区等操作保留。手机原有本地分组文件不删除，并保留其中的项目成员；设备端置顶和分区数据不改变，桌面继续照常使用。

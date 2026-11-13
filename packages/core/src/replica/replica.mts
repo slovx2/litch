@@ -74,7 +74,7 @@ export const keys = {
   sidebarProjections: (deviceId: string) => `sidebar:${deviceId}:projections`,
   /**
    * string[]：画在全局置顶区里的会话（置顶的、置顶项目里的，连同它们的子会话），按标识排。
-   * 设备目录、最近、未读、本机分组都不再画这些（organizer/shortcuts.mts 的 pinCover）
+   * 设备目录、未读、本机分组都不再画这些；最近仍按交互显示（organizer/shortcuts.mts 的 pinCover）
    */
   pinCover: (deviceId: string) => `sidebar:${deviceId}:pinCover`,
   /** OrganizerView：这台客户端上的本机整理（本机分组、置顶先后、收起），所有设备共用一份 */
@@ -882,7 +882,7 @@ export function createReplica(
 
   // 投影的主项、项目或排序依据没变就不通知；正文流式增量不经过侧栏目录。
   const refreshProjections = (deviceId: string, sessions: Map<string, SessionSummary>) => {
-    // 画在置顶区里的不进最近、未读（置顶只出现一次）
+    // 画在置顶区里的不进未读；最近仍保留主动交互的会话。
     const covered = new Set(
       options.globalPins === false ? [] : (store.get<string[]>(keys.pinCover(deviceId)) ?? []),
     )
