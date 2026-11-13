@@ -37,7 +37,7 @@ export const enManager = {
   'manager.resetReplace':
     'Waits for the manager turn, background tasks and questions to finish, then creates a new session. The old conversation remains read-only; only the handover summary and board carry over. Cancellation is unavailable once summarizing starts.',
   'manager.resetSummaryFailed': 'The handover summary failed. Continue using only the board?',
-  'manager.resetBoardOnly': 'Continue with board only',
+  'manager.resetBoardOnly': 'Use board only',
 
   'manager.resetSettings': 'Handover settings',
   'manager.resetSettingsHint': 'Change harness, model or reasoning effort',
@@ -48,15 +48,18 @@ export const enManager = {
   'manager.resetPermission': 'Permissions (fixed)',
   'manager.resetFixed': 'Device, working directory and current permissions stay the same.',
   'manager.resetTargetNote':
-    'Cancel while waiting. Sending a message cancels the wait. Cancellation is unavailable once summarizing starts. Switching applies the device’s current manager tools and instructions.',
+    'You can cancel while waiting; sending a message cancels the wait. Once summarizing starts, cancellation is unavailable. The reset uses this device’s current manager tools and instructions.',
   'manager.resetTargetReplace':
-    'Wait for the manager’s turn, background tasks and temporary questions to finish, then create a new session. The board and worklines remain, and worklines keep running. The previous conversation becomes read-only history. The incoming manager receives a handover summary and current work index, and can read the board and previous history as needed. Conversation details outside the summary or board do not automatically enter the new session.',
+    'Creates a new session after the manager’s turn, background tasks and temporary questions finish. The previous conversation becomes read-only history. The board remains and worklines keep running. The incoming manager receives a handover summary and work index, with access to previous history. Details outside the summary and board do not carry over automatically.',
+  'manager.resetBoardOnlyReplace':
+    'Creates a new session using only the board and work index, without a handover summary. The previous conversation remains read-only and worklines keep running.',
   'manager.resetTargetSummaryFailed':
     'The handover summary failed. Continue with {target} using only the board and current work index?',
   'manager.resetTargetLocked':
     'The handover target is locked. Continuing with the board uses the settings already confirmed.',
   'manager.resetTargetWaiting': 'Waiting for handover: {source} → {target}',
-  'manager.resetHandoverFailed': 'Switched; handover did not succeed',
+  'manager.resetHandoverFailed': 'New session created; handover failed',
+  'manager.resetReview': 'Review handover',
   'manager.resetCapabilities': 'Capability changes',
   'manager.resetDispatchChanges': 'Workline default changes',
   'manager.resetDispatchNote':

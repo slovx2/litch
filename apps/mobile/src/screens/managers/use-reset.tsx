@@ -163,7 +163,7 @@ export function useManagerReset(manager: ManagerView, online: boolean, resetTarg
                 `${resetSettingsLabel(operation.source, t)} → ${resetSettingsLabel(target, t)}`,
                 t('manager.resetTargetSummaryFailed', { target: resetSettingsLabel(target, t) }),
                 t('manager.resetTargetLocked'),
-                t('manager.resetTargetReplace'),
+                t('manager.resetBoardOnlyReplace'),
               ].join('\n\n')
             : preview
               ? resetPreviewDetail(preview, t)
@@ -242,6 +242,7 @@ export function useManagerReset(manager: ManagerView, online: boolean, resetTarg
           }}
         />
         <Confirm
+          fixedActions
           visible={open}
           title={t(changed ? 'manager.resetSwitchTitle' : 'manager.reset')}
           detail={detail}

@@ -246,8 +246,10 @@ export function ResetTargetManager({
             if (event.key === 'Escape') event.stopPropagation()
           }}
         >
-          <div className="confirm-body">
+          <div className="reset-target-heading">
             <b>{title}</b>
+          </div>
+          <div className="confirm-body">
             <span>{t(replace ? 'manager.resetTargetNote' : 'manager.resetNote')}</span>
             {locked && operation ? (
               <div className="reset-target-preview">
@@ -275,7 +277,15 @@ export function ResetTargetManager({
               <span role="status">{t('manager.resetPreviewLoading')}</span>
             ) : null}
             {preview || locked ? (
-              <span>{t(replace ? 'manager.resetTargetReplace' : 'manager.resetRefresh')}</span>
+              <span>
+                {t(
+                  summaryFailed
+                    ? 'manager.resetBoardOnlyReplace'
+                    : replace
+                      ? 'manager.resetTargetReplace'
+                      : 'manager.resetRefresh',
+                )}
+              </span>
             ) : null}
             {summaryFailed && target ? (
               <span className="wait">
