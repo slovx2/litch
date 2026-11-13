@@ -2,9 +2,15 @@ import type { ManagerResetPreview, ManagerResetTarget, ManagerView } from '@litc
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
+import { ChoiceMark } from '../../ui/kit/marks'
 import { Dialog } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
-import { resetNextTarget, resetPermissionLabel, resetSettingsLabel } from './reset'
+import {
+  resetEffortLabel,
+  resetNextTarget,
+  resetPermissionLabel,
+  resetSettingsLabel,
+} from './reset'
 
 /** 独立、可滚动的接班表单；确认框只负责最终有损确认。 */
 export function ResetSettings({
@@ -67,14 +73,33 @@ export function ResetSettings({
         },
       ]}
     >
-      <Text style={{ color: reason ? c.ink3 : c.ink, fontSize: font.size.body, flexShrink: 1 }}>
-        {label}
-      </Text>
+      <View style={styles.optionLabel}>
+        <ChoiceMark kind="radio" state={selected ? 'on' : 'off'} />
+        <Text style={{ color: reason ? c.ink3 : c.ink, fontSize: font.size.body, flexShrink: 1 }}>
+          {label}
+        </Text>
+      </View>
       {reason ? <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{reason}</Text> : null}
     </Pressable>
   )
   return (
-    <Dialog visible={visible} onClose={onClose} onDismiss={onDismiss}>
+    <Dialog
+      visible={visible}
+      onClose={onClose}
+      onDismiss={onDismiss}
+      footer={
+        <View style={styles.buttons}>
+          <Button kind="quiet" label={t('app.cancel')} onPress={onClose} />
+          <Button
+            label={t('manager.resetReview')}
+            testID="manager-reset-next"
+            busy={busy}
+            disabled={!preview?.canSubmit || !!error}
+            onPress={onConfirm}
+          />
+        </View>
+      }
+    >
       <View testID="manager-reset-settings" style={styles.body}>
         {title(t('manager.resetSettings'))}
         <Text style={{ color: c.ink2 }}>{t('manager.resetSettingsHint')}</Text>
@@ -116,8 +141,11 @@ export function ResetSettings({
             {title(t('manager.effort'))}
             {model?.efforts.length ? (
               model.efforts.map((effort) =>
-                option(`manager-reset-effort:${effort}`, effort, effort === target?.effort, () =>
-                  change({ effort }),
+                option(
+                  `manager-reset-effort:${effort}`,
+                  resetEffortLabel(effort, t),
+                  effort === target?.effort,
+                  () => change({ effort }),
                 ),
               )
             ) : (
@@ -201,7 +229,7 @@ export function ResetSettings({
                   {dispatchModel?.efforts.map((effort) =>
                     option(
                       `manager-reset-dispatch-effort:${effort}`,
-                      effort,
+                      resetEffortLabel(effort, t),
                       dispatch.effort === effort,
                       () => setDispatch({ effort }),
                     ),
@@ -238,23 +266,14 @@ export function ResetSettings({
             disabled={busy}
           />
         ) : null}
-        <View style={styles.buttons}>
-          <Button kind="plain" label={t('app.cancel')} onPress={onClose} />
-          <Button
-            label={t('manager.reset')}
-            testID="manager-reset-next"
-            busy={busy}
-            disabled={!preview?.canSubmit || !!error}
-            onPress={onConfirm}
-          />
-        </View>
       </View>
     </Dialog>
   )
 }
 
 const styles = StyleSheet.create({
-  body: { gap: 12 },
-  option: { borderWidth: 1, padding: 10, gap: 6, justifyContent: 'center' },
+  body: { gap: 8 },
+  option: { borderWidth: 1, padding: 8, gap: 4, justifyContent: 'center' },
+  optionLabel: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'flex-end' },
 })

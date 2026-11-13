@@ -5,6 +5,7 @@ import type {
   ManagerView,
 } from '@litch/core'
 import { harnessIdentity } from '../../../../../packages/protocol/src/harness-identity.mts'
+import { EFFORT_TEXT } from '../../../../../packages/ui/src/composer/efforts'
 import type { Translator } from '../../ui/i18n'
 
 /** 入口只排用户确认过的重置；摘要失败的再次确认才允许仅凭看板接手。 */
@@ -47,7 +48,13 @@ export function managerResetState(
 
 export function resetSettingsLabel(settings: ManagerResetSettings, t: Translator): string {
   const name = t.harness(settings.harness, harnessIdentity(settings.harness)?.displayName)
-  return [name, settings.model, settings.effort].filter(Boolean).join(' · ')
+  return [name, settings.model, settings.effort ? resetEffortLabel(settings.effort, t) : null]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+export function resetEffortLabel(effort: string, t: Translator): string {
+  return EFFORT_TEXT[effort] ? t(EFFORT_TEXT[effort]) : effort
 }
 
 export function resetPermissionLabel(permission: string | null, t: Translator): string {
@@ -102,7 +109,9 @@ export function resetPreviewDetail(preview: ManagerResetPreview, t: Translator):
   const value = (field: string, entry: string | null) =>
     field === 'harness' && entry
       ? resetSettingsLabel({ harness: entry, model: null, effort: null, permission: null }, t)
-      : (entry ?? t('manager.same'))
+      : field === 'effort' && entry
+        ? resetEffortLabel(entry, t)
+        : (entry ?? t('manager.same'))
   return [
     `${t('manager.resetSource')}: ${resetSettingsLabel(preview.source, t)} →\n${t('manager.resetTarget')}: ${resetSettingsLabel(preview.target, t)}`,
     `${t('manager.resetPermission')}: ${resetPermissionLabel(preview.target.permission, t)}`,
@@ -125,7 +134,7 @@ export function resetPreviewDetail(preview: ManagerResetPreview, t: Translator):
           t('manager.resetDispatchChanges'),
           ...preview.dispatchChanges.map(
             (change) =>
-              `${t(`manager.${change.field}` as Parameters<Translator>[0])}: ${value(change.field, change.before)} → ${value(change.field, change.after)}`,
+              `${t(change.field === 'harness' ? 'manager.lineHarness' : (`manager.${change.field}` as Parameters<Translator>[0]))}: ${value(change.field, change.before)} → ${value(change.field, change.after)}`,
           ),
           t('manager.resetDispatchNote'),
         ]

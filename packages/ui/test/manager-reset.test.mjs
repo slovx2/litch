@@ -180,7 +180,7 @@ test('支持接班的设备等待时显示已确认源目标和取消；提交�
       })
       assert.match(
         failed,
-        lang === 'zh-CN' ? /已切换，接班未成功/ : /Switched; handover did not succeed/,
+        lang === 'zh-CN' ? /新会话已创建，接班失败/ : /New session created; handover failed/,
       )
     }
   } finally {
