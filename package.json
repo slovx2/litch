@@ -166,7 +166,7 @@
     "ajv": "8.20.0",
     "jpeg-js": "0.4.4",
     "pngjs": "7.0.0",
-    "ws": "8.22.0"
+    "ws": "8.22.2"
   },
   "devDependencies": {
     "@babel/parser": "7.29.7",
