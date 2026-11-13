@@ -56,6 +56,21 @@ import { requireSupportedPermission, supportedPermissions } from './session-perm
 import type { SessionTree } from './session-tree.mjs'
 import { DeviceError, isObject } from './wire.mjs'
 
+/** 按实际接收连接过滤；分页摘要、直接应答和广播共用。 */
+export function managerResetProjection(value: unknown, declared: boolean): unknown {
+  if (declared || !isObject(value)) return value
+  const result = { ...value }
+  if (isObject(result.reset)) {
+    const { operation: _operation, ...reset } = result.reset
+    result.reset = reset
+  }
+  for (const key of ['manager', 'summary'])
+    if (isObject(result[key])) result[key] = managerResetProjection(result[key], false)
+  if (Array.isArray(result.managers))
+    result.managers = result.managers.map((manager) => managerResetProjection(manager, false))
+  return result
+}
+
 export class DeviceManagers {
   readonly store: ManagerStore
   readonly lines: ManagerLines
@@ -283,6 +298,7 @@ export class DeviceManagers {
     pagingDeclared = false,
     issuesDeclared = false,
     issueDiscussionsDeclared = false,
+    resetTargetDeclared = false,
   ): Promise<unknown> {
     if ((Object.values(MANAGER_ISSUE_METHOD) as string[]).includes(method)) {
       if (!issuesDeclared)
@@ -332,6 +348,16 @@ export class DeviceManagers {
       return this.paging.call(method, given)
     }
     const params = fields(given ?? {})
+    if (
+      !resetTargetDeclared &&
+      (method === MANAGER_METHOD.resetPreview ||
+        ['target', 'expectedThreadId', 'expectedSettingsHash', 'requestId'].some(
+          (key) => key in params,
+        ))
+    )
+      throw new DeviceError('extensionRequired', `${method} requires litchManagerResetTarget.`, {
+        required: [EXTENSION.manager, EXTENSION.managerResetTarget],
+      })
     if (method === MANAGER_METHOD.list) {
       keys(params, [])
       await Promise.all(this.store.managers().map((manager) => this.lines.refresh(manager.id)))
@@ -345,10 +371,32 @@ export class DeviceManagers {
     if (!this.store.manager(id))
       throw new ManagerError('unknownManager', 'This manager does not exist.')
     switch (method) {
-      case MANAGER_METHOD.reset:
-        keys(params, ['managerId', 'boardOnly'])
-        this.resets.request(id, params.boardOnly === true)
-        return { manager: this.manager(id) }
+      case MANAGER_METHOD.reset: {
+        keys(params, [
+          'managerId',
+          'boardOnly',
+          'target',
+          'expectedThreadId',
+          'expectedSettingsHash',
+          'requestId',
+        ])
+        const record = await this.resets.requestTarget(params)
+        const manager = this.manager(id)
+        return {
+          manager,
+          ...(record?.operation
+            ? {
+                operation: {
+                  ...record.operation,
+                  committed: !!record.committed || record.operation.committed,
+                },
+              }
+            : {}),
+        }
+      }
+      case MANAGER_METHOD.resetPreview:
+        keys(params, ['managerId', 'target'])
+        return this.resets.preview(id, params.target)
       case MANAGER_METHOD.resetCancel:
         keys(params, ['managerId'])
         this.resets.cancel(id)
@@ -962,16 +1010,28 @@ export class DeviceManagers {
           manager: { ...parsed.event.manager, ignored },
         })
       }
-      const sent = await this.tree.deliverManagerEvent(
-        manager.threadId,
-        text,
-        event.id,
-        parsed.event?.kind === 'manager-end'
-          ? { startOnly: true, onStarted: (turnId) => this.endings.started(id, turnId) }
-          : {},
-      )
+      let sent: boolean
+      try {
+        sent =
+          (await this.resets.reconcileHandover(manager, event.id, text)) ||
+          (await this.tree.deliverManagerEvent(
+            manager.threadId,
+            text,
+            event.id,
+            parsed.event?.kind === 'manager-end'
+              ? { startOnly: true, onStarted: (turnId) => this.endings.started(id, turnId) }
+              : { onStarted: (turnId) => this.resets.handoverStarted(id, event.id, turnId) },
+          ))
+      } catch (error) {
+        this.resets.handoverFailed(id, event.id, error)
+        throw error
+      }
       if (this.closed || !sent) return
       this.store.delivered(event.id)
+      if (this.store.reset(id)?.handoverEventId === event.id) {
+        this.changed(id)
+        this.tree.check(manager.threadId)
+      }
       if (parsed.event?.kind === 'manager-end') await this.endings.recover(id)
     }
   }

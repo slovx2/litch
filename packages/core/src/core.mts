@@ -1415,8 +1415,12 @@ export function createCore(options: CoreOptions): Core {
           return await deviceOf(deviceId).managers.cancelReset(managerId)
         }
         case 'managers.reset': {
-          const { deviceId, managerId, boardOnly } = params as Commands['managers.reset']['params']
-          return await deviceOf(deviceId).managers.reset(managerId, boardOnly)
+          const { deviceId, ...input } = params as Commands['managers.reset']['params']
+          return await deviceOf(deviceId).managers.reset(input)
+        }
+        case 'managers.reset.preview': {
+          const { deviceId, ...input } = params as Commands['managers.reset.preview']['params']
+          return await deviceOf(deviceId).managers.previewReset(input)
         }
         case 'managers.end': {
           const { deviceId, managerId } = params as Commands['managers.end']['params']

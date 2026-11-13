@@ -298,9 +298,9 @@ test('模拟核心：各 harness 的技能各是各的，没有声明的不认�
   const names = async (deviceId: string, harnessId: string, cwd: string | null) =>
     (await ask(deviceId, harnessId, cwd)).skills.map((entry) => entry.name)
 
-  assert.equal((await names('local', 'claude', '/work/litch')).length, 6)
+  assert.equal((await names('local', 'claude-code', '/work/litch')).length, 6)
   // 没有工作目录：仓库里带的那几项看不到
-  assert.deepEqual(await names('local', 'claude', null), [
+  assert.deepEqual(await names('local', 'claude-code', null), [
     'flaky-test',
     'write-tests',
     'changelog',
@@ -312,7 +312,7 @@ test('模拟核心：各 harness 的技能各是各的，没有声明的不认�
   // 直接连的那台原生 codex 没有声明：问了才知道它不认识
   assert.equal((await failureOf(ask('nas', undefined, null))).code, 'unsupported')
   // 没连上的设备、用不了的 harness 都问不成
-  assert.equal((await failureOf(ask('gpu', 'claude', null))).code, 'offline')
+  assert.equal((await failureOf(ask('gpu', 'claude-code', null))).code, 'offline')
   assert.equal((await failureOf(ask('local', 'codex', null))).code, 'remote')
 
   // 同一台设备上别的目录不受影响

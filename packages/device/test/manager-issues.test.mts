@@ -541,7 +541,7 @@ test('v6 连续升级保留 D/R/P/S/I、问答、关联、报告已阅；不建�
     await env.device.close()
     const db = new DatabaseSync(join(env.stateDir, 'manager.sqlite'))
     db.exec(
-      'DROP TABLE manager_resets; DROP TABLE manager_history; DROP TABLE issues; DROP TABLE issue_comments; DROP TABLE issue_notifications; DROP TABLE issue_idempotency; DROP TABLE issue_meta; DROP TABLE issue_history; PRAGMA user_version=6',
+      'DROP TABLE manager_reset_requests; DROP TABLE manager_resets; DROP TABLE manager_history; DROP TABLE issues; DROP TABLE issue_comments; DROP TABLE issue_notifications; DROP TABLE issue_idempotency; DROP TABLE issue_meta; DROP TABLE issue_history; PRAGMA user_version=6',
     )
     db.close()
     second = rig({ pi: env.pi }, {}, { stateDir: env.stateDir })

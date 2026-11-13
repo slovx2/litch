@@ -100,7 +100,7 @@ test('对话里的关键字各演一出：换了新版、旧而忙、前台的�
       assert.deepEqual(
         upgrade?.busy.map((entry) => [entry.reason, [...entry.harnesses].sort(), entry.count]),
         [
-          ['activeTurns', ['claude', 'dsh'], 0],
+          ['activeTurns', ['claude-code', 'dsh'], 0],
           ['deviceProcesses', [], 1],
           ['clients', [], 1],
         ],
@@ -158,14 +158,14 @@ test('现在再试一次：还有回合在跑就照旧没换，原因换成现�
   assert.deepEqual(states, ['reconnecting', 'online'], '和真的一样：重新连了一次')
   assert.equal(local().upgrade?.reason, 'busy')
   assert.deepEqual(local().upgrade?.busy, [
-    { reason: 'activeTurns', harnesses: ['claude'], count: 0 },
+    { reason: 'activeTurns', harnesses: ['claude-code'], count: 0 },
   ])
   assert.deepEqual(local().service, stale, '在跑的还是原来那一份')
 
   // 把 Claude Code 上的回合都了结（强行重启它），再试：这回闲着，换掉了
   await channel.command('device.harness.restart', {
     deviceId: 'local',
-    harness: 'claude',
+    harness: 'claude-code',
     force: true,
   })
   await flush()
@@ -289,6 +289,7 @@ test('设备服务比应用旧：经理看板的后加能力全关，相应命�
     requestIgnore: true,
     issues: true,
     issueDiscussions: true,
+    resetTarget: true,
   }
   const none = {
     feedback: false,
@@ -297,6 +298,7 @@ test('设备服务比应用旧：经理看板的后加能力全关，相应命�
     requestIgnore: false,
     issues: false,
     issueDiscussions: false,
+    resetTarget: false,
   }
   assert.deepEqual(views.get('local')?.features, all)
   assert.deepEqual(views.get('build')?.features, all)

@@ -129,7 +129,7 @@ export function judgeMockManage(probe: MockManageProbe): string[] {
   )
   must(probe.disableBar === 1, `改了一项，保存条上不是一项：${probe.disableBar}`)
   must(probe.disabledState === 'disabled', `停用之后状态没变：${probe.disabledState}`)
-  same(probe.pickerWithout, ['claude', 'dsh', 'codex'], '停用之后新建会话的选择器不对')
+  same(probe.pickerWithout, ['claude-code', 'dsh', 'codex'], '停用之后新建会话的选择器不对')
   must(
     /^([1-9]\d*)\/\1$/.test(probe.disabledRows),
     `停用之后它的会话没有都留着并标成不可用：${probe.disabledRows}`,
@@ -140,7 +140,7 @@ export function judgeMockManage(probe: MockManageProbe): string[] {
   )
   must(probe.leadFollows, '拨了里面那一行的开关，标题行上的开关没有跟着变')
   must(probe.enabledState === 'ready', `再启用之后没有恢复：${probe.enabledState}`)
-  same(probe.pickerWith, ['claude', 'pi', 'dsh', 'codex'], '再启用之后新建会话的选择器不对')
+  same(probe.pickerWith, ['claude-code', 'pi', 'dsh', 'codex'], '再启用之后新建会话的选择器不对')
   must(probe.enabledRowsDown === 0, `再启用之后它的会话还标着不可用：${probe.enabledRowsDown} 行`)
 
   same(
@@ -211,7 +211,7 @@ export function judgeMockManage(probe: MockManageProbe): string[] {
   )
   must(probe.logTail > 50 && probe.logTruncated, `日志的末尾没读到：${probe.logTail} 个字`)
   must(probe.logEmptyNote, '没有内容的日志没有说明')
-  same(probe.configAvailable, ['claude', 'pi'], '给得出 ssh 配置片段的入口不对')
+  same(probe.configAvailable, ['claude-code', 'pi'], '给得出 ssh 配置片段的入口不对')
   must(probe.configUnavailable.length > 0, '给不出片段的入口没有写原因')
   must(
     probe.copied.includes('Host codex-harness-adapter-claude') && probe.copied.includes('Port '),

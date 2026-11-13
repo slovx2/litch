@@ -75,7 +75,7 @@ import { describeHarness, type HarnessCatalog, REQUIRED_EXTENSIONS } from './har
 import { instructionsCall } from './instructions.mjs'
 import { listThreads } from './list-threads.mjs'
 import { type DeviceManagement, MANAGEMENT_PREFIX } from './management.mjs'
-import type { DeviceManagers } from './manager.mjs'
+import { type DeviceManagers, managerResetProjection } from './manager.mjs'
 import type { NativeBackgroundWake } from './native-background-wake.mjs'
 import { dialectFor, NATIVE_CODEX_DIALECT } from './native-codex.mjs'
 import { type DevicePairing, PAIR_PREFIX, PairingError } from './pairing.mjs'
@@ -731,14 +731,19 @@ export class ClientSession implements ClientToolPeer {
         if (method.startsWith(MANAGEMENT_PREFIX))
           return this.host.management.call(method, frame.params)
         if (method.startsWith('litch/manager/'))
-          return this.host.managers?.call(
-            method,
-            frame.params,
-            this.declared.has(EXTENSION.manager),
-            this.declared.has(EXTENSION.managerPaging),
-            this.declared.has(EXTENSION.managerIssues),
-            this.declared.has(EXTENSION.managerIssueDiscussions),
-          )
+          return this.host.managers
+            ?.call(
+              method,
+              frame.params,
+              this.declared.has(EXTENSION.manager),
+              this.declared.has(EXTENSION.managerPaging),
+              this.declared.has(EXTENSION.managerIssues),
+              this.declared.has(EXTENSION.managerIssueDiscussions),
+              this.declared.has(EXTENSION.managerResetTarget),
+            )
+            .then((result) =>
+              managerResetProjection(result, this.declared.has(EXTENSION.managerResetTarget)),
+            )
         if (method.startsWith(DEVICE_TASK_PREFIX)) return this.tasks(method, frame.params)
         return this.calls.call(method, frame.params)
       case 'workspace':
@@ -1644,6 +1649,8 @@ export class ClientSession implements ClientToolPeer {
     if (this.state !== 'ready') return
     if (extension !== undefined && !this.declared.has(extension)) return
     if (this.optOut.has(method)) return
+    if (method.startsWith('litch/manager/'))
+      params = managerResetProjection(params, this.declared.has(EXTENSION.managerResetTarget))
     if (
       method === BACKGROUND_TASKS_NOTIFICATION.changed &&
       this.declared.has(EXTENSION.nativeBackgroundWake) &&

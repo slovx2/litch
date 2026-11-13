@@ -247,6 +247,12 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       summaryBox.bottom <= rowBox.bottom,
   )
   await click('[data-manager-id="m1"] .mg-pick')
+  await until(
+    '经理的 Claude Code 徽标',
+    () =>
+      one('.mg-sidebar-manager[data-manager-id="m1"] .chip')?.textContent?.trim() === 'CC' &&
+      one('.crumb .chip')?.textContent?.trim() === 'CC',
+  )
   const selected = Boolean(await until('经理页', () => one('[data-manager="session"]')))
   await until('首次打开控制台', () => one('[data-board-tab="inbox"][aria-selected="true"]'))
   await click('[data-manager-id="m1"] [data-manager-draft-count]')
@@ -1782,7 +1788,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   // 只对模拟核心：取消不记确认；权限与确认按 harness 分开；换目录不带走项目权限。
   const managerHarness = field('经理使用')?.querySelector('select')
   if (!managerHarness) throw new Error('运行环境缺少 harness 选择')
-  managerHarness.value = 'claude'
+  managerHarness.value = 'claude-code'
   managerHarness.dispatchEvent(new Event('change', { bubbles: true }))
   const permissionButton = '.mg-form [data-kind="permission"] .pick-btn'
   const permissionIs = (title: string) => one(permissionButton)?.textContent?.includes(title)
@@ -1824,7 +1830,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await until('DSH 单独确认完全访问', () => permissionIs('完全访问'))
   await pickPermission(':read-only')
   await until('DSH 记住只读', () => permissionIs('只读'))
-  managerHarness.value = 'claude'
+  managerHarness.value = 'claude-code'
   managerHarness.dispatchEvent(new Event('change', { bubbles: true }))
   await until('Claude 保留自己的完全访问', () => permissionIs('完全访问'))
   fill(input('工作目录'), '~/work/other-project')

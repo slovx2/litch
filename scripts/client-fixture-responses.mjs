@@ -11,7 +11,7 @@
 // 事件的形状对着真的 codex（0.160.0、0.163.0）实测过。
 // 行首“经理：<操作> <JSON 参数>”经 sessionsResponses 调 litch_manager；经理开场、答复、结束事件固定回话，见 client-fixture-manager.mjs。
 
-import { readlinkSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { mkdirSync, readlinkSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { backgroundResponses } from './client-fixture-background.mjs'
@@ -172,6 +172,13 @@ export async function serveResponses(harness, path, raw, res, { serial, pace = 1
     return null
   }
   const body = parse(raw)
+  if (process.env.LITCH_FIXTURE_DUMP) {
+    mkdirSync(process.env.LITCH_FIXTURE_DUMP, { recursive: true })
+    writeFileSync(
+      join(process.env.LITCH_FIXTURE_DUMP, `responses-${Number(serial)}.json`),
+      JSON.stringify({ request: body }),
+    )
+  }
   // 操作本机（litch_machine 和 litch-machine 命令）的那几句，见 client-fixture-machine.mjs
   // 会话树（litch_sessions 和设备注入的唤醒）的那几句，见 client-fixture-sessions.mjs
   // 边做边问（request_user_input_async）的那几句，见 client-fixture-codex-ask.mjs

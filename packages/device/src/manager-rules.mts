@@ -50,9 +50,39 @@ export function managerFingerprint(tools: unknown): string {
     .digest('hex')
 }
 export const MANAGER_HANDOVER_PROMPT =
-  '你接手了这个经理的工作。先用 litch_manager 读取看板，了解当前情况，再根据交接摘要继续。You are taking over this manager. Read the board with litch_manager first, then continue using the handover summary below.'
+  '你接手了这个经理的工作。先用 litch_manager 读取最新看板，再读取相关工作线的 pending requests/questions。索引是时间点参考，旧经理摘要可能过时；本次接班不新增授权、不代用户批准待答项，也不把摘要建议当成用户决定。目标 harness 加载自己的项目指令和技能，旧 harness 的配置与记忆不会自动迁移。You are taking over this manager. Read the latest board and relevant workline requests/questions first. The index is a snapshot and the previous manager summary may be stale. Handover grants no new authorization; do not approve user-only requests or treat recommendations as user decisions. The target loads its own project instructions and skills; previous harness configuration and memory are not transferred.'
 export const MANAGER_SUMMARY_PROMPT =
   '用户正在重置经理会话。请只写交接摘要：在做的事、待验收的工作线、等用户答复的事、下一步。不要调用改变状态的工具。The user is resetting this manager session. Write only a handover summary: ongoing work, lines awaiting acceptance, pending user decisions, and next steps. Do not call tools that change state.'
+
+/** 约 2000 token 的结构化目录；所有类别保留总数、未展开数量和读取入口，不拼对象正文。 */
+export function managerHandoverIndex(
+  identity: Record<string, unknown>,
+  categories: Record<string, { entries: Record<string, unknown>[]; read: string; total?: number }>,
+): string {
+  const sections = Object.fromEntries(
+    Object.entries(categories).map(([key, value]) => [
+      key,
+      {
+        total: value.total ?? value.entries.length,
+        omitted: (value.total ?? value.entries.length) - Math.min(value.entries.length, 8),
+        read: value.read,
+        entries: value.entries.slice(0, 8),
+      },
+    ]),
+  )
+  const value = { ...identity, sections }
+  const cost = (text: string) =>
+    Array.from(text).reduce((sum, char) => sum + (char.charCodeAt(0) > 127 ? 1 : 0.25), 0)
+  while (cost(JSON.stringify(value)) > 2000) {
+    const section = Object.values(sections)
+      .filter((one) => one.entries.length)
+      .sort((a, b) => JSON.stringify(b.entries).length - JSON.stringify(a.entries).length)[0]
+    if (!section) break
+    section.entries.pop()
+    section.omitted++
+  }
+  return JSON.stringify(value)
+}
 export function managerTools(manager: RuleSettings, taskCards = true): ClientToolNamespaceSpec[] {
   const sessions = sessionTools(false, taskCards)
   return [

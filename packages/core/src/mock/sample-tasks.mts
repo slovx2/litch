@@ -205,10 +205,10 @@ export function sampleTasks(deviceId: string, now: number, lang: SampleLang): Sa
         schedule: { type: 'interval', minutes: 30 },
         timezone: 'Asia/Shanghai',
         status: 'active',
-        target: { kind: 'thread', harness: 'claude', threadId: 's8' },
+        target: { kind: 'thread', harness: 'claude-code', threadId: 's8' },
         createdAgo: 5 * DAY,
         // 模型在 s8 里用 litch_tasks 建的
-        origin: { kind: 'tool', harness: 'claude', threadId: 's8' },
+        origin: { kind: 'tool', harness: 'claude-code', threadId: 's8' },
       },
       {
         id: 'task-monthly',
@@ -216,7 +216,7 @@ export function sampleTasks(deviceId: string, now: number, lang: SampleLang): Sa
         schedule: { type: 'monthly', day: 31, time: '18:00' },
         timezone: 'Asia/Shanghai',
         status: 'paused',
-        target: newThread('claude', '~/work/litch', 'litch', 'anthropic/claude-opus-5-5'),
+        target: newThread('claude-code', '~/work/litch', 'litch', 'anthropic/claude-opus-5-5'),
         createdAgo: 90 * DAY,
       },
       {
@@ -225,7 +225,7 @@ export function sampleTasks(deviceId: string, now: number, lang: SampleLang): Sa
         schedule: { type: 'once', at: '2026-10-30T16:00' },
         timezone: 'Asia/Shanghai',
         status: 'active',
-        target: newThread('claude', '~/work/docs-site', 'docs'),
+        target: newThread('claude-code', '~/work/docs-site', 'docs'),
         createdAgo: 2 * DAY,
       },
     )

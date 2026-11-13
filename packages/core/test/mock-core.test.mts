@@ -213,7 +213,7 @@ test('完整模式的设备：一个 harness 不可用，说得出原因，设�
   assert.deepEqual(
     local?.harnesses.map((entry) => [entry.id, entry.state]),
     [
-      ['claude', 'ready'],
+      ['claude-code', 'ready'],
       ['pi', 'ready'],
       ['dsh', 'ready'],
       ['codex', 'unavailable'],
@@ -262,7 +262,7 @@ test('完整模式的设备：新建会话建在选的 harness 上；选到不�
   const onFirst = await create()
   time.advance(16)
   await settle()
-  assert.equal(harnessOf(onFirst.sessionId), 'claude')
+  assert.equal(harnessOf(onFirst.sessionId), 'claude-code')
 
   const down = await failureOf(create('codex'))
   assert.deepEqual(down.text, { key: 'fault.harnessUnavailable', args: { name: 'Codex' } })
@@ -276,7 +276,7 @@ test('完整模式的设备：底栏的选择器每个 harness 各有各的一�
     (await channel.command('device.composeOptions', { deviceId: 'local', harness })).models.map(
       (entry) => entry.id,
     )
-  const [claude, pi, dsh] = [await models('claude'), await models('pi'), await models('dsh')]
+  const [claude, pi, dsh] = [await models('claude-code'), await models('pi'), await models('dsh')]
   assert.ok(claude.length > 0 && pi.length > 0 && dsh.length > 0)
   assert.notDeepEqual(claude, pi)
   assert.notDeepEqual(pi, dsh)

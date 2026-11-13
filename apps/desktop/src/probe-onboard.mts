@@ -98,12 +98,12 @@ export async function onboardProbe(): Promise<OnboardProbe> {
   // ---------- 第一步 ----------
   const step1 = await until('首启引导的第一步', () => one('.onb[data-onboarding="install"]'))
   await until('版本情况到了（Claude 有安装按钮）', () =>
-    one('[data-onboard-harness="claude"] [data-act="install"]'),
+    one('[data-onboard-harness="claude-code"] [data-act="install"]'),
   )
   const listed = all('[data-onboard-harness]').map(
     (element) => element.dataset.onboardHarness ?? '',
   )
-  const claudeButton = text(one('[data-onboard-harness="claude"] [data-act="install"]'))
+  const claudeButton = text(one('[data-onboard-harness="claude-code"] [data-act="install"]'))
 
   // Codex 固定装不上
   one<HTMLButtonElement>('[data-onboard-harness="codex"] [data-act="install"]')?.click()
@@ -121,12 +121,14 @@ export async function onboardProbe(): Promise<OnboardProbe> {
 
   // Claude 装得上：进行中看得到日志末尾，装好进第二步
   await until('Claude 的安装按钮能点', () => {
-    const button = one<HTMLButtonElement>('[data-onboard-harness="claude"] [data-act="install"]')
+    const button = one<HTMLButtonElement>(
+      '[data-onboard-harness="claude-code"] [data-act="install"]',
+    )
     return button && !button.disabled ? button : null
   }).then((button) => button.click())
   const runningTail = text(
     await until('安装中的日志末尾', () => {
-      const tail = one('[data-onboard-harness="claude"] [data-install-log="tail"]')
+      const tail = one('[data-onboard-harness="claude-code"] [data-install-log="tail"]')
       return tail && text(tail).includes('Downloading') ? tail : null
     }),
   )
@@ -265,7 +267,7 @@ export function judgeOnboard(seen: OnboardProbe): string[] {
     if (!ok) failed.push(what)
   }
   must(seen.step1, '首启引导的第一步没出来')
-  for (const id of ['claude', 'codex', 'pi', 'dsh', 'gemini']) {
+  for (const id of ['claude-code', 'codex', 'pi', 'dsh', 'gemini']) {
     must(seen.listed.includes(id), `第一步没列 ${id}：${seen.listed.join('、')}`)
   }
   must(seen.claudeButton.includes('2.1.316'), `Claude 的按钮不是装验证版：“${seen.claudeButton}”`)

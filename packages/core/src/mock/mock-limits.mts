@@ -32,7 +32,7 @@ const SAMPLES: Record<string, (now: number) => AccountLimitRow[]> = {
       window: { usedPercent: 0, windowMins: 10080, resetsAt: now + 2 * 1440 * MINUTE },
     },
   ],
-  claude: (now) => [
+  'claude-code': (now) => [
     {
       id: 'claude-code:primary',
       name: null,

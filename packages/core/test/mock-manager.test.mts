@@ -2,18 +2,189 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { forwardedManagerQuestion } from '../../protocol/src/manager-question.mjs'
 import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
-import type { SessionOp } from '../src/channel/protocol.mjs'
+import type { SessionOp, SidebarOp } from '../src/channel/protocol.mjs'
 import { createMockCore } from '../src/mock/mock-core.mjs'
 import { createMockManagers } from '../src/mock/mock-manager.mjs'
 import { sampleApp } from '../src/mock/sample-data.mjs'
 import { sampleManagers } from '../src/mock/sample-manager.mjs'
-import type { ItemView, SessionView } from '../src/model.mjs'
+import type { ItemView, SessionView, SidebarView } from '../src/model.mjs'
 import type {
   ManagerAnswersResult,
   ManagerBoardTopicView,
   ManagerView,
 } from '../src/model-manager.mjs'
 import { fakeClock } from './helpers.mjs'
+
+test('模拟接班预览解析目标、禁用未验 harness，并换线程保留看板与历史', async () => {
+  const { clock } = fakeClock()
+  const devices = sampleApp('zh-CN', clock.now()).devices
+  const fixture = sampleManagers('local', clock.now(), 'zh-CN')
+  const source = fixture.managers.find((manager) => manager.id === 'm1')
+  assert.ok(source)
+  const harness = devices
+    .find((device) => device.id === 'local')
+    ?.harnesses?.find((harness) => harness.id === source.harness)
+  assert.equal(harness?.badge, 'CC')
+  assert.equal(harness?.abilities?.managerQuestions, true)
+  assert.equal(
+    fixture.sessions.find((session) => session.id === source.threadId)?.harness,
+    source.harness,
+  )
+  const service = createMockManagers({
+    clock,
+    lang: 'zh-CN',
+    devices: () => devices,
+    device: (id) => devices.find((d) => d.id === id),
+    add() {},
+    mark() {},
+    ending: () => 'ending',
+    spawn: () => 'handover-thread',
+    say() {},
+  })
+  const params = { deviceId: 'local', managerId: 'm1' }
+  const read = async (target?: import('../../protocol/src/manager.mjs').ManagerResetTarget) =>
+    (await service.command('managers.reset.preview', {
+      ...params,
+      ...(target ? { target } : {}),
+    })) as import('../../protocol/src/manager.mjs').ManagerResetPreview
+  const initial = await read()
+  assert.equal(initial.canSubmit, true)
+  assert.deepEqual(initial.target, initial.source)
+  assert.equal(initial.mode, 'refresh')
+  assert.equal(initial.candidates.find((one) => one.harness === 'pi')?.enabled, false)
+  const preview = await read({
+    harness: initial.source.harness === 'codex' ? 'claude-code' : 'codex',
+    model: null,
+    effort: null,
+    permission: initial.source.permission!,
+  })
+  assert.equal(preview.canSubmit, true)
+  assert.equal(preview.mode, 'replace')
+  assert.ok(preview.target.model)
+  const request = {
+    ...params,
+    target: preview.target,
+    expectedThreadId: preview.expectedThreadId,
+    expectedSettingsHash: preview.expectedSettingsHash,
+    requestId: 'switch-1',
+  }
+  const switched = (await service.command('managers.reset', request)) as { manager: ManagerView }
+  assert.equal(switched.manager.threadId, 'handover-thread')
+  assert.equal(switched.manager.harness, preview.target.harness)
+  assert.ok(switched.manager.historyThreadIds?.includes(initial.expectedThreadId))
+  assert.equal(service.readOnly('local', initial.expectedThreadId), true)
+  assert.equal(switched.manager.reset?.operation?.handover, 'accepted')
+  assert.deepEqual(await service.command('managers.reset', request), switched)
+  const next = await read({
+    harness: initial.source.harness,
+    model: null,
+    effort: null,
+    permission: initial.source.permission as string,
+  })
+  await service.command('managers.reset', {
+    ...params,
+    target: next.target,
+    expectedThreadId: next.expectedThreadId,
+    expectedSettingsHash: next.expectedSettingsHash,
+    requestId: 'switch-2',
+  })
+  const replay = (await service.command('managers.reset', request)) as {
+    manager: ManagerView
+    operation: import('../../protocol/src/manager.mjs').ManagerResetOperation
+  }
+  assert.equal(replay.operation.requestId, 'switch-1')
+  assert.equal(replay.manager.reset?.operation?.requestId, 'switch-2')
+})
+
+test('模拟经理换线程同步历史只读、侧栏标记、在途子线和回报', async () => {
+  const { clock, advance } = fakeClock()
+  const core = createMockCore({ clock, lang: 'zh-CN' })
+  const signal = new AbortController().signal
+  let sidebar: SidebarView | undefined
+  const closeSidebar = core.subscribe(
+    { kind: 'sidebar', deviceId: 'local' },
+    {
+      snapshot: (data) => {
+        sidebar = data as SidebarView
+      },
+      delta(ops) {
+        for (const op of ops as SidebarOp[])
+          if (op.op === 'session.upsert' && sidebar) {
+            const index = sidebar.sessions.findIndex((entry) => entry.id === op.session.id)
+            if (index >= 0) sidebar.sessions[index] = op.session
+            else sidebar.sessions.push(op.session)
+          }
+      },
+      error: (error) => {
+        throw error
+      },
+    },
+  )
+  let old: SessionView | undefined
+  const closeOld = core.subscribe(
+    { kind: 'session', deviceId: 'local', sessionId: 'm1' },
+    {
+      snapshot: (data) => {
+        old = data as SessionView
+      },
+      delta() {},
+      error(error) {
+        throw error
+      },
+    },
+  )
+  const { sessionId } = (await core.command(
+    'session.spawn',
+    {
+      deviceId: 'local',
+      parentId: 'm1',
+      title: '在途子线',
+      prompt: '检查工作',
+      kind: 'fresh',
+      wakeParent: false,
+    },
+    signal,
+  )) as { sessionId: string }
+  const params = { deviceId: 'local', managerId: 'm1' }
+  const preview = (await core.command(
+    'managers.reset.preview',
+    {
+      ...params,
+      target: { harness: 'codex', model: null, effort: null, permission: ':danger-full-access' },
+    },
+    signal,
+  )) as import('../../protocol/src/manager.mjs').ManagerResetPreview
+  const result = (await core.command(
+    'managers.reset',
+    {
+      ...params,
+      target: preview.target,
+      requestId: 'mock-tree-rebind',
+      expectedThreadId: preview.expectedThreadId,
+      expectedSettingsHash: preview.expectedSettingsHash,
+    },
+    signal,
+  )) as { manager: ManagerView }
+  assert.equal(old?.live, false)
+  assert.equal(
+    (sidebar?.sessions.find((entry) => entry.id === 'm1') as { litchManager?: unknown } | undefined)
+      ?.litchManager,
+    undefined,
+  )
+  assert.equal(
+    sidebar?.sessions.find((entry) => entry.id === sessionId)?.lineage?.parentId,
+    result.manager.threadId,
+  )
+  advance(60_000)
+  assert.ok(
+    sidebar?.sessions
+      .find((entry) => entry.id === result.manager.threadId)
+      ?.queuedNotes?.some((note) => note.threadId === sessionId),
+  )
+  assert.equal(sidebar?.sessions.find((entry) => entry.id === 'm1')?.queuedNotes?.length ?? 0, 0)
+  closeOld()
+  closeSidebar()
+})
 
 test('转交讨论展示议题与各方发言，明确不是决策授权，不发送内部状态字段', () => {
   const text = forwardedManagerQuestion('D-15', '确认范围', {

@@ -1256,7 +1256,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     applySessionOps(view, [
       { op: 'item.add', turnId, item: { id: `${turnId}-p`, kind: 'plan', text: sample.plan } },
     ])
-    if (view.harness === 'claude' || view.harness === 'pi') {
+    if (view.harness === 'claude-code' || view.harness === 'pi') {
       askQuestions(view, turnId, [view.harness === 'pi' ? PI_PLAN_QUESTION : sample.question])
       planAsks.add(`${turnId}-r`)
       return
@@ -2312,7 +2312,19 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       sidebars.get(deviceId)?.sessions.push(session)
       emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session }])
     },
+    rebind(deviceId, oldThreadId, newThreadId) {
+      tree.rebindManager(deviceId, oldThreadId, newThreadId)
+    },
     mark(deviceId, threadId, manager) {
+      for (const oldId of manager.historyThreadIds ?? []) {
+        const cleared = { title: findSummary(deviceId, oldId).title, litchManager: undefined }
+        updateSummary(deviceId, oldId, cleared)
+        const oldView = sessions.get(`session:${deviceId}:${oldId}`)
+        if (oldView)
+          applySessionOps(oldView, [
+            { op: 'session.state', live: false, note: managers.readOnlyNote(deviceId, oldId) },
+          ])
+      }
       const marked = {
         title: manager.name || manager.scope,
         litchManager: { managerId: manager.id, role: 'manager' as const },
@@ -2705,7 +2717,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         version: '0.6.0',
         system: 'Linux',
         running,
-        harnesses: running ? [sampleHarness('claude'), sampleHarness('pi')] : null,
+        harnesses: running ? [sampleHarness('claude-code'), sampleHarness('pi')] : null,
       }
     }
     return { ok: true, peer: 'codex', version: '0.160.0', system: 'Linux' }
@@ -2733,7 +2745,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
             note: null,
             mode: 'full',
             os: 'linux',
-            harnesses: result.harnesses ?? [sampleHarness('claude'), sampleHarness('pi')],
+            harnesses: result.harnesses ?? [sampleHarness('claude-code'), sampleHarness('pi')],
             organizable: true,
             // 设备服务会报自己是哪一份
             service: sampleRemoteService(clock.now()),

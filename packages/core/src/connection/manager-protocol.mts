@@ -60,7 +60,11 @@ export interface ManagerRequests extends ManagerPagingRequests, ManagerIssueRequ
   'litch/manager/update': { params: ManagerUpdateParams; result: ManagerUpdateResponse }
   'litch/manager/reset': {
     params: import('../../../protocol/src/manager.mjs').ManagerResetParams
-    result: ManagerEndResponse
+    result: import('../../../protocol/src/manager.mjs').ManagerResetResponse
+  }
+  'litch/manager/reset/preview': {
+    params: import('../../../protocol/src/manager.mjs').ManagerResetPreviewParams
+    result: import('../../../protocol/src/manager.mjs').ManagerResetPreview
   }
   'litch/manager/reset/cancel': {
     params: import('../../../protocol/src/manager.mjs').ManagerResetCancelParams
