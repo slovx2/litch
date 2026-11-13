@@ -52,6 +52,7 @@ export class NativeBackgroundWake {
   private readonly timers = new Map<string, NodeJS.Timeout>()
   private readonly sending = new Map<string, string>()
   private readonly checking = new Set<string>()
+  private readonly rescheduled = new Set<string>()
   private readonly completedTurns = new Set<string>()
   private readonly lastStarted = new Map<string, number>()
   private closed = false
@@ -106,7 +107,7 @@ export class NativeBackgroundWake {
       done = true
       release()
       if (this.queues.get(threadId) === queued) this.queues.delete(threadId)
-      this.schedule(threadId)
+      if (!this.checking.has(threadId)) this.schedule(threadId)
     }
   }
 
@@ -264,6 +265,7 @@ export class NativeBackgroundWake {
           else if (task.state === 'watching')
             task.state = this.stopped.has(id) ? 'paused' : 'pending'
           this.save(task)
+          this.trace('completed', id, { taskId: task.id, endedAt: task.endedAt, state: task.state })
           this.schedule(id)
         }
     }
@@ -392,6 +394,7 @@ export class NativeBackgroundWake {
     }
     this.live.set(task.id, task)
     this.save(task)
+    this.trace('registered', call.threadId, { taskId: task.id, state: task.state })
     return {
       task_id: task.id,
       state: task.endedAt === undefined ? 'registered' : 'completed',
@@ -525,13 +528,18 @@ export class NativeBackgroundWake {
     return changed
   }
   schedule(threadId: string): void {
-    if (
-      this.closed ||
-      this.timers.has(threadId) ||
-      this.checking.has(threadId) ||
-      !this.pending(threadId)
-    )
+    if (this.closed || !this.pending(threadId)) return
+    // 查 idle 或等待发送时，回合结束通知仍可能到达；不能因正在检查而吃掉这次唤醒。
+    if (this.checking.has(threadId)) {
+      this.rescheduled.add(threadId)
       return
+    }
+    if (this.timers.has(threadId)) return
+    const delayMs = Math.max(
+      this.host.settleMs ?? 300,
+      (this.lastStarted.get(threadId) ?? 0) + (this.host.startIntervalMs ?? 2000) - Date.now(),
+    )
+    this.trace('scheduled', threadId, { delayMs })
     const timer = setTimeout(
       () => {
         this.timers.delete(threadId)
@@ -539,28 +547,33 @@ export class NativeBackgroundWake {
         void this.drain(threadId).then(
           (sent) => {
             this.checking.delete(threadId)
-            if (sent && !this.active.has(threadId)) this.schedule(threadId)
+            const again = this.rescheduled.delete(threadId)
+            if (again || (sent && !this.active.has(threadId))) this.schedule(threadId)
           },
           (error) => {
             this.checking.delete(threadId)
+            this.rescheduled.delete(threadId)
             this.host.log(`后台结果未续跑：${String(error)}`)
           },
         )
       },
-      Math.max(
-        this.host.settleMs ?? 300,
-        (this.lastStarted.get(threadId) ?? 0) + (this.host.startIntervalMs ?? 2000) - Date.now(),
-      ),
+      delayMs,
     )
     timer.unref()
     this.timers.set(threadId, timer)
   }
   private async drain(threadId: string): Promise<boolean> {
+    const canContinue = this.host.canContinue(threadId)
+    this.trace('drain', threadId, {
+      activeTurnId: this.active.get(threadId) ?? null,
+      stopped: this.stopped.has(threadId),
+      canContinue,
+    })
     if (
       this.closed ||
       this.stopped.has(threadId) ||
       this.active.has(threadId) ||
-      !this.host.canContinue(threadId)
+      !canContinue
     )
       return false
     const tasks = [...this.live.values()]
@@ -627,6 +640,7 @@ export class NativeBackgroundWake {
         },
         __litchWakeEpoch: epoch,
       })
+      this.trace('delivered', threadId, { batchId, method: 'turn/start' })
       return true
     } catch (error) {
       if (!(error instanceof WakeNotReady)) {
@@ -706,6 +720,12 @@ export class NativeBackgroundWake {
   }
   private liveTask(threadId: string): NativeBackgroundTask | undefined {
     return [...this.live.values()].find((t) => t.threadId === threadId)
+  }
+  private trace(event: string, threadId: string, fields: Record<string, unknown> = {}): void {
+    // 只记身份、时刻与仲裁条件，不记录命令、用途、标题或输出。
+    this.host.log(
+      `后台接续 ${JSON.stringify({ ts: new Date().toISOString(), event, threadId, ...fields })}`,
+    )
   }
   close(): void {
     this.closed = true

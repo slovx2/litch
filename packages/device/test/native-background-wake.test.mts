@@ -21,12 +21,12 @@ function fixture(startIntervalMs = 0) {
   const starts: any[] = []
   let idle = true
   let fail = false
-  let readHook: (() => void) | undefined
+  let readHook: (() => void | Promise<void>) | undefined
   const wire = async (method: string, params: any): Promise<any> => {
     if (method === 'thread/backgroundTerminals/list')
       return { data: [...terminals].map(([itemId, processId]) => ({ itemId, processId })) }
     if (method === 'thread/read') {
-      readHook?.()
+      await readHook?.()
       return { thread: { status: { type: idle ? 'idle' : 'active' } } }
     }
     if (method === 'turn/start') {
@@ -120,7 +120,7 @@ function fixture(startIntervalMs = 0) {
     fail: () => {
       fail = true
     },
-    onRead: (hook: () => void) => {
+    onRead: (hook: () => void | Promise<void>) => {
       readHook = hook
     },
     close: () => {
@@ -130,6 +130,28 @@ function fixture(startIntervalMs = 0) {
     },
   }
 }
+
+test('NATIVE-WAKE-013 idle 查询期间回合结束重排检查，不丢失最后一次完成通知', async () => {
+  const f = fixture()
+  try {
+    f.command('job')
+    await f.watch('job')
+    let reads = 0
+    f.onRead(async () => {
+      if (++reads !== 1) return
+      f.wake.input('turn/start', { threadId: 't' }, true)
+      // 旧批次的 epoch 已失效；此时新回合也结束了，必须在检查结束后再投递。
+      f.event('turn/completed', { turn: { id: 'user', status: 'completed' } })
+      await setImmediate()
+    })
+    f.finish('job')
+    for (let i = 0; i < 50 && !f.starts.length; i++) await pause(10)
+    assert.equal(f.starts.length, 1)
+    assert.equal(f.store.list('t')[0]?.state, 'delivered')
+  } finally {
+    f.close()
+  }
+})
 
 test('计划重启快照保留 watch 命令、目的和进程号，取消或用户停止的登记不纳入', async () => {
   const f = fixture()
