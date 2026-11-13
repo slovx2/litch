@@ -33,6 +33,13 @@ export type {
   ManagerObjectId,
   ManagerPatch,
   ManagerRequestId,
+  ManagerResetCandidate,
+  ManagerResetIssue,
+  ManagerResetOperation,
+  ManagerResetPreview,
+  ManagerResetPreviewParams,
+  ManagerResetSettings,
+  ManagerResetTarget,
   ManagerStatus,
   ManagerSubmittedAnswer,
   ManagerSubmittedQuestion,
@@ -97,6 +104,7 @@ export interface ManagerBoardView
  * 没有的是比应用旧的设备服务：界面禁用对应入口并写明原因，核心也不发这些请求。
  */
 export interface ManagerFeaturesView {
+  resetTarget?: boolean
   issues?: boolean
   /** issue 讨论开启标记与按讨论过滤；未声明时保持 X-n 列表。 */
   issueDiscussions?: boolean

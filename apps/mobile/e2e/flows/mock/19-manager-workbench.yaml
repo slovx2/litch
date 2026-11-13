@@ -66,6 +66,14 @@ tags: [mock]
     id: detail:menu
 - tapOn:
     id: manager:reset
+- assertVisible:
+    id: manager-reset-settings
+- scrollUntilVisible:
+    element:
+      id: manager-reset-next
+    direction: DOWN
+- tapOn:
+    id: manager-reset-next
 - assertVisible: "(?s).*(新版本的工具和指令|latest tools and instructions).*"
 - assertVisible: "(?s).*(保留当前会话和完整历史|Keeps the conversation and full history).*"
 - tapOn: "取消|Cancel"
@@ -79,6 +87,12 @@ tags: [mock]
     id: detail:menu
 - tapOn:
     id: manager:reset
+- scrollUntilVisible:
+    element:
+      id: manager-reset-next
+    direction: DOWN
+- tapOn:
+    id: manager-reset-next
 - tapOn:
     id: confirm:ok
 - extendedWaitUntil:
@@ -104,3 +118,27 @@ tags: [mock]
     timeout: 10000
 - assertVisible:
     id: manager-tab:lines
+# 同一入口可调整接班目标；不可选项保留原因，跨引擎只显示有损交接说明。
+- tapOn:
+    id: detail:menu
+- tapOn:
+    id: manager:reset
+- assertVisible:
+    id: manager-reset-harness:codex
+- tapOn:
+    id: manager-reset-harness:codex
+- scrollUntilVisible:
+    element:
+      id: manager-reset-effort:high
+    direction: DOWN
+- tapOn:
+    id: manager-reset-effort:high
+- scrollUntilVisible:
+    element:
+      id: manager-reset-next
+    direction: DOWN
+- tapOn:
+    id: manager-reset-next
+- assertVisible: "(?s).*Codex.*"
+- assertNotVisible: "(?s).*(保留当前会话和完整历史|Keeps the conversation and full history).*"
+- tapOn: "取消|Cancel"

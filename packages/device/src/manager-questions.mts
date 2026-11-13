@@ -65,11 +65,37 @@ export class ManagerQuestions {
   async retire(managerId: string): Promise<void> {
     const manager = this.owner.store.manager(managerId)
     if (!manager) return
-    const ids = this.owner.store.questions(managerId).flatMap((state) => state.threads)
+    for (const group of this.retirement(managerId, manager.harness))
+      await this.retireOwned(group.harness, group.threadIds)
+  }
+  /** 提交前耐久记录归属；换绑后释放时绝不从新经理反推旧分叉的引擎。 */
+  retirement(managerId: string, sourceHarness: string): { harness: string; threadIds: string[] }[] {
+    const groups = new Map<string, string[]>()
+    for (const state of this.owner.store.questions(managerId)) {
+      state.threadHarnesses ??= {}
+      for (const id of state.threads) {
+        if (state.retiredThreads?.includes(id)) continue
+        const harness = state.threadHarnesses[id] ?? sourceHarness
+        state.threadHarnesses[id] = harness
+        const ids = groups.get(harness) ?? []
+        ids.push(id)
+        groups.set(harness, ids)
+      }
+      this.owner.store.saveQuestion(state)
+    }
+    return [...groups].map(([harness, threadIds]) => ({ harness, threadIds }))
+  }
+  async retireOwned(harness: string, ids: string[]): Promise<void> {
     for (const id of ids) this.retired.add(id)
     if (!ids.length) return
-    const link = await this.link(manager).catch(() => null)
-    if (link) await Promise.all(ids.map((id) => this.disposeThread(id, link)))
+    const link = await this.link({ harness })
+    await Promise.all(ids.map((id) => this.disposeThread(id, link, true)))
+    for (const state of this.owner.store.questions()) {
+      const retired = ids.filter((id) => state.threads.includes(id))
+      if (!retired.length) continue
+      state.retiredThreads = [...new Set([...(state.retiredThreads ?? []), ...retired])]
+      this.owner.store.saveQuestion(state)
+    }
   }
   allowed(threadId: string, namespace: unknown, tool: unknown): boolean {
     return (
@@ -151,7 +177,7 @@ export class ManagerQuestions {
       false,
     )
   }
-  private async link(manager: Manager): Promise<EngineLink> {
+  private async link(manager: Pick<Manager, 'harness'>): Promise<EngineLink> {
     let pending = this.links.get(manager.harness)
     if (!pending) {
       pending = this.owner.tree.host.openEngineLink(manager.harness)
@@ -162,7 +188,12 @@ export class ManagerQuestions {
             this.links.delete(manager.harness)
             if (this.closed) return
             for (const state of this.owner.store.questions()) {
-              if (this.owner.store.manager(state.managerId)?.harness !== manager.harness) continue
+              if (
+                !state.threadId ||
+                (state.threadHarnesses?.[state.threadId] ??
+                  this.owner.store.manager(state.managerId)?.harness) !== manager.harness
+              )
+                continue
               state.threadId = null
               this.owner.store.saveQuestion(state)
             }
@@ -295,6 +326,7 @@ export class ManagerQuestions {
         throw new Error('No background session was created.')
       state.threadId = created.thread.id
       state.threads.push(created.thread.id)
+      ;(state.threadHarnesses ??= {})[created.thread.id] = manager.harness
       this.restricted.set(created.thread.id, manager.id)
       state.source = snapshot.source
       state.revision = decision.revision
@@ -434,11 +466,13 @@ export class ManagerQuestions {
     }
     await this.disposeThread(id, link)
   }
-  private async disposeThread(id: string, link: EngineLink): Promise<void> {
+  private async disposeThread(id: string, link: EngineLink, strict = false): Promise<void> {
     this.retired.add(id)
     const turnId = this.activeTurns.get(id)
     if (turnId) await link.request('turn/interrupt', { threadId: id, turnId }).catch(() => {})
-    await link.request('thread/unsubscribe', { threadId: id }).catch(() => {})
+    await link.request('thread/unsubscribe', { threadId: id }).catch((error) => {
+      if (strict) throw error
+    })
   }
   releaseClosed(managerId: string): void {
     const manager = this.owner.store.manager(managerId)

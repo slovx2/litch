@@ -173,11 +173,11 @@ test('各组的状况：几个待审批、待回答、在跑、未读；只记�
   // 本机：litch 里 Claude Code 的一个在跑、一个等审批，Pi 的一个未读；docs 里 Pi 的一个未读。
   // 按 harness 分开记。置顶的、分区里的、无工作区的都闲着，不占一项
   assert.deepEqual(tallies('local'), {
-    litch: { claude: tally(1, 0, 1, 0), pi: tally(0, 0, 0, 1) },
+    litch: { 'claude-code': tally(1, 0, 1, 0), pi: tally(0, 0, 0, 1) },
     docs: { pi: tally(0, 0, 0, 1) },
   })
   // 等回答的和等审批的分开记；出了错的不算在里面
-  assert.deepEqual(tallies('build'), { litch2: { claude: tally(0, 1, 0, 0) } })
+  assert.deepEqual(tallies('build'), { litch2: { 'claude-code': tally(0, 1, 0, 0) } })
   assert.deepEqual(tallies('nas'), {})
   // 没连上的设备：会话是上次留下的，都闲着
   assert.deepEqual(tallies('gpu'), {})
@@ -187,7 +187,7 @@ test('各组的状况：几个待审批、待回答、在跑、未读；只记�
   time.advance(16)
   await settle()
   assert.deepEqual(tallies('local'), {
-    litch: { claude: tally(1, 0, 1, 0) },
+    litch: { 'claude-code': tally(1, 0, 1, 0) },
     docs: { pi: tally(0, 0, 0, 1) },
     [PINNED]: { pi: tally(0, 0, 0, 1) },
   })
@@ -210,7 +210,10 @@ test('各组的状况：几个待审批、待回答、在跑、未读；只记�
   await channel.command('session.send', { deviceId: 'local', sessionId: 's6', text: '在吗' })
   time.advance(16)
   await settle()
-  assert.deepEqual(tallies('local')?.docs, { claude: tally(0, 0, 1, 0), pi: tally(0, 0, 0, 1) })
+  assert.deepEqual(tallies('local')?.docs, {
+    'claude-code': tally(0, 0, 1, 0),
+    pi: tally(0, 0, 0, 1),
+  })
   assert.ok(seen.n >= 1)
 })
 
@@ -227,8 +230,8 @@ test('各组的状况比较：只剩后台任务在跑的数变了也算变了',
   // 键的先后不算数
   assert.equal(
     sameTallies(
-      { docs: { pi: tally(1, 1), claude: tally(0, 1) } },
-      { docs: { claude: tally(0, 1), pi: tally(1, 1) } },
+      { docs: { pi: tally(1, 1), 'claude-code': tally(0, 1) } },
+      { docs: { 'claude-code': tally(0, 1), pi: tally(1, 1) } },
     ),
     true,
   )
@@ -238,14 +241,14 @@ test('每个会话属于哪个 harness：一张表，会话多了少了才换', 
   const { store, channel, time, count } = await setup()
   const harnessOf = (deviceId: string) => store.get<SessionHarnesses>(keys.harnessOf(deviceId))
   assert.deepEqual(harnessOf('build'), {
-    b1: 'claude',
+    b1: 'claude-code',
     b2: 'pi',
-    b3: 'claude',
+    b3: 'claude-code',
     b4: 'dsh',
-    b5: 'claude',
+    b5: 'claude-code',
     b6: 'codex',
-    m2: 'claude',
-    'manager-k5': 'claude',
+    m2: 'claude-code',
+    'manager-k5': 'claude-code',
     'manager-k6': 'dsh',
   })
   assert.equal(Object.keys(harnessOf('local') ?? {}).length, 31)

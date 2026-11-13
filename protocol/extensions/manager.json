@@ -11,6 +11,7 @@
       "contains": { "const": "litchManager" }
     }
   },
+  "targetResetExtension": "litchManagerResetTarget：目标预览、新参数与 reset.operation 仅按接收连接声明提供，定义见 manager-reset-target.json；旧 reset 保持原语义。",
   "undeclared": "litch/manager/ 方法返回 extensionRequired，data.required=[\"litchManager\"]；会话对象不带 litchManager，不发送两个经理通知。标准会话、回合及通知照常可见，未修改的官方客户端可以使用这些普通会话。",
   "rules": [
     "重置 waiting 阶段允许 thread/resume、历史读取、目标读取和附件监听；turn/start、turn/steer、thread/queue/add、thread/queue/start 自动取消等待并正常处理。新增 reset/cancel 只取消 waiting，回到 idle 且保留已安装指纹；无进行中重置时幂等。summarizing/applying 阶段不允许取消或新增写入，返回 data.litch=managerResetBusy；刷新仅等待当前回合，换会话仍等待后台任务、临时追问与其他交接约束。",
@@ -148,6 +149,13 @@
       "method": "litch/manager/reset",
       "params": { "$ref": "#/definitions/ResetParams" },
       "response": { "$ref": "#/definitions/ManagerResponse" }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/reset/preview",
+      "requiresExtension": "litchManagerResetTarget",
+      "params": { "$ref": "manager-reset-target.json#/definitions/PreviewParams" },
+      "response": { "$ref": "manager-reset-target.json#/definitions/Preview" }
     },
     {
       "kind": "ClientRequest",

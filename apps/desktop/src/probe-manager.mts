@@ -247,6 +247,12 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       summaryBox.bottom <= rowBox.bottom,
   )
   await click('[data-manager-id="m1"] .mg-pick')
+  await until(
+    '经理的 Claude Code 徽标',
+    () =>
+      one('.mg-sidebar-manager[data-manager-id="m1"] .chip')?.textContent?.trim() === 'CC' &&
+      one('.crumb .chip')?.textContent?.trim() === 'CC',
+  )
   const selected = Boolean(await until('经理页', () => one('[data-manager="session"]')))
   await until('首次打开控制台', () => one('[data-board-tab="inbox"][aria-selected="true"]'))
   await click('[data-manager-id="m1"] [data-manager-draft-count]')
@@ -591,23 +597,54 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     }
   ).__litchLook
   const oldLook = fontLook.get()
-  // 三种皮肤都经过同一个二次确认，取消不发重置命令；读屏名称和新版提示共用入口。
-  for (const skin of ['retro', 'human', 'standard']) {
-    fontLook.set({ skin })
-    await click('[data-act="manager-reset"]')
-    const dialog = await until('重置二次确认', () =>
-      one<HTMLDialogElement>('dialog[open][aria-label="重置经理会话"]'),
-    )
-    if (!dialog.textContent?.includes('新版本的工具和指令'))
-      throw new Error(`重置确认缺说明：${skin}`)
-    if (!one('[data-act="manager-reset"][aria-label="重置经理会话"]'))
-      throw new Error('重置按钮缺读屏名称')
-    const rect = dialog.getBoundingClientRect()
-    if (rect.left < 0 || rect.right > innerWidth || dialog.scrollWidth > dialog.clientWidth)
-      throw new Error(`重置确认溢出：${skin}`)
-    dialog.querySelector<HTMLButtonElement>('.btn.ghost')?.click()
-    await until('取消重置', () => !one('dialog[open]'))
+  // 三种皮肤与两种语言都经过正式接班预检，取消不发重置命令。
+  const resetLook = fontLook as unknown as { set(patch: { skin?: string; lang?: string }): void }
+  for (const lang of ['zh-CN', 'en']) {
+    for (const skin of ['retro', 'human', 'standard']) {
+      resetLook.set({ skin, lang })
+      await click('[data-act="manager-reset"]')
+      const dialog = await until('重置二次确认', () => one<HTMLDialogElement>('dialog[open]'))
+      const harness = await until('接班设置预检', () =>
+        one<HTMLSelectElement>('[data-reset-field="harness"]:not(:disabled)'),
+      )
+      if (one<HTMLDetailsElement>('.reset-target-settings')?.open)
+        throw new Error('接班设置没有默认收起')
+      const disabled = [...harness.options].filter((option) => option.disabled)
+      if (disabled.length < 4 || disabled.some((option) => !option.textContent?.includes(' — ')))
+        throw new Error('不可选 harness 缺少原因')
+      dialog.querySelector<HTMLElement>('summary')?.click()
+      harness.value = 'codex'
+      harness.dispatchEvent(new Event('change', { bubbles: true }))
+      await until(
+        '跨 harness 预检',
+        () =>
+          one<HTMLSelectElement>('[data-reset-field="model"]')?.value === 'gpt-6.1' &&
+          !one<HTMLButtonElement>('.confirm-yes')?.disabled,
+      )
+      const text = dialog.textContent ?? ''
+      if (
+        !text.includes(lang === 'zh-CN' ? '切换并重置' : 'Switch and reset') ||
+        !text.includes('Claude Code') ||
+        !text.includes('Codex')
+      )
+        throw new Error(`接班确认缺源目标：${skin}/${lang}`)
+      if (text.includes(lang === 'zh-CN' ? '完整历史' : 'full history'))
+        throw new Error('跨 harness 错误承诺保留完整历史')
+      if (!text.includes(lang === 'zh-CN' ? '工作线默认设置变化' : 'Workline default changes'))
+        throw new Error('没有预览工作线默认变化')
+      const rect = dialog.getBoundingClientRect()
+      if (
+        rect.left < 0 ||
+        rect.right > innerWidth ||
+        rect.bottom > innerHeight ||
+        dialog.scrollWidth > dialog.clientWidth
+      )
+        throw new Error(`重置确认溢出：${skin}/${lang}`)
+      dialog.querySelector<HTMLButtonElement>('.btn.ghost')?.click()
+      await until('取消重置', () => !one('dialog[open]'))
+    }
   }
+  resetLook.set({ lang: 'zh-CN' })
   await until('展开 D-15 补充说明', () => answerBox('D-15'))
   let boardFont = true
   const fontMeasurements: unknown[] = []
@@ -1782,7 +1819,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   // 只对模拟核心：取消不记确认；权限与确认按 harness 分开；换目录不带走项目权限。
   const managerHarness = field('经理使用')?.querySelector('select')
   if (!managerHarness) throw new Error('运行环境缺少 harness 选择')
-  managerHarness.value = 'claude'
+  managerHarness.value = 'claude-code'
   managerHarness.dispatchEvent(new Event('change', { bubbles: true }))
   const permissionButton = '.mg-form [data-kind="permission"] .pick-btn'
   const permissionIs = (title: string) => one(permissionButton)?.textContent?.includes(title)
@@ -1824,7 +1861,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await until('DSH 单独确认完全访问', () => permissionIs('完全访问'))
   await pickPermission(':read-only')
   await until('DSH 记住只读', () => permissionIs('只读'))
-  managerHarness.value = 'claude'
+  managerHarness.value = 'claude-code'
   managerHarness.dispatchEvent(new Event('change', { bubbles: true }))
   await until('Claude 保留自己的完全访问', () => permissionIs('完全访问'))
   fill(input('工作目录'), '~/work/other-project')

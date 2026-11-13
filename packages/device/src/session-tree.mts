@@ -74,6 +74,9 @@ export interface SessionTreeHost {
   tasksEnabled?(): boolean
   /** 按设备当前设置整理常驻工具；与普通恢复共用协调器。 */
   refreshClientTools(harness: string, tools: unknown[]): unknown[]
+  /** 重置确认包含设备开关；远端设备自行给出，客户端不能代填。 */
+  managerResetEnvironment?(): unknown
+  managerResetTasks?(threadId: string): { id: string; name: string }[]
   /** 发给全部声明了 extension 的客户端连接 */
   announce(method: string, params: unknown, extension: string): void
   /** 设备进程建出来的会话：给每条客户端连接发一条标准的 thread/started（各自挂上 harness、工作区、litchLineage） */
@@ -1054,6 +1057,7 @@ export class SessionTree {
    */
   check(parentId: string): void {
     if (this.host.restarting?.(parentId)) return
+    if (this.managers?.resets.handoverPending(parentId)) return
     if (this.managers?.resets.held(parentId) || this.managers?.resets.refusal(parentId)) return
     const previous = this.checks.get(parentId) ?? Promise.resolve()
     const next = previous
@@ -1088,6 +1092,7 @@ export class SessionTree {
     options: {
       startOnly?: boolean
       automatic?: boolean
+      /** 确认事件所在回合：新建回合或成功插话后调用。 */
       onStarted?: (turnId: string) => void
       /** 完成引擎状态/恢复等等待后，在最终发送前同步重建；null 表示事件已失效。 */
       prepare?: () => { text: string; eventId: string } | null
@@ -1140,6 +1145,7 @@ export class SessionTree {
               },
               { beforeSend: beforeSend(prepared) },
             )
+            options.onStarted?.(running)
             sent = true
           } catch (error) {
             if (error instanceof UpstreamRpcError && error.code === -32601)
@@ -1198,6 +1204,7 @@ export class SessionTree {
    * 回合正好在收尾、引擎不会插话的，留在队列里照旧等下一回合或唤醒
    */
   private async steerNotes(parentId: string): Promise<void> {
+    if (this.managers?.resets.handoverPending(parentId)) return
     if (this.managers?.resets.held(parentId) || this.managers?.resets.refusal(parentId)) return
     if (this.closed || !this.enabledFor(parentId)) return
     const running = this.active.get(parentId)
@@ -1276,6 +1283,7 @@ export class SessionTree {
       !this.host.index.archived(threadId) &&
       !this.host.restarting?.(threadId) &&
       !this.managers?.resets.held(threadId) &&
+      !this.managers?.resets.handoverPending(threadId) &&
       !this.managers?.resets.refusal(threadId) &&
       this.store.wakes(threadId) < SESSION_TREE_LIMITS.wakesPerUserMessage &&
       !this.cutShort.has(threadId) &&
@@ -1489,6 +1497,8 @@ export class SessionTree {
 
   /** 设备回合带上排队回报，但不清零用户的唤醒预算。 */
   beforeDeviceTurn(threadId: string, input: unknown[]): unknown[] {
+    // 冻结或历史线程先拒绝，不能先取走回报再让内部 turn/start 失败。
+    this.managers?.resets.checkInternalInput('turn/start', { threadId })
     return this.withNotes(threadId, input) ?? input
   }
 

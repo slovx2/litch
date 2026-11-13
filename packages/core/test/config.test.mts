@@ -50,7 +50,7 @@ test('拆参数：组和动作、帮助的几种写法、--json 不算参数、�
     kind: 'problem',
     problem: { kind: 'group', group: 'update' },
   })
-  assert.deepEqual(parseHead(['harness', 'install', 'local', 'claude']), {
+  assert.deepEqual(parseHead(['harness', 'install', 'local', 'claude-code']), {
     kind: 'problem',
     problem: { kind: 'action', group: 'harness', action: 'install' },
   })
@@ -354,14 +354,14 @@ test('tools set --harness：只改这个 harness 的浏览器、Computer Use；-
   let tools = (await local())?.tools
   assert.equal(tools?.browser, true)
   assert.equal(tools?.harnesses?.pi?.browser, false)
-  assert.equal(tools?.harnesses?.claude?.browser, true)
+  assert.equal(tools?.harnesses?.['claude-code']?.browser, true)
   // 示例里本机 Pi 的任务卡关着
   assert.equal(tools?.harnesses?.pi?.taskCards, false)
   assert.ok(
-    (await m.run(['tools', 'set', 'local', '--harness', 'claude', '--task-cards', 'off'])).ok,
+    (await m.run(['tools', 'set', 'local', '--harness', 'claude-code', '--task-cards', 'off'])).ok,
   )
   await flush()
-  assert.equal((await local())?.tools.harnesses?.claude?.taskCards, false)
+  assert.equal((await local())?.tools.harnesses?.['claude-code']?.taskCards, false)
   assert.ok((await m.run(['tools', 'set', 'local', '--task-cards', 'on'])).ok)
   await flush()
   tools = (await local())?.tools

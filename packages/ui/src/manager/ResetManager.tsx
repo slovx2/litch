@@ -1,12 +1,25 @@
+import { keys } from '@litch/core'
 import { useEffect, useRef, useState } from 'react'
-import type { ManagerView } from '../../../core/src/model-manager.mts'
+import type { ManagerBoardTopicView, ManagerView } from '../../../core/src/model-manager.mts'
 import { requestOpenSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { Confirm } from '../app/Confirm.tsx'
 import { reasonOf } from '../app/errors.ts'
-import { useServices } from '../app/services.tsx'
+import { useKey, useServices } from '../app/services.tsx'
 
-export function ResetManager({ manager, disabled }: { manager: ManagerView; disabled: boolean }) {
+import { ResetTargetManager } from './ResetTargetManager.tsx'
+
+export function ResetManager(props: { manager: ManagerView; disabled: boolean }) {
+  const { manager } = props
+  const board = useKey<ManagerBoardTopicView>(keys.managerBoard(manager.deviceId, manager.id))
+  return board?.features.resetTarget ? (
+    <ResetTargetManager {...props} />
+  ) : (
+    <LegacyResetManager {...props} />
+  )
+}
+
+function LegacyResetManager({ manager, disabled }: { manager: ManagerView; disabled: boolean }) {
   const t = useT()
   const { channel } = useServices()
   const [open, setOpen] = useState(false)

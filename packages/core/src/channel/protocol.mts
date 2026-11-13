@@ -594,8 +594,17 @@ export interface Commands {
     result: { manager: ManagerView }
   }
   'managers.reset': {
-    params: { deviceId: string; managerId: string; boardOnly?: boolean }
-    result: { manager: ManagerView }
+    params: { deviceId: string } & import('../../../protocol/src/manager.mjs').ManagerResetParams
+    result: {
+      manager: ManagerView
+      operation?: import('../../../protocol/src/manager.mjs').ManagerResetOperation
+    }
+  }
+  'managers.reset.preview': {
+    params: {
+      deviceId: string
+    } & import('../../../protocol/src/manager.mjs').ManagerResetPreviewParams
+    result: import('../../../protocol/src/manager.mjs').ManagerResetPreview
   }
   'managers.reset.cancel': {
     params: { deviceId: string; managerId: string }

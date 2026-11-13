@@ -8,6 +8,7 @@ export const MANAGER_METHOD = {
   update: 'litch/manager/update',
   end: 'litch/manager/end',
   reset: 'litch/manager/reset',
+  resetPreview: 'litch/manager/reset/preview',
   resetCancel: 'litch/manager/reset/cancel',
   boardRead: 'litch/manager/board/read',
   answersSubmit: 'litch/manager/answers/submit',
@@ -264,6 +265,8 @@ export interface Manager {
   endedAt: number | null
 }
 export interface ManagerResetState {
+  /** 仅向声明 litchManagerResetTarget 的连接投递。 */
+  operation?: ManagerResetOperation
   mode: 'refresh' | 'replace'
   current: string
   applied: string | null
@@ -275,6 +278,76 @@ export interface ManagerResetParams {
   managerId: string
   /** 仅摘要失败后二次确认允许；默认必须取得摘要。 */
   boardOnly?: boolean
+  target?: ManagerResetTarget
+  expectedThreadId?: string
+  expectedSettingsHash?: string
+  requestId?: string
+}
+export const MANAGER_RESET_TARGET_EXTENSION = 'litchManagerResetTarget' as const
+export interface ManagerResetTarget {
+  harness: string
+  /** null 请求目标默认；预览会解析为具体型号与强度。 */
+  model: string | null
+  effort: string | null
+  permission: string
+  dispatch?: ManagerDispatchSettings
+}
+export interface ManagerResetSettings {
+  harness: string
+  model: string | null
+  effort: string | null
+  permission: string | null
+}
+export interface ManagerResetIssue {
+  code: string
+  field?: string
+  message: string
+}
+export interface ManagerResetCandidate {
+  harness: string
+  enabled: boolean
+  reasons: ManagerResetIssue[]
+  models: { id: string; name: string; efforts: string[]; defaultEffort: string | null }[]
+  defaultModel: string | null
+  permissions: string[]
+}
+export interface ManagerResetPreviewParams {
+  managerId: string
+  /** 不传时预览源实际设置，同时返回候选目录。 */
+  target?: ManagerResetTarget
+}
+export interface ManagerResetPreview {
+  managerId: string
+  cwd: string
+  expectedThreadId: string
+  expectedSettingsHash: string
+  source: ManagerResetSettings
+  target: ManagerResetTarget
+  mode: 'refresh' | 'replace'
+  canSubmit: boolean
+  reasons: ManagerResetIssue[]
+  candidates: ManagerResetCandidate[]
+  /** 能力差异以稳定能力名表示，文案由客户端生成。 */
+  capabilityChanges: { capability: string; before: boolean; after: boolean }[]
+  dispatchChanges: {
+    field: 'harness' | 'model' | 'effort'
+    before: string | null
+    after: string | null
+  }[]
+}
+export interface ManagerResetOperation {
+  requestId: string
+  source: ManagerResetSettings & { threadId: string }
+  target: ManagerResetTarget
+  expectedSettingsHash: string
+  candidateThreadId: string | null
+  committed: boolean
+  /** 已提交也可能尚未成功投递接班首轮。 */
+  handover: 'pending' | 'accepted' | 'failed'
+}
+export interface ManagerResetResponse extends ManagerResponse {
+  /** 本次 requestId 的幂等回执；manager.reset 始终投影经理当前的操作。 */
+  operation?: ManagerResetOperation
 }
 /** 只取消 waiting；已开始摘要或提交时返回 managerResetBusy，已结束时幂等返回。 */
 export interface ManagerResetCancelParams {

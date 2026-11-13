@@ -129,7 +129,11 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const suggestions = useKey<readonly SuggestionView[]>(keys.suggestions) ?? []
   const summary = useKey<SessionSummary>(keys.summary(deviceId, manager.threadId))
   const device = useKey<{ connection?: string }>(keys.device(deviceId))
-  const reset = useManagerReset(manager, device?.connection === 'online')
+  const reset = useManagerReset(
+    manager,
+    device?.connection === 'online',
+    features.resetTarget === true,
+  )
   const order = useIssueOrder()
   const memory = managerBoardMemory(deviceId, managerId)
   const [, renderKind] = useState(0)
@@ -457,6 +461,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
       ]}
       testID="manager-console"
     >
+      {reset.status}
       {/* 页签是下划线式，一排放不下（大字号）时横着滚，不换行。键盘弹着时第一下点击也要切页签，不只是收键盘 */}
       <ScrollView
         horizontal

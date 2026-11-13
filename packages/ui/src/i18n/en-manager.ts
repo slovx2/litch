@@ -37,7 +37,54 @@ export const enManager = {
   'manager.resetReplace':
     'Waits for the manager turn, background tasks and questions to finish, then creates a new session. The old conversation remains read-only; only the handover summary and board carry over. Cancellation is unavailable once summarizing starts.',
   'manager.resetSummaryFailed': 'The handover summary failed. Continue using only the board?',
-  'manager.resetBoardOnly': 'Continue with board only',
+  'manager.resetBoardOnly': 'Use board only',
+
+  'manager.resetSettings': 'Handover settings',
+  'manager.resetSettingsHint': 'Change harness, model or reasoning effort',
+  'manager.resetSwitchTitle': 'Switch manager settings',
+  'manager.resetSwitch': 'Switch and reset',
+  'manager.resetSource': 'Current manager',
+  'manager.resetTarget': 'Incoming manager',
+  'manager.resetPermission': 'Permissions (fixed)',
+  'manager.resetFixed': 'Device, working directory and current permissions stay the same.',
+  'manager.resetTargetNote':
+    'You can cancel while waiting; sending a message cancels the wait. Once summarizing starts, cancellation is unavailable. The reset uses this device’s current manager tools and instructions.',
+  'manager.resetTargetReplace':
+    'Creates a new session after the manager’s turn, background tasks and temporary questions finish. The previous conversation becomes read-only history. The board remains and worklines keep running. The incoming manager receives a handover summary and work index, with access to previous history. Details outside the summary and board do not carry over automatically.',
+  'manager.resetBoardOnlyReplace':
+    'Creates a new session using only the board and work index, without a handover summary. The previous conversation remains read-only and worklines keep running.',
+  'manager.resetTargetSummaryFailed':
+    'The handover summary failed. Continue with {target} using only the board and current work index?',
+  'manager.resetTargetLocked':
+    'The handover target is locked. Continuing with the board uses the settings already confirmed.',
+  'manager.resetTargetWaiting': 'Waiting for handover: {source} → {target}',
+  'manager.resetHandoverFailed': 'New session created; handover failed',
+  'manager.resetReview': 'Review handover',
+  'manager.resetCapabilities': 'Capability changes',
+  'manager.resetDispatchChanges': 'Workline default changes',
+  'manager.resetDispatchNote':
+    'Defaults set to follow the manager change with the incoming manager. Existing worklines keep their settings.',
+  'manager.resetSupported': 'Supported',
+  'manager.resetUnsupported': 'Unsupported',
+  'manager.resetNoEffort': 'No reasoning effort',
+  'manager.resetPreviewLoading': 'Checking handover settings…',
+  'manager.resetPreviewRetry': 'Check again',
+  'manager.resetUnavailable': 'Unavailable',
+  'manager.resetNotValidated': 'Manager handover has not been validated for this runtime',
+  'manager.resetPermissionUnknown':
+    'Current permissions could not be verified. Switching is unavailable.',
+  'manager.resetPermissionMismatch': 'Does not support the current permissions',
+  'manager.resetPermissionClaude': 'Uses Claude Code’s permission and approval rules.',
+  'manager.resetPermissionCodex': 'Uses Codex’s sandbox and approval rules.',
+  'manager.resetCapability.nativeBackground': 'Native background tasks',
+  'manager.resetCapability.backgroundWake': 'Resume automatically after background commands finish',
+  'manager.resetCapability.managerQuestions': 'Temporary background questions',
+  'manager.resetCapability.steer': 'Receive workline reports during a turn',
+  'manager.resetCapability.goals': 'Goals',
+  'manager.resetCapability.nativeSubagents': 'Native subagents',
+  'manager.resetCapability.clientTools': 'Manager tools',
+  'manager.resetCapability.resume': 'Session recovery',
+  'manager.resetCapability.fork': 'Session forks',
 
   'manager.selectionReset': 'Updated; selection cleared',
   'manager.discussion': 'Discussion',

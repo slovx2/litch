@@ -11,6 +11,7 @@ import type {
   ManagerItem,
   ManagerObjectId,
   ManagerRequest,
+  ManagerResetOperation,
   ManagerSituation,
 } from '../../protocol/src/manager.mjs'
 import { assertStoreFormat, initializeStoreFormat } from '../../shared/src/store-format.mjs'
@@ -43,6 +44,8 @@ const MIGRATIONS = [
    CREATE INDEX issue_comments_issue ON issue_comments(manager_id,issue_id);
    CREATE INDEX issue_notifications_unread ON issue_notifications(manager_id,issue_id,recipient,seen_at);
    CREATE INDEX issue_history_manager ON issue_history(manager_id,seq);`,
+  `CREATE TABLE manager_reset_requests(manager_id TEXT NOT NULL, request_id TEXT NOT NULL, body TEXT NOT NULL,
+   PRIMARY KEY(manager_id,request_id));`,
 ] as const
 export const MANAGER_SCHEMA_VERSION = MIGRATIONS.length
 export const managerNow = () => Math.floor(Date.now() / 1000)
@@ -64,6 +67,8 @@ export interface QuestionState {
   threadId: string | null
   /** 退休分叉的身份仍保留，迟到调用和重启都不能恢复写权限。 */
   threads: string[]
+  threadHarnesses?: Record<string, string>
+  retiredThreads?: string[]
   source: string
   revision: number
 }
@@ -83,6 +88,17 @@ export interface ResetRecord {
   committed?: { manager: Manager; input: string }
   summaryTurnId?: string
   oldTools?: unknown[]
+  operation?: ManagerResetOperation
+  plan?: import('./manager-create-validation.mjs').ManagerResetPlan
+  requestHash?: string
+  candidate?: { thread: Record<string, unknown> }
+  /** start 尚无确定结果时不盲目重发，避免超时或重启生成第二候选。 */
+  candidateStarting?: boolean
+  summaryStarting?: boolean
+  cleanup?: { harness: string; threadIds: string[] }[]
+  handoverEventId?: string
+  handoverTurnId?: string
+  handoverSettled?: boolean
 }
 
 export function openManagerDatabase(stateDir: string): DatabaseSync {
@@ -157,11 +173,35 @@ export class ManagerStore {
     return body(this.db.prepare('SELECT body FROM manager_resets WHERE manager_id=?').get(id))
   }
   saveReset(record: ResetRecord): void {
+    if (!this.db.isTransaction) {
+      this.transaction(() => this.saveReset(record))
+      return
+    }
     this.db
       .prepare(
         'INSERT INTO manager_resets VALUES(?,?) ON CONFLICT(manager_id) DO UPDATE SET body=excluded.body',
       )
       .run(record.managerId, JSON.stringify(record))
+    if (record.operation) {
+      this.db
+        .prepare(
+          'INSERT INTO manager_reset_requests VALUES(?,?,?) ON CONFLICT(manager_id,request_id) DO UPDATE SET body=excluded.body',
+        )
+        .run(record.managerId, record.operation.requestId, JSON.stringify(record))
+      // 请求日志有界；源线程保护仍使过期确认无法再次换绑。
+      this.db
+        .prepare(
+          'DELETE FROM manager_reset_requests WHERE manager_id=? AND rowid NOT IN (SELECT rowid FROM manager_reset_requests WHERE manager_id=? ORDER BY rowid DESC LIMIT 32)',
+        )
+        .run(record.managerId, record.managerId)
+    }
+  }
+  resetRequest(id: string, requestId: string): ResetRecord | null {
+    return body(
+      this.db
+        .prepare('SELECT body FROM manager_reset_requests WHERE manager_id=? AND request_id=?')
+        .get(id, requestId),
+    )
   }
   historical(threadId: string): Manager | null {
     const row = this.db
@@ -181,6 +221,11 @@ export class ManagerStore {
     if (!committed) throw new Error('Missing committed manager rebind')
     this.transaction(() => {
       const after = committed.manager
+      if (
+        this.forThread(after.threadId)?.id === after.id &&
+        this.historical(record.oldThreadId)?.id === after.id
+      )
+        return
       this.db
         .prepare('INSERT OR IGNORE INTO manager_history VALUES(?,?)')
         .run(record.oldThreadId, after.id)
@@ -196,21 +241,26 @@ export class ManagerStore {
         .prepare(
           'INSERT INTO deliveries(seq,id,manager_id,text) VALUES((SELECT coalesce(min(seq),1)-1 FROM deliveries),?,?,?)',
         )
-        .run(randomUUID(), after.id, committed.input)
+        .run(record.handoverEventId ?? randomUUID(), after.id, committed.input)
       this.record(
         after.id,
         'manager',
         'user',
-        { threadId: record.oldThreadId },
+        { threadId: record.oldThreadId, harness: record.operation?.source.harness },
         after,
         'Manager session reset',
       )
-      this.saveReset({
-        managerId: after.id,
-        oldThreadId: after.threadId,
-        phase: 'ready',
-        applied: record.applied,
-      })
+      this.saveReset(
+        record.operation
+          ? { ...record, phase: 'ready', operation: { ...record.operation, committed: true } }
+          : {
+              managerId: after.id,
+              oldThreadId: after.threadId,
+              phase: 'ready',
+              applied: record.applied,
+              ...(record.cleanup?.length ? { cleanup: record.cleanup } : {}),
+            },
+      )
     })
   }
   objects(managerId: string): BoardObject[] {
@@ -534,6 +584,17 @@ export class ManagerStore {
       }))
   }
   delivered(id: string): void {
+    if (!this.db.isTransaction) {
+      this.transaction(() => this.delivered(id))
+      return
+    }
+    const delivery = this.db.prepare('SELECT manager_id FROM deliveries WHERE id=?').get(id)
+    const record = delivery ? this.reset(String(delivery.manager_id)) : null
+    if (record?.operation && record.handoverEventId === id) {
+      delete record.error
+      record.operation.handover = 'accepted'
+      this.saveReset(record)
+    }
     this.db.prepare('DELETE FROM deliveries WHERE id=?').run(id)
   }
   report(threadId: string): LineReport | null {

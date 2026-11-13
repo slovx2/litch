@@ -24,6 +24,7 @@ export const EXTENSION = {
   inputDelivery: 'inputDelivery',
   /** 设备上的经理、看板和工作线；字段与通知只发给声明过 litchManager 的连接（manager.mts）。 */
   manager: 'litchManager',
+  managerResetTarget: 'litchManagerResetTarget',
   /**
    * 经理的后加能力（功能探测，不是新的投递声明；方法、字段、通知仍以连接声明 litchManager 为门禁）。
    * 设备信息的 extensions 里列了才有，没列的是旧设备：客户端禁用对应入口并写明原因（manager.json）。

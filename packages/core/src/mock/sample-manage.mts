@@ -125,7 +125,7 @@ function taskCardsSetting(harness: HarnessView): SettingSpecView {
 function extraSettings(harness: HarnessView): SettingSpecView[] {
   const scope = { kind: 'harness', harness: harness.id } as const
   const group = `harness.${harness.id}`
-  if (harness.id === 'claude') {
+  if (harness.id === 'claude-code') {
     return [
       {
         ...BASE,
@@ -519,12 +519,12 @@ export function sampleSettings(deviceId: string, harnesses: HarnessView[]): Samp
   const has = (id: string) => harnesses.some((harness) => harness.id === id)
   const written = new Map<string, SettingValueView>()
   if (local) {
-    if (has('claude')) {
-      written.set('harness.claude.env', [
+    if (has('claude-code')) {
+      written.set('harness.claude-code.env', [
         { name: 'HTTPS_PROXY', value: 'http://127.0.0.1:7890' },
         { name: 'ANTHROPIC_API_KEY', secret: true },
       ])
-      written.set('ssh.claude.enabled', true)
+      written.set('ssh.claude-code.enabled', true)
     }
     if (has('pi')) {
       written.set('harness.pi.endpoint', 'https://gate.example.com/v1')
@@ -534,7 +534,7 @@ export function sampleSettings(deviceId: string, harnesses: HarnessView[]): Samp
       written.set('ssh.pi.enabled', true)
     }
   } else {
-    if (has('claude')) written.set('harness.claude.cliPath', '/opt/claude/bin/claude')
+    if (has('claude-code')) written.set('harness.claude-code.cliPath', '/opt/claude/bin/claude')
     // 远程那台上的 Gemini CLI 停用着（sample-data.mts），任务卡也关着：启用后树上那一行是空的
     if (has('gemini')) {
       written.set('harness.gemini.enabled', false)

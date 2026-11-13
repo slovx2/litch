@@ -147,7 +147,7 @@ test('示例数据：每种类型的设置都有，还有一项这一版不认�
   assert.deepEqual(
     view.snapshot.sshEntries.map((entry) => [entry.harness, entry.state]),
     [
-      ['claude', 'listening'],
+      ['claude-code', 'listening'],
       ['pi', 'failed'],
       ['dsh', 'off'],
       // codex 的入口没开；开了也起不来，它的运行时不在
@@ -256,30 +256,32 @@ test('改了要重启才生效的设置而它有回合在跑：不打断，标�
   // 示例里 claude 一开始就有一个回合在跑、一个停着等批准
   assert.equal(rows.get('s1')?.status, 'running')
   assert.equal(rows.get('s2')?.status, 'waiting')
-  const result = await write([{ key: 'harness.claude.cliPath', value: '/opt/claude/bin/claude' }])
+  const result = await write([
+    { key: 'harness.claude-code.cliPath', value: '/opt/claude/bin/claude' },
+  ])
   assert.deepEqual(result.restarted, [])
-  assert.deepEqual(result.pendingRestart, ['claude'])
+  assert.deepEqual(result.pendingRestart, ['claude-code'])
   await flush()
-  assert.deepEqual(seen.view?.snapshot.pendingRestart, ['claude'])
-  assert.equal(harness('claude')?.state, 'ready', '没有动它')
+  assert.deepEqual(seen.view?.snapshot.pendingRestart, ['claude-code'])
+  assert.equal(harness('claude-code')?.state, 'ready', '没有动它')
   assert.equal(rows.get('s1')?.status, 'running')
 
   // 不要重启的设置：立刻生效，不牵扯待重启
-  const light = await write([{ key: 'harness.claude.idleExitMinutes', value: 5 }])
-  assert.deepEqual([light.restarted, light.pendingRestart], [[], ['claude']])
+  const light = await write([{ key: 'harness.claude-code.idleExitMinutes', value: 5 }])
+  assert.deepEqual([light.restarted, light.pendingRestart], [[], ['claude-code']])
 
   const busy = await failureOf(
-    channel.command('device.harness.restart', { deviceId: 'local', harness: 'claude' }),
+    channel.command('device.harness.restart', { deviceId: 'local', harness: 'claude-code' }),
   )
   assert.equal(busy.code, 'busy')
   assert.ok(busy.said?.['zh-CN'].includes('Claude Code') && busy.said.en.includes('Claude Code'))
   await flush()
-  assert.deepEqual(seen.view?.snapshot.pendingRestart, ['claude'])
+  assert.deepEqual(seen.view?.snapshot.pendingRestart, ['claude-code'])
   assert.equal(rows.get('s1')?.status, 'running', '什么都没打断')
 
   const done = await channel.command('device.harness.restart', {
     deviceId: 'local',
-    harness: 'claude',
+    harness: 'claude-code',
     force: true,
   })
   assert.deepEqual(done, { running: true, text: null })
@@ -295,7 +297,7 @@ test('密钥：写进去之后哪儿都读不回来，只知道“设过了”�
   const before = seen.view as ManageView
   // 一开始就存着的密钥也一样：只有“设过了”
   assert.deepEqual(before.snapshot.values['harness.pi.apiKey'], { set: true })
-  assert.deepEqual(before.snapshot.values['harness.claude.env'], [
+  assert.deepEqual(before.snapshot.values['harness.claude-code.env'], [
     { name: 'HTTPS_PROXY', value: 'http://127.0.0.1:7890' },
     { name: 'ANTHROPIC_API_KEY', secret: true },
   ])
@@ -402,8 +404,8 @@ test('一次写入全有或全无：里面有一项不合规矩，别的也不�
 
   for (const [edit, key] of [
     [{ key: 'terminal.scrollback', value: 10 }, 'terminal.scrollback'],
-    [{ key: 'harness.claude.cliPath', value: 'bin/claude' }, 'harness.claude.cliPath'],
-    [{ key: 'harness.claude.logLevel', value: 'loud' }, 'harness.claude.logLevel'],
+    [{ key: 'harness.claude-code.cliPath', value: 'bin/claude' }, 'harness.claude-code.cliPath'],
+    [{ key: 'harness.claude-code.logLevel', value: 'loud' }, 'harness.claude-code.logLevel'],
     [{ key: 'harness.dsh.wakeSchedule', value: 'daily' }, 'harness.dsh.wakeSchedule'],
     [{ key: 'nope.nothing', value: true }, 'nope.nothing'],
   ] as const) {
@@ -413,19 +415,19 @@ test('一次写入全有或全无：里面有一项不合规矩，别的也不�
 
   // 互换两个入口的端口：一项一项改过不去，一次写入才成立
   const swapped = await write([
-    { key: 'ssh.claude.port', value: 22232 },
+    { key: 'ssh.claude-code.port', value: 22232 },
     { key: 'ssh.dsh.port', value: 22230 },
   ])
-  assert.deepEqual(swapped.changed.sort(), ['ssh.claude.port', 'ssh.dsh.port'])
+  assert.deepEqual(swapped.changed.sort(), ['ssh.claude-code.port', 'ssh.dsh.port'])
   await flush()
   // 清掉一项：回到默认值，不再算“写过的”
   await write([
-    { key: 'ssh.claude.port', value: null },
+    { key: 'ssh.claude-code.port', value: null },
     { key: 'ssh.dsh.port', value: null },
   ])
   await flush()
-  assert.equal(seen.view?.snapshot.values['ssh.claude.port'], 22230)
-  assert.ok(!seen.view?.snapshot.explicit.includes('ssh.claude.port'))
+  assert.equal(seen.view?.snapshot.values['ssh.claude-code.port'], 22230)
+  assert.ok(!seen.view?.snapshot.explicit.includes('ssh.claude-code.port'))
 })
 
 test('对话里说“抢先改设置”：下一次保存得到冲突，什么都没写进去，并且拿到了最新的值', async () => {
@@ -557,7 +559,7 @@ test('诊断、日志、ssh 配置片段：逐项的结果、读得到的末尾�
   assert.equal(none.text, '')
 
   const config = await channel.command('device.sshConfig.read', { deviceId: 'local' })
-  const claude = config.entries.find((entry) => entry.harness === 'claude')
+  const claude = config.entries.find((entry) => entry.harness === 'claude-code')
   assert.ok(claude?.config?.includes('Port 22230'))
   assert.ok(config.text.includes('Host codex-harness-adapter-claude'))
   const dsh = config.entries.find((entry) => entry.harness === 'dsh')

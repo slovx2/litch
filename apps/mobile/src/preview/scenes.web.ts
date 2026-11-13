@@ -31,6 +31,13 @@ const say = (prompt: string) =>
 
 export const SCENES: Scene[] = [
   {
+    id: 'manager-reset',
+    group: '经理',
+    name: '经理接班设置',
+    note: '正式接班表单与确认；phase=settings|waiting|summaryFailed|handoverFailed|old-device，设备和目录固定',
+    steps: [],
+  },
+  {
     id: 'local-workspace',
     group: '设备',
     name: '本地分组 · 项目',

@@ -187,6 +187,7 @@ export function Dialog({
   onShow,
   onDismiss,
   consentHost = true,
+  footer,
   children,
 }: {
   visible: boolean
@@ -199,6 +200,8 @@ export function Dialog({
   onDismiss?(): void
   /** 同意框自身不能再次注册承载点；其他弹窗中的发送复用最上层原生窗口。 */
   consentHost?: boolean
+  /** 长表单的操作区固定在滚动内容之外。 */
+  footer?: ReactNode
   children: ReactNode
 }) {
   const theme = useTheme()
@@ -228,6 +231,9 @@ export function Dialog({
           >
             {children}
           </KeyboardCardScrollView>
+          {footer ? (
+            <View style={[styles.dialogFooter, { borderTopColor: c.line2 }]}>{footer}</View>
+          ) : null}
         </View>
       </ModalKeyboardArea>
       {consentHost ? <ModalConsentHost active={visible} /> : null}
@@ -241,6 +247,7 @@ export function Confirm({
   detail,
   confirmLabel,
   danger,
+  fixedActions = false,
   onConfirm,
   onClose,
 }: {
@@ -249,28 +256,32 @@ export function Confirm({
   detail?: string
   confirmLabel: string
   danger?: boolean
+  fixedActions?: boolean
   onConfirm(): void
   onClose(): void
 }) {
   const theme = useTheme()
   const { c } = theme
   const t = useT()
+  const actions = (
+    <View style={styles.dialogButtons}>
+      <Button kind={fixedActions ? 'quiet' : 'plain'} label={t('app.cancel')} onPress={onClose} />
+      <Button
+        kind={danger ? 'danger' : 'solid'}
+        label={confirmLabel}
+        testID="confirm:ok"
+        onPress={() => {
+          onClose()
+          onConfirm()
+        }}
+      />
+    </View>
+  )
   return (
-    <Dialog visible={visible} onClose={onClose}>
+    <Dialog visible={visible} onClose={onClose} footer={fixedActions ? actions : undefined}>
       <Text style={[styles.dialogTitle, { color: c.ink, fontFamily: theme.font.ui }]}>{title}</Text>
       {detail ? <Text style={[styles.dialogDetail, { color: c.ink2 }]}>{detail}</Text> : null}
-      <View style={styles.dialogButtons}>
-        <Button kind="plain" label={t('app.cancel')} onPress={onClose} />
-        <Button
-          kind={danger ? 'danger' : 'solid'}
-          label={confirmLabel}
-          testID="confirm:ok"
-          onPress={() => {
-            onClose()
-            onConfirm()
-          }}
-        />
-      </View>
+      {fixedActions ? null : actions}
     </Dialog>
   )
 }
@@ -381,6 +392,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   dialog: { alignSelf: 'stretch', borderWidth: 1, maxHeight: '100%' },
   dialogScroll: { flexGrow: 0 },
+  dialogFooter: { flexShrink: 0, paddingHorizontal: 20, paddingVertical: 12, borderTopWidth: 1 },
   dialogBody: { padding: 20, gap: 14 },
   dialogTitle: { fontSize: 17, fontWeight: '600' },
   dialogDetail: { fontSize: 14, lineHeight: 20 },

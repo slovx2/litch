@@ -59,7 +59,7 @@ async function steered(harness) {
 }
 
 test('会切在回合中间：插进来的话上回退切在它之前，分叉带到下一条插的话之前', async () => {
-  const { store, channel, sessionId, turnId, users, answer } = await steered('claude')
+  const { store, channel, sessionId, turnId, users, answer } = await steered('claude-code')
   const can = store.getMeta().can
   const [opening, first, second] = users.map((row) => row.key)
   const at = (pressed) => turnTarget(store, can, turnId, pressed)
@@ -106,7 +106,7 @@ const userTexts = (store) =>
     .join('|')
 
 test('编辑插进来的话：切在它之前、用改过的字开新回合；发不出去时原消息已撤、给回失败原因', async () => {
-  const { store, channel, sessionId, turnId, users } = await steered('claude')
+  const { store, channel, sessionId, turnId, users } = await steered('claude-code')
   const can = store.getMeta().can
   const target = turnTarget(store, can, turnId, users[1].key)
   assert.equal(editableOf(target.user).text, '插一句', '编辑框里带着原文')

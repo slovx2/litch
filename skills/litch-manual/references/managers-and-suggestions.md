@@ -246,33 +246,24 @@ desktop actions.
 
 桌面经理页右上角的重置图标、手机经理页“⋯”菜单里的「重置经理会话」只能由用户主动操作，每次都会确认。
 手机能力落后时，“⋯”上显示等待色记号，菜单项也说明有新版本能力。重置过程中菜单项禁用并显示等待原因。
-工具或指令比设备当前版本旧时，
-按钮显示等待色记号。Claude 保留同一会话和完整历史，新能力在下一轮生效；其他引擎先让旧会话写
-交接摘要，再创建同引擎的新会话接手看板与工作线。旧对话只读，可从桌面重置对话框中的历史入口打开。
-其余对话细节不会传入新线程；摘要失败时必须再次确认，才能仅根据看板接手。
-Claude 刷新只等待当前回合结束，后台任务、临时追问与目标继续运行；其他引擎换会话仍等待经理回合、后台任务和临时追问结束。
-等待期间可使用桌面原重置图标位置或手机标题栏的关闭图标取消重置，不增加页面高度。
-发送消息或插话会自动取消等待并正常提交，重新加载会话与附件监听始终可用。
-摘要或应用开始后不可取消，完成后可继续操作。重置结束、经理状态更新或设备重连时，客户端会重新订阅受影响的只读会话。
-工作线继续运行，重置期间回报先排队。
+工具或指令比设备当前版本旧时，按钮显示等待色记号。设备支持接班设置时，桌面确认框可展开「接班设置」，手机在重置流程中选择接班设置，更换 harness、模型或推理强度；默认保留当前设置。第一批开放 Claude Code 和 Codex，其他运行方式仍列在候选中并说明不可选原因。设备、工作目录和当前权限固定，目标不支持该权限或当前权限无法核实时不能提交。
+确认前显示当前经理 → 接班经理、模型、强度、权限及其执行说明，并列出能力和工作线默认设置的变化。工作线默认值继续遵守「跟随经理」语义；显式值保留，冲突时需在表单中调整，已有工作线保持原设置。
+Claude 设置不变时保留同一会话和完整历史，新能力在下一轮生效，只等待当前回合。更换 harness、模型或强度时（包括同为 Claude），以及其他引擎重置时，先等待经理回合、后台任务和临时追问结束，再生成交接摘要并创建新会话。看板和工作线保留，工作线继续运行；旧对话只读，可从确认框中的历史入口打开。
+新经理接收交接摘要和当前工作索引，按需读取看板及旧历史；未写入摘要或看板的对话细节不会自动进入新会话。摘要失败后需再次确认才能仅根据看板和工作索引接手，重试锁定原目标。已提交切换但接班首轮失败时显示「已切换，接班未成功」。
+等待期间显示已确认的源 → 目标，可使用原重置图标取消；发送消息或插话会取消等待并正常提交。摘要或应用开始后不能取消。重置期间回报先排队，完成或设备重连后客户端重新订阅。设备未提供接班设置时保留原重置流程。
 重置时按设备当前开关补齐或移除浏览器、Computer Use、操作本机工具，并在设备提供定时任务时补齐定时任务工具。
 已有 Claude 和 Pi 经理重新打开、重连或设备重启后恢复时也会更新这些工具；Codex 普通恢复不更新，重置创建的新会话使用当前开关。
 
 Use the reset icon at the top right on desktop, or **Reset manager session** in the mobile manager page's **⋯** menu.
 Both always ask for confirmation. On mobile, an amber marker on **⋯** highlights available updates;
 the menu entry is disabled with a waiting explanation while a reset is in progress. An amber
-dot means tools or instructions are behind the connected device's current definitions. Claude keeps
-the same conversation and loads the new capabilities on its next turn. Other harnesses write a
-handover summary and start a new session with the same harness and settings; the board and worklines
-remain. The previous conversation becomes read-only history, accessible from the desktop reset dialog.
-Conversation details outside the summary do not carry over. If summarizing fails, the user must
-confirm again to continue with the board alone. Claude refresh waits only for the current turn;
-background tasks, temporary questions and goals continue. Other harnesses also wait for background
-tasks and temporary questions before replacing the session. While waiting, use the cancel icon in
-the desktop reset button's position or the mobile title bar. Sending a message or steering cancels
-the pending reset and submits the input normally. Subscriptions and attachment watching stay available.
-Cancellation stops being available once summarizing or applying starts. Manager updates and device
-reconnection retry affected read-only subscriptions. Worklines continue and reports queue meanwhile.
+dot means tools or instructions are behind the connected device’s current definitions. When the device supports handover settings, expand **Handover settings** in the desktop confirmation dialog, or choose handover settings in the mobile reset flow, to change harness, model or reasoning effort. Current settings are selected initially. Claude Code and Codex are available first; other runtimes remain listed with their unavailable reasons. Device, working directory and current permissions are fixed. Unsupported or unverifiable permissions block submission.
+The preview shows current → incoming manager, model, effort, permission behavior, capability changes and workline default changes. Defaults keep their follow-manager meaning. Explicit values remain; resolve conflicts in the form. Existing worklines keep their settings.
+On mobile, **Review handover** opens the final confirmation after selecting settings. The settings and confirmation dialogs keep their actions visible while the details scroll. Reasoning effort labels follow the selected language.
+
+With unchanged Claude settings, the same session and full history remain, and new capabilities apply on the next turn after the current turn finishes. Changing harness, model or effort, including within Claude, starts a new session. Resets on other harnesses also replace the session. Replacement waits for the manager’s turn, background tasks and temporary questions, then generates a handover summary. The board and worklines remain; worklines keep running. The previous conversation becomes read-only history, accessible from the reset dialog.
+The incoming manager receives the summary and current work index, and reads the board and previous history as needed. Conversation details outside the summary or board do not automatically enter the new session. If summarizing fails, confirm again to continue with the board and work index; the original target stays locked. A committed switch whose first handover turn failed shows **Switched; handover did not succeed**.
+While waiting, the confirmed source → target is shown and the reset icon cancels the operation. Sending a message or steering cancels the wait and submits the input normally. Cancellation ends when summarizing or applying starts. Reports queue meanwhile; completion and reconnection refresh subscriptions. Devices without handover support keep the existing reset flow.
 Reset adds or removes browser, Computer Use and local-machine tools according to current device settings,
 and adds scheduling tools when the device provides scheduled tasks. Existing Claude and Pi managers also
 refresh these tools when reopened, reconnected or resumed after a device restart. Normal Codex resumes

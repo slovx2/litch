@@ -9,7 +9,7 @@ import type { SampleLang } from './sample-text.mjs'
 type Row = [name: string, scope: SkillOption['scope'], zh: string, en: string]
 
 const SKILLS: Record<string, Row[]> = {
-  claude: [
+  'claude-code': [
     [
       'code-review',
       'repo',
@@ -46,7 +46,7 @@ const SKILLS: Record<string, Row[]> = {
 
 /** 用户自己的、系统带的技能放在哪。仓库里的跟着工作目录走 */
 const HOMES: Record<string, string> = {
-  claude: '/home/dev/.claude/skills',
+  'claude-code': '/home/dev/.claude/skills',
   pi: '/home/dev/.pi/agent/skills',
   codex: '/home/dev/.codex/skills',
 }

@@ -233,13 +233,14 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
   // 运行设置：默认值、保存、恢复默认，以及离开时保存/放弃/取消。
   await openDetail('local')
   await click('Claude 的详情设置', () =>
-    act('harness-settings', one('[data-harness-block="claude"]') ?? document),
+    act('harness-settings', one('[data-harness-block="claude-code"]') ?? document),
   )
-  await until('Claude 运行设置', () => one('[data-runtime-settings="claude"]'))
+  await until('Claude 运行设置', () => one('[data-runtime-settings="claude-code"]'))
   // 配置等标签要等 harness 配置读回来才出现；没出现时点它什么都不会发生，也就不会问
   const tabButton = (tab: string) => one<HTMLButtonElement>(`.hc-tabs [data-tab="${tab}"]`)
   await until('配置标签出现', () => tabButton('config'))
-  const ttl = () => one<HTMLSelectElement>('[data-setting="harness.claude.promptCacheTtl"] select')
+  const ttl = () =>
+    one<HTMLSelectElement>('[data-setting="harness.claude-code.promptCacheTtl"] select')
   const runtimeFlow = [ttl()?.value ?? 'missing']
   const changeTtl = async (value: string) => {
     const field = ttl() as HTMLSelectElement
@@ -266,12 +267,12 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
   await click('离开确认里的保存', () => act('leave-save'))
   await until('返回设备页', () => one('[data-detail="local"]'))
   await click('Claude 的详情设置', () =>
-    act('harness-settings', one('[data-harness-block="claude"]') ?? document),
+    act('harness-settings', one('[data-harness-block="claude-code"]') ?? document),
   )
   await until('运行设置再次打开', () => ttl())
   runtimeFlow.push(ttl()?.value ?? 'missing')
   await click('恢复默认', () =>
-    act('reset', one('[data-setting="harness.claude.promptCacheTtl"]') ?? document),
+    act('reset', one('[data-setting="harness.claude-code.promptCacheTtl"]') ?? document),
   )
   await until('恢复默认草稿', () => one('.mng-save'))
   await click('运行设置的保存', () => act('save', one('.mng-save') ?? document))
@@ -279,7 +280,7 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
   runtimeFlow.push(ttl()?.value ?? 'missing')
 
   // ---------- 一、配置（本机 Claude Code） ----------
-  await openSettings('local', 'claude')
+  await openSettings('local', 'claude-code')
   const contextOpus = 'litch_context_windows.anthropic.claude-opus-5-5'
   const must = (condition: boolean, message: string) => {
     if (!condition) throw new Error(message)
@@ -346,7 +347,7 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
 
   // 别的客户端抢先改了：第一次保存撞上冲突，改动留着，再存就成
   await sayIn('CC', '抢先改配置')
-  await openSettings('local', 'claude')
+  await openSettings('local', 'claude-code')
   switchOf('autoMemoryEnabled')?.click()
   await click('能按的“保存”', () => act('hc-save'))
   const conflict = (
@@ -358,7 +359,7 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
 
   // 改着的时候别处改了：提示一句，用最新的
   await sayIn('CC', '别处改配置')
-  await openSettings('local', 'claude')
+  await openSettings('local', 'claude-code')
   switchOf('autoCompactEnabled')?.click()
   const moved = (await until('“别处改过了”的提示', () => one('[data-hc-moved]'))) !== null
   await click('“用最新的”', () => act('hc-take-latest'))
@@ -380,7 +381,7 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
   await until('离开前问', asked)
   await click('“放弃”', () => act('leave-discard'))
   await until('设备详情', () => !one('.hc-page') && one('[data-detail="local"]'))
-  await openSettings('local', 'claude')
+  await openSettings('local', 'claude-code')
   const leaveDiscarded = `${fastNow()}:${bar() ? 'dirty' : 'clean'}`
   // 设备详情已经在设置窗口中：切设置分组和关闭窗口都要先确认。
   switchOf('fastMode')?.click()
@@ -409,11 +410,11 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
     '保存后在设置窗口进入外观',
     () => !one('.hc-page') && one('.page-window .set-content[data-section="look"]'),
   )
-  await openSettings('local', 'claude')
+  await openSettings('local', 'claude-code')
   const leaveSaved = `${fastSaved}→${fastNow()}`
 
   // ---------- 二、账号（本机 Claude Code）：粘贴授权码；网关从它那里拉型号 ----------
-  await openSettings('local', 'claude', 'accounts')
+  await openSettings('local', 'claude-code', 'accounts')
   const account = () => card('anthropic')
   const consoleLogin = () =>
     one<HTMLButtonElement>('[data-act="hc-method"][data-method="console"]', account() ?? document)
@@ -540,7 +541,7 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
   )
 
   // ---------- 三、MCP（本机 Claude Code） ----------
-  await openSettings('local', 'claude', 'mcp')
+  await openSettings('local', 'claude-code', 'mcp')
   const server = (name: string) => one(`[data-hc-mcp="${name}"]`)
   await click('添加 MCP 服务', () => act('hc-mcp-add'))
   const mcpDialog = await until('MCP 的对话框', () => one('[data-hc-dialog="mcp"]'))
@@ -578,7 +579,7 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
   await dismiss(sentry)
 
   // ---------- 四、指令文件（本机）：改了保存；统一模式 ----------
-  const instr = await openSettings('local', 'claude', 'instructions')
+  const instr = await openSettings('local', 'claude-code', 'instructions')
   const before = instr.dataset.hash ?? ''
   const editor = await until('编辑器', () => one<HTMLTextAreaElement>('[data-hc-editor]'))
   fill(editor, `${editor.value}\n- 验收加的一行\n`)
@@ -593,8 +594,8 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
   await click('统一成一份', () => act('hc-unify'))
   const unifyDialog = await until('统一的对话框', () => one('[data-hc-dialog="unify"]'))
   const source = one<HTMLSelectElement>('#hc-unify-source', unifyDialog)
-  if (source && source.value !== 'claude') {
-    source.value = 'claude'
+  if (source && source.value !== 'claude-code') {
+    source.value = 'claude-code'
     source.dispatchEvent(new Event('change', { bubbles: true }))
     await frame()
   }
@@ -684,7 +685,7 @@ export function judgeHarnessSettings(seen: HarnessSettingsProbe): string[] {
     '后台设置未显示当前版本和要求',
   )
   must(seen.backgroundEditable, '旧版本的后台开关不应禁用')
-  for (const id of ['claude', 'codex', 'pi', 'dsh']) {
+  for (const id of ['claude-code', 'codex', 'pi', 'dsh']) {
     must(seen.entries.includes(id), `本机的 ${id} 没有“详情设置”入口：${seen.entries.join('、')}`)
   }
   must(seen.unsupportedEntry, 'build-01 上 dsh 没有运行设置入口')
@@ -764,8 +765,8 @@ export async function leaveCloseSetup(): Promise<boolean> {
     throw new Error('关窗口前问的验收：等不到页面')
   }
   // 上面的验收停在本机的设备详情上：从 Claude Code 那一块进详情设置
-  if (!one('.hc-page[data-hc="claude"]')) {
-    const block = await until(() => one('[data-detail="local"] [data-harness-block="claude"]'))
+  if (!one('.hc-page[data-hc="claude-code"]')) {
+    const block = await until(() => one('[data-detail="local"] [data-harness-block="claude-code"]'))
     one<HTMLButtonElement>('[data-act="harness-settings"]', block)?.click()
   }
   ;(await until(() => one<HTMLButtonElement>('.hc-tabs [data-tab="config"]'))).click()
