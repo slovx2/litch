@@ -43,7 +43,7 @@ async function flipDevice() {
 test('停用的 harness 不列，点设备那一格设整列不动它；启用后出现，值照旧', async () => {
   await until(() => device() && snapshot(), { what: 'build-01 和它的设置' })
   assert.equal(device().harnesses.find((entry) => entry.id === 'gemini')?.state, 'disabled')
-  assert.deepEqual(ids(), ['claude', 'pi', 'dsh', 'codex', 'opencode'])
+  assert.deepEqual(ids(), ['claude-code', 'pi', 'dsh', 'codex', 'opencode'])
   assert.ok(!taskCardTargets(device()).includes('gemini'))
   // 停用的那个任务卡关着，但不算进设备那一格
   assert.equal(device().tools.harnesses.gemini.taskCards, false)
@@ -60,7 +60,7 @@ test('停用的 harness 不列，点设备那一格设整列不动它；启用�
     edits: [{ key: 'harness.gemini.enabled', value: true }],
   })
   await until(() => ids().includes('gemini'), { what: '启用后 Gemini CLI 列出来' })
-  assert.deepEqual(ids(), ['claude', 'pi', 'dsh', 'codex', 'opencode', 'gemini'])
+  assert.deepEqual(ids(), ['claude-code', 'pi', 'dsh', 'codex', 'opencode', 'gemini'])
   assert.equal(harnessRows(device()).at(-1).switches.taskCards, false)
   assert.equal(deviceCell(device(), 'taskCards'), 'mixed')
   assert.ok(taskCardTargets(device()).includes('gemini'))

@@ -43,7 +43,7 @@ test('历史分页接入手机行和状态：保留较新回合，向前补出�
   const project = (turns) =>
     projectThread(
       { id: 'paged', name: '分页', cwd: '/', turns },
-      { deviceId: 'local', harness: 'claude' },
+      { deviceId: 'local', harness: 'claude-code' },
     )
   let sink
   const recent = project([protocolTurn('new', '最新正文')])
