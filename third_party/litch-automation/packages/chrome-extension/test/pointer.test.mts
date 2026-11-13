@@ -108,7 +108,7 @@ for (const [name, change, code] of [
     'staleDocument',
   ],
   ['同源新文档', (f: ReturnType<typeof fixture>) => f.navigate(), 'staleDocument'],
-  ['来源变化', (f: ReturnType<typeof fixture>) => f.crossOrigin(), 'originNotApproved'],
+  ['来源变化', (f: ReturnType<typeof fixture>) => f.crossOrigin(), 'staleDocument'],
   ['视口变化', (f: ReturnType<typeof fixture>) => f.resize(), 'staleDocument'],
 ] as const) {
   test(`指针不绘制时仍拒绝${name}`, async () => {

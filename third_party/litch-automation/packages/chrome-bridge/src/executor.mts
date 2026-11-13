@@ -297,6 +297,27 @@ export class ChromeExecutor implements BrowserExecutor {
       )
     return page
   }
+  private async approvePageOrigins(
+    page: ChromePage,
+    invocation: ClientToolInvocation,
+    context: ClientToolContext,
+  ): Promise<void> {
+    const tabs = await this.listTabs(page.instanceId, context.signal)
+    const tab = tabs.find((tab) => tab.id === page.grant.tabId)
+    if (!tab || (page.targetId && tab.targetId !== page.targetId))
+      throw new ChromeBridgeError(
+        'targetUnavailable',
+        'The claimed Chrome target changed. List tabs and choose the intended tab again.',
+      )
+    const origins = [...new Set([...page.grant.origins, ...tab.origins])]
+    await this.approve(invocation, context, origins)
+    // 审批卡等待期间可能停回合、撤租约或断线，不能给旧标签登记来源。
+    this.page(invocation, page.id)
+    if (context.signal.aborted)
+      throw new ChromeBridgeError('cancelled', 'Website approval was cancelled.')
+    if (origins.some((origin) => !page.grant.origins.includes(origin)))
+      await page.authorize(origins)
+  }
   private async claim(
     invocation: ClientToolInvocation,
     context: ClientToolContext,
@@ -487,7 +508,9 @@ export class ChromeExecutor implements BrowserExecutor {
       if (!page)
         throw new ChromeBridgeError('staleLease', 'Chrome changed while preparing the tab.')
       this.busy.add(page.id)
-      page.bind(context.signal, page.state.generation)
+      page.bind(context.signal, page.state.generation, () =>
+        this.approvePageOrigins(page, invocation, context),
+      )
       try {
         if (page.state.loading && !(await page.waitForLoad(10_000, context.signal)))
           throw new ChromeBridgeError(
@@ -771,7 +794,9 @@ export class ChromeExecutor implements BrowserExecutor {
       if (this.busy.has(page.id))
         throw new ChromeBridgeError('busy', 'Another operation is running on this Chrome tab.')
       this.busy.add(page.id)
-      page.bind(context.signal, page.state.generation)
+      page.bind(context.signal, page.state.generation, () =>
+        this.approvePageOrigins(page, invocation, context),
+      )
       try {
         // 每次操作重新判断，已发出的租约不能绕过用户刚设置的黑名单。
         if (invocation.tool !== 'release')
