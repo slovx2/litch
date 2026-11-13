@@ -411,7 +411,10 @@ export function createMockManagers(host: MockManagerHost) {
           dispatch,
         }),
         mode:
-          JSON.stringify(source) === JSON.stringify(resolved) && source.harness === 'claude-code'
+          source.harness === resolved.harness &&
+          source.model === resolved.model &&
+          source.effort === resolved.effort &&
+          source.harness === 'claude-code'
             ? 'refresh'
             : 'replace',
         capabilityChanges: [

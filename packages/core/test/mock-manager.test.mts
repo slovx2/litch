@@ -36,6 +36,9 @@ test('模拟接班预览解析目标、禁用未验 harness，并换线程保留
       ...(target ? { target } : {}),
     })) as import('../../protocol/src/manager.mjs').ManagerResetPreview
   const initial = await read()
+  assert.equal(initial.canSubmit, true)
+  assert.deepEqual(initial.target, initial.source)
+  assert.equal(initial.mode, 'refresh')
   assert.equal(initial.candidates.find((one) => one.harness === 'pi')?.enabled, false)
   const preview = await read({
     harness: initial.source.harness === 'codex' ? 'claude-code' : 'codex',
