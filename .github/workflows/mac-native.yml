@@ -41,7 +41,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: 1.26.10
-      - uses: ruby/setup-ruby@de492cf36cbab201753d720ce4f4e336cd688c94
+      - uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199
         if: contains(fromJSON(inputs.domains), 'ios')
         with:
           ruby-version: 3.4.7
