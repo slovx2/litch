@@ -7,6 +7,16 @@ versioning or publishing metadata.
 
 ## 未发布
 
+## 0.43.1（2026-11-13）
+
+### 中文
+
+- 重新打开会话后，后台任务完成的通知会显示成一段原始 JSON 的用户消息；现在显示为“后台任务完成”事件。远程设备需要把设备服务更新到这个版本。
+
+### English
+
+- Fixed background task completion notifications appearing as user messages containing raw JSON after reopening a session. They now appear as “Background task completed” events. Update the device service on remote devices to this version.
+
 ## 0.43.0（2026-11-13）
 
 ### 中文
