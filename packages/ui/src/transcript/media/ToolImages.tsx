@@ -48,9 +48,12 @@ export function ToolImageGroup({ items, children }: { items: ItemView[]; childre
 export function ToolImageStrip({
   deviceId,
   images: own,
+  hidden = false,
 }: {
   deviceId: string
   images?: ToolImage[]
+  /** 只隐藏摘要缩略图，查看器与菜单不能随 touch 引发的展开一起卸载。 */
+  hidden?: boolean
 }) {
   const group = useContext(Gallery)
   const touch = useContext(TurnTouch)
@@ -70,7 +73,11 @@ export function ToolImageStrip({
   }
   return (
     <>
-      <span className="tool-images" data-tool-images="">
+      <span
+        className="tool-images"
+        data-tool-images=""
+        style={hidden ? { display: 'none' } : undefined}
+      >
         {entries.length > 3 ? (
           <button
             type="button"
