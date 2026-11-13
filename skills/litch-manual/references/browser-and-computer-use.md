@@ -360,6 +360,8 @@ Chrome 的站点权限在 **设置 → Chrome**：默认关闭“信任所有网
 黑名单与内置浏览器一致：只在信任所有网站开启时生效，按主机名匹配并包含子域名。可逐项删除黑名单、逐项或全部删除一直允许的网站。
 Chrome 的 localhost 仍检查站点权限，因为它位于控制端并可能带有登录态；信任所有网站或记住该来源后无需再问。总开关开启后不再单独审批 Chrome 实例或标签；明确拒绝、黑名单及任务授权范围仍独立检查。
 
+认领后的页面动态加载其他网站的 iframe 时，工具会重新检查这些来源的网站许可。已信任或已允许的来源自动继续；需要批准时弹出正常网站审批卡，拒绝和黑名单仍会阻止访问，无需重新认领或手动添加域名。批准前不会把新来源的页面内容返回给代理。若页面在一次操作中继续变化，按提示获取新快照，不重复已可能执行的输入。
+
 Chrome 总开关包含远程设备范围：只有下方勾选的远程设备可以使用，未勾选时立即返回提示，不会弹卡或等待。开启 Chrome 总开关后，所有获准使用此控制端的会话都可列出已连接 profile 的标签标题和网址，认领用户标签无需另批。页面访问只由 Chrome 的站点许可控制，用户已登录的标签和代理新开的标签遵循相同的站点规则；开启“信任所有网站”后，除黑名单以外的已登录网站都可被操作。网站许可不等于网络防火墙，也不替代发送、购买等具体操作所需的用户指令。
 
 With Chrome control enabled, conversations allowed to use this controller can list titles and URLs across its connected profiles and claim user tabs without a separate instance or tab approval. Chrome site permissions control page access for both signed-in user tabs and agent-created tabs. With **Trust all websites** enabled, signed-in sites outside the blocklist are accessible. Site permission is not a network firewall or authorization to send messages or make purchases without the user's instruction.

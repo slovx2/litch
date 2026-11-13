@@ -12,6 +12,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { buildChromeExtension } from '../../apps/desktop/scripts/build-chrome.mjs'
 import { Cdp, until } from '../chrome-m0/cdp.mjs'
 import { concurrentClaim } from './concurrent-claim.mjs'
+import { dynamicOriginChecks } from './dynamic-origins.mjs'
 import { fixtures } from './fixtures.mjs'
 import { chromeHandoff } from './handoff.mjs'
 import { inputChecks } from './input-check.mjs'
@@ -293,17 +294,20 @@ try {
     return result
   }
   let tabId
-  report.handoff = await chromeHandoff({
-    executor,
-    targetId,
-    origin: site.origin,
-    invocation,
-    context: { ...context, ask: async () => 'once' },
-    check,
-    cdp,
-    identity,
-  })
-  if (process.argv.includes('--handoff-only')) {
+  const dynamicOnly = process.argv.includes('--dynamic-origins-only')
+  if (dynamicOnly) await dynamicOriginChecks({ executor, targetId, site, invocation, check })
+  else
+    report.handoff = await chromeHandoff({
+      executor,
+      targetId,
+      origin: site.origin,
+      invocation,
+      context: { ...context, ask: async () => 'once' },
+      check,
+      cdp,
+      identity,
+    })
+  if (dynamicOnly || process.argv.includes('--handoff-only')) {
     report.success = true
     await cleanup()
     report.elapsedMs = Date.now() - started
@@ -652,16 +656,11 @@ try {
       const original = tabs.find((tab) => tab.url === site.origin + '/')
       tabId = JSON.parse(text(await success('claim', { claimToken: original.claimToken }))).tabId
     })
-    await check('跨来源 iframe 闸 / 重新审批', async () => {
-      const moved = await call('navigate', { tabId, url: `${site.origin}/frames` })
-      assert.equal(moved.success, false)
-      assert.match(text(moved), /originNotApproved/)
-      assert.equal((await call('screenshot', { tabId })).success, false)
-      const list = JSON.parse(text(await success('tabs', { action: 'list', targetId }))).tabs
-      const next = list.find((tab) => tab.url.endsWith('/frames'))
-      tabId = JSON.parse(text(await success('claim', { claimToken: next.claimToken }))).tabId
+    await check('跨来源 iframe 按既有许可登记 / 保留原标签租约', async () => {
+      await success('navigate', { tabId, url: `${site.origin}/frames` })
       await success('snapshot', { tabId })
       await success('screenshot', { tabId })
+      assert.ok(executor.pages.get(tabId).grant.origins.includes(site.other))
     })
     await check('控制端 localhost / 远程来源调用上下文', async () => {
       invocation.device = {
@@ -970,6 +969,7 @@ try {
         Object.assign(invocation, prior)
       }
     })
+    await dynamicOriginChecks({ executor, targetId, site, invocation, check })
     await inputChecks({
       targetId,
       origin: site.origin,
@@ -984,7 +984,14 @@ try {
             tool,
             arguments: args,
           },
-          context,
+          {
+            ...context,
+            // 此组验证的是未授权跳转；新来源现会正常弹卡，必须明确拒绝，不能默认批准后再断言不可读。
+            ask: (request) =>
+              request.kind === 'site' && request.origin === site.other
+                ? Promise.resolve('decline')
+                : context.ask(request),
+          },
         ),
     })
     // 定向 headless 验收不启动额外的 headed 生命周期场景；默认完整验收仍保留全部断言。

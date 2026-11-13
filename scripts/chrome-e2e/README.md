@@ -1,5 +1,8 @@
 # Chrome 自动验收
 
+动态 iframe 回归包含在 headless 场景中（`dynamic-origins.mjs`）：认领后通过页面按钮载入第二来源，分别验证信任所有网站、网站审批卡、黑名单和用户拒绝；未批准的正文不得出现在返回结果中。
+定向执行：`npm run client:check:chrome -- --headless-only --dynamic-origins-only`。
+
 两会话交接定向验收：`node scripts/chrome-e2e/run.mjs --headless-only --handoff-only`。使用隔离 profile 和正式扩展/桥，覆盖未释放时含会话标题的拒绝、不同会话各开各的标签、主动释放后立即认领同一标签、回合结束后认领及旧句柄失效。原生输入锁的无输入回归在 Computer Use 的 `InputOwnershipTests`，交还接线在 `input-release.test.mts`；定向脚本不向系统发送键鼠输入。
 
 测试和验收启动 Chrome for Testing、Chromium 或 Electron 时，参数统一经过 `third_party/litch-automation/scripts/chromium-test-args.mjs` 的 `withChromiumTestArgs(args)`，固定使用 `--use-mock-keychain` 和 `--password-store=basic`。Playwright 放进 `args`，CDP 直起传给进程参数；Launch Services 的 `--args` 后也用同一 helper。根 `npm run check` 检查实际启动参数，防止新入口漏项；产品运行时不使用此 helper。

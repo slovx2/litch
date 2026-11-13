@@ -33,6 +33,14 @@ export async function fixtures() {
       return res.end(
         '<!doctype html><title>Unapproved site</title><h1>UNAPPROVED_CONTENT_MUST_NOT_LEAK</h1>',
       )
+    if (url.pathname === '/dynamic-frame-content')
+      return res.end(
+        '<!doctype html><title>Dynamic editor</title><h1>DYNAMIC_EDITOR_CONTENT</h1><script>parent.postMessage("DYNAMIC_EDITOR_CONTENT", "*")</script>',
+      )
+    if (url.pathname === '/dynamic-frames')
+      return res.end(`<!doctype html><title>Dynamic frames</title><h1>Atlas workspace</h1>
+      <button onclick="if(!document.querySelector('iframe')){const frame=document.createElement('iframe');frame.src='${other}/dynamic-frame-content';document.body.append(frame)}">Add editor</button>
+      <p id="editor-result"></p><script>addEventListener('message', event => {if(event.origin==='${other}' && event.data==='DYNAMIC_EDITOR_CONTENT') document.querySelector('#editor-result').textContent=event.data})</script>`)
     if (url.pathname === '/remote-upload')
       return res.end(`<!doctype html><title>Remote upload</title>
       <input id="remote-file" type="file" hidden accept=".txt"><button onclick="document.getElementById('remote-file').click()">Remote trigger</button>
