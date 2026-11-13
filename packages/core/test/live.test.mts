@@ -229,8 +229,16 @@ function setup(
     'turn/interrupt': () => ({}),
     'thread/turns/list': (params) => {
       world.turnLists.push(params)
-      const last = world.lastTurn[(params as { threadId: string }).threadId]
-      return { data: last ? [last] : [], nextCursor: null }
+      const { threadId } = params as { threadId: string }
+      const last = world.lastTurn[threadId]
+      return {
+        data: Object.hasOwn(world.lastTurn, threadId)
+          ? last
+            ? [last]
+            : []
+          : [...(world.threads.find((entry) => entry.id === threadId)?.turns ?? [])].reverse(),
+        nextCursor: null,
+      }
     },
     'turn/steer': (params) => {
       if (world.steerFailure) throw world.steerFailure
@@ -940,6 +948,305 @@ test('打断：用对面给的回合标识；对面还没给标识、或者没�
   await command('session.send', { ...where, text: '跑起来' })
   await command('session.interrupt', where)
   assert.deepEqual(sent('turn/interrupt'), [{ threadId: 'a', turnId: 'srv-1' }])
+})
+
+for (const [code, message] of [
+  [-32600, 'expected active turn id 3 but found 13'],
+  [-32600, 'expected active turn id `3` but found `13`'],
+  [-32009, '指定回合与当前活动回合不一致'],
+  [-32009, '指定回合与活动回合不一致'],
+  [-32600, 'no active turn to interrupt'],
+] as const) {
+  test(`过时回合停止恢复：${message}，查询真实回合13后只重试一次`, async () => {
+    const { core, world, handlers, peer, command, sent } = setup([
+      thread({ id: 'a', turns: [started('3')] }),
+    ])
+    runtime(handlers, 'codex')
+    let attempts = 0
+    handlers['turn/interrupt'] = (params) => {
+      if (++attempts === 1) throw new RpcFailure(code, message)
+      assert.equal((params as { turnId: string }).turnId, '13')
+      world.threads[0] = thread({
+        id: 'a',
+        status: { type: 'idle' },
+        turns: [finished('3'), finished('13', { status: 'interrupted' })],
+      })
+      peer.last().notify('turn/completed', {
+        threadId: 'a',
+        turn: finished('13', { status: 'interrupted' }),
+      })
+      return {}
+    }
+    core.start()
+    await settle()
+    const session = watch(core)
+    await settle()
+    // 模拟服务端已推进，但客户端没有收到中间事件，不读取真实会话。
+    world.threads[0] = thread({
+      id: 'a',
+      status: { type: 'active', activeFlags: [] },
+      turns: [finished('3'), started('13')],
+    })
+    await command('session.interrupt', where)
+    await settle()
+    assert.deepEqual(sent('turn/interrupt'), [
+      { threadId: 'a', turnId: '3' },
+      { threadId: 'a', turnId: '13' },
+    ])
+    assert.equal(sent('thread/turns/list').length, 1)
+    assert.ok(session.seen.view?.turns.every((entry) => entry.status !== 'running'))
+    await command('session.send', { ...where, text: '停止后继续工作' })
+    assert.equal(sent('turn/start').length, 1)
+    core.stop()
+  })
+}
+
+for (const [code, message] of [
+  [-32600, 'expected active turn id 3 but found 13'],
+  [-32600, 'expected active turn id `3` but found `13`'],
+  [-32600, 'no active turn to steer'],
+  [-32009, '指定回合与当前活动回合不一致'],
+  [-32009, '指定回合与活动回合不一致'],
+] as const) {
+  test(`过时回合插话恢复：${message}，按13继续且不重复正文`, async () => {
+    const { core, world, handlers, command, sent } = setup([
+      thread({ id: 'a', turns: [started('3')] }),
+    ])
+    runtime(handlers, 'codex')
+    let attempts = 0
+    handlers['turn/steer'] = (params) => {
+      if (++attempts === 1) throw new RpcFailure(code, message)
+      assert.equal((params as { expectedTurnId: string }).expectedTurnId, '13')
+      return { turnId: '13' }
+    }
+    core.start()
+    await settle()
+    const session = watch(core)
+    await settle()
+    world.threads[0] = thread({
+      id: 'a',
+      status: { type: 'active', activeFlags: [] },
+      turns: [finished('3'), started('13')],
+    })
+    await command('session.send', { ...where, text: '核实后插话原文', now: true })
+    await settle()
+    assert.equal(sent('thread/turns/list').length, 1)
+    assert.deepEqual(
+      sent('turn/steer').map((value) => (value as { expectedTurnId: string }).expectedTurnId),
+      ['3', '13'],
+    )
+    assert.equal(sent('turn/start').length, 0)
+    assert.equal(session.seen.view?.queued.length, 0)
+    assert.equal(JSON.stringify(session.texts()).match(/核实后插话原文/g)?.length, 1)
+    core.stop()
+  })
+}
+
+for (const action of ['session.interrupt', 'session.send'] as const) {
+  test(`回合核实终态：${action} 不继续请求已经结束的回合`, async () => {
+    const { core, world, handlers, command, sent } = setup([
+      thread({ id: 'a', turns: [started('3')] }),
+    ])
+    const message =
+      action === 'session.interrupt' ? 'no active turn to interrupt' : 'no active turn to steer'
+    handlers[action === 'session.interrupt' ? 'turn/interrupt' : 'turn/steer'] = () => {
+      throw new RpcFailure(-32600, message)
+    }
+    core.start()
+    await settle()
+    const session = watch(core)
+    await settle()
+    world.threads[0] = thread({
+      id: 'a',
+      status: { type: 'idle' },
+      turns: [finished('3'), finished('13')],
+    })
+    await command(action, {
+      ...where,
+      ...(action === 'session.send' ? { text: '终态后的消息', now: true } : {}),
+    })
+    await settle()
+    assert.equal(sent('thread/turns/list').length, 1)
+    if (action === 'session.interrupt') {
+      assert.equal(sent('turn/interrupt').length, 1)
+      assert.ok(session.seen.view?.turns.every((entry) => entry.status !== 'running'))
+    } else {
+      assert.equal(sent('turn/steer').length, 1)
+      assert.equal(sent('turn/start').length, 1)
+      assert.equal(session.seen.view?.queued.length, 0)
+    }
+    core.stop()
+  })
+
+  test(`连续回合冲突：${action} 最多补发一次，不循环`, async () => {
+    const { core, world, handlers, command, sent } = setup([
+      thread({ id: 'a', turns: [started('3')] }),
+    ])
+    const method = action === 'session.interrupt' ? 'turn/interrupt' : 'turn/steer'
+    handlers[method] = () => {
+      throw new RpcFailure(-32600, 'expected active turn id 13 but found 14')
+    }
+    core.start()
+    await settle()
+    const session = watch(core)
+    await settle()
+    world.threads[0] = thread({
+      id: 'a',
+      status: { type: 'active', activeFlags: [] },
+      turns: [finished('3'), started('13')],
+    })
+    const pending = command(action, {
+      ...where,
+      ...(action === 'session.send' ? { text: '保留唯一原文', now: true } : {}),
+    })
+    if (action === 'session.interrupt') await assert.rejects(pending)
+    else await pending
+    assert.equal(sent(method).length, 2)
+    assert.equal(sent('thread/turns/list').length, 1)
+    assert.equal(sent('turn/start').length, 0)
+    if (action === 'session.send')
+      assert.deepEqual(
+        session.seen.view?.queued.map((entry) => [entry.text, entry.delivery]),
+        [['保留唯一原文', 'held']],
+      )
+    core.stop()
+  })
+}
+
+for (const [code, message] of [
+  [-32600, 'expected active turn id 3 but found 13; unrelated details'],
+  [-32600, 'permission denied'],
+  [-32602, 'expected active turn id 3 but found 13'],
+] as const) {
+  test(`非目标错误不恢复：${code} ${message}`, async () => {
+    const { core, handlers, command, sent } = setup([thread({ id: 'a', turns: [started('3')] })])
+    handlers['turn/interrupt'] = () => {
+      throw new RpcFailure(code, message)
+    }
+    core.start()
+    await settle()
+    watch(core)
+    await settle()
+    await assert.rejects(command('session.interrupt', where))
+    assert.equal(sent('turn/interrupt').length, 1)
+    assert.equal(sent('thread/turns/list').length, 0)
+    core.stop()
+  })
+}
+
+test('turn/start 的13应答必须纠正迟到的3通知，不能永久绑定在错误回合', async () => {
+  const { core, world, peer, handlers, command, sent } = setup([
+    thread({ id: 'a', turns: [finished('12')] }),
+  ])
+  handlers['turn/start'] = () => {
+    // 旧回合未在当前历史窗口里，迟到通知恰好先于正确的启动应答到达。
+    peer.last().notify('turn/started', {
+      threadId: 'a',
+      turn: turn('3', [userText('old', '旧回合原文')], { status: 'inProgress' }),
+    })
+    world.threads[0] = thread({
+      id: 'a',
+      status: { type: 'active', activeFlags: [] },
+      turns: [
+        turn('3', [userText('old', '旧回合原文')]),
+        finished('12'),
+        turn('13', [userText('new', '启动真实回合13')], { status: 'inProgress' }),
+      ],
+    })
+    return { turn: started('13') }
+  }
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  await command('session.send', { ...where, text: '启动真实回合13' })
+  await command('session.interrupt', where)
+  assert.deepEqual(sent('turn/interrupt'), [{ threadId: 'a', turnId: '13' }])
+  assert.equal(session.seen.view?.turns.filter((entry) => entry.status === 'running').length, 1)
+  const texts = session.texts().flat()
+  assert.equal(texts.filter((text) => text === '旧回合原文').length, 1)
+  assert.equal(texts.filter((text) => text === '启动真实回合13').length, 1)
+  core.stop()
+})
+
+test('回合3到13：新回合通知到达或连接恢复时，视图使用13，不会自行丢弃回合号', async () => {
+  for (const route of ['notification', 'reconnect'] as const) {
+    const { core, world, peer, time, command, sent } = setup([
+      thread({ id: 'a', turns: [started('3')] }),
+    ])
+    core.start()
+    await settle()
+    const session = watch(core)
+    await settle()
+    world.threads[0] = thread({
+      id: 'a',
+      status: { type: 'active', activeFlags: [] },
+      turns: [finished('3'), started('13')],
+    })
+    if (route === 'notification') {
+      peer.last().notify('turn/completed', { threadId: 'a', turn: finished('3') })
+      peer.last().notify('turn/started', { threadId: 'a', turn: started('13') })
+    } else {
+      peer.last().drop()
+      await settle()
+      time.advance(500)
+    }
+    await settle()
+    await settle()
+    assert.equal(session.seen.view?.turns.at(-1)?.id, '13')
+    await command('session.interrupt', where)
+    assert.deepEqual(sent('turn/interrupt'), [{ threadId: 'a', turnId: '13' }])
+    core.stop()
+  }
+})
+
+test('thread/read 仍返回旧回合3：冲突恢复按 turns/list 的13更新，而非读取旧快照', async () => {
+  const old = thread({ id: 'a', turns: [started('3')] })
+  const { core, world, handlers, command, sent } = setup([old])
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  handlers['thread/read'] = () => ({ thread: old })
+  world.threads[0] = thread({
+    id: 'a',
+    status: { type: 'active', activeFlags: [] },
+    turns: [finished('3'), started('13')],
+  })
+  handlers['turn/interrupt'] = (params) => {
+    if ((params as { turnId: string }).turnId === '3')
+      throw new RpcFailure(-32600, 'expected active turn id 3 but found 13')
+    return {}
+  }
+  await command('session.interrupt', where)
+  assert.equal(session.seen.view?.turns.find((entry) => entry.id === '3')?.status, 'completed')
+  assert.equal(session.seen.view?.turns.at(-1)?.id, '13')
+  assert.deepEqual(
+    sent('turn/interrupt').map((params) => (params as { turnId: string }).turnId),
+    ['3', '13'],
+  )
+  core.stop()
+})
+
+test('后台未打开会话的回合冲突：再查一次最新回合再停止', async () => {
+  const { core, world, handlers, command, sent } = setup([thread({ id: 'b', turns: [] })])
+  world.lastTurn.b = started('3')
+  handlers['turn/interrupt'] = (params) => {
+    if ((params as { turnId: string }).turnId === '3') {
+      world.lastTurn.b = started('13')
+      throw new RpcFailure(-32600, 'expected active turn id 3 but found 13')
+    }
+    return {}
+  }
+  core.start()
+  await settle()
+  await command('session.interrupt', { deviceId: 'local', sessionId: 'b' })
+  assert.deepEqual(
+    sent('turn/interrupt').map((params) => (params as { turnId: string }).turnId),
+    ['3', '13'],
+  )
+  assert.equal(sent('thread/turns/list').length, 2)
+  core.stop()
 })
 
 test('打断没打开过的会话（后台任务页上停一个子会话）：问对面最近的回合，在跑就打断它', async () => {
@@ -2005,6 +2312,7 @@ for (const during of ['stop', 'new-turn', 'remove'] as const) {
     await settle()
     const session = watch(core)
     await settle()
+    world.lastTurn.a = finished('ghost')
     world.steerFailure = new RpcFailure(-32600, 'no active turn to steer')
     const sending = command('session.send', { ...where, text: '等核实的原文', now: true })
     for (let tick = 0; tick < 10 && !finish; tick++) await settle()

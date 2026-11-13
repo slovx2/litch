@@ -371,6 +371,20 @@ const PAUSE_BEFORE_STOP_MS = 500
 const isRunning = (view: SessionView): TurnView | undefined =>
   view.turns.findLast((turn) => turn.status === 'running')
 
+/** Codex 0.163.0 两类拒绝均为 -32600、data=null；不可仅按通用错误码重试。 */
+function staleActiveTurn(error: unknown): boolean {
+  if (!(error instanceof RpcError)) return false
+  if (error.code === -32009)
+    return ['指定回合与当前活动回合不一致', '指定回合与活动回合不一致'].includes(error.message)
+  return (
+    error.code === -32600 &&
+    (/^no active turn to (?:steer|interrupt)$/.test(error.message) ||
+      /^expected active turn id (?:`[^`\r\n]+`|[^\s`]+) but found (?:`[^`\r\n]+`|[^\s`]+)$/.test(
+        error.message,
+      ))
+  )
+}
+
 const UNSUPPORTED = '对方不支持此操作'
 
 export function createLiveSessions(host: LiveHost): LiveSessions {
@@ -1668,6 +1682,14 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       }
       // 通知可能比应答先到，那时已经对上了；没对上就在这里对
       if (!live.view?.turns.some((entry) => entry.id === viewId)) return
+      const notified = serverTurn(live, viewId)
+      if (notified && notified !== turn.id) {
+        // 首条未知通知也可能是迟到的旧回合；启动应答才是本次请求的权威标识。
+        // 重载以分开已混入的历史条目，不能只换 alias 后把两轮正文拼在一起。
+        await load(live)
+        host.touched(live.id, bodyOf(message, mentions))
+        return
+      }
       bind(live, turn.id)
       // 回合在应答到达之前就结束了的极端情况：以应答里的状态为准
       if (turn.status !== 'inProgress') putTurn(live, turn)
@@ -1689,7 +1711,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
   }
 
   /** 只读对账：idle 广播没有回合结局，不能据此把未完成的历史猜成成功。 */
-  const reconcileTurns = async (live: Live): Promise<boolean> => {
+  const reconcileTurns = async (live: Live, current = false): Promise<boolean> => {
     // 超时或被较新的通知作废后，下一次手动发送仍须核实；不能再次等待旧回合的结束通知。
     live.needsTurnCheck = true
     const view = live.view
@@ -1699,12 +1721,26 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       .filter((turn) => turn.status === 'running')
       .map((turn) => ({ viewId: turn.id, serverId: serverTurn(live, turn.id) }))
     try {
+      // 回合号被拒时先核实回合列表，不能依赖可能滞后的 resume/read 历史或报错里的数字。
+      const newest = current
+        ? await host.request(
+            'thread/turns/list',
+            {
+              threadId: live.id,
+              cursor: null,
+              limit: 100,
+              sortDirection: 'desc',
+              itemsView: 'notLoaded',
+            },
+            { timeoutMs: 5000 },
+          )
+        : null
       const { thread } = await host.request(
         'thread/read',
-        { threadId: live.id, includeTurns: !view.history },
+        { threadId: live.id, includeTurns: !view.history && !current },
         { timeoutMs: 5000 },
       )
-      if (view.history) {
+      if (view.history || current) {
         // 长会话只核对回合头，不为几个状态拉回整份历史里的工具输出。
         const missing = new Set(
           running.flatMap((entry) => (entry.serverId ? [entry.serverId] : [])),
@@ -1727,17 +1763,20 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         const turns: Turn[] = []
         let cursor: string | null = null
         do {
-          let page: ClientRequests['thread/turns/list']['result'] = await host.request(
-            'thread/turns/list',
-            {
-              threadId: live.id,
-              cursor,
-              limit: 100,
-              sortDirection: 'desc',
-              itemsView: 'notLoaded',
-            },
-            { timeoutMs: 5000 },
-          )
+          let page: ClientRequests['thread/turns/list']['result'] =
+            cursor === null && newest
+              ? newest
+              : await host.request(
+                  'thread/turns/list',
+                  {
+                    threadId: live.id,
+                    cursor,
+                    limit: 100,
+                    sortDirection: 'desc',
+                    itemsView: 'notLoaded',
+                  },
+                  { timeoutMs: 5000 },
+                )
           if (page.nextCursor !== null && page.nextCursor === cursor)
             throw new Error('回合核实的分页游标未前进')
           // 只有交付结果仍未知的那一页需要消息正文，不能从回合终态猜测插话是否已被消费。
@@ -1771,6 +1810,23 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         pauseQueue(live)
       for (const entry of running) {
         const turn = thread.turns.find((candidate) => candidate.id === entry.serverId)
+        if (!turn && current && (latest || thread.status.type === 'idle')) {
+          // 权威列表已穷尽却无此回合，可能被回退移除；只收尾为中止，不猜测执行成功。
+          emit(live, [
+            {
+              op: 'turn.status',
+              turnId: entry.viewId,
+              status: 'interrupted',
+              durationMs: null,
+              error: null,
+            },
+          ])
+          settleItems(live, entry.serverId ?? entry.viewId, false)
+          settleTodo(live, entry.serverId ?? entry.viewId)
+          settleSteered(live, entry.viewId, false)
+          settleRequests(live, (request) => request.turnId === entry.serverId)
+          continue
+        }
         if (!turn || turn.status === 'inProgress') continue
         for (const item of turn.items) reconcileInput(live, item)
         putTurn(live, turn)
@@ -1783,7 +1839,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       for (const turn of thread.turns) {
         if (
           turn.status === 'inProgress' &&
-          !view.turns.some((entry) => entry.id === viewTurn(live, turn.id))
+          (current || !view.turns.some((entry) => entry.id === viewTurn(live, turn.id)))
         )
           putTurn(live, turn)
       }
@@ -2597,124 +2653,134 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     },
 
     async steer(sessionId, messageId) {
-      const live = need(sessionId)
-      const message = live.queued.find((entry) => entry.id === messageId)
-      if (!message) throw new ChannelError('rejected', '该消息已不在队列中')
-      if (message.delivery)
-        throw new ChannelError('rejected', '该消息已暂停，请使用待发消息的发送或编辑操作')
-      mustReach(live)
-      if (live.stale || live.loading) {
-        live.immediate.add(messageId)
-        setNote(live, phrase('session.inputSyncing'))
-        return
-      }
-      if (isCompacting(live)) {
-        live.immediate.add(messageId)
-        return
-      }
-      const starting = live.starting ? live.startingInput.get(live.starting) : undefined
-      if (starting) {
-        const revision = live.pauseRevision
-        setNote(live, phrase('session.inputSyncing'))
-        if (!(await starting.ready) || revision !== live.pauseRevision || live.paused)
-          throw new ChannelError(
-            'rejected',
-            '回合启动已取消，消息仍待发',
-            phrase('session.steerHeld'),
-          )
-        if (!live.queued.some((row) => row.id === messageId)) return
+      const attempt = async (recover: boolean): Promise<void> => {
+        const live = need(sessionId)
+        const message = live.queued.find((entry) => entry.id === messageId)
+        if (!message) throw new ChannelError('rejected', '该消息已不在队列中')
+        if (message.delivery)
+          throw new ChannelError('rejected', '该消息已暂停，请使用待发消息的发送或编辑操作')
         mustReach(live)
         if (live.stale || live.loading) {
           live.immediate.add(messageId)
+          setNote(live, phrase('session.inputSyncing'))
           return
         }
-      }
-      const running = isRunning(live.view)
-      const turnId = running ? serverTurn(live, running.id) : null
-      if (!running || !turnId) throw new ChannelError('rejected', '当前没有可插入消息的回合')
-      const { harness } = live.view
-      const can = abilities(harness, live.id)
-      // 声明了不会的、试过不行的：不去发，消息照常排着等这个回合结束
-      if (!can.steer) throw new ChannelError('unsupported', UNSUPPORTED)
-      if (!can.steerImages && message.images.length > 0) {
-        throw new ChannelError(
-          'rejected',
-          '带图片的消息不能中途插进去',
-          phrase('fault.steerImages'),
-        )
-      }
-      const clientId = `litch-${host.deviceId}-${runMark}-${++localSeq}`
-      const key = `${running.id}:steer:${localSeq}`
-      // 先从队列里拿出来、显示进回合里，不等对面
-      live.queued = live.queued.filter((entry) => entry !== message)
-      const { id: _queueId, ...said } = message
-      const mentions = mentionsIn(live)
-      const tracked =
-        host.terms(harness, live.id)?.extensions.includes(EXTENSION.inputDelivery) === true
-      live.steered.set(clientId, { key, turnId: running.id, message: said, tracked })
-      emit(live, [
-        { op: 'queue.set', queued: live.queued },
-        {
-          op: 'item.add',
-          turnId: running.id,
-          item: {
-            ...localUserMessage(key, said, mentions),
-            unconfirmed: true,
-            ...(tracked ? { delivery: 'queued' as const } : {}),
-          },
-        },
-      ])
-      try {
-        await host.request('turn/steer', {
-          threadId: sessionId,
-          expectedTurnId: turnId,
-          clientUserMessageId: clientId,
-          input: toInput(said, mentions),
-        })
-      } catch (error) {
-        // 没插成：原样退回队首；明确没有活动回合时先核实，不能无限等一个不会到来的结束通知。
-        // 停止收尾或回显已经接管此输入，迟到的失败不能再恢复第二份。
-        if (!live.steered.has(clientId)) return
-        const staleTurn =
-          error instanceof RpcError &&
-          (error.message === 'no active turn to steer' ||
-            (error.code === -32009 &&
-              ['指定回合与当前活动回合不一致', '指定回合与活动回合不一致'].includes(error.message)))
-        if (staleTurn) live.needsTurnCheck = true
-        live.steered.delete(clientId)
-        live.queued = [live.paused ? { ...message, delivery: 'held' } : message, ...live.queued]
-        emit(live, [
-          { op: 'item.remove', turnId: running.id, itemId: key },
-          { op: 'queue.set', queued: live.queued },
-        ])
-        // 请求发出后服务端才进入压缩：明确拒绝并未受理，留给压缩结束事件恢复。
-        if (
-          error instanceof RpcError &&
-          error.code === -32009 &&
-          error.message === '正在压缩上下文，请等待压缩结束后发送'
-        ) {
-          if (!live.paused) live.immediate.add(messageId)
+        if (isCompacting(live)) {
+          live.immediate.add(messageId)
           return
         }
-        if (staleTurn) {
-          const idle = await reconcileTurns(live)
-          // 用户可能在对账期间移除消息；不要把它恢复回来，也不要覆盖其他消息的结果。
-          if (!live.queued.some((entry) => entry.id === message.id)) return
-          if (idle && !live.paused) {
-            setNote(live, null)
-            pump(live)
-          } else {
-            pauseQueue(live)
-            setNote(live, phrase('session.steerHeld'))
+        const starting = live.starting ? live.startingInput.get(live.starting) : undefined
+        if (starting) {
+          const revision = live.pauseRevision
+          setNote(live, phrase('session.inputSyncing'))
+          if (!(await starting.ready) || revision !== live.pauseRevision || live.paused)
+            throw new ChannelError(
+              'rejected',
+              '回合启动已取消，消息仍待发',
+              phrase('session.steerHeld'),
+            )
+          if (!live.queued.some((row) => row.id === messageId)) return
+          mustReach(live)
+          if (live.stale || live.loading) {
+            live.immediate.add(messageId)
+            return
           }
-          return
         }
-        pump(live)
-        if (!lacksMethod(error)) throw failure(error)
-        // 对面不会引导：记下来，这个 harness 上的入口都停掉
-        markLacking(deviceFault(error)?.harness ?? harness, 'steer', live.id)
-        throw new ChannelError('unsupported', UNSUPPORTED)
+        const running = isRunning(live.view)
+        const turnId = running ? serverTurn(live, running.id) : null
+        if (!running || !turnId) throw new ChannelError('rejected', '当前没有可插入消息的回合')
+        const { harness } = live.view
+        const can = abilities(harness, live.id)
+        // 声明了不会的、试过不行的：不去发，消息照常排着等这个回合结束
+        if (!can.steer) throw new ChannelError('unsupported', UNSUPPORTED)
+        if (!can.steerImages && message.images.length > 0) {
+          throw new ChannelError(
+            'rejected',
+            '带图片的消息不能中途插进去',
+            phrase('fault.steerImages'),
+          )
+        }
+        const clientId = `litch-${host.deviceId}-${runMark}-${++localSeq}`
+        const key = `${running.id}:steer:${localSeq}`
+        // 先从队列里拿出来、显示进回合里，不等对面
+        live.queued = live.queued.filter((entry) => entry !== message)
+        const { id: _queueId, ...said } = message
+        const mentions = mentionsIn(live)
+        const tracked =
+          host.terms(harness, live.id)?.extensions.includes(EXTENSION.inputDelivery) === true
+        live.steered.set(clientId, { key, turnId: running.id, message: said, tracked })
+        emit(live, [
+          { op: 'queue.set', queued: live.queued },
+          {
+            op: 'item.add',
+            turnId: running.id,
+            item: {
+              ...localUserMessage(key, said, mentions),
+              unconfirmed: true,
+              ...(tracked ? { delivery: 'queued' as const } : {}),
+            },
+          },
+        ])
+        try {
+          await host.request('turn/steer', {
+            threadId: sessionId,
+            expectedTurnId: turnId,
+            clientUserMessageId: clientId,
+            input: toInput(said, mentions),
+          })
+        } catch (error) {
+          // 没插成：原样退回队首；明确没有活动回合时先核实，不能无限等一个不会到来的结束通知。
+          // 停止收尾或回显已经接管此输入，迟到的失败不能再恢复第二份。
+          if (!live.steered.has(clientId)) return
+          const staleTurn = staleActiveTurn(error)
+          if (staleTurn) live.needsTurnCheck = true
+          live.steered.delete(clientId)
+          live.queued = [live.paused ? { ...message, delivery: 'held' } : message, ...live.queued]
+          emit(live, [
+            { op: 'item.remove', turnId: running.id, itemId: key },
+            { op: 'queue.set', queued: live.queued },
+          ])
+          // 请求发出后服务端才进入压缩：明确拒绝并未受理，留给压缩结束事件恢复。
+          if (
+            error instanceof RpcError &&
+            error.code === -32009 &&
+            error.message === '正在压缩上下文，请等待压缩结束后发送'
+          ) {
+            if (!live.paused) live.immediate.add(messageId)
+            return
+          }
+          if (staleTurn) {
+            const revision = live.pauseRevision
+            const idle = recover ? await reconcileTurns(live, true) : false
+            // 用户可能在对账期间移除消息；不要把它恢复回来，也不要覆盖其他消息的结果。
+            if (!live.queued.some((entry) => entry.id === message.id)) return
+            if (idle && !live.paused) {
+              setNote(live, null)
+              pump(live)
+            } else if (
+              recover &&
+              !live.needsTurnCheck &&
+              !live.paused &&
+              live.pauseRevision === revision &&
+              isRunning(live.view)
+            ) {
+              setNote(live, null)
+              // 核实后的回合只补发一次；第二次拒绝保留待发，不递归恢复。
+              await attempt(false)
+            } else {
+              pauseQueue(live)
+              setNote(live, phrase('session.steerHeld'))
+            }
+            return
+          }
+          pump(live)
+          if (!lacksMethod(error)) throw failure(error)
+          // 对面不会引导：记下来，这个 harness 上的入口都停掉
+          markLacking(deviceFault(error)?.harness ?? harness, 'steer', live.id)
+          throw new ChannelError('unsupported', UNSUPPORTED)
+        }
       }
+      await attempt(true)
     },
 
     async interrupt(sessionId) {
@@ -2738,7 +2804,20 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         try {
           await host.request('turn/interrupt', { threadId: sessionId, turnId: last.id })
         } catch (error) {
-          throw failure(error)
+          if (!staleActiveTurn(error)) throw failure(error)
+          try {
+            const page = await host.request('thread/turns/list', {
+              threadId: sessionId,
+              limit: 1,
+              sortDirection: 'desc',
+              itemsView: 'notLoaded',
+            })
+            const current = page.data[0]
+            if (current?.status === 'inProgress')
+              await host.request('turn/interrupt', { threadId: sessionId, turnId: current.id })
+          } catch (retryError) {
+            throw failure(retryError)
+          }
         }
         return
       }
@@ -2773,7 +2852,22 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       try {
         await host.request('turn/interrupt', { threadId: sessionId, turnId })
       } catch (error) {
-        throw failure(error)
+        if (!staleActiveTurn(error)) throw failure(error)
+        await reconcileTurns(live, true)
+        if (live.needsTurnCheck) throw failure(error)
+        const current = isRunning(live.view)
+        const latest = current ? serverTurn(live, current.id) : null
+        if (!latest) {
+          setNote(live, null)
+          return
+        }
+        try {
+          await host.request('turn/interrupt', { threadId: sessionId, turnId: latest })
+          setNote(live, null)
+        } catch (retryError) {
+          live.needsTurnCheck = staleActiveTurn(retryError)
+          throw failure(retryError)
+        }
       }
     },
 
