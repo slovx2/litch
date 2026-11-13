@@ -578,6 +578,8 @@ explain it:
   says so and does not wake the parent. A scheduled run ends with its turn too; when the background
   work finishes later, the run's summary and count are updated and it shows as unread again.
   原生 Codex 登记的任务在后台页显示自动继续状态。停止回合会暂停自动继续，命令本身不会额外被杀；输入框中的待发消息不会因此自动发送，用户明确发送后才能解除暂停。取消登记只撤销自动继续，停止命令使用后台页的停止按钮。客户端全部断开时，设备仍可收到结果并继续；设备服务或 Codex 重启不自动续跑，已保存结果仍可读取。自动续跑没有次数上限，可能持续产生模型费用；重复完成只投递一次，交付未确认时不自动重试。官方客户端同时打开同一线程会看到标准回合和工具输出；绕过设备的并发写入不能获得设备侧的原子仲裁保证。
+  原生 Codex 在活动回合收到的后台完成结果，在桌面和手机中均显示为“后台任务完成”事件条；重新打开会话或重连后，首屏历史和后续分页保持相同显示，不显示为用户消息。
+  Native Codex background completions delivered during an active turn appear as a “Background task completed” event on desktop and phone. Reopening or reconnecting preserves that display in both the initial history page and later pages.
   To stop a task without the Stop button, ask the model or stop the turn. With Pi's "Ask before acting" on, starting a background command is asked about like
   any other command; in OpenCode's read-only permission mode the model cannot start one, and outside
   the project folder it asks first (except with full access). On the phone, the same line (or
