@@ -44,6 +44,7 @@ export interface MockManagerHost
   say(deviceId: string, threadId: string, prompt: string, answer: string): void
   add(deviceId: string, session: ManagerSessionSummary): void
   mark(deviceId: string, threadId: string, manager: ManagerView): void
+  rebind?(deviceId: string, oldThreadId: string, newThreadId: string): void
   /** 是否宣告经理 issue；不给当作宣告 */
   issues?: boolean
   /** 发出结束事件并开始收尾回合；回合停止时由宿主调用 turnEnded。 */
@@ -65,6 +66,13 @@ export function createMockManagers(host: MockManagerHost) {
   const lists = new Map<string, Set<HostSink>>()
   const boards = new Map<string, Set<HostSink>>()
   const endingTurns = new Map<string, string>()
+  const resetRequests = new Map<
+    string,
+    {
+      fingerprint: string
+      operation: import('../../../protocol/src/manager.mjs').ManagerResetOperation
+    }
+  >()
   const liveLines = new Set<string>()
   let seq = 0
   const t = (zh: string, en: string) => (host.lang === 'zh-CN' ? zh : en)
@@ -346,9 +354,9 @@ export function createMockManagers(host: MockManagerHost) {
       const { target: requested } = params as Commands['managers.reset.preview']['params']
       const source = {
         harness: manager.harness,
-        model: manager.model,
-        effort: manager.effort,
-        permission: manager.permission ?? ':danger-full-access',
+        model: manager.model ?? (manager.harness === 'codex' ? 'gpt-6.1' : 'claude-sonnet-4-6'),
+        effort: manager.effort ?? 'medium',
+        permission: manager.permission ?? ':workspace',
       }
       const target = requested ?? { ...source }
       const candidates = ['claude-code', 'codex', 'pi', 'opencode', 'dsh', 'acp'].map((harness) => {
@@ -387,14 +395,19 @@ export function createMockManagers(host: MockManagerHost) {
       if (target.permission !== source.permission)
         reasons.push({ code: 'permissionMismatch', message: 'The manager permission is fixed.' })
       const dispatch = target.dispatch ?? manager.dispatch
-      const effective = (harness: string, model: string | null, effort: string | null) => ({
-        harness: dispatch.harness ?? harness,
-        model: dispatch.model ?? (!dispatch.harness || dispatch.harness === harness ? model : null),
+      const effective = (
+        harness: string,
+        model: string | null,
+        effort: string | null,
+        defaults: typeof dispatch,
+      ) => ({
+        harness: defaults.harness ?? harness,
+        model: defaults.model ?? (!defaults.harness || defaults.harness === harness ? model : null),
         effort:
-          dispatch.effort ?? (!dispatch.harness || dispatch.harness === harness ? effort : null),
+          defaults.effort ?? (!defaults.harness || defaults.harness === harness ? effort : null),
       })
-      const before = effective(source.harness, source.model, source.effort)
-      const after = effective(resolved.harness, resolved.model, resolved.effort)
+      const before = effective(source.harness, source.model, source.effort, manager.dispatch)
+      const after = effective(resolved.harness, resolved.model, resolved.effort, dispatch)
       return {
         managerId,
         cwd: manager.cwd,
@@ -417,13 +430,16 @@ export function createMockManagers(host: MockManagerHost) {
           source.harness === 'claude-code'
             ? 'refresh'
             : 'replace',
-        capabilityChanges: [
-          {
-            capability: 'nativeBackground',
-            before: source.harness === 'claude-code',
-            after: resolved.harness === 'claude-code',
-          },
-        ],
+        capabilityChanges:
+          source.harness === resolved.harness
+            ? []
+            : [
+                {
+                  capability: 'nativeBackground',
+                  before: source.harness === 'claude-code',
+                  after: resolved.harness === 'claude-code',
+                },
+              ],
         dispatchChanges: (['harness', 'model', 'effort'] as const).flatMap((field) =>
           before[field] === after[field]
             ? []
@@ -626,8 +642,21 @@ export function createMockManagers(host: MockManagerHost) {
       result = { manager }
     } else if (name === 'managers.reset') {
       const input = params as Commands['managers.reset']['params']
-      const previous = manager.reset?.operation
-      if (input.target && previous?.requestId === input.requestId) return { manager: copy(manager) }
+      const requestKey = JSON.stringify([deviceId, managerId, input.requestId])
+      const fingerprint = JSON.stringify({
+        target: input.target,
+        expectedThreadId: input.expectedThreadId,
+        expectedSettingsHash: input.expectedSettingsHash,
+      })
+      const previous = resetRequests.get(requestKey)
+      if (input.target && previous) {
+        if (previous.fingerprint !== fingerprint)
+          throw new ChannelError(
+            'invalid',
+            'This requestId was already used with another reset plan.',
+          )
+        return { manager: copy(manager), operation: copy(previous.operation) }
+      }
       let operation: import('../../../protocol/src/manager.mjs').ManagerResetOperation | undefined
       let mode = manager.harness === 'claude-code' ? ('refresh' as const) : ('replace' as const)
       if (input.target) {
@@ -656,6 +685,7 @@ export function createMockManagers(host: MockManagerHost) {
           })
           for (const line of board.lines)
             if (line.parentThreadId === oldId) line.parentThreadId = manager.threadId
+          host.rebind?.(deviceId, oldId, manager.threadId)
         }
         operation = {
           requestId: input.requestId,
@@ -666,6 +696,9 @@ export function createMockManagers(host: MockManagerHost) {
           committed: true,
           handover: 'accepted',
         }
+        resetRequests.set(requestKey, { fingerprint, operation: copy(operation) })
+        if (resetRequests.size > 32)
+          resetRequests.delete(resetRequests.keys().next().value as string)
         Object.assign(manager, preview.target)
         host.mark(deviceId, manager.threadId, manager)
       }
@@ -677,7 +710,7 @@ export function createMockManagers(host: MockManagerHost) {
         phase: 'ready',
         ...(operation ? { operation } : {}),
       }
-      result = { manager }
+      result = { manager, ...(operation ? { operation } : {}) }
     } else if (name === 'managers.end') {
       manager.status = 'ending'
       activity(board, t('经理正在收尾', 'Manager is wrapping up'))
@@ -1000,6 +1033,11 @@ export function createMockManagers(host: MockManagerHost) {
   }
   for (const device of host.devices()) state(device.id)
   const readOnlyNote = (deviceId: string, threadId: string): string | null => {
+    if (state(deviceId).managers.some((entry) => entry.historyThreadIds?.includes(threadId)))
+      return t(
+        '此经理会话已被替换，对话只读',
+        'This manager session was replaced. Chat is read-only.',
+      )
     const manager = state(deviceId).managers.find((entry) => entry.threadId === threadId)
     if (!manager || manager.status === 'active') return null
     return manager.status === 'ending'

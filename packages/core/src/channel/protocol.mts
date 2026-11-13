@@ -595,7 +595,10 @@ export interface Commands {
   }
   'managers.reset': {
     params: { deviceId: string } & import('../../../protocol/src/manager.mjs').ManagerResetParams
-    result: { manager: ManagerView }
+    result: {
+      manager: ManagerView
+      operation?: import('../../../protocol/src/manager.mjs').ManagerResetOperation
+    }
   }
   'managers.reset.preview': {
     params: {

@@ -714,7 +714,10 @@ export function createManagers(host: ManagersHost) {
     async reset(input: import('../../../protocol/src/manager.mjs').ManagerResetParams) {
       if (input.target) requires('resetTarget', MANAGER_METHOD.reset)
       const result = await guarded(() => host.request(MANAGER_METHOD.reset, input))
-      return { manager: settle(result.manager) }
+      return {
+        manager: settle(result.manager),
+        ...(result.operation ? { operation: result.operation } : {}),
+      }
     },
     async end(managerId: string) {
       const result = await guarded(() => host.request(MANAGER_METHOD.end, { managerId }))

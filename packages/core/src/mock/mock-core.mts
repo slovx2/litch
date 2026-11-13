@@ -2312,7 +2312,19 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       sidebars.get(deviceId)?.sessions.push(session)
       emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session }])
     },
+    rebind(deviceId, oldThreadId, newThreadId) {
+      tree.rebindManager(deviceId, oldThreadId, newThreadId)
+    },
     mark(deviceId, threadId, manager) {
+      for (const oldId of manager.historyThreadIds ?? []) {
+        const cleared = { title: findSummary(deviceId, oldId).title, litchManager: undefined }
+        updateSummary(deviceId, oldId, cleared)
+        const oldView = sessions.get(`session:${deviceId}:${oldId}`)
+        if (oldView)
+          applySessionOps(oldView, [
+            { op: 'session.state', live: false, note: managers.readOnlyNote(deviceId, oldId) },
+          ])
+      }
       const marked = {
         title: manager.name || manager.scope,
         litchManager: { managerId: manager.id, role: 'manager' as const },

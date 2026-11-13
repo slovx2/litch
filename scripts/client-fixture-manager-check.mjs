@@ -175,7 +175,7 @@ export async function startManagerFixture(t, engines) {
   return { ...(await ready), modelDump: env.LITCH_FIXTURE_DUMP }
 }
 
-export async function managerClient(t, socket, namespaces = []) {
+export async function managerClient(t, socket, namespaces = [], extensions = []) {
   const ws = new WebSocket('ws://localhost/', {
     createConnection: () => net.createConnection(socket),
     handshakeTimeout: 10_000,
@@ -236,6 +236,7 @@ export async function managerClient(t, socket, namespaces = []) {
         'clientTools',
         'litchManager',
         'suggestionInbox',
+        ...extensions,
       ],
       litchClientTools: { namespaces },
     },

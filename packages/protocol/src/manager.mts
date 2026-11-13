@@ -345,6 +345,10 @@ export interface ManagerResetOperation {
   /** 已提交也可能尚未成功投递接班首轮。 */
   handover: 'pending' | 'accepted' | 'failed'
 }
+export interface ManagerResetResponse extends ManagerResponse {
+  /** 本次 requestId 的幂等回执；manager.reset 始终投影经理当前的操作。 */
+  operation?: ManagerResetOperation
+}
 /** 只取消 waiting；已开始摘要或提交时返回 managerResetBusy，已结束时幂等返回。 */
 export interface ManagerResetCancelParams {
   managerId: string

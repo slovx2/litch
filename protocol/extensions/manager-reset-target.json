@@ -2,13 +2,15 @@
   "extension": "litchManagerResetTarget",
   "description": "经理接班目标预检、设置确认与幂等换线程；须同时声明 litchManager。",
   "declaration": {
-    "capability": "litchExtensions",
-    "type": "array",
-    "items": {
-      "type": "string"
-    },
-    "contains": {
-      "const": "litchManagerResetTarget"
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "litchManagerResetTarget"
+      }
     }
   },
   "undeclared": "不接受 reset 的 target、expectedThreadId、expectedSettingsHash、requestId；不提供 preview；Manager.reset 不带 operation。无 target 的 reset 保持原行为。",
@@ -17,28 +19,6 @@
     "requestId 同计划返回同一操作，不同计划冲突；boardOnly 只重试原 summaryFailed 操作。",
     "设备、工作目录和有效权限固定；跨 harness 或型号/强度变化强制 replace。提交后只向前恢复，接班投递状态独立于绑定状态。",
     "旧连接收到普通 Manager 更新；operation 按接收连接声明过滤。"
-  ],
-  "messages": [
-    {
-      "kind": "ClientRequest",
-      "method": "litch/manager/reset/preview",
-      "params": {
-        "$ref": "#/definitions/PreviewParams"
-      },
-      "response": {
-        "$ref": "#/definitions/Preview"
-      }
-    },
-    {
-      "kind": "ClientRequest",
-      "method": "litch/manager/reset",
-      "params": {
-        "$ref": "#/definitions/ResetParams"
-      },
-      "response": {
-        "$ref": "manager.json#/definitions/ManagerResponse"
-      }
-    }
   ],
   "fields": [
     {
@@ -57,16 +37,10 @@
           "type": "string"
         },
         "model": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "effort": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "permission": {
           "type": "string"
@@ -75,12 +49,7 @@
           "$ref": "manager.json#/definitions/Dispatch"
         }
       },
-      "required": [
-        "harness",
-        "model",
-        "effort",
-        "permission"
-      ],
+      "required": ["harness", "model", "effort", "permission"],
       "additionalProperties": false
     },
     "Settings": {
@@ -90,30 +59,16 @@
           "type": "string"
         },
         "model": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "effort": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "permission": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       },
-      "required": [
-        "harness",
-        "model",
-        "effort",
-        "permission"
-      ],
+      "required": ["harness", "model", "effort", "permission"],
       "additionalProperties": false
     },
     "Issue": {
@@ -129,10 +84,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "code",
-        "message"
-      ],
+      "required": ["code", "message"],
       "additionalProperties": false
     },
     "Candidate": {
@@ -168,26 +120,15 @@
                 }
               },
               "defaultEffort": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "type": ["string", "null"]
               }
             },
-            "required": [
-              "id",
-              "name",
-              "efforts",
-              "defaultEffort"
-            ],
+            "required": ["id", "name", "efforts", "defaultEffort"],
             "additionalProperties": false
           }
         },
         "defaultModel": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "permissions": {
           "type": "array",
@@ -196,14 +137,7 @@
           }
         }
       },
-      "required": [
-        "harness",
-        "enabled",
-        "reasons",
-        "models",
-        "defaultModel",
-        "permissions"
-      ],
+      "required": ["harness", "enabled", "reasons", "models", "defaultModel", "permissions"],
       "additionalProperties": false
     },
     "PreviewParams": {
@@ -216,9 +150,7 @@
           "$ref": "#/definitions/Target"
         }
       },
-      "required": [
-        "managerId"
-      ],
+      "required": ["managerId"],
       "additionalProperties": false
     },
     "ResetParams": {
@@ -243,13 +175,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "managerId",
-        "target",
-        "expectedThreadId",
-        "expectedSettingsHash",
-        "requestId"
-      ],
+      "required": ["managerId", "target", "expectedThreadId", "expectedSettingsHash", "requestId"],
       "additionalProperties": false
     },
     "Preview": {
@@ -274,10 +200,7 @@
           "$ref": "#/definitions/Target"
         },
         "mode": {
-          "enum": [
-            "refresh",
-            "replace"
-          ]
+          "enum": ["refresh", "replace"]
         },
         "canSubmit": {
           "type": "boolean"
@@ -309,11 +232,7 @@
                 "type": "boolean"
               }
             },
-            "required": [
-              "capability",
-              "before",
-              "after"
-            ],
+            "required": ["capability", "before", "after"],
             "additionalProperties": false
           }
         },
@@ -323,30 +242,16 @@
             "type": "object",
             "properties": {
               "field": {
-                "enum": [
-                  "harness",
-                  "model",
-                  "effort"
-                ]
+                "enum": ["harness", "model", "effort"]
               },
               "before": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "type": ["string", "null"]
               },
               "after": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "type": ["string", "null"]
               }
             },
-            "required": [
-              "field",
-              "before",
-              "after"
-            ],
+            "required": ["field", "before", "after"],
             "additionalProperties": false
           }
         }
@@ -380,34 +285,19 @@
               "type": "string"
             },
             "model": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "effort": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "permission": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "threadId": {
               "type": "string"
             }
           },
-          "required": [
-            "harness",
-            "model",
-            "effort",
-            "permission",
-            "threadId"
-          ],
+          "required": ["harness", "model", "effort", "permission", "threadId"],
           "additionalProperties": false
         },
         "target": {
@@ -417,20 +307,13 @@
           "type": "string"
         },
         "candidateThreadId": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "committed": {
           "type": "boolean"
         },
         "handover": {
-          "enum": [
-            "pending",
-            "accepted",
-            "failed"
-          ]
+          "enum": ["pending", "accepted", "failed"]
         }
       },
       "required": [
@@ -443,6 +326,177 @@
         "handover"
       ],
       "additionalProperties": false
+    },
+    "ResetState": {
+      "type": "object",
+      "required": ["mode", "current", "applied", "outdated", "phase"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "$ref": "manager.json#/definitions/ResetState/properties/mode"
+        },
+        "current": {
+          "$ref": "manager.json#/definitions/ResetState/properties/current"
+        },
+        "applied": {
+          "$ref": "manager.json#/definitions/ResetState/properties/applied"
+        },
+        "outdated": {
+          "$ref": "manager.json#/definitions/ResetState/properties/outdated"
+        },
+        "phase": {
+          "$ref": "manager.json#/definitions/ResetState/properties/phase"
+        },
+        "error": {
+          "$ref": "manager.json#/definitions/ResetState/properties/error"
+        },
+        "operation": {
+          "$ref": "#/definitions/Operation"
+        }
+      }
+    },
+    "Manager": {
+      "type": "object",
+      "required": [
+        "id",
+        "threadId",
+        "name",
+        "scope",
+        "cwd",
+        "harness",
+        "model",
+        "effort",
+        "template",
+        "dispatch",
+        "contact",
+        "rules",
+        "status",
+        "pendingDecisions",
+        "runningLines",
+        "latestActivity",
+        "createdAt",
+        "updatedAt",
+        "endedAt"
+      ],
+      "properties": {
+        "reset": {
+          "$ref": "#/definitions/ResetState"
+        },
+        "historyThreadIds": {
+          "$ref": "manager.json#/definitions/Manager/properties/historyThreadIds"
+        },
+        "permission": {
+          "$ref": "manager.json#/definitions/Manager/properties/permission"
+        },
+        "id": {
+          "$ref": "manager.json#/definitions/Manager/properties/id"
+        },
+        "threadId": {
+          "$ref": "manager.json#/definitions/Manager/properties/threadId"
+        },
+        "name": {
+          "$ref": "manager.json#/definitions/Manager/properties/name"
+        },
+        "scope": {
+          "$ref": "manager.json#/definitions/Manager/properties/scope"
+        },
+        "cwd": {
+          "$ref": "manager.json#/definitions/Manager/properties/cwd"
+        },
+        "harness": {
+          "$ref": "manager.json#/definitions/Manager/properties/harness"
+        },
+        "model": {
+          "$ref": "manager.json#/definitions/Manager/properties/model"
+        },
+        "effort": {
+          "$ref": "manager.json#/definitions/Manager/properties/effort"
+        },
+        "template": {
+          "$ref": "manager.json#/definitions/Manager/properties/template"
+        },
+        "dispatch": {
+          "$ref": "manager.json#/definitions/Manager/properties/dispatch"
+        },
+        "contact": {
+          "$ref": "manager.json#/definitions/Manager/properties/contact"
+        },
+        "rules": {
+          "$ref": "manager.json#/definitions/Manager/properties/rules"
+        },
+        "status": {
+          "$ref": "manager.json#/definitions/Manager/properties/status"
+        },
+        "pendingDecisions": {
+          "$ref": "manager.json#/definitions/Manager/properties/pendingDecisions"
+        },
+        "pendingRequests": {
+          "$ref": "manager.json#/definitions/Manager/properties/pendingRequests"
+        },
+        "runningLines": {
+          "$ref": "manager.json#/definitions/Manager/properties/runningLines"
+        },
+        "latestActivity": {
+          "$ref": "manager.json#/definitions/Manager/properties/latestActivity"
+        },
+        "createdAt": {
+          "$ref": "manager.json#/definitions/Manager/properties/createdAt"
+        },
+        "updatedAt": {
+          "$ref": "manager.json#/definitions/Manager/properties/updatedAt"
+        },
+        "endedAt": {
+          "$ref": "manager.json#/definitions/Manager/properties/endedAt"
+        },
+        "pendingReports": {
+          "$ref": "manager.json#/definitions/Manager/properties/pendingReports"
+        },
+        "pendingSuggestions": {
+          "$ref": "manager.json#/definitions/Manager/properties/pendingSuggestions"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ManagerResponse": {
+      "type": "object",
+      "required": ["manager"],
+      "properties": {
+        "manager": {
+          "$ref": "#/definitions/Manager"
+        },
+        "operation": {
+          "$ref": "#/definitions/Operation"
+        }
+      },
+      "additionalProperties": false
     }
-  }
+  },
+  "appliesTo": "设备聚合面；runtime/info.device.extensions 宣告支持，initialize.capabilities.litchExtensions 逐连接协商。",
+  "parts": [
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/reset/preview",
+      "params": {
+        "$ref": "#/definitions/PreviewParams"
+      },
+      "response": {
+        "$ref": "#/definitions/Preview"
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/reset",
+      "params": {
+        "$ref": "#/definitions/ResetParams"
+      },
+      "response": {
+        "$ref": "#/definitions/ManagerResponse"
+      }
+    },
+    {
+      "kind": "DeviceFeature",
+      "name": "litchManagerResetTarget",
+      "where": "runtime/info.device.extensions"
+    }
+  ]
 }

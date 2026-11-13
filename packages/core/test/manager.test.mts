@@ -403,7 +403,11 @@ test('副本：普通侧栏过滤整棵经理树，经理复用原有 children �
 
 function serviceWorld(
   handlers: Record<string, Handler>,
-  features = { feedback: true, posts: true, ignore: true },
+  features: import('../src/model-manager.mjs').ManagerFeaturesView = {
+    feedback: true,
+    posts: true,
+    ignore: true,
+  },
 ) {
   let online = true
   let supported = true
@@ -455,6 +459,55 @@ function serviceWorld(
     },
   }
 }
+
+test('接班预览与目标确认完整透传；旧设备拒绝目标调用且不回退成普通重置', async () => {
+  const { manager } = sample()
+  const target = { harness: 'codex', model: 'fixture', effort: 'high', permission: ':workspace' }
+  const seen: unknown[] = []
+  const old = serviceWorld({
+    [MANAGER_METHOD.reset]: () => {
+      throw new Error('不应发送')
+    },
+  })
+  await assert.rejects(
+    old.service.previewReset({ managerId: manager.id, target }),
+    (error: any) => error.code === 'unsupported',
+  )
+  await assert.rejects(
+    old.service.reset({ managerId: manager.id, target }),
+    (error: any) => error.code === 'unsupported',
+  )
+  assert.ok(!old.calls.includes(MANAGER_METHOD.reset))
+  const preview = {
+    managerId: manager.id,
+    expectedThreadId: manager.threadId,
+    expectedSettingsHash: 'hash',
+    target,
+  }
+  const current = serviceWorld(
+    {
+      [MANAGER_METHOD.resetPreview]: (params) => {
+        seen.push(params)
+        return preview
+      },
+      [MANAGER_METHOD.reset]: (params) => {
+        seen.push(params)
+        return { manager }
+      },
+    },
+    { feedback: true, posts: true, ignore: true, resetTarget: true },
+  )
+  assert.deepEqual(await current.service.previewReset({ managerId: manager.id, target }), preview)
+  const input = {
+    managerId: manager.id,
+    target,
+    expectedThreadId: manager.threadId,
+    expectedSettingsHash: 'hash',
+    requestId: 'idempotent',
+  }
+  await current.service.reset(input)
+  assert.deepEqual(seen, [{ managerId: manager.id, target }, input])
+})
 
 test('连接已完成但经理目录仍在途时，新订阅保持未知，不能将空目录判为普通会话', async () => {
   const { manager } = sample()

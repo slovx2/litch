@@ -152,6 +152,8 @@ interface AgentEntry {
 }
 
 export interface MockTree {
+  /** 经理换线程后，子线和已排队回报改投新经理。 */
+  rebindManager(deviceId: string, oldThreadId: string, newThreadId: string): void
   /** 这条消息是不是会话树的一出：是的话由这里接着演，返回 true */
   claim(view: SessionView, turnId: string, message: OutgoingMessage): boolean
   /** 一个回合停了（排着的消息接着发之前）：等着选的 offer 卡当在这里做（和设备进程一样），等着它停下的子会话开始跑 */
@@ -1220,6 +1222,21 @@ export function createMockTree(host: MockTreeHost): MockTree {
   }
 
   return {
+    rebindManager(deviceId, oldThreadId, newThreadId) {
+      for (const summary of host.summaries(deviceId)) {
+        if (summary.lineage?.parentId !== oldThreadId) continue
+        const lineage = { ...summary.lineage, parentId: newThreadId }
+        host.updateSummary(deviceId, summary.id, { lineage })
+      }
+      const oldKey = sameKey(deviceId, oldThreadId)
+      const newKey = sameKey(deviceId, newThreadId)
+      const notes = [...(pending.get(newKey) ?? []), ...(pending.get(oldKey) ?? [])]
+      queue(deviceId, oldThreadId, [])
+      queue(deviceId, newThreadId, notes)
+      if (wakes.has(oldKey)) wakes.set(newKey, wakes.get(oldKey) as number)
+      wakes.delete(oldKey)
+      if (pendingWakes.delete(oldKey)) pendingWakes.add(newKey)
+    },
     claim(view, turnId, message) {
       const key = sameKey(view.deviceId, view.sessionId)
       const user = view.items[view.turns.find((turn) => turn.id === turnId)?.itemIds[0] ?? '']

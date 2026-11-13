@@ -548,6 +548,30 @@ export class DeviceServer {
       enabled: () => this.sessionTreeOn(),
       tasksEnabled: () => this.tasks !== null,
       refreshClientTools: (harness, tools) => this.resumeTools.tools(harness, tools),
+      managerResetEnvironment: () => ({
+        settings: this.control?.state?.snapshot.values ?? this.options.clientToolSettings ?? {},
+        backgroundWake: this.nativeBackground.enabled('codex'),
+        executors: [
+          ...new Set(
+            this.host.clientTools.executors(null).flatMap((peer) => [...peer.clientToolNamespaces]),
+          ),
+        ].sort(),
+      }),
+      managerResetTasks: (threadId) => {
+        if (!this.tasks) throw new Error('The scheduled task store is unavailable.')
+        const tasks = this.tasks.store.tasks()
+        const blocked = new Map(
+          tasks
+            .filter((task) => task.target.kind === 'thread' && task.target.threadId === threadId)
+            .map((task) => [task.id, { id: task.id, name: task.name }]),
+        )
+        for (const run of this.tasks.store.runsIn(['queued', 'running']))
+          if (run.threadId === threadId) {
+            const task = tasks.find((task) => task.id === run.taskId)
+            blocked.set(run.taskId, { id: run.taskId, name: task?.name ?? run.taskId })
+          }
+        return [...blocked.values()]
+      },
       announce: (method, params, extension) => this.announce(method, params, extension),
       threadStarted: (harness, thread) => {
         for (const session of this.sessions) session.threadStarted(harness, thread)
@@ -610,6 +634,7 @@ export class DeviceServer {
     this.deviceTools.refusal = (threadId) => this.managers.resets.refusal(threadId)
     info.extensions.push(
       EXTENSION.manager,
+      EXTENSION.managerResetTarget,
       EXTENSION.managerFeedback,
       EXTENSION.managerPosts,
       EXTENSION.managerIgnore,
@@ -1202,6 +1227,7 @@ export class DeviceServer {
     link.request = async (method, params, options) => {
       if (this.closed)
         throw new EngineUnavailable(link.harness, 'the device service is shutting down')
+      this.managers.resets.checkInternalInput(method, params)
       if (['turn/start', 'turn/steer', 'thread/queue/add'].includes(method))
         this.attachments.observe(link.harness, params)
       // 定时任务和设备工具也使用内部连接，结束后的经理不能从这里重新开工。
@@ -1248,6 +1274,7 @@ export class DeviceServer {
               beforeSend: () => {
                 if (this.restart?.blocked(link.harness, threadId ?? undefined))
                   throw new Error('设备正在准备重启，暂不启动工作')
+                this.managers.resets.checkInternalInput(method, params)
                 options?.beforeSend?.()
               },
             }
@@ -1264,6 +1291,7 @@ export class DeviceServer {
             )
           : method === 'thread/resume' &&
               isObject(ready) &&
+              !this.managers.resets.readingSettings(params) &&
               this.resumeTools.supports(link.harness, link.native)
             ? await this.resumeTools.resume(
                 link.harness,
