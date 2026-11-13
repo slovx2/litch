@@ -53,6 +53,8 @@ for (const [platform, path, name] of [
           if (id === 'react/jsx-runtime') return { jsx, jsxs: jsx }
           if (id === 'react-native') return { StyleSheet: { create: (s) => s } }
           if (id.endsWith('/appearance.ts') || id.endsWith('/i18n')) return { useT: () => (k) => k }
+          if (id.endsWith('/services')) return { useChannel: () => ({}) }
+          if (id.endsWith('/theme')) return { useTheme: () => ({ c: {}, font: { size: {} } }) }
           return {}
         },
       })
@@ -72,6 +74,7 @@ for (const [platform, path, name] of [
         effects = []
         output.exports[name]({
           manager: {},
+          features: { paging: false },
           head: issue,
           issue: structuredClone(issue),
           open: enabled,
