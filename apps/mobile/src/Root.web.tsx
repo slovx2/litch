@@ -11,6 +11,7 @@ import { ComposeStatePreview } from './preview/ComposeState.web.tsx'
 import { applyPrefs, runScene } from './preview/frame.web.ts'
 import { PreviewIndex } from './preview/Index.web.tsx'
 import { ManagerEventsPreview } from './preview/ManagerEvents.web.tsx'
+import { ManagerResetPreviewScreen } from './preview/ManagerReset.web.tsx'
 import { ModelRankingPreview } from './preview/ModelRanking.web.tsx'
 import { startScrollNudge } from './preview/nudge.web.ts'
 import { sceneById } from './preview/scenes.web.ts'
@@ -44,6 +45,8 @@ function PreviewApp() {
 }
 
 export default function Root() {
+  if (inFrame && params.get('scene') === 'manager-reset')
+    return <ManagerResetPreviewScreen params={params} />
   if (inFrame && params.get('scene') === 'board-actions') return <BoardActionsPreview />
   if (inFrame && params.get('scene') === 'board-mermaid') return <BoardMermaidPreview />
   if (inFrame && params.get('scene') === 'compose-state') return <ComposeStatePreview />
