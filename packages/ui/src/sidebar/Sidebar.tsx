@@ -368,7 +368,7 @@ const SessionRow = memo(function SessionRow({
   }
   // 本地分组：只记在这台客户端上，设备没连着也能做。已在某个组里的多一项移出
   if (organizer?.status === 'ok') {
-    const home = groupOfMember(organizer, { deviceId, sessionId })
+    const home = groupOfMember(organizer, { kind: 'session', deviceId, sessionId })
     actions.push({
       id: 'local',
       title: t('local.join'),
@@ -475,7 +475,7 @@ const SessionRow = memo(function SessionRow({
         void organize(channel, {
           type: 'member.add',
           groupId: choice,
-          member: { deviceId, sessionId },
+          member: { kind: 'session', deviceId, sessionId },
         }).then((done) => {
           if (done && summary.pinned)
             showToast({
@@ -486,7 +486,10 @@ const SessionRow = memo(function SessionRow({
         })
       }
     } else if (id === 'unlocal')
-      void organize(channel, { type: 'member.remove', member: { deviceId, sessionId } })
+      void organize(channel, {
+        type: 'member.remove',
+        member: { kind: 'session', deviceId, sessionId },
+      })
     else if (id === 'group') {
       if (choice === NEW_SECTION) setGrouping(true)
       else if (choice) placeAt({ sectionId: choice })
@@ -702,7 +705,15 @@ const SessionRow = memo(function SessionRow({
       {localGrouping ? (
         <LocalGroupDialog
           group={null}
-          members={[{ deviceId, sessionId }]}
+          members={[{ kind: 'session', deviceId, sessionId }]}
+          onCreated={() => {
+            if (summary.pinned)
+              showToast({
+                id: 'local-pinned',
+                lifeMs: 5000,
+                text: (say) => say('local.joinedPinned'),
+              })
+          }}
           onClose={() => setLocalGrouping(false)}
         />
       ) : null}
@@ -821,6 +832,14 @@ function HeadLine(props: HeadProps) {
           onToggle()
       }}
       {...card?.area}
+      onContextMenu={(event) => {
+        if (!props.workspaceId || (event.target as Element).closest('.pick-pop')) return
+        const button = event.currentTarget.querySelector<HTMLButtonElement>('.row-more > button')
+        if (!button) return
+        event.preventDefault()
+        event.stopPropagation()
+        button.click()
+      }}
     >
       <button
         type="button"
@@ -922,20 +941,17 @@ function WorkspaceHead(props: WorkspaceHeadProps) {
       menu={menu}
       card={card}
       drop={drop}
-      onDrag={
-        device.organizable
-          ? (event) =>
-              beginDrag(event, {
-                deviceId: device.id,
-                kind: 'workspace',
-                id: workspace.id,
-                workspaceId: workspace.id,
-                pinned: workspace.pinned,
-                sectionId: workspace.sectionId,
-                organizable: true,
-                ...(props.dragOrigin ? { origin: props.dragOrigin } : {}),
-              })
-          : undefined
+      onDrag={(event) =>
+        beginDrag(event, {
+          deviceId: device.id,
+          kind: 'workspace',
+          id: workspace.id,
+          workspaceId: workspace.id,
+          pinned: workspace.pinned,
+          sectionId: workspace.sectionId,
+          organizable: device.organizable,
+          ...(props.dragOrigin ? { origin: props.dragOrigin } : {}),
+        })
       }
     />
   )
@@ -1229,7 +1245,7 @@ function PinnedWorkspaceHead({
         onToggle={props.onToggle}
         tick
         deviceLabel={deviceLabel}
-        dragOrigin={{ kind: 'pins' }}
+        dragOrigin={props.origin}
         drop={false}
         add={
           device.connection === 'online' ? (

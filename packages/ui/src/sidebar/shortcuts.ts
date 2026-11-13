@@ -4,13 +4,15 @@ import {
   type CoreChannel,
   keys,
   type LocalGroup,
+  localLayout,
+  type MemberRef,
   type MergedPins,
   mergePins,
   type OrganizerAction,
   type OrganizerView,
   pinSourceOf,
+  type SessionChildren,
   type SessionGroups,
-  type SessionRef,
   sameRef,
   type WorkspaceView,
 } from '@litch/core'
@@ -42,7 +44,7 @@ export function organize(
 /** 这个会话在哪个本地分组里（最多一个） */
 export const groupOfMember = (
   organizer: OrganizerView | undefined,
-  ref: SessionRef,
+  ref: MemberRef,
 ): LocalGroup | undefined =>
   organizer?.groups.find((group) => group.members.some((member) => sameRef(member, ref)))
 
@@ -70,5 +72,29 @@ export function useCovers(): ReadonlyMap<string, ReadonlySet<string>> {
   return useMemo(
     () => new Map(devices.map((deviceId, index) => [deviceId, new Set(covers[index] ?? NONE)])),
     [devices, covers],
+  )
+}
+
+/** 本机分组按实体去重，项目与显式会话跨组共用归属。 */
+export function useLocalLayout() {
+  const organizer = useOrganizer()
+  const devices = useKey<string[]>(keys.devices) ?? NONE
+  const groups = useKeys<SessionGroups>(devices.map(keys.groups))
+  const children = useKeys<SessionChildren>(devices.map(keys.children))
+  const workspaces = useKeys<WorkspaceView[]>(devices.map(keys.workspaces))
+  const covers = useKeys<string[]>(devices.map(keys.pinCover))
+  return useMemo(
+    () =>
+      localLayout(
+        organizer?.groups ?? [],
+        devices.map((deviceId, index) => ({
+          deviceId,
+          groups: groups[index],
+          children: children[index],
+          workspaces: workspaces[index],
+          covered: covers[index],
+        })),
+      ),
+    [organizer?.groups, devices, groups, children, workspaces, covers],
   )
 }

@@ -14,17 +14,21 @@ import {
   parseOrganizer,
 } from '../src/index.mjs'
 
-const ref = (deviceId: string, sessionId: string) => ({ deviceId, sessionId })
+const ref = (deviceId: string, sessionId: string) => ({
+  kind: 'session' as const,
+  deviceId,
+  sessionId,
+})
 let n = 0
 const id = () => `g${n++}`
 
 test('文件校验：空、坏、更高版本、重复项都分得清', () => {
   assert.deepEqual(parseOrganizer(null), { kind: 'empty' })
   assert.deepEqual(parseOrganizer('x'), { kind: 'corrupt' })
-  assert.deepEqual(parseOrganizer({ version: 2 }), { kind: 'newer', version: 2 })
+  assert.deepEqual(parseOrganizer({ version: 3 }), { kind: 'newer', version: 3 })
   assert.deepEqual(parseOrganizer({ version: 0 }), { kind: 'corrupt' })
   const good = {
-    version: 1,
+    version: 2,
     revision: 3,
     groups: [{ id: 'a', name: '发布', members: [ref('mac', 's1'), ref('linux', 's1')] }],
     pinOrder: [

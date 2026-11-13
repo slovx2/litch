@@ -5,11 +5,15 @@ import {
   type DeviceView,
   keys,
   type LocalGroup,
+  type LocalLayout,
+  type MemberRef,
+  type MemberTree,
   memberState,
   movePin,
   PINS_FOLD,
   type PinRef,
   pinKey,
+  refKey,
   type SessionChildren,
   type SessionGroups,
   type SessionRef,
@@ -49,7 +53,7 @@ import { MORE_ROWS, moreToReveal, pageRows } from './paging.ts'
 import { RowMenu } from './RowMenu.tsx'
 import { containsSession, revealRow } from './reveal.ts'
 import { useSidebarReveal } from './reveal-context.ts'
-import { organize, useCovers, useMergedPins, useOrganizer } from './shortcuts.ts'
+import { organize, useCovers, useLocalLayout, useMergedPins, useOrganizer } from './shortcuts.ts'
 import { toggleSidebarFold, useSidebarFolds } from './state.ts'
 import { TallyView } from './TallyMarks.tsx'
 import { TreeSum } from './TreeSum.tsx'
@@ -84,6 +88,7 @@ export interface ShortcutWorkspaceProps {
   expanded: boolean
   onToggle(): void
   place: ShortcutPlace
+  origin: DragOrigin
 }
 
 interface ShortcutsProps {
@@ -136,6 +141,7 @@ function SessionTree({
   origin,
   place,
   render,
+  excluded,
 }: {
   deviceId: string
   sessionId: string
@@ -144,11 +150,12 @@ function SessionTree({
   origin: DragOrigin
   place?: ShortcutPlace | undefined
   render: ShortcutsProps['renderSession']
+  excluded?: ReadonlySet<string> | undefined
 }): ReactNode {
   const children = useKey<SessionChildren>(keys.children(deviceId)) ?? NO_CHILDREN
   const folds = useSidebarFolds(SCOPE)
-  if (depth > MAX_DEPTH) return null
-  const kids = children[sessionId] ?? NO_IDS
+  if (depth > MAX_DEPTH || excluded?.has(sessionId)) return null
+  const kids = (children[sessionId] ?? NO_IDS).filter((id) => !excluded?.has(id))
   const id = `${deviceId}\n${sessionId}`
   const shut = !folds.folded.includes(id)
   const fold = () => toggleSidebarFold(SCOPE, 'folded', id)
@@ -185,6 +192,7 @@ function SessionTree({
                 source={source}
                 origin={origin}
                 render={render}
+                excluded={excluded}
               />
             ))
           )}
@@ -436,6 +444,8 @@ function PinsSection({ renderSession, renderWorkspace }: ShortcutsProps) {
 
 /** 置顶的项目：那一行和里面（没进设备分组、没单独置顶的）会话。项目本身是项目，不是设备 */
 function PinnedWorkspace({
+  origin = { kind: 'pins' },
+  tree,
   deviceId,
   workspaceId,
   explicit,
@@ -449,6 +459,8 @@ function PinnedWorkspace({
   place: ShortcutPlace
   renderSession: ShortcutsProps['renderSession']
   renderWorkspace: ShortcutsProps['renderWorkspace']
+  origin?: DragOrigin
+  tree?: MemberTree | undefined
 }) {
   const groups = useKey<SessionGroups>(keys.groups(deviceId))
   const children = useKey<SessionChildren>(keys.children(deviceId)) ?? NO_CHILDREN
@@ -462,7 +474,8 @@ function PinnedWorkspace({
   const nested = new Set(
     ids.flatMap((id) => (children[id] ?? []).filter((kid) => ids.includes(kid))),
   )
-  const top = ids.filter((id) => !nested.has(id) && !explicit.has(`${deviceId}\n${id}`))
+  const top =
+    tree?.roots ?? ids.filter((id) => !nested.has(id) && !explicit.has(`${deviceId}\n${id}`))
   // 和设备树的项目一样分页：点“显示更多”多出来的个数，只记在这一处、这一次打开里
   const [more, setMore] = useState(0)
   const page = pageRows(top, more)
@@ -485,6 +498,7 @@ function PinnedWorkspace({
         expanded,
         onToggle: () => toggleSidebarFold(SCOPE, 'closed', key, true),
         place,
+        origin,
       })}
       {expanded ? (
         <>
@@ -494,9 +508,10 @@ function PinnedWorkspace({
               deviceId={deviceId}
               sessionId={id}
               depth={0}
-              source="tree"
-              origin={{ kind: 'pins' }}
+              source={origin.kind === 'group' ? 'local' : 'tree'}
+              origin={origin}
               render={renderSession}
+              excluded={tree?.excluded}
             />
           ))}
           <MoreRows
@@ -515,11 +530,13 @@ function PinnedWorkspace({
  * 没有组时什么都不出（新建在顶上的“+”菜单、会话菜单里），只在拖着会话时露出一块落点。
  * 组里的会话照样留在设备目录里；置顶了的不在这里画，只数一下
  */
-function LocalGroupsSection({ renderSession, onPage }: ShortcutsProps) {
+function LocalGroupsSection({ renderSession, renderWorkspace, onPage }: ShortcutsProps) {
   const t = useT()
   const organizer = useOrganizer()
+  const layout = useLocalLayout()
   const dragging = useDragging()
-  const [creating, setCreating] = useState<SessionRef[] | null>(null)
+  const [creating, setCreating] = useState<MemberRef[] | null>(null)
+  const [creatingPinned, setCreatingPinned] = useState(false)
   const [over, setOver] = useState<Over | null>(null)
   useEffect(() => {
     if (!dragging) setOver(null)
@@ -538,16 +555,18 @@ function LocalGroupsSection({ renderSession, onPage }: ShortcutsProps) {
         <LocalGroupBlock
           key={group.id}
           group={group}
+          layout={layout}
           index={index}
           count={groups.length}
           folded={organizer.folds[group.id] === true}
           over={over}
           setOver={setOver}
           renderSession={renderSession}
+          renderWorkspace={renderWorkspace}
           onPage={onPage}
         />
       ))}
-      {groups.length === 0 && !blocked && dragging?.kind === 'session' ? (
+      {groups.length === 0 && !blocked && isMember(dragging) ? (
         // 还没有组：拖进来就新建一个组放进去
         // biome-ignore lint/a11y/noStaticElementInteractions: 拖放的落点；键盘走会话菜单里的“新建本地分组…”
         <div
@@ -555,23 +574,36 @@ function LocalGroupsSection({ renderSession, onPage }: ShortcutsProps) {
           data-shortcuts="local-new"
           data-drop={over?.zone === ':new' ? 'into' : undefined}
           onDragOver={(event) => {
-            if (draggedItem()?.kind !== 'session') return
+            if (!isMember(draggedItem())) return
             event.preventDefault()
             if (over?.zone !== ':new') setOver({ zone: ':new', mode: 'into' })
           }}
           onDrop={(event) => {
             const item = draggedItem()
-            if (item?.kind !== 'session') return
+            if (!isMember(item)) return
             event.preventDefault()
             endDrag()
-            setCreating([{ deviceId: item.deviceId, sessionId: item.id }])
+            setCreating([dragRef(item)])
+            setCreatingPinned(item.pinned)
           }}
         >
           {t('local.dropNew')}
         </div>
       ) : null}
       {creating ? (
-        <LocalGroupDialog group={null} members={creating} onClose={() => setCreating(null)} />
+        <LocalGroupDialog
+          group={null}
+          members={creating}
+          onCreated={() => {
+            if (creatingPinned)
+              showToast({
+                id: 'local-pinned',
+                lifeMs: 5000,
+                text: (say) => say('local.joinedPinned'),
+              })
+          }}
+          onClose={() => setCreating(null)}
+        />
       ) : null}
     </>
   )
@@ -579,31 +611,32 @@ function LocalGroupsSection({ renderSession, onPage }: ShortcutsProps) {
 
 function LocalGroupBlock({
   group,
+  layout,
   index,
   count,
   folded,
   over,
   setOver,
   renderSession,
+  renderWorkspace,
   onPage,
 }: {
   group: LocalGroup
+  layout: LocalLayout
   index: number
   count: number
   folded: boolean
   over: Over | null
   setOver(over: Over | null): void
   renderSession: ShortcutsProps['renderSession']
+  renderWorkspace: ShortcutsProps['renderWorkspace']
   onPage(page: Page): void
 }) {
   const { channel } = useServices()
   const t = useT()
-  const covers = useCovers()
   const organizer = useOrganizer()
   const [renaming, setRenaming] = useState(false)
-  const covered = (ref: SessionRef) => covers.get(ref.deviceId)?.has(ref.sessionId) === true
-  const visible = group.members.filter((ref) => !covered(ref))
-  const pinned = group.members.length - visible.length
+  const { visible, pinned } = layout.groups.get(group.id) ?? { visible: [], pinned: 0 }
   const zone = `group:${group.id}`
   const shiftGroup = (step: -1 | 1) =>
     void organize(channel, { type: 'group.move', groupId: group.id, to: index + step })
@@ -634,7 +667,7 @@ function LocalGroupBlock({
         if (over?.zone !== zone || over.mode !== mode) setOver({ zone, mode })
         return
       }
-      if (item.kind !== 'session') return
+      if (!isMember(item)) return
       event.preventDefault()
       event.dataTransfer.dropEffect = 'move'
       if (over?.zone !== zone || over.mode !== 'into') setOver({ zone, mode: 'into' })
@@ -651,7 +684,7 @@ function LocalGroupBlock({
         const from = organizer?.groups.findIndex((entry) => entry.id === item.id) ?? -1
         const to = dropIndex(from, index, lowerHalf(event))
         void organize(channel, { type: 'group.move', groupId: item.id, to })
-      } else if (item.kind === 'session') {
+      } else if (isMember(item)) {
         event.preventDefault()
         join(item)
       } else return
@@ -660,7 +693,7 @@ function LocalGroupBlock({
     },
   }
   const join = (item: DragItem, to?: number) => {
-    const member = { deviceId: item.deviceId, sessionId: item.id }
+    const member = dragRef(item)
     const moving = item.origin?.kind === 'group' && item.origin.groupId === group.id
     void organize(
       channel,
@@ -677,26 +710,23 @@ function LocalGroupBlock({
     })
   }
   /** 一个成员上的拖放：插到它前面、后面 */
-  const memberZone = (ref: SessionRef, at: number) => ({
+  const memberZone = (ref: MemberRef, at: number) => ({
     onDragOver(event: DragEvent) {
       const item = draggedItem()
-      if (item?.kind !== 'session' || !event.dataTransfer.types.includes(DRAG_TYPE)) return
+      if (!isMember(item) || !event.dataTransfer.types.includes(DRAG_TYPE)) return
       event.preventDefault()
       event.stopPropagation()
-      const name = `member:${group.id}:${ref.deviceId}:${ref.sessionId}`
+      const name = `member:${group.id}:${refKey(ref)}`
       const mode = lowerHalf(event) ? 'after' : 'before'
       if (over?.zone !== name || over.mode !== mode) setOver({ zone: name, mode })
     },
     onDrop(event: DragEvent) {
       const item = draggedItem()
-      if (item?.kind !== 'session') return
+      if (!isMember(item)) return
       event.preventDefault()
       event.stopPropagation()
-      const from = group.members.findIndex(
-        (entry) => entry.deviceId === item.deviceId && entry.sessionId === item.id,
-      )
-      const sameGroup = item.origin?.kind === 'group' && item.origin.groupId === group.id
-      join(item, dropIndex(sameGroup ? from : -1, at, lowerHalf(event)))
+      const from = group.members.findIndex((entry) => refKey(entry) === refKey(dragRef(item)))
+      join(item, dropIndex(from, at, lowerHalf(event)))
       setOver(null)
       endDrag()
     },
@@ -715,7 +745,16 @@ function LocalGroupBlock({
         label={group.name}
         closed={folded}
         onToggle={() => void organize(channel, { type: 'fold', key: group.id, closed: !folded })}
-        tally={<RefsTally refs={visible} />}
+        tally={
+          <RefsTally
+            refs={visible.flatMap((ref) =>
+              (layout.trees.get(refKey(ref))?.roots ?? []).map((sessionId) => ({
+                deviceId: ref.deviceId,
+                sessionId,
+              })),
+            )}
+          />
+        }
         drop={over?.zone === zone && over.mode === 'into'}
         drag={{
           onDragStart(event) {
@@ -748,7 +787,7 @@ function LocalGroupBlock({
         <div className="sc-body">
           {visible.map((ref) => {
             const at = group.members.indexOf(ref)
-            const name = `member:${group.id}:${ref.deviceId}:${ref.sessionId}`
+            const name = `member:${group.id}:${refKey(ref)}`
             const mark = over?.zone === name && over.mode !== 'into' ? over.mode : undefined
             const place: ShortcutPlace = {
               kind: 'member',
@@ -765,17 +804,14 @@ function LocalGroupBlock({
               },
             }
             return (
-              <div
-                key={`${ref.deviceId}\n${ref.sessionId}`}
-                className="sc-item"
-                data-drop={mark}
-                {...memberZone(ref, at)}
-              >
+              <div key={refKey(ref)} className="sc-item" data-drop={mark} {...memberZone(ref, at)}>
                 <MemberEntry
                   member={ref}
                   group={group}
                   place={place}
                   renderSession={renderSession}
+                  renderWorkspace={renderWorkspace}
+                  tree={layout.trees.get(refKey(ref))}
                   onPage={onPage}
                 />
               </div>
@@ -793,17 +829,19 @@ function LocalGroupBlock({
 }
 
 /** 本地分组里的一个成员：能画的画成会话行，画不了的（未加载、已删除、设备没了、已归档）是一行占位，可以移出 */
-function MemberEntry({
+function SessionMemberEntry({
   member,
   group,
   place,
   renderSession,
+  tree,
   onPage,
 }: {
-  member: SessionRef
+  member: Extract<MemberRef, { kind: 'session' }>
   group: LocalGroup
   place: ShortcutPlace
   renderSession: ShortcutsProps['renderSession']
+  tree?: MemberTree | undefined
   onPage(page: Page): void
 }) {
   const { channel } = useServices()
@@ -827,6 +865,7 @@ function MemberEntry({
         origin={{ kind: 'group', groupId: group.id }}
         place={place}
         render={renderSession}
+        excluded={tree?.excluded}
       />
     )
   const title = archived?.find((entry) => entry.id === member.sessionId)?.title
@@ -861,6 +900,93 @@ function MemberEntry({
         ]}
         onAction={(id) => {
           if (id === 'leave') remove()
+          else place.shift(id === 'up' ? -1 : 1)
+        }}
+      />
+    </div>
+  )
+}
+
+/** 本机整理不依赖设备能力，离线项目也能拖入。 */
+const isMember = (item: DragItem | null): item is DragItem =>
+  item?.kind === 'session' || item?.kind === 'workspace'
+const dragRef = (item: DragItem): MemberRef =>
+  item.kind === 'workspace'
+    ? { kind: 'workspace', deviceId: item.deviceId, workspaceId: item.id }
+    : { kind: 'session', deviceId: item.deviceId, sessionId: item.id }
+
+function MemberEntry(props: {
+  member: MemberRef
+  group: LocalGroup
+  place: ShortcutPlace
+  tree?: MemberTree | undefined
+  renderSession: ShortcutsProps['renderSession']
+  renderWorkspace: ShortcutsProps['renderWorkspace']
+  onPage(page: Page): void
+}) {
+  return props.member.kind === 'workspace' ? (
+    <WorkspaceMemberEntry {...props} member={props.member} />
+  ) : (
+    <SessionMemberEntry {...props} member={props.member} />
+  )
+}
+
+function WorkspaceMemberEntry({
+  member,
+  group,
+  place,
+  tree,
+  renderSession,
+  renderWorkspace,
+}: {
+  member: Extract<MemberRef, { kind: 'workspace' }>
+  group: LocalGroup
+  place: ShortcutPlace
+  tree?: MemberTree | undefined
+  renderSession: ShortcutsProps['renderSession']
+  renderWorkspace: ShortcutsProps['renderWorkspace']
+}) {
+  const { channel } = useServices()
+  const t = useT()
+  const device = useKey<DeviceView>(keys.device(member.deviceId))
+  const workspace = useKey<WorkspaceView[]>(keys.workspaces(member.deviceId))?.find(
+    (entry) => entry.id === member.workspaceId,
+  )
+  if (device && workspace)
+    return (
+      <PinnedWorkspace
+        deviceId={member.deviceId}
+        workspaceId={member.workspaceId}
+        explicit={new Set()}
+        origin={{ kind: 'group', groupId: group.id }}
+        place={place}
+        tree={tree}
+        renderSession={renderSession}
+        renderWorkspace={renderWorkspace}
+      />
+    )
+  return (
+    <div
+      className="row-line sc-ghost"
+      data-workspace={member.workspaceId}
+      data-device={member.deviceId}
+      style={wireStyle(device?.wire)}
+    >
+      <span className="ss-row">
+        <i className="dev-tick off" aria-hidden="true" />
+        <span className="title ell grow">
+          {t(!device ? 'local.member.unconfigured' : 'local.workspace.missing')}
+        </span>
+      </span>
+      <RowMenu
+        label={t('workspace.menu')}
+        actions={[
+          { id: 'leave', title: t('local.leave', { name: group.name }) },
+          ...(place.index > 0 ? [{ id: 'up', title: t('section.up') }] : []),
+          ...(place.index < place.count - 1 ? [{ id: 'down', title: t('section.down') }] : []),
+        ]}
+        onAction={(id) => {
+          if (id === 'leave') void organize(channel, { type: 'member.remove', member })
           else place.shift(id === 'up' ? -1 : 1)
         }}
       />

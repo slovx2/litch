@@ -41,6 +41,7 @@ export function ShortcutSession({
   at,
   onOpen,
   onMenu,
+  excluded,
 }: {
   deviceId: string
   sessionId: string
@@ -51,6 +52,7 @@ export function ShortcutSession({
   at?: number
   onOpen(summary: SessionSummary, deviceId: string): void
   onMenu?(summary: SessionSummary, deviceId: string): void
+  excluded?: ReadonlySet<string> | undefined
 }) {
   const { c } = useTheme()
   const device = useKey<DeviceView>(keys.device(deviceId))
@@ -61,29 +63,31 @@ export function ShortcutSession({
   const where = useDeviceNote(device, showDevice)
   return (
     <>
-      {recentTree(sessionId, children, folds.folded).map((node) => (
-        <View key={node.id} style={styles.row}>
-          <View
-            style={[styles.wire, { backgroundColor: device ? c.wire[device.wire] : c.line2 }]}
-          />
-          <View style={styles.grow}>
-            <TreeLine
-              deviceId={deviceId}
-              sessionId={node.id}
-              depth={node.depth}
-              kids={node.kids}
-              folded={node.folded}
-              device={device}
-              where={where}
-              {...(node.depth === 0 && at !== undefined ? { at } : {})}
-              testID={`${testID}:${deviceId}:${node.id}`}
-              onFold={() => toggleFolded(foldScope, 'folded', node.id)}
-              onOpen={onOpen}
-              onMenu={onMenu}
+      {recentTree(sessionId, children, folds.folded)
+        .filter((node) => !excluded?.has(node.id))
+        .map((node) => (
+          <View key={node.id} style={styles.row}>
+            <View
+              style={[styles.wire, { backgroundColor: device ? c.wire[device.wire] : c.line2 }]}
             />
+            <View style={styles.grow}>
+              <TreeLine
+                deviceId={deviceId}
+                sessionId={node.id}
+                depth={node.depth}
+                kids={node.kids}
+                folded={node.folded}
+                device={device}
+                where={where}
+                {...(node.depth === 0 && at !== undefined ? { at } : {})}
+                testID={`${testID}:${deviceId}:${node.id}`}
+                onFold={() => toggleFolded(foldScope, 'folded', node.id)}
+                onOpen={onOpen}
+                onMenu={onMenu}
+              />
+            </View>
           </View>
-        </View>
-      ))}
+        ))}
     </>
   )
 }
@@ -165,6 +169,8 @@ export function ShortcutWorkspace({
   onOpen,
   onMenu,
   onSessionMenu,
+  tree,
+  scope = 'pins',
 }: {
   deviceId: string
   workspaceId: string
@@ -174,6 +180,8 @@ export function ShortcutWorkspace({
   onOpen(summary: SessionSummary, deviceId: string): void
   onMenu(workspace: WorkspaceView, deviceId: string): void
   onSessionMenu(summary: SessionSummary, deviceId: string): void
+  tree?: import('@litch/core').MemberTree | undefined
+  scope?: string
 }) {
   const theme = useTheme()
   const { c } = theme
@@ -184,16 +192,17 @@ export function ShortcutWorkspace({
   )
   const groups = useKey<SessionGroups>(keys.groups(deviceId))
   const children = useKey<SessionChildren>(keys.children(deviceId)) ?? NO_CHILDREN
-  const folds = useSyncExternalStore(subscribeFolds, () => foldsOf(`pins:${deviceId}`))
+  const folds = useSyncExternalStore(subscribeFolds, () => foldsOf(`${scope}:${deviceId}`))
   const where = useDeviceNote(device, showDevice)
   if (!workspace) return null
   const ids = groups?.[workspaceId] ?? NO_IDS
   const nested = new Set(
     ids.flatMap((id) => (children[id] ?? []).filter((kid) => ids.includes(kid))),
   )
-  const top = ids.filter((id) => !nested.has(id) && !explicit.has(`${deviceId}\n${id}`))
+  const top =
+    tree?.roots ?? ids.filter((id) => !nested.has(id) && !explicit.has(`${deviceId}\n${id}`))
   const open = !groupClosed(folds, workspaceId, true)
-  const testID = `pins:ws:${deviceId}:${workspaceId}`
+  const testID = `${scope}:ws:${deviceId}:${workspaceId}`
   return (
     <>
       <Pressable
@@ -203,7 +212,7 @@ export function ShortcutWorkspace({
           .filter(Boolean)
           .join(' · ')}
         testID={testID}
-        onPress={() => toggleFolded(`pins:${deviceId}`, 'closed', workspaceId, true)}
+        onPress={() => toggleFolded(`${scope}:${deviceId}`, 'closed', workspaceId, true)}
         onLongPress={() => onMenu(workspace, deviceId)}
         style={({ pressed }) => [
           styles.head,
@@ -236,11 +245,12 @@ export function ShortcutWorkspace({
               key={id}
               deviceId={deviceId}
               sessionId={id}
-              scope="pins"
+              scope={scope}
               showDevice={showDevice}
-              testID="pins"
+              testID={scope}
               onOpen={onOpen}
               onMenu={onSessionMenu}
+              excluded={tree?.excluded}
             />
           ))
         : null}

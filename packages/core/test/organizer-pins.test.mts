@@ -171,14 +171,16 @@ test('副本：本机整理经通道推给每个窗口；只改本机，不发�
     action: {
       type: 'group.create',
       name: '跨设备',
-      members: [{ deviceId: 'local', sessionId: 'x' }],
+      members: [{ kind: 'session', deviceId: 'local', sessionId: 'x' }],
     },
   })
   advance(50)
   await settle()
   const view = two.replica.store.get<OrganizerView>(keys.organizer)
   assert.equal(view?.groups[0]?.id, made.groupId)
-  assert.deepEqual(view?.groups[0]?.members, [{ deviceId: 'local', sessionId: 'x' }])
+  assert.deepEqual(view?.groups[0]?.members, [
+    { kind: 'session', deviceId: 'local', sessionId: 'x' },
+  ])
   assert.deepEqual(
     names.filter((name) => name !== 'core.info'),
     ['organizer.apply'],

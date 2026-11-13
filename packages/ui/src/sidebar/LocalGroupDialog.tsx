@@ -1,5 +1,5 @@
 // 新建一个本地分组，或者给它改名。本地分组只存在这台客户端上，可以混装任何设备的会话；只问名字，不问设备。
-import { GROUP_NAME_MAX, type LocalGroup, type SessionRef } from '@litch/core'
+import { GROUP_NAME_MAX, type LocalGroup, type MemberRef } from '@litch/core'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
@@ -8,8 +8,8 @@ import { useServices } from '../app/services.tsx'
 interface LocalGroupDialogProps {
   /** 给了就是改名 */
   group: LocalGroup | null
-  /** 新建时一起放进去的会话 */
-  members?: SessionRef[]
+  /** 新建时一起放进去的成员 */
+  members?: MemberRef[]
   onCreated?(groupId: string): void
   onClose(): void
 }

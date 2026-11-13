@@ -17,10 +17,13 @@ export type PinRef =
 export interface LocalGroup {
   id: string
   name: string
-  members: SessionRef[]
+  members: MemberRef[]
 }
 
-export const ORGANIZER_VERSION = 1
+/** 本机组与置顶使用相同的实体引用，类型是身份的一部分。 */
+export type MemberRef = PinRef
+
+export const ORGANIZER_VERSION = 2
 /** 组名最长多少个字符 */
 export const GROUP_NAME_MAX = 80
 
@@ -57,18 +60,12 @@ const isText = (value: unknown): value is string => typeof value === 'string' &&
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-export const refKey = (ref: SessionRef): string => JSON.stringify([ref.deviceId, ref.sessionId])
 export const pinKey = (ref: PinRef): string =>
   JSON.stringify([ref.kind, ref.deviceId, ref.kind === 'session' ? ref.sessionId : ref.workspaceId])
-export const sameRef = (a: SessionRef, b: SessionRef): boolean =>
-  a.deviceId === b.deviceId && a.sessionId === b.sessionId
+export const refKey = pinKey
+export const sameRef = (a: MemberRef, b: MemberRef): boolean => refKey(a) === refKey(b)
 
-function checkRef(value: unknown): SessionRef | null {
-  if (!isRecord(value) || !isText(value.deviceId) || !isText(value.sessionId)) return null
-  return { deviceId: value.deviceId, sessionId: value.sessionId }
-}
-
-function checkPin(value: unknown): PinRef | null {
+export function checkMember(value: unknown): MemberRef | null {
   if (!isRecord(value) || !isText(value.deviceId)) return null
   if (value.kind === 'session' && isText(value.sessionId))
     return { kind: 'session', deviceId: value.deviceId, sessionId: value.sessionId }
@@ -93,7 +90,9 @@ export function parseOrganizer(raw: unknown): OrganizerLoad {
   const version = raw.version
   if (typeof version !== 'number' || !Number.isInteger(version)) return { kind: 'corrupt' }
   if (version > ORGANIZER_VERSION) return { kind: 'newer', version }
-  if (version !== ORGANIZER_VERSION) return { kind: 'corrupt' }
+  // 唯一的旧格式例外：迁移 v1 的纯会话分组，避免丢掉用户的本机数据。
+  // 写回一律用 v2；旧桌面与手机都会先认出 newer 并停写，不会把项目判坏后从旧备份恢复。
+  if (version !== 1 && version !== ORGANIZER_VERSION) return { kind: 'corrupt' }
   const revision = raw.revision
   if (typeof revision !== 'number' || !Number.isInteger(revision) || revision < 0)
     return { kind: 'corrupt' }
@@ -108,9 +107,17 @@ export function parseOrganizer(raw: unknown): OrganizerLoad {
     if (name === null || name !== entry.name || !Array.isArray(entry.members))
       return { kind: 'corrupt' }
     groupIds.add(entry.id)
-    const refs: SessionRef[] = []
+    const refs: MemberRef[] = []
     for (const value of entry.members) {
-      const ref = checkRef(value)
+      const ref =
+        version === 1
+          ? isRecord(value) &&
+            !('kind' in value) &&
+            isText(value.deviceId) &&
+            isText(value.sessionId)
+            ? { kind: 'session' as const, deviceId: value.deviceId, sessionId: value.sessionId }
+            : null
+          : checkMember(value)
       if (!ref || members.has(refKey(ref))) return { kind: 'corrupt' }
       members.add(refKey(ref))
       refs.push(ref)
@@ -120,7 +127,7 @@ export function parseOrganizer(raw: unknown): OrganizerLoad {
   const pinOrder: PinRef[] = []
   const pins = new Set<string>()
   for (const value of raw.pinOrder) {
-    const ref = checkPin(value)
+    const ref = checkMember(value)
     if (!ref || pins.has(pinKey(ref))) return { kind: 'corrupt' }
     pins.add(pinKey(ref))
     pinOrder.push(ref)

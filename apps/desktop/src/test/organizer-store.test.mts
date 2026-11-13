@@ -10,7 +10,7 @@ import { fileOrganizerStore, ORGANIZER_FILE } from '../organizer-store.mjs'
 const file = (revision: number, name = '发布'): OrganizerFile => ({
   ...emptyOrganizer(),
   revision,
-  groups: [{ id: 'g', name, members: [{ deviceId: 'mac', sessionId: 's' }] }],
+  groups: [{ id: 'g', name, members: [{ kind: 'session', deviceId: 'mac', sessionId: 's' }] }],
 })
 
 test('没有文件是空的；写两次后备份是上一份', () => {
