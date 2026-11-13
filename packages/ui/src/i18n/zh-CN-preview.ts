@@ -12,7 +12,6 @@ export const zhPreview = {
   'media.menu.browser': '在浏览器中打开',
   'media.menu.failed': '图片操作失败：{reason}',
   'media.save': '保存图片',
-  'media.reveal': '在文件浏览器中显示',
   'preview.zoomIn': '放大',
   'preview.zoomOut': '缩小',
   'preview.view': '预览',

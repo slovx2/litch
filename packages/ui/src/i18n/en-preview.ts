@@ -13,7 +13,6 @@ export const enPreview: Record<keyof typeof zhPreview, string> = {
   'media.menu.browser': 'Open in browser',
   'media.menu.failed': 'Image action failed: {reason}',
   'media.save': 'Save image',
-  'media.reveal': 'Show in file browser',
   'preview.zoomIn': 'Zoom in',
   'preview.zoomOut': 'Zoom out',
   'preview.view': 'Preview',
