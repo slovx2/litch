@@ -213,9 +213,17 @@ export class ChromeExecutor implements BrowserExecutor {
       )
     return id
   }
-  private async listTabs(instanceId: string, signal: AbortSignal): Promise<ListedTab[]> {
+  private async listTabs(
+    instanceId: string,
+    signal: AbortSignal,
+    tabId?: number,
+  ): Promise<ListedTab[]> {
     const list = () =>
-      this.options.bridge.call<ListedTab[]>(instanceId, { op: 'list', args: {} }, signal)
+      this.options.bridge.call<ListedTab[]>(
+        instanceId,
+        { op: 'list', args: tabId === undefined ? {} : { tabId } },
+        signal,
+      )
     try {
       return await list()
     } catch (error) {
@@ -302,7 +310,7 @@ export class ChromeExecutor implements BrowserExecutor {
     invocation: ClientToolInvocation,
     context: ClientToolContext,
   ): Promise<void> {
-    const tabs = await this.listTabs(page.instanceId, context.signal)
+    const tabs = await this.listTabs(page.instanceId, context.signal, page.grant.tabId)
     const tab = tabs.find((tab) => tab.id === page.grant.tabId)
     if (!tab || (page.targetId && tab.targetId !== page.targetId))
       throw new ChromeBridgeError(

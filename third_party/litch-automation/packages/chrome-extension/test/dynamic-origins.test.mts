@@ -28,7 +28,13 @@ function fixture() {
     stoppedTurns: new Set(),
     presentation: { active: async () => {}, keep: async () => {} },
     chrome: {
-      tabs: { get: async () => ({ url: origin + '/', status: 'complete' }) },
+      windows: { getLastFocused: async () => ({ id: 1 }) },
+      tabs: {
+        get: async () => ({ id: 1, url: origin + '/', status: 'complete' }),
+        query: async () => {
+          throw new Error('不应枚举无关标签')
+        },
+      },
       webNavigation: {
         getAllFrames: async () => [
           { url: origin + '/', frameId: 0, documentId: 'main' },
@@ -36,6 +42,7 @@ function fixture() {
         ],
       },
       debugger: {
+        getTargets: async () => [{ tabId: 1, id: 'a'.repeat(32) }],
         sendCommand: async (_target: unknown, method: string) => {
           commands++
           dispatch()
@@ -72,6 +79,21 @@ test('动态来源必须先登记才允许观察；扩展不自行扩大 grant',
   assert.deepEqual(f.grant.origins, ['https://atlas.test'])
   await f.call('authorize', { origins: [...f.grant.origins, f.other] })
   assert.ok(await documentStamp(f.state, f.grant))
+})
+
+test('来源预检定向枚举已认领标签，不读取其他标签的 iframe', async () => {
+  const f = fixture()
+  f.dynamic()
+  const result = (await execute(f.state, {
+    kind: 'request',
+    id: 'list',
+    epoch: 'epoch',
+    op: 'list',
+    args: { tabId: 1 },
+  })) as Array<{ id: number; origins: string[] }>
+  assert.equal(result.length, 1)
+  assert.equal(result[0]?.id, 1)
+  assert.deepEqual(result[0]?.origins, ['https://atlas.test', f.other])
 })
 
 test('读操作中途出现未授权 iframe 时丢弃结果，不夹带新页面内容', async () => {

@@ -26,6 +26,7 @@ function fixture() {
   let grant: ChromeGrant
   let commands = 0
   let authorizations = 0
+  const lists: unknown[] = []
   let ask: ClientToolContext['ask'] = async () => 'session'
   const asked: string[] = []
   const executor = new ChromeExecutor({
@@ -37,7 +38,10 @@ function fixture() {
       instances: () => [{ id: 'atlas', epoch: '1', inputReceipts: true }],
       onEvent: () => () => {},
       call: async (_id: string, request: { op: string; args: Record<string, any> }) => {
-        if (request.op === 'list') return [structuredClone(tab)]
+        if (request.op === 'list') {
+          lists.push(request.args)
+          return [structuredClone(tab)]
+        }
         if (request.op === 'claim') {
           grant = structuredClone(request.args.grant)
           return { tab: structuredClone(tab) }
@@ -106,6 +110,7 @@ function fixture() {
     call,
     commands: () => commands,
     authorizations: () => authorizations,
+    lists,
     ask: (next: typeof ask) => {
       ask = next
     },
@@ -132,6 +137,10 @@ for (const permission of ['trustAll', 'always', 'session', 'once'] as const) {
     assert.deepEqual(f.asked, [])
     assert.ok(f.grant().origins.includes(frameOrigin))
     assert.equal(f.authorizations(), 1)
+    assert.ok(
+      f.lists.slice(1).every((args) => (args as { tabId?: number }).tabId === 1),
+      '预检只枚举自己的标签',
+    )
   })
 }
 
