@@ -1,4 +1,5 @@
 import type {
+  ManagerDispatchSettings,
   ManagerResetPreview,
   ManagerResetSettings,
   ManagerResetTarget,
@@ -7,6 +8,8 @@ import type {
 import { harnessIdentity } from '../../../../../packages/protocol/src/harness-identity.mts'
 import { EFFORT_TEXT } from '../../../../../packages/ui/src/composer/efforts'
 import type { Translator } from '../../ui/i18n'
+
+export { resetTargetChanged as resetSettingsChanged } from '../../../../../packages/ui/src/manager/reset-target.ts'
 
 /** 入口只排用户确认过的重置；摘要失败的再次确认才允许仅凭看板接手。 */
 export function managerResetState(
@@ -105,13 +108,56 @@ export function resetNextTarget(
   return target
 }
 
-export function resetPreviewDetail(preview: ManagerResetPreview, t: Translator): string {
-  const value = (field: string, entry: string | null) =>
-    field === 'harness' && entry
+/** null 保留跟随语义；不同 harness 的型号与强度默认值来自它自己的目录。 */
+export function resetDispatchOptions(
+  preview: ManagerResetPreview,
+  dispatch: ManagerDispatchSettings,
+  side: 'source' | 'target' = 'target',
+) {
+  const settings = preview[side]
+  const line = side === 'target' ? (preview.target.dispatch ?? dispatch) : dispatch
+  const followsHarness = !line.harness || line.harness === settings.harness
+  const candidate = preview.candidates.find(
+    (one) => one.harness === (line.harness ?? settings.harness),
+  )
+  const modelId = line.model ?? (followsHarness ? settings.model : candidate?.defaultModel)
+  const model = candidate?.models.find((one) => one.id === modelId)
+  return {
+    line,
+    models: candidate?.models ?? [],
+    model,
+    modelId: modelId ?? null,
+    effort:
+      line.effort ??
+      (followsHarness && !line.model ? settings.effort : model?.defaultEffort) ??
+      null,
+    modelDefaultKey: followsHarness ? ('manager.same' as const) : ('manager.default' as const),
+    effortDefaultKey:
+      followsHarness && !line.model ? ('manager.same' as const) : ('manager.default' as const),
+  }
+}
+
+export function resetPreviewDetail(
+  preview: ManagerResetPreview,
+  t: Translator,
+  dispatch?: ManagerDispatchSettings,
+): string {
+  const value = (field: string, entry: string | null, after: boolean) => {
+    if (entry === null && dispatch) {
+      const defaults = resetDispatchOptions(preview, dispatch, after ? 'target' : 'source')
+      entry =
+        field === 'model'
+          ? defaults.modelId
+          : field === 'effort'
+            ? defaults.effort
+            : (defaults.line.harness ?? preview[after ? 'target' : 'source'].harness)
+    }
+    return field === 'harness' && entry
       ? resetSettingsLabel({ harness: entry, model: null, effort: null, permission: null }, t)
       : field === 'effort' && entry
         ? resetEffortLabel(entry, t)
-        : (entry ?? t('manager.same'))
+        : (entry ?? t(field === 'effort' ? 'manager.resetNoEffort' : 'manager.default'))
+  }
   return [
     `${t('manager.resetSource')}: ${resetSettingsLabel(preview.source, t)} →\n${t('manager.resetTarget')}: ${resetSettingsLabel(preview.target, t)}`,
     `${t('manager.resetPermission')}: ${resetPermissionLabel(preview.target.permission, t)}`,
@@ -134,7 +180,7 @@ export function resetPreviewDetail(preview: ManagerResetPreview, t: Translator):
           t('manager.resetDispatchChanges'),
           ...preview.dispatchChanges.map(
             (change) =>
-              `${t(change.field === 'harness' ? 'manager.lineHarness' : (`manager.${change.field}` as Parameters<Translator>[0]))}: ${value(change.field, change.before)} → ${value(change.field, change.after)}`,
+              `${t(change.field === 'harness' ? 'manager.lineHarness' : (`manager.${change.field}` as Parameters<Translator>[0]))}: ${value(change.field, change.before, false)} → ${value(change.field, change.after, true)}`,
           ),
           t('manager.resetDispatchNote'),
         ]

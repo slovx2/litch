@@ -6,6 +6,7 @@ import { ChoiceMark } from '../../ui/kit/marks'
 import { Dialog } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import {
+  resetDispatchOptions,
   resetEffortLabel,
   resetNextTarget,
   resetPermissionLabel,
@@ -174,13 +175,12 @@ export function ResetSettings({
                   ...(dispatch.harness ? [dispatch.harness] : []),
                 ]),
               ]
-              const models =
-                preview.candidates.find(
-                  (one) => one.harness === (dispatch.harness ?? target?.harness),
-                )?.models ?? []
-              const dispatchModel = models.find(
-                (one) => one.id === (dispatch.model ?? target?.model),
-              )
+              const {
+                models,
+                model: dispatchModel,
+                modelDefaultKey,
+                effortDefaultKey,
+              } = resetDispatchOptions(preview, manager.dispatch)
               return (
                 <>
                   {title(t('manager.lineHarness'))}
@@ -204,7 +204,7 @@ export function ResetSettings({
                   {title(t('manager.model'))}
                   {option(
                     'manager-reset-dispatch:model-follow',
-                    t('manager.same'),
+                    t(modelDefaultKey),
                     dispatch.model === null,
                     () => setDispatch({ model: null, effort: null }),
                   )}
@@ -222,7 +222,7 @@ export function ResetSettings({
                   {title(t('manager.effort'))}
                   {option(
                     'manager-reset-dispatch:effort-follow',
-                    t('manager.same'),
+                    t(effortDefaultKey),
                     dispatch.effort === null,
                     () => setDispatch({ effort: null }),
                   )}

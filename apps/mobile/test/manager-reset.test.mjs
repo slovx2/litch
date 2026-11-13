@@ -2,8 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   managerResetState,
+  resetDispatchOptions,
   resetNextTarget,
   resetPreviewDetail,
+  resetSettingsChanged,
   resetTargetParams,
 } from '../src/screens/managers/reset.ts'
 
@@ -24,6 +26,96 @@ const preview = {
   capabilityChanges: [{ capability: 'nativeBackground', before: true, after: false }],
   dispatchChanges: [{ field: 'harness', before: 'claude-code', after: 'codex' }],
 }
+
+const dispatch = {
+  harness: null,
+  model: null,
+  effort: null,
+  worktree: false,
+  merge: 'manager',
+  maxRunningLines: 4,
+}
+const dispatchPreview = {
+  ...preview,
+  target: { ...preview.source, dispatch: { ...dispatch, harness: 'codex' } },
+  candidates: [
+    {
+      harness: 'codex',
+      defaultModel: 'gpt-6.1',
+      models: [
+        { id: 'gpt-6.1', name: 'GPT', efforts: ['low', 'medium', 'high'], defaultEffort: 'medium' },
+      ],
+    },
+    {
+      harness: 'claude-code',
+      defaultModel: 'claude-sonnet-4-6',
+      models: [
+        {
+          id: 'claude-sonnet-4-6',
+          name: 'Sonnet',
+          efforts: ['low', 'medium', 'high'],
+          defaultEffort: 'medium',
+        },
+      ],
+    },
+  ],
+  dispatchChanges: [
+    { field: 'harness', before: 'claude-code', after: 'codex' },
+    { field: 'model', before: 'claude-sonnet-4-6', after: null },
+    { field: 'effort', before: 'high', after: null },
+  ],
+}
+
+test('只改派线 harness：默认型号和强度属于 Codex，不沿用经理 Claude 的型号', () => {
+  const options = resetDispatchOptions(dispatchPreview, dispatch)
+  assert.equal(options.modelId, 'gpt-6.1')
+  assert.deepEqual(options.model.efforts, ['low', 'medium', 'high'])
+  assert.equal(options.effort, 'medium')
+  assert.equal(options.modelDefaultKey, 'manager.default')
+  assert.equal(options.effortDefaultKey, 'manager.default')
+  assert.equal(options.line.model, null, '保留 null 的默认语义')
+  assert.equal(options.line.effort, null)
+  assert.equal(resetSettingsChanged(dispatchPreview.source, dispatchPreview.target, dispatch), true)
+  assert.equal(
+    resetSettingsChanged(dispatchPreview.source, { ...dispatchPreview.source, dispatch }, dispatch),
+    false,
+  )
+})
+
+test('派线跟随经理时沿用经理设置；固定型号后取型号默认强度，显式强度优先', () => {
+  const same = { ...dispatchPreview, target: { ...dispatchPreview.source, dispatch } }
+  assert.equal(resetDispatchOptions(same, dispatch).modelId, 'claude-sonnet-4-6')
+  assert.equal(resetDispatchOptions(same, dispatch).effort, 'high')
+  assert.equal(resetDispatchOptions(same, dispatch).modelDefaultKey, 'manager.same')
+  assert.equal(resetDispatchOptions(same, dispatch).effortDefaultKey, 'manager.same')
+  const fixed = {
+    ...same,
+    target: { ...same.target, dispatch: { ...dispatch, model: 'claude-sonnet-4-6' } },
+  }
+  assert.equal(resetDispatchOptions(fixed, dispatch).effort, 'medium')
+  assert.equal(resetDispatchOptions(fixed, dispatch).effortDefaultKey, 'manager.default')
+  assert.equal(
+    resetDispatchOptions(
+      {
+        ...dispatchPreview,
+        target: {
+          ...dispatchPreview.target,
+          dispatch: { ...dispatchPreview.target.dispatch, effort: 'low' },
+        },
+      },
+      dispatch,
+    ).effort,
+    'low',
+  )
+})
+
+test('只改派线 harness 的确认把空默认值解析为实际目标型号和强度', () => {
+  const t = Object.assign((key) => key, { harness: (id, name) => name ?? id })
+  const detail = resetPreviewDetail(dispatchPreview, t, dispatch)
+  assert.match(detail, /manager.model: claude-sonnet-4-6 → gpt-6.1/)
+  assert.match(detail, /manager.effort: effort.high → effort.medium/)
+  assert.doesNotMatch(detail, /→ manager.same/)
+})
 
 test('跨 harness 与型号变化清理原目录的值，当前权限始终固定', () => {
   assert.deepEqual(

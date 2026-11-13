@@ -1,5 +1,5 @@
 // 正式接班组件的 RN Web 窄屏验收；仅驱动本脚本创建的隔离 Chrome。
-// 用法：node apps/mobile/test/manager-reset-ui.mjs [预览地址] [截图目录]
+// 用法：node apps/mobile/test/manager-reset-ui.mjs [预览地址] [截图目录] [dispatch]
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { globSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
@@ -111,7 +111,71 @@ try {
     deviceScaleFactor: 1,
     mobile: false,
   })
-  for (const lang of ['zh-CN', 'en']) {
+  if (process.argv[4] === 'dispatch') {
+    await open('zh-CN')
+    await click('manager:reset')
+    await wait(exists('manager-reset-dispatch-harness:codex'))
+    await read(
+      `document.querySelector('[data-testid="manager-reset-dispatch-harness:codex"]').scrollIntoView({block:'center'})`,
+    )
+    await click('manager-reset-dispatch-harness:codex')
+    await wait(
+      `document.querySelector('[data-testid="manager-reset-dispatch-effort:high"]')?.getAttribute('aria-disabled')!=='true'`,
+    )
+    const choices = await read(
+      `[...document.querySelectorAll('[data-testid^="manager-reset-dispatch"]')].map(e=>({id:e.dataset.testid,text:e.textContent,checked:e.getAttribute('aria-checked')}))`,
+    )
+    assert.ok(
+      choices.some(
+        (one) =>
+          one.id === 'manager-reset-dispatch:model-follow' &&
+          one.text.includes('默认') &&
+          one.checked === 'true',
+      ),
+    )
+    assert.ok(
+      choices.some(
+        (one) =>
+          one.id === 'manager-reset-dispatch:effort-follow' &&
+          one.text.includes('默认') &&
+          one.checked === 'true',
+      ),
+    )
+    for (const effort of ['low', 'medium', 'high'])
+      assert.ok(choices.some((one) => one.id === `manager-reset-dispatch-effort:${effort}`))
+    await read(
+      `document.querySelector('[data-testid="manager-reset-dispatch:effort-follow"]').scrollIntoView({block:'center'})`,
+    )
+    await fits()
+    await shot('logic-mobile-dispatch-defaults')
+    await click('manager-reset-next')
+    await wait(exists('confirm:ok'))
+    const confirmation = await text()
+    assert.match(confirmation, /切换经理设置/)
+    assert.match(confirmation, /模型: claude-sonnet-4-6 → gpt-6.1/)
+    assert.doesNotMatch(confirmation, /→ 与经理相同/)
+    await read(
+      `[...document.querySelectorAll('div')].filter(e=>e.clientHeight>0&&getComputedStyle(e).overflowY==='auto').forEach(e=>{e.scrollTop=e.scrollHeight})`,
+    )
+    await shot('logic-mobile-dispatch-confirm')
+    const evidence = { choices, confirmation }
+    for (const name of ['defaults', 'confirm'])
+      writeFileSync(
+        join(output, `logic-mobile-dispatch-${name}.json`),
+        JSON.stringify(evidence, null, 2),
+      )
+    await click('confirm:ok')
+    await wait(`window.__managerReset.calls.some(([name])=>name==='managers.reset')`)
+    const params = await read(
+      `window.__managerReset.calls.filter(([name])=>name==='managers.reset').at(-1)[1]`,
+    )
+    assert.equal(params.target.harness, 'claude-code')
+    assert.equal(params.target.dispatch.harness, 'codex')
+    assert.equal(params.target.dispatch.model, null)
+    assert.equal(params.target.dispatch.effort, null)
+    console.log(`通过：只改派线 harness 的型号默认值、强度候选、确认与提交；截图：${output}`)
+  }
+  for (const lang of process.argv[4] === 'dispatch' ? [] : ['zh-CN', 'en']) {
     await open(lang)
     for (const skin of ['standard', 'human', 'retro']) {
       await open(lang)
@@ -217,10 +281,11 @@ try {
     assert.ok(!(await read(exists('manager-reset-settings'))), '旧设备保留直接确认')
     assert.ok((await text()).includes(lang === 'en' ? 'full history' : '完整历史'))
   }
-  console.log(
-    '通过：390pt，三皮肤×中英文，选择/有损确认/等待取消/摘要失败锁定/接班失败/旧设备；截图：' +
-      output,
-  )
+  if (process.argv[4] !== 'dispatch')
+    console.log(
+      '通过：390pt，三皮肤×中英文，选择/有损确认/等待取消/摘要失败锁定/接班失败/旧设备；截图：' +
+        output,
+    )
 } catch (error) {
   console.error(await diagnose?.())
   console.error(error)

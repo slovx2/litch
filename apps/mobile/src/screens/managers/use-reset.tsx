@@ -11,6 +11,7 @@ import { ResetSettings } from './ResetSettings'
 import {
   managerResetState,
   resetPreviewDetail,
+  resetSettingsChanged,
   resetSettingsLabel,
   resetTargetParams,
 } from './reset'
@@ -149,12 +150,7 @@ export function useManagerReset(manager: ManagerView, online: boolean, resetTarg
   const replace = locked ? true : targetFlow && preview ? preview.mode === 'replace' : state.replace
   const target = locked ? operation?.target : preview?.target
   const source = locked ? operation?.source : preview?.source
-  const changed =
-    source &&
-    target &&
-    ['harness', 'model', 'effort'].some(
-      (key) => source[key as keyof typeof source] !== target[key as keyof typeof target],
-    )
+  const changed = source && target && resetSettingsChanged(source, target, manager.dispatch)
   const detail =
     targetFlow && target
       ? [
@@ -166,7 +162,7 @@ export function useManagerReset(manager: ManagerView, online: boolean, resetTarg
                 t('manager.resetBoardOnlyReplace'),
               ].join('\n\n')
             : preview
-              ? resetPreviewDetail(preview, t)
+              ? resetPreviewDetail(preview, t, manager.dispatch)
               : '',
           error || manager.reset?.error || '',
         ]
