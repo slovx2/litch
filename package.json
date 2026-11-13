@@ -83,6 +83,7 @@
     "client:diagnose:files-refresh": "node --import tsx --test packages/core/diagnostics/files-refresh-disk.mts",
     "client:test:ui": "npm run test --prefix packages/ui",
     "client:build": "npm run build --prefix packages/ui && npm run build --prefix apps/desktop",
+    "client:check:transcript-media-menu": "node scripts/check-media.mjs --menu",
     "client:dev": "npm run dev --prefix packages/ui",
     "client:start": "npm run build --prefix packages/ui && npm run start --prefix apps/desktop",
     "client:start:mock": "npm run build --prefix packages/ui && npm run start:mock --prefix apps/desktop",

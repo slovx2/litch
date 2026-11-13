@@ -923,6 +923,7 @@ export const zhCN = {
   'files.action.copyFull': '复制完整路径',
   'files.copied': '已复制：{text}',
   'files.action.revealFinder': '在 Finder 中打开',
+  'files.action.revealExplorer': '在资源管理器中显示',
   'files.action.revealManager': '在文件管理器中打开',
   'files.reveal.missing': '文件或目录已不存在。',
   'files.reveal.denied': '无法访问此路径，或路径超出文件访问范围。',

@@ -25,7 +25,7 @@ test('提示悬停或含焦点时不消失；离开后重新计满寿命，更�
   }
   const result = await build({
     stdin: {
-      contents: `export { showToast, dismissToast, Toasts } from './src/app/toasts.tsx';
+      contents: `export { showToast, dismissToast, releaseToastHost, Toasts } from './src/app/toasts.tsx';
         export { offerUndo } from './src/sidebar/archive-undo.ts';`,
       resolveDir: new URL('..', import.meta.url).pathname,
     },
@@ -42,6 +42,7 @@ test('提示悬停或含焦点时不消失；离开后重新计满寿命，更�
             export const useEffect=(f,deps)=>globalThis.__toastLifetime.useEffect(f,deps);
             export const useSyncExternalStore=(_,read)=>read();`,
             'react/jsx-runtime': 'export const jsx=(type,props)=>({type,props}),jsxs=jsx;',
+            'react-dom': 'export const createPortal=(content,host)=>({portal:true,content,host});',
             './appearance.ts': 'export const useT=()=>Object.assign(key=>key,{text:x=>x});',
             './icons.tsx': 'export const Close=()=>null;',
             '@litch/core': `export const keys={summary:(d,s)=>'summary:'+d+':'+s,archived:d=>'archived:'+d};`,
@@ -58,7 +59,7 @@ test('提示悬停或含焦点时不消失；离开后重新计满寿命，更�
     ],
   })
   try {
-    const { showToast, Toasts, dismissToast, offerUndo } = await import(
+    const { showToast, Toasts, dismissToast, releaseToastHost, offerUndo } = await import(
       `data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString('base64')}`
     )
     let expired = 0
@@ -153,6 +154,17 @@ test('提示悬停或含焦点时不消失；离开后重新计满寿命，更�
     assert.equal(stopped, true)
     assert.equal(Toasts(), null)
     assert.equal(expired, 3)
+    const host = { role: '虚构图片查看器' }
+    showToast({ id: 'media-failed', text: () => '复制失败', lifeMs: 0, host })
+    assert.equal(Toasts().portal, true, '模态操作的提示挂在同一顶层')
+    assert.equal(Toasts().host, host)
+    releaseToastHost(host)
+    assert.equal(
+      Toasts().props.children[0].props.toast.host,
+      undefined,
+      '关闭查看器后提示回到主界面',
+    )
+    dismissToast('media-failed')
   } finally {
     for (const cleanup of cleanups) cleanup?.()
     globalThis.window = previous

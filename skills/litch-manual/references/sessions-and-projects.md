@@ -854,6 +854,24 @@ Explicit Markdown links use the written destination, even when the label looks l
 手机可打开会话设备上的附件；属于控制端电脑的附件需要回到该电脑打开。新发送的文件卡信息保存在消息文本中，重新读取原生历史仍能恢复；既有历史中的裸路径不作猜测转换。
 ## AI 读取的图片 / Images read by AI
 
+### 桌面图片右键菜单 / Desktop image context menu
+
+对话正文的本机、远程和外网图片，以及工具结果图片和大图查看器，都支持右键菜单。
+菜单只显示当前可用的操作；上下方向键选择，回车执行，Esc 关闭并返回原图。
+正文缩略图可选择“查看大图”，大图菜单不重复提供此项。
+
+可复制原图到剪贴板。本机文件可在 Finder、资源管理器或文件管理器中显示；远程文件可“保存到本机”。
+文件图片可复制完整设备路径或在文件面板中打开。外网图片可复制图片地址、下载另存，
+或在浏览器中打开；浏览器打开方式沿用对话链接的设置。
+工具结果图片按需读取原图后复制或下载，不提供文件路径或文件管理器操作。
+图片缓存已清理或复制、保存失败时会显示原因。此菜单仅适用于桌面端。
+
+Right-click a transcript image, tool result image, or image in the viewer to see available actions.
+Copy uses the full image. Local files can be shown in the system file manager; remote files can be
+saved to this computer. File images also offer their full device path and the file panel. Web images
+offer their address, download, and browser opening using the conversation link preference. Tool
+images have no file path actions. Use arrow keys and Enter, or Escape to dismiss the menu.
+
 工具读取图片、MCP 返回图片或浏览器和 Computer Use 截图时，对话的工具摘要右侧会显示一排小图。
 组折叠时显示最近三张和“+N”，展开后按工具显示；窄屏只显示最后一张。点击可浏览同组全部图片，
 用左右按钮或方向键切换、Home/End 跳首尾、点击图片放大或还原、放大后拖动，Ctrl+滚轮调整缩放。

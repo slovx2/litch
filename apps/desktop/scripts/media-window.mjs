@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, BrowserWindow, clipboard } from 'electron'
+import { checkMediaMenu } from './media-menu-check.mjs'
 
 app.setPath('userData', process.env.LITCH_MEDIA_PROFILE)
 app.dock?.hide()
@@ -33,10 +34,12 @@ app.whenReady().then(async () => {
     done(true),
   )
   let saved = false
+  let completedDownloads = 0
   window.webContents.session.on('will-download', (_event, item) => {
     item.setSavePath(join(output, 'saved-image.png'))
     item.once('done', (_event, state) => {
       saved = state === 'completed'
+      if (saved) completedDownloads++
     })
   })
   try {
@@ -45,6 +48,11 @@ app.whenReady().then(async () => {
     await window.webContents.debugger.sendCommand('Emulation.setFocusEmulationEnabled', {
       enabled: true,
     })
+    if (process.env.LITCH_MEDIA_MENU) {
+      await checkMediaMenu({ window, read, wait, output, downloaded: () => completedDownloads })
+      assert.deepEqual(forbidden, [])
+      return
+    }
     await wait('document.querySelectorAll("[data-media-state=ready]").length === 5')
     await wait('document.querySelectorAll("[data-media-state=failed]").length >= 1')
     assert.equal(await read('document.querySelectorAll("[data-media-state=tooLarge]").length'), 1)
@@ -222,7 +230,7 @@ app.whenReady().then(async () => {
     assert.equal(await read('document.activeElement.className'), 'transcript-image-open')
     await read('document.querySelector(".transcript-image-open").click()')
     await wait('document.querySelector(".media-lightbox[open] img")?.complete')
-    await read('document.querySelector("[aria-label=在文件浏览器中显示]").click()')
+    await read('document.querySelector("[aria-label=在文件面板中打开]").click()')
     await wait('!document.querySelector(".media-lightbox")')
     assert.equal(await read('window.mediaFixture.fileState().active?.endsWith("photo.png")'), true)
     await read('document.querySelector("#toggle").click()')
@@ -247,6 +255,6 @@ app.whenReady().then(async () => {
     process.exitCode = 1
   } finally {
     window.destroy()
-    app.quit()
+    app.exit(process.exitCode ?? 0)
   }
 })

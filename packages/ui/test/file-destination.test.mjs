@@ -17,7 +17,21 @@ test('本机文件与目录只显示系统文件管理器，远程文件保留�
 test('macOS、Windows 和 Linux 文案按客户端平台选择，中英文均提供', () => {
   for (const platform of ['darwin', 'win32', 'linux']) {
     const key = revealLabel(platform)
-    assert.equal(zh[key], platform === 'darwin' ? '在 Finder 中打开' : '在文件管理器中打开')
-    assert.equal(en[key], platform === 'darwin' ? 'Show in Finder' : 'Show in File Manager')
+    assert.equal(
+      zh[key],
+      platform === 'darwin'
+        ? '在 Finder 中打开'
+        : platform === 'win32'
+          ? '在资源管理器中显示'
+          : '在文件管理器中打开',
+    )
+    assert.equal(
+      en[key],
+      platform === 'darwin'
+        ? 'Show in Finder'
+        : platform === 'win32'
+          ? 'Show in File Explorer'
+          : 'Show in File Manager',
+    )
   }
 })
