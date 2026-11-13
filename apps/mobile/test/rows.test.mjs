@@ -32,6 +32,33 @@ const command = (id, status, exitCode = null) => ({
 })
 const notice = (id) => ({ id, kind: 'notice', label: '进入审查模式', detail: null })
 
+test('后台完成插话在活动回合生成提示行，不生成用户气泡', () => {
+  const item = projectItem({
+    type: 'userMessage',
+    id: 'bg',
+    litchOrigin: 'backgroundTask',
+    content: [
+      {
+        type: 'text',
+        text: '<litch-background-completed>{"batchId":"b","events":[{"taskId":"task","originalTurnId":"old","itemId":"cmd","title":"构建","purpose":"检查构建","purposeTruncated":false,"status":"completed","exitCode":0,"signal":"unknown","durationMs":50,"output":"passed","outputMayBeTruncated":true,"truncated":false}]}</litch-background-completed>',
+        text_elements: [],
+      },
+    ],
+  })
+  const rows = new RowBuilder().build(
+    viewOf([{ id: 'active', status: 'running', itemIds: ['bg'] }], [item]),
+    'all',
+  )
+  assert.equal(
+    rows.some((row) => row.type === 'user'),
+    false,
+  )
+  const event = rows.find((row) => row.type === 'event')
+  assert.equal(event?.kind, 'background-completed')
+  assert.equal(event?.summary, '构建')
+  assert.equal(event?.body, 'passed')
+})
+
 function viewOf(turns, items) {
   return {
     forkedFrom: null,

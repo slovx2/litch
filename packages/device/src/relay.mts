@@ -255,7 +255,8 @@ export class Relay {
       this.host.background.resumed(link, result.thread)
     let changed = false
     if (isObject(result)) {
-      if (this.host.decorateNative?.(link, request?.method ?? '', result)) changed = true
+      if (this.host.decorateNative?.(link, request?.method ?? '', result, request?.threadId))
+        changed = true
       if (isObject(result.thread))
         this.host.observe(link, 'thread/snapshot', { thread: result.thread })
       changed = this.stamp(link, result.thread) || changed

@@ -656,6 +656,12 @@ explain it:
 
 Native Codex **0.163.0 or later** adds `litch_background.watch/read/cancel` to new Litch sessions. Finite commands that exit after one message or email, or after a build finishes, must register with `watch` when their result is needed for the current task, even if called watchers or listeners. Persistent services and indefinite listeners remain unregistered. Registration permits ending the turn; completion triggers continuation. The Background tasks page explains an unsupported runtime or a session without the tool; upgrade and start a new session as needed.
 
+已登记命令完成后，会话空闲时自动开续跑回合；回合进行中则立即插入同一份结果，桌面和手机显示“后台任务完成”，不显示为用户消息。正在等待审批、提问，或用户已停止、归档、经理暂停时保留结果；上游明确拒绝插话时等待空闲。投递结果不明不自动重试。本机和远程设备规则相同。
+
+Registered completions start a continuation when idle or deliver an in-turn background message while a turn is active. Desktop and mobile show “Background task completed” instead of a user bubble. Pending approvals/questions, user stops, archiving and paused managers still hold delivery; an explicit native steer refusal falls back to idle delivery. Uncertain delivery is never retried automatically. Local and remote devices follow the same rules.
+
+设备日志里的“后台接续”记录登记、完成、排程、仲裁及投递时刻，只含任务/批次/回合标识和状态，不记录命令正文或输出。完成到收到通知慢时，可区分命令仍在运行、待答/停止屏障、原生拒绝插话和模型正在处理当前采样。
+
 Codex 等 CI 等外部事件时，必须先启动有限命令并取得 `litch_background.watch` 的登记确认，才能结束回合等待自动续跑。没有这个工具时，不会仅凭“待唤醒”自动检查；应在当前回合处理完，或明确请经理/用户后续检查。工具在建会话时固定：重启设备服务或 app-server 不会给旧会话补装；升级实际选用的 Codex 后需要新建会话。本机与远程设备遵循同一规则。
 
 Ending a turn does not register a CI wait. Automatic continuation requires confirmation from `litch_background.watch` after starting a finite command. Without that tool, finish within the turn or explicitly ask the manager/user to check later. Tools are fixed at session creation: restarting the device service or app-server does not add them to old sessions. Upgrade the Codex executable actually selected by the device, then start a new session. This applies to local and remote devices.

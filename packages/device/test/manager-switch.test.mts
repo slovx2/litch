@@ -233,6 +233,16 @@ for (const source of ['claude-code', 'codex'])
       ])
       assert.equal(env.device.managers.resets.held(env.oldId), true)
       await until(() => env.running(source, env.oldId), '源引擎摘要')
+      // 后台结果现在可在活动回合插话；内部连接仍必须挡住接班摘要期间的新输入。
+      const sourceLink = await env.tree.link(source)
+      await assert.rejects(
+        sourceLink.request('turn/steer', {
+          threadId: env.oldId,
+          expectedTurnId: env.tree.activeTurn(env.oldId),
+          input: [{ type: 'text', text: '后台结果不应进入交接摘要', text_elements: [] }],
+        }),
+        /reset/,
+      )
       env.end(source, env.oldId)
       await until(() => env.current().threadId !== env.oldId, '跨引擎提交', 5000)
       const current = env.current()

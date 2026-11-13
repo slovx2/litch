@@ -3,7 +3,7 @@
 // 环境从零构造，绝不读取个人模型凭据或真实 HOME/CODEX_HOME。
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -22,6 +22,7 @@ import { codexConfig, startResponsesModel } from './client-fixture-responses.mjs
 
 // --child-entry=start|accept|manager-line 同时验收派子会话的真实工具调用链。
 const entry = process.argv.find((arg) => arg.startsWith('--child-entry='))?.split('=')[1]
+const activeDelivery = process.argv.includes('--active')
 // 真正等待固定时长，用于核验回合释放后原生命令仍存活并触发接续；默认保留原来的可控释放夹具。
 const sleepSeconds = Number(
   process.argv.find((arg) => arg.startsWith('--sleep='))?.split('=')[1] ?? 0,
@@ -43,6 +44,11 @@ let parentStage = 0
 const sentStarts = []
 const completedTurns = new Set()
 const samples = []
+let commandCompletedAt
+let modelReceivedAt
+let completionReceivedAt
+let backgroundSentAt
+const steered = new Set()
 const respond = (body) => {
   const input = JSON.stringify(body.input)
   if (
@@ -93,6 +99,7 @@ const respond = (body) => {
     input.includes('"batchId"') ||
     input.includes('\\"batchId\\"')
   ) {
+    modelReceivedAt = Date.now()
     continued = true
     return { text: 'BACKGROUND_RESULT_HANDLED' }
   }
@@ -112,9 +119,13 @@ const respond = (body) => {
         name: 'exec_command',
         arguments: JSON.stringify({
           // 由验收主流程在登记完成后放行，避免机器负载让命令早于 watch 退出。
-          cmd: sleepSeconds
+          cmd: (sleepSeconds
             ? `sleep ${sleepSeconds}; echo WAKE_NATIVE_RESULT; exit 7`
-            : 'while [ ! -f release-background ]; do sleep 0.1; done; echo WAKE_NATIVE_RESULT; exit 7',
+            : 'while [ ! -f release-background ]; do sleep 0.1; done; echo WAKE_NATIVE_RESULT; exit 7'
+          ).replace(
+            'exit 7',
+            `${JSON.stringify(process.execPath)} -e 'require("node:fs").writeFileSync("command-exit-at", String(Date.now()))'; exit 7`,
+          ),
           yield_time_ms: 1000,
           max_output_tokens: 1000,
         }),
@@ -135,11 +146,22 @@ const respond = (body) => {
       },
     }
   }
-  const output = JSON.stringify(
-    body.input.findLast((item) => item.type === 'function_call_output')?.output,
-  )
-  assert.match(output, /registered/, 'watch confirms delegation before final answer')
-  assert.doesNotMatch(output, /\[litch:/, 'watch 必须成功，不能把工具错误当作已登记')
+  if (stage === 3) {
+    const output = JSON.stringify(
+      body.input.findLast((item) => item.type === 'function_call_output')?.output,
+    )
+    assert.match(output, /registered/, 'watch confirms delegation before final answer')
+    assert.doesNotMatch(output, /\[litch:/, 'watch 必须成功，不能把工具错误当作已登记')
+  }
+  // 活动夹具连续做独立工作；完成插话应在下一次采样可见，不能等所有工作做完。
+  if (activeDelivery && stage < 43)
+    return {
+      call: {
+        namespace: 'functions',
+        name: 'exec_command',
+        arguments: JSON.stringify({ cmd: 'sleep 0.1', yield_time_ms: 1000 }),
+      },
+    }
   return { text: 'REGISTERED_AND_YIELDED' }
 }
 let scriptError
@@ -195,6 +217,17 @@ const connect = async (handlers) => {
       const raw = data.toString()
       const frame = JSON.parse(raw)
       if (frame.method === 'turn/completed') completedTurns.add(frame.params.threadId)
+      if (
+        frame.method === 'item/completed' &&
+        frame.params.item?.type === 'commandExecution' &&
+        frame.params.item.command?.includes('WAKE_NATIVE_RESULT')
+      ) {
+        commandCompletedAt ??= frame.params.completedAtMs ?? Date.now()
+        completionReceivedAt ??= Date.now()
+      }
+      if (frame.id != null && !frame.method && steered.has(frame.id)) {
+        assert.ok(!frame.error, JSON.stringify(frame.error))
+      }
       handlers.message(raw)
     })
     ws.on('close', () => handlers.close('native closed'))
@@ -202,6 +235,13 @@ const connect = async (handlers) => {
       send: (raw) => {
         const frame = JSON.parse(raw)
         if (frame.method === 'thread/start') sentStarts.push(frame.params)
+        if (
+          frame.method === 'turn/steer' &&
+          frame.params.clientUserMessageId?.startsWith('litch-background-')
+        ) {
+          backgroundSentAt ??= Date.now()
+          steered.add(frame.id)
+        }
         ws.send(raw)
       },
       close: () => {
@@ -292,14 +332,16 @@ try {
   // 从原生连接记录完成事件，避免子会话结束早于客户端补订阅；首回合完成前 rollout 可能还是空文件。
   for (let i = 0; i < 400; i++) {
     assert.ifError(scriptError)
-    if (completedTurns.has(thread.id)) break
+    if (activeDelivery ? samples.length >= 3 : completedTurns.has(thread.id)) break
     if (i === 399) throw new Error(`回合未结束：${thread.id}; samples=${samples.length}; ${stderr}`)
     await pause(50)
   }
   const history = await client.call('thread/read', { threadId: thread.id, includeTurns: true })
   assert.ok(
-    history.thread.turns.some((turn) => turn.status === 'completed'),
-    '原生历史确认首回合已完成',
+    history.thread.turns.some(
+      (turn) => turn.status === (activeDelivery ? 'inProgress' : 'completed'),
+    ),
+    '原生历史确认首回合状态',
   )
   assert.ifError(scriptError)
   // 本夹具直接建 DeviceServer，不走启动器的 skill 安装；原生发现为空时必须使用 guide 短表。
@@ -346,38 +388,73 @@ try {
   for (let i = 0; i < (sleepSeconds + 15) * 20 && !continued; i++) await pause(50)
   assert.ifError(scriptError)
   assert.ok(continued, 'all UI clients disconnected; device still delivers completion')
+  const processExitMarkerAt = Number(readFileSync(join(dirs.work, 'command-exit-at'), 'utf8'))
+  console.log(
+    JSON.stringify({
+      mode: activeDelivery ? 'active' : 'idle',
+      phase: 'received',
+      processExitMarkerAt,
+      commandCompletedAt,
+      completionReceivedAt,
+      modelReceivedAt,
+      modelLatencyMs: modelReceivedAt - processExitMarkerAt,
+    }),
+  )
   await pause(200)
   client = new TestClient(device)
   await client.initialize(['harness', 'backgroundTasks', 'nativeBackgroundWake'])
   const resumed = await client.call('thread/resume', { threadId: thread.id })
   const automatic = resumed.thread.turns.find((t) => t.litchOrigin === 'backgroundTask')
-  assert.ok(automatic, 'origin survives history read')
-  assert.ok(
-    automatic.items.some(
-      (i) => i.type === 'functionCallOutput' && i.namespace === 'litch_background',
-    ),
-  )
-  assert.ok(
-    automatic.items.some(
-      (i) => i.type === 'agentMessage' && i.text === 'BACKGROUND_RESULT_HANDLED',
-    ),
-  )
-  assert.equal(
-    samples.length,
-    4,
-    'one command, one registration, one final answer, one continuation',
-  )
+  if (activeDelivery) {
+    assert.equal(automatic, undefined, '后台插话不能把整个用户回合改成后台回合')
+    const messages = resumed.thread.turns
+      .flatMap((t) => t.items)
+      .filter((i) => i.litchOrigin === 'backgroundTask')
+    assert.equal(messages.length, 1)
+    assert.equal(messages[0].type, 'userMessage')
+    assert.match(messages[0].content[0].text, /^<litch-background-completed>/)
+  } else {
+    assert.ok(automatic, 'origin survives history read')
+    assert.ok(
+      automatic.items.some(
+        (i) => i.type === 'functionCallOutput' && i.namespace === 'litch_background',
+      ),
+    )
+    assert.ok(
+      automatic.items.some(
+        (i) => i.type === 'agentMessage' && i.text === 'BACKGROUND_RESULT_HANDLED',
+      ),
+    )
+  }
+  if (activeDelivery)
+    assert.ok(samples.length >= 4 && samples.length < 43, '活动回合在独立工作结束前收到结果')
+  else
+    assert.equal(
+      samples.length,
+      4,
+      'one command, one registration, one final answer, one continuation',
+    )
   assert.ok(JSON.stringify(samples.at(-1).input).includes('WAKE_NATIVE_RESULT'))
-  assert.ok(JSON.stringify(samples.at(-1).input).includes('\\"exitCode\\":7'))
-  const page = await client.call('thread/turns/list', { threadId: thread.id })
+  assert.ok(/exitCode.{0,3}:7/.test(JSON.stringify(samples.at(-1).input)))
+  const page = await client.call('thread/turns/list', {
+    threadId: thread.id,
+    ...(activeDelivery ? { itemsView: 'full' } : {}),
+  })
   assert.ok(
-    page.data.some((t) => t.litchOrigin === 'backgroundTask'),
+    page.data.some((t) =>
+      activeDelivery
+        ? t.items.some((i) => i.litchOrigin === 'backgroundTask')
+        : t.litchOrigin === 'backgroundTask',
+    ),
     'paginated history retains origin',
   )
   const ordinary = new TestClient(device)
   try {
     await ordinary.initialize(['harness'])
-    const plain = await ordinary.call('thread/turns/list', { threadId: thread.id })
+    const plain = await ordinary.call('thread/turns/list', {
+      threadId: thread.id,
+      ...(activeDelivery ? { itemsView: 'full' } : {}),
+    })
     assert.ok(
       !JSON.stringify(plain).includes('litchOrigin'),
       'undeclared peer sees standard turns only',
@@ -385,6 +462,7 @@ try {
   } finally {
     ordinary.close()
   }
+  const sampledBeforeRestart = samples.length
   await device.close()
   const restarted = new DeviceServer({
     stateDir: dirs.device,
@@ -397,13 +475,34 @@ try {
   try {
     await read.initialize(['harness', 'backgroundTasks', 'nativeBackgroundWake'])
     const history = await read.call('thread/resume', { threadId: thread.id })
-    assert.ok(history.thread.turns.some((t) => t.litchOrigin === 'backgroundTask'))
+    assert.ok(
+      history.thread.turns.some((t) =>
+        activeDelivery
+          ? t.items.some((i) => i.litchOrigin === 'backgroundTask')
+          : t.litchOrigin === 'backgroundTask',
+      ),
+    )
     await pause(500)
-    assert.equal(samples.length, 4, 'restart never replays the completion')
+    assert.equal(samples.length, sampledBeforeRestart, 'restart never replays the completion')
   } finally {
     read.close()
     await restarted.close()
   }
+  assert.ok(commandCompletedAt && modelReceivedAt && completionReceivedAt)
+  assert.ok(modelReceivedAt - processExitMarkerAt < 3000, '命令结束后三秒内假模型必须收到结果')
+  assert.equal(steered.size, activeDelivery ? 1 : 0)
+  console.log(
+    JSON.stringify({
+      mode: activeDelivery ? 'active' : 'idle',
+      processExitMarkerAt,
+      backgroundSentAt,
+      commandCompletedAt,
+      completionReceivedAt,
+      modelReceivedAt,
+      eventLatencyMs: completionReceivedAt - commandCompletedAt,
+      modelLatencyMs: modelReceivedAt - processExitMarkerAt,
+    }),
+  )
   console.log(
     `PASS native background continuation (${entry ?? 'client'}, sleep=${sleepSeconds}s): final tools, explicit watch, no UI clients, exit output, origin persistence, restart does not replay`,
   )

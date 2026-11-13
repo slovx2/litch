@@ -79,6 +79,7 @@ export interface SessionTreeHost {
   managerResetTasks?(threadId: string): { id: string; name: string }[]
   /** 发给全部声明了 extension 的客户端连接 */
   announce(method: string, params: unknown, extension: string): void
+  pendingChanged?(threadId: string): void
   /** 设备进程建出来的会话：给每条客户端连接发一条标准的 thread/started（各自挂上 harness、工作区、litchLineage） */
   threadStarted(harness: string, thread: Record<string, unknown>): void
   clientRequests?(threadId: string): SessionPendingRequest[]
@@ -488,16 +489,19 @@ export class SessionTree {
   }
 
   /** 原生后台接续不属于用户回合；停止、失败、待答与经理暂停仍然约束它。 */
-  canAutoContinue(threadId: string): boolean {
+  canAutoContinue(threadId: string, allowActive = false): boolean {
+    return this.autoContinueBlock(threadId, allowActive) === null
+  }
+
+  autoContinueBlock(threadId: string, allowActive = false): string | null {
     const manager =
       this.managers?.store.forThread(threadId) ?? this.managers?.lines.managerFor(threadId)
-    return (
-      !this.closed &&
-      !this.cutShort.has(threadId) &&
-      !this.active.has(threadId) &&
-      this.pendingRequests(threadId).length === 0 &&
-      (!manager || manager.status === 'active')
-    )
+    if (this.closed) return 'closed'
+    if (this.cutShort.has(threadId)) return 'stopped'
+    if (!allowActive && this.active.has(threadId)) return 'active'
+    if (this.pendingRequests(threadId).length > 0) return 'pending-request'
+    if (manager && manager.status !== 'active') return 'manager-inactive'
+    return null
   }
 
   activeTurn(threadId: string): string | null {
@@ -626,6 +630,7 @@ export class SessionTree {
   }
 
   pendingChanged(threadId: string): void {
+    this.host.pendingChanged?.(threadId)
     const manager = this.managers?.lines.managerFor(threadId)
     if (manager) this.managers?.changed(manager.id)
     const parent = this.store.parentOf(threadId)
@@ -1436,7 +1441,7 @@ export class SessionTree {
    * 会话停着没有。看到的通知和引擎说的都要是停着；引擎说停着、通知还记着在跑的，是漏了结束的通知
    * （设备进程的连接断过、重启过），以引擎为准。读不到的只看通知
    */
-  private async idle(threadId: string): Promise<boolean> {
+  async idle(threadId: string): Promise<boolean> {
     if (this.managers?.resets.held(threadId) || this.managers?.resets.refusal(threadId))
       return false
     const before = this.active.get(threadId)

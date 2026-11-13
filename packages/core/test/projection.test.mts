@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { ThreadItem } from '../../protocol/src/index.mjs'
+import { formatBackgroundCompletion } from '../../protocol/src/native-background-wake.mjs'
 import {
   codexHarness,
   countDiffLines,
@@ -16,6 +17,45 @@ import {
   threadTitle,
 } from '../src/index.mjs'
 import { agentText, project, thread, turn, userText } from './fixtures.mjs'
+
+test('后台插话仅认设备来源标记，实时和历史投影为后台完成提示，普通用户不能靠标签冒充', () => {
+  const text = formatBackgroundCompletion({
+    batchId: 'batch',
+    events: [
+      {
+        taskId: 'task',
+        originalTurnId: 'old',
+        itemId: 'cmd',
+        title: '构建',
+        purpose: '检查构建',
+        purposeTruncated: false,
+        status: 'completed',
+        exitCode: 0,
+        signal: 'unknown',
+        durationMs: 50,
+        output: 'build passed',
+        outputMayBeTruncated: true,
+        truncated: false,
+      },
+    ],
+  })
+  const raw = { ...userText('input', text), litchOrigin: 'backgroundTask' as const }
+  const item = projectItem(raw)
+  assert.equal(item.kind, 'userMessage')
+  if (item.kind !== 'userMessage') return
+  assert.equal(item.text, '')
+  assert.deepEqual(item.event, {
+    kind: 'background-completed',
+    notes: [],
+    summary: '构建',
+    body: 'build passed',
+  })
+  const history = projectTurn(turn('active', [raw]))
+  assert.deepEqual(history.items[0], { ...item, id: 'active:input' })
+  assert.equal(history.turn.origin, undefined)
+  const ordinary = projectItem(userText('ordinary', text))
+  assert.equal(ordinary.kind === 'userMessage' && ordinary.event, undefined)
+})
 
 test('Claude 安全拦截实时/历史采用同一失败投影，保留原文并让侧栏显示错误', () => {
   const message =

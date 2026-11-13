@@ -177,6 +177,9 @@ const MIGRATIONS: readonly string[] = [
   `CREATE TABLE question_settlements(id TEXT PRIMARY KEY, thread_id TEXT NOT NULL,
      record TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0);
    CREATE INDEX question_settlements_by_thread ON question_settlements(thread_id);`,
+  // 后台插话来源独立于有限保留的任务结果，历史翻页与重启后仍能识别。
+  `CREATE TABLE native_background_inputs(thread_id TEXT NOT NULL, item_id TEXT NOT NULL, batch_id TEXT NOT NULL,
+     PRIMARY KEY(thread_id, item_id)) WITHOUT ROWID;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length

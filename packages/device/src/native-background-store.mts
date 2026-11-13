@@ -86,8 +86,23 @@ export class NativeBackgroundStore {
       .run(threadId, turnId)
   }
 
+  rememberInput(threadId: string, itemId: string, batchId: string): void {
+    this.db
+      .prepare(
+        'INSERT OR IGNORE INTO native_background_inputs(thread_id, item_id, batch_id) VALUES(?, ?, ?)',
+      )
+      .run(threadId, itemId, batchId)
+  }
+
+  isInput(threadId: string, itemId: string): boolean {
+    return !!this.db
+      .prepare('SELECT 1 FROM native_background_inputs WHERE thread_id=? AND item_id=?')
+      .get(threadId, itemId)
+  }
+
   forget(threadId: string): void {
     this.db.prepare('DELETE FROM native_background_tasks WHERE thread_id=?').run(threadId)
     this.db.prepare('DELETE FROM native_background_turns WHERE thread_id=?').run(threadId)
+    this.db.prepare('DELETE FROM native_background_inputs WHERE thread_id=?').run(threadId)
   }
 }

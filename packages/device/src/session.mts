@@ -305,8 +305,15 @@ export class ClientSession implements ClientToolPeer {
       answered: (link, id, error) => this.traced(id, error, link.harness),
       deviceTools: host.deviceTools,
       decorateNative: (link, _method, value, threadId) =>
-        link.dialect.clientToolsByDevice === true && this.declared.has(EXTENSION.backgroundTasks)
-          ? (host.nativeBackground?.decorate(threadId ?? '', value) ?? false)
+        link.dialect.clientToolsByDevice === true &&
+        (this.declared.has(EXTENSION.backgroundTasks) ||
+          this.declared.has(EXTENSION.nativeBackgroundWake))
+          ? (host.nativeBackground?.decorate(
+              threadId ?? '',
+              value,
+              this.declared.has(EXTENSION.nativeBackgroundWake),
+              this.declared.has(EXTENSION.backgroundTasks),
+            ) ?? false)
           : false,
       observe: (link, method, params) => {
         this.host.resumeTools.observe(method, params)
