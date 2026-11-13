@@ -888,6 +888,7 @@ offer their address, download, and browser opening using the conversation link p
 images have no file path actions. Use arrow keys and Enter, or Escape to dismiss the menu.
 
 工具读取图片、MCP 返回图片或浏览器和 Computer Use 截图时，对话的工具摘要右侧会显示一排小图。
+重开会话后，首屏与后续历史分页都沿用设备缓存的工具图片。
 组折叠时显示最近三张和“+N”，展开后按工具显示；窄屏只显示最后一张。点击可浏览同组全部图片，
 用左右按钮或方向键切换、Home/End 跳首尾、点击图片放大或还原、放大后拖动，Ctrl+滚轮调整缩放。
 桌面以半透明深色遮罩覆盖窗口，图片浮在对话上；点击图片以外的遮罩直接关闭，拖动松手不会误关。右上关闭或 Esc 返回。
@@ -898,6 +899,7 @@ images have no file path actions. Use arrow keys and Enter, or Escape to dismiss
 缓存已清理、格式不支持或上游没保留图片时不能恢复。Codex 已截成文字的大 MCP 结果不能补回。
 
 Images returned by Read, MCP, browser and Computer Use tools appear beside the tool summary.
+After reopening a conversation, both the first screen and later history pages use cached tool images from the session device.
 Collapsed groups show the latest three thumbnails and “+N”; expanded groups show each tool’s images.
 Narrow screens show the last image. Click to browse the whole group, use arrows or Home/End to navigate,
 click to zoom, drag while zoomed, and Ctrl+scroll to adjust zoom. Close with the top-right button or Escape;
