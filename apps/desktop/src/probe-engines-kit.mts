@@ -280,12 +280,18 @@ export function installEnginesKit(): boolean {
     }
     throw new Error('对话里有收着的过程或步骤组点不开')
   }
-  /** 一条步骤右边的状态：耗时那一格不要 */
+  // 命令行只显示状态图标、不再写“运行”；按实际读屏标签采样，不把图标读成空状态。
+  const commandMark = (item: Element) =>
+    !one('.verb', item) ? one('.item-head .step-mark', item) : null
+  /** 一条步骤的状态：耗时那一格不要 */
   const stateOf = (item: Element) =>
+    commandMark(item)?.getAttribute('aria-label') ??
     all('.item-head .meta > span', item)
       .map(text)
       .filter((word) => word && !/^[\d.]+ (毫秒|秒)$|^\d+ 分 \d+ 秒$/.test(word))
       .join(' ')
+  const stepOf = (item: Element) =>
+    `${commandMark(item) ? '运行' : text(one('.verb', item))} ${text(one('.tgt', item))}｜${stateOf(item)}`.trim()
   const outline = async () => {
     await unfold()
     return turns().map((turn) =>
@@ -301,18 +307,14 @@ export function installEnginesKit(): boolean {
           return [...(one('.proc-body', block)?.children ?? [])].flatMap((part): string[] => {
             if (part.matches('.agent-message')) return [`说明：${text(one('.md', part))}`]
             if (part.matches('.steps')) {
-              return all('.item', part).map((item) =>
-                `${text(one('.verb', item))} ${text(one('.tgt', item))}｜${stateOf(item)}`.trim(),
-              )
+              return all('.item', part).map(stepOf)
             }
             return [`${part.className}：${text(part).slice(0, 80)}`]
           })
         }
         // 只有提示的回合（比如只有“上下文已压缩”那一条）提示直接露在外面
         if (block.matches('.notes')) {
-          return all('.item', block).map((item) =>
-            `${text(one('.verb', item))} ${text(one('.tgt', item))}｜${stateOf(item)}`.trim(),
-          )
+          return all('.item', block).map(stepOf)
         }
         // 压缩那一条（正在压缩、已压缩、没压成）单独一块
         if (block.matches('.compaction')) return [text(block)]

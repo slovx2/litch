@@ -10,7 +10,7 @@ export interface ApprovalSeen {
   permission: string
   /** 来的那张卡片。没来是 null */
   card: CardSeen | null
-  /** 卡片等着的时候，对话里那条命令右边写的是什么 */
+  /** 卡片等着的时候，命令状态图标的读屏标签 */
   pending: string
   /** 卡片等着的时候侧栏这一行上有没有“等你”的记号 */
   flagged: boolean
@@ -23,7 +23,7 @@ export interface ApprovalSeen {
   turn: string[]
   /** 那条命令点开之后里面的输出 */
   output: string
-  /** 那条命令右边的几格（连耗时），状态那一格标没标红 */
+  /** 命令耗时和状态图标标签，状态图标是否标红 */
   meta: string[]
   red: boolean
 }
@@ -53,7 +53,9 @@ export async function enginesApproval(
   // 进行中的步骤组默认收着，那条命令要点开才画出来
   if (shown) await kit.unfold()
   const pending = shown
-    ? text(kit.sub(kit.turns().at(-1), '.item-head .meta [data-state="waiting"]'))
+    ? (kit
+        .sub(kit.turns().at(-1), '.item-head .step-mark[aria-label="待审批"]')
+        ?.getAttribute('aria-label') ?? '')
     : ''
   // 侧栏的记号和卡片走两条订阅，各按各的帧到，谁先到不一定（流水线上 dsh 卡片先到、记号晚一帧，量空过一次）。
   // 卡片这时一直开着，等记号出现再下结论，不在卡片刚出现的那一帧就读
@@ -73,7 +75,9 @@ export async function enginesApproval(
   const turn = (await kit.outline()).at(-1) ?? []
   // 命令那一条：这一回合里最后一条带输出的
   const last = kit.turns().at(-1)
-  const item = kit.subs(last, '.item').findLast((entry) => text(one('.verb', entry)) === '运行')
+  const item = kit
+    .subs(last, '.item')
+    .findLast((entry) => !one('.verb', entry) && one('.item-head .step-mark', entry))
   const head = kit.sub<HTMLButtonElement>(item, '.item-head')
   if (head?.getAttribute('aria-expanded') === 'false') head.click()
   await files.frame()
@@ -88,9 +92,12 @@ export async function enginesApproval(
     foot: kit.foot(),
     answer: kit.lastAnswer(),
     turn,
-    output: text(kit.sub(item, '.item-detail')),
-    meta: kit.subs(item, '.item-head .meta > span').map(text),
-    red: Boolean(kit.sub(item, '.item-head .meta > .minus')),
+    output: text(kit.sub(item, '.item-detail .well')),
+    meta: [
+      ...kit.subs(item, '.item-head .meta > span').map(text),
+      kit.sub(item, '.item-head .step-mark')?.getAttribute('aria-label') ?? '',
+    ].filter(Boolean),
+    red: Boolean(kit.sub(item, '.item-head .step-mark.minus')),
   }
 }
 

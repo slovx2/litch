@@ -59,3 +59,34 @@ test('已定稿的正文照常完成，取样不依赖预期回答的内容', as
   await kit.idle(600)
   assert.equal(kit.lastAnswer(), full)
 })
+
+test('命令没有动词文字、状态只在图标上时，骨架仍包含完整命令与状态', async () => {
+  for (const status of ['待审批', '通过', '已拒绝']) {
+    const item = {}
+    const steps = { matches: (selector) => selector === '.steps' }
+    const proc = { matches: (selector) => selector === '.proc' }
+    const turn = { children: [proc] }
+    const page = {
+      __filesKit: {
+        one: (selector, scope) => {
+          if (selector === '.proc-body' && scope === proc) return { children: [steps] }
+          if (scope !== item) return null
+          if (selector === '.item-head .step-mark')
+            return { getAttribute: (name) => (name === 'aria-label' ? status : null) }
+          if (selector === '.tgt') return { textContent: 'echo fixture-ran-$((6*7))' }
+          return null
+        },
+        all: (selector, scope) => {
+          if (selector === '.turn') return [turn]
+          if (selector === '.item' && scope === steps) return [item]
+          return []
+        },
+        text: (node) => node?.textContent ?? '',
+        frame: async () => {},
+      },
+    }
+    runInNewContext(`${code}\nprobes.installEnginesKit()`, { window: page })
+    const outline = await page.__enginesKit.outline()
+    assert.equal(outline[0][0], `运行 echo fixture-ran-$((6*7))｜${status}`)
+  }
+})
