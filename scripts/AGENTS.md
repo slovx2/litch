@@ -104,6 +104,10 @@ plain `.mjs` / shell.
 - `.mjs` scripts are Biome-formatted (`npm run format` covers `scripts/`); the
   shell scripts (`codex-shim`, `codex-harness-adapter-mode`) are left untouched.
 
+## 对话媒体菜单验收
+
+先 `npm run client:build`，再 `npm run client:check:transcript-media-menu`。隐藏 Electron 窗口加载正式组件与模拟核心；文件外壳和剪贴板使用隔离替身，外网下载使用已读取的 Blob，不访问公网。覆盖菜单操作、失败提示、键盘和三平台文案。截图默认写 `.artifacts/transcript-media-menu/`，可用 `LITCH_MEDIA_OUTPUT` 指定目录。
+
 ## 手机经理控制台验收
 
 `npm run client:check:manager-mobile` 先生成手机 WebView 资源，再自动分配空闲端口，启动本工作树的隔离 Expo 预览并运行正式页面验收，结束或中断时清理自有进程。需要先安装 `apps/mobile` 依赖和隔离 Chrome for Testing（可用 `LITCH_CHROME_BINARY` 指定）。入口是 `check-manager-mobile-run.mjs`，生命周期实现与单测在 `manager-mobile-runner*`；不设置 `CI=1`，不改现有服务器或工作树配置。

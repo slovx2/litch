@@ -972,6 +972,7 @@ export const en: Record<MessageKey, Entry> = {
   'files.action.copyFull': 'Copy full path',
   'files.copied': 'Copied: {text}',
   'files.action.revealFinder': 'Show in Finder',
+  'files.action.revealExplorer': 'Show in File Explorer',
   'files.action.revealManager': 'Show in File Manager',
   'files.reveal.missing': 'The file or folder no longer exists.',
   'files.reveal.denied': 'This path is inaccessible or outside the file access scope.',

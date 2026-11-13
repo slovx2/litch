@@ -9,5 +9,9 @@ export function fileDestination(
 }
 
 export function revealLabel(platform: string | undefined) {
-  return platform === 'darwin' ? 'files.action.revealFinder' : 'files.action.revealManager'
+  return platform === 'darwin'
+    ? 'files.action.revealFinder'
+    : platform === 'win32'
+      ? 'files.action.revealExplorer'
+      : 'files.action.revealManager'
 }

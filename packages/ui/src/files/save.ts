@@ -3,7 +3,7 @@ import { dismissToast, showToast } from '../app/toasts.tsx'
 import { byteSize } from './lines.ts'
 
 /** 只传设备路径；本机目标只由外壳的系统保存对话框决定。 */
-export function saveToLocal(source: FileSaveSource): void {
+export function saveToLocal(source: FileSaveSource, host?: HTMLElement): void {
   const shell = window.litchShell
   if (!shell?.saveFile || !shell.onFileSave || !shell.fileSaveAction) return
   const id = crypto.randomUUID()
@@ -12,6 +12,7 @@ export function saveToLocal(source: FileSaveSource): void {
     void shell.fileSaveAction?.(id, kind).catch((error) =>
       showToast({
         id,
+        host,
         tone: 'err',
         lifeMs: 0,
         text: (t) => t('files.save.failed', { name, reason: String(error) }),
@@ -23,6 +24,7 @@ export function saveToLocal(source: FileSaveSource): void {
     if (progress.state === 'saving') {
       showToast({
         id,
+        host,
         lifeMs: 0,
         text: (t) =>
           t('files.save.progress', {
@@ -43,6 +45,7 @@ export function saveToLocal(source: FileSaveSource): void {
     if (progress.state === 'failed') {
       showToast({
         id,
+        host,
         tone: 'err',
         lifeMs: 0,
         text: (t) =>
@@ -55,17 +58,19 @@ export function saveToLocal(source: FileSaveSource): void {
     }
     showToast({
       id,
+      host,
       lifeMs: 0,
       text: (t) => t('files.save.saved', { path: progress.destination }),
       action: { label: (t) => t('files.save.open'), run: () => action('open') },
       more: { label: (t) => t('files.save.reveal'), run: () => action('reveal') },
     })
   })
-  showToast({ id, lifeMs: 0, text: (t) => t('files.save.choose', { name }) })
+  showToast({ id, host, lifeMs: 0, text: (t) => t('files.save.choose', { name }) })
   void shell.saveFile({ ...source, id }).catch((error) => {
     close()
     showToast({
       id,
+      host,
       tone: 'err',
       lifeMs: 0,
       text: (t) => t('files.save.failed', { name, reason: String(error) }),

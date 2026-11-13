@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { Icon } from '../../app/icons.tsx'
+import { releaseToastHost, showToast } from '../../app/toasts.tsx'
+import { copyImage, downloadImage, type MediaSource } from './actions.ts'
+import { useMediaMenu } from './MediaMenu.tsx'
 
 export interface GalleryImage {
   id: string
@@ -9,8 +12,9 @@ export interface GalleryImage {
   height: number
   label: string
   href: string
+  source: MediaSource
   reveal?: () => void
-  save?: (() => void) | undefined
+  save?: ((host?: HTMLElement) => void) | undefined
 }
 
 export function Lightbox({
@@ -34,7 +38,6 @@ export function Lightbox({
   )
   const [scale, setScale] = useState<number | null>(null)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
-  const [error, setError] = useState(false)
   const drag = useRef<{
     x: number
     y: number
@@ -44,12 +47,23 @@ export function Lightbox({
     blank: boolean
   } | null>(null)
   const entry = entries[index]
+  const mediaMenu = useMediaMenu(
+    {
+      kind: 'image',
+      source: entry?.source ?? { kind: 'tool' },
+      label: entry?.label ?? '',
+      image: entry,
+    },
+    undefined,
+    close,
+  )
   useEffect(() => {
     const element = dialog.current
     const before = document.activeElement as HTMLElement | null
     element?.showModal()
     return () => {
       element?.close()
+      releaseToastHost(element)
       before?.focus()
     }
   }, [])
@@ -61,7 +75,6 @@ export function Lightbox({
   const next = (step: number) => {
     setIndex((at) => Math.max(0, Math.min(entries.length - 1, at + step)))
     reset()
-    setError(false)
   }
   const zoom = (factor: number) => {
     const fitted = (img.current?.clientWidth ?? entry.width) / entry.width
@@ -69,30 +82,20 @@ export function Lightbox({
   }
   const copy = async () => {
     try {
-      const canvas = document.createElement('canvas')
-      canvas.width = entry.width
-      canvas.height = entry.height
-      const context = canvas.getContext('2d')
-      if (!context || !img.current) throw new Error('图片尚未加载')
-      context.drawImage(img.current, 0, 0, entry.width, entry.height)
-      const blob = await new Promise<Blob>((resolve, reject) =>
-        canvas.toBlob(
-          (value) => (value ? resolve(value) : reject(new Error('图片无法复制'))),
-          'image/png',
-        ),
-      )
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-      setError(false)
+      await copyImage(entry)
     } catch {
-      setError(true)
+      showToast({
+        id: 'media-copy',
+        host: dialog.current ?? undefined,
+        tone: 'err',
+        lifeMs: 5000,
+        text: (tr) => tr('message.copy.failed'),
+      })
     }
   }
   const save = () => {
-    if (entry.save) return entry.save()
-    const link = document.createElement('a')
-    link.href = entry.url
-    link.download = entry.href.split('/').pop()?.split(/[?#]/)[0] || 'image'
-    link.click()
+    if (entry.save) return entry.save(dialog.current ?? undefined)
+    downloadImage(entry, entry.href)
   }
   return (
     <dialog
@@ -102,7 +105,8 @@ export function Lightbox({
       onPointerDown={(event) => {
         if (
           event.button !== 0 ||
-          (event.target instanceof Element && event.target.closest('.media-lightbox-tools'))
+          (event.target instanceof Element &&
+            event.target.closest('.media-lightbox-tools, [role="menu"], .toasts'))
         )
           return
         if (drag.current) {
@@ -145,7 +149,12 @@ export function Lightbox({
         drag.current = null
       }}
       onDoubleClick={(event) => {
-        if (!(event.target instanceof Element && event.target.closest('.media-lightbox-tools')))
+        if (
+          !(
+            event.target instanceof Element &&
+            event.target.closest('.media-lightbox-tools, [role="menu"], .toasts')
+          )
+        )
           reset()
       }}
       onCancel={(event) => {
@@ -240,7 +249,6 @@ export function Lightbox({
           ×
         </button>
       </div>
-      {error ? <small role="alert">{t('message.copy.failed')}</small> : null}
       <div
         ref={stage}
         className="media-lightbox-stage"
@@ -252,6 +260,7 @@ export function Lightbox({
       >
         <img
           ref={img}
+          onContextMenu={mediaMenu.onContextMenu}
           src={entry.url}
           alt={entry.label}
           draggable={false}
@@ -268,6 +277,7 @@ export function Lightbox({
           }}
         />
       </div>
+      {mediaMenu.menu}
     </dialog>
   )
 }

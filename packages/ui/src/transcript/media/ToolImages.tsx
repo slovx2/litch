@@ -17,9 +17,12 @@ import {
 } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { useKey, useServices } from '../../app/services.tsx'
+import { releaseToastHost } from '../../app/toasts.tsx'
 import { PreviewResources } from '../../files/preview/resources.ts'
 import { usePreviewImage } from '../../files/preview/use-image.ts'
 import { TurnTouch } from '../state.ts'
+import { useMediaMenu } from './MediaMenu.tsx'
+import { loadToolImage } from './tool-image-resource.ts'
 import './tool-images.css'
 
 const Gallery = createContext<ToolImage[]>([])
@@ -57,7 +60,6 @@ export function ToolImageStrip({
   useEffect(() => {
     select(null)
   }, [device?.toolImagesEnabled, device?.connection])
-  const t = useT()
   const entries = own ?? group
   const all = group.length ? group : entries
   if (device?.toolImagesEnabled === false || !entries.length) return null
@@ -98,26 +100,12 @@ export function ToolImageStrip({
             key={image.id}
             className={`tool-image-chip ${index < visible.length - 1 ? 'tool-images-wide' : ''}`}
           >
-            <button
-              type="button"
-              className="tool-image-open"
-              aria-label={t('tool.image.view')}
-              onClick={(event) => {
-                event.currentTarget.focus()
-                open(image.id)
-              }}
-            >
-              {image.thumbnail ? (
-                <img
-                  src={`data:image/png;base64,${image.thumbnail.dataBase64}`}
-                  alt={image.tool}
-                  width={image.thumbnail.width}
-                  height={image.thumbnail.height}
-                />
-              ) : (
-                <span>▧</span>
-              )}
-            </button>
+            <ToolImageButton
+              deviceId={deviceId}
+              image={image}
+              open={() => open(image.id)}
+              touch={touch}
+            />
             <span className="tool-image-hover" role="tooltip">
               {image.thumbnail ? (
                 <img src={`data:image/png;base64,${image.thumbnail.dataBase64}`} alt="" />
@@ -138,6 +126,63 @@ export function ToolImageStrip({
           close={() => select(null)}
         />
       ) : null}
+    </>
+  )
+}
+
+function ToolImageButton({
+  deviceId,
+  image,
+  open,
+  touch,
+}: {
+  deviceId: string
+  image: ToolImage
+  open(): void
+  touch(): void
+}) {
+  const t = useT()
+  const { channel } = useServices()
+  const mediaMenu = useMediaMenu(
+    {
+      kind: 'image',
+      source: { kind: 'tool' },
+      label: image.tool,
+      load: () =>
+        loadToolImage(
+          () => channel.command('media.image', { deviceId, source: TOOL_IMAGE_PREFIX + image.id }),
+          t('files.view.failed'),
+        ),
+    },
+    open,
+  )
+  return (
+    <>
+      <button
+        type="button"
+        className="tool-image-open"
+        aria-label={t('tool.image.view')}
+        onContextMenu={(event) => {
+          touch()
+          mediaMenu.onContextMenu(event)
+        }}
+        onClick={(event) => {
+          event.currentTarget.focus()
+          open()
+        }}
+      >
+        {image.thumbnail ? (
+          <img
+            src={`data:image/png;base64,${image.thumbnail.dataBase64}`}
+            alt={image.tool}
+            width={image.thumbnail.width}
+            height={image.thumbnail.height}
+          />
+        ) : (
+          <span>▧</span>
+        )}
+      </button>
+      {mediaMenu.menu}
     </>
   )
 }
@@ -180,10 +225,18 @@ function ToolImageViewer({
     return () => next.dispose()
   }, [channel, entry.id])
   const { image, failure } = usePreviewImage(content, resources, entry.id)
+  const mediaMenu = useMediaMenu({
+    kind: 'image',
+    source: { kind: 'tool' },
+    label: entry.tool,
+    image: failure ? undefined : (image ?? undefined),
+  })
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null
-    dialog.current?.showModal()
+    const element = dialog.current
+    element?.showModal()
     return () => {
+      releaseToastHost(element)
       before?.focus()
     }
   }, [])
@@ -272,6 +325,7 @@ function ToolImageViewer({
           <button
             type="button"
             className="tool-image-stage"
+            onContextMenu={mediaMenu.onContextMenu}
             aria-label={t('preview.zoomIn')}
             onWheel={(event) => {
               if (!event.ctrlKey) return
@@ -299,6 +353,7 @@ function ToolImageViewer({
               }
             }}
             onPointerDown={(event) => {
+              if (event.button !== 0) return
               event.currentTarget.setPointerCapture(event.pointerId)
               drag.current = { x: event.clientX, y: event.clientY, origin: offset, moved: false }
             }}
@@ -353,6 +408,7 @@ function ToolImageViewer({
           →
         </button>
       </nav>
+      {mediaMenu.menu}
     </dialog>
   )
 }
