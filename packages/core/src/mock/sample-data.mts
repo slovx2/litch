@@ -134,7 +134,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       mode: 'full',
       os: 'macos',
       harnesses: [
-        harness('claude'),
+        harness('claude-code'),
         {
           ...harness('pi'),
           cli: {
@@ -202,7 +202,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       // 经 ACP 接的 Gemini CLI 在设置里停用着（真的设备服务上 ACP 那几个默认不启用）：设置页“按 harness 开关”的树上
       // 不列它，启用后才出现（它的任务卡关着，sample-manage.mts）
       harnesses: [
-        harness('claude'),
+        harness('claude-code'),
         harness('pi'),
         harness('dsh', { configurable: false }),
         harness('codex'),
@@ -281,7 +281,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       mode: 'full',
       // 这次运行里还没连上过：对面是什么系统还不知道
       os: null,
-      harnesses: [harness('claude'), harness('pi')],
+      harnesses: [harness('claude-code'), harness('pi')],
       stranded: [],
       note: phrase('ssh.unreachable'),
       failure: {
@@ -386,7 +386,7 @@ function sidebar(
 export function sampleArchived(now: number, lang: SampleLang): Map<string, SessionSummary[]> {
   const roots = new Map([['litch', '~/work/litch']])
   const rows: Row[] = [
-    ['a1', 'litch', 'claude', 'idle', 9 * 24 * HOUR],
+    ['a1', 'litch', 'claude-code', 'idle', 9 * 24 * HOUR],
     ['a2', 'litch', 'pi', 'idle', 21 * 24 * HOUR],
   ]
   return new Map([['local', summaries(SAMPLE_TEXT[lang], now, roots, rows)]])
@@ -409,7 +409,7 @@ export function sampleSidebars(now: number, lang: SampleLang): SidebarView[] {
         [
           'p1',
           'litch',
-          'claude',
+          'claude-code',
           'idle',
           4 * HOUR,
           { pinned: true, placedAt: now - 9 * 24 * HOUR },
@@ -426,7 +426,7 @@ export function sampleSidebars(now: number, lang: SampleLang): SidebarView[] {
         [
           'k1',
           'litch',
-          'claude',
+          'claude-code',
           'idle',
           2 * 24 * HOUR,
           {
@@ -434,15 +434,15 @@ export function sampleSidebars(now: number, lang: SampleLang): SidebarView[] {
             placedAt: now - 2 * 24 * HOUR,
           },
         ],
-        ['s1', 'litch', 'claude', 'running', 0],
-        ['s2', 'litch', 'claude', 'waiting', 3 * MINUTE, { waitingFor: 'approval' }],
+        ['s1', 'litch', 'claude-code', 'running', 0],
+        ['s2', 'litch', 'claude-code', 'waiting', 3 * MINUTE, { waitingFor: 'approval' }],
         ['s3', 'litch', 'pi', 'idle', 12 * MINUTE, { unread: true }],
         ['s4', 'litch', 'dsh', 'idle', HOUR],
         // Claude 桌面端从 s1 派出来的 Claude Code 会话：侧栏默认不显示，“更多”里打开才有，挂在 s1 下面
         [
           'cd1',
           'litch',
-          'claude',
+          'claude-code',
           'idle',
           5 * HOUR,
           { nativeLineage: { app: 'claude-desktop', parentId: 's1', createdAt: now - 6 * HOUR } },
@@ -468,22 +468,29 @@ export function sampleSidebars(now: number, lang: SampleLang): SidebarView[] {
             },
           },
         ],
-        ['s6', 'docs', 'claude', 'idle', 2 * HOUR],
+        ['s6', 'docs', 'claude-code', 'idle', 2 * HOUR],
         ['s7', 'docs', 'pi', 'idle', 40 * MINUTE, { unread: true }],
-        ['s8', 'docs', 'claude', 'idle', 5 * 24 * HOUR],
+        ['s8', 'docs', 'claude-code', 'idle', 5 * 24 * HOUR],
         // 这个工作区会话多：侧栏只露出最近的几个，其余的收在“展示更多”后面
         // 在工作区的子目录里开的：行上多一个小记号
-        ['d1', 'docs', 'claude', 'idle', 6 * 24 * HOUR, { cwd: '~/work/docs-site/content/guide' }],
+        [
+          'd1',
+          'docs',
+          'claude-code',
+          'idle',
+          6 * 24 * HOUR,
+          { cwd: '~/work/docs-site/content/guide' },
+        ],
         ['d2', 'docs', 'pi', 'idle', 8 * 24 * HOUR],
-        ['d3', 'docs', 'claude', 'idle', 9 * 24 * HOUR],
+        ['d3', 'docs', 'claude-code', 'idle', 9 * 24 * HOUR],
         ['d4', 'docs', 'codex', 'idle', 12 * 24 * HOUR],
-        ['d5', 'docs', 'claude', 'idle', 15 * 24 * HOUR],
+        ['d5', 'docs', 'claude-code', 'idle', 15 * 24 * HOUR],
         ['d6', 'docs', 'dsh', 'idle', 19 * 24 * HOUR],
-        ['d7', 'docs', 'claude', 'idle', 23 * 24 * HOUR],
+        ['d7', 'docs', 'claude-code', 'idle', 23 * 24 * HOUR],
         ['d8', 'docs', 'pi', 'idle', 30 * 24 * HOUR],
-        ['d9', 'docs', 'claude', 'idle', 41 * 24 * HOUR],
+        ['d9', 'docs', 'claude-code', 'idle', 41 * 24 * HOUR],
         // 不属于任何工作区的：它的工作目录是“添加工作区”时可以直接挑的候选
-        ['s9', null, 'claude', 'idle', 3 * 24 * HOUR, { cwd: '/Users/dev/notes/launchd' }],
+        ['s9', null, 'claude-code', 'idle', 3 * 24 * HOUR, { cwd: '/Users/dev/notes/launchd' }],
       ],
     ),
     sidebar(
@@ -495,12 +502,12 @@ export function sampleSidebars(now: number, lang: SampleLang): SidebarView[] {
         ['infra', 'infra', '/srv/work/infra'],
       ],
       [
-        ['b1', 'litch2', 'claude', 'waiting', 8 * MINUTE, { waitingFor: 'answer' }],
+        ['b1', 'litch2', 'claude-code', 'waiting', 8 * MINUTE, { waitingFor: 'answer' }],
         ['b2', 'litch2', 'pi', 'idle', 20 * MINUTE],
         // 工作目录和工作区的根不是一回事的两种：在子目录里开的；目录根本不在这个工作区里的（从别处挪进来的）
-        ['b3', 'litch2', 'claude', 'idle', 2 * HOUR, { cwd: '/srv/work/litch/apps/desktop' }],
+        ['b3', 'litch2', 'claude-code', 'idle', 2 * HOUR, { cwd: '/srv/work/litch/apps/desktop' }],
         ['b4', 'infra', 'dsh', 'error', 3 * HOUR],
-        ['b5', 'infra', 'claude', 'idle', 6 * 24 * HOUR, { cwd: '/var/cache/ci' }],
+        ['b5', 'infra', 'claude-code', 'idle', 6 * 24 * HOUR, { cwd: '/var/cache/ci' }],
         ['b6', 'litch2', 'codex', 'idle', 5 * HOUR],
       ],
     ),
@@ -518,7 +525,7 @@ export function sampleSidebars(now: number, lang: SampleLang): SidebarView[] {
       [['lab', 'train-lab', '~/train-lab']],
       [
         ['g1', 'lab', 'pi', 'idle', 26 * HOUR],
-        ['g2', 'lab', 'claude', 'idle', 7 * 24 * HOUR],
+        ['g2', 'lab', 'claude-code', 'idle', 7 * 24 * HOUR],
       ],
     ),
   ]

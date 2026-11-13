@@ -135,9 +135,12 @@ test('握手声明 harnessInstall；设备列了它才能用，设备视图带 i
   const { seen } = bare.watch()
   assert.equal(seen.view?.available, false)
   await assert.rejects(bare.command('install.versions'), { code: 'unsupported' })
-  await assert.rejects(bare.command('install.start', { harness: 'claude', version: 'verified' }), {
-    code: 'unsupported',
-  })
+  await assert.rejects(
+    bare.command('install.start', { harness: 'claude-code', version: 'verified' }),
+    {
+      code: 'unsupported',
+    },
+  )
   assert.equal(bare.sent('litch/device/harness/versions').length, 0)
 })
 
@@ -281,10 +284,10 @@ test('模拟核心：fresh 开局本机都没装；装 Claude 日志一行行出
     },
   )
   time.advance(100)
-  const claude = seen.view?.versions?.find((entry) => entry.harness === 'claude')
+  const claude = seen.view?.versions?.find((entry) => entry.harness === 'claude-code')
   assert.deepEqual([claude?.installed, claude?.verified], [null, '2.1.316'])
 
-  await command('install.start', { harness: 'claude', version: 'verified' })
+  await command('install.start', { harness: 'claude-code', version: 'verified' })
   await assert.rejects(command('install.start', { harness: 'pi', version: 'verified' }), {
     code: 'busy',
   })
@@ -294,9 +297,9 @@ test('模拟核心：fresh 开局本机都没装；装 Claude 日志一行行出
   assert.ok((running?.log.length ?? 0) > 0 && (running?.log.length ?? 0) < 7)
   time.advance(1000)
   assert.equal(seen.view?.jobs[0]?.state, 'succeeded')
-  assert.equal(local()?.harnesses.find((entry) => entry.id === 'claude')?.state, 'ready')
+  assert.equal(local()?.harnesses.find((entry) => entry.id === 'claude-code')?.state, 'ready')
   assert.equal(
-    seen.view?.versions?.find((entry) => entry.harness === 'claude')?.installed,
+    seen.view?.versions?.find((entry) => entry.harness === 'claude-code')?.installed,
     '2.1.316',
   )
 

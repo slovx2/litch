@@ -342,7 +342,7 @@ export async function treeProbe(): Promise<TreeSeen> {
     $<HTMLButtonElement>('.spawn-dialog button[type="submit"]')?.disabled === true
   const supportedHarness = $<HTMLSelectElement>('#spawn-harness')
   if (supportedHarness) {
-    supportedHarness.value = 'claude'
+    supportedHarness.value = 'claude-code'
     supportedHarness.dispatchEvent(new Event('change', { bubbles: true }))
   }
   const titleBox = $<HTMLInputElement>('#spawn-title')
@@ -463,7 +463,7 @@ export async function treeProbe(): Promise<TreeSeen> {
   await until(() => $('.spawn-dialog[data-proposal]') !== null)
   const harnessBox = $<HTMLSelectElement>('#spawn-harness')
   if (harnessBox) {
-    harnessBox.value = 'claude'
+    harnessBox.value = 'claude-code'
     harnessBox.dispatchEvent(new Event('change', { bubbles: true }))
   }
   $<HTMLInputElement>('.spawn-dialog .spawn-wake input')?.click()
@@ -478,7 +478,7 @@ export async function treeProbe(): Promise<TreeSeen> {
       return (
         card?.dataset.state === 'started' &&
         meta?.dataset.actual === 'true' &&
-        meta.querySelector('[data-harness="claude"]') !== null
+        meta.querySelector('[data-harness="claude-code"]') !== null
       )
     }))
   seen.actual = firstWrap()?.querySelector('.prop-meta')?.textContent ?? '没有'
@@ -631,7 +631,7 @@ export async function treeProbe(): Promise<TreeSeen> {
   await until(() => $('.spawn-dialog') !== null)
   const heldHarness = $<HTMLSelectElement>('#spawn-harness')
   if (heldHarness) {
-    heldHarness.value = 'claude'
+    heldHarness.value = 'claude-code'
     heldHarness.dispatchEvent(new Event('change', { bubbles: true }))
   }
   await sleep(100)

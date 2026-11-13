@@ -18,6 +18,18 @@ import { fakeClock } from './helpers.mjs'
 test('模拟接班预览解析目标、禁用未验 harness，并换线程保留看板与历史', async () => {
   const { clock } = fakeClock()
   const devices = sampleApp('zh-CN', clock.now()).devices
+  const fixture = sampleManagers('local', clock.now(), 'zh-CN')
+  const source = fixture.managers.find((manager) => manager.id === 'm1')
+  assert.ok(source)
+  const harness = devices
+    .find((device) => device.id === 'local')
+    ?.harnesses?.find((harness) => harness.id === source.harness)
+  assert.equal(harness?.badge, 'CC')
+  assert.equal(harness?.abilities?.managerQuestions, true)
+  assert.equal(
+    fixture.sessions.find((session) => session.id === source.threadId)?.harness,
+    source.harness,
+  )
   const service = createMockManagers({
     clock,
     lang: 'zh-CN',

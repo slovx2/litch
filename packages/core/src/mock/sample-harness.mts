@@ -36,7 +36,13 @@ const ALL: HarnessAbilities = {
 
 const DECLARED: Record<string, HarnessAbilities> = {
   // 引导只把文字交给模型，图片到不了
-  claude: { ...ALL, goals: true, cutInTurn: true, ephemeralFork: true, managerQuestions: true },
+  'claude-code': {
+    ...ALL,
+    goals: true,
+    cutInTurn: true,
+    ephemeralFork: true,
+    managerQuestions: true,
+  },
   // Pi 和 dsh 不发本回合的差异：工作目录不是 git 仓库时，差异面板在它们的会话里没有东西可看
   pi: { ...ALL, turnDiff: false, ephemeralFork: true, managerQuestions: true },
   // dsh 的后台作业只列得出（job/list），停不了
@@ -64,10 +70,10 @@ const DECLARED: Record<string, HarnessAbilities> = {
 }
 
 /** 声明了认识“拒绝并附说明”的 harness */
-const TAKES_NOTE: readonly string[] = ['claude']
+const TAKES_NOTE: readonly string[] = ['claude-code']
 
 const KNOWN: Record<string, [name: string, badge: string, version: string]> = {
-  claude: ['Claude Code', 'CC', '2.1.282'],
+  'claude-code': ['Claude Code', 'CC', '2.1.282'],
   pi: ['Pi', 'PI', '0.99.1'],
   dsh: ['dsh', 'DS', '0.2.0-rc.2'],
   codex: ['Codex', 'CX', '0.160.0'],
@@ -133,7 +139,7 @@ const preset = (
 })
 
 const PRESETS: Record<string, PermissionPreset[]> = {
-  claude: [
+  'claude-code': [
     preset(':read-only', {
       'zh-CN': '只能看：可以读文件、搜索，在只读且断网的沙箱里运行命令',
       en: 'Look only: can read files, search, and run commands in a read-only sandbox with no network',

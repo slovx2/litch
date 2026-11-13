@@ -417,7 +417,7 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   const unknown = row('harness.dsh.wakeSchedule') as HTMLElement
   const unknownNote = text(one('.form-note', one('.mng-unknown', unknown) as HTMLElement))
   const unknownEditable = Boolean(one('input, select, button', unknown))
-  await openRuntime('claude')
+  await openRuntime('claude-code')
   collectControls()
   const envSecret = one('[data-env="ANTHROPIC_API_KEY"]') as HTMLElement
   const envSecretShown = text(one('.env-kept .pill', envSecret))
@@ -556,9 +556,9 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   )
 
   // ---- 五、Claude Code 有回合在跑：改它要重启才生效的设置，标成待重启；重启先问 ----
-  await openRuntime('claude')
-  const claude = () => block('claude') as HTMLElement
-  choose(select('harness.claude.logLevel') as HTMLSelectElement, 'debug')
+  await openRuntime('claude-code')
+  const claude = () => block('claude-code') as HTMLElement
+  choose(select('harness.claude-code.logLevel') as HTMLSelectElement, 'debug')
   await save()
   await until('Claude Code 标成待重启', () => claude().dataset.pending === 'true')
   const pendingShown = Boolean(one('[data-pending-pill]', claude()))
@@ -701,7 +701,7 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
     .filter((entry) => entry.dataset.available === 'true')
     .map((entry) => entry.dataset.sshConfig ?? '')
   const configUnavailable = text(one('[data-ssh-config="codex"] > .form-note'))
-  act(one('[data-ssh-config="claude"]'), 'copy-config')?.click()
+  act(one('[data-ssh-config="claude-code"]'), 'copy-config')?.click()
   await until('复制到了', () => clipboard.length > 0)
   const copied = clipboard.at(-1) ?? ''
 

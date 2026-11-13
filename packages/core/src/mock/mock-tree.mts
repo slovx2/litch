@@ -257,19 +257,13 @@ export function createMockTree(host: MockTreeHost): MockTree {
     const parentSummary = host.summary(deviceId, parent.sessionId)
     const ranking = host.modelRanking?.(deviceId)
     if (ranking) {
-      // 模拟目录的 Claude 标签仍用 claude；等级目录使用协议中的真实 harness 标识。
-      const identityHarness = (id: string) => (id === 'claude' ? 'claude-code' : id)
-      const parentModel = rankedModelSelection(
-        ranking,
-        identityHarness(parent.harness),
-        parent.settings.model,
-      )
+      const parentModel = rankedModelSelection(ranking, parent.harness, parent.settings.model)
       const childId =
         options.settings?.model ??
         (harness === parent.harness
           ? parent.settings.model
           : host.settings(deviceId, harness).model)
-      const childModel = rankedModelSelection(ranking, identityHarness(harness), childId)
+      const childModel = rankedModelSelection(ranking, harness, childId)
       const preview = modelLimitPreview(ranking, parentModel, childModel, {
         deviceId,
         sessionId: parent.sessionId,

@@ -137,35 +137,35 @@ export function sampleManagers(
       'manager-k1',
       'm1',
       t('回退改成编辑原消息', 'Edit original messages to rewind'),
-      'claude',
+      'claude-code',
       true,
     ],
     [
       'manager-k2',
       'm1',
       t('子会话能归档（照 Claude）', 'Archive child sessions like Claude'),
-      'claude',
+      'claude-code',
       false,
     ],
     [
       'manager-k3',
       'm1',
       t('后台任务页筛选：先调研', 'Research background task filters'),
-      'claude',
+      'claude-code',
       true,
     ],
     [
       'manager-k4',
       'm1',
       t('恢复 CLI 重试并显示次数', 'Restore CLI retries and show attempts'),
-      'claude',
+      'claude-code',
       false,
     ],
     [
       'manager-k5',
       'm2',
       t('复现 522：压测网关', 'Reproduce 522 with gateway load tests'),
-      'claude',
+      'claude-code',
       true,
     ],
     ['manager-k6', 'm2', t('给上游加超时告警', 'Add upstream timeout alerts'), 'dsh', false],
@@ -173,7 +173,7 @@ export function sampleManagers(
       'manager-k7',
       'm3',
       t('输入区高度不齐（复发）', 'Composer height mismatch returns'),
-      'claude',
+      'claude-code',
       false,
     ],
   ] as const
@@ -288,7 +288,7 @@ export function sampleManagers(
     }
     managers.push(manager)
     boards.push(board)
-    const own = session(id, name, 'claude', id, null, false)
+    const own = session(id, name, 'claude-code', id, null, false)
     // m2：经理自己回合已结束、挂着一条等 CI 的后台命令，另有一条工作线在跑（侧栏记号与文字分开表达）
     if (id === 'm2')
       own.background = {

@@ -339,7 +339,7 @@ test('投影：别的应用派出来的会话带着是谁派的、父会话；�
   )
   const summary = projectSummary(
     thread({ id: 'n', litchNativeLineage: { app: 'claude-desktop' } } as never),
-    { harness: 'claude', workspaceId: null },
+    { harness: 'claude-code', workspaceId: null },
   )
   assert.equal(summary.nativeLineage?.app, 'claude-desktop')
 })
@@ -1145,7 +1145,7 @@ test('分块：回合还在跑时收尾带的卡片和问题先不进收尾区�
 
 test('提案卡片写什么：开始了、子会话在侧栏里的写实际的 harness、目录、方式；别的写提案的，没给的跟父会话', () => {
   const planned = { harness: 'pi', model: 'm1', effort: 'high', cwd: '~/a', kind: 'fork' as const }
-  assert.deepEqual(proposalShape(planned, undefined, 'claude'), {
+  assert.deepEqual(proposalShape(planned, undefined, 'claude-code'), {
     harness: 'pi',
     model: 'm1',
     effort: 'high',
@@ -1153,7 +1153,10 @@ test('提案卡片写什么：开始了、子会话在侧栏里的写实际的 h
     kind: 'fork',
     actual: false,
   })
-  assert.equal(proposalShape({ ...planned, harness: null }, null, 'claude').harness, 'claude')
+  assert.equal(
+    proposalShape({ ...planned, harness: null }, null, 'claude-code').harness,
+    'claude-code',
+  )
   const child = {
     harness: 'dsh',
     cwd: '/work/b',
@@ -1168,7 +1171,7 @@ test('提案卡片写什么：开始了、子会话在侧栏里的写实际的 h
       proposalId: 'pr1',
     },
   }
-  assert.deepEqual(proposalShape(planned, child, 'claude'), {
+  assert.deepEqual(proposalShape(planned, child, 'claude-code'), {
     harness: 'dsh',
     model: null,
     effort: null,
@@ -1656,7 +1659,7 @@ test('模拟：说“派子会话”派出两个子会话（侧栏里挂在父�
   await settle()
   await world.until(() => world.children('s6').length === 2, '两个子会话进了侧栏')
   const kids = world.children('s6')
-  assert.deepEqual(kids.map((entry) => entry.harness).sort(), ['claude', 'dsh'])
+  assert.deepEqual(kids.map((entry) => entry.harness).sort(), ['claude-code', 'dsh'])
   const cards = Object.values(parent.view?.items ?? {}).filter(
     (item): item is ToolCallItem => item.kind === 'toolCall' && item.spawned !== undefined,
   )
@@ -1750,13 +1753,13 @@ test('模拟：说“提个子会话”出三张提案；短的那张到点过�
     deviceId: 'local',
     sessionId: 's6',
     proposalId: first.id,
-    overrides: { title: '整理更新记录', harness: 'claude' },
+    overrides: { title: '整理更新记录', harness: 'claude-code' },
   })) as { sessionId: string }
   await world.until(() => world.children('s6').some((entry) => entry.id === sessionId), '起出来了')
   const child = world.children('s6').find((entry) => entry.id === sessionId)
   assert.equal(child?.lineage?.origin, 'proposal')
   assert.equal(child?.title, '整理更新记录')
-  assert.equal(child?.harness, 'claude')
+  assert.equal(child?.harness, 'claude-code')
   // 子会话记着是哪个提案：对话里那张提案卡片据此显示“已开始”
   assert.equal(child?.lineage?.proposalId, first.id)
   assert.equal(list()[0]?.status, 'started')
@@ -1930,10 +1933,10 @@ test('模拟：说“新任务交给 Pi”选新会话后，简报开在收不�
     deviceId: 'local',
     sessionId: 's6',
     proposalId: held?.id ?? '',
-    overrides: { harness: 'claude' },
+    overrides: { harness: 'claude-code' },
   })) as { sessionId: string }
   await world.until(() => list().at(-1)?.status === 'started', '用户点了开始')
-  assert.equal(world.children('s6').find((entry) => entry.id === sessionId)?.harness, 'claude')
+  assert.equal(world.children('s6').find((entry) => entry.id === sessionId)?.harness, 'claude-code')
 })
 
 test('模拟：说“交接”模型把手上的任务交给分叉会话（不出卡，立刻起），再回答新消息', async () => {
@@ -2009,11 +2012,11 @@ test('模拟：说“收尾建议”先调收尾（三条建议加一个问题�
     deviceId: 'local',
     sessionId: 's6',
     proposalId: second.id,
-    overrides: { harness: 'claude', wakeParent: false },
+    overrides: { harness: 'claude-code', wakeParent: false },
   })) as { sessionId: string }
   await world.until(() => world.children('s6').some((entry) => entry.id === sessionId), '起出来了')
   const child = world.children('s6').find((entry) => entry.id === sessionId)
-  assert.equal(child?.harness, 'claude')
+  assert.equal(child?.harness, 'claude-code')
   assert.equal(child?.lineage?.wakeParent, false)
   assert.equal(child?.lineage?.proposalId, second.id)
 

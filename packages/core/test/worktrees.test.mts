@@ -286,7 +286,7 @@ test('WT-CORE-004 模拟：在新工作树里建会话，会话目录在工作�
   assert.equal(outside.branches, null)
   const { sessionId } = await channel.command('session.create', {
     deviceId: 'local',
-    harness: 'claude',
+    harness: 'claude-code',
     workspaceId: 'litch',
     cwd: '~/work/litch',
     text: 'Try the new layout',
@@ -305,7 +305,7 @@ test('WT-CORE-004 模拟：在新工作树里建会话，会话目录在工作�
   await assert.rejects(
     channel.command('session.create', {
       deviceId: 'local',
-      harness: 'claude',
+      harness: 'claude-code',
       cwd: '/elsewhere',
       text: 'x',
       worktree: {},

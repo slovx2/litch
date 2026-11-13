@@ -98,7 +98,7 @@ export function judgeSwitches(seen: SwitchesSeen): string[] {
   }
   same(
     seen.rowsBefore,
-    ['claude', 'pi', 'dsh', 'codex', 'opencode'],
+    ['claude-code', 'pi', 'dsh', 'codex', 'opencode'],
     '停用 Gemini CLI 时 build-01 下面列的',
   )
   same(seen.cardsBefore, 'on', '停用的 Gemini CLI 任务卡关着，设备那一格却不是全开')
@@ -106,7 +106,7 @@ export function judgeSwitches(seen: SwitchesSeen): string[] {
   same(seen.browserFlipped, 'off', '点了浏览器那一格之后')
   same(
     seen.rowsAfter,
-    ['claude', 'pi', 'dsh', 'codex', 'opencode', 'gemini'],
+    ['claude-code', 'pi', 'dsh', 'codex', 'opencode', 'gemini'],
     '启用 Gemini CLI 之后 build-01 下面列的',
   )
   same(seen.openCards, 'off', '启用后 Gemini CLI 的任务卡（原来关着）')

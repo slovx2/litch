@@ -43,7 +43,7 @@ interface Sample {
 
 const SAMPLES: readonly Sample[] = [
   {
-    harness: 'claude',
+    harness: 'claude-code',
     method: 'script',
     minimum: '2.1.282',
     verified: '2.1.316',

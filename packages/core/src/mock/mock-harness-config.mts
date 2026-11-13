@@ -69,7 +69,7 @@ export interface MockHarnessConfig {
 
 const SAMPLES: Record<string, (home: SampleHome) => SampleHc> = {
   codex: sampleCodex,
-  claude: sampleClaude,
+  'claude-code': sampleClaude,
   opencode: sampleOpencode,
   pi: samplePi,
   dsh: sampleDsh,
@@ -625,7 +625,7 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
         delete config.overridden[edit.key]
         if (one?.effect === 'harness') restart = true
       }
-      if (state.harness === 'claude') refreshClaudeContext(config)
+      if (state.harness === 'claude-code') refreshClaudeContext(config)
       bump(state, 'config')
       if (restart) state.restartRequired = true
       publish(state)
@@ -637,7 +637,7 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
       if (!state.sample.config.actions.some((one) => one.id === p.actionId)) {
         throw new ChannelError('notFound', `没有这个动作：${p.actionId}`)
       }
-      if (state.harness === 'claude' && p.actionId.startsWith('context-window.')) {
+      if (state.harness === 'claude-code' && p.actionId.startsWith('context-window.')) {
         checkVersion(state, 'config', p.expectedVersion ?? '')
         const config = state.sample.config
         if (p.actionId === 'context-window.use-default')

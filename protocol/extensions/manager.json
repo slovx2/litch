@@ -152,6 +152,13 @@
     },
     {
       "kind": "ClientRequest",
+      "method": "litch/manager/reset/preview",
+      "requiresExtension": "litchManagerResetTarget",
+      "params": { "$ref": "manager-reset-target.json#/definitions/PreviewParams" },
+      "response": { "$ref": "manager-reset-target.json#/definitions/Preview" }
+    },
+    {
+      "kind": "ClientRequest",
       "method": "litch/manager/reset/cancel",
       "params": { "$ref": "#/definitions/IdParams" },
       "response": { "$ref": "#/definitions/ManagerResponse" }

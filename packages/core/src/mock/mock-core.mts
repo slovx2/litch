@@ -1256,7 +1256,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     applySessionOps(view, [
       { op: 'item.add', turnId, item: { id: `${turnId}-p`, kind: 'plan', text: sample.plan } },
     ])
-    if (view.harness === 'claude' || view.harness === 'pi') {
+    if (view.harness === 'claude-code' || view.harness === 'pi') {
       askQuestions(view, turnId, [view.harness === 'pi' ? PI_PLAN_QUESTION : sample.question])
       planAsks.add(`${turnId}-r`)
       return
@@ -2705,7 +2705,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         version: '0.6.0',
         system: 'Linux',
         running,
-        harnesses: running ? [sampleHarness('claude'), sampleHarness('pi')] : null,
+        harnesses: running ? [sampleHarness('claude-code'), sampleHarness('pi')] : null,
       }
     }
     return { ok: true, peer: 'codex', version: '0.160.0', system: 'Linux' }
@@ -2733,7 +2733,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
             note: null,
             mode: 'full',
             os: 'linux',
-            harnesses: result.harnesses ?? [sampleHarness('claude'), sampleHarness('pi')],
+            harnesses: result.harnesses ?? [sampleHarness('claude-code'), sampleHarness('pi')],
             organizable: true,
             // 设备服务会报自己是哪一份
             service: sampleRemoteService(clock.now()),
