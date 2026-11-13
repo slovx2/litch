@@ -763,7 +763,7 @@ export const Steps = memo(function Steps({
               ) : null}
             </span>
           </button>
-          {!open ? <ToolImageStrip deviceId={deviceId} /> : null}
+          <ToolImageStrip deviceId={deviceId} hidden={open} />
         </ToolImageSummary>
         {open ? (
           <div className="steps-body">

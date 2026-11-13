@@ -893,6 +893,8 @@ images have no file path actions. Use arrow keys and Enter, or Escape to dismiss
 用左右按钮或方向键切换、Home/End 跳首尾、点击图片放大或还原、放大后拖动，Ctrl+滚轮调整缩放。
 桌面以半透明深色遮罩覆盖窗口，图片浮在对话上；点击图片以外的遮罩直接关闭，拖动松手不会误关。右上关闭或 Esc 返回。
 
+桌面在已完成或刚自动折叠的过程组中，首次点击工具图片即可打开原图。查看图片时，过程展开不会关闭查看器。
+
 设备设置的“隐私 → 在对话里显示 AI 读取的图片”默认开启。关闭后不再保存、传输或显示工具图片，
 不影响模型读取图片。原图保存在会话设备，按需加载；单张上限 8MiB，设备图片内容缓存上限 512MiB，
 30 天未使用失效，既有缓存定期清理。旧历史仅有文件路径时，第一次打开取的是当前文件；源文件已删除、
@@ -905,6 +907,8 @@ Narrow screens show the last image. Click to browse the whole group, use arrows 
 click to zoom, drag while zoomed, and Ctrl+scroll to adjust zoom. Close with the top-right button or Escape;
 The desktop viewer floats over a dark translucent backdrop. Clicking that backdrop closes immediately;
 clicking the image or releasing a drag does not close it.
+
+On desktop, the first click opens the original image even in a completed or automatically folded process group. Expanding the process does not close the viewer.
 
 **Device settings → Privacy → Show images read by AI in conversations** is on by default. Turning it off
 stops saving, transferring and displaying tool images without changing what the model receives.

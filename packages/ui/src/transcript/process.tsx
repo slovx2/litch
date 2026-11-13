@@ -130,7 +130,7 @@ export const ProcessHead = memo(function ProcessHead({
             </span>
           ) : null}
         </button>
-        {!open ? <ToolImageStrip deviceId={deviceId} /> : null}
+        <ToolImageStrip deviceId={deviceId} hidden={open} />
       </ToolImageSummary>
     </ToolImageGroup>
   )
