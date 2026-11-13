@@ -15,7 +15,7 @@ import { ManagerResetPreviewScreen } from './preview/ManagerReset.web.tsx'
 import { ModelRankingPreview } from './preview/ModelRanking.web.tsx'
 import { startScrollNudge } from './preview/nudge.web.ts'
 import { sceneById } from './preview/scenes.web.ts'
-import { seedOrganizer } from './shell/organizer-file.web.ts'
+import { previewOrganizerFiles, seedOrganizer } from './shell/organizer-file.web.ts'
 
 const params = new URLSearchParams(location.search)
 const inFrame = params.has('app')
@@ -24,6 +24,8 @@ if (inFrame) {
   applyPrefs(params)
   const groups = sceneById(params.get('scene'))?.localGroups
   if (groups) seedOrganizer('mock', groups)
+  if (params.get('scene') === 'local-workspace')
+    Object.assign(window, { __localOrganizerFiles: () => previewOrganizerFiles('mock') })
 }
 
 function PreviewApp() {

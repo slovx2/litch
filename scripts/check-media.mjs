@@ -9,7 +9,11 @@ import { assertUiBuildFresh } from './ui-build-state.mjs'
 
 assertUiBuildFresh()
 const profile = mkdtempSync(join(tmpdir(), 'litch-media-window-'))
-const output = resolve('.artifacts/media-p1/desktop')
+const menu = process.argv.includes('--menu')
+const output = resolve(
+  process.env.LITCH_MEDIA_OUTPUT ??
+    (menu ? '.artifacts/transcript-media-menu' : '.artifacts/media-p1/desktop'),
+)
 mkdirSync(output, { recursive: true })
 const vite = await createServer({
   root: resolve('packages/ui'),
@@ -30,7 +34,8 @@ const child = spawn(
       CLAUDE_CONFIG_DIR: join(profile, '.claude'),
       LITCH_MEDIA_PROFILE: profile,
       LITCH_MEDIA_OUTPUT: output,
-      LITCH_MEDIA_URL: `${vite.resolvedUrls.local[0]}test/media-fixture.html?lang=zh-CN`,
+      LITCH_MEDIA_MENU: menu ? '1' : '',
+      LITCH_MEDIA_URL: `${vite.resolvedUrls.local[0]}test/media-fixture.html?lang=zh-CN${menu ? '&menu=1' : ''}`,
     },
     stdio: 'inherit',
   },

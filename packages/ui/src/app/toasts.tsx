@@ -2,11 +2,14 @@
 // 几秒后自己消失；鼠标或者键盘焦点在上面时不消失，离开之后重新计时。
 // 同一个标识的提示再来一次是换掉内容、重新计时，不会叠出第二条。
 import { useEffect, useState, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
 import type { Translator } from '../i18n/index.ts'
 import { useT } from './appearance.ts'
 import { Close } from './icons.tsx'
 
 export interface Toast {
+  /** 模态查看器中的操作把提示挂在同一顶层，避免被 dialog 遮罩盖住。 */
+  host?: HTMLElement | undefined
   id: string
   /** 提示上的字。显示的时候才按当前语言说，改了语言跟着变 */
   text(t: Translator): string
@@ -40,6 +43,12 @@ export function showToast(toast: Toast): void {
   const entry: Shown = { ...toast, stamp: ++stamp }
   const index = list.findIndex((shown) => shown.id === toast.id)
   publish(index < 0 ? [...list, entry] : list.with(index, entry))
+}
+
+/** 查看器关闭后，未结束的保存进度及结果继续在主界面显示。 */
+export function releaseToastHost(host: HTMLElement | null): void {
+  if (host && list.some((toast) => toast.host === host))
+    publish(list.map((toast) => (toast.host === host ? { ...toast, host: undefined } : toast)))
 }
 
 /** 收起一条提示。gone 为真表示它是自己消失或者被关掉的，要告诉出提示的一方 */
@@ -122,11 +131,18 @@ function ToastRow({ toast }: { toast: Shown }) {
 export function Toasts() {
   const shown = useSyncExternalStore(subscribe, () => list)
   if (shown.length === 0) return null
-  return (
-    <div className="toasts">
-      {shown.map((toast) => (
-        <ToastRow key={toast.id} toast={toast} />
-      ))}
-    </div>
-  )
+  const hosts = new Set(shown.map((toast) => toast.host ?? null))
+  const groups = [...hosts].map((host) => {
+    const entries = shown.filter((toast) => (toast.host ?? null) === host)
+    const key = host ? entries[0]?.id : 'default'
+    const content = (
+      <div className="toasts" key={key}>
+        {entries.map((toast) => (
+          <ToastRow key={toast.id} toast={toast} />
+        ))}
+      </div>
+    )
+    return host ? createPortal(content, host, key) : content
+  })
+  return groups.length === 1 ? groups[0] : groups
 }

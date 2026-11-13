@@ -1,7 +1,7 @@
 // 会话动作单里的“加入本机分组”“从某组移出”，以及选组的动作单、新建组时问名字的框。
 // 设备会话列表、首页置顶区、本机组详情三处共用。本机分组只在这台手机上，任何设备的会话都能放进来，
 // 设备连没连着都能做（不经过设备）。
-import { GROUP_NAME_MAX, type SessionRef } from '@litch/core'
+import { GROUP_NAME_MAX, type MemberRef } from '@litch/core'
 import { type ReactNode, useState } from 'react'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -10,15 +10,15 @@ import { groupOfMember, organize, organizerBlocked, useOrganizer } from './organ
 
 export function useLocalJoin(act: (work: Promise<unknown>) => void): {
   /** 放进会话动作单的几项 */
-  entries(ref: SessionRef): SheetAction[]
+  entries(ref: MemberRef): SheetAction[]
   overlays: ReactNode
 } {
   const t = useT()
   const channel = useChannel()
   const organizer = useOrganizer()
-  const [choosing, setChoosing] = useState<SessionRef | null>(null)
-  const [naming, setNaming] = useState<SessionRef | null>(null)
-  const entries = (ref: SessionRef): SheetAction[] => {
+  const [choosing, setChoosing] = useState<MemberRef | null>(null)
+  const [naming, setNaming] = useState<MemberRef | null>(null)
+  const entries = (ref: MemberRef): SheetAction[] => {
     if (!organizer || organizerBlocked(organizer)) return []
     const current = groupOfMember(organizer, ref)
     return [

@@ -147,6 +147,22 @@ test('别的设备上拖来的一律不接', () => {
   assert.deepEqual(dropCommands(workspace(), SECTION, 'remote'), [])
 })
 
+test('本机组的项目拖回目录不搬项目、不取消置顶；离线项目不发设备整理命令', () => {
+  for (const target of [PINNED, SECTION, PROJECTS, slot(PROJECTS, 'docs')]) {
+    assert.deepEqual(
+      dropCommands(
+        workspace({ origin: { kind: 'group', groupId: 'local' }, pinned: true }),
+        target,
+        'local',
+        ORDER,
+      ),
+      [],
+      '本机组只改本机引用，目录落点不得顺带改设备',
+    )
+    assert.deepEqual(dropCommands(workspace({ organizable: false }), target, 'local', ORDER), [])
+  }
+})
+
 test('组的先后：记着的照记着的，删掉的组不算，新建的组按设备给的先后接在后面', async () => {
   const { orderBands } = await import('../src/sidebar/drop.ts')
   const present = [':section:a', ':section:b', ':projects']

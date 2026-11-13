@@ -27,7 +27,7 @@ export function pinSourceOf(
 
 /**
  * 画在置顶区里的会话：置顶的会话、置顶项目里（没进设备分组的）会话，以及它们下面的子会话。
- * 这些在设备目录、最近、未读、本机组里都不再画一遍（置顶只出现一次）
+ * 这些在设备目录、未读、本机组里不再重画；最近仍按主动交互显示。
  */
 export function pinCover(
   groups: SessionGroups,

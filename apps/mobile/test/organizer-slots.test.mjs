@@ -49,3 +49,17 @@ test('两格都坏报坏；有更高版本的停用', () => {
   disk.slots.set('b', JSON.stringify({ version: 5 }))
   assert.deepEqual(slottedOrganizerStore(disk).load(), { kind: 'newer', version: 5 })
 })
+
+test('含项目的 v2 文件只读加载原文不变；更新其他字段、交替写入和重启都保留项目', () => {
+  const disk = io()
+  const member = { kind: 'workspace', deviceId: 'mac', workspaceId: 'work' }
+  const original = { ...file(7), groups: [{ id: 'g', name: '项目', members: [member] }] }
+  const text = JSON.stringify(original)
+  disk.slots.set('a', text)
+  const store = slottedOrganizerStore(disk)
+  assert.deepEqual(store.load(), { kind: 'ok', file: original })
+  assert.deepEqual([...disk.slots], [['a', text]], '加载不改写已有文件')
+  store.save({ ...original, revision: 8, folds: { g: true } })
+  assert.deepEqual(slottedOrganizerStore(disk).load().file.groups[0].members, [member])
+  assert.equal(disk.slots.get('a'), text, '原文保留在另一格')
+})

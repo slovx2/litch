@@ -13,7 +13,7 @@ import { mockChannel, until } from './helpers.mjs'
 
 const cleanup = []
 for (const globalPins of [true, false]) {
-  test(`${globalPins ? '桌面默认' : '手机设备内置顶'}：最近投影按是否显示全局置顶区去重`, async () => {
+  test(`${globalPins ? '桌面默认' : '手机设备内置顶'}：最近收纳置顶会话和置顶项目会话，各自只出现一次`, async () => {
     const mock = mockChannel()
     const activity = createMobileActivity(
       mock.channel,
@@ -36,8 +36,21 @@ for (const globalPins of [true, false]) {
     const rows = replica.store.get(keys.sidebarProjections('local')).recent
     assert.equal(
       rows.some((row) => row.sessionId === 'p1'),
-      !globalPins,
+      true,
     )
+    await activity.channel.command('workspace.update', {
+      deviceId: 'local',
+      workspaceId: 'litch',
+      pinned: true,
+    })
+    await activity.channel.command('session.rename', {
+      deviceId: 'local',
+      sessionId: 's4',
+      title: '置顶项目内的会话',
+    })
+    const projected = replica.store.get(keys.sidebarProjections('local')).recent
+    assert.equal(projected.filter((row) => row.sessionId === 'p1').length, 1)
+    assert.equal(projected.filter((row) => row.sessionId === 's4').length, 1)
     assert.equal(
       replica.store.get(keys.summary('local', 'p1')).pinned,
       true,

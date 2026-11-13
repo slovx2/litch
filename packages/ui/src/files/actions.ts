@@ -33,7 +33,7 @@ function copy(text: string): void {
   )
 }
 
-export function runFileAction(action: FileAction, subject: FileSubject): void {
+export function runFileAction(action: FileAction, subject: FileSubject, host?: HTMLElement): void {
   if (action === 'revealLocal') {
     if (subject.deviceId && subject.root) {
       const source = { deviceId: subject.deviceId, root: subject.root, path: subject.path }
@@ -43,6 +43,7 @@ export function runFileAction(action: FileAction, subject: FileSubject): void {
           if (result !== 'opened')
             showToast({
               id: 'files-reveal',
+              host,
               tone: 'err',
               lifeMs: 5000,
               text: (t) => t(`files.reveal.${result}`),
@@ -51,6 +52,7 @@ export function runFileAction(action: FileAction, subject: FileSubject): void {
         .catch(() =>
           showToast({
             id: 'files-reveal',
+            host,
             tone: 'err',
             lifeMs: 5000,
             text: (t) => t('files.reveal.failed'),

@@ -12,6 +12,7 @@ import { ExternalLink } from '../ExternalLink.tsx'
 import { Link, useFileLinks } from '../FileLinks.tsx'
 import { MarkdownPolicyContext } from '../markdown-policy.ts'
 import { type GalleryImage, Lightbox } from './Lightbox.tsx'
+import { useMediaMenu } from './MediaMenu.tsx'
 import './images.css'
 
 interface Gallery {
@@ -132,6 +133,16 @@ function LoadedImage({
   const { image, failure, fail } = usePreviewImage(content, gallery.resources, id)
   const external = /^https?:\/\//i.test(href)
   const { deviceId, root, path } = scope
+  const source = external ? { kind: 'url' as const, href } : { kind: 'file' as const, file: scope }
+  const mediaMenu = useMediaMenu(
+    {
+      kind: 'image',
+      source,
+      label: alt || href,
+      image: failure ? undefined : (image ?? undefined),
+    },
+    image && !failure ? () => gallery.open(id) : undefined,
+  )
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -169,10 +180,11 @@ function LoadedImage({
             reveal: () =>
               openInFiles({ deviceId, root, path, workspaceId: null, alt: null, line: null }),
             save: window.litchShell?.saveFile
-              ? () => saveToLocal({ deviceId, root, path })
+              ? (host?: HTMLElement) => saveToLocal({ deviceId, root, path }, host)
               : undefined,
           }),
       href,
+      source: external ? { kind: 'url', href } : { kind: 'file', file: { deviceId, root, path } },
     }
     gallery.entries.set(id, entry)
     return () => {
@@ -192,6 +204,7 @@ function LoadedImage({
         <button
           type="button"
           className="transcript-image-open"
+          onContextMenu={mediaMenu.onContextMenu}
           aria-label={t('media.enlarge', { name: alt || href })}
           onClick={(event) => {
             event.currentTarget.focus()
@@ -212,6 +225,7 @@ function LoadedImage({
           </small>
         </span>
       )}
+      {mediaMenu.menu}
     </span>
   )
 }

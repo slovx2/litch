@@ -108,7 +108,9 @@ export function PinsGroup({
         onPress: () => reorder(ref, at + 1),
       })
     if (menu.kind === 'session')
-      list.push(...join.entries({ deviceId: menu.deviceId, sessionId: menu.summary.id }))
+      list.push(
+        ...join.entries({ kind: 'session', deviceId: menu.deviceId, sessionId: menu.summary.id }),
+      )
     list.push({
       label: t('organizer.open'),
       testID: 'menu:pins:device',

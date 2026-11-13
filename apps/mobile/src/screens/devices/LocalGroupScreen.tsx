@@ -5,9 +5,12 @@
 import {
   type DeviceView,
   keys,
+  type MemberRef,
+  type MemberTree,
   memberState,
-  type SessionRef,
+  refKey,
   type SessionSummary,
+  type WorkspaceView,
 } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useCallback, useState } from 'react'
@@ -25,8 +28,8 @@ import { useReadMenu } from '../sessions/read-menu'
 import { titleOf } from '../sessions/rows'
 import { useGroupMenu } from './GroupMenu'
 import { useLocalJoin } from './LocalJoin'
-import { organize, organizerBlocked, useKeyList, useOrganizer } from './organizer-state'
-import { ShortcutSession, useDeviceNote } from './ShortcutRows'
+import { organize, organizerBlocked, useLocalLayout, useOrganizer } from './organizer-state'
+import { ShortcutSession, ShortcutWorkspace, useDeviceNote } from './ShortcutRows'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'LocalGroup'>
 
@@ -39,9 +42,10 @@ export function LocalGroupScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets()
   const channel = useChannel()
   const organizer = useOrganizer()
+  const layout = useLocalLayout()
   const devices = useKey<string[]>(keys.devices) ?? NO_IDS
   const [failure, setFailure] = useState<string | null>(null)
-  const [menu, setMenu] = useState<{ ref: SessionRef; title: string; readId?: string } | null>(null)
+  const [menu, setMenu] = useState<{ ref: MemberRef; title: string; readId?: string } | null>(null)
   const act = useCallback(
     (work: Promise<unknown>) => {
       setFailure(null)
@@ -52,22 +56,18 @@ export function LocalGroupScreen({ navigation, route }: Props) {
     [t],
   )
   const join = useLocalJoin(act)
-  const readActions = useReadMenu(menu?.ref.deviceId, menu?.readId ?? menu?.ref.sessionId, act)
+  const readActions = useReadMenu(
+    menu?.ref.kind === 'session' ? menu.ref.deviceId : undefined,
+    menu?.readId ?? (menu?.ref.kind === 'session' ? menu.ref.sessionId : undefined),
+    act,
+  )
   const groupMenu = useGroupMenu(act, () => navigation.goBack())
   const group = organizer?.groups.find((entry) => entry.id === groupId)
   const blocked = organizerBlocked(organizer)
   const members = group?.members ?? []
-  const covers = useKeyList<string[]>(devices.map(keys.pinCover))
-  // 置顶区里有的成员：这里不画，只数一下
-  const covered = (ref: SessionRef) =>
-    covers[devices.indexOf(ref.deviceId)]?.includes(ref.sessionId) === true
-  const pinned = members.filter(covered).length
+  const { visible, pinned } = layout.groups.get(groupId) ?? { visible: [], pinned: 0 }
   const showDevice = devices.length > 1
-  const at = menu
-    ? members.findIndex(
-        (m) => m.deviceId === menu.ref.deviceId && m.sessionId === menu.ref.sessionId,
-      )
-    : -1
+  const at = menu ? members.findIndex((m) => refKey(m) === refKey(menu.ref)) : -1
   const actions = (): SheetAction[] => {
     if (!menu || blocked) return readActions
     const { ref } = menu
@@ -84,11 +84,12 @@ export function LocalGroupScreen({ navigation, route }: Props) {
         testID: 'menu:member:down',
         onPress: () => act(organize(channel, { type: 'member.move', member: ref, to: at + 1 })),
       })
-    list.push({
-      label: t('organizer.leave'),
-      testID: 'menu:member:leave',
-      onPress: () => act(organize(channel, { type: 'member.remove', member: ref })),
-    })
+    if (at >= 0)
+      list.push({
+        label: t('organizer.leave'),
+        testID: 'menu:member:leave',
+        onPress: () => act(organize(channel, { type: 'member.remove', member: ref })),
+      })
     // 换到别的组（“加入本机分组”里不列现在这一组）
     list.push(...join.entries(ref).filter((entry) => entry.testID === 'menu:local'))
     list.push({
@@ -128,26 +129,31 @@ export function LocalGroupScreen({ navigation, route }: Props) {
             {t('organizer.empty')}
           </Text>
         ) : (
-          members
-            .filter((member) => !covered(member))
-            .map((member) => (
-              <Member
-                key={`${member.deviceId}\n${member.sessionId}`}
-                member={member}
-                showDevice={showDevice}
-                onOpen={(summary, deviceId) =>
-                  navigation.navigate('Detail', {
-                    deviceId,
-                    sessionId: summary.id,
-                    title: titleOf(summary, t),
-                  })
-                }
-                onMenu={(title, readId) =>
-                  setMenu({ ref: member, title, ...(readId ? { readId } : {}) })
-                }
-                onArchived={() => navigation.navigate('Sessions', { deviceId: member.deviceId })}
-              />
-            ))
+          visible.map((member) => (
+            <Member
+              key={refKey(member)}
+              member={member}
+              tree={layout.trees.get(refKey(member))}
+              showDevice={showDevice}
+              onOpen={(summary, deviceId) =>
+                navigation.navigate('Detail', {
+                  deviceId,
+                  sessionId: summary.id,
+                  title: titleOf(summary, t),
+                })
+              }
+              onMenu={(title, readId) =>
+                setMenu({
+                  ref: readId
+                    ? { kind: 'session', deviceId: member.deviceId, sessionId: readId }
+                    : member,
+                  title,
+                  ...(readId ? { readId } : {}),
+                })
+              }
+              onArchived={() => navigation.navigate('Sessions', { deviceId: member.deviceId })}
+            />
+          ))
         )}
         {pinned > 0 ? (
           <Text testID="localGroup:pinned" style={[styles.note, { color: c.ink3 }]}>
@@ -168,14 +174,16 @@ export function LocalGroupScreen({ navigation, route }: Props) {
 }
 
 /** 组里的一个会话（置顶了的上面已经滤掉）：在就照常画（连同子会话）；不在了留一行说明 */
-function Member({
+function SessionMember({
   member,
+  tree,
   showDevice,
   onOpen,
   onMenu,
   onArchived,
 }: {
-  member: SessionRef
+  member: Extract<MemberRef, { kind: 'session' }>
+  tree?: MemberTree | undefined
   showDevice: boolean
   onOpen(summary: SessionSummary, deviceId: string): void
   onMenu(title: string, sessionId?: string): void
@@ -205,6 +213,7 @@ function Member({
         testID="localGroup"
         onOpen={onOpen}
         onMenu={(entry) => onMenu(titleOf(entry, t), entry.id)}
+        excluded={tree?.excluded}
       />
     )
   // 置顶了的成员上面已经滤掉，这里不会是 pinned
@@ -255,3 +264,71 @@ const styles = StyleSheet.create({
   ghostName: { flexShrink: 1, fontSize: 14, fontStyle: 'italic' },
   ghostNote: { flex: 1, fontSize: 11, textAlign: 'right' },
 })
+
+function Member(props: {
+  member: MemberRef
+  tree?: MemberTree | undefined
+  showDevice: boolean
+  onOpen(summary: SessionSummary, deviceId: string): void
+  onMenu(title: string, sessionId?: string): void
+  onArchived(): void
+}) {
+  return props.member.kind === 'session' ? (
+    <SessionMember {...props} member={props.member} />
+  ) : (
+    <WorkspaceMember {...props} member={props.member} />
+  )
+}
+
+function WorkspaceMember({
+  member,
+  tree,
+  showDevice,
+  onOpen,
+  onMenu,
+}: {
+  member: Extract<MemberRef, { kind: 'workspace' }>
+  tree?: MemberTree | undefined
+  showDevice: boolean
+  onOpen(summary: SessionSummary, deviceId: string): void
+  onMenu(title: string, sessionId?: string): void
+}) {
+  const theme = useTheme()
+  const t = useT()
+  const device = useKey<DeviceView>(keys.device(member.deviceId))
+  const workspace = useKey<WorkspaceView[]>(keys.workspaces(member.deviceId))?.find(
+    (entry) => entry.id === member.workspaceId,
+  )
+  if (workspace)
+    return (
+      <ShortcutWorkspace
+        deviceId={member.deviceId}
+        workspaceId={member.workspaceId}
+        explicit={new Set()}
+        scope="localGroup"
+        tree={tree}
+        showDevice={showDevice}
+        onOpen={onOpen}
+        onMenu={(entry) => onMenu(entry.name)}
+        onSessionMenu={(entry) => onMenu(titleOf(entry, t), entry.id)}
+      />
+    )
+  const label = t(device ? 'local.workspace.missing' : 'local.member.unconfigured')
+  return (
+    <Pressable
+      accessibilityRole="button"
+      testID={`localGroup:ghost:ws:${member.workspaceId}`}
+      onPress={() => onMenu(label)}
+      onLongPress={() => onMenu(label)}
+      style={[styles.ghost, { minHeight: theme.hit, borderBottomColor: theme.c.line1 }]}
+    >
+      <View
+        style={[
+          styles.wire,
+          { backgroundColor: device ? theme.c.wire[device.wire] : theme.c.line2 },
+        ]}
+      />
+      <Text style={[styles.ghostName, { color: theme.c.ink3 }]}>{label}</Text>
+    </Pressable>
+  )
+}

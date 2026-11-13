@@ -35,7 +35,8 @@ export const orderProjection = (a: SidebarProjectionRow, b: SidebarProjectionRow
 
 /**
  * 只读目录摘要；父链路径压缩，深层子树不重复遍历祖先。缺失父项和环不作为独立主会话。
- * excluded 是画在全局置顶区里的会话（含子会话）：它们不算进最近、未读，主项在里面的也不出
+ * excluded 是画在全局置顶区里的会话（含子会话）：只在未读中排除。
+ * 最近仍按主动交互归并主项，置顶资格不影响它出现。
  */
 export function projectSidebarGroups(
   deviceId: string,
@@ -80,11 +81,11 @@ export function projectSidebarGroups(
     into.set(root.id, { deviceId, sessionId: root.id, workspaceId: root.workspaceId, at })
   }
   for (const session of sessions.values()) {
-    if (excluded.has(session.id)) continue
     const id = rootOf(session.id)
-    const root = id && !excluded.has(id) ? sessions.get(id) : undefined
+    const root = id ? sessions.get(id) : undefined
     if (!root) continue
-    if (session.unread) add(unread, root, session.updatedAt)
+    if (session.unread && !excluded.has(session.id) && !excluded.has(root.id))
+      add(unread, root, session.updatedAt)
     const at = interactionTime(session.id)
     if (at > 0) add(recent, root, at)
   }
