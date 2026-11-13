@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -22,6 +23,7 @@ for (const mode of [
   'server-exit',
   'interrupt',
   'orphan',
+  'readonly-cache',
 ]) {
   test(`手机经理生命周期：${mode}，清理自有进程且不动其他服务器`, { timeout: 15_000 }, async () => {
     const work = mkdtempSync(join(tmpdir(), 'manager-mobile-unit-'))
@@ -85,3 +87,27 @@ for (const mode of [
     }
   })
 }
+
+test('冒烟包装器的诊断不占用 stdout，避免破坏 Node 进程隔离报告协议', { timeout: 10_000 }, () => {
+  const work = mkdtempSync(join(tmpdir(), 'manager-mobile-output-'))
+  try {
+    const result = spawnSync(process.execPath, [fixture, 'runner'], {
+      env: {
+        PATH: process.env.PATH,
+        HOME: work,
+        LITCH_CHROME_BINARY: process.execPath,
+        LITCH_FIXTURE_REPORT: join(work, 'events.jsonl'),
+        LITCH_FIXTURE_MODE: 'success',
+      },
+      encoding: 'utf8',
+      timeout: 8000,
+    })
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(result.stdout, '', 'stdout 留给调用方协议，不混入进度或子进程文字')
+    assert.match(result.stderr, /手机经理预览/)
+    assert.match(result.stderr, /虚构验收的 stdout 诊断/)
+    assert.match(result.stderr, /虚构验收的 stderr 诊断/)
+  } finally {
+    rmSync(work, { recursive: true, force: true })
+  }
+})

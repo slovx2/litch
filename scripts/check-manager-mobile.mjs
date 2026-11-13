@@ -219,11 +219,13 @@ try {
   await until(async () => (await decisionOrder()).startsWith('D-17,D-16,D-15'), '待处理优先')
   await order('newest')
   await openIssue('D-13')
-  assert.ok(
-    await read(
-      "(()=>{const a=document.querySelector('[data-testid=\"decision-answer:D-13\"]');return !!a&&a.innerText.includes('你的答复')&&a.innerText.includes('子会话不算，子代理照算')&&a.innerText.includes('子会话已有回报')&&!a.innerText.includes('后台任务页要列出')})()",
-    ),
-    '答复与问题分块',
+  // 卡片外壳先出现，Markdown 经异步 WASM 解析后才挂正文；等正文完成再验分块。
+  await until(
+    () =>
+      read(
+        "(()=>{const a=document.querySelector('[data-testid=\"decision-answer:D-13\"]');return !!a&&a.innerText.includes('你的答复')&&a.innerText.includes('子会话不算，子代理照算')&&a.innerText.includes('子会话已有回报')&&!a.innerText.includes('后台任务页要列出')})()",
+      ),
+    '答复正文完成并与问题分块',
   )
   assert.ok(
     await read(

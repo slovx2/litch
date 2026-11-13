@@ -1,11 +1,12 @@
 // 手机经理冒烟的进程生命周期：仅启动本工作树的预览，不接管已有服务器。
 import { execFileSync, spawn } from 'node:child_process'
-import { globSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { globSync, mkdirSync, mkdtempSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as pause } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { removeTestTree } from './ci/remove-test-tree.mjs'
 
 const repo = fileURLToPath(new URL('..', import.meta.url))
 const mobile = join(repo, 'apps/mobile')
@@ -38,15 +39,14 @@ function launch(args, env, cwd, forward = false) {
       resolve(value)
     }
     child.once('error', (error) => finish({ error }))
-    child.once('exit', (code, signal) => finish({ code, signal }))
+    // close 在 exit 之后，且已经等完继承管道的子进程，不能只等父进程退出。
+    child.once('close', (code, signal) => finish({ code, signal }))
   })
-  for (const [stream, destination] of [
-    [child.stdout, process.stdout],
-    [child.stderr, process.stderr],
-  ])
+  for (const stream of [child.stdout, child.stderr])
     stream.on('data', (chunk) => {
       output = (output + chunk).slice(-32_768)
-      if (forward) destination.write(chunk)
+      // 诊断不写 fd 1：Node 进程隔离的测试报告在 stdout 上传二进制协议。
+      if (forward) process.stderr.write(chunk)
     })
   const groupAlive = () => {
     if (!child.pid) return false
@@ -86,7 +86,12 @@ function launch(args, env, cwd, forward = false) {
       kill('SIGTERM')
       const deadline = Date.now() + 5000
       while (groupAlive() && Date.now() < deadline) await pause(50)
-      if (groupAlive()) kill('SIGKILL')
+      if (groupAlive()) {
+        kill('SIGKILL')
+        const killedDeadline = Date.now() + 5000
+        while (groupAlive() && Date.now() < killedDeadline) await pause(50)
+        if (groupAlive()) throw new Error(`进程组 ${child.pid} 在 SIGKILL 后仍未退出`)
+      }
       await done
     },
   }
@@ -134,6 +139,18 @@ function failed(message, child) {
   return new Error(`${message}\n${child.output()}`)
 }
 
+async function cleanup(probe, server, home) {
+  const stopped = await Promise.allSettled([probe?.stop(), server?.stop()])
+  const failures = stopped.filter((result) => result.status === 'rejected')
+  if (failures.length)
+    throw new AggregateError(
+      failures.map((result) => result.reason),
+      `子进程清理失败，保留临时目录：${home}`,
+    )
+  // Expo 的 DotSlash 缓存含只读目录；复用不跟随软链的临时树清理，有限重试仍失败就报错。
+  removeTestTree(home)
+}
+
 export async function runManagerMobile({
   expo = join(mobile, 'node_modules/expo/bin/cli'),
   check = join(repo, 'scripts/check-manager-mobile.mjs'),
@@ -166,7 +183,7 @@ export async function runManagerMobile({
     const env = isolatedEnvironment(source, home, browser)
     const port = await freePort()
     const base = `http://127.0.0.1:${port}`
-    console.log(`手机经理预览：${base}`)
+    console.error(`手机经理预览：${base}`)
     server = launch([expo, 'start', '--web', '--offline', '--port', String(port)], env, mobile)
     const ready = async () => {
       const deadline = Date.now() + readyTimeout
@@ -206,14 +223,6 @@ export async function runManagerMobile({
       })
   } finally {
     signal?.removeEventListener('abort', abort)
-    try {
-      await probe?.stop()
-    } finally {
-      try {
-        await server?.stop()
-      } finally {
-        rmSync(home, { recursive: true, force: true })
-      }
-    }
+    await cleanup(probe, server, home)
   }
 }
