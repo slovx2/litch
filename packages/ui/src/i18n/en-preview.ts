@@ -9,6 +9,7 @@ export const enPreview: Record<keyof typeof zhPreview, string> = {
   'media.menu.save': 'Save to this computer',
   'media.menu.copyAddress': 'Copy image address',
   'media.menu.enlarge': 'View full image',
+  'media.menu.files': 'Open in Files panel',
   'media.menu.browser': 'Open in browser',
   'media.menu.failed': 'Image action failed: {reason}',
   'media.save': 'Save image',

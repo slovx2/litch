@@ -230,7 +230,7 @@ app.whenReady().then(async () => {
     assert.equal(await read('document.activeElement.className'), 'transcript-image-open')
     await read('document.querySelector(".transcript-image-open").click()')
     await wait('document.querySelector(".media-lightbox[open] img")?.complete')
-    await read('document.querySelector("[aria-label=在文件浏览器中显示]").click()')
+    await read('document.querySelector("[aria-label=在文件面板中打开]").click()')
     await wait('!document.querySelector(".media-lightbox")')
     assert.equal(await read('window.mediaFixture.fileState().active?.endsWith("photo.png")'), true)
     await read('document.querySelector("#toggle").click()')

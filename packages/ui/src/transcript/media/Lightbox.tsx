@@ -236,7 +236,7 @@ export function Lightbox({
           <button
             type="button"
             className="ibtn"
-            aria-label={t('media.reveal')}
+            aria-label={t('media.menu.files')}
             onClick={() => {
               entry.reveal?.()
               close()

@@ -65,6 +65,9 @@ test('工具缓存图片没有文件操作，按需原图可复制保存；未�
 })
 
 test('各平台菜单文案与中英文资源完整', () => {
+  assert.equal(mediaActionKey('files', { kind: 'tool' }), 'media.menu.files')
+  assert.equal(zhCN['media.menu.files'], '在文件面板中打开')
+  assert.equal(en['media.menu.files'], 'Open in Files panel')
   assert.equal(revealLabel('darwin'), 'files.action.revealFinder')
   assert.equal(revealLabel('win32'), 'files.action.revealExplorer')
   assert.equal(revealLabel('linux'), 'files.action.revealManager')

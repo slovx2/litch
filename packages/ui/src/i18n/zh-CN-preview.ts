@@ -8,6 +8,7 @@ export const zhPreview = {
   'media.menu.save': '保存到本机',
   'media.menu.copyAddress': '复制图片地址',
   'media.menu.enlarge': '查看大图',
+  'media.menu.files': '在文件面板中打开',
   'media.menu.browser': '在浏览器中打开',
   'media.menu.failed': '图片操作失败：{reason}',
   'media.save': '保存图片',

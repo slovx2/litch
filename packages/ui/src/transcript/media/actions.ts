@@ -63,7 +63,7 @@ export function mediaActionKey(action: MediaAction, source: MediaSource): Messag
     case 'copyPath':
       return source.kind === 'url' ? 'media.menu.copyAddress' : 'files.action.copyFull'
     case 'files':
-      return 'media.reveal'
+      return 'media.menu.files'
     case 'enlarge':
       return 'media.menu.enlarge'
     case 'browser':
