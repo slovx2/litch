@@ -30,8 +30,11 @@ export async function checkMediaMenu({ window, read, wait, output, downloaded })
     await read('new Promise(r => requestAnimationFrame(r))')
   }
   const click = async (selector, button = 'left') => {
+    await read(
+      `(async () => { document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:'nearest'}); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))) })()`,
+    )
     const point = await read(
-      `(() => { const e=document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({block:'nearest'}); const r=e.getBoundingClientRect(); return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)} })()`,
+      `(() => { const e=document.querySelector(${JSON.stringify(selector)}); const r=e.getBoundingClientRect(); return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)} })()`,
     )
     for (const type of ['mouseDown', 'mouseUp'])
       window.webContents.sendInputEvent({ type, ...point, button, clickCount: 1 })
@@ -189,6 +192,47 @@ export async function checkMediaMenu({ window, read, wait, output, downloaded })
     await key('Escape')
   }
   await read('window.litchShell.platform = "darwin"')
+  const user = '#user-fixture .uimg'
+  const beforeCopy = await read('window.mediaFixture.effects.png.length')
+  await checkList(user, ['copy', 'save', 'enlarge'])
+  writeFileSync(
+    join(output, 'user-image-menu.png'),
+    (await window.webContents.capturePage()).toPNG(),
+  )
+  await pick('copy')
+  await wait(`window.mediaFixture.effects.png.length === ${beforeCopy + 1}`)
+  const beforeSave = downloaded()
+  await open(user)
+  await pick('save')
+  const userDeadline = Date.now() + 10000
+  while (downloaded() <= beforeSave && Date.now() < userDeadline)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  assert.equal(downloaded(), beforeSave + 1, '用户附件按 data URL 下载')
+  await open(user)
+  await pick('enlarge')
+  await wait('document.querySelector(".media-lightbox[open] img")?.complete')
+  await checkList('.media-lightbox img', ['copy', 'save'])
+  writeFileSync(
+    join(output, 'user-lightbox-menu.png'),
+    (await window.webContents.capturePage()).toPNG(),
+  )
+  await pick('copy')
+  await wait(`window.mediaFixture.effects.png.length === ${beforeCopy + 2}`)
+  await key('Escape')
+  await wait('!document.querySelector(".media-lightbox")')
+  assert.equal(await read(`document.activeElement.matches(${JSON.stringify(user)})`), true)
+  await checkList('#user-device-fixture .uimg', [
+    'copy',
+    'revealLocal',
+    'save',
+    'copyPath',
+    'files',
+    'enlarge',
+  ])
+  await pick('copyPath')
+  await wait('window.mediaFixture.effects.paths.at(-1) === "/work/media-p1/photo.png"')
+  await checkList('#user-remote-fixture .uimg', ['copy', 'save', 'copyPath', 'files', 'enlarge'])
+  await key('Escape')
   await read('document.querySelectorAll(".toast-x").forEach(button => button.click())')
   for (const skin of ['standard', 'retro', 'human'])
     for (const lang of ['zh-CN', 'en']) {
@@ -223,6 +267,6 @@ export async function checkMediaMenu({ window, read, wait, output, downloaded })
     ),
   )
   console.log(
-    '媒体菜单通过：本机/远程/外网/工具原图、两类灯箱、所有操作、错误提示、键盘、三平台文案、三皮肤中英截图',
+    '媒体菜单通过：本机/远程/外网/工具原图、用户附件复制与data下载、共用灯箱、错误提示、键盘、三平台文案、三皮肤中英截图',
   )
 }

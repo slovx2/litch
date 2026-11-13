@@ -26,6 +26,7 @@ import { type AttachmentContext, FileCard } from './FileCard.tsx'
 import { Markdown } from './Markdown.tsx'
 import { MessageCopy } from './MessageCopy.tsx'
 import { MessageEdit } from './MessageEdit.tsx'
+import { UserImage, userImageSource } from './media/UserImage.tsx'
 import { PeerHead, PeerTag } from './PeerHead.tsx'
 import { SystemCard } from './SystemCard.tsx'
 import { usePin } from './scroll.ts'
@@ -61,17 +62,13 @@ export function UserAttachments({
     <div className="atts">
       {attachments.map((attachment, index) =>
         attachment.url ? (
-          <button
+          <UserImage
             // biome-ignore lint/suspicious/noArrayIndexKey: 附件发出去之后不会增删换位
             key={index}
-            type="button"
-            className="uimg"
-            title={attachment.label ?? t('attachment.view')}
-            aria-label={t('attachment.view')}
-            onClick={() => setViewing(attachment)}
-          >
-            <img src={attachment.url} alt={attachment.label ?? t('attachment.image')} />
-          </button>
+            attachment={attachment}
+            {...context}
+            open={() => setViewing(attachment)}
+          />
         ) : attachment.kind === 'file' || attachment.kind === 'folder' ? (
           // biome-ignore lint/suspicious/noArrayIndexKey: 附件发出去之后不会增删换位
           <FileCard key={index} file={attachment} {...context} />
@@ -86,6 +83,7 @@ export function UserAttachments({
         <ImageViewer
           url={viewing.url}
           label={viewing.label ?? t('attachment.image')}
+          source={userImageSource(viewing, context.deviceId)}
           onClose={() => setViewing(null)}
         />
       ) : null}

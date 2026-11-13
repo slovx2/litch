@@ -118,9 +118,9 @@ try {
       )
     }
     await click('.cmp-atts button')
-    await wait('!!document.querySelector(".viewer")')
-    await click('.viewer-x')
-    await wait('!document.querySelector(".viewer")')
+    await wait('!!document.querySelector(".media-lightbox")')
+    await click('.media-lightbox-tools button:last-child')
+    await wait('!document.querySelector(".media-lightbox")')
     await click('.cmp-att-x')
     await wait('document.querySelectorAll(".cmp-atts img").length===2')
     await read(

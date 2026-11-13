@@ -6,6 +6,16 @@ export type MediaSource =
   | { kind: 'file'; file: FileSaveSource }
   | { kind: 'url'; href: string }
   | { kind: 'tool' }
+  | { kind: 'attachment'; file?: FileSaveSource | undefined }
+
+/** 控制端附件没有设备文件身份，不能借会话设备执行 revealFile 或复制成设备路径。 */
+export function attachmentSource(file: FileSaveSource | null, client: boolean): MediaSource {
+  return { kind: 'attachment', ...(file && !client ? { file } : {}) }
+}
+
+export function mediaFile(source: MediaSource): FileSaveSource | null {
+  return source.kind === 'file' || source.kind === 'attachment' ? (source.file ?? null) : null
+}
 export interface ImageAsset {
   url: string
   width: number
@@ -39,16 +49,16 @@ export function mediaActions(
 ): MediaAction[] {
   const actions: MediaAction[] = []
   const ready = !!(subject.image || subject.load)
+  const file = mediaFile(subject.source)
   if (options.copy && ready) actions.push('copy')
-  if (subject.source.kind === 'file' && options.destination === 'revealLocal')
-    actions.push('revealLocal')
+  if (file && options.destination === 'revealLocal') actions.push('revealLocal')
   if (
     (subject.source.kind === 'file' && options.destination === 'saveLocal') ||
     (subject.source.kind !== 'file' && ready)
   )
     actions.push('save')
-  if (options.text && subject.source.kind !== 'tool') actions.push('copyPath')
-  if (subject.source.kind === 'file') actions.push('files')
+  if (options.text && (file || subject.source.kind === 'url')) actions.push('copyPath')
+  if (file) actions.push('files')
   if (options.enlarge) actions.push('enlarge')
   if (subject.source.kind === 'url') actions.push('browser')
   return actions

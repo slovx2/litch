@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { fileDestination, revealLabel } from '../src/files/destination.ts'
 import { en } from '../src/i18n/en.ts'
 import { zhCN } from '../src/i18n/zh-CN.ts'
-import { mediaActionKey, mediaActions } from '../src/transcript/media/actions.ts'
+import { attachmentSource, mediaActionKey, mediaActions } from '../src/transcript/media/actions.ts'
 
 const image = { url: 'blob:fictional', width: 80, height: 60 }
 const file = { deviceId: 'atlas', root: '/work', path: '/work/diagram.png' }
@@ -81,4 +81,30 @@ test('各平台菜单文案与中英文资源完整', () => {
       assert.ok(en[key])
       assert.ok(zhCN[key])
     }
+})
+
+test('用户附件：内联内容可复制、下载和放大，控制端路径不冒充设备路径', () => {
+  for (const source of [attachmentSource(null, false), attachmentSource(file, true)]) {
+    assert.deepEqual(mediaActions(subject(source), options), ['copy', 'save', 'enlarge'])
+    assert.deepEqual(mediaActions(subject(source), { ...options, enlarge: false }), [
+      'copy',
+      'save',
+    ])
+  }
+  const source = subject(attachmentSource(file, false))
+  assert.deepEqual(mediaActions(source, { ...options, destination: 'revealLocal' }), [
+    'copy',
+    'revealLocal',
+    'save',
+    'copyPath',
+    'files',
+    'enlarge',
+  ])
+  assert.deepEqual(mediaActions(source, { ...options, destination: 'saveLocal' }), [
+    'copy',
+    'save',
+    'copyPath',
+    'files',
+    'enlarge',
+  ])
 })
