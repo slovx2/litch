@@ -603,24 +603,25 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   imageArea.setSelectionRange(2, 5)
   const draftImage = one<HTMLElement>('.cmp-att img')!
   draftImage.click()
-  let draftViewer = await until('草稿图片大图', () => one<HTMLDialogElement>('dialog.viewer[open]'))
+  let draftViewer = await until('草稿图片大图', () =>
+    one<HTMLDialogElement>('dialog.media-lightbox[open]'),
+  )
   let imageDraftViewed =
     draftViewer.querySelector('img')?.getAttribute('src') === draftImage.getAttribute('src')
   draftViewer.dispatchEvent(new Event('cancel', { cancelable: true }))
   await until(
     'Esc 关闭草稿大图并回到输入框',
-    () => !one('dialog.viewer') && document.activeElement === area(),
+    () => !one('dialog.media-lightbox') && document.activeElement === area(),
   )
   draftImage.click()
-  draftViewer = await until('再次打开草稿大图', () => one<HTMLDialogElement>('dialog.viewer[open]'))
-  // 遮罩只在空白处按下、原地松开时关闭（拖动或缩放不关）：先在遮罩上按下，再点击
-  draftViewer.dispatchEvent(
-    new PointerEvent('pointerdown', { bubbles: true, clientX: 4, clientY: 4, isPrimary: true }),
+  draftViewer = await until('再次打开草稿大图', () =>
+    one<HTMLDialogElement>('dialog.media-lightbox[open]'),
   )
-  draftViewer.click()
+  // 共用灯箱的真实遮罩点击由媒体窗口验收覆盖；此处确认关闭后草稿焦点和选择区不变。
+  draftViewer.querySelector<HTMLButtonElement>('.media-lightbox-tools button:last-child')?.click()
   await until(
-    '点外面关闭草稿大图并回到输入框',
-    () => !one('dialog.viewer') && document.activeElement === area(),
+    '关闭共用草稿大图并回到输入框',
+    () => !one('dialog.media-lightbox') && document.activeElement === area(),
   )
   imageDraftViewed &&=
     thumbs() === 1 &&
@@ -643,16 +644,16 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     await until(`${source} 图片已添加`, () => thumbs() === 2)
     all('.cmp-att-view').at(-1)?.click()
     const shown = await until(`${source} 图片可预览`, () =>
-      one<HTMLDialogElement>('dialog.viewer[open]'),
+      one<HTMLDialogElement>('dialog.media-lightbox[open]'),
     )
     imageDraftViewed &&= shown.querySelector('img')?.alt === `${source}.png`
-    one<HTMLButtonElement>('.viewer-x')?.click()
+    one<HTMLButtonElement>('.media-lightbox-tools button:last-child')?.click()
     await until(
       `${source} 预览关闭`,
-      () => !one('dialog.viewer') && document.activeElement === imageArea,
+      () => !one('dialog.media-lightbox') && document.activeElement === imageArea,
     )
     all('.cmp-att-x').at(-1)?.click()
-    await until(`${source} 移除不预览`, () => thumbs() === 1 && !one('dialog.viewer'))
+    await until(`${source} 移除不预览`, () => thumbs() === 1 && !one('dialog.media-lightbox'))
   }
   write(imageArea, '')
   let draftClearUndo: boolean | null = null
@@ -701,12 +702,12 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   if (persistedImages?.read()?.some(([, images]) => images.length > 0))
     throw new Error('图片草稿发送后未清理持久存储')
   ;(thumb as HTMLElement).click()
-  const viewer = await until('大图', () => one<HTMLDialogElement>('dialog.viewer[open]'))
+  const viewer = await until('大图', () => one<HTMLDialogElement>('dialog.media-lightbox[open]'))
   const seen = Boolean(
     viewer.querySelector('img')?.getAttribute('src')?.startsWith('data:image/png'),
   )
-  one<HTMLButtonElement>('.viewer-x')?.click()
-  await until('大图关上', () => !one('dialog.viewer'))
+  one<HTMLButtonElement>('.media-lightbox-tools button:last-child')?.click()
+  await until('大图关上', () => !one('dialog.media-lightbox'))
   const imageViewed = seen
   await until('带图的回合结束', () => !running() && !one('.tray-row'), 60_000)
   await sleep(300)

@@ -16,6 +16,7 @@ import {
   type MediaSubject,
   mediaActionKey,
   mediaActions,
+  mediaFile,
 } from './actions.ts'
 
 export function useMediaMenu(
@@ -24,7 +25,7 @@ export function useMediaMenu(
   openedFiles?: () => void,
 ) {
   const t = useT()
-  const file = subject.source.kind === 'file' ? subject.source.file : null
+  const file = mediaFile(subject.source)
   const destination = useFileDestination(file ? { ...file, relative: file.path } : null)
   const [menu, setMenu] = useState<{
     x: number
@@ -52,10 +53,14 @@ export function useMediaMenu(
     })
   const run = async (action: MediaAction) => {
     try {
-      if (action === 'enlarge') return enlarge?.()
+      if (action === 'enlarge') {
+        menu?.trigger.focus({ preventScroll: true })
+        return enlarge?.()
+      }
       if (action === 'revealLocal' && file)
         return runFileAction('revealLocal', { ...file, relative: file.path }, toastHost)
-      if (action === 'save' && file) return saveToLocal(file, toastHost)
+      if (action === 'save' && subject.source.kind === 'file' && file)
+        return saveToLocal(file, toastHost)
       if (action === 'files' && file) {
         openInFiles({ ...file, workspaceId: null, alt: null, line: null })
         openedFiles?.()
@@ -63,9 +68,9 @@ export function useMediaMenu(
       }
       if (action === 'copyPath') {
         const source = subject.source
-        if (source.kind !== 'tool')
+        if (file || source.kind === 'url')
           await navigator.clipboard.writeText(
-            source.kind === 'file' ? source.file.path : source.href,
+            file ? file.path : source.kind === 'url' ? source.href : '',
           )
         return
       }
@@ -82,7 +87,7 @@ export function useMediaMenu(
         else if (action === 'save')
           await downloadImage(
             image,
-            subject.source.kind === 'url' ? subject.source.href : 'image.png',
+            subject.source.kind === 'url' ? subject.source.href : subject.label || 'image.png',
           )
       } finally {
         lease?.release()

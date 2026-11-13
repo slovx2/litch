@@ -22,6 +22,7 @@ import { setViewing } from '../src/side/browser/store.ts'
 import { FileLinksProvider } from '../src/transcript/FileLinks.tsx'
 import { Markdown } from '../src/transcript/Markdown.tsx'
 import { ToolImageStrip } from '../src/transcript/media/ToolImages.tsx'
+import { UserAttachments } from '../src/transcript/messages.tsx'
 
 const core = createMockCore({ clock: browserClock, lang: 'zh-CN', stepMs: 0 })
 const [client, server] = createPortPair()
@@ -132,6 +133,38 @@ function Fixture() {
             }}
           >
             <h2>本机图片</h2>
+            {menuMode ? (
+              <section id="user-device-fixture">
+                <UserAttachments
+                  deviceId="local"
+                  attachments={[
+                    {
+                      kind: 'image',
+                      label: '星云设备图片.png',
+                      url: `data:image/png;base64,${SAMPLE_TOOL_IMAGES[0]!.thumbnail!.dataBase64}`,
+                      path: '/work/media-p1/photo.png',
+                    },
+                  ]}
+                />
+              </section>
+            ) : null}
+            {menuMode ? (
+              <section id="user-fixture">
+                <h2>用户发送的图片</h2>
+                <UserAttachments
+                  deviceId="local"
+                  attachments={[
+                    {
+                      kind: 'image',
+                      label: '星云附件.png',
+                      url: `data:image/png;base64,${SAMPLE_TOOL_IMAGES[0]!.thumbnail!.dataBase64}`,
+                      path: '/client/nebula.png',
+                      client: true,
+                    },
+                  ]}
+                />
+              </section>
+            ) : null}
             <Markdown
               streaming={false}
               text={
@@ -143,6 +176,21 @@ function Fixture() {
             value={{ deviceId: 'build', scope: { root: '/srv/work', cwd: '/srv/work' }, open() {} }}
           >
             <h2>远程设备与外网</h2>
+            {menuMode ? (
+              <section id="user-remote-fixture">
+                <UserAttachments
+                  deviceId="build"
+                  attachments={[
+                    {
+                      kind: 'image',
+                      label: '星云远程图片.png',
+                      url: `data:image/png;base64,${SAMPLE_TOOL_IMAGES[0]!.thumbnail!.dataBase64}`,
+                      path: '/srv/work/media-p1/photo.png',
+                    },
+                  ]}
+                />
+              </section>
+            ) : null}
             <Markdown
               streaming={false}
               text={

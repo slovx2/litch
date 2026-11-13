@@ -255,7 +255,7 @@
   font: 600 calc(14px * var(--fs)) / round(calc(24px * var(--fs)), 1px) var(--mono);
 }
 /* 复古皮肤里图片也是直角 */
-[data-skin="retro"] :is(.cmp-att img, .cmp-att-x, .uimg, .viewer img) {
+[data-skin="retro"] :is(.cmp-att img, .cmp-att-x, .uimg, .media-lightbox img) {
   border-radius: 0;
 }
 [data-skin="retro"] .cmp-att img,

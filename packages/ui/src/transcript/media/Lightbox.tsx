@@ -4,6 +4,7 @@ import { Icon } from '../../app/icons.tsx'
 import { releaseToastHost, showToast } from '../../app/toasts.tsx'
 import { copyImage, downloadImage, type MediaSource } from './actions.ts'
 import { useMediaMenu } from './MediaMenu.tsx'
+import './images.css'
 
 export interface GalleryImage {
   id: string

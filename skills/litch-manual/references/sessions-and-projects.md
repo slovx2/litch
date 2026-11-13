@@ -862,7 +862,7 @@ Explicit Markdown links use the written destination, even when the label looks l
 
 ### 桌面图片右键菜单 / Desktop image context menu
 
-对话正文的本机、远程和外网图片，以及工具结果图片和大图查看器，都支持右键菜单。
+对话正文的本机、远程和外网图片、用户发的图片，以及工具结果图片和大图查看器，都支持右键菜单。
 菜单只显示当前可用的操作；上下方向键选择，回车执行，Esc 关闭并返回原图。
 正文缩略图可选择“查看大图”，大图菜单不重复提供此项。
 
@@ -871,8 +871,9 @@ Explicit Markdown links use the written destination, even when the label looks l
 或在浏览器中打开；浏览器打开方式沿用对话链接的设置。
 工具结果图片按需读取原图后复制或下载，不提供文件路径或文件管理器操作。
 图片缓存已清理或复制、保存失败时会显示原因。此菜单仅适用于桌面端。
+用户图片附件使用随消息保存的内联内容复制或下载，查看大图也复用同一灯箱；草稿大图和内联工具图片大图同样可复制。附件有会话设备的绝对文件路径时，才提供对应的路径与文件操作；标为控制端文件的附件不借用会话设备的文件管理器接口，相关菜单隐藏。
 
-Right-click a transcript image, tool result image, or image in the viewer to see available actions.
+Right-click a transcript image, sent user image, tool result image, or image in the viewer to see available actions.
 Copy uses the full image. Local files can be shown in the system file manager; remote files can be
 saved to this computer. File images also offer their full device path and the file panel. Web images
 offer their address, download, and browser opening using the conversation link preference. Tool
