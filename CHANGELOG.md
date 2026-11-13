@@ -7,6 +7,28 @@ versioning or publishing metadata.
 
 ## 未发布
 
+## 0.43.0（2026-11-13）
+
+### 中文
+
+- 经理重置时可选择接班的 harness、模型和强度，也可设置派线默认值；桌面和手机均支持。
+- 对话图片新增右键菜单，可在 Finder 或文件管理器中显示、保存和复制；远程设备图片可保存到本机，用户发送的图片和大图查看器同样支持。
+- 本地分组可以收纳项目，支持从置顶区拖入或通过菜单加入。
+- 从置顶区打开的会话也会出现在“最近”中。
+- Chrome 工具会按当前网站许可处理页面动态加载的新来源（例如 iframe），减少重复授权和错误。
+- 修复 Codex 会话提示“expected active turn id … but found …”后无法停止或继续对话的问题。
+- 后台任务完成结果可在当前回合进行中即时送达，无须等回合结束。
+
+### English
+
+- Choose the successor harness, model, and reasoning effort when resetting a manager, and configure defaults for new worklines on desktop and mobile.
+- Transcript images now have a context menu to reveal, save, or copy them. Save remote images to your computer, with the same actions available for your own images and in the full-size viewer.
+- Local groups can now contain projects. Drag projects from Pins into a group or add them from the menu.
+- Sessions opened from Pins now also appear in Recent.
+- Chrome tools apply the current site permission to dynamically loaded origins, such as iframes, reducing repeated permission prompts and errors.
+- Fixed Codex sessions becoming impossible to stop or continue after an “expected active turn id … but found …” error.
+- Background task results now arrive during an active turn instead of waiting for the turn to finish.
+
 ## 0.42.0（2026-11-12）
 
 - 桌面侧栏新增“+”菜单，可新建对话、添加项目、本地分组和设备；空白处右键也可打开。分组移到侧栏最外层，组内经理保留经理框，收起时显示子会话数量。
