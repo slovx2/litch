@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm'
 import { transformSync } from '../../../node_modules/esbuild/lib/main.js'
 import { kinds, nodes, threadFixture } from '../../../packages/ui/test/issue-thread-fixture.mjs'
 
-function sheetFixture(kind) {
+function sheetFixture(kind, options = {}) {
   const source = transformSync(
     readFileSync(
       new URL('../src/screens/managers/issues/IssueConsole.tsx', import.meta.url),
@@ -14,6 +14,8 @@ function sheetFixture(kind) {
     { loader: 'tsx', format: 'cjs', jsx: 'automatic' },
   ).code
   const state = []
+  const effects = []
+  const calls = []
   let cursor = 0
   const element = (type, props) => ({ type, props })
   const module = { exports: {} }
@@ -22,7 +24,9 @@ function sheetFixture(kind) {
     require(name) {
       if (name === 'react')
         return {
-          useEffect() {},
+          useEffect(run) {
+            effects.push(run)
+          },
           useRef(initial) {
             const index = cursor++
             if (!(index in state)) state[index] = { current: initial }
@@ -42,6 +46,15 @@ function sheetFixture(kind) {
       if (name === 'react/jsx-runtime') return { jsx: element, jsxs: element }
       if (name === 'react-native') return { StyleSheet: { create: (styles) => styles } }
       if (name.endsWith('/i18n')) return { useT: () => (key) => key }
+      if (name.endsWith('/theme')) return { useTheme: () => ({ c: {}, font: { size: {} } }) }
+      if (name.endsWith('/services'))
+        return {
+          useChannel: () => ({
+            command: async (...args) => {
+              calls.push(args)
+            },
+          }),
+        }
       if (name === '../IssueRelations') return { IssueContext: { Provider: 'context' } }
       if (name === '../Issue') return { Issue: 'quick' }
       if (name === './IssueThread')
@@ -51,7 +64,7 @@ function sheetFixture(kind) {
     },
   })
   const issue = {
-    id: 'D-42',
+    id: kind === 'suggestion' ? 'S-nebula' : 'D-42',
     kind,
     title: '虚构议题',
     author: { kind: 'manager' },
@@ -60,18 +73,42 @@ function sheetFixture(kind) {
   }
   const props = {
     issueId: issue.id,
-    board: { posts: [issue] },
+    board: { posts: options.empty ? [] : [issue] },
     issues: { details: { [issue.id]: issue } },
     commands: {},
-    manager: {},
-    features: {},
+    manager: { deviceId: 'nebula', id: 'manager' },
+    features: { paging: options.paged === true },
     suggestions: [],
   }
-  return () => {
+  const render = () => {
     cursor = 0
+    effects.length = 0
     return module.exports.IssueSheetDrawer(props)
   }
+  render.effects = () =>
+    effects.splice(0).forEach((run) => {
+      run()
+    })
+  render.calls = calls
+  render.loaded = () => {
+    props.board.posts = [issue]
+  }
+  return render
 }
+
+test('手机分页建议详情：首屏只有 issue 外壳时请求原卡，加载后出现简报和操作', async () => {
+  const render = sheetFixture('suggestion', { paged: true, empty: true })
+  let tree = render()
+  render.effects()
+  await Promise.resolve()
+  assert.deepEqual(JSON.parse(JSON.stringify(render.calls)), [
+    ['managers.board.detail', { deviceId: 'nebula', managerId: 'manager', id: 'S-nebula' }],
+  ])
+  assert.ok(nodes(tree).some((node) => node.props?.testID === 'issue-quick-loading'))
+  render.loaded()
+  tree = render()
+  assert.ok(nodes(tree).some((node) => node.type === 'quick'))
+})
 
 for (const kind of kinds) {
   test(`${kind}：手机抽屉标题入口控制折叠正文，讨论输入框保留`, () => {

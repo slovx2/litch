@@ -14,6 +14,7 @@ import { ManagerEventsPreview } from './preview/ManagerEvents.web.tsx'
 import { ManagerResetPreviewScreen } from './preview/ManagerReset.web.tsx'
 import { ModelRankingPreview } from './preview/ModelRanking.web.tsx'
 import { startScrollNudge } from './preview/nudge.web.ts'
+import { SuggestionDetailPreview } from './preview/SuggestionDetail.web.tsx'
 import { sceneById } from './preview/scenes.web.ts'
 import { previewOrganizerFiles, seedOrganizer } from './shell/organizer-file.web.ts'
 
@@ -50,6 +51,7 @@ export default function Root() {
   if (inFrame && params.get('scene') === 'manager-reset')
     return <ManagerResetPreviewScreen params={params} />
   if (inFrame && params.get('scene') === 'board-actions') return <BoardActionsPreview />
+  if (inFrame && params.get('scene') === 'suggestion-detail') return <SuggestionDetailPreview />
   if (inFrame && params.get('scene') === 'board-mermaid') return <BoardMermaidPreview />
   if (inFrame && params.get('scene') === 'compose-state') return <ComposeStatePreview />
   if (inFrame && params.get('scene') === 'antigravity-quota')

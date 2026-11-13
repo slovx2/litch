@@ -5,6 +5,7 @@
 import type {
   ManagerBoardView,
   ManagerFeaturesView,
+  ManagerObjectId,
   ManagerView,
   SuggestionView,
 } from '@litch/core'
@@ -43,6 +44,7 @@ import {
   issueActiveFilterCount,
   normalizeIssueFilter,
 } from '../../../../../../packages/ui/src/manager/issues/filter-groups.ts'
+import { useChannel } from '../../../shell/services'
 import { useT } from '../../../ui/i18n'
 import { Button } from '../../../ui/kit/controls'
 import { IconButton } from '../../../ui/kit/Icon'
@@ -469,7 +471,29 @@ export function IssueSheetDrawer({
   onOpenItem(id: string): void
 }) {
   const t = useT()
+  const channel = useChannel()
+  const { c, font } = useTheme()
   const issue = issues.details[issueId as keyof typeof issues.details]
+  const detailId = issue && issue.kind !== 'ordinary' ? (issue.id as ManagerObjectId) : undefined
+  const [detailError, setDetailError] = useState('')
+  useEffect(() => {
+    if (!features.paging || !detailId) return
+    let current = true
+    setDetailError('')
+    // issue/read 只取公共外壳；分页看板的简报和原卡操作须另取 board.detail。
+    void channel
+      .command('managers.board.detail', {
+        deviceId: manager.deviceId,
+        managerId: manager.id,
+        id: detailId,
+      })
+      .catch((error) => {
+        if (current) setDetailError(error instanceof Error ? error.message : String(error))
+      })
+    return () => {
+      current = false
+    }
+  }, [features.paging, detailId, channel, manager.deviceId, manager.id])
   const special = issue ? issue.kind !== 'ordinary' : false
   const [talking, setTalking] = useState(!special)
   const [bodyOpen, setBodyOpen] = useState(false)
@@ -559,7 +583,15 @@ export function IssueSheetDrawer({
           />
         ) : null}
         {special && !talking ? (
-          quick
+          (quick ?? (
+            <Text
+              testID="issue-quick-loading"
+              accessibilityRole={detailError ? 'alert' : undefined}
+              style={{ color: detailError ? c.err : c.ink3, fontSize: font.size.meta }}
+            >
+              {detailError || t('manager.loading')}
+            </Text>
+          ))
         ) : (
           <IssueThread
             key={issue.id}
