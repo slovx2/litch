@@ -359,6 +359,7 @@ export {
   GROUPS_FOLD,
   groupName,
   type LocalGroup,
+  type MemberRef,
   ORGANIZER_VERSION,
   type OrganizerFile,
   type OrganizerLoad,
@@ -378,6 +379,12 @@ export {
   type OrganizerStore,
   type OrganizerView,
 } from './organizer/host.mjs'
+export {
+  type LocalCatalog,
+  type LocalLayout,
+  localLayout,
+  type MemberTree,
+} from './organizer/local.mjs'
 export { type MergedPins, mergePins, movePin, type PinSource } from './organizer/pins.mjs'
 export {
   catalogSettled,

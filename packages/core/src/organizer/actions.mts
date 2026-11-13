@@ -1,29 +1,30 @@
 // 本机整理的动作：一次只改一处（建组、改名、删组、排组、加入移出、组内排序、置顶先后、收起），
 // 标题排序和成员移动互不覆盖。纯函数：给旧文件和动作，回新文件；不合理的动作抛 OrganizerRefusal。
 import {
+  checkMember,
   groupName,
   type LocalGroup,
+  type MemberRef,
   type OrganizerFile,
   type PinRef,
   pinKey,
   refKey,
-  type SessionRef,
   sameRef,
 } from './file.mjs'
 
 export type OrganizerAction =
   /** 新建一个组（排在最后）；members 一起放进去（从别的组挪过来） */
-  | { type: 'group.create'; name: string; members?: SessionRef[] }
+  | { type: 'group.create'; name: string; members?: MemberRef[] }
   | { type: 'group.rename'; groupId: string; name: string }
   /** 删组只删引用，不动设备上的会话 */
   | { type: 'group.delete'; groupId: string }
   /** 把组挪到第 to 个（按挪走之后的位置数） */
   | { type: 'group.move'; groupId: string; to: number }
-  /** 放进一个组；已在别的组里就挪过来（一个会话最多在一个本机组里）。to 不给是排到最后 */
-  | { type: 'member.add'; groupId: string; member: SessionRef; to?: number }
-  | { type: 'member.remove'; member: SessionRef }
+  /** 放进一个组；已在别的组里就挪过来（一个成员最多在一个本机组里）。to 不给是排到最后 */
+  | { type: 'member.add'; groupId: string; member: MemberRef; to?: number }
+  | { type: 'member.remove'; member: MemberRef }
   /** 组内挪到第 to 个 */
-  | { type: 'member.move'; member: SessionRef; to: number }
+  | { type: 'member.move'; member: MemberRef; to: number }
   /**
    * 换掉置顶的先后。base 是界面算这份先后时手上的版本号：中间别的窗口写过就拒绝，免得互相覆盖
    */
@@ -58,15 +59,10 @@ const moveTo = <T,>(list: readonly T[], from: number, to: number): T[] => {
 const groupOf = (file: OrganizerFile, groupId: string): LocalGroup =>
   file.groups.find((group) => group.id === groupId) ?? refuse('notFound', '本地分组不存在')
 
-const checkedRef = (ref: SessionRef): SessionRef =>
-  typeof ref?.deviceId === 'string' &&
-  ref.deviceId &&
-  typeof ref.sessionId === 'string' &&
-  ref.sessionId
-    ? { deviceId: ref.deviceId, sessionId: ref.sessionId }
-    : refuse('invalid', '会话引用无效')
+const checkedRef = (ref: MemberRef): MemberRef =>
+  checkMember(ref) ?? refuse('invalid', '成员引用无效')
 
-const without = (groups: readonly LocalGroup[], refs: readonly SessionRef[]): LocalGroup[] => {
+const without = (groups: readonly LocalGroup[], refs: readonly MemberRef[]): LocalGroup[] => {
   const gone = new Set(refs.map(refKey))
   return groups.map((group) =>
     group.members.some((member) => gone.has(refKey(member)))
@@ -149,7 +145,7 @@ export function applyOrganizer(
       const member = checkedRef(action.member)
       const group =
         file.groups.find((entry) => entry.members.some((ref) => sameRef(ref, member))) ??
-        refuse('notFound', '会话不在本地分组里')
+        refuse('notFound', '成员不在本地分组里')
       const from = group.members.findIndex((ref) => sameRef(ref, member))
       const members = moveTo(group.members, from, action.to)
       if (members.every((ref, index) => ref === group.members[index])) return file

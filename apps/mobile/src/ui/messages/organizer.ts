@@ -3,8 +3,8 @@
 import type { Entry } from '../../../../../packages/ui/src/i18n/types.ts'
 
 export const zhCN = {
-  'organizer.count': '{count} 个对话',
-  'organizer.empty': '长按对话，选择“加入本地分组”',
+  'organizer.count': '{count} 个成员',
+  'organizer.empty': '长按对话或项目，选择“加入本地分组”',
   'organizer.blocked': '本地分组文件无法读取或来自更新版本，暂时只读。',
   'organizer.up': '上移',
   'organizer.down': '下移',
@@ -13,8 +13,8 @@ export const zhCN = {
 } satisfies Record<string, Entry>
 
 export const en: Record<keyof typeof zhCN, Entry> = {
-  'organizer.count': '{count} chats',
-  'organizer.empty': 'Long-press a chat and choose “Add to local group”',
+  'organizer.count': '{count} members',
+  'organizer.empty': 'Long-press a chat or project and choose “Add to local group”',
   'organizer.blocked':
     'The local groups file can’t be read or was written by a newer version. It’s read-only for now.',
   'organizer.up': 'Move up',

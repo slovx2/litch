@@ -31,6 +31,25 @@ const say = (prompt: string) =>
 
 export const SCENES: Scene[] = [
   {
+    id: 'local-workspace',
+    group: '设备',
+    name: '本地分组 · 项目',
+    note: '含项目成员的 v2 文件；首页正常运行并保持文件不变，不恢复本地分组入口',
+    localGroups: [
+      {
+        id: 'workspace-group',
+        name: '开发项目',
+        members: [
+          { kind: 'workspace', deviceId: 'local', workspaceId: 'litch' },
+          { kind: 'session', deviceId: 'local', sessionId: 's2' },
+          { kind: 'workspace', deviceId: 'nas', workspaceId: 'missing' },
+        ],
+      },
+      { id: 'review-group', name: '验收', members: [] },
+    ],
+    steps: [],
+  },
+  {
     id: 'board-actions',
     group: '经理',
     name: '长卡片操作栏',
