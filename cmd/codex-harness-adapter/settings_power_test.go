@@ -11,7 +11,7 @@ import (
 func TestPowerSettingsLocalRegistrationAndPersistence(t *testing.T) {
 	cfg := settingsTestConfiguration(t)
 	manager := newHarnessManager(cfg)
-	for _, key := range []string{powerLocalKey, powerWorkingKey, powerPluggedKey} {
+	for _, key := range []string{powerLocalKey, powerWorkingKey, powerRemoteKey, powerPluggedKey} {
 		if _, ok := manager.settingsSchema().spec(key); ok {
 			t.Fatalf("未登记服务暴露 %s", key)
 		}
@@ -25,7 +25,7 @@ func TestPowerSettingsLocalRegistrationAndPersistence(t *testing.T) {
 	if _, ok := manager.settingsSchema().spec(powerLocalKey); ok {
 		t.Fatal("内部归属出现在 schema")
 	}
-	for key, want := range map[string]bool{powerWorkingKey: true, powerPluggedKey: false} {
+	for key, want := range map[string]bool{powerWorkingKey: true, powerRemoteKey: false, powerPluggedKey: false} {
 		spec, ok := manager.settingsSchema().spec(key)
 		if !ok || spec.Default != want || spec.Restart != restartNone || spec.Scope != deviceScope {
 			t.Fatalf("设置声明错误: %+v", spec)
@@ -45,7 +45,7 @@ func TestPowerSettingsLocalRegistrationAndPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.settings = loaded
-	if got := cfg.powerSettings(); !got.local || got.working || !got.plugged {
+	if got := cfg.powerSettings(); !got.local || got.working || got.remote || !got.plugged {
 		t.Fatalf("用户设置没有持久保留: %+v", got)
 	}
 	// Windows 不提供 POSIX 权限位；文件存在性与持久化仍在所有平台检查。
@@ -102,5 +102,42 @@ func TestLocalServiceFlagIsExplicit(t *testing.T) {
 		if arg == "--local-service" {
 			t.Fatal("归属登记不应变成重复启动参数")
 		}
+	}
+}
+
+func TestControlPowerRemoteSettingAndSeparateActivity(t *testing.T) {
+	cfg := settingsTestConfiguration(t)
+	manager := newHarnessManager(cfg)
+	if err := manager.registerLocalPower(); err != nil {
+		t.Fatal(err)
+	}
+	backend := &fakePowerBackend{available: true, power: "ac"}
+	power := newPowerController(context.Background(), backend, cfg.powerSettings, nil, nil)
+	t.Cleanup(power.close)
+	server := &controlServer{c: cfg, manager: manager, power: power, ctx: context.Background()}
+	params, _ := json.Marshal(remoteReport(1, powerActivitySource{ID: "remote", Working: 1}))
+	if _, err := server.handlePowerActivity("power.remoteActivity", params, "desktop"); err != nil {
+		t.Fatal(err)
+	}
+	if backend.starts != 0 || power.generation != "" {
+		t.Fatal("默认关闭时远程活动生效或覆盖了本机摘要")
+	}
+	params, _ = json.Marshal(map[string]any{"expectedVersion": 1, "edits": []settingEdit{edit(powerRemoteKey, true)}})
+	if _, err := server.handle("settings.write", params); err != nil {
+		t.Fatal(err)
+	}
+	if backend.starts != 1 || power.read().Working != 1 {
+		t.Fatalf("启用后已有远程证据没有立即生效: %+v", power.read())
+	}
+	loaded, err := loadSettings(cfg.home)
+	if err != nil || !loaded.boolean(powerRemoteKey, false) {
+		t.Fatal("远程开关没有持久保存", err)
+	}
+	params, _ = json.Marshal(map[string]any{"expectedVersion": 2, "edits": []settingEdit{edit(powerRemoteKey, false)}})
+	if _, err := server.handle("settings.write", params); err != nil {
+		t.Fatal(err)
+	}
+	if power.read().State == "requested" || !backend.leases[0].stopped {
+		t.Fatal("关闭没有立即释放")
 	}
 }

@@ -291,8 +291,8 @@ func (s *controlServer) serve(connection net.Conn) {
 			began := time.Now()
 			var result any
 			var failure *controlError
-			if request.Method == "power.activity" && s.power != nil {
-				result, failure = s.handlePowerActivity(request.Params, connection)
+			if (request.Method == "power.activity" || request.Method == "power.remoteActivity") && s.power != nil {
+				result, failure = s.handlePowerActivity(request.Method, request.Params, connection)
 			} else {
 				result, failure = s.handle(request.Method, request.Params)
 			}
@@ -359,7 +359,7 @@ func (s *controlServer) handle(method string, params json.RawMessage) (any, *con
 	switch method {
 	case "modelRanking.read", "modelRanking.write", "modelRanking.reset", "modelRanking.merge":
 		return s.handleModelRanking(method, params)
-	case "power.read", "power.activity", "power.registerLocal":
+	case "power.read", "power.activity", "power.remoteActivity", "power.registerLocal":
 		return s.handlePower(method, params)
 	case "settings.read":
 		return map[string]any{

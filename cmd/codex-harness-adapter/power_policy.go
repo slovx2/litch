@@ -11,6 +11,7 @@ func (p *powerController) reconcile() bool {
 		return false
 	}
 	now, config := p.now(), p.settings()
+	remoteWorking, remoteUnknown, remoteExpired := p.remoteWorking(now)
 	settingsChanged := config != p.lastSettings
 	p.lastSettings = config
 	state := powerStatus{Supported: p.backend.supported(), ConfiguredForLocalService: config.local,
@@ -49,7 +50,12 @@ func (p *powerController) reconcile() bool {
 			state.Working += evidence.working
 		}
 	}
-	if config.working && state.Working > 0 {
+	localWorking := state.Working
+	if config.remote {
+		state.Working += remoteWorking
+		expired = expired || remoteExpired
+	}
+	if (config.working && localWorking > 0) || (config.remote && remoteWorking > 0) {
 		state.Reasons = append(state.Reasons, "working")
 	}
 	if config.plugged && p.source == "ac" {
@@ -120,7 +126,7 @@ func (p *powerController) reconcile() bool {
 	case wanted && (p.failed || p.lease == nil):
 		state.State = "degraded"
 		state.Text = both("无法阻止系统休眠；请检查设备服务日志，修复后重新开关电源设置", "Could not prevent sleep. Check the device-service log, then toggle the power setting after fixing the cause")
-	case config.working && unknown:
+	case (config.working && unknown) || (config.remote && remoteUnknown):
 		state.State = "degraded"
 		state.Text = both("部分工作状态未确认；已有工作证据最多保留 90 秒，请检查设备连接和服务日志", "Some work status is unconfirmed. Existing evidence is kept for up to 90 seconds; check device connections and service logs")
 	case config.plugged && p.source == "unknown":

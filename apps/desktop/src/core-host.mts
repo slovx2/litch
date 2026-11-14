@@ -26,10 +26,16 @@ import { CLIENT_TOOL, type ClientToolToCore, type ClientToolToMain } from './cli
 import { fileDeviceStore } from './device-store.mjs'
 import { createFileSaveCore } from './file-save-core.mjs'
 import { ATTACH, LANGUAGE, SERVICE, TERMINALS } from './ipc.mjs'
-import { type AdapterLang, localDevice, upgradeReport } from './local-adapter.mjs'
+import {
+  type AdapterLang,
+  defaultAdapterHome,
+  localDevice,
+  upgradeReport,
+} from './local-adapter.mjs'
 import { createDesktopLog, DESKTOP_LOG_DIR, type DesktopLog, teeConsole } from './log-file.mjs'
 import { fileOrganizerStore } from './organizer-store.mjs'
 import { desktopPairing } from './pairing.mjs'
+import { reportRemotePower } from './remote-power.mjs'
 import { createForwarder } from './ssh/forward.mjs'
 import { discoverHosts } from './ssh/hosts.mjs'
 import { remoteSetup } from './ssh/setup.mjs'
@@ -249,6 +255,13 @@ function createHost(): Core | MockCore {
       },
     ],
   })
+  if (process.platform === 'darwin' && process.env.LITCH_ADAPTER_ROOT && !process.env.LITCH_ENTRY) {
+    const home = process.env.LITCH_ADAPTER_HOME || defaultAdapterHome()
+    const stopPower = reportRemotePower(core, join(home, 'device', 'ctl.sock'), (line) =>
+      console.error(`[power] ${line}`),
+    )
+    process.once('exit', stopPower)
+  }
   return core
 }
 

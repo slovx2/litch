@@ -2,6 +2,12 @@ import type { DevicePowerView } from '@litch/core'
 import type { Translator } from '../i18n/index.ts'
 
 export const PLUGGED_POWER_SETTING = 'power.keepAwakeWhilePluggedIn'
+export const REMOTE_POWER_SETTING = 'power.preventSleepWhileRemoteWorking'
+
+/** 远程任务对控制端的影响只在桌面本机设置里展示。 */
+export function showPowerSetting(key: string, localDesktop: boolean): boolean {
+  return key !== REMOTE_POWER_SETTING || localDesktop
+}
 
 /** 描述配置和当前供电，电池上启用开关不冒充已经申请断言。 */
 export function powerShortcutTitle(
