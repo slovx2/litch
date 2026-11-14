@@ -578,7 +578,7 @@ leaves the suggestion pending. Deleting the source withdraws its pending cards.
 
 ### Configuration and common questions
 
-`scripts/litch open suggestions` opens the global list. Retention is per device, in Devices → the
+`scripts/litch open suggestions` opens the global list. Retention is per device, in Settings → the
 device → Session orchestration → Suggestion retention. Its values, commands and expiration behavior
 are in `device-settings.md`. Task cards can be switched per harness with
 `scripts/litch tools set <device> --harness <id> --task-cards on|off`.

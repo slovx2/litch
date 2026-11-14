@@ -290,6 +290,15 @@ export function App() {
     section: DeviceSection | null
     seq: number
   } | null>(null)
+  const [settingsDevice, setSettingsDevice] = useState<string | null>(null)
+  const openDevice = useCallback(
+    (deviceId: string) =>
+      leaveThen(() => {
+        setDeviceAt((was) => ({ deviceId, section: null, seq: (was?.seq ?? 0) + 1 }))
+        openPage('devices')
+      }),
+    [openPage],
+  )
   const openDevices = useCallback(
     () =>
       leaveThen(() => {
@@ -642,6 +651,8 @@ export function App() {
               onSection={(section) => leaveThen(() => setSettingsAt(section))}
               onClose={closeAuxiliary}
               onDevices={openDevices}
+              activeDevice={settingsDevice}
+              onDevice={openDevice}
               onArchived={() => openPage('archived')}
               devices={
                 <DevicesPage
@@ -649,6 +660,7 @@ export function App() {
                   initial={deviceAt?.deviceId ?? null}
                   section={deviceAt?.section ?? null}
                   onClose={closeAuxiliary}
+                  onDeviceChange={setSettingsDevice}
                 />
               }
             />

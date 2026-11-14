@@ -31,32 +31,6 @@ interface SettingRowProps {
   restarts: string | null
 }
 
-/**
- * 一个 harness 的设置里，设备服务标了“启用开关”角色的那一项：标题行上也放一个，不用点开就能拨。
- * 它和点开之后的那一行是同一项、同一份草稿：在这里拨了，那一行跟着变，没保存、被别处动过照旧在那一行上说
- */
-export function LeadSwitch(props: Omit<SettingRowProps, 'failure' | 'restarts'>) {
-  const { deviceId, spec, snapshot, revision, draft, saving } = props
-  const t = useT()
-  const stored = snapshot.values[spec.key]
-  const origin = { revision, stored }
-  return (
-    <span className="mng-lead" data-lead={spec.key}>
-      <Control
-        deviceId={deviceId}
-        id={`lead-${deviceId}-${spec.key}`}
-        spec={spec}
-        stored={stored}
-        edit={draft?.edit ?? null}
-        disabled={saving}
-        wrong={false}
-        label={t.said(spec.title)}
-        onEdit={(next) => editDraft(deviceId, spec, next, origin)}
-      />
-    </span>
-  )
-}
-
 export function SettingRow(props: SettingRowProps) {
   const { deviceId, spec, snapshot, revision, draft, saving, failure, restarts } = props
   const t = useT()

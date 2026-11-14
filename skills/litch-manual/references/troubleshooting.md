@@ -5,13 +5,13 @@ Start every investigation with `scripts/litch status`, then narrow down.
 ## Tools
 
 - `scripts/litch diagnose run <device>` runs the device's checks (each harness's command, terminals,
-  SSH entries) and reports what failed and why. Same as Devices → the device → Diagnostics → Run checks.
+  SSH entries) and reports what failed and why. Same as Settings → the device → Diagnostics → Run checks.
 - `scripts/litch diagnose logs <device>` reads the tail of a log (`--source`, `--harness <id>`; see
   `scripts/litch diagnose --help`): the device process (`device`), the background service (`service`),
   control-channel requests (`control`), the device's per-request summary (`requests`: method, harness,
   ok, duration, error), or for one harness its runtime log (`runtime`), diagnostics log
   (`diagnostics`), per-request summary (`rpc`) and, for Claude Code, its detailed debug log (`debug`).
-  Same as Devices → the device → Logs. Quote the relevant lines to the user, not whole logs, and never
+  Same as Settings → the device → Logs. Quote the relevant lines to the user, not whole logs, and never
   secrets that may appear in them. The summaries never contain conversation text, file contents or
   command output.
 - `scripts/litch diagnose ssh-config <device>` prints the `~/.ssh/config` snippet that lets the
@@ -90,7 +90,7 @@ automatically interrupt or change harness network timeouts. Native retry message
 progress or completion. The continuation appears as a system card on desktop and phone.
 
 **A model is unavailable or every turn fails at once.** Usually the harness's own sign-in or model
-configuration. Check Devices → harness → Settings → Accounts/Config, or its own CLI; the user completes login steps. the harness's runtime log
+configuration. Check Settings → the device → the harness → Accounts/Config, or its own CLI; the user completes login steps. the harness's runtime log
 (`diagnose logs`) shows the error.
 
 **A remote device does not connect.** `scripts/litch devices check <target>` and the table in
@@ -126,7 +126,7 @@ network-share folders are not supported in the files panel.
   versions before this layout are no longer written.
 - The desktop app's own logs (`main.jsonl`, `core.jsonl`: requests to devices, connection changes, UI
   commands): `~/Library/Logs/Litch` on macOS, the app's logs folder elsewhere, same limits. On the
-  local device, Devices → the device → Logs has buttons that open this folder and the device's log
+  local device, Settings → the device → Logs has buttons that open this folder and the device's log
   folder; for a remote device the Logs section shows the folder and a `tail` command to copy.
 - The desktop app's own data: the app's user-data folder (devices, sidebar snapshots, preferences).
 - This manual: `~/.agents/skills/litch-manual`, linked into other harnesses' skill folders. Litch

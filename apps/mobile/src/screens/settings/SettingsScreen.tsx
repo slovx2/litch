@@ -21,6 +21,7 @@ import { SKINS, type Skin, useTheme } from '../../ui/theme'
 import { CURRENT_VERSION } from '../../update/store'
 import { ApprovalKeySection } from './ApprovalKeySection'
 import { ConnectionSection } from './ConnectionSection'
+import { DeviceSettingsLinks } from './DeviceSettingsLinks'
 import { TaskCardsSection } from './TaskCardsSection'
 import { AutoUpdateSwitch, UpdateStatus } from './UpdateSection'
 
@@ -111,9 +112,21 @@ export function SettingsScreen({ navigation }: Props) {
     )
   }
   return (
-    <Screen title={t('settings.title')} testID="settings">
+    <Screen
+      title={t('settings.title')}
+      testID="settings"
+      actions={[
+        {
+          icon: 'plus',
+          label: t('devices.add'),
+          testID: 'settings:add-device',
+          onPress: () => navigation.navigate('AddDevice'),
+        },
+      ]}
+    >
       <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 32 }]}>
-        <SectionLabel>{t('settings.group.look')}</SectionLabel>
+        <DeviceSettingsLinks />
+        <SectionLabel>{t('settings.general')}</SectionLabel>
         <Group>
           <Pick<Prefs['lang']>
             name="lang"

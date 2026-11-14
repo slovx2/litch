@@ -1,12 +1,10 @@
-// 一个 harness 占一块，平时只有一行：它是谁、现在什么状态、开没开、能不能重启。
-// 进入详情页后显示运行信息、不可用原因和设置。
-// “启用”也只是按声明画出来的一项，界面不认它的键：标题行上的开关是设备服务标了“启用开关”角色的那一项（见 ManagePanel）。
+// 设备页每个 harness 只有一行入口与状态；独立详情页显示安装、重启、运行信息和设置。
 import type { DeviceView, HarnessView, InstallTopicView } from '@litch/core'
 import { type ReactNode, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { Confirm } from '../../app/Confirm.tsx'
 import { whyNot } from '../../app/errors.ts'
-import { Icon } from '../../app/icons.tsx'
+import { Forward, Icon } from '../../app/icons.tsx'
 import { useServices } from '../../app/services.tsx'
 import { showToast } from '../../app/toasts.tsx'
 import { InstallRow } from '../../install/InstallRow.tsx'
@@ -31,25 +29,13 @@ interface HarnessBlockProps {
   pending: boolean
   /** 详情页显示运行信息与设置；设备列表只显示标题行。 */
   detail?: boolean
-  /** 标题行上的开关。设备服务没有给哪一项标“启用开关”的角色就没有 */
-  toggle: ReactNode
-  /** 详情设置：打开它；'unsupported' 是设备支持而这个 harness 还不支持；null 是设备不支持，不提 */
-  settings: (() => void) | 'unsupported' | null
+  /** 列表行进入独立详情页；详情页自身不再显示入口。 */
+  settings: (() => void) | null
   children: ReactNode
 }
 
 export function HarnessBlock(props: HarnessBlockProps) {
-  const {
-    device,
-    harnessId,
-    harness,
-    install,
-    pending,
-    detail = false,
-    toggle,
-    settings,
-    children,
-  } = props
+  const { device, harnessId, harness, install, pending, detail = false, settings, children } = props
   const { channel } = useServices()
   const t = useT()
   const [restarting, setRestarting] = useState(false)
@@ -104,6 +90,46 @@ export function HarnessBlock(props: HarnessBlockProps) {
     }
   }
 
+  // 设备页只保留可进入的整行；安装、启停和运行信息都在独立详情页。
+  if (!detail) {
+    const version = install?.versions?.find((entry) => entry.harness === harnessId)
+    return (
+      <section
+        className="mng-h"
+        data-harness-block={harnessId}
+        data-state={harness?.state ?? 'unknown'}
+        data-pending={pending}
+        data-open={false}
+      >
+        <button
+          type="button"
+          className="mng-h-link"
+          data-act="harness-settings"
+          disabled={typeof settings !== 'function'}
+          onClick={typeof settings === 'function' ? settings : undefined}
+        >
+          <span className={ready ? 'chip' : 'chip off'}>
+            {harness?.badge ?? harnessId.slice(0, 2).toUpperCase()}
+          </span>
+          <span className="mng-h-name ell grow">{name}</span>
+          <span className="dim mng-h-summary">
+            {harness?.down === 'notInstalled' || version?.installed === null
+              ? t('install.notInstalled')
+              : harness
+                ? t(`harness.state.${harness.state}`)
+                : t('devices.harness.unknown')}
+          </span>
+          {pending ? (
+            <span className="pill wait" data-pending-pill>
+              {t('manage.pending')}
+            </span>
+          ) : null}
+          <Forward />
+        </button>
+      </section>
+    )
+  }
+
   return (
     <section
       className="mng-h"
@@ -134,19 +160,6 @@ export function HarnessBlock(props: HarnessBlockProps) {
           <span className="pill wait" data-pending-pill>
             {t('manage.pending')}
           </span>
-        ) : null}
-        {toggle}
-        {typeof settings === 'function' ? (
-          <button
-            type="button"
-            className="ibtn"
-            title={t('hc.entry')}
-            aria-label={t('hc.entry')}
-            data-act="harness-settings"
-            onClick={settings}
-          >
-            <Icon name="tool" />
-          </button>
         ) : null}
         {harness ? (
           <button
@@ -216,18 +229,13 @@ export function HarnessBlock(props: HarnessBlockProps) {
                 : null}
             </div>
           ) : null}
-          {/* 停用了的：开关就在标题行上，不用再解释 */}
+          {/* 停用状态由下面的启用设置表达，不重复说明。 */}
           {harness && !ready && harness.state !== 'disabled' ? (
             <div className="mng-h-why">
               <HarnessWhy harness={harness} />
             </div>
           ) : null}
           {pending ? <div className="mng-h-note">{t('manage.pending.note', { name })}</div> : null}
-          {settings === 'unsupported' ? (
-            <div className="mng-h-note dim" data-hc-unsupported>
-              {t('hc.entry.unsupported')}
-            </div>
-          ) : null}
           <div className="mng-rows">{children}</div>
         </div>
       ) : null}

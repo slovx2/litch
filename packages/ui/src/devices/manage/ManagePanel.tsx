@@ -28,7 +28,7 @@ import { HarnessBlock } from './HarnessBlock.tsx'
 import { ModelRanking } from './ModelRanking.tsx'
 import { PowerSettings } from './PowerSettings.tsx'
 import { SaveBar, saveDrafts } from './SaveBar.tsx'
-import { LeadSwitch, SettingRow } from './SettingRow.tsx'
+import { SettingRow } from './SettingRow.tsx'
 import { SshEntries } from './SshEntries.tsx'
 
 const NO_REVISIONS: ManageRevisions = {}
@@ -95,7 +95,7 @@ export function ManagePanel({
     schema?.settings.filter((spec) =>
       harnessId
         ? spec.scope.kind === 'harness' && spec.scope.harness === harnessId
-        : spec.scope.kind === 'device' || spec.role === 'enable',
+        : spec.scope.kind === 'device',
     ) ?? []
   const scoped = schema ? { ...schema, settings: selected } : undefined
   const guard = useLeaveGuard(Boolean(harnessId && selected.some((spec) => drafts[spec.key])))
@@ -173,7 +173,6 @@ export function ManagePanel({
           install={install}
           pending={snapshot.pendingRestart.includes(harnessId)}
           detail
-          toggle={null}
           settings={null}
         >
           {bucketsOf(schema, ofHarness(harnessId)).map((bucket) => (
@@ -215,10 +214,6 @@ export function ManagePanel({
           <h2>{t('manage.harness.title')}</h2>
         </div>
         {harnessIds.map((id) => {
-          const specs = ofHarness(id)
-          // 设备服务标成“启用开关”的那一项：标题行上也放一个，不用点开就能拨。
-          // 认的是它带的角色标记，不认键名，也不看它排在第几；没有哪一项带着就没有这个开关
-          const lead = specs.find((spec) => spec.role === 'enable' && spec.type === 'boolean')
           return (
             <HarnessBlock
               key={id}
@@ -228,18 +223,6 @@ export function ManagePanel({
               install={install}
               pending={snapshot.pendingRestart.includes(id)}
               settings={onSettings ? () => leaveThen(() => onSettings(id)) : null}
-              toggle={
-                lead ? (
-                  <LeadSwitch
-                    deviceId={deviceId}
-                    spec={lead}
-                    snapshot={snapshot}
-                    revision={revisions[lead.key] ?? 0}
-                    draft={drafts[lead.key]}
-                    saving={saving}
-                  />
-                ) : null
-              }
             >
               {null}
             </HarnessBlock>

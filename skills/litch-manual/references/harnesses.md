@@ -65,11 +65,11 @@ user. Litch has no command for it. Do it yourself with the user's OK, or give th
 - For a remote device the command has to run on that machine: in a terminal there, or, with the user's
   OK, `ssh <alias> '<command>'` from here.
 - Afterwards make Litch pick it up: `scripts/litch harness restart <device> <id>` (it re-detects the
-  command; the Devices page has the same as the harness's Restart button). If the harness was disabled,
+  command; the harness's Runtime page has the same Restart button). If the harness was disabled,
   `scripts/litch harness enable <device> <id>`.
 
-**Signing in, API keys, providers and the harness's own settings** live on the Devices page: each
-harness row has a **Settings** button (详情设置) that opens these tabs. Runtime settings belong to Litch; the other tabs read and write the
+**Signing in, API keys, providers and the harness's own settings** live at Settings → the device →
+the harness. Click the whole harness row to open its page. Runtime settings belong to Litch; the other tabs read and write the
 harness's own config files on that device (shared with its CLI there):
 
 - **Claude Code 账号与网关并用**：另配 API key 不会隐藏已配置的官方账号模型。
@@ -86,7 +86,7 @@ harness's own config files on that device (shared with its CLI there):
   changes prompt to save, discard or cancel when leaving. The device page keeps status, enable,
   installation and restart controls.
 
-- **Claude Code 自动压缩窗口（桌面端）**：设备详情的“配置 → 上下文窗口”按供应商和实际模型分别设置，包含官方账号。
+- **Claude Code 自动压缩窗口（桌面端）**：设置 → 设备 → Claude Code → 配置 → 上下文窗口，按供应商和实际模型分别设置，包含官方账号。
   范围为 100K–1M token，留空继承 Claude 设置；同一模型的 `[1m]` 变体共用一行。
   设置存在设备的 Litch `context-windows.json`，不会改其他供应商，也不改变模型容量或订阅额度。
   CLI 会预留输出和摘要空间后提前压缩，这不是请求的硬上限；需 Claude Code 2.1.299 或更新版本。
@@ -157,7 +157,7 @@ still store it in that harness's environment on that device:
 
 ## Claude on-demand tools
 
-设备详情 → Claude Code → 设置提供 **工具按需加载**（`harness.claude-code.toolLoading`，默认 `auto`）和 **工具加载覆盖**（`harness.claude-code.toolLoadingOverrides`，默认空）。两项修改后需重启 Claude Code；不修改真实 Claude 用户配置。
+设置 → 设备 → Claude Code → 运行设置提供 **工具按需加载**（`harness.claude-code.toolLoading`，默认 `auto`）和 **工具加载覆盖**（`harness.claude-code.toolLoadingOverrides`，默认空）。两项修改后需重启 Claude Code；不修改真实 Claude 用户配置。
 
 - `auto`：仅已确认的 CLI（至少 2.1.305）、Claude 模型及搜索环境启用分层。官方 API 或明确设置有效 `ENABLE_TOOL_SEARCH` 才启用；未知网关、云路由、模型和版本，以及关闭实验能力时，未声明的工具全部常驻。
 - `on`：用户明确启用分层。未设置 `ENABLE_TOOL_SEARCH` 时补 `true`；已设置的值不变。CLI 自身限制仍优先。
@@ -180,10 +180,10 @@ Deferred tools are listed by namespace in the system prompt and can be discovere
 ## Enabling, disabling, restarting
 
 `scripts/litch harness auto-title <device>` reads Litch's automatic naming switch for new Codex
-sessions. Append `on` or `off` to change it. In the UI: Devices → Codex → Settings → Config →
+sessions. Append `on` or `off` to change it. In the UI: Settings → the device → Codex → Config →
 Name sessions automatically. This does not rename existing sessions or change Codex's native settings.
 
-原生 Codex 0.163.0 及以上支持显式后台任务接续。设备详情 → 设置 → 配置中有“后台任务自动继续”（`litch.backgroundWake`），默认开启。新建 Litch 会话获得显式登记有限原生命令的工具，完成后可自动接续；已有会话不会因此补装工具。关闭立即撤销已登记任务的自动继续，不停止原生命令。开启不恢复已取消登记；设备服务或 Codex 重启后不自动续跑。这个设置保存在设备服务中，不修改 Codex 的全局配置。桌面和手机设置页标明版本要求；低版本显示当前版本与设备详情升级入口，开关仍可更改。后台任务页以小字说明当前版本不支持、版本无法确认，或本会话未安装登记工具；升级或启用后请新建会话。
+原生 Codex 0.163.0 及以上支持显式后台任务接续。设置 → 设备 → Codex → 配置中有“后台任务自动继续”（`litch.backgroundWake`），默认开启。新建 Litch 会话获得显式登记有限原生命令的工具，完成后可自动接续；已有会话不会因此补装工具。关闭立即撤销已登记任务的自动继续，不停止原生命令。开启不恢复已取消登记；设备服务或 Codex 重启后不自动续跑。这个设置保存在设备服务中，不修改 Codex 的全局配置。桌面和手机设置页标明版本要求；低版本显示当前版本与设备详情升级入口，开关仍可更改。后台任务页以小字说明当前版本不支持、版本无法确认，或本会话未安装登记工具；升级或启用后请新建会话。
 
 Native Codex background continuation requires **0.163.0 or later**. Desktop and mobile settings show the requirement and an upgrade hint for older versions; the switch remains editable. The Background tasks page explains an unsupported or unverified runtime, or a session without the registration tool. Start a new session after upgrading or enabling the feature. Turning it off cancels continuations without stopping commands; turning it back on does not restore cancelled registrations. Device or Codex restarts do not resume this work. The setting stays in Litch and does not modify Codex configuration.
 
@@ -333,7 +333,7 @@ SDK 0.1.23 的 localharness。第一次创建会话时从官方 PyPI 按需下�
 已装 App、IDE 或 `agy` CLI 不代表已装 SDK runtime。
 API key 模式无需安装 agy CLI；自定义 SDK runtime 仍用 `CHA_ANTIGRAVITY_CLI`，不要填到订阅 CLI 的路径项。
 
-在 Devices → Antigravity → Settings → Accounts 配置 `GEMINI_API_KEY`，保存后重启引擎。
+在 设置 → 设备 → Antigravity → 账号 配置 `GEMINI_API_KEY`，保存后重启引擎。
 密钥只写不读回。默认模型和 Gemini API 地址在详情设置中修改，新建会话生效；自定义地址会
 收到 API key。API key 后端没有订阅登录按钮，不读取桌面或 CLI 的 OAuth 缓存。
 
@@ -354,6 +354,6 @@ Antigravity 默认使用订阅（官方 ACP）。只装 `agy`、未配置 API ke
 ### 旧版 Claude Code 的自动压缩窗口
 
 Claude Code 低于 2.1.299 时，对话仍正常运行，本次启动不传入 Litch 配置的模型压缩窗口，
-其他设置保持生效。对话内提示实际路径、版本和未生效的设置，并指向设备详情的安装/更新入口。
+其他设置保持生效。对话内提示实际路径、版本和未生效的设置；安装/更新入口位于 设置 → 设备 → 对应 harness → 运行设置。
 同一会话、同一路径与版本只提示一次；切换 CLI 或升级后重新判断。更新并重启后，保存的窗口设置生效。
 这项降级只针对自动压缩窗口，不改变其他功能各自的最低版本要求。

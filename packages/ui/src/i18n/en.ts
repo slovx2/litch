@@ -332,20 +332,20 @@ export const en: Record<MessageKey, Entry> = {
   'harness.said': 'Details from the device',
   'harness.next.connecting': 'Available once connected.',
   'harness.next.unreachable':
-    'The device service retries automatically. If it still can’t connect, restart it on the Devices page.',
+    'The device service retries automatically. If it still can’t connect, restart it in its Runtime settings.',
   'harness.next.handshakeFailed':
-    'It retries automatically. If it keeps failing, restart it on the Devices page.',
+    'It retries automatically. If it keeps failing, restart it in its Runtime settings.',
   'harness.next.disconnected': 'Reconnecting automatically.',
   'harness.next.starting': 'Available once started.',
-  'harness.next.disabled': 'Turn it back on in the device settings.',
+  'harness.next.disabled': 'Turn it back on in its Runtime settings.',
   'harness.next.notInstalled':
-    'Install its CLI on this device, then restart it on the Devices page. If it’s installed elsewhere, set its path in settings.',
+    'Install its CLI on this device, then restart it in its Runtime settings. If it’s installed elsewhere, set its path there.',
   'harness.next.versionTooLow':
-    'Upgrade its CLI on this device, then restart it on the Devices page.',
-  'harness.next.startFailed': 'Fix the reported issue, then restart it on the Devices page.',
+    'Upgrade its CLI on this device, then restart it in its Runtime settings.',
+  'harness.next.startFailed': 'Fix the reported issue, then restart it in its Runtime settings.',
   'harness.next.stopped':
-    'Restart it on the Devices page. If it keeps exiting, check diagnostics there.',
-  'harness.next.other': 'Check its status on the Devices page.',
+    'Restart it in its Runtime settings. If it keeps exiting, check the device diagnostics.',
+  'harness.next.other': 'Select the device and harness in Settings to check its status.',
 
   'devices.title': 'Devices',
   'devices.close': 'Back to conversation',
@@ -1024,6 +1024,8 @@ export const en: Record<MessageKey, Entry> = {
   'settings.title': 'Settings',
   'settings.close': 'Back to conversation',
   'settings.nav': 'Settings sections',
+  'settings.general': 'General',
+  'settings.shared': 'Across devices',
   'settings.group.look': 'Appearance',
   'settings.group.lang': 'Language',
   'settings.group.switches': 'Per-harness switches',

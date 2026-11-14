@@ -74,7 +74,6 @@ const sectionsOn = (platform: string) =>
         'look',
         'lang',
         'chat',
-        'switches',
         'browser',
         'chrome',
         'computer',
@@ -82,8 +81,9 @@ const sectionsOn = (platform: string) =>
         'assist',
         'keys',
         'about',
+        'switches',
       ]
-    : ['look', 'lang', 'chat', 'switches', 'browser', 'chrome', 'notify', 'assist', 'keys', 'about']
+    : ['look', 'lang', 'chat', 'browser', 'chrome', 'notify', 'assist', 'keys', 'about', 'switches']
 const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
   const all =
     lang === 'en'
@@ -91,7 +91,6 @@ const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
           'Appearance',
           'Language',
           'Conversation',
-          'Per-harness switches',
           'Built-in browser',
           'Chrome',
           'Computer Use',
@@ -99,12 +98,12 @@ const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
           'Config assistant',
           'Shortcuts',
           'About',
+          'Per-harness switches',
         ]
       : [
           '外观',
           '语言',
           '对话',
-          '按 harness 开关',
           '内置浏览器',
           'Chrome',
           'Computer Use',
@@ -112,6 +111,7 @@ const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
           '配置助手',
           '快捷键',
           '关于',
+          '按 harness 开关',
         ]
   return hasComputerUse(platform) ? all : all.filter((title) => title !== 'Computer Use')
 }

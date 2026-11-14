@@ -55,7 +55,9 @@ export async function switchesSeen(): Promise<SwitchesSeen> {
   await until('build-01 的设置', () => one('[data-detail="build"] [data-manage-state="ready"]'))
   const block = () => one('[data-harness-block="gemini"]')
   await until('Gemini CLI 那一块是停用的', () => block()?.dataset.state === 'disabled')
-  one<HTMLButtonElement>('.mng-h-head [data-lead] .switch', block() ?? document)?.click()
+  one<HTMLButtonElement>('[data-act="harness-settings"]', block() ?? document)?.click()
+  await until('Gemini CLI 独立运行设置', () => one('[data-runtime-settings="gemini"]'))
+  one<HTMLButtonElement>('[data-setting="harness.gemini.enabled"] .switch')?.click()
   const save = await until('能按的“保存”', () => {
     const found = one<HTMLButtonElement>('.mng-save [data-act="save"]')
     return found && !found.disabled ? found : null
