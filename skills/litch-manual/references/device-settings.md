@@ -95,19 +95,24 @@ installed there). Existing worktrees are never moved.
 
 ## Power (local macOS service)
 
-Devices → the device → **Power** has two switches that save immediately. The desktop registers its
-local service; a phone connected to that service can use them too. Ordinary remote services do not
+Devices → the device → **Power** saves switches immediately. The desktop registers its
+local service; a phone connected to that service can use the local-task and plugged-in switches too. Ordinary remote services do not
 get them automatically. Windows/Linux do not support them.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `power.preventSleepWhileWorking` | on | Prevent idle system sleep while a turn (including approvals/questions) or background task runs, on battery too; releases 30 seconds after work ends |
+| `power.preventSleepWhileWorking` | on | Local tasks only: prevent idle system sleep while a turn (including approvals/questions) or background task runs, on battery too; releases 30 seconds after work ends |
+| `power.preventSleepWhileRemoteWorking` | off | Desktop local-device settings only: also prevent local sleep for turns and background tasks on connected remote devices, independently of the local-task switch |
 | `power.keepAwakeWhilePluggedIn` | off | While plugged in, keep the system awake even without tasks and with the desktop app closed, as long as the device service runs |
 
 The desktop's local-device toolbar and the phone device header offer the plugged-in shortcut.
 The state line reports whether the service is actually requesting wakefulness, running on battery,
 or failed. Unplugging releases the plugged-in request within about 15 seconds; running tasks still
-follow the other switch. Both increase power use and allow the display to sleep and lock. They do
+follow their own switches. Remote tasks do not affect local sleep by default. The remote option uses
+the desktop's existing connection state, without extra remote polling; disconnected, unavailable or
+unconfirmed work retains its original evidence for at most 90 seconds. Closing the desktop ends
+remote reporting; local tasks and the plugged-in setting remain controlled by the local service.
+All switches increase power use and allow the display to sleep and lock. They do
 not prevent lid closure/manual sleep/shutdown/low-battery protection, wake a sleeping machine, or make
 locked-screen interaction work. Work bypassing the device service is outside their scope.
 

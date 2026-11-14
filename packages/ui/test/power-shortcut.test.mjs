@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { powerShortcutTitle, powerStatusLine } from '../src/devices/power-shortcut.ts'
+import {
+  powerShortcutTitle,
+  powerStatusLine,
+  REMOTE_POWER_SETTING,
+  showPowerSetting,
+} from '../src/devices/power-shortcut.ts'
 import { translator } from '../src/i18n/index.ts'
 
 const power = (powerSource) => ({
@@ -9,6 +14,13 @@ const power = (powerSource) => ({
   powerSource,
   reasons: [],
   text: { 'zh-CN': '服务状态', en: 'Service status' },
+})
+
+test('远程任务防休眠只出现在桌面本机设置；手机及远程设备保留原有两项', () => {
+  assert.equal(showPowerSetting(REMOTE_POWER_SETTING, true), true)
+  assert.equal(showPowerSetting(REMOTE_POWER_SETTING, false), false)
+  assert.equal(showPowerSetting('power.preventSleepWhileWorking', false), true)
+  assert.equal(showPowerSetting('power.keepAwakeWhilePluggedIn', false), true)
 })
 
 test('快捷开关提示区分配置开启与当前供电；离线不显示过期供电和已申请状态', () => {

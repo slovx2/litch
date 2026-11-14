@@ -10,17 +10,19 @@ import (
 const (
 	powerLocalKey   = "power.localService"
 	powerWorkingKey = "power.preventSleepWhileWorking"
+	powerRemoteKey  = "power.preventSleepWhileRemoteWorking"
 	powerPluggedKey = "power.keepAwakeWhilePluggedIn"
 )
 
 type powerSettings struct {
-	local, working, plugged bool
+	local, working, remote, plugged bool
 }
 
 func (c configuration) powerSettings() powerSettings {
 	return powerSettings{
 		local:   c.settings.boolean(powerLocalKey, false),
 		working: c.settings.boolean(powerWorkingKey, true),
+		remote:  c.settings.boolean(powerRemoteKey, false),
 		plugged: c.settings.boolean(powerPluggedKey, false),
 	}
 }
@@ -30,7 +32,10 @@ func powerSettingSpecs() (settingGroup, []settingSpec) {
 	return settingGroup{ID: "power", Scope: deviceScope, Title: both("电源", "Power"), Description: &description}, []settingSpec{
 		{Key: powerWorkingKey, Group: "power", Type: settingBoolean, Scope: deviceScope, Restart: restartNone,
 			Default: true, Title: both("运行任务时阻止系统休眠", "Prevent sleep while tasks are running"),
-			Description: both("回合、后台任务和等待审批或回答期间阻止系统空闲休眠，电池供电时也生效，会增加耗电。", "Prevents idle system sleep during turns, background tasks and waits for approval or answers, including on battery power; this uses more energy.")},
+			Description: both("仅针对本机的回合、后台任务和等待审批或回答。电池供电时也生效，会增加耗电。", "Applies only to local turns, background tasks and waits for approval or answers, including on battery power; this uses more energy.")},
+		{Key: powerRemoteKey, Group: "power", Type: settingBoolean, Scope: deviceScope, Restart: restartNone,
+			Default: false, Title: both("远程设备运行任务时也阻止本机休眠", "Prevent local sleep while remote tasks are running"),
+			Description: both("桌面应用连接的远程设备有回合或后台任务运行时生效，会增加本机耗电。断线或状态未知时，已有证据最多保留 90 秒。", "Uses the desktop app’s connected remote turns and background tasks; this uses more local energy. Existing evidence expires within 90 seconds after a disconnect or unknown status.")},
 		{Key: powerPluggedKey, Group: "power", Type: settingBoolean, Scope: deviceScope, Restart: restartNone,
 			Default: false, Title: both("接通电源时始终阻止系统休眠", "Always prevent sleep when plugged in"),
 			Description: both("设备服务运行且接通电源时阻止系统空闲休眠，即使没有任务、已关闭桌面应用也生效；会增加耗电。", "Prevents idle system sleep while the device service is running and the computer is plugged in, even with no tasks or after the desktop app closes; this uses more energy.")},

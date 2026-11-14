@@ -392,7 +392,7 @@ function deviceSettings(harnesses: HarnessView[], firstPort: number): SettingSpe
   ]
 }
 
-/** 本机防休眠的两个开关 */
+/** 本机防休眠开关；远程任务选项只在桌面本机设置中展示。 */
 function powerSettings(): SettingSpecView[] {
   const scope = { kind: 'device' } as const
   return [
@@ -406,8 +406,25 @@ function powerSettings(): SettingSpecView[] {
       restart: 'none',
       title: both('运行任务时阻止系统休眠', 'Prevent sleep while tasks are running'),
       description: both(
-        '回合、后台任务和等待审批或回答期间阻止系统空闲休眠，电池供电时也生效，会增加耗电。',
-        'Prevents idle system sleep during turns, background tasks and waits for approval or answers, including on battery power; this uses more energy.',
+        '仅针对本机的回合、后台任务和等待审批或回答。电池供电时也生效，会增加耗电。',
+        'Applies only to local turns, background tasks and waits for approval or answers, including on battery power; this uses more energy.',
+      ),
+    },
+    {
+      ...BASE,
+      key: 'power.preventSleepWhileRemoteWorking',
+      group: 'power',
+      type: 'boolean',
+      scope,
+      default: false,
+      restart: 'none',
+      title: both(
+        '远程设备运行任务时也阻止本机休眠',
+        'Prevent local sleep while remote tasks are running',
+      ),
+      description: both(
+        '桌面应用连接的远程设备有回合或后台任务运行时生效，会增加本机耗电。断线或状态未知时，已有证据最多保留 90 秒。',
+        'Uses the desktop app’s connected remote turns and background tasks; this uses more local energy. Existing evidence expires within 90 seconds after a disconnect or unknown status.',
       ),
     },
     {

@@ -67,6 +67,7 @@ type powerController struct {
 	lastComplete                          bool
 	retired                               map[string]bool
 	evidence                              map[string]powerEvidence
+	remotes                               map[string]*remotePowerEvidence
 	lastSettings                          powerSettings
 	lease                                 powerLease
 	renewAt, releaseAt, retryAt, sourceAt time.Time
@@ -82,7 +83,7 @@ type powerController struct {
 
 func newPowerController(ctx context.Context, backend powerBackend, settings func() powerSettings, changed func(), log func(string, map[string]any)) *powerController {
 	p := &powerController{ctx: ctx, backend: backend, settings: settings, changed: changed, log: log, now: time.Now,
-		retired: map[string]bool{}, evidence: map[string]powerEvidence{}, source: "unknown"}
+		retired: map[string]bool{}, evidence: map[string]powerEvidence{}, remotes: map[string]*remotePowerEvidence{}, source: "unknown"}
 	p.status = powerStatus{Supported: backend.supported(), State: "inactive", PowerSource: "unknown", Reasons: []string{}}
 	return p
 }
@@ -135,15 +136,8 @@ func (p *powerController) activity(value powerActivity) (powerStatus, *controlEr
 }
 
 func (p *powerController) activityFrom(value powerActivity, owner any) (powerStatus, *controlError) {
-	if len(value.Generation) == 0 || len(value.Generation) > 128 || len(value.Sources) > 16384 || value.Sequence > 9007199254740991 {
+	if !validPowerActivity(value) {
 		return p.rejectActivity()
-	}
-	seen := map[string]bool{}
-	for _, source := range value.Sources {
-		if source.ID == "" || len(source.ID) > 128 || seen[source.ID] || source.Working < 0 || source.Working > 1000000 || source.ObservedAgoMs < 0 || source.ObservedAgoMs > int64(365*24*time.Hour/time.Millisecond) {
-			return p.rejectActivity()
-		}
-		seen[source.ID] = true
 	}
 	p.mu.Lock()
 	if p.closed || p.retired[value.Generation] || (p.generation == value.Generation && value.Sequence <= p.sequence) {
@@ -159,26 +153,7 @@ func (p *powerController) activityFrom(value powerActivity, owner any) (powerSta
 	now := p.now()
 	p.lastActivity = now
 	p.lastComplete = value.Complete
-	next := make(map[string]powerEvidence, len(value.Sources))
-	// 重启或部分查询失败时，省略项不代表已空闲；沿用旧证据的原始期限。
-	if !value.Complete {
-		for id, old := range p.evidence {
-			old.unknown = true
-			next[id] = old
-		}
-	}
-	for _, source := range value.Sources {
-		entry := powerEvidence{working: source.Working, observed: now.Add(-time.Duration(source.ObservedAgoMs) * time.Millisecond), unknown: source.Unknown}
-		// unknown 不能把旧证据重新盖成新鲜，也不能把上一轮已知工作误报为空闲。
-		if old, ok := p.evidence[source.ID]; ok && source.Unknown {
-			entry.working = old.working
-			if old.observed.Before(entry.observed) {
-				entry.observed = old.observed
-			}
-		}
-		next[source.ID] = entry
-	}
-	p.evidence = next
+	p.evidence = mergePowerEvidence(p.evidence, value, now)
 	changed := p.reconcile()
 	p.mu.Unlock()
 	if changed && p.changed != nil {
@@ -190,11 +165,14 @@ func (p *powerController) activityFrom(value powerActivity, owner any) (powerSta
 // 只有发送过当前活动摘要的连接断开才降级；设置 CLI 的短连接不影响工作。
 func (p *powerController) disconnected(owner any) {
 	p.mu.Lock()
-	if p.owner == nil || p.owner != owner {
-		p.mu.Unlock()
-		return
+	for _, remote := range p.remotes {
+		if remote.owner != nil && remote.owner == owner {
+			remote.owner, remote.disconnected = nil, true
+		}
 	}
-	p.owner, p.connectionLost = nil, true
+	if p.owner != nil && p.owner == owner {
+		p.owner, p.connectionLost = nil, true
+	}
 	changed := p.reconcile()
 	p.mu.Unlock()
 	if changed && p.changed != nil {

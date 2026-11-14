@@ -22,16 +22,19 @@ func (s *controlServer) handlePower(method string, params json.RawMessage) (any,
 			return nil, controlFailure(err)
 		}
 		s.power.refresh()
-	case "power.activity":
-		return s.handlePowerActivity(params, nil)
+	case "power.activity", "power.remoteActivity":
+		return s.handlePowerActivity(method, params, nil)
 	}
 	return s.power.read(), nil
 }
 
-func (s *controlServer) handlePowerActivity(params json.RawMessage, owner any) (any, *controlError) {
+func (s *controlServer) handlePowerActivity(method string, params json.RawMessage, owner any) (any, *controlError) {
 	var request powerActivity
 	if failure := decodeControlParams(params, &request); failure != nil {
 		return nil, failure
+	}
+	if method == "power.remoteActivity" {
+		return s.power.remoteActivity(request, owner)
 	}
 	return s.power.activityFrom(request, owner)
 }

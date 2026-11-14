@@ -11,6 +11,7 @@ import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import {
   PLUGGED_POWER_SETTING,
   powerStatusLine,
+  showPowerSetting,
 } from '../../../../../packages/ui/src/devices/power-shortcut.ts'
 import { useBusy, useChannel, useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -63,22 +64,24 @@ export function PowerSettings({
           {powerStatusLine(state, snapshot.values[PLUGGED_POWER_SETTING] === true, t)}
         </Text>
       ) : null}
-      {specs.map((spec) => (
-        <View key={spec.key} style={{ gap: 6 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <Text style={{ flex: 1, color: theme.c.ink }}>{t.said(spec.title)}</Text>
-            <Switch
-              testID={`setting:${spec.key}`}
-              accessibilityLabel={t.said(spec.title)}
-              value={snapshot.values[spec.key] === true}
-              disabled={busy}
-              trackColor={{ true: theme.c.accent, false: theme.c.line2 }}
-              onValueChange={(value) => void toggle(spec.key, value)}
-            />
+      {specs
+        .filter((spec) => showPowerSetting(spec.key, false))
+        .map((spec) => (
+          <View key={spec.key} style={{ gap: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <Text style={{ flex: 1, color: theme.c.ink }}>{t.said(spec.title)}</Text>
+              <Switch
+                testID={`setting:${spec.key}`}
+                accessibilityLabel={t.said(spec.title)}
+                value={snapshot.values[spec.key] === true}
+                disabled={busy}
+                trackColor={{ true: theme.c.accent, false: theme.c.line2 }}
+                onValueChange={(value) => void toggle(spec.key, value)}
+              />
+            </View>
+            <Text style={{ color: theme.c.ink3 }}>{t.said(spec.description)}</Text>
           </View>
-          <Text style={{ color: theme.c.ink3 }}>{t.said(spec.description)}</Text>
-        </View>
-      ))}
+        ))}
       {failure ? (
         <Text accessibilityRole="alert" style={{ color: theme.c.err }}>
           {whyNot(failure, t)}

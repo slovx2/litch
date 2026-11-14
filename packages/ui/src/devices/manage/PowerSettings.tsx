@@ -1,6 +1,7 @@
 // 电源开关立即写入，仍以服务端快照为准；写入失败时保留原值并说明原因。
 import {
   type DevicePowerView,
+  type DeviceView,
   keys,
   type SettingSpecView,
   type SettingsSnapshotView,
@@ -9,7 +10,7 @@ import { useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { whyNot } from '../../app/errors.ts'
 import { useKey, useServices } from '../../app/services.tsx'
-import { PLUGGED_POWER_SETTING, powerStatusLine } from '../power-shortcut.ts'
+import { PLUGGED_POWER_SETTING, powerStatusLine, showPowerSetting } from '../power-shortcut.ts'
 import { Control } from './controls.tsx'
 
 export function PowerSettings({
@@ -24,6 +25,7 @@ export function PowerSettings({
   const t = useT()
   const { channel } = useServices()
   const state = useKey<DevicePowerView>(keys.managePower(deviceId))
+  const device = useKey<DeviceView>(keys.device(deviceId))
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<unknown>(null)
   const toggle = async (key: string, value: boolean) => {
@@ -50,31 +52,33 @@ export function PowerSettings({
         </p>
       ) : null}
       <div className="mng-rows" data-power-settings>
-        {specs.map((spec) => (
-          <div className="mng-row" data-setting={spec.key} data-type={spec.type} key={spec.key}>
-            <div className="mng-row-text">
-              <label className="mng-row-title" htmlFor={`power-${deviceId}-${spec.key}`}>
-                {t.said(spec.title)}
-              </label>
-              <span className="form-note">{t.said(spec.description)}</span>
+        {specs
+          .filter((spec) => showPowerSetting(spec.key, device?.kind === 'local'))
+          .map((spec) => (
+            <div className="mng-row" data-setting={spec.key} data-type={spec.type} key={spec.key}>
+              <div className="mng-row-text">
+                <label className="mng-row-title" htmlFor={`power-${deviceId}-${spec.key}`}>
+                  {t.said(spec.title)}
+                </label>
+                <span className="form-note">{t.said(spec.description)}</span>
+              </div>
+              <div className="mng-row-ctl">
+                <Control
+                  deviceId={deviceId}
+                  id={`power-${deviceId}-${spec.key}`}
+                  spec={spec}
+                  stored={snapshot.values[spec.key]}
+                  edit={null}
+                  disabled={busy}
+                  wrong={false}
+                  label={t.said(spec.title)}
+                  onEdit={(edit) => {
+                    if (edit.kind === 'boolean') void toggle(spec.key, edit.value)
+                  }}
+                />
+              </div>
             </div>
-            <div className="mng-row-ctl">
-              <Control
-                deviceId={deviceId}
-                id={`power-${deviceId}-${spec.key}`}
-                spec={spec}
-                stored={snapshot.values[spec.key]}
-                edit={null}
-                disabled={busy}
-                wrong={false}
-                label={t.said(spec.title)}
-                onEdit={(edit) => {
-                  if (edit.kind === 'boolean') void toggle(spec.key, edit.value)
-                }}
-              />
-            </div>
-          </div>
-        ))}
+          ))}
         {failure ? (
           <p className="form-note err" role="alert">
             {whyNot(failure, t)}
