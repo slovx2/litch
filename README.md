@@ -59,7 +59,7 @@ Android 和 iOS 内置 Tailscale，不占用系统 VPN，可与已有 VPN 共存
 | 适配器 `codex-harness-adapter` | 连接一台设备上的多个 harness，见[安装与使用](ADAPTER.md) |
 | 桌面客户端 | 提供 macOS（Apple Silicon）与 Windows 安装包，自带适配器；支持本机和远程会话、浏览器、Computer Use，以及经授权操作桌面电脑的命令和文件 |
 | Android 客户端 | 提供 APK，支持会话、审批、终端、文件、经理和定时任务 |
-| iOS 客户端 | 具备手机端的远程会话、审批、终端、文件、经理和定时任务能力。目前在 TestFlight 内部测试，准备提交 App Store，尚无公开下载。iOS 单独发版，不随桌面端和 Android 一起发布 |
+| iOS 客户端 | 已在 App Store 上架，支持远程会话、审批、终端、文件、经理和定时任务。iOS 单独发版，不随桌面端和 Android 一起发布 |
 
 具体功能与平台限制见[产品手册](skills/litch-manual/SKILL.md)。
 
@@ -79,13 +79,16 @@ Computer Use、内置浏览器和 Chrome 控制拆成了独立的包，别的桌
 
 ## 下载
 
-从[发布页](https://github.com/slovx2/litch/releases/latest)下载：
+桌面端和 Android 的安装包文件名含版本号，以下固定链接指向最新发布页；在 Assets 中选择对应文件。
 
-| 系统 | 文件 | 说明 |
+| 系统 | 下载或安装 | 说明 |
 |---|---|---|
-| macOS（Apple Silicon） | `Litch-<版本>-macos-arm64.dmg` | 签过名，经过苹果公证。打开后把 Litch 拖进“应用程序” |
-| Windows（x64） | `Litch-<版本>-windows-x64-setup.exe` | 支持 Windows 11，终端使用 Windows PowerShell；管理员账号暂不能扫码配对。安装程序未签名，仅安装给当前用户，无需管理员权限 |
-| 安卓（arm64，Android 7.0 及以上） | `Litch-<版本>-android-arm64.apk` | 直接安装，第一次系统会让你允许“安装未知应用”。应用自己生成一把 SSH 钥匙，把它的公钥加到远程机器的 `authorized_keys` 里就能连 |
+| macOS（Apple Silicon） | [最新发布页](https://github.com/slovx2/litch/releases/latest)：`Litch-<版本>-macos-arm64.dmg` | 签过名，经过苹果公证。打开后把 Litch 拖进“应用程序” |
+| Windows（x64） | [最新发布页](https://github.com/slovx2/litch/releases/latest)：`Litch-<版本>-windows-x64-setup.exe` | 支持 Windows 11，终端使用 Windows PowerShell；管理员账号暂不能扫码配对。安装程序未签名，仅安装给当前用户，无需管理员权限 |
+| 安卓（arm64，Android 7.0 及以上） | [最新发布页](https://github.com/slovx2/litch/releases/latest)：`Litch-<版本>-android-arm64.apk` | 直接安装，第一次系统会让你允许“安装未知应用”。应用自己生成一把 SSH 钥匙，把它的公钥加到远程机器的 `authorized_keys` 里就能连 |
+| iOS | [App Store](https://apps.apple.com/app/id6831062826) | iPhone、iPad；iOS 单独发版 |
+| 设备适配器 | [安装与使用](ADAPTER.md#安装与启动) | Linux 和 macOS 的安装脚本、源码运行及远程设备配置 |
+| Homebrew（macOS） | `brew install slovx2/tap/codex-harness-adapter` · [使用说明](ADAPTER.md#macoshomebrew后台运行) | 安装设备适配器，支持 Apple Silicon |
 
 应用自带一份适配器，打开就把本机上装了的 Claude Code、Pi、DSH、OpenCode 和 codex 收在“本机”这台设备下；这些 harness 本身要另外装好并登录。Intel 芯片的 Mac 暂时没有安装包，可以从源码运行。
 

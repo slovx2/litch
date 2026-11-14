@@ -59,7 +59,7 @@ Android and iOS include Tailscale without occupying the system VPN, so it can co
 | Adapter `codex-harness-adapter` | Connects multiple harnesses on one device. See [install and usage](ADAPTER.en.md) |
 | Desktop client | Installers for macOS (Apple Silicon) and Windows, with the adapter included. Supports local and remote sessions, browsers, Computer Use, and approved command and file operations on the desktop computer |
 | Android client | Available as an APK, with sessions, approvals, terminals, files, managers and scheduled tasks |
-| iOS client | Supports remote sessions, approvals, terminals, files, managers and scheduled tasks. Currently in internal TestFlight testing and being prepared for App Store submission; no public download is available. iOS releases separately from the desktop and Android apps |
+| iOS client | Available on the App Store, with remote sessions, approvals, terminals, files, managers and scheduled tasks. iOS releases separately from the desktop and Android apps |
 
 See the [product manual](skills/litch-manual/SKILL.md) for features and platform limitations.
 
@@ -75,13 +75,16 @@ These modules are integrated as source under `third_party/litch-automation`, fro
 
 ## Download
 
-Get it from the [releases page](https://github.com/slovx2/litch/releases/latest):
+Desktop and Android installer filenames include a version number. The fixed links below open the latest release; choose the matching file under Assets.
 
-| System | File | Notes |
+| System | Download or install | Notes |
 |---|---|---|
-| macOS (Apple Silicon) | `Litch-<version>-macos-arm64.dmg` | Signed and notarized by Apple. Open it and drag Litch into Applications |
-| Windows (x64) | `Litch-<version>-windows-x64-setup.exe` | Supports Windows 11 with Windows PowerShell terminals. Administrator accounts cannot yet pair phones by QR code. The installer is unsigned and installs for the current user without administrator rights |
-| Android (arm64, Android 7.0 or later) | `Litch-<version>-android-arm64.apk` | Install it directly; the first time, Android asks you to allow installing unknown apps. The app generates its own SSH key; add its public key to the remote machine's `authorized_keys` to connect |
+| macOS (Apple Silicon) | [Latest release](https://github.com/slovx2/litch/releases/latest): `Litch-<version>-macos-arm64.dmg` | Signed and notarized by Apple. Open it and drag Litch into Applications |
+| Windows (x64) | [Latest release](https://github.com/slovx2/litch/releases/latest): `Litch-<version>-windows-x64-setup.exe` | Supports Windows 11 with Windows PowerShell terminals. Administrator accounts cannot yet pair phones by QR code. The installer is unsigned and installs for the current user without administrator rights |
+| Android (arm64, Android 7.0 or later) | [Latest release](https://github.com/slovx2/litch/releases/latest): `Litch-<version>-android-arm64.apk` | Install it directly; the first time, Android asks you to allow installing unknown apps. The app generates its own SSH key; add its public key to the remote machine's `authorized_keys` to connect |
+| iOS | [App Store](https://apps.apple.com/app/id6831062826) | iPhone and iPad; released separately |
+| Device adapter | [Install and usage](ADAPTER.en.md#install-and-run) | Install script, source setup and remote device configuration for Linux and macOS |
+| Homebrew (macOS) | `brew install slovx2/tap/codex-harness-adapter` · [Usage](ADAPTER.en.md#macos-homebrew-background-service) | Installs the device adapter; supports Apple Silicon |
 
 The app ships with its own copy of the adapter and, when opened, gathers the Claude Code, Pi, DSH, OpenCode and codex installed on this machine under the device named Local; install and sign in to those harnesses separately. There is no installer for Intel Macs yet; run it from source there.
 
