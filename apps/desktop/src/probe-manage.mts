@@ -251,7 +251,7 @@ export async function manageProbe(): Promise<ManageProbe> {
   await until('设备恢复内置等级', () => rankingMode() === 'builtin')
   one<HTMLButtonElement>('.fold', ranking)?.click()
   // 一打开只有 harness 各一行，设置项都收着
-  const folded = `${all('[data-setting]').length}/${all('[data-harness-block] .mng-h-head').length}`
+  const folded = `${all('[data-setting]').length}/${all('[data-harness-block] .mng-h-link').length}`
   await unfold()
   const harnesses = all('[data-harness-block]').map(
     (item) => `${item.dataset.harnessBlock}:${item.dataset.state}`,
@@ -304,8 +304,9 @@ export async function manageProbe(): Promise<ManageProbe> {
   const tookLatest = `${piPort().value}:${elsewhere}`
 
   // ---- 三、停用 Pi ----
-  const enabled = () => one<HTMLButtonElement>('[data-lead] .switch', block('pi'))
+  const enabled = () => one<HTMLButtonElement>('[data-setting="harness.pi.enabled"] .switch')
   const setEnabled = async (value: boolean) => {
+    await openRuntime('pi')
     const button = await until('Pi 启用开关可用', () => {
       const found = enabled()
       return found && !found.disabled ? found : null

@@ -37,7 +37,7 @@ node <安装根>/packages/device/dist/shared/src/automation-skills-cli.mjs --rem
 
 The browser and Computer Use are switched per device and, below that, per harness (task cards too;
 see `sessions-and-projects.md`). A harness that was never switched on its own follows its device, and
-so does a harness installed later. The tree under Settings → Per-harness switches lists only the
+so does a harness installed later. The tree under Settings → Across devices → Per-harness switches lists only the
 harnesses enabled on each device: one turned off in the device settings has no row there and is left
 out when a device's box is clicked, and its switches are kept and apply again once it is enabled.
 
@@ -58,7 +58,7 @@ out when a device's box is clicked, and its switches are kept and apply again on
 In the UI: Settings → Per-harness switches, a table with a row per device (expand it to see its
 harnesses) and a column per switch. A device cell is checked when all its harnesses are on, empty
 when all are off and half-checked otherwise; clicking it sets the whole column for that device. The
-three columns of an offline device are read-only. The device page (Devices → the device) shows a
+three columns of an offline device are read-only. The device page (Settings → the device) shows a
 one-line summary with a link to that table.
 
 开关保存在设备设置的 `tools.browser`、`tools.computer`、`tools.machine`，每个 harness 可用 `harness.<id>.browser`、

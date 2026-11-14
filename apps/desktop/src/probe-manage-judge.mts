@@ -48,14 +48,14 @@ export function judgeMockManage(probe: MockManageProbe): string[] {
     probe.foldedShown === '0/0/0/0/0',
     `详情一打开就露出了该收着的东西（设置项/原因/环境文件里的变量/入口的状况/配置片段的按钮）：${probe.foldedShown}`,
   )
-  // codex 那一组里启用项排在第二（模拟核心的样例故意这样摆）：标题行上照样有开关，认的是角色标记
+  // 设备页只显示入口；启用开关和重启已移入独立运行设置页。
   same(
     probe.heads,
     [
-      'claude:false:true:有重启',
-      'pi:false:true:有重启',
-      'dsh:false:true:有重启',
-      'codex:false:true:有重启',
+      'claude-code:false:没有开关:没有重启',
+      'pi:false:没有开关:没有重启',
+      'dsh:false:没有开关:没有重启',
+      'codex:false:没有开关:没有重启',
     ],
     '收着的时候 harness 的标题行不对（标识:开没开着:标题行上的开关:重启）',
   )
@@ -79,7 +79,7 @@ export function judgeMockManage(probe: MockManageProbe): string[] {
   )
   same(
     probe.harnesses,
-    ['claude:ready', 'pi:ready', 'dsh:ready', 'codex:unavailable'],
+    ['claude-code:ready', 'pi:ready', 'dsh:ready', 'codex:unavailable'],
     '本机的 harness 和状态不对',
   )
   must(probe.downReason.length > 0, '不可用的 harness 没有写原因')
@@ -111,7 +111,7 @@ export function judgeMockManage(probe: MockManageProbe): string[] {
   must(probe.inheritedSecret === '已设置', `环境文件里的密钥露出来了：${probe.inheritedSecret}`)
   same(
     probe.sshStates,
-    ['claude:listening', 'pi:failed', 'dsh:off', 'codex:off'],
+    ['claude-code:listening', 'pi:failed', 'dsh:off', 'codex:off'],
     'SSH 入口的状况不对',
   )
   must(
@@ -124,8 +124,8 @@ export function judgeMockManage(probe: MockManageProbe): string[] {
   )
 
   must(
-    probe.leadOpens === 'false:false:false',
-    `设备页拨开关后不应展开运行设置：${probe.leadOpens}`,
+    probe.runtimeToggle === 'true:false:true',
+    `独立运行设置页拨开关后应保留当前页：${probe.runtimeToggle}`,
   )
   must(probe.disableBar === 1, `改了一项，保存条上不是一项：${probe.disableBar}`)
   must(probe.disabledState === 'disabled', `停用之后状态没变：${probe.disabledState}`)
@@ -138,7 +138,7 @@ export function judgeMockManage(probe: MockManageProbe): string[] {
     probe.disabledHint.includes('Pi') && probe.disabledHint.includes('停用'),
     `停用之后它的会话里没有说发不了：${probe.disabledHint}`,
   )
-  must(probe.leadFollows, '拨了里面那一行的开关，标题行上的开关没有跟着变')
+  must(probe.enabledAfterReopen, '重新打开运行设置页后未保持启用状态')
   must(probe.enabledState === 'ready', `再启用之后没有恢复：${probe.enabledState}`)
   same(probe.pickerWith, ['claude-code', 'pi', 'dsh', 'codex'], '再启用之后新建会话的选择器不对')
   must(probe.enabledRowsDown === 0, `再启用之后它的会话还标着不可用：${probe.enabledRowsDown} 行`)
@@ -273,22 +273,11 @@ export function judgeManage(probe: ManageProbe): string[] {
     probe.downReasons.length === unusable && probe.downReasons.every((reason) => reason.length > 0),
     `用不了的 harness 没有都写原因：${JSON.stringify(probe.downReasons)}`,
   )
-  // 真的设备服务给每个 harness 的启用项都标了角色，标题行上各有一个开关（dsh、OpenCode、codex 没装，
-  // ACP 那三个和 Antigravity 默认不启用，都关着）
+  // 设备页只有列表入口，启用开关移至各 harness 的运行设置。
   same(
     probe.leads,
-    [
-      'claude-code:true',
-      'pi:true',
-      'dsh:false',
-      'opencode:false',
-      'gemini:false',
-      'qwen:false',
-      'acp:false',
-      'agy:false',
-      'codex:false',
-    ],
-    '每个 harness 的标题行上的启用开关不对（标识:开着没有）',
+    probe.harnesses.map((entry) => `${entry.split(':')[0]}:没有开关`),
+    '设备页不应出现 harness 启用开关',
   )
   for (const type of ['boolean', 'env', 'integer', 'path']) {
     must(

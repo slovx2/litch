@@ -11,7 +11,7 @@
   min-height: 0;
 }
 .set-nav {
-  width: 168px;
+  width: 224px;
   flex: none;
   display: flex;
   flex-direction: column;
@@ -60,6 +60,73 @@
   margin: 6px 8px;
   border: 0;
   border-top: 1px solid var(--line-1);
+}
+.set-nav .set-nav-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--row-h);
+  margin: 0;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.set-nav-label .grow {
+  flex: 1;
+  min-width: 0;
+}
+.set-nav .set-nav-label button {
+  padding: 0;
+}
+.set-nav .set-device {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.set-device .grow {
+  flex: 1;
+  min-width: 0;
+}
+.set-device .pill {
+  font-size: 10px;
+  padding: 0 3px;
+}
+.mng-h-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: calc(var(--row-h) + 2 * var(--row-pad));
+  padding: var(--row-pad) 12px;
+  text-align: left;
+}
+.mng-h-link:hover {
+  background: var(--hover);
+}
+.mng-h-link .grow {
+  flex: 1;
+  min-width: 0;
+}
+.mng-h-summary {
+  font-size: 11px;
+}
+@media (max-width: 760px) {
+  .set-nav {
+    width: 180px;
+    padding-left: 6px;
+  }
+  .set-page .set-head {
+    padding: 16px 12px 8px;
+  }
+  .set-page .set-block {
+    padding: 4px 12px 16px;
+  }
+  .mng-h-link {
+    gap: 6px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
 }
 .set-body {
   flex: 1 1 0;

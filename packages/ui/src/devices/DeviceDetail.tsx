@@ -49,7 +49,9 @@ export function DeviceDetail({ deviceId, section = null, onBack, onClose }: Devi
   /** 改名、换线色、移除没做成的原因 */
   const [failure, setFailure] = useState<string | null>(null)
   /** 开着哪个 harness 的详情设置（盖住设备详情的一页） */
-  const [settingsOf, setSettingsOf] = useState<string | null>(null)
+  const [settingsOf, setSettingsOf] = useState<string | null>(
+    section?.startsWith('harness:') ? section.slice('harness:'.length) : null,
+  )
   const closeSettings = useCallback(() => setSettingsOf(null), [])
   const field = useRef<HTMLInputElement>(null)
   /** 这一次改名已经有了结果（提交或者放弃）。输入框消失时还会再报一次失焦，不能当成又提交一次 */

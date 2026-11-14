@@ -100,23 +100,26 @@ open, so what was done and a reply cut off midway are in view.
 
 ### Devices
 
-The device list, device details and harness details are inside the Settings modal. The settings navigation stays visible; device-menu links open the requested detail directly. Closing the window or leaving an edited section asks to save, discard or cancel.
+All devices appear directly in the Settings navigation, alongside General preferences. Select a device,
+then a harness row to open its separate page. Device-menu links still open the requested detail directly.
+Closing the window or leaving an edited section asks to save, discard or cancel.
 
 A list of devices (status, harnesses, activity) with **Add device**. A device's detail page has, from
 top to bottom: **This device** (reconnect, rename, edit connection, remove, wire color),
 **Use this computer** (built-in browser, Computer Use, and for remote devices "Operate this computer"),
 **Device service** (version, how it was started), **Phones** (paired phones, "Use on phone…"), and the
-management area: **Harnesses** (per-harness enable switch, restart, CLI path, environment variables),
+management area: **Harnesses** (one row each, opening a separate page for enable/disable, restart, CLI path and environment variables),
 **SSH entries for the Codex desktop app**, **Reconnectable terminals**, **Scheduled tasks**,
 **Session orchestration**, **Diagnostics** and **Logs**. Changes in the management area are saved
 together with a save bar. See `devices.md` and `device-settings.md`.
 
 ### Settings
 
-Sections in order: **Appearance**, **Language**, **Conversation**, **Per-harness switches**,
+General sections: **Appearance**, **Language**, **Conversation**,
 **Built-in browser**, **Chrome** (desktop), **Computer Use** (supported desktop platforms),
-**Notifications**, **Config assistant**, **Shortcuts**, **About**. **Devices** and **Archived sessions**
-sit above the section list: Devices stays in the Settings window, while Archived sessions opens the main view. Appearance includes window zoom and the two
+**Notifications**, **Config assistant**, **Shortcuts**, **About**. Devices are listed individually above
+General, with connection status and an Add button. **Per-harness switches** is under **Across devices**;
+**Archived sessions** opens the main view. Appearance includes window zoom and the two
 text sizes. Conversation sets mid-turn sending. Browser and Chrome use separate permission settings.
 Configuration commands and defaults are in the corresponding references.
 

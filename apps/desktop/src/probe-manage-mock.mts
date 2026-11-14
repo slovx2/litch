@@ -50,19 +50,16 @@ export interface MockManageProbe {
   sshFailedReason: string
   /** 切到英文：设备服务给的标题跟着换 */
   english: string
-  /**
-   * 在收着的 Pi 的标题行上拨开关：这一块自己开了、想收也收不起来，里面那一行的开关跟着变
-   * （这一块开没开:标题行上的开关:行上的开关）
-   */
-  leadOpens: string
+  /** 在独立运行设置页停用 Pi：详情保持显示，开关与草稿同步。 */
+  runtimeToggle: string
   /** 停用 Pi：保存条、状态、新建会话的选择器里没有它、它的会话标成不可用 */
   disableBar: number
   disabledState: string
   pickerWithout: string[]
   disabledRows: string
   disabledHint: string
-  /** 再启用（拨的是里面那一行的开关）：标题行上的开关跟着变；恢复 */
-  leadFollows: boolean
+  /** 再启用后重新打开运行设置页，仍显示启用。 */
+  enabledAfterReopen: boolean
   enabledState: string
   pickerWith: string[]
   enabledRowsDown: number
@@ -467,17 +464,14 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   act(row('harness.pi.cliPath') as HTMLElement, 'revert')?.click()
   await until('撤销选择不保存设置', () => input('harness.pi.cliPath')?.value === beforeCli)
 
-  // ---- 三、停用 Pi（在收着的标题行上拨），再启用（在里面那一行上拨） ----
+  // ---- 三、独立运行设置页停用 Pi，再启用；设备页只保留入口 ----
   const enabled = () =>
     one<HTMLButtonElement>('.switch', row('harness.pi.enabled') ?? document.createElement('div'))
-  const lead = () =>
-    one<HTMLButtonElement>('.mng-h-head [data-lead] .switch', block('pi') as HTMLElement)
   const isDown = (entry: HTMLElement) => entry.classList.contains('down')
-  await openDetail('local')
-  await ready()
-  lead()?.click()
+  await openRuntime('pi')
+  enabled()?.click()
   await until('保存条', bar)
-  const leadOpens = `${block('pi')?.dataset.open}:${lead()?.getAttribute('aria-checked')}:${Boolean(enabled())}`
+  const runtimeToggle = `${block('pi')?.dataset.open}:${enabled()?.getAttribute('aria-checked')}:${Boolean(one('[data-runtime-settings="pi"]'))}`
   const disableBar = dirty()
   await save()
   await until('Pi 变成停用', () => block('pi')?.dataset.state === 'disabled')
@@ -494,9 +488,10 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   await save()
   await openDetail('local')
   await ready()
-  const leadFollows = lead()?.getAttribute('aria-checked') === 'true'
   await until('Pi 恢复可用', () => block('pi')?.dataset.state === 'ready')
   const enabledState = block('pi')?.dataset.state ?? ''
+  await openRuntime('pi')
+  const enabledAfterReopen = enabled()?.getAttribute('aria-checked') === 'true'
   const pickerWith = await pickerOptions()
   const enabledRowsDown = rowsOf('PI').filter(isDown).length
 
@@ -725,7 +720,7 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   await ready()
   // 等着重启的那一个，收着的标题行上就看得出
   const remotePending = all('[data-harness-block][data-pending="true"]')
-    .filter((entry) => one('.mng-h-head [data-pending-pill]', entry))
+    .filter((entry) => one('[data-pending-pill]', entry))
     .map((entry) => entry.dataset.harnessBlock ?? '')
   await unfold()
 
@@ -806,13 +801,13 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
     sshStates,
     sshFailedReason,
     english,
-    leadOpens,
+    runtimeToggle,
     disableBar,
     disabledState,
     pickerWithout,
     disabledRows,
     disabledHint,
-    leadFollows,
+    enabledAfterReopen,
     enabledState,
     pickerWith,
     enabledRowsDown,

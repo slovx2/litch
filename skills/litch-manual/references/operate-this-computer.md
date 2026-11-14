@@ -19,7 +19,7 @@ app; no port is opened and macOS Remote Login is not used.
 
 ## Settings
 
-In the UI: Devices → the remote device → "Use this computer" → "Operate this computer (commands and
+In the UI: Settings → the remote device → "Use this computer" → "Operate this computer (commands and
 files)".
 
 When access is off, a tool call displays an enable card in the calling conversation and the desktop's

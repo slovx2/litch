@@ -1,9 +1,8 @@
 // 设备详情里的 harness 与设置：开着这一页才订阅这台设备的管理数据（replica.openManage，manage 主题）。
-// 每个 harness 一块：标题行是徽标、名字、版本、状态、启用开关（设备服务标了 role: 'enable' 的那一项，不认键名），
-// 点开是原因和它的各项设置；设备级的设置按分组各一块。改了的先记草稿，一块一个“保存”，一次写入全有或全无；
+// 设备页的 harness 只列名称、状态与整行入口；进入独立页面才显示启用、重启和运行设置。
+// 设备级的设置按分组各一块。改了的先记草稿，一块一个“保存”，一次写入全有或全无；
 // 别处先改过了（版本号对不上）就不写，换成最新的值并说明。要重启才生效的，标出待重启，由用户点“重启”。
-// 声明了 harnessConfig 的 harness 在“重启”旁边多一个“详情设置”，进它自己的页面（hconfig/）；
-// 设备支持（别的 harness 声明了）它却没有，说一句还不支持。
+// 声明了 harnessConfig 的 harness 在独立页增加配置、账号等标签（hconfig/）。
 import {
   type ChannelErrorShape,
   type DeviceView,
@@ -25,7 +24,7 @@ import { cliPresentation } from '../../../../../packages/ui/src/devices/cli-pres
 import type { RootStackParamList } from '../../nav/routes'
 import { useBusy, useChannel, useKey, useReplica } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
-import { Button, Loading } from '../../ui/kit/controls'
+import { Button, Loading, Row } from '../../ui/kit/controls'
 import { Caret, Fold, Icon } from '../../ui/kit/Icon'
 import { Confirm } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
@@ -200,19 +199,12 @@ function Block({
   )
 }
 
-/** 详情设置的入口：它声明了就给按钮；设备支持（别的 harness 声明了）它却没有，说还不支持；设备整个不支持就没有 */
-function settingsEntry(device: DeviceView, harness: HarnessView): 'open' | 'unsupported' | null {
-  if (device.manageable || harness.configurable) return 'open'
-  return device.harnesses.some((entry) => entry.configurable) ? 'unsupported' : null
-}
-
-/** 一个 harness 的标题行：启用开关（立刻写）、重启、详情设置 */
+/** 设备页显示入口，独立运行设置页显示启用开关（立刻写）与重启。 */
 function HarnessHead({
   deviceId,
   harness,
   enable,
   snapshot,
-  entry,
   detail = false,
   install,
 }: {
@@ -220,7 +212,6 @@ function HarnessHead({
   harness: HarnessView
   enable: SettingSpecView | null
   snapshot: SettingsSnapshotView
-  entry: 'open' | 'unsupported' | null
   detail?: boolean
   install?: InstallTopicView
 }) {
@@ -288,6 +279,27 @@ function HarnessHead({
       })
     }
   }
+  if (!detail) {
+    return (
+      <Row
+        title={t.harness(harness.id, harness.name)}
+        meta={
+          harness.down === 'notInstalled'
+            ? t('install.notInstalled')
+            : t(`harness.state.${harness.state}`)
+        }
+        detail={pending ? t('manage.pending') : undefined}
+        testID={`harness:${harness.id}:settings`}
+        onPress={() =>
+          navigation.navigate('HarnessSettings', {
+            deviceId,
+            harness: harness.id,
+            name: t.harness(harness.id, harness.name),
+          })
+        }
+      />
+    )
+  }
   return (
     <View>
       <View style={styles.head} testID={`harness:${harness.id}`}>
@@ -327,23 +339,6 @@ function HarnessHead({
             color={on === false || restarting ? theme.c.ink3 : theme.c.ink2}
           />
         </Pressable>
-        {entry === 'open' ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('hc.entry')}
-            testID={`harness:${harness.id}:settings`}
-            onPress={() =>
-              navigation.navigate('HarnessSettings', {
-                deviceId,
-                harness: harness.id,
-                name: t.harness(harness.id, harness.name),
-              })
-            }
-            style={styles.iconHit}
-          >
-            <Icon name="gear" size={18} color={theme.c.ink2} />
-          </Pressable>
-        ) : null}
         {enable && on !== null ? (
           <Switch
             accessibilityLabel={t('devices.manage.enable')}
@@ -400,9 +395,6 @@ function HarnessHead({
               ))
             : null}
         </View>
-      ) : null}
-      {entry === 'unsupported' ? (
-        <Text style={[styles.note, { color: theme.c.ink3 }]}>{t('hc.entry.unsupported')}</Text>
       ) : null}
       {pending ? (
         <Text style={[styles.note, { color: theme.c.wait }]}>
@@ -523,7 +515,6 @@ export function ManageSection({
               harness={harness}
               enable={enable}
               snapshot={snapshot}
-              entry={null}
               detail
               install={install}
             />
@@ -549,7 +540,6 @@ export function ManageSection({
             harness={harness}
             enable={enable}
             snapshot={snapshot}
-            entry={settingsEntry(device, harness)}
           />
         )
       })}

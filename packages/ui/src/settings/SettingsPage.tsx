@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react'
+import { useState } from 'react'
 import { useT } from '../app/appearance.ts'
-import { Archive, Close, Forward, Machine } from '../app/icons.tsx'
+import { Archive, Close, Forward } from '../app/icons.tsx'
 import { useServices } from '../app/services.tsx'
+import { AddDevice } from '../devices/AddDevice.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 import { AboutSection } from './About.tsx'
 import { AssistSection } from './AssistSection.tsx'
@@ -10,6 +12,7 @@ import { ChatSection } from './ChatSection.tsx'
 import { ChromeSection } from './ChromeSection.tsx'
 import { ComputerSection } from './ComputerSection.tsx'
 import { computerBridge, computerIntro } from './computer-bridge.ts'
+import { DeviceNav } from './DeviceNav.tsx'
 import { HarnessSwitches } from './HarnessSwitches.tsx'
 import { LangSection, LookSection } from './Look.tsx'
 import { NotifySection } from './NotifySection.tsx'
@@ -17,7 +20,7 @@ import { ShortcutsSection } from './Shortcuts.tsx'
 
 /**
  * 设置页左边的几组，按这个顺序排。
- * “设备”在同一窗口内显示列表和详情；“已归档对话”打开主页面。computer（Computer Use）只在 macOS 上的桌面外壳里有
+ * 所有设备在导航中平铺，点入设备及 harness 的独立详情；“已归档对话”打开主页面。computer（Computer Use）只在 macOS 上的桌面外壳里有
  * （外壳给了 window.litchComputerUse 才显示），别的系统和普通浏览器里不出这一组；
  * chrome（代理操作这台电脑上的 Chrome）不是内置浏览器，单独一组，只在桌面外壳里有
  */
@@ -25,7 +28,6 @@ export const SETTINGS_SECTIONS = [
   'look',
   'lang',
   'chat',
-  'switches',
   'browser',
   'chrome',
   'computer',
@@ -33,6 +35,7 @@ export const SETTINGS_SECTIONS = [
   'assist',
   'keys',
   'about',
+  'switches',
 ] as const
 type SettingsGroup = (typeof SETTINGS_SECTIONS)[number]
 export type SettingsSection = SettingsGroup | 'devices'
@@ -79,6 +82,8 @@ interface SettingsPageProps {
   onClose(): void
   /** 进入设置窗口内的设备列表 */
   onDevices(): void
+  activeDevice: string | null
+  onDevice(deviceId: string): void
   /** 设备列表、设备详情及 harness 详情共用设置窗口。 */
   devices: ReactNode
   /** 去“已归档对话”那一页 */
@@ -95,11 +100,14 @@ export function SettingsPage({
   onSection,
   onClose,
   onDevices,
+  activeDevice,
+  onDevice,
   devices,
   onArchived,
 }: SettingsPageProps) {
   const t = useT()
   const { shell } = useServices()
+  const [adding, setAdding] = useState(false)
   const sections = shownSections(shell)
   // 要的那一组这里没有（不是 macOS 却要开 Computer Use）：落到第一组
   const section = asked === 'devices' || sections.includes(asked) ? asked : 'look'
@@ -109,34 +117,42 @@ export function SettingsPage({
     <div className="set-page">
       <nav className="set-nav" aria-label={t('settings.nav')}>
         <h1>{t('settings.title')}</h1>
+        <DeviceNav
+          active={section === 'devices' ? activeDevice : null}
+          onDevice={onDevice}
+          onDevices={onDevices}
+          onAdd={() => setAdding(true)}
+        />
+        <hr className="set-nav-rule" />
+        <h2 className="set-nav-label">{t('settings.general')}</h2>
+        {sections
+          .filter((id) => id !== 'switches')
+          .map((id) => (
+            <button
+              key={id}
+              type="button"
+              data-section={id}
+              aria-current={id === section ? 'page' : undefined}
+              onClick={() => onSection(id)}
+            >
+              {t(TITLES[id])}
+            </button>
+          ))}
+        <hr className="set-nav-rule" />
+        <h2 className="set-nav-label">{t('settings.shared')}</h2>
         <button
           type="button"
-          className="set-go"
-          data-page="devices"
-          aria-current={section === 'devices' ? 'page' : undefined}
-          onClick={onDevices}
+          data-section="switches"
+          aria-current={section === 'switches' ? 'page' : undefined}
+          onClick={() => onSection('switches')}
         >
-          <Machine />
-          <span className="grow">{t('sidebar.devices')}</span>
-          <Forward />
+          {t(TITLES.switches)}
         </button>
         <button type="button" className="set-go" data-page="archived" onClick={onArchived}>
           <Archive />
           <span className="grow">{t('archived.title')}</span>
           <Forward />
         </button>
-        <hr className="set-nav-rule" />
-        {sections.map((id) => (
-          <button
-            key={id}
-            type="button"
-            data-section={id}
-            aria-current={id === section ? 'page' : undefined}
-            onClick={() => onSection(id)}
-          >
-            {t(TITLES[id])}
-          </button>
-        ))}
       </nav>
       {section === 'devices' ? (
         <div className="set-devices">{devices}</div>
@@ -185,6 +201,7 @@ export function SettingsPage({
           </div>
         </div>
       )}
+      {adding ? <AddDevice edit={null} onClose={() => setAdding(false)} /> : null}
     </div>
   )
 }

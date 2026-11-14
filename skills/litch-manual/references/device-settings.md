@@ -1,8 +1,10 @@
 # Device settings
 
 Each device (Local and every remote device with the device service) keeps its own settings. In the UI
-device-wide settings are on the device's detail page (Devices → the device). Harness settings are under
-that harness's Settings → Runtime tab on desktop and phone. The device service
+device-wide settings are on Settings → the device. All devices are listed directly in the settings
+navigation (desktop) or at the top of Settings (phone). Select a harness row to open its own page;
+its Runtime tab contains enable/disable, restart and runtime settings (desktop also has installation).
+The device service
 declares the settings and their descriptions, so the live list is authoritative:
 
 - `scripts/litch settings get <device>` lists every setting with its current value, type and title; querying one also gives its
@@ -95,7 +97,7 @@ installed there). Existing worktrees are never moved.
 
 ## Power (local macOS service)
 
-Devices → the device → **Power** has two switches that save immediately. The desktop registers its
+Settings → the device → **Power** has two switches that save immediately. The desktop registers its
 local service; a phone connected to that service can use them too. Ordinary remote services do not
 get them automatically. Windows/Linux do not support them.
 
@@ -121,7 +123,7 @@ A service-only local install can register on that computer with
 
 ## Suggestion retention
 
-Devices → the device → **Session orchestration → Suggestion retention** controls ordinary pending
+Settings → the device → **Session orchestration → Suggestion retention** controls ordinary pending
 suggestions. `sessions.suggestionRetentionDays` is an enum: `1`, `3`, `7` (default),
 `14`, `30` or `never`. Changes apply immediately without restarting and recalculate expiry
 from each card's original creation time. Shortening retention can expire old cards immediately;

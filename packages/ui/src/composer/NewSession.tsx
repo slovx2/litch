@@ -475,13 +475,13 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
           ...(entry.state === 'ready'
             ? {}
             : entry.down === 'notInstalled'
-              ? // 没装的只说没装，装去设备页（那里每个 harness 旁边有安装按钮）
+              ? // 未安装时直接进入对应 harness 的运行设置，安装入口在该页。
                 {
                   disabled: true,
                   note: t('newSession.harness.notInstalled'),
                   noteAction: {
                     label: t('newSession.harness.install'),
-                    run: () => requestDevice(device.id),
+                    run: () => requestDevice(device.id, `harness:${entry.id}`),
                   },
                 }
               : {

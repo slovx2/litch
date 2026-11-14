@@ -86,7 +86,7 @@ command: `scripts/litch harness restart`, `scripts/litch devices reconnect`, or 
 |---|---|---|
 | E1 | Grant system permissions: macOS Accessibility and Screen Recording, Windows UAC prompts | Tell the user which switch to turn on and where (`references/browser-and-computer-use.md`); the user flips it |
 | E2 | Scan the phone pairing QR code, compare the confirmation code, click Allow | `scripts/litch phones pair <device>` opens the QR dialog; the user does the rest on the phone and the computer |
-| E3 | Complete a harness login, obtain a key, or handle an OAuth secret | Guide the user to Devices → harness → Settings → Accounts or the harness CLI. Litch supports account setup in that page; the user completes its browser/code steps. User-supplied keys may go in the harness environment (`references/harnesses.md`) |
+| E3 | Complete a harness login, obtain a key, or handle an OAuth secret | Guide the user to Settings → the device → the harness → Accounts or the harness CLI. Litch supports account setup in that page; the user completes its browser/code steps. User-supplied keys may go in the harness environment (`references/harnesses.md`) |
 | E4 | Password logins, first-time host-key confirmation, creating or copying SSH keys when adding a remote device | Litch only adds targets that already log in without a password. Explain how to set that up (`references/devices.md`) and let the user do it |
 | E5 | Updating Litch itself (checking, downloading, restarting to update, the automatic-check switch) | Not part of this manual or the command. Tell the user it is in Settings → About → Updates |
 | E6 | Expand agent access or autonomous manager dispatch without user confirmation | Guarded actions always show a confirmation card in Litch (rule 4) |
