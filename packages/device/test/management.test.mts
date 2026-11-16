@@ -586,3 +586,38 @@ test('诊断、日志、ssh 配置片段：原样交给主进程，结果原样�
     await close()
   }
 })
+
+test('Codex 权限修复仅按声明提供，确认动作透传；拒绝强制修复和过期状态', async () => {
+  const { connect, control, close } = setup({ codex: 'startFailed' })
+  try {
+    const offered = control.state?.harnesses[0]
+    assert.ok(offered)
+    offered.repair = 'codexControlPermissions'
+    const client = connect()
+    await client.initialize(BOTH)
+    const info = await client.call('runtime/info')
+    assertRuntimeInfo(info)
+    assert.equal(info.harnesses[0].unavailable.repair, 'codexControlPermissions')
+    const plain = connect()
+    await plain.initialize()
+    assert.equal((await plain.call('runtime/info')).harnesses[0].unavailable.repair, undefined)
+    await assert.rejects(
+      client.call(RESTART, { harness: 'codex', repair: 'codexControlPermissions', force: true }),
+    )
+    assert.equal(control.sent('harness.apply').length, 0)
+    control.applyTo = 'startFailed'
+    const params = { harness: 'codex', repair: 'codexControlPermissions' }
+    assertSettingsParams(RESTART, params)
+    const result = await client.call(RESTART, params)
+    assertSettingsResponse(RESTART, result)
+    assert.deepEqual(control.sent('harness.apply'), [params])
+    // 下一次状态没有动作时，同一个客户端的旧按钮不能绕过设备核验。
+    const latest = control.state?.harnesses[0]
+    assert.ok(latest)
+    delete latest.repair
+    await assert.rejects(client.call(RESTART, params))
+    assert.equal(control.sent('harness.apply').length, 1)
+  } finally {
+    await close()
+  }
+})

@@ -10,6 +10,20 @@ $ProgressPreference = 'SilentlyContinue'
 
 if ($env:OS -ne 'Windows_NT') { throw 'This repair requires Windows.' }
 $directory = [IO.Path]::GetFullPath((Join-Path $CodexHome 'app-server-control'))
+# 拒绝目标及其祖先中的链接，避免通过 CODEX_HOME 的 junction 越过修复边界。
+function Assert-PlainPath([string]$path) {
+    $current = $path
+    while ($current) {
+        if (Test-Path -LiteralPath $current) {
+            $part = Get-Item -LiteralPath $current -Force
+            if ($part.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Refusing a reparse point in the repair path.' }
+        }
+        $parent = [IO.Path]::GetDirectoryName($current)
+        if ($parent -eq $current) { break }
+        $current = $parent
+    }
+}
+Assert-PlainPath $directory
 $item = Get-Item -LiteralPath $directory -Force
 if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
     throw 'Refusing a non-directory or reparse point.'
@@ -34,9 +48,9 @@ foreach ($entry in $entries) {
 }
 $held = $null
 try {
-    if ($entries.Count -gt 0) {
+    if ($entries.Count -gt 0 -or $Apply) {
         # FileShare.None 要求没有其他进程持有文件；不打断正在启动的 Codex。
-        $held = [IO.File]::Open($entries[0].FullName, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+        $held = [IO.File]::Open((Join-Path $directory 'app-server-startup.lock'), [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
     }
     $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
     $private = $owner -eq $userSid -and $acl.AreAccessRulesProtected -and $rules.Count -eq 1 -and
@@ -52,7 +66,15 @@ try {
         return
     }
     $backup = [IO.Path]::GetFullPath($BackupDirectory)
+    Assert-PlainPath $backup
     [IO.Directory]::CreateDirectory($backup) | Out-Null
+    for ($index=1; $index -le 4; $index++) {
+        $target = Join-Path $backup "codex-control-acl.$index.json"
+        Assert-PlainPath $target
+        if ((Test-Path -LiteralPath $target) -and (Get-Item -LiteralPath $target -Force).PSIsContainer) {
+            throw 'Refusing a non-file ACL backup.'
+        }
+    }
     $base = Join-Path $backup 'codex-control-acl'
     # 只轮换本脚本生成的四份 ACL 备份。
     for ($index=3; $index -ge 1; $index--) {

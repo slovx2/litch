@@ -420,6 +420,13 @@ export const zhCN = {
   'manage.pending': '待重启',
   'manage.pending.note':
     '{name} 的设置已修改，但修改时有回合正在运行，仍在使用旧设置。空闲后点击“重启”使改动生效。',
+  'manage.repair': '修复权限',
+  'manage.repair.busy': '正在修复…',
+  'manage.repair.title': '修复 Codex 启动锁权限',
+  'manage.repair.note':
+    '将先备份 ACL，再仅将闲置的 app-server-control 目录设为当前用户专属权限，然后重启 Codex。遇到链接、其他文件或占用的锁时会停止。',
+  'manage.repair.confirm': '修复并重启',
+  'manage.repair.failed': '权限修复未完成：{reason}',
   'manage.restart': '重启',
   'manage.restarting': '正在重启…',
   'manage.restart.done': '{name} 已重启',

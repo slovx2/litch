@@ -133,6 +133,10 @@
           "harness": {
             "type": "string"
           },
+          "repair": {
+            "description": "用户确认后带当前 unavailable.repair 提供的动作。仅 Windows Codex 的固定 private-directory 启动错误提供 codexControlPermissions。拒绝 force:true、状态变化、配置待重启；只修复闲置 app-server-control 目录，先备份 ACL（保留四份），拒绝链接、未知内容、占用锁和不可信属主，不递归改 CODEX_HOME，成功后重启。",
+            "enum": ["codexControlPermissions"]
+          },
           "force": {
             "description": "true：有回合在跑也照做",
             "type": "boolean"
@@ -321,6 +325,13 @@
         "$ref": "#/definitions/LocalizedText"
       },
       "description": "message 的两种语言版本，message 是其中中文那一份。只发给声明过 deviceSettings 的连接，而且只有适配器主进程给的原因才有（设备进程自己判断的 connecting、unreachable、handshakeFailed、disconnected 没有）。harness.json 的 HarnessInfo 定义里登记了这个可选字段，两份定义是一致的。"
+    },
+    {
+      "kind": "Field",
+      "on": "HarnessInfo.unavailable（harness 扩展）",
+      "name": "repair",
+      "schema": { "enum": ["codexControlPermissions"] },
+      "description": "只向声明 deviceSettings 的连接提供。仅 Windows 原生 Codex 当前固定 socket directory is not private to the current user 启动失败时出现；客户端需确认后调用 harness/restart 并带 repair。服务端执行前重新核验，不接受客户端路径或命令。"
     },
     {
       "kind": "Error",

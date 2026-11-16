@@ -1076,7 +1076,12 @@ export interface Commands {
    * 它有回合在跑时以 busy 结束，什么都没做；force 为真表示用户说了照做，回合会被打断。
    */
   'device.harness.restart': {
-    params: { deviceId: string; harness: string; force?: boolean }
+    params: {
+      deviceId: string
+      harness: string
+      force?: boolean
+      repair?: 'codexControlPermissions'
+    }
     result: HarnessRestartResult
   }
   /** 运行诊断。harness 不给就全查；要等各项检查跑完，可能要一两分钟 */

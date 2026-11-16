@@ -226,6 +226,8 @@ export type HarnessUnavailableKind =
   | 'stopped'
 
 export interface HarnessUnavailable {
+  /** deviceSettings：设备为当前失败状态提供的受控修复。 */
+  repair?: 'codexControlPermissions'
   kind: HarnessUnavailableKind
   /** 给人看的说明 */
   message: string

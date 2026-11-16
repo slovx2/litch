@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"runtime"
 
 	"github.com/slovx2/litch/internal/hostplatform"
 )
@@ -9,7 +10,8 @@ import (
 // 经控制通道推给设备进程的那一份现状：每个 harness 的状态，加设置的快照。
 
 type harnessView struct {
-	ID string `json:"id"`
+	ID     string `json:"id"`
+	Repair string `json:"repair,omitempty"`
 	// 它的运行时在哪个套接字上，写法和设备进程的 --upstream 一样。没在跑时那里没有东西。
 	Socket string `json:"socket"`
 	State  string `json:"state"`
@@ -75,7 +77,7 @@ func (m *harnessManager) view(keys []string) controlState {
 		}
 		m.mu.Unlock()
 		state.Harnesses = append(state.Harnesses, harnessView{
-			ID: id, State: current, Text: text, Native: id == nativeCodex, CLI: cli,
+			ID: id, State: current, Text: text, Repair: codexControlRepairAction(runtime.GOOS, id, current, text), Native: id == nativeCodex, CLI: cli,
 			Socket: hostplatform.ListenURL(hostplatform.SocketPath(filepath.Join(m.base.home, id))),
 		})
 	}

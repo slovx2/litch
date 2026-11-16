@@ -290,6 +290,10 @@
                   "description": "给人看的说明，客户端可以原样显示。里面不带设备上的路径（连不上时系统给的原文里有套接字的路径，那个只进设备进程的日志）",
                   "type": "string"
                 },
+                "repair": {
+                  "description": "deviceSettings 扩展的受控修复动作，仅声明过该扩展的连接可见。",
+                  "enum": ["codexControlPermissions"]
+                },
                 "text": {
                   "description": "message 的两种语言版本，message 是其中中文那一份。属于 deviceSettings 扩展（device-settings.json）：只发给声明过它的连接，而且只有适配器主进程给的原因才有",
                   "type": "object",

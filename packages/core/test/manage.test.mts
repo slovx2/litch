@@ -783,3 +783,15 @@ test('停用一个 harness：它的会话留在侧栏里；之后再对一次账
   assert.equal(me.device()?.harnesses.find((entry) => entry.id === 'pi')?.state, 'ready')
   assert.deepEqual([...me.rows.keys()].sort(), ['c1', 'p1'])
 })
+
+test('确认过的 Codex 修复动作经核心原样传给设备，普通重启不带修复', async () => {
+  const { me, sent } = await opened()
+  await me.command('device.harness.restart', {
+    harness: 'codex',
+    repair: 'codexControlPermissions',
+  })
+  assert.deepEqual(sent('litch/device/harness/restart').at(-1), {
+    harness: 'codex',
+    repair: 'codexControlPermissions',
+  })
+})

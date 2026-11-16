@@ -437,6 +437,13 @@ export const en: Record<MessageKey, Entry> = {
   'manage.pending': 'Restart pending',
   'manage.pending.note':
     '{name}’s settings changed during a turn, so it’s still using the old ones. Click Restart when it’s idle to apply them.',
+  'manage.repair': 'Repair permissions',
+  'manage.repair.busy': 'Repairing…',
+  'manage.repair.title': 'Repair Codex startup lock permissions',
+  'manage.repair.note':
+    'Back up the ACL, restrict only the idle app-server-control directory to the current user, then restart Codex. Links, other files or a held lock will stop the repair.',
+  'manage.repair.confirm': 'Repair and restart',
+  'manage.repair.failed': 'Permission repair did not complete: {reason}',
   'manage.restart': 'Restart',
   'manage.restarting': 'Restarting…',
   'manage.restart.done': '{name} restarted',

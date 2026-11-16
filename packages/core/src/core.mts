@@ -1189,9 +1189,9 @@ export function createCore(options: CoreOptions): Core {
           return await deviceOf(deviceId).writeSettings(expectedVersion, edits)
         }
         case 'device.harness.restart': {
-          const { deviceId, harness, force } =
+          const { deviceId, harness, force, repair } =
             params as Commands['device.harness.restart']['params']
-          return await deviceOf(deviceId).restartHarness(harness, force === true)
+          return await deviceOf(deviceId).restartHarness(harness, force === true, repair)
         }
         case 'device.diagnostics.run': {
           const { deviceId, harness } = params as Commands['device.diagnostics.run']['params']

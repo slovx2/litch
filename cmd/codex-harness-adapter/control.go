@@ -82,6 +82,8 @@ type controlServer struct {
 	done    sync.WaitGroup
 	// 算一条 state 和把它发出去是一件事，拿着这把锁做（publish）。
 	stateMu sync.Mutex
+	// Codex 修复、重新启动和设置写入不能在核验与修改权限之间交错。
+	actionMu sync.Mutex
 	// 这份服务的来历，随每条 state 带给设备进程，也带在 service.stop 的应答里。
 	facts *serviceFacts
 	// 让整个服务停下来。
@@ -368,6 +370,8 @@ func (s *controlServer) handle(method string, params json.RawMessage) (any, *con
 			"inheritedEnv": inheritedEnvironment(s.c.userEnv),
 		}, nil
 	case "settings.write":
+		s.actionMu.Lock()
+		defer s.actionMu.Unlock()
 		var request struct {
 			ExpectedVersion *int          `json:"expectedVersion"`
 			Edits           []settingEdit `json:"edits"`
@@ -400,11 +404,12 @@ func (s *controlServer) handle(method string, params json.RawMessage) (any, *con
 	case "harness.apply":
 		var request struct {
 			Harness string `json:"harness"`
+			Repair  string `json:"repair"`
 		}
 		if failure := decodeControlParams(params, &request); failure != nil {
 			return nil, failure
 		}
-		return s.applyHarness(request.Harness)
+		return s.applyHarnessRepair(request.Harness, request.Repair)
 	case "diagnostics.run":
 		var request struct {
 			Harness string `json:"harness"`
@@ -466,10 +471,28 @@ func isKnownHarness(id string) bool {
 // 照现行的设置重新收敛一个 harness，等到有结果才返回：它起来了、没起来，或者按设置不用起；
 // 起来了的话再等它的 SSH 入口写下状况。这样应答里的状态、待重启名单、入口状况都是定下来的。
 func (s *controlServer) applyHarness(id string) (any, *controlError) {
+	return s.applyHarnessRepair(id, "")
+}
+
+func (s *controlServer) applyHarnessRepair(id, repair string) (any, *controlError) {
 	if !isKnownHarness(id) {
 		return nil, unknownHarness(id)
 	}
+	unlock := func() {}
+	if id == nativeCodex {
+		s.actionMu.Lock()
+		unlock = s.actionMu.Unlock
+	}
+	if repair != "" {
+		if failure := s.repairCodexControl(id, repair); failure != nil {
+			unlock()
+			return nil, failure
+		}
+	}
 	round, accepted := s.manager.apply(id)
+	// 已标成 starting：新的修复会被拒绝。等待启动结果不占锁，其他 harness 仍可各自重启。
+	unlock()
+
 	if !accepted {
 		return nil, &controlError{Reason: "failed", Harness: id, Text: both("服务正在退出，没有受理", "The service is shutting down; the request was not accepted")}
 	}

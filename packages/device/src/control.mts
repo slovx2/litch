@@ -27,6 +27,7 @@ import { isObject } from './wire.mjs'
 
 /** 主进程眼里的一个 harness */
 export interface ManagedHarness {
+  repair?: 'codexControlPermissions'
   cli?: HarnessRuntimeInfo
   id: string
   /** 它的运行时在哪个套接字上，写法和 --upstream 一样（unix://路径）。没在跑时那里没有东西 */

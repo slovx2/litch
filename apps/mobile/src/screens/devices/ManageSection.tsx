@@ -32,6 +32,7 @@ import { useTheme } from '../../ui/theme'
 import { useLeaveGuard } from './hconfig/leave'
 import { ModelRanking } from './ModelRanking'
 import { PowerSettings } from './PowerSettings'
+import { RepairCodexControl } from './RepairCodexControl'
 import { type Draft, editOf, problemOf, SettingControl } from './SettingControl'
 
 function harnessLine(harness: HarnessView, t: Translator): string {
@@ -310,6 +311,7 @@ function HarnessHead({
             {harnessFailureText(harness, t)}
           </Text>
         ) : null}
+        <RepairCodexControl deviceId={deviceId} harness={harness} />
       </View>
     )
   }
@@ -425,6 +427,7 @@ function HarnessHead({
           {said.text}
         </Text>
       ) : null}
+      <RepairCodexControl deviceId={deviceId} harness={harness} />
       <Confirm
         visible={busyAsk}
         danger

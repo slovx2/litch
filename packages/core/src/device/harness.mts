@@ -201,6 +201,7 @@ export function harnessFromInfo(info: HarnessInfo): HarnessView {
     // 握手时声明过 deviceSettings 的连接，适配器主进程给的原因带着两种语言的版本：有就用它，界面按语言挑
     detail: down?.text ? bilingual(down.text) : down?.message || null,
     down: down?.kind ?? null,
+    ...(down?.repair === 'codexControlPermissions' ? { repair: down.repair } : {}),
     abilities: abilitiesOf(info.features, info.id),
     // 它自己声明了；设备那一级声明了没有由设备去并（device.mts）
     configurable: listed(info.extensions).includes(EXTENSION.harnessConfig),

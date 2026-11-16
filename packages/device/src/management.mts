@@ -222,6 +222,24 @@ export class DeviceManagement {
           harness,
         },
       )
+    if (
+      fields.repair !== undefined &&
+      (fields.repair !== 'codexControlPermissions' || fields.force === true)
+    )
+      throw new ManagementError('invalidSetting', {
+        'zh-CN': '权限修复参数无效，不能强制修复',
+        en: 'Invalid permission repair; forced repair is not allowed',
+      })
+    // 修复只接受明确失败且未运行的 Codex，不对失联运行时执行常规 busy 探测。Go 再核验并独占锁文件。
+    if (fields.repair !== undefined) {
+      const managed = state?.harnesses.find((item) => item.id === harness)
+      if (managed?.state !== 'startFailed' || managed.repair !== fields.repair)
+        throw new ManagementError('invalidSetting', {
+          'zh-CN': '当前状态不支持权限修复，请刷新后重试',
+          en: 'Permission repair is unavailable; refresh and try again',
+        })
+      return this.apply(harness, fields.repair)
+    }
     if (this.host.control && fields.force !== true && (await this.host.busy(harness)))
       throw new ManagementError(
         'harnessBusy',
@@ -234,10 +252,14 @@ export class DeviceManagement {
     return this.apply(harness)
   }
 
-  private async apply(harness: string): Promise<unknown> {
+  private async apply(harness: string, repair?: 'codexControlPermissions'): Promise<unknown> {
     await this.host.restart?.prepare(harness)
     try {
-      const result = await this.ask('harness.apply', { harness }, WAIT.apply)
+      const result = await this.ask(
+        'harness.apply',
+        { harness, ...(repair ? { repair } : {}) },
+        WAIT.apply,
+      )
       if (isObject(result) && result.state === 'running') await this.host.restart?.recover(harness)
       return result
     } finally {

@@ -69,7 +69,11 @@ export interface Management {
   powerChanged(note: DevicePowerStatus): void
   rankingChanged(note: ModelRankingSnapshot): void
   write(expectedVersion: number, edits: readonly SettingEditView[]): Promise<SettingsWriteResult>
-  restart(harness: HarnessId, force: boolean): Promise<HarnessRestartResult>
+  restart(
+    harness: HarnessId,
+    force: boolean,
+    repair?: 'codexControlPermissions',
+  ): Promise<HarnessRestartResult>
   diagnostics(harness: HarnessId | undefined): Promise<DiagnosticsView>
   logs(
     source: LogSource,
@@ -300,13 +304,13 @@ export function createManagement(host: ManagementHost): Management {
       }
     },
 
-    async restart(harness, force) {
+    async restart(harness, force, repair) {
       reachable()
       const mine = epoch
       try {
         const result = await host.request(
           'litch/device/harness/restart',
-          { harness, ...(force ? { force: true } : {}) },
+          { harness, ...(force ? { force: true } : {}), ...(repair ? { repair } : {}) },
           { timeoutMs: WAIT.restart },
         )
         if (mine === epoch) apply(result.snapshot, [])

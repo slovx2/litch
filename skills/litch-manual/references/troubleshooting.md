@@ -135,9 +135,13 @@ network-share folders are not supported in the files panel.
 
 ### Windows 本机已连接，但 Codex 启动失败
 
+设备页和 Codex 详情会显示设备给出的具体失败原因。Windows 设备识别到这条固定错误时，桌面和手机会提供「修复权限」。确认后，设备先备份 ACL，再仅将闲置的 `app-server-control` 目录设为当前用户属主、受保护的单用户 FullControl DACL，并重启 Codex。备份位于设备状态目录的 `backups/codex-control-acl/`，保留四份。遇到链接、其他文件、占用锁或不可信属主时拒绝，具体原因保留在页面；先关闭占用它的 Codex daemon 或处理所示原因，再重试。旧设备没有按钮时升级设备服务。
+
 设备页和 Codex 详情会显示设备给出的具体失败原因。`socket directory is not private to the current user` 是 Codex 的私有目录检查失败；即使 Litch 的 `codex/app-server` 目录正确，Codex 仍会先校验其数据目录中的 `app-server-control` 启动锁目录。Administrator 或关闭 UAC 不会免除此检查。不要递归修改整个 `.codex` 的权限，也不要关闭校验。
 
 维护者可使用源码中的 `scripts/repair-codex-control-windows.ps1`，显式传入 `-CodexHome` 和 `-BackupDirectory`。默认只预览；确认后加 `-Apply`。脚本只接受当前用户（或其已提升的 Administrators 组）拥有、仅含闲置 `app-server-startup.lock` 的普通目录；拒绝链接、其他文件和被占用的锁。应用时先保留四份 ACL 备份，再将这一个目录的属主和受保护 DACL 收紧为当前用户专属，不修改会话、配置或凭据。随后在设备页重启 Codex。存在官方 daemon 或其他文件时，先确认并关闭对应进程，不要直接删除目录。
+
+On Windows, the device page and Codex details offer **Repair permissions** for the recognized private-directory startup failure. After confirmation, the device backs up the ACL under its state directory's `backups/codex-control-acl/` (four versions), repairs only the idle startup-lock directory and restarts Codex. Failure details remain on the page.
 
 Windows can reject Codex's `app-server-control` startup-lock directory before it binds Litch's separate socket. Administrator access does not bypass this check. The maintenance script previews by default, requires explicit paths and `-Apply`, backs up four ACL versions, and restricts only an idle startup-lock directory to its current user. It refuses active locks, links, foreign owners and unexpected contents; it never changes the whole Codex home recursively.
 

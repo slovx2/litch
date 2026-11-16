@@ -1470,7 +1470,7 @@ export class ClientSession implements ClientToolPeer {
     const seen = link.facts.userAgent !== null || link.facts.runtime !== null
     let unavailable: HarnessUnavailable | null = link.available ? null : link.failure
     // 说明的两种语言版本是 deviceSettings 扩展的内容，只给声明过它的连接
-    if (unavailable?.text && !this.declared.has(EXTENSION.deviceSettings))
+    if (unavailable && !this.declared.has(EXTENSION.deviceSettings))
       unavailable = { kind: unavailable.kind, message: unavailable.message }
     const info = describeHarness(
       link.harness,
@@ -1573,6 +1573,7 @@ export class ClientSession implements ClientToolPeer {
       kind: managed.state,
       message: managed.text?.['zh-CN'] ?? '这个 harness 现在没有在运行',
       ...(managed.text ? { text: managed.text } : {}),
+      ...(managed.repair ? { repair: managed.repair } : {}),
     })
   }
 

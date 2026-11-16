@@ -10,6 +10,7 @@ import { showToast } from '../../app/toasts.tsx'
 import { InstallRow } from '../../install/InstallRow.tsx'
 import { cliPresentation } from '../cli-presentation.ts'
 import { HarnessWhy } from '../HarnessList.tsx'
+import { RepairCodexControl } from './RepairCodexControl.tsx'
 
 const STATE_CLASS: Record<HarnessView['state'], string> = {
   ready: 'pill ok',
@@ -131,6 +132,7 @@ export function HarnessBlock(props: HarnessBlockProps) {
             <HarnessWhy harness={harness} />
           </div>
         ) : null}
+        <RepairCodexControl deviceId={deviceId} harness={harness} />
       </section>
     )
   }
@@ -244,6 +246,7 @@ export function HarnessBlock(props: HarnessBlockProps) {
           <div className="mng-rows">{children}</div>
         </div>
       ) : null}
+      <RepairCodexControl deviceId={deviceId} harness={harness} />
       {asking ? (
         <Confirm
           title={t('manage.restart.busy.title', { name })}

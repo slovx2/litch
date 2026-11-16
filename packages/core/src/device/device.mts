@@ -435,7 +435,11 @@ export interface Device {
     edits: readonly SettingEditView[],
   ): Promise<SettingsWriteResult>
   /** 重启一个 harness。它有回合在跑、又没说照做（force）时以 busy 结束 */
-  restartHarness(harness: HarnessId, force: boolean): Promise<HarnessRestartResult>
+  restartHarness(
+    harness: HarnessId,
+    force: boolean,
+    repair?: 'codexControlPermissions',
+  ): Promise<HarnessRestartResult>
   runDiagnostics(harness?: HarnessId): Promise<DiagnosticsView>
   readLogs(source: LogSource, harness?: HarnessId, maxBytes?: number): Promise<LogTailView>
   readSshConfig(): Promise<SshConfigView>
@@ -3411,8 +3415,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       return result
     },
     writeSettings: (expectedVersion, edits) => manage.write(expectedVersion, edits),
-    async restartHarness(harness, force) {
-      const result = await manage.restart(harness, force)
+    async restartHarness(harness, force, repair) {
+      const result = await manage.restart(harness, force, repair)
       // 要重启才生效的设置用上了：详情设置那边的提示收起、数据重读
       harnessConfig.restarted(harness)
       return result

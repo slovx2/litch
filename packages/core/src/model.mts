@@ -60,6 +60,7 @@ export type ConnectionState = 'connecting' | 'online' | 'reconnecting' | 'offlin
 export type HarnessId = string
 
 export interface HarnessView {
+  repair?: 'codexControlPermissions'
   cli?: HarnessRuntimeInfo
   id: HarnessId
   name: string

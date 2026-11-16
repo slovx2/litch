@@ -206,6 +206,8 @@ export type ManagedHarnessState =
   | 'stopped'
 
 export interface DeviceHarnessRestartParams {
+  /** 用户确认后指定设备提供的修复，修复成功才重启。修复始终不允许 force。 */
+  repair?: 'codexControlPermissions'
   harness: string
   /** true：有回合在跑也照做。不带时有回合在跑（或者判断不了）就拒绝，原因是 harnessBusy */
   force?: boolean
