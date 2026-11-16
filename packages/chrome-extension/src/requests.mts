@@ -69,7 +69,11 @@ async function executeRequest(state: ExtensionState, request: ChromeRequest): Pr
   if (request.op === 'list') {
     // Chrome 在后台时仍返回最后获得焦点的窗口；没有窗口时只缺少标记，不妨碍列举。
     const lastFocused = await state.chrome.windows.getLastFocused().catch(() => null)
-    const tabs = await state.chrome.tabs.query({})
+    // 来源预检只读取已认领标签，避免每个 CDP 分块都枚举其他标签的全部 iframe。
+    const tabs =
+      args.tabId === undefined
+        ? await state.chrome.tabs.query({})
+        : [await state.chrome.tabs.get(number(args.tabId)).catch(() => null)].filter(Boolean)
     const targets: Array<{ tabId?: number; id: string }> = await state.chrome.debugger.getTargets()
     const result: Array<ChromeListedTab & { targetId?: string }> = await Promise.all(
       tabs

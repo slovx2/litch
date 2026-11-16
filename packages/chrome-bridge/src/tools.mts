@@ -160,7 +160,7 @@ export async function executePageTool(
       if (!origin || !page.grant.origins.includes(origin))
         throw new ChromeBridgeError(
           'originNotApproved',
-          'Claim the current document and approve its source first.',
+          'Take a fresh snapshot to check the current website permissions before continuing.',
         )
       return null
     },

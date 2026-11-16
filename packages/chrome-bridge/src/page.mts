@@ -33,6 +33,7 @@ export class ChromePage implements BrowserPage {
   private signal: AbortSignal | undefined
   private activeGeneration: number | undefined
   private inputDocumentChanged = false
+  private approveOrigins: (() => Promise<void>) | undefined
   constructor(
     id: string,
     instanceId: string,
@@ -46,14 +47,16 @@ export class ChromePage implements BrowserPage {
     this.state = state
     this.bridge = bridge
   }
-  bind(signal: AbortSignal, generation: number): void {
+  bind(signal: AbortSignal, generation: number, approveOrigins?: () => Promise<void>): void {
     this.signal = signal
     this.activeGeneration = generation
     this.inputDocumentChanged = false
+    this.approveOrigins = approveOrigins
   }
   unbind(): void {
     this.signal = undefined
     this.activeGeneration = undefined
+    this.approveOrigins = undefined
   }
   info(): TabInfo {
     return {
@@ -84,6 +87,9 @@ export class ChromePage implements BrowserPage {
         'signingIn',
         'The user is signing in. Wait until they return control.',
       )
+    // 先枚举来源元数据并走宿主网站许可；授权完成前不发任何读取或输入命令。
+    // authorize/renew/release 不进入此闸，既避免递归，也保证用户仍可交还标签。
+    if (guarded || op === 'refresh') await this.approveOrigins?.()
     return this.bridge.call<T>(
       this.instanceId,
       {

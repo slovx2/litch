@@ -95,8 +95,8 @@ export async function documentStamp(state: ExtensionState, grant: ChromeGrant): 
   const missing = origins.find((origin) => !grant.origins.includes(origin))
   if (missing)
     throw new ChromeFault(
-      'originNotApproved',
-      `Origin ${missing} has not been approved. Call claim to request approval; do not read or act on this tab.`,
+      'staleDocument',
+      `The page added origin ${missing} during this operation. No page content was returned. Call snapshot to check the current website permissions; do not repeat input that may have executed.`,
     )
   return JSON.stringify([
     tab.url,
