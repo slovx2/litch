@@ -7,6 +7,24 @@ versioning or publishing metadata.
 
 ## 未发布
 
+## 0.44.0（2026-11-16）
+
+### 中文
+
+- 新增“远程设备运行任务时阻止本机休眠”选项，默认关闭；“运行任务时阻止休眠”只控制本机任务。
+- 设置主页平铺所有设备，每个 harness 都有独立设置页；桌面和手机均支持。
+- Windows 上 Codex 启动失败时显示具体原因；遇到启动锁目录权限问题，可在设备页确认后一键修复并重试。
+- 修复重新打开会话时首屏工具图片缺失，以及折叠过程组中首次点击图片无法打开查看器的问题。
+- 修复手机议题抽屉中建议详情空白、无法开始任务的问题。
+
+### English
+
+- Added an option to keep this computer awake while remote devices run tasks, off by default. The existing sleep prevention option now applies only to local tasks.
+- Settings now lists all devices on its home page, with a separate settings page for each harness on desktop and mobile.
+- Windows now shows the specific reason when Codex fails to start. For startup lock directory permission errors, confirm a repair on the device page to fix permissions and retry.
+- Fixed tool images missing from the first screen after reopening a session, and the image viewer failing to open on the first click inside a collapsed process group.
+- Fixed blank suggestion details and unavailable task actions in the mobile issue drawer.
+
 ## 0.43.1（2026-11-13）
 
 ### 中文
