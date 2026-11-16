@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/slovx2/litch/internal/hostplatform"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -107,8 +108,11 @@ func serveRuntime(ctx context.Context, c configuration, autoInit bool, stage *st
 		return err
 	}
 	defer log.Close()
+	// 按本轮起点读取固定的传输错误，避免把上一次启动失败当成本次原因。
+	logOffset, _ := log.Seek(0, io.SeekEnd)
 	process.Stdout, process.Stderr = log, log
 	runtimeFailure := func(kind string, message bilingual, cause error) error {
+		message = runtimeFailureText(c, log.Name(), logOffset, message, cause)
 		fmt.Fprintf(log, "\n%s: %v\n", message, cause)
 		logPath := filepath.Join(c.harnessLogDirectory(), "runtime.log")
 		return &harnessFailure{kind: kind, text: message, logPath: logPath,

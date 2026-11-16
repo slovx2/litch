@@ -21,6 +21,7 @@ import { type ReactNode, useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { cliPresentation } from '../../../../../packages/ui/src/devices/cli-presentation.ts'
+import { harnessFailureText } from '../../../../../packages/ui/src/devices/harness-failure.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useBusy, useChannel, useKey, useReplica } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
@@ -40,9 +41,7 @@ function harnessLine(harness: HarnessView, t: Translator): string {
       : harness.state === 'disabled'
         ? t('harness.state.disabled')
         : t('harness.state.unavailable')
-  return [harness.version, state, harness.reason ? t.text(harness.reason) : null]
-    .filter(Boolean)
-    .join(' · ')
+  return [harness.version, state, harnessFailureText(harness, t)].filter(Boolean).join(' · ')
 }
 
 /** 只读的 harness 列表：对面没有设置接口、或者没连着的时候 */
@@ -281,23 +280,37 @@ function HarnessHead({
   }
   if (!detail) {
     return (
-      <Row
-        title={t.harness(harness.id, harness.name)}
-        meta={
-          harness.down === 'notInstalled'
-            ? t('install.notInstalled')
-            : t(`harness.state.${harness.state}`)
-        }
-        detail={pending ? t('manage.pending') : undefined}
-        testID={`harness:${harness.id}:settings`}
-        onPress={() =>
-          navigation.navigate('HarnessSettings', {
-            deviceId,
-            harness: harness.id,
-            name: t.harness(harness.id, harness.name),
-          })
-        }
-      />
+      <View>
+        <Row
+          title={t.harness(harness.id, harness.name)}
+          meta={
+            harness.down === 'notInstalled'
+              ? t('install.notInstalled')
+              : t(`harness.state.${harness.state}`)
+          }
+          detail={pending ? t('manage.pending') : undefined}
+          testID={`harness:${harness.id}:settings`}
+          onPress={() =>
+            navigation.navigate('HarnessSettings', {
+              deviceId,
+              harness: harness.id,
+              name: t.harness(harness.id, harness.name),
+            })
+          }
+        />
+        {harness.down === 'startFailed' && harnessFailureText(harness, t) ? (
+          <Text
+            selectable
+            testID={`harness:${harness.id}:failure`}
+            style={[
+              styles.small,
+              { color: theme.c.ink2, paddingHorizontal: 16, paddingBottom: 12 },
+            ]}
+          >
+            {harnessFailureText(harness, t)}
+          </Text>
+        ) : null}
+      </View>
     )
   }
   return (
@@ -319,8 +332,14 @@ function HarnessHead({
             </Text>
             {pending ? <Text style={{ color: theme.c.wait }}> · {t('manage.pending')}</Text> : null}
           </Text>
-          {harness.reason ? (
-            <Text style={[styles.small, { color: theme.c.ink2 }]}>{t.text(harness.reason)}</Text>
+          {harnessFailureText(harness, t) ? (
+            <Text
+              selectable
+              style={[styles.small, { color: theme.c.ink2 }]}
+              testID={`harness:${harness.id}:failure`}
+            >
+              {harnessFailureText(harness, t)}
+            </Text>
           ) : null}
         </View>
         <Pressable
