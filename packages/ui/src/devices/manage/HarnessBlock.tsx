@@ -126,6 +126,11 @@ export function HarnessBlock(props: HarnessBlockProps) {
           ) : null}
           <Forward />
         </button>
+        {harness?.state === 'unavailable' && harness.down === 'startFailed' ? (
+          <div className="mng-h-why">
+            <HarnessWhy harness={harness} />
+          </div>
+        ) : null}
       </section>
     )
   }

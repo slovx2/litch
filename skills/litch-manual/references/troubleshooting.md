@@ -133,6 +133,14 @@ network-share folders are not supported in the files panel.
   rewrites it every time it starts; the switch "Install the manual into local harnesses" is in Litch's
   settings.
 
+### Windows 本机已连接，但 Codex 启动失败
+
+设备页和 Codex 详情会显示设备给出的具体失败原因。`socket directory is not private to the current user` 是 Codex 的私有目录检查失败；即使 Litch 的 `codex/app-server` 目录正确，Codex 仍会先校验其数据目录中的 `app-server-control` 启动锁目录。Administrator 或关闭 UAC 不会免除此检查。不要递归修改整个 `.codex` 的权限，也不要关闭校验。
+
+维护者可使用源码中的 `scripts/repair-codex-control-windows.ps1`，显式传入 `-CodexHome` 和 `-BackupDirectory`。默认只预览；确认后加 `-Apply`。脚本只接受当前用户（或其已提升的 Administrators 组）拥有、仅含闲置 `app-server-startup.lock` 的普通目录；拒绝链接、其他文件和被占用的锁。应用时先保留四份 ACL 备份，再将这一个目录的属主和受保护 DACL 收紧为当前用户专属，不修改会话、配置或凭据。随后在设备页重启 Codex。存在官方 daemon 或其他文件时，先确认并关闭对应进程，不要直接删除目录。
+
+Windows can reject Codex's `app-server-control` startup-lock directory before it binds Litch's separate socket. Administrator access does not bypass this check. The maintenance script previews by default, requires explicit paths and `-Apply`, backs up four ACL versions, and restricts only an idle startup-lock directory to its current user. It refuses active locks, links, foreign owners and unexpected contents; it never changes the whole Codex home recursively.
+
 ### 记住的访问权限读取失败
 
 旧设备服务不支持权限记忆时，桌面和手机静默使用当前选择，不显示错误或重试入口。支持记忆的设备暂时读取失败时，重连或重新打开页面会自动重读；读取成功前，新建对话保留手动选择，未选择则使用 harness 默认权限，不把默认值写回记忆。新建时保存失败可显示一次轻提示，不阻断创建。已有对话继续使用当前权限；需要确认的完全访问仍须确认。输入框底栏保持单行，不展示权限记忆状态。
