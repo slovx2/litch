@@ -33,6 +33,17 @@ func badCodexControlACL(t *testing.T, directory string) {
 
 func TestCodexControlRepairWindowsBoundaries(t *testing.T) {
 	c := settingsTestConfiguration(t)
+	// 父进程可能来自 PowerShell 7；系统修复不能加载它继承的其他模块。
+	modules := filepath.Join(t.TempDir(), "foreign-modules")
+	security := filepath.Join(modules, "Microsoft.PowerShell.Security")
+	if err := os.MkdirAll(security, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(security, "Microsoft.PowerShell.Security.psm1"),
+		[]byte("throw 'unexpected external module import'\nfunction Get-Acl {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PSModulePath", modules)
 	home := filepath.Join(c.home, "isolated codex's home")
 	t.Setenv("CODEX_HOME", home)
 	c = c.forHarness(nativeCodex)

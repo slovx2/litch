@@ -51,7 +51,8 @@ func repairCodexControlDirectory(ctx context.Context, c configuration) error {
 
 	backup := filepath.Join(c.home, "backups", "codex-control-acl")
 	// 参数通过环境传递，路径绝不拼进 PowerShell 源码；脚本内没有提权、下载或递归 ACL 操作。
-	source := "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); try { & {" + strings.TrimPrefix(repairscripts.CodexControlRepair, "\ufeff") +
+	// 只加载系统自带模块，避免父进程 PowerShell 7 的搜索路径污染系统 PowerShell 5.1。
+	source := "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); $env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules'); try { & {" + strings.TrimPrefix(repairscripts.CodexControlRepair, "\ufeff") +
 		"\n} -CodexHome $env:LITCH_REPAIR_CODEX_HOME -BackupDirectory $env:LITCH_REPAIR_BACKUP -Apply } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }"
 	units := utf16.Encode([]rune(source))
 	encoded := make([]byte, len(units)*2)
