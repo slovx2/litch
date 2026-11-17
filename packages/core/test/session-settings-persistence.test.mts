@@ -186,6 +186,36 @@ test('切换失败期间收到其他连接的有效设置，不能用失败前�
   }
 })
 
+for (const confirmed of [false, true]) {
+  test(`失败回退逐字段合并通知：${confirmed ? '保留已确认的同值' : '其他字段变化不保留失败值'}`, async () => {
+    const world = fixture('claude', async () => {
+      world.peer.last().notify('thread/settings/updated', {
+        threadId: 'a',
+        threadSettings: confirmed ? { effort: 'high' } : { model: 'other-client-model' },
+      })
+      await settle()
+      throw new RpcFailure(-32602, '隔离拒绝')
+    })
+    world.core.start()
+    try {
+      await settle()
+      const session = watch(world.core)
+      await settle()
+      await assert.rejects(
+        world.command('session.configure', {
+          ...where,
+          settings: { effort: 'high', permission: ':danger-full-access' },
+        }),
+      )
+      assert.equal(session.seen.view?.settings.effort, confirmed ? 'high' : 'low')
+      assert.equal(session.seen.view?.settings.permission, ':workspace')
+      assert.equal(session.seen.view?.settings.model, confirmed ? 'small' : 'other-client-model')
+    } finally {
+      world.core.stop()
+    }
+  })
+}
+
 test('模式保存期间执行计划，先完成保存再退出计划模式并发送', async () => {
   let release!: () => void
   const gate = new Promise<void>((resolve) => {

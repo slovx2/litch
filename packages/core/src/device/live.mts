@@ -321,6 +321,8 @@ interface Live {
   pending: Partial<SessionSettings>
   /** 参数切换按用户操作顺序落到引擎；发消息也等待这些写入完成。 */
   configuring: Promise<void> | null
+  /** 当前写入失败时的回退值；在途设置通知同步更新，保留其他连接确认的字段。 */
+  configurationRollback: SessionSettings | null
   /**
    * 插进回合里、对面还没回显的话：发出去时带的客户端标识 → 先显示出来的那个条目。
    * 声明交付状态的引擎在 sent 才移除；queued 仍保留原文，停止时按明确回执结算。
@@ -1064,6 +1066,12 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       const thread = (threadSettings as typeof threadSettings & { thread?: Thread })?.thread
       if (thread) host.started(thread)
       if (live.view) {
+        if (live.configurationRollback)
+          live.configurationRollback = updatedSettings(
+            threadSettings,
+            live.configurationRollback,
+            presetsOf(live.view.harness, live.id),
+          )
         emit(live, [
           { op: 'session.can', can: abilities(live.view.harness, live.id) },
           {
@@ -2044,6 +2052,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     startingInput: new Map(),
     pending: {},
     configuring: null,
+    configurationRollback: null,
     steered: new Map(),
     immediate: new Set(),
     reverting: false,
@@ -2579,15 +2588,20 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
           )
         const before = live.view.settings
         const optimistic = { ...before, ...sent }
+        live.configurationRollback = before
         emit(live, [{ op: 'session.settings', settings: optimistic }])
-        const displayed = live.view.settings
         // 会话设置立即持久化到引擎，设备发起的任务、回报和后台唤醒才会继承同一份设置。
         try {
           await withSpeed('thread/settings/update', { threadId: live.id, ...overrides })
         } catch (error) {
-          if (live.view.settings === displayed)
-            emit(live, [{ op: 'session.settings', settings: before }])
+          const restored = { ...live.view.settings }
+          const rollback = live.configurationRollback ?? before
+          for (const key of Object.keys(sent) as (keyof SessionSettings)[])
+            if (restored[key] === optimistic[key]) Object.assign(restored, { [key]: rollback[key] })
+          emit(live, [{ op: 'session.settings', settings: restored }])
           throw error
+        } finally {
+          live.configurationRollback = null
         }
         for (const key of Object.keys(sent) as (keyof SessionSettings)[]) {
           if (live.pending[key] === sent[key]) delete live.pending[key]
