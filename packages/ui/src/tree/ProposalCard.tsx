@@ -60,7 +60,7 @@ export function ProposalActs({
   proposal: SessionProposalView
   small?: boolean
   inbox?: boolean
-  /** 经理看板里：补充说明默认收起，点“补充说明”展开（同决策卡） */
+  /** 可选收起补充说明；默认直接显示输入框。 */
   noteFold?: boolean
   /** 经理看板里：“编辑后开始”“忽略”收进行尾的“⋯”（同手机），一行放得下 */
   moreMenu?: boolean

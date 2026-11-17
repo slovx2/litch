@@ -130,7 +130,7 @@ test('握手时声明了计划确认：Claude Code 和 Pi 交计划时由引擎�
   assert.ok(hello.capabilities.litchExtensions.includes('planConfirmation'))
 })
 
-test('模式跟着回合发：连着会话现在的模型和强度；发过一次之后不重复发', async () => {
+test('模式立即写入：连着会话现在的模型和强度；用户回合不重复发', async () => {
   const world = setup(undefined, { 'thread/resume': resumed('default') })
   world.core.start()
   await settle()
@@ -145,7 +145,7 @@ test('模式跟着回合发：连着会话现在的模型和强度；发过一�
   assert.equal(world.sent('turn/start').length, 0)
 
   await world.command('session.send', { ...where, text: '先出个计划' })
-  const first = world.sent('turn/start')[0] as Sent
+  const first = world.sent('thread/settings/update')[0] as Sent
   assert.deepEqual(first.collaborationMode, {
     mode: 'plan',
     settings: { model: 'gate/small', reasoning_effort: 'low', developer_instructions: null },
@@ -160,31 +160,29 @@ test('模式跟着回合发：连着会话现在的模型和强度；发过一�
   assert.equal(session.seen.view?.settings.mode, 'plan')
 })
 
-test('对面没报模型：模式先不发（协议里它连着模型一起给），留着', async () => {
-  // 假对端默认的订阅应答里没有模型
+test('对面没报模型：拒绝无法保存的模式切换；选择模型后可以一起持久化', async () => {
   const world = setup()
   world.core.start()
   await settle()
   const session = watch(world.core)
   await settle()
+  await assert.rejects(
+    world.command('session.configure', { ...where, settings: { mode: 'plan' } }),
+    { code: 'rejected' },
+  )
   assert.equal(session.seen.view?.settings.mode, null)
-  await world.command('session.configure', { ...where, settings: { mode: 'plan' } })
-  await world.command('session.send', { ...where, text: '一' })
-  assert.equal('collaborationMode' in (world.sent('turn/start')[0] as Sent), false)
-  // 同时选了模型的话就发得出去了
-  world.peer.last().notify('turn/completed', {
-    threadId: 'a',
-    turn: turn('srv-1', [], { status: 'completed' }),
+  assert.equal(world.sent('thread/settings/update').length, 0)
+  await world.command('session.configure', {
+    ...where,
+    settings: { model: 'gate/large', mode: 'plan' },
   })
-  await settle()
-  await world.command('session.configure', { ...where, settings: { model: 'gate/large' } })
-  await world.command('session.send', { ...where, text: '二' })
-  const second = world.sent('turn/start')[1] as Sent
-  assert.deepEqual(second.collaborationMode, {
+  const changed = world.sent('thread/settings/update')[0] as Sent
+  assert.deepEqual(changed.collaborationMode, {
     mode: 'plan',
     settings: { model: 'gate/large', reasoning_effort: null, developer_instructions: null },
   })
   assert.equal(session.seen.view?.settings.mode, 'plan')
+  world.core.stop()
 })
 
 test('对面自己改了模式（模型退出了计划模式）：界面跟着变，这边没发出去的那一下不留', async () => {
@@ -202,8 +200,8 @@ test('对面自己改了模式（模型退出了计划模式）：界面跟着�
   said('default')
   await settle()
   assert.equal(session.seen.view?.settings.mode, 'default')
-  // 只跟模式：模型那几项不从这条通知里取
-  assert.equal(session.seen.view?.settings.model, 'gate/small')
+  // 标准通知不需要嵌入 thread，其他客户端的模型切换也立即同步。
+  assert.equal(session.seen.view?.settings.model, 'gate/large')
   // 不认识的模式不理
   said('pair')
   await settle()

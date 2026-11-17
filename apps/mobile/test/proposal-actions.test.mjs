@@ -77,6 +77,20 @@ function actions({
   }
 }
 
+test('手机建议的自由文本补充默认显示，不需先展开', () => {
+  const { acts, render } = actions({ manager: true })
+  const tree = render({ acts })
+  const rows = []
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return
+    rows.push(node)
+    for (const child of [node.props?.children].flat()) visit(child)
+  }
+  visit(tree)
+  assert.ok(rows.some((row) => row.type === 'ProposalNote'))
+  assert.ok(!rows.some((row) => row.props?.testID === 'proposal:p:note-open'))
+})
+
 test('手机工作树预检失败时开始禁用、理由可见，工作树开关仍可修改', () => {
   const { acts, render } = actions({
     manager: true,

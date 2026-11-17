@@ -92,7 +92,7 @@ for (const delayed of [false, true])
       await settle()
       assert.equal(session.seen.view?.settings.model, patch.model)
       assert.equal(session.seen.view?.settings.effort, patch.effort)
-      assert.equal((sent('turn/start')[0] as { model: string }).model, patch.model)
+      assert.equal((sent('thread/settings/update')[0] as { model: string }).model, patch.model)
     } finally {
       core.stop()
     }

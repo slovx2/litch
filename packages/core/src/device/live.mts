@@ -64,6 +64,7 @@ import {
   projectSettings,
   settingsDiff,
   turnOverrides,
+  updatedSettings,
 } from '../projection/settings.mjs'
 import { withSideChatNote } from '../projection/side-chat.mjs'
 import { spanOp } from '../projection/span.mjs'
@@ -224,8 +225,8 @@ export interface LiveSessions {
   ): Promise<string>
   /** 在 harness 上新建会话时会带上的客户端工具定义（create 用的同一份）；不带是空的 */
   toolsFor(harness: HarnessId | null): unknown[]
-  /** 改模型、强度、权限预设。记在这边，下一个回合开始时一起告诉对面 */
-  configure(sessionId: string, settings: Partial<SessionSettings>): void
+  /** 模型、强度、速度、权限和模式立即保存到引擎，之后各类回合沿用。 */
+  configure(sessionId: string, settings: Partial<SessionSettings>): Promise<void>
   /** 执行计划：退出计划模式，并以 text 这句话发起一个回合。回合还在进行的时候做不了 */
   implementPlan(sessionId: string, text: string): Promise<void>
   /** now：有回合在进行时直接插进去（引导），插不进去就照常排队 */
@@ -316,8 +317,10 @@ interface Live {
   dispatching: QueuedMessage[]
   /** 回合号到达之前的停止在这里等待；本地回合已保留输入正文。 */
   startingInput: Map<string, { ready: Promise<string | null>; resolve(id: string | null): void }>
-  /** 用户改了、还没告诉对面的设置 */
+  /** 新建会话或执行计划时，还需随首条输入送出的设置。 */
   pending: Partial<SessionSettings>
+  /** 参数切换按用户操作顺序落到引擎；发消息也等待这些写入完成。 */
+  configuring: Promise<void> | null
   /**
    * 插进回合里、对面还没回显的话：发出去时带的客户端标识 → 先显示出来的那个条目。
    * 声明交付状态的引擎在 sent 才移除；queued 仍保留原文，停止时按明确回执结算。
@@ -1056,17 +1059,20 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
           },
         },
       ]),
-    // 设置变了：别的客户端改的，或者引擎自己改的（模型退出了计划模式）。这一版只跟模式：
-    // 模型、强度、权限这几项各有各的认法，回合之间换了的话下次载入会话时会对上
+    // 其他客户端或引擎改了设置：按通知字段同步，不要求通知额外嵌入 thread。
     'thread/settings/updated': (live, { threadSettings }) => {
       const thread = (threadSettings as typeof threadSettings & { thread?: Thread })?.thread
       if (thread) host.started(thread)
-      if (live.view && thread) {
+      if (live.view) {
         emit(live, [
           { op: 'session.can', can: abilities(live.view.harness, live.id) },
           {
             op: 'session.settings',
-            settings: projectSettings(threadSettings, presetsOf(live.view.harness, live.id)),
+            settings: updatedSettings(
+              threadSettings,
+              live.view.settings,
+              presetsOf(live.view.harness, live.id),
+            ),
           },
         ])
       }
@@ -1631,6 +1637,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     message: OutgoingMessage,
     clientId: string | null = null,
   ): Promise<void> => {
+    if (live.configuring) await live.configuring
     const viewId = `local:${++localSeq}`
     const userKey = `${viewId}:user`
     const mentions = mentionsIn(live)
@@ -1655,7 +1662,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       },
       { op: 'item.add', turnId: viewId, item: localUserMessage(userKey, message, mentions) },
     ])
-    // 改过的设置跟着这个回合一起告诉对面，之后的回合对面会沿用
+    // 新建会话或执行计划留下的设置随这个回合发送；普通切换已由 configure 立即保存。
     const sent = { ...live.pending }
     // 它声明了自己的权限预设的话，只发预设的标识
     const declared = live.view ? presetsOf(live.view.harness, live.id) !== null : false
@@ -2036,6 +2043,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     dispatching: [],
     startingInput: new Map(),
     pending: {},
+    configuring: null,
     steered: new Map(),
     immediate: new Set(),
     reverting: false,
@@ -2547,18 +2555,56 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
     configure(sessionId, settings) {
       const live = need(sessionId)
-      if (live.compactSwitch)
-        throw new ChannelError('rejected', '正在压缩并切换供应商', phrase('session.switchBusy'))
-      for (const key of ['model', 'effort', 'speed', 'permission'] as const) {
-        const value = settings[key]
-        if (value) live.pending[key] = value
-      }
-      if (settings.mode) live.pending.mode = settings.mode
-      emit(live, [{ op: 'session.settings', settings: { ...live.view.settings, ...live.pending } }])
+      const change = (live.configuring ?? Promise.resolve()).then(async () => {
+        if (live.compactSwitch)
+          throw new ChannelError('rejected', '正在压缩并切换供应商', phrase('session.switchBusy'))
+        if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
+        mustReach(live)
+        const sent = { ...live.pending }
+        for (const key of ['model', 'effort', 'speed', 'permission'] as const) {
+          const value = settings[key]
+          if (value) sent[key] = value
+        }
+        if (settings.mode) sent.mode = settings.mode
+        const overrides = turnOverrides(
+          sent,
+          presetsOf(live.view.harness, live.id) !== null,
+          live.view.settings,
+        )
+        if (sent.mode && !overrides.collaborationMode)
+          throw new ChannelError(
+            'rejected',
+            '当前模型未知，无法保存模式设置',
+            phrase('session.settingsModelUnknown'),
+          )
+        const before = live.view.settings
+        const optimistic = { ...before, ...sent }
+        emit(live, [{ op: 'session.settings', settings: optimistic }])
+        const displayed = live.view.settings
+        // 会话设置立即持久化到引擎，设备发起的任务、回报和后台唤醒才会继承同一份设置。
+        try {
+          await withSpeed('thread/settings/update', { threadId: live.id, ...overrides })
+        } catch (error) {
+          if (live.view.settings === displayed)
+            emit(live, [{ op: 'session.settings', settings: before }])
+          throw error
+        }
+        for (const key of Object.keys(sent) as (keyof SessionSettings)[]) {
+          if (live.pending[key] === sent[key]) delete live.pending[key]
+        }
+      })
+      // 失败交回命令调用方显示；后续切换和发送仍可继续，不让失败污染整条串行队列。
+      const settled = change.catch(() => {})
+      live.configuring = settled
+      void settled.then(() => {
+        if (live.configuring === settled) live.configuring = null
+      })
+      return change
     },
 
     async implementPlan(sessionId, text) {
       const live = need(sessionId)
+      if (live.configuring) await live.configuring
       if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
       mustReach(live)
       if (isRunning(live.view) || live.queued.length > 0) {
@@ -2575,6 +2621,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       const live = need(sessionId)
       if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
       mustReach(live)
+      if (live.configuring) await live.configuring
       const beforeInput = host.beforeInput?.(sessionId)
       if (beforeInput) await beforeInput
       const pauseRevision = live.pauseRevision
@@ -3131,7 +3178,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         ])
         if (thenConfigure) {
           delete live.compactSwitch
-          sessionsApi.configure(sessionId, thenConfigure)
+          await sessionsApi.configure(sessionId, thenConfigure)
         }
       } catch (error) {
         live.compacting = Math.max(0, live.compacting - 1)

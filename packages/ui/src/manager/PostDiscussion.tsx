@@ -85,15 +85,8 @@ export function PostDiscussion({
   const board = useKey<ManagerBoardTopicView>(
     keys.managerBoard(manager.deviceId, manager.id),
   )?.board
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   const inputId = useId()
-  const submitted = useRef(0)
-  const count = post?.discussion.messages.length ?? 0
-  // 混合提交由宿主执行；确认设备新增记录后也收起编辑区。
-  useEffect(() => {
-    if (count > submitted.current) setOpen(false)
-    submitted.current = count
-  }, [count])
   const [selectedMode, setMode] = useState<'manager' | 'temporary' | null>(null)
   const { drafts, write } = usePostDrafts(manager.deviceId, manager.id)
   const draft = post ? drafts[post.id] : undefined
@@ -179,7 +172,6 @@ export function PostDiscussion({
         mode,
       })
       change('')
-      setOpen(false)
     } catch (e) {
       setError(reasonOf(e, t))
     } finally {

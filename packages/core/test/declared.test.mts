@@ -357,13 +357,13 @@ test('权限预设按声明来：选项是它声明的那几档；选了只发�
   const pick = { settings: { permission: ':danger-full-access' } }
   await command('session.configure', { sessionId: 'c1', ...pick })
   await command('session.send', { sessionId: 'c1', text: '一' })
-  const onDeclared = sent('turn/start').at(-1)
+  const onDeclared = sent('thread/settings/update').at(-1)
   assert.equal(onDeclared?.permissions, ':danger-full-access')
   assert.ok(!('approvalPolicy' in (onDeclared ?? {})), '有声明的只发预设的标识')
 
   await command('session.configure', { sessionId: 'o1', ...pick })
   await command('session.send', { sessionId: 'o1', text: '一' })
-  const onBuiltin = sent('turn/start').at(-1)
+  const onBuiltin = sent('thread/settings/update').at(-1)
   assert.deepEqual(
     [onBuiltin?.permissions, onBuiltin?.approvalPolicy],
     [':danger-full-access', 'never'],

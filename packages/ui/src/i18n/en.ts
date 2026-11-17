@@ -1574,6 +1574,7 @@ export const en: Record<MessageKey, Entry> = {
   'session.switchCancelled': 'Cancelled. The provider was not changed.',
   'session.switchTimeout': 'Timed out waiting for compaction. The provider was not changed.',
   'session.switchBusy': 'Waiting for compaction to finish. Please try again afterward.',
+  'session.settingsModelUnknown': 'Select a model before changing the conversation mode.',
   'composer.switch.title': 'Switch provider',
   'composer.switch.note':
     'Compacting first can reduce the cost of processing your history with the new provider. Your current provider handles compaction; switching happens only after it succeeds.',

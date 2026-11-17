@@ -539,7 +539,11 @@ export function createCore(options: CoreOptions): Core {
         case 'session.configure': {
           const { deviceId, sessionId, settings } =
             params as Commands['session.configure']['params']
-          deviceOf(deviceId).configure(sessionId, settings)
+          try {
+            await deviceOf(deviceId).configure(sessionId, settings)
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
           return {}
         }
         case 'session.goal.set': {

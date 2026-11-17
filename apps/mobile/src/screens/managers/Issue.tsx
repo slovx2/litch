@@ -241,10 +241,6 @@ export function Issue({
     setCollapsed(!collapsed)
   }
   /** 正在填忽略理由；null 是没在填 */
-  // 请你做的回复框默认收起，点“回复”才展开；已有草稿或正在修改回复时一直展开
-  const [replyOpen, setReplyOpen] = useState(false)
-  // 有选项的决策，补充说明默认收起；开放题（没有选项）输入框就是答复，一直显示
-  const [noteOpen, setNoteOpen] = useState(false)
   const replyInput = useRef<TextInput>(null)
   const [requestIgnore, setRequestIgnore] = useState<{ revision: number; reason: string } | null>(
     null,
@@ -515,8 +511,6 @@ export function Issue({
   ]
     .filter(Boolean)
     .join(' · ')
-  const noteShown = !decision?.options.length || noteOpen || Boolean(reply.trim())
-  const replyShown = replyOpen || Boolean(reply.trim()) || (editing && request?.status !== 'open')
   const entry = (
     <Pressable
       accessibilityRole="button"
@@ -851,7 +845,6 @@ export function Issue({
                 worktree={suggestion.proposal.worktree ?? false}
                 prompt={suggestion.proposal.prompt}
                 wider={suggestion.proposal.widerSandbox}
-                noteFold
                 extra={inline && !hideDiscussion ? entry : null}
               />
             </CardActions>
@@ -930,20 +923,18 @@ export function Issue({
                       </CardActions>
                     </View>
                   ) : null}
-                  {replyShown ? (
-                    <QuestionInput
-                      testID={`request-reply:${request.id}`}
-                      accessibilityLabel={t('manager.requestText')}
-                      placeholder={t('manager.requestText')}
-                      placeholderTextColor={c.ink3}
-                      style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
-                      multiline
-                      inputRef={replyInput}
-                      editable={features.feedback && !locked}
-                      value={reply}
-                      onChangeText={writeReply}
-                    />
-                  ) : null}
+                  <QuestionInput
+                    testID={`request-reply:${request.id}`}
+                    accessibilityLabel={t('manager.requestText')}
+                    placeholder={t('manager.requestText')}
+                    placeholderTextColor={c.ink3}
+                    style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
+                    multiline
+                    inputRef={replyInput}
+                    editable={features.feedback && !locked}
+                    value={reply}
+                    onChangeText={writeReply}
+                  />
                   <CardActions primary>
                     <Button
                       testID={`request-deliver:${request.id}`}
@@ -952,21 +943,6 @@ export function Issue({
                       onPress={() => void submitReply(true)}
                     />
                   </CardActions>
-                  {replyShown ? null : (
-                    <CardActions>
-                      <Button
-                        kind="quiet"
-                        testID={`request-reply-open:${request.id}`}
-                        disabled={locked || !features.feedback}
-                        label={t('manager.requestReply')}
-                        onPress={() => {
-                          setReplyOpen(true)
-                          // 展开后直接进入输入
-                          requestAnimationFrame(() => replyInput.current?.focus())
-                        }}
-                      />
-                    </CardActions>
-                  )}
                   {request.status === 'open' ? (
                     <CardActions>
                       <Button
@@ -1066,19 +1042,17 @@ export function Issue({
                           />
                         ))}
                       </View>
-                      {noteShown ? (
-                        <QuestionInput
-                          inputRef={replyInput}
-                          testID={`decision-input:${decision.id}`}
-                          accessibilityLabel={t('manager.answer')}
-                          placeholder={t('manager.answer')}
-                          placeholderTextColor={c.ink3}
-                          style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
-                          multiline
-                          value={reply}
-                          onChangeText={writeReply}
-                        />
-                      ) : null}
+                      <QuestionInput
+                        inputRef={replyInput}
+                        testID={`decision-input:${decision.id}`}
+                        accessibilityLabel={t('manager.answer')}
+                        placeholder={t('manager.answer')}
+                        placeholderTextColor={c.ink3}
+                        style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
+                        multiline
+                        value={reply}
+                        onChangeText={writeReply}
+                      />
                       <CardActions primary>
                         <View style={styles.barGroup}>
                           <Button
@@ -1092,19 +1066,6 @@ export function Issue({
                             label={t('manager.submitDecision')}
                             onPress={() => void submitDecision(choice)}
                           />
-                          {noteShown ? null : (
-                            <Button
-                              kind="quiet"
-                              testID={`decision-note-open:${decision.id}`}
-                              disabled={locked}
-                              label={t('manager.addNote')}
-                              onPress={() => {
-                                setNoteOpen(true)
-                                // 展开后直接进入输入
-                                requestAnimationFrame(() => replyInput.current?.focus())
-                              }}
-                            />
-                          )}
                           {choice ? (
                             <Button
                               kind="quiet"

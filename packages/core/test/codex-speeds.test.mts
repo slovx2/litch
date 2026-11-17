@@ -52,6 +52,10 @@ function world(direct: boolean) {
       nextCursor: null,
       backwardsCursor: null,
     }),
+    'thread/settings/update': (params) => {
+      loaded(params)
+      return {}
+    },
     'thread/resume': (params) => {
       const id = loaded(params)
       const found = threads.find((entry) => entry.id === id)
@@ -152,7 +156,7 @@ test('直连原生 codex：选了快速，切走再切回来、桌面端重启�
 
   await app.command('session.configure', { ...where, settings: { speed: 'priority' } })
   await say(app, '快点')
-  assert.equal(app.sent('turn/start')[0]?.serviceTier, 'priority')
+  assert.equal(app.sent('thread/settings/update')[0]?.serviceTier, 'priority')
 
   // 切走：没人看了留一阵再退订；codex 空闲久了卸载会话，速度忘了
   session.close()
@@ -202,7 +206,7 @@ test('直连原生 codex：选了快速，切走再切回来、桌面端重启�
   // 改回标准：明着发 default，也照它记
   await again.command('session.configure', { ...where, settings: { speed: 'default' } })
   await say(again, '慢点')
-  assert.equal(again.sent('turn/start').at(-1)?.serviceTier, 'default')
+  assert.equal(again.sent('thread/settings/update').at(-1)?.serviceTier, 'default')
   again.time.advance(5000)
   assert.equal(again.saved.at(-1)?.speeds?.a, 'default')
   reopened.close()
@@ -217,7 +221,7 @@ test('连的不是原生 codex 自己（设备服务、适配器入口）：恢�
   await settle()
   await app.command('session.configure', { ...where, settings: { speed: 'priority' } })
   await say(app, '快点')
-  assert.equal(app.sent('turn/start')[0]?.serviceTier, 'priority')
+  assert.equal(app.sent('thread/settings/update')[0]?.serviceTier, 'priority')
   session.close()
   await settle()
   session = watchSession(app.core)

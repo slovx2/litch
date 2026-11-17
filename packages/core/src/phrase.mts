@@ -119,6 +119,7 @@ export type PhraseKey =
   | 'session.switchCancelled'
   | 'session.switchTimeout'
   | 'session.switchBusy'
+  | 'session.settingsModelUnknown'
   | 'session.steerQueued'
   | 'session.steerHeld'
   // 终端

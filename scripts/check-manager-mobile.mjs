@@ -160,8 +160,12 @@ try {
     )
   }
   const noteOpen = async (id) => {
-    if (!(await read(`!!document.querySelector('[data-testid="manager-issue:${id}"] textarea')`)))
-      await tapId(`decision-note-open:${id}`)
+    await wait(`[data-testid="manager-issue:${id}"] textarea`)
+    assert.equal(
+      await read(`!!document.querySelector('[data-testid="decision-note-open:${id}"]')`),
+      false,
+      '补充说明默认展开',
+    )
   }
   const checkGrowth = async (selector, label) => {
     const size = () =>
@@ -687,7 +691,12 @@ try {
     '无文字草稿不显示第二个提交按钮',
   )
   await shot('mobile-request-empty')
-  await tapId('request-reply-open:R-1')
+  await wait('[data-testid="request-reply:R-1"]')
+  assert.equal(
+    await read(`!!document.querySelector('[data-testid="request-reply-open:R-1"]')`),
+    false,
+    '请你做回复默认展开',
+  )
   await checkGrowth('[data-testid="request-reply:R-1"]', '请你做回复')
   await read(
     `(()=>{const input=document.querySelector('[data-testid="manager-issue:R-1"] textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'暂时受阻');input.dispatchEvent(new Event('input',{bubbles:true}))})()`,
@@ -762,7 +771,7 @@ try {
   )
   await tapId('manager-category:decision')
   await wait('[data-testid="decision-submit:D-17"]')
-  // 有选项的决策补充说明默认收起，先展开
+  // 有选项的决策补充说明也默认显示
   await noteOpen('D-17')
   await wait('[data-testid="manager-issue:D-17"] textarea')
   await read(

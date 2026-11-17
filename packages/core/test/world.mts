@@ -31,6 +31,7 @@ export function setup(
   extra: Record<string, Handler> = {},
   /** 这台电脑上存东西的地方：要测存下的视图时给 */
   store?: DeviceStore,
+  deviceKind: 'local' | 'ssh' = 'local',
 ) {
   const world = {
     threads,
@@ -57,6 +58,7 @@ export function setup(
     }),
     // 读历史不看归没归档；订阅只给没归档的
     'thread/read': (params) => ({ thread: find(params, [...world.threads, ...world.archived]) }),
+    'thread/settings/update': () => ({}),
     'thread/resume': (params) => ({ thread: find(params) }),
     'thread/archive': (params) => {
       const found = find(params)
@@ -86,8 +88,8 @@ export function setup(
         id: 'local',
         name: '本机',
         host: 'dev@mac',
-        kind: 'local',
-        target: null,
+        kind: deviceKind,
+        target: deviceKind === 'ssh' ? { kind: 'alias', alias: 'isolated-fixture' } : null,
         wire: 'green',
         open: peer.open,
       },

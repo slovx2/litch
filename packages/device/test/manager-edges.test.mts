@@ -25,7 +25,7 @@ async function setup(values?: Record<string, unknown>, harness = 'pi') {
       },
     ],
   })
-  // 模拟引擎保存用户在 turn/start 上的选择，再由 thread/resume 返回。
+  // 模拟引擎保存会话设置，再由 thread/resume 返回。
   const config = { model: 'fake', reasoningEffort: 'high' }
   const newThread = engine.handlers['thread/start']!
   engine.handlers['thread/start'] = (params, connection) => {
@@ -39,6 +39,11 @@ async function setup(values?: Record<string, unknown>, harness = 'pi') {
     if (params.model) config.model = params.model
     if (params.effort) config.reasoningEffort = params.effort
     return start(params, connection)
+  }
+  engine.handlers['thread/settings/update'] = (params) => {
+    if (params.model) config.model = params.model
+    if (params.effort) config.reasoningEffort = params.effort
+    return {}
   }
   engine.handlers['thread/resume'] = (params, connection) => ({
     ...(resume(params, connection) as Record<string, unknown>),
@@ -60,22 +65,18 @@ async function setup(values?: Record<string, unknown>, harness = 'pi') {
     contact: { ...MANAGER_DEFAULT_CONTACT },
   })
   await until(() => engine.running(threadId), '经理开场')
-  return { ...env, client, manager, threadId, engine }
+  return { ...env, client, manager, threadId, engine, config }
 }
 
 test('D13：用户修改模型和强度后，看板事件沿用线程当前设置', async () => {
   const env = await setup()
   try {
     const { engine, threadId, client, manager } = env
-    assert.equal(
-      (engine.seen.filter((frame) => frame.method === 'turn/start').at(-1)?.params as any)?.effort,
-      'low',
-    )
+    assert.equal(env.config.reasoningEffort, 'low')
     engine.end(threadId, 'completed', '完成')
     await until(() => !env.device.sessionTree.isActive(threadId), '空闲')
-    await client.call('turn/start', { threadId, model: 'new-model', effort: 'high', input: [] })
-    engine.end(threadId, 'completed', '用户回合结束')
-    await until(() => !env.device.sessionTree.isActive(threadId), '用户回合停止')
+    await env.device.sessionTree.watch('pi', threadId)
+    await client.call('thread/settings/update', { threadId, model: 'new-model', effort: 'high' })
     env.device.managers.writer.tool(manager.id, 'add', {
       kind: 'decision',
       decision: { title: '继续？', background: '' },
@@ -87,9 +88,49 @@ test('D13：用户修改模型和强度后，看板事件沿用线程当前设�
     await until(() => engine.running(threadId), '事件回合')
     const request = engine.seen.filter((frame) => frame.method === 'turn/start').at(-1)
       ?.params as any
-    assert.equal(request.effort, 'high')
-    assert.equal(request.model, 'new-model')
+    assert.equal(request.effort, undefined, '事件回合由引擎沿用设置，不重写快照')
+    assert.equal(request.model, undefined)
+    assert.equal(env.config.reasoningEffort, 'high')
+    assert.equal(env.config.model, 'new-model')
   } finally {
+    await env.close()
+  }
+})
+
+test('经理事件恢复期间切换参数，不得用恢复前的快照覆盖用户刚保存的值', async () => {
+  const env = await setup()
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  try {
+    const { engine, threadId, client } = env
+    engine.end(threadId, 'completed', '完成')
+    await until(() => !env.device.sessionTree.isActive(threadId), '空闲')
+    await env.device.sessionTree.watch('pi', threadId)
+    const resume = engine.handlers['thread/resume']!
+    let waiting = false
+    engine.handlers['thread/resume'] = (params, connection) => {
+      const result = resume(params, connection)
+      const id = engine.seen.at(-1)?.id
+      waiting = true
+      void gate.then(() => connection.send({ id, result }))
+      return undefined
+    }
+    const answer = env.device.sessionTree.deliverManagerEvent(
+      threadId,
+      '隔离经理事件',
+      'settings-race',
+    )
+    await until(() => waiting, '事件回合已读取旧参数、等待恢复应答')
+    await client.call('thread/settings/update', { threadId, model: 'new-model', effort: 'high' })
+    release()
+    await answer
+    await until(() => engine.running(threadId), '事件回合')
+    assert.equal(env.config.reasoningEffort, 'high')
+    assert.equal(env.config.model, 'new-model')
+  } finally {
+    release()
     await env.close()
   }
 })

@@ -413,6 +413,7 @@ export function fakeDevice(harnesses: FakeHarness[]): {
         backwardsCursor: null,
       }
     }),
+    'thread/settings/update': byThread('thread/settings/update', () => ({})),
     'thread/resume': byThread('thread/resume', (entry, found) => {
       if (entry.archived.includes(found)) throw new RpcFailure(-32600, 'thread is archived')
       return { thread: stamp(entry, found), model: entry.models[0]?.model ?? null }
