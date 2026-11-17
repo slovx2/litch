@@ -80,10 +80,12 @@ export async function toolImagesProbe(): Promise<string[]> {
   await wait(() => !query('.tool-image-dialog'), '背景关闭')
   const group = strip.closest('.steps')!
   group.querySelector<HTMLElement>('.steps-head')!.click()
-  await wait(() => group.querySelector('.steps-body .tool-images'), '展开组后工具行小图')
-  checks(
-    group.querySelector(':scope > .tool-image-summary .tool-images') === null,
-    '展开后组条应隐藏',
+  await wait(
+    () => group.querySelector('.steps-body .tool-images')?.getClientRects().length,
+    '展开组后工具行小图',
   )
+  const summary = group.querySelector<HTMLElement>(':scope > .tool-image-summary .tool-images')
+  // 摘要保留 DOM 以维持查看器状态；验收展开后不占位，而不是要求卸载。
+  checks(!summary || summary.getClientRects().length === 0, '展开后组条应隐藏')
   return failures
 }
