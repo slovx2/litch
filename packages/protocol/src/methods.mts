@@ -125,6 +125,8 @@ import type {
   ThreadSectionUpdateParams,
   ThreadSetNameParams,
   ThreadSettingsUpdatedNotification,
+  ThreadSettingsUpdateParams,
+  ThreadSettingsUpdateResponse,
   ThreadStartedNotification,
   ThreadStartParams,
   ThreadStartResponse,
@@ -355,6 +357,10 @@ export interface ClientRequests extends AcpControlsRequests {
   'thread/turns/list': { params: ThreadTurnsListParams; result: ThreadTurnsListResponse }
   /** 载入一个会话并订阅它的事件。之后这条连接会收到它的回合、条目通知和待答复的请求 */
   'thread/resume': { params: ThreadResumeParams; result: ThreadResumeResponse }
+  'thread/settings/update': {
+    params: ThreadSettingsUpdateParams
+    result: ThreadSettingsUpdateResponse
+  }
   'thread/unsubscribe': { params: ThreadUnsubscribeParams; result: ThreadUnsubscribeResponse }
   'thread/start': {
     params: ToHarness<ThreadStartParams & WorktreeStartFields>

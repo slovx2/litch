@@ -256,6 +256,14 @@ try {
   await until(async () => (await issueCount()) === 2, '两条待审核建议')
   const sourceSuggestion = await firstIssue()
   await openCard(sourceSuggestion)
+  await wait('.mg-board [data-issue-type="suggestion"] textarea.prop-note')
+  assert.equal(
+    await read(
+      `!!document.querySelector('.mg-board [data-issue-type="suggestion"] [data-act="note-open"]')`,
+    ),
+    false,
+    '建议补充说明默认显示',
+  )
   await click('.mg-board .suggestion-row [data-act="open-source"]')
   await wait('.arch-bar')
   await call('Input.dispatchKeyEvent', {
@@ -722,9 +730,8 @@ try {
   )
   await click('[data-board-tab="requests"]')
   await openCard('R-1')
-  // 回复框默认收起：先点“回复”展开
-  if (!(await read('!!document.querySelector(\'[data-act="manager-request-text"]\')')))
-    await click('[data-act="manager-request-reply-open"]')
+  // 自由回复默认展开，不需要额外点击。
+  await wait('[data-act="manager-request-text"]')
   await fill('[data-act="manager-request-text"]', '真机复验 **通过**。')
   await click('[data-act="manager-request-deliver"]')
   await click('[data-act="manager-submit"]')
@@ -735,7 +742,7 @@ try {
     await read("document.querySelector('.mg-request-response strong')?.textContent === '通过'"),
   )
   assert.ok(await read("!!document.querySelector('.mg-request-response time[datetime][title]')"))
-  console.log('请你做：先展开回复、填写、交付与批量提交通过')
+  console.log('请你做：默认展开回复、填写、交付与批量提交通过')
   assert.equal(await read('document.querySelector(\'[data-board-tab="requests"] .pill\')'), null)
   assert.ok(
     await read(
@@ -774,13 +781,8 @@ try {
   await openDiscussion('D-15')
   await fill(question, '保留的追问草稿')
   await click('[data-issue="D-15"] [data-act="manager-edit-answer"]')
-  // 有选项的决策先展开补充说明，再验证修改与取消，不能直接填写尚未挂载的输入框。
-  if (
-    !(await read(
-      '!!document.querySelector(\'[data-decision="D-15"] [data-act="manager-answer"]\')',
-    ))
-  )
-    await click('[data-issue="D-15"] [data-act="manager-answer-open"]')
+  // 有选项的决策也默认显示补充说明。
+  await wait('[data-decision="D-15"] [data-act="manager-answer"]')
   await fill('[data-decision="D-15"] [data-act="manager-answer"]', '放弃这次答案修改')
   assert.equal(
     await read(

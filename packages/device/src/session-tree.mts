@@ -1161,9 +1161,9 @@ export class SessionTree {
           // 提卡审核不等待工作线结束，但沿用经理本身的自动唤醒保护与预算。
           if (options.automatic && (!this.canAutoWake(threadId) || (await this.longIdle(threadId))))
             return
-          // 线程设置是当前型号/强度的唯一权威，不用经理创建记录覆盖用户的选择。
-          const settings = await link.request('thread/resume', { threadId, excludeTurns: true })
-          const current = isObject(settings) ? settings : {}
+          // 恢复只负责装载线程。起回合时沿用引擎的最新设置，不能把恢复应答里的旧快照再写回去：
+          // 应答在途或回合请求排队时，用户仍可能修改型号、强度等参数。
+          await link.request('thread/resume', { threadId, excludeTurns: true })
           if (options.automatic && (!this.canAutoWake(threadId) || this.active.has(threadId)))
             return
           const prepared = options.prepare ? options.prepare() : { text, eventId }
@@ -1173,10 +1173,6 @@ export class SessionTree {
             {
               threadId,
               input: [{ type: 'text', text: prepared.text, text_elements: [] }],
-              ...(typeof current.model === 'string' ? { model: current.model } : {}),
-              ...(typeof current.reasoningEffort === 'string'
-                ? { effort: current.reasoningEffort }
-                : {}),
             },
             { restartable: !options.startOnly, beforeSend: beforeSend(prepared) },
           )

@@ -393,6 +393,7 @@ explain it:
   (Read only / In project / Full access, or the harness's own presets) and optionally turn on the
   Plan mode switch → send the
   first message. `scripts/litch open new` brings the user to this page.
+  在已有会话切换模型、推理强度、速度、权限或计划模式时，设置立即保存到会话所在设备的引擎，不需要先发送消息。后续用户消息、定时任务、子会话回报、后台任务及经理事件发起的回合都继承新设置；正在执行的回合仍遵循引擎自己的切换能力。桌面、手机、本机和远程设备使用同一规则。写入失败时显示错误并保留原设置。
   新建页开启的计划模式用于新会话的第一条消息。进入会话时按该会话的能力显示对话参数；会话未单独声明能力时沿用 harness 的能力。
   新建页进入会话时连续保留已收到的正文与提问卡，不因页面交接短暂清空；首个计划问题可直接作答。
 - **Worktrees**: on the New session page, when the project folder is in a git repository on a device

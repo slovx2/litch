@@ -90,6 +90,32 @@ export function projectSettings(
   }
 }
 
+/** 设置通知用 effort / sandboxPolicy；部分适配器共用 resume 的形状。只更新通知实际提供的字段。 */
+export function updatedSettings(
+  source: SettingsSource & { effort?: string | null; sandboxPolicy?: SandboxPolicy | null },
+  current: SessionSettings,
+  presets: readonly PermissionPreset[] | null,
+): SessionSettings {
+  const projected = projectSettings(
+    {
+      ...source,
+      reasoningEffort: source.reasoningEffort ?? source.effort ?? null,
+      sandbox: source.sandbox ?? source.sandboxPolicy ?? null,
+    },
+    presets,
+  )
+  return {
+    model: 'model' in source ? projected.model : current.model,
+    effort: 'effort' in source || 'reasoningEffort' in source ? projected.effort : current.effort,
+    speed: 'serviceTier' in source ? projected.speed : current.speed,
+    permission:
+      'activePermissionProfile' in source || 'sandboxPolicy' in source || 'sandbox' in source
+        ? projected.permission
+        : current.permission,
+    mode: projected.mode ?? current.mode,
+  }
+}
+
 export function projectModels(models: Model[]): ModelOption[] {
   return models
     .filter((model) => !model.hidden)
@@ -241,7 +267,7 @@ type TurnOverrides = Partial<
 >
 
 /**
- * 用户改过、还没告诉对面的设置，写成 turn/start 的参数。没改的不带，对面沿用它自己的。
+ * 把需要更新的设置写成 thread/settings/update 或 turn/start 共用的覆盖参数。没改的不带，引擎沿用自己的。
  * declared：这个 harness 声明了自己的权限预设。那样就只发预设的标识，配套的审批策略、沙箱由对面自己配
  * （适配器的引擎自己映射，原生 codex 由设备进程补）；没有声明时是内置的三档，审批策略要这边一起给。
  */

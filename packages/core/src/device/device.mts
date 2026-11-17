@@ -366,7 +366,7 @@ export interface Device {
   readonly organize: Organizer
   /** 加工作区时可以直接挑的目录：还没归进任何工作区的会话的工作目录，最近用过的在前 */
   rootCandidates(): string[]
-  configure(sessionId: string, settings: Partial<SessionSettings>): void
+  configure(sessionId: string, settings: Partial<SessionSettings>): Promise<void>
   /** 执行计划：退出计划模式，并以 text 这句话发起一个回合 */
   implementPlan(sessionId: string, text: string): Promise<void>
   ignoreQuestions(sessionId: string, sourceIds: string[]): Promise<void>

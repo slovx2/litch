@@ -255,6 +255,7 @@ function setup(
       if (!found) throw new RpcFailure(-32600, 'thread not found')
       return { thread: found }
     },
+    'thread/settings/update': () => ({}),
     'thread/resume': (params) => {
       const found = world.threads.find(
         (entry) => entry.id === (params as { threadId: string }).threadId,
@@ -1696,7 +1697,7 @@ test('上下文占用：对面报了才有，取最近一次请求用掉的；�
   assert.deepEqual(session.seen.view?.usage, { usedTokens: 91_000, windowTokens: null })
 })
 
-test('设置：对面报的显示出来；改了之后跟着下一个回合发一次，再往后不重复发', async () => {
+test('设置：对面报的显示出来；切换立即写入，不依赖用户发消息', async () => {
   const { core, command, sent } = setup()
   core.start()
   await settle()
@@ -1726,7 +1727,7 @@ test('设置：对面报的显示出来；改了之后跟着下一个回合发�
   assert.equal(sent('turn/start').length, 0)
 
   await command('session.send', { ...where, text: '一' })
-  const first = sent('turn/start')[0] as Record<string, unknown>
+  const first = sent('thread/settings/update')[0] as Record<string, unknown>
   assert.equal(first.effort, 'high')
   // 标准速度明着发 default：不发的话用的是模型自己的默认档（这个模型默认是快速）
   assert.equal(first.serviceTier, 'default')
@@ -1737,7 +1738,7 @@ test('设置：对面报的显示出来；改了之后跟着下一个回合发�
   assert.equal('model' in first, false)
 })
 
-test('设置：发出去之后的回合不再带；没发成功的下次接着带', async () => {
+test('设置：写入成功后，用户回合即使发送失败也不重新覆盖会话设置', async () => {
   const { core, world, peer, command, sent } = setup()
   core.start()
   await settle()
@@ -1753,7 +1754,7 @@ test('设置：发出去之后的回合不再带；没发成功的下次接着�
   await command('session.send', { ...where, text: '三' })
   assert.deepEqual(
     sent('turn/start').map((params) => (params as { model?: string }).model),
-    ['gate/plain', 'gate/plain', undefined],
+    [undefined, undefined, undefined],
   )
 })
 

@@ -160,7 +160,7 @@ try {
       ['D-2', 'D-5'],
     )
     assert.equal(
-      // 有选项的决策清空后补充说明收起，输入框不在或为空都算清空
+      // 提交后清空草稿，默认显示的输入框保持可继续输入
       await read(
         `document.querySelector('[data-testid="manager-issue:D-3"] textarea')?.value ?? ''`,
       ),
@@ -235,8 +235,12 @@ try {
       await read(`document.querySelectorAll('[data-testid="relation:/outside/STORE.md"]').length`),
       1,
     )
-    // 回复框默认收起：点“回复”展开后再点进输入框，两者都不应收起卡片
-    await click('[data-testid="request-reply-open:R-2"]')
+    // 回复框默认显示，点进输入框不应收起卡片
+    assert.equal(
+      await read(`!!document.querySelector('[data-testid="request-reply-open:R-2"]')`),
+      false,
+      '回复默认展开',
+    )
     await click('[data-testid="manager-issue:R-2"] textarea')
     assert.equal(await read(`!!document.querySelector('[data-testid="manager-issue:R-2"]')`), true)
     const returnState = () =>
@@ -296,8 +300,14 @@ try {
       assert.ok(Math.abs(before - observed.headerY) < 2, '展开保持卡头位置')
       assert.deepEqual(observed.order, ['R-1', 'R-2', 'R-3'])
       assert.equal(observed.links, 1, '同一链接只显示一次')
-      // 回复框默认收起：点“回复”展开后再点进输入框，两者都不应收起卡片
-      await click('[data-manager-request="R-2"] [data-act="manager-request-reply-open"]')
+      // 回复框默认显示，点进输入框不应收起卡片
+      assert.equal(
+        await read(
+          `!!document.querySelector('[data-manager-request="R-2"] [data-act="manager-request-reply-open"]')`,
+        ),
+        false,
+        '回复默认展开',
+      )
       await click('[data-manager-request="R-2"] textarea')
       assert.equal(
         await read(

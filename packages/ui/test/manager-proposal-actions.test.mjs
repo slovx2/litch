@@ -74,6 +74,11 @@ test('卡片仍可修改工作树：预检期间只禁用开始，不禁用开�
 })
 
 for (const inbox of [false, true]) {
+  test(`建议的自由文本补充默认可见 inbox=${inbox}`, () => {
+    const html = module.exports.render(true, inbox)
+    assert.match(html, /<textarea[^>]*class="req-input prop-note"/)
+    assert.doesNotMatch(html, /data-act="note-open"/)
+  })
   test(`对话/侧栏与看板共用按钮 inbox=${inbox}：经理保留开始、编辑和忽略，普通卡还可原地执行`, () => {
     const actions = (sourceIsManager) =>
       [

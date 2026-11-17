@@ -155,7 +155,7 @@ export function ProposalActsRow({
   tail?: ReactNode
   blocked?: string | null
   explain?: boolean
-  /** 经理看板里：补充说明默认收起，点“补充说明”展开（同决策卡） */
+  /** 可选收起补充说明；默认直接显示输入框。 */
   noteFold?: boolean
   /** 建议列表与经理看板：在来源会话里做（同桌面） */
   inbox?: boolean

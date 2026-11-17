@@ -1510,6 +1510,7 @@ export const zhCN = {
   'session.switchCancelled': '操作已取消，未切换供应商。',
   'session.switchTimeout': '等待压缩完成超时，未切换供应商。',
   'session.switchBusy': '正在等待压缩完成，请稍后再试。',
+  'session.settingsModelUnknown': '当前模型未知，请先选择模型再切换模式。',
   'composer.switch.title': '切换供应商',
   'composer.switch.note':
     '先压缩上下文再切换，可减少切换后重新处理历史消息的费用。压缩使用当前供应商，成功后再切换。',

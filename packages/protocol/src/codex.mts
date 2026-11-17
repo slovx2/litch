@@ -140,6 +140,8 @@ export type { ThreadSectionMoveParams } from '../../../protocol/codex-app-server
 export type { ThreadSectionUpdateParams } from '../../../protocol/codex-app-server/0.163.0/typescript/v2/ThreadSectionUpdateParams'
 export type { ThreadSetNameParams } from '../../../protocol/codex-app-server/0.163.0/typescript/v2/ThreadSetNameParams'
 export type { ThreadSettingsUpdatedNotification } from '../../../protocol/codex-app-server/0.163.0/typescript/v2/ThreadSettingsUpdatedNotification'
+export type { ThreadSettingsUpdateParams } from '../../../protocol/codex-app-server/0.163.0/typescript/v2/ThreadSettingsUpdateParams'
+export type { ThreadSettingsUpdateResponse } from '../../../protocol/codex-app-server/0.163.0/typescript/v2/ThreadSettingsUpdateResponse'
 export type { ThreadStartedNotification } from '../../../protocol/codex-app-server/0.163.0/typescript/v2/ThreadStartedNotification'
 export type { ThreadStartParams } from '../../../protocol/codex-app-server/0.163.0/typescript/v2/ThreadStartParams'
 export type { ThreadStartResponse } from '../../../protocol/codex-app-server/0.163.0/typescript/v2/ThreadStartResponse'
