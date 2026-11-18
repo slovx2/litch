@@ -79,7 +79,7 @@ export function FileCard({
     setState(next)
     if (next === 'cleaned') return
     if (!targetId) {
-      setError(t('attachment.desktopRequired'))
+      setError(t(file.client ? 'attachment.desktopRequired' : 'attachment.noDevice'))
       return
     }
     if (!root) {

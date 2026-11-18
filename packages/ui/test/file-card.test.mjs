@@ -18,6 +18,7 @@ async function renderFileCard(path) {
   const values = {
     attachmentDetail: '()=>"PDF · 1 KB"',
     attachmentState: 'async()=>globalThis.__attachmentNext',
+    normalizePath: 'path=>path',
     useEffect: '()=>{}',
     useState:
       'x=>[x==="unknown"?globalThis.__attachmentShown:x,v=>{globalThis.__attachmentUpdated=v}]',
@@ -65,6 +66,7 @@ async function renderFileCard(path) {
       },
     ],
   })
+
   return (
     await import(
       `data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString('base64')}`
@@ -85,6 +87,25 @@ const words = (n) =>
       : Array.isArray(n)
         ? n.map(words).join('')
         : words(n.props?.children)
+
+test('桌面缺少会话设备上下文不误报文件来自其他电脑；控制端专有路径仍说明原电脑', async () => {
+  const render = await renderFileCard(
+    new URL('../src/transcript/FileCard.tsx', import.meta.url).pathname,
+  )
+  globalThis.__attachmentShown = 'unknown'
+  globalThis.__attachmentNext = 'unknown'
+  for (const client of [false, true]) {
+    const tree = render({ file: { kind: 'file', path: '/files/a.xls', client } })
+    const button = nodes(tree).find((n) => n.type === 'button')
+    button.props.onClick()
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(
+      globalThis.__attachmentUpdated,
+      client ? 'attachment.desktopRequired' : 'attachment.noDevice',
+    )
+  }
+})
+
 for (const [platform, path] of [
   ['desktop', new URL('../src/transcript/FileCard.tsx', import.meta.url).pathname],
   ['mobile', new URL('../../../apps/mobile/src/detail/FileCard.tsx', import.meta.url).pathname],
