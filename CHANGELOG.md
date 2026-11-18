@@ -7,6 +7,20 @@ versioning or publishing metadata.
 
 ## 未发布
 
+## 0.44.1（2026-11-18）
+
+### 中文
+
+- 切换推理级别、模型等会话参数后立即保存生效，定时任务、回报唤醒等回合不再覆盖为旧值。
+- 经理 Console 中决策、请你做和建议的回复框默认展开。
+- 修复历史较多的设备上 Claude Code 启动超时失败的问题；设备列表中卡在启动中、启动失败或已停止的 harness 可直接重启。
+
+### English
+
+- Changes to reasoning effort, model, and other session settings now take effect immediately. Scheduled tasks and wake-ups from reports no longer restore older values.
+- Reply fields for decisions, requests, and suggestions are now expanded by default in the manager Console.
+- Fixed Claude Code startup timing out on devices with large histories. Restart a harness directly from the device list when it is stuck starting, fails to start, or has stopped.
+
 ## 0.44.0（2026-11-16）
 
 ### 中文
