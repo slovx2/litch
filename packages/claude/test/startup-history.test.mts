@@ -175,6 +175,58 @@ test('恢复只修正启动前的残留；新回合和重新写入的历史保�
   }
 })
 
+for (const action of ['read', 'append', 'update']) {
+  test(`逐条${action}先修正旧历史，不能清掉启动后新增的后台活动`, async () => {
+    const stage = await openStage(`startup-items-${action}`)
+    try {
+      const client = await stage.connect('fixture')
+      const { thread } = await client.request('thread/start', { cwd: stage.directory })
+      stage.store.upsertTurn({
+        id: 'terminal',
+        threadId: thread.id,
+        status: 'completed',
+        startedAt: 1,
+        completedAt: 2,
+        durationMs: 1000,
+        diff: '',
+        error: null,
+        items: [
+          { type: 'subAgentActivity', id: 'old', kind: 'started' },
+          { type: 'agentMessage', id: 'tail', text: '旧历史' },
+        ] as any,
+      })
+      stage.store.recoverStaleInProgressTurns()
+      if (action === 'read') {
+        assert.equal(stage.store.getItem('terminal', 'old'), null)
+      } else {
+        if (action === 'append')
+          stage.store.appendItem('terminal', {
+            type: 'subAgentActivity',
+            id: 'fresh',
+            kind: 'started',
+          } as any)
+        else
+          stage.store.updateItem(
+            'terminal',
+            'tail',
+            () => ({ type: 'subAgentActivity', id: 'tail', kind: 'started' }) as any,
+          )
+        const items = stage.store.getTurn('terminal')?.items
+        assert.equal(
+          items?.some((item) => item.id === 'old'),
+          false,
+        )
+        assert.equal(
+          kindOf(items?.find((item) => item.id === (action === 'append' ? 'fresh' : 'tail'))),
+          'started',
+        )
+      }
+    } finally {
+      await stage.dispose()
+    }
+  })
+}
+
 test('活动回合与线程状态仍在启动时收尾；失败工具不得伪造成功或重放', async () => {
   const stage = await openStage('startup-active')
   try {

@@ -1143,8 +1143,17 @@ export class SessionStore {
   private liveTurn(turnId: string): LiveTurn | null {
     const cached = this.live.get(turnId)
     if (cached) return cached
-    const row = this.db.prepare('SELECT items_json FROM turns WHERE id = ?').get(turnId)
+    const recovering = this.recoveryItems.has(turnId)
+    const row = this.db
+      .prepare(
+        recovering
+          ? 'SELECT * FROM turns WHERE id = ?'
+          : 'SELECT items_json FROM turns WHERE id = ?',
+      )
+      .get(turnId)
     if (!row) return null
+    // 逐条读取和修改也属于首次访问：先修正旧残留，再写入本进程的新后台活动。
+    if (recovering) this.recoverTurnItems(row)
     const items = JSON.parse(String(row.items_json)) as ThreadItem[]
     const changes = this.db
       .prepare(
@@ -2126,7 +2135,7 @@ export class SessionStore {
     }
   }
 
-  private rowToTurn(row: any): TurnRecord {
+  private recoverTurnItems(row: any): void {
     const id = String(row.id)
     if (this.recoveryItems.has(id)) {
       const status = String(row.status) as TurnStatus
@@ -2144,6 +2153,10 @@ export class SessionStore {
       }
       this.recoveryItems.delete(id)
     }
+  }
+
+  private rowToTurn(row: any): TurnRecord {
+    this.recoverTurnItems(row)
     return {
       id: String(row.id),
       threadId: String(row.thread_id),
