@@ -9,6 +9,7 @@ import { CjkEmphasisPreview } from './preview/CjkEmphasis.web.tsx'
 import { CollapsedTurnPreview } from './preview/CollapsedTurn.web.tsx'
 import { ComposeStatePreview } from './preview/ComposeState.web.tsx'
 import { applyPrefs, runScene } from './preview/frame.web.ts'
+import { HarnessRecoveryPreview } from './preview/HarnessRecovery.web.tsx'
 import { PreviewIndex } from './preview/Index.web.tsx'
 import { ManagerEventsPreview } from './preview/ManagerEvents.web.tsx'
 import { ManagerResetPreviewScreen } from './preview/ManagerReset.web.tsx'
@@ -48,6 +49,8 @@ function PreviewApp() {
 }
 
 export default function Root() {
+  if (inFrame && params.get('scene') === 'harness-recovery')
+    return <HarnessRecoveryPreview params={params} />
   if (inFrame && params.get('scene') === 'manager-reset')
     return <ManagerResetPreviewScreen params={params} />
   if (inFrame && params.get('scene') === 'board-actions') return <BoardActionsPreview />

@@ -179,6 +179,15 @@ Deferred tools are listed by namespace in the system prompt and can be discovere
 
 ## Enabling, disabling, restarting
 
+桌面和手机的设备页中，正在启动、启动失败或已停止的引擎会直接显示“重启”，不必先进入运行设置。
+正在启动且长时间没有进展时可重试；启动失败时先查看同处显示的具体原因。设备必须保持连接。
+若仍有回合运行，首次点击只显示确认框；确认后才强制重启，取消不会中断工作。本机和远程设备规则相同。
+
+Desktop and mobile device pages show **Restart** directly for starting, failed, or stopped engines.
+Retry if startup stops progressing, or resolve the displayed failure first. The device must be connected.
+If a turn is still running, Litch asks before forcing a restart; cancelling leaves it running.
+This applies to both local and remote devices.
+
 `scripts/litch harness auto-title <device>` reads Litch's automatic naming switch for new Codex
 sessions. Append `on` or `off` to change it. In the UI: Settings → the device → Codex → Config →
 Name sessions automatically. This does not rename existing sessions or change Codex's native settings.

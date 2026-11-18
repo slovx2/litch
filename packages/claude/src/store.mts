@@ -125,6 +125,9 @@ export class SessionStore {
   private statusQuery: StatusQuery | null = null
   /** 记条目改动的语句，头一次记的时候备好 */
   private logStatement: LogStatement | null = null
+  /** 启动前已结束、尚未按需检查条目终态的回合；新回合的后台活动不能被当作崩溃残留。 */
+  private recoveryItems = new Set<string>()
+  private recoveryMessage = 'server restarted before completing turn'
 
   constructor(path = join(adapterHome(), 'state.sqlite')) {
     assertStoreFormat(path)
@@ -1093,6 +1096,7 @@ export class SessionStore {
         turn.diff,
         turn.error == null ? null : JSON.stringify(turn.error),
       )
+    this.recoveryItems.delete(turn.id)
   }
 
   getTurn(id: string): TurnRecord | null {
@@ -1857,6 +1861,7 @@ export class SessionStore {
   }
 
   recoverStaleInProgressTurns(message = 'server restarted before completing turn'): number {
+    this.recoveryMessage = message
     this.flushAll()
     const hooks = this.db.prepare('SELECT DISTINCT turn_id FROM hook_runs').all() as Array<{
       turn_id: string
@@ -1910,47 +1915,13 @@ export class SessionStore {
     for (const threadId of seenThreads) {
       updateThread.run(JSON.stringify({ type: 'idle' }), completedAt, threadId)
     }
+    // 已结束的历史只登记标识，真正读取该回合时再修正条目。启动不能为几千个历史回合
+    // 读取、解析和重写数百 MB 正文，否则会在运行时监听之前耗尽宿主的启动时限。
     const terminalRows = this.db
-      .prepare('SELECT id, thread_id, status, items_json FROM turns WHERE status <> ?')
-      .all('inProgress') as Array<{
-      id: string
-      thread_id: string
-      status: TurnStatus
-      items_json: string
-    }>
-    const updateItems = this.db.prepare('UPDATE turns SET items_json = ? WHERE id = ?')
-    const repairThreadIds = new Set<string>()
-    for (const row of terminalRows) {
-      // A successful legacy Codex cc turn may contain only a
-      // `subAgentActivity: started` marker. Remove that optional marker during
-      // recovery so the canonical spawnAgent/wait terminal state is used and
-      // a cold-opened child cannot be revived as working.
-      const itemsJson = this.terminalizeStaleItems(
-        row.items_json,
-        message,
-        row.status !== 'completed',
-        row.status === 'completed',
-        this.uncertainToolIds(row.thread_id),
-        row.status,
-      )
-      if (itemsJson === row.items_json) continue
-      updateItems.run(itemsJson, row.id)
-      repairThreadIds.add(String(row.thread_id))
-      recoveredCount += 1
-    }
-    const reconcileThread = this.db.prepare(
-      `UPDATE threads SET status_json = ?, updated_at = ?
-       WHERE id = ?
-         AND NOT EXISTS (SELECT 1 FROM turns WHERE thread_id = threads.id AND status = ?)`,
-    )
-    for (const threadId of repairThreadIds) {
-      reconcileThread.run(JSON.stringify({ type: 'idle' }), completedAt, threadId, 'inProgress')
-    }
-    // A crash can land between completeTurn() and the following
-    // setThreadStatus(..., idle). In that window every turn is already
-    // terminal, so the item JSON is unchanged and the repairThreadIds path
-    // above has nothing to trigger. Reconcile those active threads directly;
-    // never touch a thread that still owns an in-progress turn.
+      .prepare('SELECT id FROM turns WHERE status <> ?')
+      .all('inProgress') as Array<{ id: string }>
+    this.recoveryItems = new Set(terminalRows.map((row) => String(row.id)))
+    // 崩溃可能发生在完成回合与更新线程状态之间。只对账状态元数据，不读取已结束历史的正文。
     const reconcileTerminalActiveThreads = this.db.prepare(
       `UPDATE threads SET status_json = ?, updated_at = ?
        WHERE json_extract(status_json, '$.type') = 'active'
@@ -2156,6 +2127,23 @@ export class SessionStore {
   }
 
   private rowToTurn(row: any): TurnRecord {
+    const id = String(row.id)
+    if (this.recoveryItems.has(id)) {
+      const status = String(row.status) as TurnStatus
+      const itemsJson = this.terminalizeStaleItems(
+        String(row.items_json),
+        this.recoveryMessage,
+        status !== 'completed',
+        status === 'completed',
+        this.uncertainToolIds(String(row.thread_id)),
+        status,
+      )
+      if (itemsJson !== row.items_json) {
+        this.db.prepare('UPDATE turns SET items_json=? WHERE id=?').run(itemsJson, id)
+        row.items_json = itemsJson
+      }
+      this.recoveryItems.delete(id)
+    }
     return {
       id: String(row.id),
       threadId: String(row.thread_id),

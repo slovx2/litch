@@ -326,13 +326,13 @@ export const zhCN = {
   'harness.next.unreachable': '设备服务会自动重试。如果一直无法连接，请在其运行设置中重启。',
   'harness.next.handshakeFailed': '会自动重试。如果一直失败，请在其运行设置中重启。',
   'harness.next.disconnected': '正在自动重连。',
-  'harness.next.starting': '启动后即可使用。',
+  'harness.next.starting': '启动完成后即可使用；若长时间没有进展，可重启此引擎。',
   'harness.next.disabled': '在其运行设置中重新启用。',
   'harness.next.notInstalled':
     '在此设备上安装其命令行工具，然后在其运行设置中重启；如果安装在其他位置，请在运行设置中填写路径。',
   'harness.next.versionTooLow': '在此设备上升级其命令行工具，然后在其运行设置中重启。',
-  'harness.next.startFailed': '按设备给出的原因处理后，在其运行设置中重启。',
-  'harness.next.stopped': '在其运行设置中重启。如果反复退出，请查看设备页的诊断。',
+  'harness.next.startFailed': '按设备给出的原因处理后，重启此引擎。',
+  'harness.next.stopped': '请重启此引擎；若反复退出，请查看设备页的诊断。',
   'harness.next.other': '在设置中选择设备及对应的 harness，查看其状态。',
 
   'devices.title': '设备',

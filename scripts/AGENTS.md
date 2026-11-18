@@ -112,6 +112,10 @@ plain `.mjs` / shell.
 
 `npm run client:check:manager-mobile` 先生成手机 WebView 资源，再自动分配空闲端口，启动本工作树的隔离 Expo 预览并运行正式页面验收，结束或中断时清理自有进程。需要先安装 `apps/mobile` 依赖和隔离 Chrome for Testing（可用 `LITCH_CHROME_BINARY` 指定）。入口是 `check-manager-mobile-run.mjs`，生命周期实现与单测在 `manager-mobile-runner*`；不设置 `CI=1`，不改现有服务器或工作树配置。
 
+## 引擎启动恢复验收
+
+`node scripts/check-harness-recovery.mjs [Expo 预览 URL] [截图目录]` 使用正式设备列表与隔离核心，验证启动中、启动失败和停止时的直接重启、忙中取消及 force 确认；传 Expo URL 时同时验手机。Claude 大历史启动及按需修复的定向回归在 `packages/claude/test/startup-history.test.mts`，按包内说明编译并预加载隔离环境。
+
 ## Windows Codex 启动锁权限
 
 `repair-codex-control-windows.ps1` 显式指定 Codex 数据目录和备份目录，默认只读预览，`-Apply` 才收紧闲置启动锁目录的权限；边界与操作见产品手册 troubleshooting。定向回归 `test-repair-codex-control-windows.ps1 -FixtureDirectory <不存在的隔离绝对路径>`。两份脚本保留 UTF-8 BOM，供 Windows PowerShell 5.1 正确读取中文注释。

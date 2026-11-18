@@ -336,15 +336,15 @@ export const en: Record<MessageKey, Entry> = {
   'harness.next.handshakeFailed':
     'It retries automatically. If it keeps failing, restart it in its Runtime settings.',
   'harness.next.disconnected': 'Reconnecting automatically.',
-  'harness.next.starting': 'Available once started.',
+  'harness.next.starting':
+    'Available once started. Restart the engine if startup stops progressing.',
   'harness.next.disabled': 'Turn it back on in its Runtime settings.',
   'harness.next.notInstalled':
     'Install its CLI on this device, then restart it in its Runtime settings. If it’s installed elsewhere, set its path there.',
   'harness.next.versionTooLow':
     'Upgrade its CLI on this device, then restart it in its Runtime settings.',
-  'harness.next.startFailed': 'Fix the reported issue, then restart it in its Runtime settings.',
-  'harness.next.stopped':
-    'Restart it in its Runtime settings. If it keeps exiting, check the device diagnostics.',
+  'harness.next.startFailed': 'Fix the reported issue, then restart the engine.',
+  'harness.next.stopped': 'Restart the engine. If it keeps exiting, check the device diagnostics.',
   'harness.next.other': 'Select the device and harness in Settings to check its status.',
 
   'devices.title': 'Devices',
