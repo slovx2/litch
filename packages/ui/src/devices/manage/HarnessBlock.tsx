@@ -1,4 +1,4 @@
-// 设备页每个 harness 只有一行入口与状态；独立详情页显示安装、重启、运行信息和设置。
+// 设备页列入口与状态，启动异常时直接提供重启；独立详情页显示安装、运行信息和设置。
 import type { DeviceView, HarnessView, InstallTopicView } from '@litch/core'
 import { type ReactNode, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
@@ -10,11 +10,12 @@ import { showToast } from '../../app/toasts.tsx'
 import { InstallRow } from '../../install/InstallRow.tsx'
 import { cliPresentation } from '../cli-presentation.ts'
 import { HarnessWhy } from '../HarnessList.tsx'
+import { harnessRecoveryAvailable } from '../harness-failure.ts'
 import { RepairCodexControl } from './RepairCodexControl.tsx'
 
 const STATE_CLASS: Record<HarnessView['state'], string> = {
   ready: 'pill ok',
-  // 设备服务会自己接着试，所以按“在等”的样子画，不按出错画
+  // 不可用包含启动中，具体原因与恢复操作另行显示。
   unavailable: 'pill wait',
   disabled: 'pill mute',
 }
@@ -91,7 +92,18 @@ export function HarnessBlock(props: HarnessBlockProps) {
     }
   }
 
-  // 设备页只保留可进入的整行；安装、启停和运行信息都在独立详情页。
+  const confirmation = asking ? (
+    <Confirm
+      title={t('manage.restart.busy.title', { name })}
+      note={t('manage.restart.busy.note')}
+      yes={t('manage.restart.busy.yes')}
+      no={t('manage.restart.busy.no')}
+      onYes={() => void restart(true)}
+      onClose={() => setAsking(false)}
+    />
+  ) : null
+
+  // 设备页保留可进入的整行；启动异常的恢复入口不能藏在独立详情页。
   if (!detail) {
     const version = install?.versions?.find((entry) => entry.harness === harnessId)
     return (
@@ -101,6 +113,7 @@ export function HarnessBlock(props: HarnessBlockProps) {
         data-state={harness?.state ?? 'unknown'}
         data-pending={pending}
         data-open={false}
+        data-restarting={restarting}
       >
         <button
           type="button"
@@ -127,12 +140,22 @@ export function HarnessBlock(props: HarnessBlockProps) {
           ) : null}
           <Forward />
         </button>
-        {harness?.state === 'unavailable' && harness.down === 'startFailed' ? (
+        {harnessRecoveryAvailable(harness) && harness ? (
           <div className="mng-h-why">
             <HarnessWhy harness={harness} />
+            <button
+              type="button"
+              className="btn ghost"
+              data-act="restart"
+              disabled={restarting || device.connection !== 'online'}
+              onClick={() => void restart(false)}
+            >
+              {t(restarting ? 'manage.restarting' : 'manage.restart')}
+            </button>
           </div>
         ) : null}
         <RepairCodexControl deviceId={deviceId} harness={harness} />
+        {confirmation}
       </section>
     )
   }
@@ -247,16 +270,7 @@ export function HarnessBlock(props: HarnessBlockProps) {
         </div>
       ) : null}
       <RepairCodexControl deviceId={deviceId} harness={harness} />
-      {asking ? (
-        <Confirm
-          title={t('manage.restart.busy.title', { name })}
-          note={t('manage.restart.busy.note')}
-          yes={t('manage.restart.busy.yes')}
-          no={t('manage.restart.busy.no')}
-          onYes={() => void restart(true)}
-          onClose={() => setAsking(false)}
-        />
-      ) : null}
+      {confirmation}
     </section>
   )
 }

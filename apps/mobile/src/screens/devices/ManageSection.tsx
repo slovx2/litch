@@ -1,5 +1,5 @@
 // 设备详情里的 harness 与设置：开着这一页才订阅这台设备的管理数据（replica.openManage，manage 主题）。
-// 设备页的 harness 只列名称、状态与整行入口；进入独立页面才显示启用、重启和运行设置。
+// 设备页列名称、状态与入口，启动异常时直接提供重启；独立页面显示启用和运行设置。
 // 设备级的设置按分组各一块。改了的先记草稿，一块一个“保存”，一次写入全有或全无；
 // 别处先改过了（版本号对不上）就不写，换成最新的值并说明。要重启才生效的，标出待重启，由用户点“重启”。
 // 声明了 harnessConfig 的 harness 在独立页增加配置、账号等标签（hconfig/）。
@@ -21,7 +21,10 @@ import { type ReactNode, useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { cliPresentation } from '../../../../../packages/ui/src/devices/cli-presentation.ts'
-import { harnessFailureText } from '../../../../../packages/ui/src/devices/harness-failure.ts'
+import {
+  harnessFailureText,
+  harnessRecoveryAvailable,
+} from '../../../../../packages/ui/src/devices/harness-failure.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useBusy, useChannel, useKey, useReplica } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
@@ -246,6 +249,7 @@ function HarnessHead({
     }
   }
   const restart = async (force: boolean) => {
+    setBusyAsk(false)
     setSaid(null)
     try {
       const result = await runRestart(
@@ -279,6 +283,24 @@ function HarnessHead({
       })
     }
   }
+  const feedback = (
+    <>
+      {said ? (
+        <Text style={[styles.note, { color: said.bad ? theme.c.err : theme.c.ok }]}>
+          {said.text}
+        </Text>
+      ) : null}
+      <Confirm
+        visible={busyAsk}
+        danger
+        title={t('manage.restart.busy.title', { name: t.harness(harness.id, harness.name) })}
+        detail={t('manage.restart.busy.note')}
+        confirmLabel={t('manage.restart.busy.yes')}
+        onConfirm={() => void restart(true)}
+        onClose={() => setBusyAsk(false)}
+      />
+    </>
+  )
   if (!detail) {
     return (
       <View>
@@ -299,7 +321,7 @@ function HarnessHead({
             })
           }
         />
-        {harness.down === 'startFailed' && harnessFailureText(harness, t) ? (
+        {harnessRecoveryAvailable(harness) && harnessFailureText(harness, t) ? (
           <Text
             selectable
             testID={`harness:${harness.id}:failure`}
@@ -311,7 +333,19 @@ function HarnessHead({
             {harnessFailureText(harness, t)}
           </Text>
         ) : null}
+        {harnessRecoveryAvailable(harness) ? (
+          <View style={styles.note}>
+            <Button
+              label={t('manage.restart')}
+              busy={restarting}
+              disabled={restarting}
+              testID={`harness:${harness.id}:restart`}
+              onPress={() => void restart(false)}
+            />
+          </View>
+        ) : null}
         <RepairCodexControl deviceId={deviceId} harness={harness} />
+        {feedback}
       </View>
     )
   }
@@ -422,21 +456,8 @@ function HarnessHead({
           {t('manage.pending.note', { name: t.harness(harness.id, harness.name) })}
         </Text>
       ) : null}
-      {said ? (
-        <Text style={[styles.note, { color: said.bad ? theme.c.err : theme.c.ok }]}>
-          {said.text}
-        </Text>
-      ) : null}
+      {feedback}
       <RepairCodexControl deviceId={deviceId} harness={harness} />
-      <Confirm
-        visible={busyAsk}
-        danger
-        title={t('manage.restart.busy.title', { name: t.harness(harness.id, harness.name) })}
-        detail={t('manage.restart.busy.note')}
-        confirmLabel={t('manage.restart.busy.yes')}
-        onConfirm={() => void restart(true)}
-        onClose={() => setBusyAsk(false)}
-      />
     </View>
   )
 }
