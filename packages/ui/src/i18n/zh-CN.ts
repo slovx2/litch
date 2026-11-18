@@ -1566,6 +1566,7 @@ export const zhCN = {
   'composer.file.uploading': '正在添加文件…',
   'attachment.cleaned': '已清理',
   'attachment.desktopRequired': '请在上传此文件的电脑上打开。',
+  'attachment.noDevice': '无法确定文件所属设备，请重新打开此会话。',
   'attachment.noRoot': '无法确定文件所属目录。',
   'compose.addFile': '添加文件',
   'composer.attach.inline': '添加图片或文件',

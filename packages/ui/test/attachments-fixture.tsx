@@ -4,17 +4,23 @@ import {
   createMockCore,
   createPortPair,
   createReplica,
+  type FileLinkFailure,
+  type HostSink,
   localUserMessage,
+  type OutgoingMessage,
   parentPath,
+  projectThread,
   serveChannel,
   type UserMessageItem,
 } from '@litch/core'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import { toInput } from '../../core/src/projection/outgoing.mts'
+import type { Thread } from '../../protocol/src/index.mts'
 import { ServicesProvider } from '../src/app/services.tsx'
 import { Composer } from '../src/composer/Composer.tsx'
 import { treeKey, treeUiNow } from '../src/files/state.ts'
-import { UserAttachments } from '../src/transcript/messages.tsx'
+import { UserMessage } from '../src/transcript/messages.tsx'
 import '../src/styles/index.css'
 
 const clock = {
@@ -27,17 +33,62 @@ const clock = {
 const mock = createMockCore({ clock })
 const [client, server] = createPortPair()
 let cleaned = false
-let resolves = 0
+const resolves: { deviceId: string; root: string; ref: { path: string } }[] = []
+let failure: FileLinkFailure | null = null
+let sink: HostSink | null = null
+let currentDevice = 'local'
+const sessionId = 'attachments-fixture'
+const project = (message: OutgoingMessage) =>
+  projectThread(
+    {
+      id: sessionId,
+      cwd: '/fixtures',
+      turns: [
+        {
+          id: 't',
+          status: 'completed',
+          error: null,
+          items: [{ id: 'u', type: 'userMessage', content: toInput(message, false) }],
+        },
+      ],
+    } as unknown as Thread,
+    { deviceId: currentDevice, harness: 'codex' },
+  )
+let view = project({ text: '', images: [], extras: [] })
 serveChannel(
   server,
   {
     command(name, args, signal) {
       if (name === 'files.attachmentStatus' && cleaned)
         return Promise.resolve({ state: 'cleaned' }) as never
-      if (name === 'files.resolve') resolves++
+      if (name === 'files.resolve') {
+        const request = args as (typeof resolves)[number]
+        resolves.push(request)
+        if (failure || request.ref.path.startsWith('/fixtures/native/')) {
+          return Promise.resolve({
+            status: failure ? 'failed' : 'ready',
+            href: request.ref.path,
+            path: request.ref.path,
+            attempted: [request.ref.path],
+            candidates: failure
+              ? []
+              : [{ root: request.root, path: request.ref.path, kind: 'file' }],
+            failures: failure ? [{ path: request.ref.path, reason: failure }] : [],
+          }) as never
+        }
+      }
       return mock.command(name, args, signal)
     },
-    subscribe: (topic, sink) => mock.subscribe(topic, sink),
+    subscribe(topic, receiver) {
+      if (topic.kind === 'session' && topic.sessionId === sessionId) {
+        sink = receiver
+        receiver.snapshot(view)
+        return () => {
+          sink = null
+        }
+      }
+      return mock.subscribe(topic, receiver)
+    },
   },
   { clock },
 )
@@ -46,21 +97,48 @@ const replica = createReplica(channel)
 replica.start()
 window.__litchLook?.set({ lang: 'zh-CN', skin: 'standard' })
 let sent: UserMessageItem | null = null
+let show = (_deviceId: string, _message: OutgoingMessage) => {}
+let remount = () => {}
 Object.assign(window, {
   __attachments: {
     sent: () => sent,
     expire: () => {
       cleaned = true
     },
-    resolves: () => resolves,
+    resolves: () => resolves.length,
+    requests: () => resolves,
+    remount: () => remount(),
+    fail: (reason: FileLinkFailure | null) => {
+      failure = reason
+    },
+    show: (deviceId: string, message: OutgoingMessage) => show(deviceId, message),
+    upload: (deviceId: string) =>
+      channel.command('files.uploadAttachment', {
+        deviceId,
+        name: '11.04 明细 比价(1)(1).xls',
+        dataBase64: btoa('isolated fixture'),
+      }),
     opened: () => {
       const file = sent?.attachments[0]
-      return file?.path ? treeUiNow(treeKey('local', parentPath(file.path)!)) : null
+      const target = resolves.at(-1)
+      return file?.path && target
+        ? treeUiNow(treeKey(target.deviceId, parentPath(file.path)!))
+        : null
     },
   },
 })
 function Fixture() {
-  const [message, setMessage] = useState<UserMessageItem | null>(null)
+  const [scene, setScene] = useState({ deviceId: 'local', shown: false, generation: 0 })
+  useEffect(() => replica.openSession(scene.deviceId, sessionId), [scene.deviceId])
+  show = (deviceId, message) => {
+    cleaned = false
+    currentDevice = deviceId
+    sent = localUserMessage('u', message, false)
+    view = project(message)
+    if (scene.deviceId === deviceId) sink?.snapshot(view)
+    setScene((old) => ({ ...old, deviceId, shown: true, generation: old.generation + 1 }))
+  }
+  remount = () => setScene((old) => ({ ...old, generation: old.generation + 1 }))
   return (
     <ServicesProvider value={{ channel, replica, shell: 'browser' }}>
       <main
@@ -73,11 +151,13 @@ function Fixture() {
           boxSizing: 'border-box',
         }}
       >
-        {message ? (
-          <div className="umsg">
-            <UserAttachments attachments={message.attachments} deviceId="local" />
-            <div>{message.text}</div>
-          </div>
+        {scene.shown ? (
+          <UserMessage
+            key={scene.generation}
+            deviceId={scene.deviceId}
+            sessionId={sessionId}
+            itemId="t:u"
+          />
         ) : null}
         <Composer
           deviceId="local"
@@ -92,8 +172,7 @@ function Fixture() {
           settings={{ model: null, effort: null, speed: null, permission: null, mode: null }}
           onSettings={() => {}}
           onSend={async (text, images, extras) => {
-            sent = localUserMessage('u', { text, images, extras }, false)
-            setMessage(sent)
+            show('local', { text, images, extras })
           }}
         />
       </main>

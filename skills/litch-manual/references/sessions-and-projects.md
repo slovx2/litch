@@ -867,6 +867,10 @@ Explicit Markdown links use the written destination, even when the label looks l
 选取附件只修改本地草稿，设备离线仍可加图、预览图片、移除附件和编辑文字或选项。点击发送时才上传普通文件，上传完成后向模型提交；待上传文件在上传后可预览。图片随消息内联发送。文件存放在会话设备主目录的 `.litch/attachments/<独立编号>/` 下，不同附件不覆盖同名文件；上传失败会尝试清除本次目录。设备服务启动时清理一次，之后每 24 小时清理修改时间超过 30 天的附件编号目录。会话仍打开、回合或后台任务仍在运行时保留；重新引用、打开附件会刷新目录修改时间。无法确认会话状态时暂不清理。清理不跟随软链，不触及附件根目录之外的路径。已自动清理的附件在桌面和手机显示“已清理”，不能再打开；历史中的文件名保留。上传副本不包含后续对源文件的修改。
 
 手机可打开会话设备上的附件；属于控制端电脑的附件需要回到该电脑打开。新发送的文件卡信息保存在消息文本中，重新读取原生历史仍能恢复；既有历史中的裸路径不作猜测转换。
+
+已发送消息的文件卡始终按消息记录的所属设备打开，重开历史也相同。上传过的文件使用会话设备上的副本，原电脑上的源文件移动或删除不影响该副本；未上传的本机引用仍需原文件。文件不存在、设备离线或没有读取权限时，界面显示对应原因；只有明确属于控制端电脑、当前客户端无法访问的文件才提示回到原电脑打开。
+
+Sent file cards use the device recorded with the message, including after reopening history. Uploaded files open the copy on the session device even if the original has moved or been deleted. Local path references still require the original. Missing files, offline devices, and permission failures show their actual cause; only desktop-only references ask you to return to the source computer.
 ## AI 读取的图片 / Images read by AI
 
 ### 桌面图片右键菜单 / Desktop image context menu

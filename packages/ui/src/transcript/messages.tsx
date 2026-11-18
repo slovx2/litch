@@ -215,7 +215,11 @@ export const UserMessage = memo(function UserMessage({
         data-anchor={`u:${ref.itemId}`}
         ref={bubble}
       >
-        <UserAttachments attachments={item.attachments} />
+        <UserAttachments
+          attachments={item.attachments}
+          deviceId={ref.deviceId}
+          sessionId={ref.sessionId}
+        />
         {comments ? <SentComments {...ref} comments={comments.comments} /> : null}
         {replies ? (
           <AskReplyBody replies={replies} deviceId={ref.deviceId} sessionId={ref.sessionId} />

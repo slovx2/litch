@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { globSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -128,9 +128,82 @@ try {
   )
   assert.equal(await evaluate('window.__attachments.resolves()'), resolvedBefore)
   assert.equal(await evaluate(`document.querySelectorAll('.attachment-card-error').length`), 0)
+  // 必须经正式 UserMessage 渲染；手工给 UserAttachments 传设备会掩盖历史消息丢上下文。
+  const nativePath = '/fixtures/native/11.04 明细 比价(1)(1).xls'
+  const uploaded = await evaluate(`window.__attachments.upload('build')`)
+  assert.ok(uploaded.path.includes('/.litch/attachments/'))
+  for (const scene of [
+    { deviceId: 'local', target: 'local', path: nativePath },
+    { deviceId: 'build', target: 'build', path: uploaded.path },
+    { deviceId: 'build', target: 'local', path: nativePath, client: true },
+  ]) {
+    await evaluate(
+      `window.__attachments.show(${JSON.stringify(scene.deviceId)}, ${JSON.stringify({
+        text: '查看先前发送的附件',
+        images: [],
+        extras: [
+          {
+            kind: 'file',
+            name: '11.04 明细 比价(1)(1).xls',
+            path: scene.path,
+            ...(scene.client ? { client: true } : {}),
+          },
+        ],
+      })})`,
+    )
+    await until(
+      () =>
+        evaluate(
+          `document.querySelector('.umsg .attachment-card-info .ell')?.textContent === '11.04 明细 比价(1)(1).xls'`,
+        ),
+      '历史附件',
+    )
+    for (const reopen of [false, true]) {
+      if (reopen) await evaluate('window.__attachments.remount()')
+      const before = await evaluate('window.__attachments.resolves()')
+      await evaluate(`document.querySelector('.umsg .attachment-card-open').click()`)
+      await until(() => evaluate(`window.__attachments.resolves() > ${before}`), '附件路由')
+      const request = await evaluate('window.__attachments.requests().at(-1)')
+      assert.equal(request.deviceId, scene.target)
+      assert.equal(request.ref.path, scene.path)
+      await until(
+        () => evaluate(`window.__attachments.opened()?.active === ${JSON.stringify(scene.path)}`),
+        '原设备或设备副本打开',
+      )
+      assert.equal(await evaluate('document.querySelectorAll(".attachment-card-error").length'), 0)
+    }
+  }
+  for (const [reason, text] of [
+    ['missing', '文件或目录不存在'],
+    ['permission', '没有读取权限'],
+    ['offline', '设备未连接'],
+  ]) {
+    await evaluate(`window.__attachments.fail(${JSON.stringify(reason)})`)
+    await evaluate(`document.querySelector('.umsg .attachment-card-open').click()`)
+    await until(
+      () => evaluate(`!!document.querySelector('.file-link-dialog[open]')`),
+      '真实失败原因',
+    )
+    const message = await evaluate(
+      `document.querySelector('.file-link-dialog .modal-body').textContent`,
+    )
+    assert.ok(message.includes(text), `${reason}: ${message}`)
+    assert.ok(!message.includes('请在上传此文件的电脑上打开'))
+    if (reason === 'missing' && process.env.LITCH_ATTACHMENT_SHOTS) {
+      mkdirSync(process.env.LITCH_ATTACHMENT_SHOTS, { recursive: true })
+      writeFileSync(
+        join(process.env.LITCH_ATTACHMENT_SHOTS, 'missing-file.png'),
+        Buffer.from((await cdp.call('Page.captureScreenshot', { format: 'png' })).data, 'base64'),
+      )
+    }
+    await evaluate(
+      `document.querySelector('.file-link-dialog .modal-foot button:last-child').click()`,
+    )
+    await until(() => evaluate('!document.querySelector(".file-link-dialog")'), '关闭错误弹层')
+  }
   assert.deepEqual(errors, [])
   console.log(
-    '通过：选择文件、协议上传模拟、输入区/消息文件卡、三皮肤两宽度截断、点击预览与已清理状态',
+    '通过：选择上传、正式消息/重开后的设备路由、本机与远程副本、控制端文件、真实失败原因、三皮肤两宽度、已清理状态',
   )
 } finally {
   cdp?.close()

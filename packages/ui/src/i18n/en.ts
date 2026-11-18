@@ -1637,6 +1637,7 @@ export const en: Record<MessageKey, Entry> = {
   'composer.file.uploading': 'Adding files…',
   'attachment.cleaned': 'Cleaned up',
   'attachment.desktopRequired': 'Open this file on the desktop computer it came from.',
+  'attachment.noDevice': 'The file’s device is unavailable. Reopen this conversation.',
   'attachment.noRoot': 'The file’s directory is unavailable.',
   'compose.addFile': 'Add file',
   'composer.attach.inline': 'Add images or files',
