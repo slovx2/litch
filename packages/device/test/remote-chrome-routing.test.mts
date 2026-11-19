@@ -21,6 +21,89 @@ const body = (reply: ClientToolCallResponse) => {
   return JSON.parse(first.text.split('\n')[0] ?? '')
 }
 
+test('双端模式的快照标题只显示可再次调用的设备句柄，保留网页正文', async () => {
+  const raw = 'chrome:physical-tab'
+  const wait = `Found.\nTab ${raw}: "Fixture" https://fixture.invalid`
+  const observation = `Tab ${raw}: "Fixture" https://fixture.invalid\n{"observation":{"generation":1}}\nTab ${raw}: 网页正文`
+  const scope = { harness: 'codex', threadId: 'thread', turnId: 'turn' }
+  const runtime = {
+    status: { enabled: true, hostLabel: 'device', condition: 'connected' },
+    instances: [{ id: 'device', epoch: 'epoch', protocol: 1 }],
+    async call(_scope: unknown, params: ClientToolCallParams) {
+      if (params.tool === 'run_actions') {
+        assert.deepEqual(params.arguments, {
+          actions: [
+            { tool: 'wait', arguments: { tabId: raw, for: 'text', text: 'Fixture' } },
+            { tool: 'wait', arguments: { tabId: raw, for: 'text', text: 'Missing' } },
+          ],
+        })
+        return {
+          success: false,
+          contentItems: [
+            {
+              type: 'inputText',
+              text: JSON.stringify({
+                steps: [
+                  { tool: 'wait', success: true, text: wait },
+                  { tool: 'wait', success: false, text: 'Timed out' },
+                ],
+                observationStatus: 'completed',
+              }),
+            },
+            { type: 'inputText', text: 'Final snapshot:' },
+            { type: 'inputText', text: observation },
+          ],
+        }
+      }
+      if (params.tool === 'snapshot') {
+        assert.deepEqual(params.arguments, { tabId: raw })
+        return { success: true, contentItems: [{ type: 'inputText', text: observation }] }
+      }
+      return {
+        success: true,
+        contentItems: [
+          { type: 'inputText', text: JSON.stringify({ tabId: raw, status: 'ready' }) },
+          { type: 'inputText', text: observation },
+        ],
+      }
+    },
+  } as unknown as DeviceChromeRuntime
+  const router = new RemoteChromeRouter(runtime)
+  const call = (tool: string, args = {}) => {
+    const reply = router.route(
+      scope,
+      { ...scope, namespace: 'litch_browser', tool, arguments: args, callId: tool },
+      {
+        negotiated: true,
+        controller: null,
+        signal: new AbortController().signal,
+        ask: async () => 'once',
+        fullAccess: async () => false,
+      },
+    )
+    assert.ok(reply)
+    return reply
+  }
+  const targetId = body(await call('targets')).targets[0].targetId
+  const claimed = await call('ensure_claimed', { targetId })
+  const tabId = body(claimed).tabId
+  const expected = observation.replace(`Tab ${raw}:`, `Tab ${tabId}:`)
+  assert.deepEqual(claimed.contentItems[1], { type: 'inputText', text: expected })
+  const snapshot = await call('snapshot', { tabId })
+  assert.deepEqual(snapshot.contentItems[0], { type: 'inputText', text: expected })
+  const batch = await call('run_actions', {
+    actions: [
+      { tool: 'wait', arguments: { tabId, for: 'text', text: 'Fixture' } },
+      { tool: 'wait', arguments: { tabId, for: 'text', text: 'Missing' } },
+    ],
+  })
+  assert.equal(batch.success, false)
+  const summary = batch.contentItems[0]
+  assert.equal(summary?.type, 'inputText')
+  assert.equal(JSON.parse(summary.text).steps[0].text, wait.replace(raw, tabId))
+  assert.deepEqual(batch.contentItems[2], { type: 'inputText', text: expected })
+})
+
 test('控制端重连后安全恢复原标签，后续调用使用新代次而非旧租约', async () => {
   let epoch = 'first'
   let reconnectDuringRecovery = false
