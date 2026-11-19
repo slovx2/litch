@@ -193,7 +193,7 @@ test('安装进度只转给声明了 harnessInstall 的连接', async () => {
 
 // ---------- 对着真的主进程 ----------
 
-/** 编译出来的测试所在的目录（dist/device/test），假运行时就在这里 */
+/** 编译出来的测试所在的目录，假运行时就在这里 */
 const HERE = dirname(fileURLToPath(import.meta.url))
 
 interface Service {
@@ -226,7 +226,16 @@ function startService(registry: string): Promise<Service> {
   assert.equal(built.status, 0, `适配器主进程没有编出来：\n${built.stderr}`)
   const stage = join(root, 'r')
   const entry = (name: string, source: string) => {
-    const path = join(stage, 'packages', name, 'dist', name, 'src', `${source}.mjs`)
+    const path = join(
+      stage,
+      'packages',
+      name,
+      'dist',
+      ...(name === 'device' ? ['packages'] : []),
+      name,
+      'src',
+      `${source}.mjs`,
+    )
     mkdirSync(dirname(path), { recursive: true })
     return path
   }

@@ -6,16 +6,15 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
+import { REPO } from './helpers.mjs'
 
 const ENVIRONMENT = 'CHA_ADAPTER_CLI'
 const shared = (file: string) => new URL(`../../shared/src/${file}`, import.meta.url).href
 /** 仓库根目录 bin/ 里的那一份，测试之前由 scripts/build-cli.mjs 编出来 */
-const built = fileURLToPath(
-  new URL(
-    `../../../../../bin/codex-harness-adapter${process.platform === 'win32' ? '.exe' : ''}`,
-    import.meta.url,
-  ),
+const built = join(
+  REPO,
+  'bin',
+  `codex-harness-adapter${process.platform === 'win32' ? '.exe' : ''}`,
 )
 
 /** 另起一个进程跑一段模块代码，它打印的最后一行是 JSON */

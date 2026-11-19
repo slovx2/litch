@@ -86,7 +86,16 @@ async function startService(): Promise<Service> {
   // 三个引擎的位置上放假的运行时，设备进程用真的；原生 codex 是 bin 目录里那个假的命令行
   const stage = join(root, 'r')
   const entry = (name: string, source: string) => {
-    const path = join(stage, 'packages', name, 'dist', name, 'src', `${source}.mjs`)
+    const path = join(
+      stage,
+      'packages',
+      name,
+      'dist',
+      ...(name === 'device' ? ['packages'] : []),
+      name,
+      'src',
+      `${source}.mjs`,
+    )
     mkdirSync(dirname(path), { recursive: true })
     return path
   }

@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import test from 'node:test'
+import { REPO } from './helpers.mjs'
 
 test('编排路径护栏：新增read只能取元数据，resume/fork必须排除历史', () => {
   for (const name of ['session-tree', 'session-start']) {
-    const source = readFileSync(new URL(`../../../src/${name}.mts`, import.meta.url), 'utf8')
+    const source = readFileSync(join(REPO, 'packages/device/src', `${name}.mts`), 'utf8')
     // 此范围的请求统一用字面量对象；改为变量必须同步完善护栏，不能悄悄略过。
     const calls = [
       ...source.matchAll(/\.request\(\s*'(thread\/(?:read|resume|fork))'\s*,\s*([^)]*)/g),

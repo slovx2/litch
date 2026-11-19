@@ -50,7 +50,7 @@ const NEW_HARNESSES: [string, string][] = [
 /** 这里起不来的入口，给不出 ssh 配置片段 */
 const NOT_RUNNING = ['dsh', ...NEW_HARNESSES.map(([id]) => id)]
 
-/** 编译出来的测试所在的目录（dist/device/test），假运行时就在这里 */
+/** 编译出来的测试所在的目录，假运行时就在这里 */
 const HERE = dirname(fileURLToPath(import.meta.url))
 
 function freePorts(count: number): Promise<number[]> {
@@ -112,7 +112,16 @@ async function startService(extraEnv: Record<string, string> = {}): Promise<Serv
     // 主进程按 <root>/packages/<名字>/dist/… 找运行时和设备进程：运行时的位置上放假的，设备进程用真的
     const stage = join(root, 'r')
     const entry = (name: string, source: string) => {
-      const path = join(stage, 'packages', name, 'dist', name, 'src', `${source}.mjs`)
+      const path = join(
+        stage,
+        'packages',
+        name,
+        'dist',
+        ...(name === 'device' ? ['packages'] : []),
+        name,
+        'src',
+        `${source}.mjs`,
+      )
       mkdirSync(dirname(path), { recursive: true })
       return path
     }

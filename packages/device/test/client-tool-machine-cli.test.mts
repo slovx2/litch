@@ -3,22 +3,19 @@
 // 看命令行打出来的和退出码。挑哪条连接的各种情形在 client-tool-invoke.test.mts，这里只看两头接得上。
 import assert from 'node:assert/strict'
 import { type ChildProcess, spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
 import { CLIENT_TOOL_METHOD } from '../../protocol/src/client-tools.mjs'
 import { listenUnix } from '../src/sockets.mjs'
 import { FakeUpstream } from './fake-upstream.mjs'
-import { rig, type TestClient } from './helpers.mjs'
+import { REPO, rig, type TestClient } from './helpers.mjs'
 
 const MACHINE = 'litch_machine'
 /** 短名：bin/litch-machine 是指向 codex-harness-adapter 的链接，按这个名字调用就是 machine 子命令 */
-const CLI = fileURLToPath(
-  new URL(
-    `../../../../../bin/${process.platform === 'win32' ? 'litch-machine.exe' : 'litch-machine'}`,
-    import.meta.url,
-  ),
-)
+const CLI = join(REPO, 'bin', process.platform === 'win32' ? 'litch-machine.exe' : 'litch-machine')
+// 在监听套接字之前检查构建产物，缺失时直接失败，避免等不到子进程回包而挂住清理。
+assert.ok(existsSync(CLI), `测试要先编出命令行：${CLI}`)
 
 interface Ran {
   code: number | null

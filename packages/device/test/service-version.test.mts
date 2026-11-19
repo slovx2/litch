@@ -17,7 +17,7 @@ import {
   tempDir,
 } from './helpers.mjs'
 
-/** 编译出来的测试所在的目录（dist/device/test），假运行时就在这里 */
+/** 编译出来的测试所在的目录，假运行时就在这里 */
 const HERE = dirname(fileURLToPath(import.meta.url))
 const VERSION = '7.7.7'
 
@@ -64,7 +64,16 @@ function stage() {
   // 主进程按 <root>/packages/<名字>/dist/… 找运行时和设备进程：运行时的位置上放假的，设备进程用真的
   const adapter = join(root, 'r')
   const entry = (name: string, source: string) => {
-    const path = join(adapter, 'packages', name, 'dist', name, 'src', `${source}.mjs`)
+    const path = join(
+      adapter,
+      'packages',
+      name,
+      'dist',
+      ...(name === 'device' ? ['packages'] : []),
+      name,
+      'src',
+      `${source}.mjs`,
+    )
     mkdirSync(dirname(path), { recursive: true })
     return path
   }

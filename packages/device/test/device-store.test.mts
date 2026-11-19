@@ -10,12 +10,9 @@ import { ProjectPermissions } from '../src/project-permissions.mjs'
 import { openDeviceStore } from '../src/store.mjs'
 import { ThreadIndex } from '../src/thread-index.mjs'
 import { FakeEngine } from './fake-engine.mjs'
-import { type Rig, rig, tempDir } from './helpers.mjs'
+import { REPO, type Rig, rig, tempDir } from './helpers.mjs'
 
-const fixture = readFileSync(
-  new URL('../../../test/fixtures/device-v0.27.5.sql', import.meta.url),
-  'utf8',
-)
+const fixture = readFileSync(join(REPO, 'packages/device/test/fixtures/device-v0.27.5.sql'), 'utf8')
 const preservedTables = [
   'threads',
   'projects',
