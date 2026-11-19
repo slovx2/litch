@@ -347,7 +347,7 @@ async function install(serial) {
 /** 起夹具（真的适配器经 SSH，假模型），等它把连接配置写出来；顺带开一个只在回环上的口给流程用 */
 async function startFixture(serial) {
   for (const built of [
-    'packages/device/dist/device/src/main.mjs',
+    'packages/device/dist/packages/device/src/main.mjs',
     'packages/pi/dist/pi/src/adapter.mjs',
   ])
     if (!existsSync(join(repo, built)))

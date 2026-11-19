@@ -23,6 +23,10 @@ import {
 } from '../../../protocol/src/client-tools.mjs'
 import { CONFIG_NAMESPACE, CONFIG_TOOL } from '../../../protocol/src/client-tools-config.mjs'
 import type { JsonRpcId } from '../../../protocol/src/index.mjs'
+import {
+  REMOTE_CHROME_APPROVAL,
+  type RemoteChromePrompt,
+} from '../../../protocol/src/remote-chrome.mjs'
 import { createCancel } from '../channel/cancel.mjs'
 import type { AbortSignalLike, Clock } from '../channel/protocol.mjs'
 import { NO_REPLY } from '../connection/rpc.mjs'
@@ -137,7 +141,7 @@ interface Running {
   turnId: string | null
   /** litch_machine 的调用（交给接线那一层，不经主进程） */
   machine: boolean
-  resolve(result: ClientToolCallResponse | typeof NO_REPLY): void
+  resolve(result: unknown): void
   /** 不等了：告诉执行的那一方（主进程，或者中止 litch_machine 的信号） */
   stop(): void
   /** 超时的定时器：取消函数。卡片挂着的时候停表，是 null */
@@ -200,7 +204,7 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
   const turns = new Map<string, { threadId: string; turnId: string }>()
   let seq = 0
 
-  const finish = (call: Running, result: ClientToolCallResponse | typeof NO_REPLY) => {
+  const finish = (call: Running, result: unknown) => {
     if (running.get(call.id) !== call) return
     running.delete(call.id)
     call.stopTimer?.()
@@ -265,6 +269,7 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
       namespace,
       tool: params.tool,
       arguments: params.arguments,
+      ...(params.litchChromeTargets ? { litchChromeTargets: params.litchChromeTargets } : {}),
       id,
       device: host.device(),
       harness,
@@ -385,7 +390,7 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
   const coreCall = (
     meta: { threadId: string | null; turnId: string | null; machine: boolean; label: string },
     rpcId: string,
-    work: (signal: AbortSignalLike, hold: () => () => void) => Promise<ClientToolCallResponse>,
+    work: (signal: AbortSignalLike, hold: () => () => void) => Promise<unknown>,
   ): Promise<unknown> => {
     const id = `${host.deviceId}:${++seq}`
     const cancel = createCancel()
@@ -523,8 +528,74 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
     )
   }
 
+  const chromeApproval = (params: unknown, rpcId: string): Promise<unknown> | undefined => {
+    const p = params as Partial<RemoteChromePrompt> | null
+    if (
+      !host.hub.namespaces().includes(CLIENT_TOOL_NAMESPACE.browser) ||
+      !p ||
+      typeof p.id !== 'string' ||
+      typeof p.nonce !== 'string' ||
+      typeof p.threadId !== 'string' ||
+      typeof p.turnId !== 'string' ||
+      typeof p.callId !== 'string' ||
+      typeof p.origin !== 'string' ||
+      typeof p.hostLabel !== 'string' ||
+      typeof p.expiresAt !== 'number' ||
+      (p.kind !== 'site' && p.kind !== 'signIn')
+    )
+      return undefined
+    const prompt = p as RemoteChromePrompt
+    return coreCall(
+      { threadId: prompt.threadId, turnId: prompt.turnId, machine: false, label: 'remoteChrome' },
+      rpcId,
+      (signal, hold) =>
+        new Promise((resolve) => {
+          const resume = hold()
+          const drop = host.showAsk(
+            {
+              threadId: prompt.threadId,
+              turnId: prompt.turnId,
+              callId: prompt.callId,
+              askId: prompt.id,
+              namespace: 'litch_browser',
+              tool: prompt.kind === 'site' ? 'site' : 'request_sign_in',
+              ask:
+                prompt.kind === 'site'
+                  ? {
+                      kind: 'site',
+                      browser: 'chrome',
+                      url: prompt.origin,
+                      origin: prompt.origin,
+                      remoteHost: prompt.hostLabel,
+                    }
+                  : {
+                      kind: 'chromeSignIn',
+                      origin: prompt.origin,
+                      reason: prompt.reason ?? '',
+                      remoteHost: prompt.hostLabel,
+                    },
+            },
+            (decision) => {
+              resume()
+              resolve(
+                decision && !signal.aborted
+                  ? { id: prompt.id, nonce: prompt.nonce, decision }
+                  : null,
+              )
+            },
+          )
+          signal.addEventListener('abort', () => {
+            drop()
+            resume()
+            resolve(null)
+          })
+        }),
+    )
+  }
+
   return {
     serverRequest(method, params, id) {
+      if (method === REMOTE_CHROME_APPROVAL) return chromeApproval(params, String(id))
       if (method === CLIENT_TOOL_METHOD.call) return detachedCall(params, String(id))
       if (method !== 'item/tool/call') return undefined
       const raw = params as Partial<ClientToolCallParams> | null

@@ -46,7 +46,8 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
   const primary = request.options.find((option) => option.role !== 'decline')
   const refuse = request.options.find((option) => option.role === 'decline')
   const { ask, device } = request
-  const remote = device.kind === 'ssh'
+  const remoteHost = 'remoteHost' in ask ? ask.remoteHost : undefined
+  const remote = device.kind === 'ssh' && remoteHost === undefined
   const title = t(
     ask.kind === 'browserDownload'
       ? 'browser.download.title'
@@ -64,7 +65,7 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
   )
   /** 信任所有网站要经外壳改设置；普通浏览器里（模拟核心）没有外壳，不出这个按钮 */
   const bridge =
-    ask.kind === 'site'
+    ask.kind === 'site' && !remoteHost
       ? ask.browser === 'chrome'
         ? shell === 'electron'
           ? {
@@ -131,7 +132,7 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
       <div className="req-head">
         {ask.kind === 'computerSelf' ? <Icon name="info" /> : null}
         <i className="st wait" />
-        <span>{title}</span>
+        <span>{remoteHost ? t('chrome.device.approval', { host: remoteHost }) : title}</span>
       </div>
       <div className="req-body">
         {ask.kind === 'browserDownload' ? (
@@ -192,7 +193,11 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
               </span>
             </div>
             {ask.reason ? <div className="req-why">{ask.reason}</div> : null}
-            <div className="req-why">{t('chrome.signInNote')}</div>
+            <div className="req-why">
+              {remoteHost
+                ? t('chrome.device.signIn', { host: remoteHost })
+                : t('chrome.signInNote')}
+            </div>
           </>
         ) : null}
         {ask.kind === 'site' ? (

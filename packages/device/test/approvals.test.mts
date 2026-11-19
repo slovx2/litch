@@ -232,3 +232,45 @@ test('连接断了：它挂的卡片都收掉，别的连接的留着', () => {
   )
   assert.deepEqual(r.changed.at(-1), { threadId: 'thread-1', data: [] })
 })
+
+test('设备 Chrome 卡只投影给协商后的连接，手机不能答或收掉它', () => {
+  const clock = new FakeClock()
+  const notifications: { method: string; extension: string }[] = []
+  const ledger = new DeviceApprovals(
+    {
+      announce: (method, _params, extension) => notifications.push({ method, extension }),
+      log: () => {},
+    },
+    clock,
+  )
+  const oldPhone = new Peer(true)
+  const phone: ApprovalPeer = {
+    declares: (extension) => ['clientApprovals', 'remoteChrome'].includes(extension),
+    announce() {},
+  }
+  const id = '8ee5cd26-8df7-4956-86e9-d62256ef959e'
+  const dismiss = ledger.openChrome({
+    id,
+    nonce: '2038246d-8b79-407f-b36e-d864797f81d1',
+    expiresAt: clock.now() + 6000,
+    threadId: 'thread-1',
+    turnId: 'turn-1',
+    callId: 'call-1',
+    hostLabel: 'Linux test',
+    kind: 'site',
+    origin: 'http://localhost:7823',
+  })
+  assert.deepEqual(notifications, [
+    { method: 'litch/remoteChrome/cardsChanged', extension: 'remoteChrome' },
+  ])
+  assert.deepEqual(ledger.call(oldPhone, 'litch/approval/list', {}), { data: [] })
+  const projected = ledger.list('thread-1', true)[0]
+  assert.equal(projected?.kind, 'browserSite')
+  assert.equal(projected.summary.device, 'Linux test')
+  assert.equal(projected.summary.location, 'sessionDevice')
+  assert.throws(() => ledger.call(phone, 'litch/approval/answer', { ...answer(), id }), /网站审批/)
+  ledger.call(phone, 'litch/approval/close', { id })
+  assert.equal(ledger.list('thread-1', true).length, 1)
+  dismiss()
+  assert.deepEqual(ledger.call(phone, 'litch/approval/list', {}), { data: [] })
+})

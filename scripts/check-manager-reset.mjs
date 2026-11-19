@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { managerBundle } from '../packages/device/dist/device/src/manager-rules.mjs'
+import { managerBundle } from '../packages/device/dist/packages/device/src/manager-rules.mjs'
 import {
   managerClient,
   managerReply,

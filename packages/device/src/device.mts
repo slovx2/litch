@@ -32,6 +32,10 @@ import {
   NATIVE_BACKGROUND_NAMESPACE,
   supportsNativeBackground,
 } from '../../protocol/src/native-background-wake.mjs'
+import {
+  REMOTE_CHROME_CHANGED,
+  REMOTE_CHROME_PENDING_PREFIX,
+} from '../../protocol/src/remote-chrome.mjs'
 import { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
 import { SUGGESTION_RETENTION_SETTING } from '../../protocol/src/suggestion-inbox.mjs'
 import { TOOL_IMAGES_SETTING } from '../../protocol/src/tool-images.mjs'
@@ -61,6 +65,8 @@ import { DevicePairing, type PairingConfig } from './pairing.mjs'
 import { PowerActivity } from './power-activity.mjs'
 import { hasActiveTurn } from './probe.mjs'
 import { RecoveryActions } from './recovery-actions.mjs'
+import { RemoteChromeRouter } from './remote-chrome-routing.mjs'
+import { DeviceChromeRuntime } from './remote-chrome-runtime.mjs'
 import { RepositoryTools } from './repository-tools.mjs'
 import { RestartResume } from './restart-resume.mjs'
 import { RestartStore } from './restart-store.mjs'
@@ -74,6 +80,7 @@ import {
 } from './session.mjs'
 import { SessionArchives } from './session-archive.mjs'
 import { sessionHistory } from './session-history.mjs'
+import { currentPermission } from './session-permissions.mjs'
 import { openSessionDatabase, SessionStore } from './session-store.mjs'
 import { sessionToolsHandler } from './session-tools.mjs'
 import { SessionTree } from './session-tree.mjs'
@@ -108,6 +115,7 @@ export interface DeviceOptions {
 
   /** 设备进程自己的状态目录，设备库 device.sqlite 放在里面 */
   stateDir: string
+  chromeBinary?: string
   /**
    * 设备级的工作区第一次启用时，要不要从各引擎现有的项目导入。
    * 默认要。只有测试会关：和导入无关的测试不想让设备进程自己另开连接去读上游。
@@ -250,10 +258,12 @@ export class DeviceServer {
     harness: string,
     runtime: Record<string, unknown> | null,
     native: boolean,
+    chromeRouting = true,
   ): Record<string, unknown> {
     const values = this.control?.state?.snapshot.values ?? this.options.clientToolSettings
     return prepareSessionTools(params, harness, runtime, native, values, {
       tasks: this.tasks !== null,
+      deviceChrome: chromeRouting && this.chrome?.status.enabled === true,
       desktopNamespaces: this.host.clientTools
         .executors(null)
         .flatMap((peer) => [...peer.clientToolNamespaces]),
@@ -316,6 +326,7 @@ export class DeviceServer {
   private readonly pairing: DevicePairing | null
   /** 手机上批准：桌面端挂的卡片（只在内存） */
   private readonly approvals: DeviceApprovals
+  private readonly chrome: DeviceChromeRuntime | null
   /** 设备层的工作树。这台机器上没有 git 时是 null */
   readonly worktrees: Worktrees | null
   readonly worktreeLife: WorktreeLife | null
@@ -432,10 +443,21 @@ export class DeviceServer {
       log,
     })
     info.extensions.push(EXTENSION.clientApprovals)
+    this.chrome =
+      options.chromeBinary && process.platform === 'linux'
+        ? new DeviceChromeRuntime(
+            options.stateDir,
+            this.version,
+            (status) => this.announce(REMOTE_CHROME_CHANGED, status, EXTENSION.remoteChrome),
+            log,
+            options.chromeBinary,
+          )
+        : null
+    if (this.chrome) info.extensions.push(EXTENSION.remoteChrome)
     const taskTiming = { ...DEFAULT_TASK_TIMING, ...options.tasks?.timing }
     this.taskTiming = taskTiming
     this.deviceTools = new DeviceTools(log)
-    registerAutomationGuide(this.deviceTools)
+    registerAutomationGuide(this.deviceTools, () => this.chrome?.status.enabled === true)
     // litch_tasks 是第一个注册者：调用从哪条连接来都由设备进程答
     registerTasksTool(this.deviceTools, {
       tasks: () => this.tasks,
@@ -518,8 +540,11 @@ export class DeviceServer {
       modelRanking: () => this.modelRanking.config(),
       toolsBusy: (threadId) => this.deviceTools.busy(threadId),
       clientRequests: (threadId) =>
-        this.approvals.list(threadId).map((card) => ({
-          id: `client:${card.id}`,
+        this.approvals.list(threadId, true).map((card) => ({
+          id:
+            card.kind === 'browserSite' && card.summary.location === 'sessionDevice'
+              ? `${REMOTE_CHROME_PENDING_PREFIX}${card.id}`
+              : `client:${card.id}`,
           threadId,
           harness: this.index.lookup(threadId) ?? '',
           turnId: null,
@@ -530,7 +555,9 @@ export class DeviceServer {
             card.kind === 'computerSelf'
               ? 'Litch'
               : card.kind === 'browserSite'
-                ? card.summary.origin
+                ? card.summary.location === 'sessionDevice'
+                  ? `Chrome · ${card.summary.device}`
+                  : card.summary.origin
                 : card.summary.site.trim(),
           summary:
             card.kind === 'computerSelf' || card.kind === 'browserSite'
@@ -717,7 +744,32 @@ export class DeviceServer {
       store: this.sessionTree.store,
       log,
     })
+    const chrome = this.chrome
     const router = new ClientToolRouter({
+      ...(chrome
+        ? {
+            remoteChrome: new RemoteChromeRouter(chrome),
+            chromeHostLabel: () => chrome.status.hostLabel,
+            projectChromeApproval: (prompt) => this.approvals.openChrome(prompt),
+            chromeFullAccess: async (harness, threadId) => {
+              try {
+                const link = await this.openEngineLink(harness, { observeSnapshots: false })
+                try {
+                  const config = await link.request(
+                    'thread/resume',
+                    { threadId, excludeTurns: true },
+                    { timeoutMs: 5000 },
+                  )
+                  return currentPermission(config) === ':danger-full-access'
+                } finally {
+                  link.close()
+                }
+              } catch {
+                return false
+              }
+            },
+          }
+        : {}),
       enabled: (harness, namespace) => {
         const switches = deviceToolSwitches(
           this.control?.state?.snapshot.values ?? this.options.clientToolSettings,
@@ -769,7 +821,7 @@ export class DeviceServer {
         this.managers.resets.held(id) ||
         this.managers.resets.refusal(id) !== null ||
         this.sessionTree.pending.list(id).length > 0 ||
-        this.approvals.list(id).length > 0,
+        this.approvals.list(id, true).length > 0,
       background: (id) => this.nativeBackground.restartTasks(id, this.background.tasks(id)),
       resumed: (_harness, id) => this.sessionTree.restartContinuing(id),
       settled: () => this.sessionTree.checkAll(),
@@ -814,8 +866,8 @@ export class DeviceServer {
             .map((source) => source.id),
         )
       },
-      prepareSession: (params, harness, runtime, native) =>
-        this.prepareSession(params, harness, runtime, native),
+      prepareSession: (params, harness, runtime, native, chromeRouting) =>
+        this.prepareSession(params, harness, runtime, native, chromeRouting),
       resumeTools: this.resumeTools,
       clientTools: router,
       clientInvoke: new ClientToolInvoker({ router, index: this.index, log }),
@@ -827,6 +879,7 @@ export class DeviceServer {
       sessionTreeOn: () => this.sessionTreeOn(),
       pairing: this.pairing,
       approvals: this.approvals,
+      chrome: this.chrome,
       harnessConfigChanged: (params) =>
         this.announce(HARNESS_CONFIG_NOTIFICATION.changed, params, EXTENSION.harnessConfig),
       harnessEnvNames: (harness) => this.harnessEnvNames(harness),
@@ -1143,6 +1196,7 @@ export class DeviceServer {
               tools: this.deviceTools,
               ...(this.options.trace ? { trace: this.options.trace } : {}),
               clientTools: this.host.clientTools,
+              deviceChrome: this.chrome !== null,
               prepareQuestionInput: (method, params) =>
                 this.sessionTree.prepareQuestionInput(method, params),
               reserveTurn: async (threadId) => {
@@ -1369,6 +1423,7 @@ export class DeviceServer {
     this.sessionTree.close()
     this.deviceTools.close()
     // 先同步关闭所有输入，再等待清理；不能在 await 期间继续接收引擎消息或新客户端。
+    await this.chrome?.close()
     await this.attachments.close()
     await this.managers.close()
     this.worktreeLife?.stop()

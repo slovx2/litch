@@ -5,8 +5,8 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { resultOf } from '../packages/device/dist/device/test/fake-engine.mjs'
-import { brief, treeRig } from '../packages/device/dist/device/test/tree-kit.mjs'
+import { resultOf } from '../packages/device/dist/packages/device/test/fake-engine.mjs'
+import { brief, treeRig } from '../packages/device/dist/packages/device/test/tree-kit.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const artifact = join(root, '.artifacts', `proposal-start-${Date.now()}`)

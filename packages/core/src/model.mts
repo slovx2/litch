@@ -213,6 +213,7 @@ export interface ConnectFailureView {
 }
 
 export interface DeviceView {
+  remoteChrome?: import('../../protocol/src/remote-chrome.mjs').RemoteChromeStatus
   modelRanking?: boolean
   toolImagesEnabled?: boolean
   id: string
@@ -1000,7 +1001,7 @@ export interface FormRequest {
 export type ClientAskView =
   | { kind: 'browserDownload'; filename: string; origin: string; totalBytes: number | null }
   | { kind: 'computerSelf'; id: string; nonce: string; desktopId: string | null }
-  | { kind: 'chromeSignIn'; origin: string; reason: string }
+  | { kind: 'chromeSignIn'; origin: string; reason: string; remoteHost?: string }
   | { kind: 'chromeInstance'; instanceId: string; name: string }
   | { kind: 'chromeTab'; url: string; title: string }
   | {
@@ -1009,6 +1010,7 @@ export type ClientAskView =
       origin: string
       url: string
       browser?: 'chrome'
+      remoteHost?: string
     }
   | SignInAskView
   | MachineAskView

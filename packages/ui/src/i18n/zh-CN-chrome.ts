@@ -1,4 +1,20 @@
 export const zhChrome = {
+  'chrome.device.title': '设备 Chrome',
+  'chrome.device.status': '{host} · {status}',
+  'chrome.device.enabled': '本设备的会话可使用此 Chrome。',
+  'chrome.device.disabled': '本设备的会话访问已关闭。',
+  'chrome.device.prepareNote':
+    '请在 Linux 设备上以运行 Chrome 的用户执行命令。建议使用专用 Chrome 用户资料。',
+  'chrome.device.installNote':
+    '在 Linux 设备的 Chrome 中打开商店地址并安装 Litch Browser。执行下方命令更改访问权限。',
+  'chrome.device.conflict': 'Chrome 宿主已由其他程序登记。',
+  'chrome.device.incompatible': '更新 Litch 或 Chrome 扩展后连接。',
+  'chrome.device.error': '设备 Chrome 无法启动。请在 Linux 设备上执行准备命令检查登记。',
+  'chrome.device.copy': '复制准备命令',
+  'chrome.device.copied': '已复制',
+  'chrome.device.copyError': '无法写入剪贴板，请选中命令并复制。',
+  'chrome.device.approval': 'Chrome · {host}',
+  'chrome.device.signIn': '请在 {host} 的 Chrome 中登录。完成后在此处交还控制。',
   'chrome.tab': '允许控制这个 Chrome 标签页？',
   'chrome.tabAllow': '允许控制',
   'chrome.trustDone': '已信任 Chrome 中的所有网站。可在“设置 → Chrome”中关闭或设置黑名单',

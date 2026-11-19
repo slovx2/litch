@@ -4,7 +4,7 @@ import { writeFileSync } from 'node:fs'
 import { performance } from 'node:perf_hooks'
 import { sampleManagers } from '../packages/core/dist/packages/core/src/mock/sample-manager.mjs'
 import { projectManagerBoard } from '../packages/core/dist/packages/core/src/projection/manager.mjs'
-import { treeRig } from '../packages/device/dist/device/test/tree-kit.mjs'
+import { treeRig } from '../packages/device/dist/packages/device/test/tree-kit.mjs'
 
 const env = treeRig()
 const owner = env.device.managers

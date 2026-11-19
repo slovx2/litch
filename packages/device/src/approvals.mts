@@ -27,6 +27,7 @@ import {
   isApprovalToken,
 } from '../../protocol/src/client-approvals.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
+import { REMOTE_CHROME_CARDS, type RemoteChromePrompt } from '../../protocol/src/remote-chrome.mjs'
 import { isObject } from './wire.mjs'
 
 /** 一条客户端连接：发卡片的、答卡片的都是它 */
@@ -74,7 +75,7 @@ export class ApprovalError extends Error {
 
 interface Held {
   card: ApprovalCardView
-  owner: ApprovalPeer
+  owner: ApprovalPeer | null
   answers: number
   timer: unknown
 }
@@ -103,7 +104,7 @@ export class DeviceApprovals {
       case APPROVAL_LIST: {
         if (given.threadId !== undefined && typeof given.threadId !== 'string')
           throw new ApprovalError(null, 'threadId 要是字符串')
-        return { data: this.list(given.threadId) }
+        return { data: this.list(given.threadId, peer.declares(EXTENSION.remoteChrome)) }
       }
       case APPROVAL_ANSWER:
         this.answer(params)
@@ -169,10 +170,41 @@ export class DeviceApprovals {
     if (held?.owner === peer) this.drop(held)
   }
 
-  list(threadId: string | undefined): ApprovalCardView[] {
+  openChrome(prompt: RemoteChromePrompt): () => void {
+    const held: Held = {
+      card: {
+        id: prompt.id,
+        nonce: prompt.nonce,
+        desktopId: 'session-device-chrome',
+        threadId: prompt.threadId,
+        kind: 'browserSite',
+        summary: {
+          origin: prompt.origin,
+          device: prompt.hostLabel,
+          browser: 'chrome',
+          location: 'sessionDevice',
+        },
+        expiresAt: prompt.expiresAt,
+        openedAt: this.clock.now(),
+      },
+      owner: null,
+      answers: 0,
+      timer: null,
+    }
+    this.cards.set(prompt.id, held)
+    this.expireAt(held, prompt.expiresAt)
+    this.changed(prompt.threadId, true)
+    return () => this.drop(held)
+  }
+
+  list(threadId: string | undefined, includeChrome = false): ApprovalCardView[] {
     const data: ApprovalCardView[] = []
     for (const held of this.cards.values())
-      if (threadId === undefined || held.card.threadId === threadId) data.push(viewOf(held))
+      if (
+        (held.owner || includeChrome) &&
+        (threadId === undefined || held.card.threadId === threadId)
+      )
+        data.push(viewOf(held))
     return data.sort((a, b) => a.openedAt - b.openedAt)
   }
 
@@ -181,7 +213,7 @@ export class DeviceApprovals {
     const held = this.cards.get(params.id)
     if (!held || (held.card.expiresAt !== null && held.card.expiresAt <= this.clock.now()))
       throw new ApprovalError(APPROVAL_ERROR.unknownApproval, `没有卡片 ${params.id}`)
-    if (held.card.kind === 'browserSite')
+    if (!held.owner || held.card.kind === 'browserSite')
       throw new ApprovalError(null, '网站审批必须在执行浏览器操作的 Litch 桌面会话中处理')
     if (held.answers >= APPROVAL_ANSWERS_MAX)
       throw new ApprovalError(APPROVAL_ERROR.tooMany, '这张卡片答的次数太多了')
@@ -210,7 +242,7 @@ export class DeviceApprovals {
     if (this.cards.get(held.card.id) !== held) return
     this.cards.delete(held.card.id)
     this.clock.clearTimeout(held.timer)
-    this.changed(held.card.threadId)
+    this.changed(held.card.threadId, held.owner === null)
   }
 
   private countOf(peer: ApprovalPeer): number {
@@ -219,13 +251,25 @@ export class DeviceApprovals {
     return count
   }
 
-  private changed(threadId: string): void {
+  private changed(threadId: string, chrome = false): void {
     this.host.changed?.(threadId)
-    this.host.announce(
-      APPROVAL_CHANGED,
-      { threadId, data: this.list(threadId) },
-      EXTENSION.clientApprovals,
+    if (!chrome)
+      this.host.announce(
+        APPROVAL_CHANGED,
+        { threadId, data: this.list(threadId) },
+        EXTENSION.clientApprovals,
+      )
+    if (
+      chrome ||
+      this.list(threadId, true).some(
+        (card) => card.kind === 'browserSite' && card.summary.location === 'sessionDevice',
+      )
     )
+      this.host.announce(
+        REMOTE_CHROME_CARDS,
+        { threadId, data: this.list(threadId, true) },
+        EXTENSION.remoteChrome,
+      )
   }
 }
 

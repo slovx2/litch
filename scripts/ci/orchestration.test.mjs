@@ -258,7 +258,7 @@ test('外部下载只重试已识别的瞬态错误，404 立即失败且逐次�
 
 test('只读缓存能收尾，且不跟随符号链接修改片外目录', (t) => {
   const directory = temporary(t)
-  const tests = join(directory, 'packages/device/dist/device/test')
+  const tests = join(directory, 'packages/device/dist/packages/device/test')
   const outside = join(directory, 'outside')
   const recorded = join(directory, 'test-home')
   mkdirSync(tests, { recursive: true })

@@ -116,6 +116,7 @@ export interface EngineLinkOptions {
     Partial<Pick<DeviceTools, 'allowed'>>
   /** 后台会话的客户端工具也交给设备统一路由，内部连接只转交，不获得桌面权限。 */
   clientTools?: ClientToolRouter
+  deviceChrome?: boolean
   /** 这个 harness 发来的这条请求（按请求号）此刻有没有真正的客户端连接拿着 */
   held(harness: string, requestId: RpcId): boolean
   heldGraceMs?: number
@@ -347,7 +348,9 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
               : {}),
           },
         },
-        tools.namespaces(),
+        options.deviceChrome
+          ? [...tools.namespaces(), CLIENT_TOOL_NAMESPACE.browser]
+          : tools.namespaces(),
       ),
     )
     const init = await call('initialize', greeting, options.handshakeTimeoutMs)
@@ -406,6 +409,8 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
             options.clientTools?.threadClosed(harness, ready.threadId)
           if (threadId && isObject(result?.turn)) {
             options.clientTools?.turnBegan(harness, threadId, String(result.turn.id))
+            if (options.deviceChrome)
+              options.clientTools?.managedTurn(harness, String(result.turn.id))
             options.turnStarted?.(harness, threadId, result.turn)
           }
           return result

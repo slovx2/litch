@@ -19,7 +19,7 @@ const alive = (pid: number): boolean => {
 
 /** 一个扮演常驻的 Go 层的进程拉起设备进程，返回两边的进程号 */
 async function launch(root: string): Promise<{ parent: ChildProcess; device: number }> {
-  const main = join(REPO, 'packages/device/dist/device/src/main.mjs')
+  const main = join(REPO, 'packages/device/dist/packages/device/src/main.mjs')
   const socket = join(root, 'device', 'device.sock')
   const args = [main, '--listen', `unix://${socket}`, '--state', join(root, 'device')]
   const script = `

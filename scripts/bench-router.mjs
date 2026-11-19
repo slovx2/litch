@@ -38,7 +38,7 @@ import { WebSocket } from 'ws'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const engineMain = join(repo, 'packages/pi/dist/pi/src/adapter.mjs')
-const deviceMain = join(repo, 'packages/device/dist/device/src/main.mjs')
+const deviceMain = join(repo, 'packages/device/dist/packages/device/src/main.mjs')
 for (const [path, name] of [
   [engineMain, 'packages/pi'],
   [deviceMain, 'packages/device'],

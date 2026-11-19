@@ -15,6 +15,7 @@ import {
   isApprovalToken,
 } from '../../../protocol/src/client-approvals.mjs'
 import type { ClientRequestMethod, ClientRequests } from '../../../protocol/src/index.mjs'
+import { REMOTE_CHROME_CARDS } from '../../../protocol/src/remote-chrome.mjs'
 import { type ApprovalsOp, ChannelError } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
 import { RpcError } from '../connection/rpc.mjs'
@@ -124,6 +125,7 @@ export function createApprovals(host: ApprovalsHost): Approvals {
   return {
     ask(place) {
       if (!host.online() || !host.supported()) return null
+      if (place.ask.kind === 'site' && place.ask.remoteHost) return null
       const card: ApprovalCard | null =
         place.ask.kind === 'site'
           ? {
@@ -194,7 +196,7 @@ export function createApprovals(host: ApprovalsHost): Approvals {
         if (outgoing.has(params.id) && !readOnly.has(params.id)) host.phoneAnswer?.(params)
         return true
       }
-      if (method === APPROVAL_CHANGED) {
+      if (method === APPROVAL_CHANGED || method === REMOTE_CHROME_CARDS) {
         if (cards === null) return true
         const changed = params as ApprovalChangedNotification
         if (typeof changed?.threadId !== 'string' || !Array.isArray(changed.data)) return true

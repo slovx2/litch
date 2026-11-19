@@ -16,7 +16,7 @@ import (
 
 // 设备进程的启动命令行是定死的接口，packages/device/src/args.mts 照同一份解析：
 //
-//	<node> <root>/packages/device/dist/device/src/main.mjs \
+//	<node> <root>/packages/device/dist/packages/device/src/main.mjs \
 //	  --listen unix://<home>/device/device.sock --state <home>/device \
 //	  --process-buffer-bytes N --process-limit N --process-idle-ms N --process-exited-ms N \
 //	  --upstream <harness>=unix://<home>/<harness>/runtime.sock …

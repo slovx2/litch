@@ -13,7 +13,7 @@ import type { BrowserExecutor } from '../browser/executor.mjs'
 import { createSiteBook } from '../browser/sites.mjs'
 import { blockedHostOf } from '../browser/url.mjs'
 import type { ClientToolExecutor, ClientToolInvocation } from '../client-tools/types.mjs'
-import { ChromeBridge } from './bridge.mjs'
+import { ChromeBridge, ChromeBridgeError } from './bridge.mjs'
 import { ChromeExecutor, chromeFailure } from './executor.mjs'
 import { ChromeInstaller, chromeIdentity } from './installer.mjs'
 
@@ -38,6 +38,8 @@ export class BrowserTargets {
   private options: BrowserTargetsOptions
   private installer: ChromeInstaller | null = null
   private bridge: ChromeBridge | null = null
+  private controlGeneration = new Map<string, number>()
+  private stopSequence = 0
   private chrome: ChromeExecutor | null = null
   private identity = { id: '', version: '' }
   private initialized: Promise<void>
@@ -73,6 +75,11 @@ export class BrowserTargets {
       token: this.installer.token,
       extensionIds,
       version: this.identity.version,
+    })
+    this.bridge.onEvent((id, event) => {
+      if (event.kind === 'hello' || event.kind === 'disconnected') this.controlGeneration.delete(id)
+      if (event.kind === 'control' && event.stopped)
+        this.controlGeneration.set(id, ++this.stopSequence)
     })
     await this.bridge.start()
     this.chrome = new ChromeExecutor({
@@ -169,6 +176,56 @@ export class BrowserTargets {
           return chromeFailure(
             new Error(this.lastError ?? 'Chrome is unavailable on this platform.'),
           )
+        const bindings = invocation.litchChromeTargets
+        if (bindings) {
+          const instances = this.bridge?.instances() ?? []
+          for (const binding of bindings) {
+            const instance = instances.find(({ id }) => binding.targetId === `chrome:${id}`)
+            if (
+              !instance ||
+              instance.stopped ||
+              instance.protocol === null ||
+              (!binding.recover && this.routingEpoch(instance.id, instance.epoch) !== binding.epoch)
+            )
+              return chromeFailure(
+                new ChromeBridgeError(
+                  'targetUnavailable',
+                  'Chrome stopped or reconnected on this controller. List targets and claim again.',
+                ),
+              )
+          }
+          const abort = new AbortController()
+          const off = this.bridge?.onEvent((id, event) => {
+            if (
+              bindings.some((binding) => binding.targetId === `chrome:${id}`) &&
+              (event.kind === 'hello' ||
+                event.kind === 'disconnected' ||
+                (event.kind === 'control' && event.stopped))
+            )
+              abort.abort()
+          })
+          try {
+            const reply = await this.chrome.call(invocation, {
+              ...context,
+              signal: AbortSignal.any([context.signal, abort.signal]),
+            })
+            if (reply.success && invocation.tool === 'targets') {
+              const item = reply.contentItems[0]
+              if (item?.type === 'inputText') {
+                const { targets } = JSON.parse(item.text)
+                item.text = JSON.stringify({
+                  targets: targets.map((instance: { id: string; epoch: string }) => ({
+                    ...instance,
+                    epoch: this.routingEpoch(instance.id, instance.epoch),
+                  })),
+                })
+              }
+            }
+            return reply
+          } finally {
+            off?.()
+          }
+        }
         return this.chrome.call(invocation, context)
       },
       turnEnded: (turn) => {
@@ -178,6 +235,10 @@ export class BrowserTargets {
       phoneAnswer: (answer) => builtin.phoneAnswer?.(answer),
     }
   }
+  private routingEpoch(id: string, epoch: string): string {
+    return `${epoch}:${this.controlGeneration.get(id) ?? 0}`
+  }
+
   async dispose(): Promise<void> {
     await this.initialized
     this.chrome?.dispose()

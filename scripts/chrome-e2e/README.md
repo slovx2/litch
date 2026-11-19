@@ -69,3 +69,9 @@ LITCH_CHROME_GUI_SLOT=approved npm run client:check:chrome -- --shown
 `remote-model.mjs` 是共享隔离假模型。测试提示为 `LITCH_TOOL_PLAN ` 后接步骤数组，每项 `{namespace,tool,args}`（namespace 缺省 litch_browser），`args` 的 `$targetId` / `$tabId` 可引用先前工具结果。最终回话带 `LITCH_REMOTE_DONE`。它只在显式指定的 `/opt/litch-chrome` 与隔离 HOME 启动。
 
 测试退出会停止本次 Chrome 与原生桥并删除 profile。远程服务与假模型属于两条工作线共用的预置夹具，`--remote` 只断开自己的会话连接，不擅自停止或删除它们；负责共享夹具的会话在各线验收后统一拆除。
+
+## Linux 设备 Chrome
+
+`bash scripts/chrome-e2e/run-remote-device.sh <本地镜像 ID> <CFT zip 绝对路径> <Linux 适配器绝对路径> <Linux Codex 绝对路径>`。从仓库根目录运行。镜像需提供非 root 用户、Xvfb、unzip、Node 24 和 Chrome 所需的 Linux 库。先构建设备包、Pi 入口以及 `apps/desktop/dist/chrome-extension`；Linux 适配器用与镜像一致的 GOOS/GOARCH 编译。实测用 ARM64 Chrome for Testing 157.0.8103.50、Node 24.19.0、Codex 0.163.0。
+
+两个容器使用隔离的 HOME、Chrome 数据目录和各自回环。设备进程不继承 DISPLAY，Chrome 单独使用 Xvfb；Docker 夹具用 `--no-sandbox`，正式启动不使用该参数。脚本使用同一份扩展的开发构建，只访问夹具网页与回环假模型。双端行为由真实 Chrome 执行；控制端由夹具提供桌面连接与执行端口，另走正式设备服务和真实 Codex／Pi 反向工具入口核对协议。脚本不访问商店、真实设备或用户资料。

@@ -11,6 +11,12 @@ import type {
 import { MODEL_RANKING, type ModelRankingSnapshot } from '../../../protocol/src/model-ranking.mjs'
 import { PATH_PICKER_EXTENSION } from '../../../protocol/src/path-picker.mjs'
 import {
+  REMOTE_CHROME_APPROVAL,
+  REMOTE_CHROME_CHANGED,
+  REMOTE_CHROME_STATUS,
+  type RemoteChromeStatus,
+} from '../../../protocol/src/remote-chrome.mjs'
+import {
   type ThreadCapabilities,
   threadCapabilities,
 } from '../../../protocol/src/thread-capabilities.mjs'
@@ -673,6 +679,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let fileBrowserSupported = false
   let filePreviewSupported = false
   let browserUploadSupported = false
+  let remoteChromeSupported = false
+  let remoteChrome: RemoteChromeStatus | undefined
   let mediaImagesSupported = false
   let modelRankingSupported = false
   let powerSupported = false
@@ -893,6 +901,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     organizable,
     manageable,
     modelRanking: modelRankingSupported,
+    ...(remoteChrome && online ? { remoteChrome } : {}),
     service,
     upgrade,
     remoteUpgrade: upgrader?.view() ?? null,
@@ -1919,6 +1928,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     fileBrowserSupported = false
     filePreviewSupported = false
     browserUploadSupported = false
+    remoteChromeSupported = false
+    remoteChrome = undefined
     mediaImagesSupported = false
     turnNotices = false
     readStateSupported = false
@@ -1953,6 +1964,16 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         fileBrowserSupported = info.device.extensions?.includes(EXTENSION.fileBrowser) === true
         filePreviewSupported = info.device.extensions?.includes(EXTENSION.filePreview) === true
         browserUploadSupported = info.device.extensions?.includes(EXTENSION.browserUpload) === true
+        remoteChromeSupported = info.device.extensions?.includes(EXTENSION.remoteChrome) === true
+        if (remoteChromeSupported)
+          void link.request(REMOTE_CHROME_STATUS, {}).then(
+            (status) => {
+              if (mine !== session) return
+              remoteChrome = status
+              hooks.device(view())
+            },
+            (error) => log(`无法读取设备 Chrome 状态：${String(error)}`),
+          )
         mediaImagesSupported = info.device.extensions?.includes(EXTENSION.mediaImages) === true
         configurable = info.device.extensions?.includes(EXTENSION.harnessConfig) === true
         harnesses = info.harnesses.map((entry) => withConfig(harnessFromInfo(entry)))
@@ -2265,6 +2286,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       // 扫码绑定手机：配对的状态、已绑定的手机
       if (pairing.notification(method, params)) return
       // 手机批准：卡片变了（手机）、手机答了（桌面端）
+      if (method === REMOTE_CHROME_CHANGED && remoteChromeSupported) {
+        remoteChrome = params as RemoteChromeStatus
+        hooks.device(view())
+        return
+      }
       if (approvals.notification(method, params)) return
       // 给 harness 安装：任务的状态和日志
       if (install.notification(method, params)) return
@@ -2292,7 +2318,9 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       else route(method, params)
     },
     request: (method, params, id) =>
-      toolCalls.serverRequest(method, params, id) ?? live.serverRequest(method, params, id),
+      method === REMOTE_CHROME_APPROVAL && !remoteChromeSupported
+        ? undefined
+        : (toolCalls.serverRequest(method, params, id) ?? live.serverRequest(method, params, id)),
     log,
     ...(trace ? { trace } : {}),
   })

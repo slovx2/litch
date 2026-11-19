@@ -1,4 +1,21 @@
 export const enChrome = {
+  'chrome.device.title': 'Device Chrome',
+  'chrome.device.status': '{host} · {status}',
+  'chrome.device.enabled': 'Available to conversations on this device.',
+  'chrome.device.disabled': 'Access for conversations on this device is off.',
+  'chrome.device.prepareNote':
+    'On the Linux device, run this command as the Chrome user. Use a dedicated Chrome profile.',
+  'chrome.device.installNote':
+    'On the Linux device, open the store address in Chrome and install Litch Browser. Use the command below to change access.',
+  'chrome.device.conflict': 'Another owner has already registered the Chrome host.',
+  'chrome.device.incompatible': 'Update Litch or the Chrome extension to connect.',
+  'chrome.device.error':
+    'Device Chrome could not start. Run the prepare command on the Linux device to check its registration.',
+  'chrome.device.copy': 'Copy prepare command',
+  'chrome.device.copied': 'Copied',
+  'chrome.device.copyError': 'Clipboard unavailable. Select and copy the command.',
+  'chrome.device.approval': 'Chrome · {host}',
+  'chrome.device.signIn': 'Sign in using Chrome on {host}. Return control here when finished.',
   'chrome.tab': 'Allow control of this Chrome tab?',
   'chrome.tabAllow': 'Allow control',
   'chrome.trustDone':

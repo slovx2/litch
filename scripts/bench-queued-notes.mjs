@@ -2,7 +2,7 @@
 // 先构建 device。用同一脚本对比改动前后的产物，不代表真实模型冷启动耗时。
 import assert from 'node:assert/strict'
 import { setTimeout as delay } from 'node:timers/promises'
-import { litch, parent, treeRig } from '../packages/device/dist/device/test/tree-kit.mjs'
+import { litch, parent, treeRig } from '../packages/device/dist/packages/device/test/tree-kit.mjs'
 
 for (let sample = 0; sample < 3; sample++) {
   const logs = []

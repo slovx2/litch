@@ -17,7 +17,7 @@ const alive = (pid: number): boolean => {
 test('拉起它的进程被强杀：设备进程自己退出，并把聚合面的套接字清掉', async () => {
   const root = tempDir()
   const socket = join(root, 'device', 'device.sock')
-  const main = join(REPO, 'packages/device/dist/device/src/main.mjs')
+  const main = join(REPO, 'packages/device/dist/packages/device/src/main.mjs')
   // 中间这个进程扮演常驻的 Go 层：照定死的命令行拉起设备进程（自成一组，标准输出接管道），
   // 见到就绪标记后把设备进程的进程号报出来，然后一直等着
   const args = [main, '--listen', `unix://${socket}`, '--state', join(root, 'device')]

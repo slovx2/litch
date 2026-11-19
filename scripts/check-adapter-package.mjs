@@ -831,7 +831,7 @@ async function musl(pkgDir, built) {
   // 不拦的话是什么样：解开来直接跑
   must(name, `mkdir ${HOME}/raw && tar -xzf /pkg/${built.real.name} -C ${HOME}/raw`)
   const raw = `${HOME}/raw/${NAME}-${built.version}-${target}/libexec`
-  must(name, `test -f ${raw}/packages/device/dist/device/src/main.mjs`)
+  must(name, `test -f ${raw}/packages/device/dist/packages/device/src/main.mjs`)
   const node = sh(name, `${raw}/node/bin/node --version`)
   assert.notEqual(node.code, 0)
   fact(`直接跑随包带的 Node：退出码 ${node.code}，${node.all.split('\n')[0]}`)

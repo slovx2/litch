@@ -44,7 +44,7 @@ for (const [path, hint] of [
   [tool, '请先运行 npm run build（apps/desktop）'],
   [cli, '请先运行 npm run client:stage:adapter，或用 --adapter 指到一份暂存好的目录'],
   [node, '这份适配器里没有自带的 Node，重新暂存一遍'],
-  [join(adapter, 'packages/device/dist/device/src/main.mjs'), '这份适配器里没有设备进程'],
+  [join(adapter, 'packages/device/dist/packages/device/src/main.mjs'), '这份适配器里没有设备进程'],
 ]) {
   if (existsSync(path)) continue
   console.error(`没有找到 ${path}：${hint}`)
@@ -371,7 +371,7 @@ try {
       assert.equal(runtimes.length, 1, `运行时不是恰好一个：${JSON.stringify(runtimes)}`)
       assert.ok(runtimes[0].command.includes(`${adapter}/packages/pi/dist/pi/src/adapter.mjs`))
       const device = children.find((entry) =>
-        entry.command.includes(`${adapter}/packages/device/dist/device/src/main.mjs`),
+        entry.command.includes(`${adapter}/packages/device/dist/packages/device/src/main.mjs`),
       )
       assert.ok(device, '没有看到设备进程')
       assert.ok(

@@ -12,7 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "biome check src test ../protocol/src/device.mts ../protocol/src/device-codex.mts",
-    "start": "node dist/device/src/main.mjs",
-    "test": "npm run build && npm run build --prefix ../pi && npm run build --prefix ../claude && cd ../.. && node scripts/build-cli.mjs && node --import ./packages/device/dist/device/test/isolate-process.mjs --test --test-timeout=300000 packages/device/dist/device/test/*.test.mjs"
+    "start": "node dist/packages/device/src/main.mjs",
+    "test": "npm run build && npm run build --prefix ../pi && npm run build --prefix ../claude && cd ../.. && node scripts/build-cli.mjs && node --import ./packages/device/dist/packages/device/test/isolate-process.mjs --test --test-timeout=300000 packages/device/dist/packages/device/test/*.test.mjs"
   }
 }

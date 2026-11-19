@@ -103,7 +103,7 @@ if (withSsh && !managed) {
 /** 主进程的二进制和各 SSH 入口的端口：取 ssh 配置片段时要用 */
 const service = { binary: '', ports: /** @type {string[]} */ ([]) }
 const engine = join(repo, 'packages/pi/dist/pi/src/adapter.mjs')
-const deviceMain = join(repo, 'packages/device/dist/device/src/main.mjs')
+const deviceMain = join(repo, 'packages/device/dist/packages/device/src/main.mjs')
 for (const [path, name] of [
   [engine, 'packages/pi'],
   [deviceMain, 'packages/device'],

@@ -301,7 +301,7 @@ if (process.argv.includes('--device')) {
   device = spawn(
     process.execPath,
     [
-      join(repo, 'packages/device/dist/device/src/main.mjs'),
+      join(repo, 'packages/device/dist/packages/device/src/main.mjs'),
       '--listen',
       entry,
       '--state',

@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
-import { registerAutomationGuide } from '../packages/device/dist/device/src/automation-guide.mjs'
+import { registerAutomationGuide } from '../packages/device/dist/packages/device/src/automation-guide.mjs'
 import { browserToolsSpec } from '../packages/device/dist/protocol/src/client-tools-browser.mjs'
 import {
   resolveAutomationTools,
