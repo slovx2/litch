@@ -365,6 +365,10 @@ In a terminal under the Linux user running Chrome, run `codex-harness-adapter ch
 
 In a new conversation, `targets()` identifies the controller and session device by `location`. Localhost refers to the machine running the selected Chrome. You can claim tabs on both machines in one conversation; each `run_actions` batch must stay on one. Website permissions are stored on the machine running Chrome. Approve access in a connected Litch desktop. A phone can show that approval is pending. For sign-in, use Chrome on the Linux device and return control in Litch.
 
+未指定 Chrome 句柄的普通认领和释放仍使用内置浏览器。Chrome 重连后，用 `ensure_claimed` 返回的新标签句柄继续操作；旧句柄不会自动换绑。等待站点审批时关闭设备或 harness 的浏览器开关，迟到的批准不会恢复执行权。
+
+Ordinary claiming and release without Chrome handles still use the built-in browser. After Chrome reconnects, continue with the fresh tab handle returned by `ensure_claimed`; old handles are not silently rebound. Turning off the device or harness browser switch while site approval is pending prevents a late approval from restoring access.
+
 设备 Chrome 的站点策略在设备上管理：在 Chrome 所属用户的终端运行 `codex-harness-adapter chrome sites` 查看；用 `trust-on` 或 `trust-off` 更改信任开关，用 `block <域名>`、`unblock <域名>` 管理信任模式下的黑名单，用 `forget <来源>` 删除永久许可。默认关闭信任开关。
 
 Manage the device’s site policy in its Chrome user’s terminal. Run `codex-harness-adapter chrome sites` to inspect settings, `trust-on` or `trust-off` to change site trust, `block <host>` or `unblock <host>` to manage the blocklist used in trust mode, and `forget <origin>` to remove a saved approval. Site trust is off by default.

@@ -318,7 +318,8 @@ export class ClientToolRouter {
         : null,
       ask: async (ask, signal) => {
         const fullAccess = await fullAccessOf()
-        if (signal.aborted) return null
+        if (signal.aborted || this.options.enabled?.(call.harness, call.namespace) === false)
+          return null
         if (fullAccess) {
           if (ask.kind === 'site') return 'once'
           throw new Error(
@@ -330,7 +331,7 @@ export class ClientToolRouter {
           throw new Error(
             'Connect a Litch desktop to approve access on the session device. The requested action was not executed.',
           )
-        return requestChromeApproval({
+        const decision = await requestChromeApproval({
           scope,
           callId: params.callId,
           ask,
@@ -339,6 +340,8 @@ export class ClientToolRouter {
           deliver: (prompt, signal) => this.deliverChromeApproval(call, approver, prompt, signal),
           project: this.options.projectChromeApproval ?? (() => () => {}),
         })
+        // 审批等待期间设备或 harness 可以关闭浏览器；迟到的答复不能恢复执行权。
+        return this.options.enabled?.(call.harness, call.namespace) === false ? null : decision
       },
     })
     if (!routed) return false

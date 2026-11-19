@@ -6,6 +6,7 @@ import { createServer } from 'node:http'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as pause } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { withChromiumTestArgs } from '../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 import { checkRemoteChromeEngines } from './remote-device-engines.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -60,18 +61,12 @@ const wait = async (predicate, what) => {
   }
   throw new Error(`Timed out waiting for ${what}`)
 }
+// 这是适配器准备清单的参数，不是 Chromium 的启动参数。
+const prepareOptions = (action) => (action === 'prepare' ? ['--user-data-dir', profile] : [])
 const runCLI = (action) =>
   execFileSync(
     binary,
-    [
-      'chrome',
-      action,
-      '--root',
-      repo,
-      '--home',
-      join(home, 'adapter'),
-      ...(action === 'prepare' ? ['--user-data-dir', profile] : []),
-    ],
+    ['chrome', action, '--root', repo, '--home', join(home, 'adapter'), ...prepareOptions(action)],
     {
       env: { ...process.env, CHROME_CONFIG_HOME: config },
       encoding: 'utf8',
@@ -90,7 +85,7 @@ let chrome
 function launch() {
   chrome = spawn(
     browser,
-    [
+    withChromiumTestArgs([
       '--no-sandbox',
       '--disable-dev-shm-usage',
       '--no-first-run',
@@ -104,7 +99,7 @@ function launch() {
       `--user-data-dir=${profile}`,
       `--load-extension=${extension}`,
       'about:blank',
-    ],
+    ]),
     {
       env: { ...process.env, DISPLAY: ':99', CHROME_CONFIG_HOME: config },
       stdio: ['ignore', 'ignore', 'pipe'],

@@ -81,12 +81,7 @@ export class RemoteChromeRouter {
     if (params.namespace !== 'litch_browser') return null
     const key = keyOf(scope)
     const opaque = hasChrome(params.arguments, true)
-    if (
-      !opaque &&
-      !['targets', 'claim', 'ensure_claimed', 'release'].includes(params.tool) &&
-      !hasChrome(params.arguments)
-    )
-      return null
+    if (!opaque && params.tool !== 'targets' && !hasChrome(params.arguments)) return null
     if (!this.turns.has(key) && !(this.runtime.status.enabled && context.negotiated))
       return opaque
         ? Promise.resolve(
@@ -247,6 +242,32 @@ export class RemoteChromeRouter {
       throw new ChromeRouteError(
         'The controller disconnected. Its Chrome handles cannot be used on another computer.',
       )
+    let recoveryEpoch: string | undefined
+    if (
+      route.location === 'controller' &&
+      params.tool === 'ensure_claimed' &&
+      routes.some((one) => one.kind === 'tabId')
+    ) {
+      // 只刷新已绑定控制端的实例代次；原标签的 DevTools 身份仍由执行器核验。
+      // 不沿用旧代次，也不允许刷新后与真正恢复之间再次重连而静默换绑。
+      const listed = await route.controller?.call(
+        { ...params, tool: 'targets', arguments: {}, callId: randomUUID(), litchChromeTargets: [] },
+        signal,
+      )
+      signal.throwIfAborted()
+      const targets = listed?.success ? readObject(listed.contentItems[0])?.targets : null
+      const current = Array.isArray(targets)
+        ? targets.find((item) => isObject(item) && item.targetId === route.target)
+        : null
+      if (
+        !isObject(current) ||
+        typeof current.epoch !== 'string' ||
+        current.stopped === true ||
+        current.protocol === null
+      )
+        throw new ChromeRouteError('The original controller Chrome instance is unavailable.')
+      recoveryEpoch = current.epoch
+    }
     if (
       route.location === 'sessionDevice' &&
       params.tool === 'request_sign_in' &&
@@ -274,10 +295,7 @@ export class RemoteChromeRouter {
               ...call,
               litchChromeTargets: routes.map((one) => ({
                 targetId: one.target,
-                epoch: one.epoch,
-                ...(params.tool === 'ensure_claimed' && one.kind === 'tabId'
-                  ? { recover: true }
-                  : {}),
+                epoch: recoveryEpoch ?? one.epoch,
               })),
             },
             signal,
@@ -285,7 +303,10 @@ export class RemoteChromeRouter {
     signal.throwIfAborted()
     if (!reply) throw new ChromeRouteError('The controller disconnected.')
     if (!reply.success) return reply
-    return this.transform(reply, params.tool, args, route)
+    return this.transform(reply, params.tool, args, {
+      ...route,
+      epoch: recoveryEpoch ?? route.epoch,
+    })
   }
 
   private describeTarget(
