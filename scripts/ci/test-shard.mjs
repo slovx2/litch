@@ -23,7 +23,7 @@ const suites = {
     args: ['--import', './packages/pi/dist/pi/test/setup.mjs'],
   },
   device: {
-    dir: 'packages/device/dist/device/test',
+    dir: 'packages/device/dist/packages/device/test',
     suffix: '.test.mjs',
     args: ['--test-timeout=300000'],
   },

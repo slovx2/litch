@@ -73,7 +73,7 @@ const PACKAGES = [
   // 通用 ACP 引擎：一份代码扮演 gemini、qwen、acp 三个 harness（CHA_ACP_AGENT）
   { name: 'acp', entry: 'dist/acp/src/adapter.mjs', required: true, omit: ['dev'] },
   { name: 'antigravity', entry: 'dist/antigravity/src/adapter.mjs', required: true, omit: ['dev'] },
-  { name: 'device', entry: 'dist/device/src/main.mjs', required: true, omit: ['dev'] },
+  { name: 'device', entry: 'dist/packages/device/src/main.mjs', required: true, omit: ['dev'] },
 ]
 
 /**
@@ -232,8 +232,17 @@ function tidyModules(out) {
 export function staleSource(from, entry) {
   const built = lstatSync(join(from, entry)).mtimeMs
   const packages = dirname(from)
-  for (const name of readdirSync(join(from, 'dist'))) {
-    const source = join(packages, name, 'src')
+  const device = entry.startsWith('dist/packages/')
+  const top = join(from, 'dist', ...(device ? ['packages'] : []))
+  const sources = readdirSync(top).map((name) => join(packages, name, 'src'))
+  if (device) {
+    const automation = 'third_party/litch-automation/packages'
+    const builtAutomation = join(from, 'dist', automation)
+    if (existsSync(builtAutomation))
+      for (const name of readdirSync(builtAutomation))
+        sources.push(join(dirname(packages), automation, name, 'src'))
+  }
+  for (const source of sources) {
     if (!existsSync(source)) continue
     let newer = null
     walk(source, (path, entry) => {
@@ -271,7 +280,9 @@ function stagePackage(spec, out, guardTarget, from = join(repo, 'packages', spec
   // Claude 入口的守护进程各平台都编了一份（scripts/build-process-guard.mjs），只带目标平台的
   copyTree(dist, join(to, 'dist'), (source) => {
     const parts = relative(dist, source).split(sep)
-    if (parts[1] === 'test') return false
+    if (spec.name === 'device' && parts[0] && !['packages', 'third_party'].includes(parts[0]))
+      return false
+    if (parts[1] === 'test' || (spec.name === 'device' && parts[2] === 'test')) return false
     return !(
       parts[1] === 'src' &&
       (parts[2] === 'process-guard' || parts[2] === 'tui-helper') &&

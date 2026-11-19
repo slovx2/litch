@@ -31,6 +31,12 @@ import {
 import type { HarnessConfigChangedNotification } from '../../protocol/src/harness-config.mjs'
 import { PROJECT_PERMISSION } from '../../protocol/src/harness-project-permissions.mjs'
 import { supportsNativeBackground } from '../../protocol/src/native-background-wake.mjs'
+import {
+  REMOTE_CHROME_CONFIGURE,
+  REMOTE_CHROME_PENDING_PREFIX,
+  REMOTE_CHROME_PREFIX,
+  REMOTE_CHROME_STATUS,
+} from '../../protocol/src/remote-chrome.mjs'
 import { SESSION_TREE_METHOD } from '../../protocol/src/session-tree.mjs'
 import { SUGGESTIONS_LIST } from '../../protocol/src/suggestion-inbox.mjs'
 import { localTaskTimeZone } from '../../protocol/src/task-schedule.mjs'
@@ -82,6 +88,7 @@ import { type DevicePairing, PAIR_PREFIX, PairingError } from './pairing.mjs'
 import type { PowerActivity } from './power-activity.mjs'
 import type { RecoveryActions } from './recovery-actions.mjs'
 import { Relay } from './relay.mjs'
+import type { DeviceChromeRuntime } from './remote-chrome-runtime.mjs'
 import type { RestartResume } from './restart-resume.mjs'
 import { classify } from './routes.mjs'
 import { describeDevice } from './service-info.mjs'
@@ -157,6 +164,7 @@ export interface SessionHost {
     harness: string,
     runtime: Record<string, unknown> | null,
     native: boolean,
+    chromeRouting: boolean,
   ): Record<string, unknown>
 
   turnNotices?: import('./turn-notices.mjs').TurnNotices
@@ -214,6 +222,7 @@ export interface SessionHost {
   pairing: DevicePairing | null
   /** 手机上批准（clientApprovals）：桌面端挂的卡片、手机的答复，各连接共用 */
   approvals: DeviceApprovals
+  chrome?: DeviceChromeRuntime | null
   /** harness 详情设置经设备进程的翻译改了配置：告诉所有声明过 harnessConfig 的连接 */
   harnessConfigChanged(params: HarnessConfigChangedNotification): void
   /** 设备设置里 `harness.<id>.env` 填了哪些变量名。没有设置功能时是空的 */
@@ -269,6 +278,8 @@ export class ClientSession implements ClientToolPeer {
   /** 握手时客户端给的参数，之后才出现的 harness 也用它去握手 */
   private initializeParams: unknown = null
   /** 握手时声明能执行的客户端工具命名空间（clientTools 扩展） */
+  remoteChrome = false
+  chromeTargetRouting = false
   clientToolNamespaces: DeclaredClientTools = NO_CLIENT_TOOLS
   /** 握手时报的桌面端信息（声明了 litch_machine 的 Litch 带） */
   desktop: ClientToolsDesktopInfo | null = null
@@ -335,7 +346,7 @@ export class ClientSession implements ClientToolPeer {
           host.sessionTree.turnEvent(harness, method, params)
         },
         itemEvent: (params) => host.sessionTree.itemEvent(params),
-        decorate: (thread) => host.sessionTree.decorate(thread),
+        decorate: (thread) => host.sessionTree.decorate(thread, this.remoteChrome),
         deleted: (threadId) => host.sessionTree.deleted(threadId),
       },
       worktrees: {
@@ -640,6 +651,16 @@ export class ClientSession implements ClientToolPeer {
     switch (route.kind) {
       case 'device':
         if (method === 'runtime/info') return this.runtimeInfo()
+        if (method.startsWith(REMOTE_CHROME_PREFIX)) {
+          if (!this.remoteChrome)
+            throw new DeviceError('extensionRequired', 'remoteChrome must be declared')
+          if (method === REMOTE_CHROME_CONFIGURE && this.host.chrome)
+            return this.host.chrome.configure(frame.params)
+          if (method !== REMOTE_CHROME_STATUS || !this.host.chrome)
+            throw new DeviceError('unsupported', 'Device Chrome is unavailable')
+          const chrome = this.host.chrome
+          return chrome.refresh().then(() => chrome.status)
+        }
         if (method === ATTACHMENT_WATCH_METHOD) {
           if (!this.declared.has(EXTENSION.fileAttachments))
             throw new ProtocolError(-32602, 'fileAttachments 扩展未声明')
@@ -773,7 +794,8 @@ export class ClientSession implements ClientToolPeer {
             decorate: (row: Record<string, unknown>) => {
               if (!this.declared.has(EXTENSION.threadCapabilities)) delete row.litchCapabilities
               if (this.declared.has(EXTENSION.manager)) this.host.managers?.decorate(row)
-              if (this.declared.has(EXTENSION.sessionTree)) this.host.sessionTree.decorate(row)
+              if (this.declared.has(EXTENSION.sessionTree))
+                this.host.sessionTree.decorate(row, this.remoteChrome)
               if (this.declared.has(EXTENSION.backgroundTasks)) this.decorateBackground(row)
               if (this.declared.has(EXTENSION.worktrees)) this.host.worktrees?.decorate(row)
             },
@@ -985,8 +1007,10 @@ export class ClientSession implements ClientToolPeer {
       ].includes(method)
     )
       this.host.restart?.cancel(params.threadId, method === 'turn/interrupt')
-    if (params && method === 'turn/interrupt' && typeof params.threadId === 'string')
+    if (params && method === 'turn/interrupt' && typeof params.threadId === 'string') {
+      this.host.clientTools.interrupt(link.harness, params.threadId, params.turnId)
       this.host.sessionTree.interrupted(params.threadId)
+    }
     // 用户在后台任务页上停命令：原生 codex 派生的集合把它记成 stopped（不是 failed），子会话补的回报写明是用户停的
     if (
       params &&
@@ -1041,6 +1065,7 @@ export class ClientSession implements ClientToolPeer {
         link.harness,
         link.facts.runtime,
         link.dialect.clientToolsByDevice === true,
+        this.remoteChrome,
       )
     // 应答回来之后要记的（一个请求只有一个 after）；没成时要收拾的
     const afterwards: ((result: unknown) => void)[] = []
@@ -1411,7 +1436,8 @@ export class ClientSession implements ClientToolPeer {
     if (!this.declared.has(EXTENSION.threadCapabilities)) delete thread.litchCapabilities
     workspaces.decorate(threadId, thread)
     if (this.declared.has(EXTENSION.manager)) this.host.managers?.decorate(thread)
-    if (this.declared.has(EXTENSION.sessionTree)) this.host.sessionTree.decorate(thread)
+    if (this.declared.has(EXTENSION.sessionTree))
+      this.host.sessionTree.decorate(thread, this.remoteChrome)
     if (this.declared.has(EXTENSION.backgroundTasks)) this.decorateBackground(thread)
     if (this.declared.has(EXTENSION.worktrees)) this.host.worktrees?.decorate(thread)
     return more ? result : { thread }
@@ -1486,7 +1512,13 @@ export class ClientSession implements ClientToolPeer {
 
   /** 设备信息。会话编排开着才列 sessionTree：客户端按它决定带不带 litch_sessions、出不出派子会话的界面 */
   private deviceInfo(): DeviceInfo {
-    const { info } = this.host
+    const advertised = this.host.info
+    const info = this.remoteChrome
+      ? advertised
+      : {
+          ...advertised,
+          extensions: advertised.extensions.filter((name) => name !== EXTENSION.remoteChrome),
+        }
     return this.host.sessionTreeOn()
       ? {
           ...info,
@@ -1657,6 +1689,21 @@ export class ClientSession implements ClientToolPeer {
     if (this.state !== 'ready') return
     if (extension !== undefined && !this.declared.has(extension)) return
     if (this.optOut.has(method)) return
+    if (
+      !this.remoteChrome &&
+      method === 'litch/thread/pending/changed' &&
+      isObject(params) &&
+      Array.isArray(params.litchPendingRequests)
+    )
+      params = {
+        ...params,
+        litchPendingRequests: params.litchPendingRequests.filter(
+          (request) =>
+            !isObject(request) ||
+            typeof request.id !== 'string' ||
+            !request.id.startsWith(REMOTE_CHROME_PENDING_PREFIX),
+        ),
+      }
     if (method.startsWith('litch/manager/'))
       params = managerResetProjection(params, this.declared.has(EXTENSION.managerResetTarget))
     if (
@@ -1692,7 +1739,8 @@ export class ClientSession implements ClientToolPeer {
     const copy: Record<string, unknown> = { ...thread, harness }
     if (!this.declared.has(EXTENSION.threadCapabilities)) delete copy.litchCapabilities
     this.host.workspaces.decorate(thread.id, copy)
-    if (this.declared.has(EXTENSION.sessionTree)) this.host.sessionTree.decorate(copy)
+    if (this.declared.has(EXTENSION.sessionTree))
+      this.host.sessionTree.decorate(copy, this.remoteChrome)
     if (this.declared.has(EXTENSION.backgroundTasks)) this.decorateBackground(copy)
     if (this.declared.has(EXTENSION.worktrees)) this.host.worktrees?.decorate(copy)
     this.send(JSON.stringify({ method: 'thread/started', params: { thread: copy } }))
@@ -1741,7 +1789,13 @@ export class ClientSession implements ClientToolPeer {
     this.state = 'initializing'
     this.declared = new Set(declared)
     this.initializeParams = params
+    this.remoteChrome = this.declared.has(EXTENSION.remoteChrome)
     this.clientToolNamespaces = clientToolNamespaces(params)
+    this.chromeTargetRouting =
+      this.remoteChrome &&
+      this.clientToolNamespaces.has('litch_browser') &&
+      isObject(capabilities.litchClientTools) &&
+      capabilities.litchClientTools.chromeTargetRouting === 1
     this.desktop = this.clientToolNamespaces.size ? desktopOf(capabilities) : null
     // 退订名单在路由层生效：被退订的通知直接不转发
     this.optOut = new Set(strings(capabilities.optOutNotificationMethods))

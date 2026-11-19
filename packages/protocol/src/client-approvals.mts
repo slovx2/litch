@@ -92,6 +92,8 @@ export interface BrowserSiteSummary {
   origin: string
   device: string
   browser: 'chrome' | 'builtin'
+  /** 只有声明 remoteChrome 的连接可见。 */
+  location?: 'sessionDevice'
 }
 
 /** 自身访问独立于网站登录；授权档位用已有签名字段 ref（once/session/always）传递，always 只代表 24 小时。 */

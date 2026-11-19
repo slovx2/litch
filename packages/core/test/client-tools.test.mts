@@ -273,6 +273,7 @@ test('握手：主进程报了能执行的命名空间就声明 clientTools 扩�
   assert.deepEqual(capabilities.litchClientTools, {
     namespaces: ['litch_echo', 'litch_browser'],
     browserActions: true,
+    chromeTargetRouting: 1,
   })
 
   for (const namespaces of [null, []]) {
@@ -965,5 +966,56 @@ test('自定义权限名称不能仅凭底层沙箱是完全访问就免审', as
     response: { success: true, contentItems: [] },
   })
   await pending
+  core.stop()
+})
+
+test('设备 Chrome 站点卡在桌面回答，nonce 回给会话设备，撤卡不回放', async () => {
+  const { core, peer, command } = setup({
+    namespaces: ['litch_browser'],
+    managed: true,
+    deviceExtensions: ['remoteChrome'],
+    kind: 'ssh',
+  })
+  core.start()
+  await settle()
+  const session = watchSession(core)
+  await settle()
+  const origin = 'http://localhost:31770'
+  const prompt = {
+    id: 'device-chrome-approval',
+    nonce: 'device-chrome-nonce',
+    kind: 'site',
+    expiresAt: Date.now() + 300_000,
+    threadId: 'a',
+    turnId: 't1',
+    callId: 'c1',
+    hostLabel: 'Linux fixture',
+    origin,
+  }
+  const result = peer.last().ask('litch/remoteChrome/approval', prompt)
+  await settle()
+  const request = session.seen.view?.requests[0] as ClientAskRequest | undefined
+  assert.equal(request?.kind, 'clientAsk')
+  assert.deepEqual(request?.ask, {
+    kind: 'site',
+    browser: 'chrome',
+    origin,
+    url: origin,
+    remoteHost: 'Linux fixture',
+  })
+  await command('session.respond', {
+    deviceId: 'local',
+    sessionId: 'a',
+    requestId: request?.id,
+    optionId: 'once',
+  })
+  assert.deepEqual(resultOf(await result), { id: prompt.id, nonce: prompt.nonce, decision: 'once' })
+  const second = 'second-request'
+  void peer.last().ask('litch/remoteChrome/approval', { ...prompt, id: 'second-card' }, second)
+  await settle()
+  assert.equal(session.seen.view?.requests.length, 1)
+  peer.last().notify('serverRequest/resolved', { threadId: 'a', requestId: second })
+  await settle()
+  assert.equal(session.seen.view?.requests.length, 0)
   core.stop()
 })

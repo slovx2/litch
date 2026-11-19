@@ -10,6 +10,7 @@ import { EXTENSION } from '../../protocol/src/device.mjs'
 import { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
 import { installSharedAutomationSkills } from '../../shared/src/automation-skills.mjs'
 import { isAutomationSpec, withAutomationGuide } from '../../shared/src/automation-tools.mjs'
+import { DEVICE_CHROME_GUIDE } from './automation-guide.mjs'
 import { managerTools, ruleSettings } from './manager-rules.mjs'
 import { isObject } from './wire.mjs'
 
@@ -20,7 +21,7 @@ export function prepareSessionTools(
   runtime: Record<string, unknown> | null,
   native: boolean,
   values: Record<string, unknown> | undefined,
-  options: { tasks: boolean; desktopNamespaces?: readonly string[] },
+  options: { tasks: boolean; desktopNamespaces?: readonly string[]; deviceChrome?: boolean },
 ): Record<string, unknown> {
   if (params.ephemeral === true) return params
   if (!Array.isArray(runtime?.extensions) || !runtime.extensions.includes(EXTENSION.clientTools))
@@ -65,5 +66,21 @@ export function prepareSessionTools(
   )
   const { dynamicTools: _given, ...rest } = params
   if (dynamicTools.some(isAutomationSpec)) installSharedAutomationSkills()
-  return dynamicTools.length ? { ...rest, dynamicTools: withAutomationGuide(dynamicTools) } : rest
+  if (!dynamicTools.length) return rest
+  const guided = withAutomationGuide(dynamicTools)
+  return {
+    ...rest,
+    dynamicTools:
+      options.deviceChrome &&
+      dynamicTools.some((spec) => isObject(spec) && spec.name === 'litch_browser')
+        ? guided.map((spec) =>
+            isObject(spec) && spec.name === 'litch_browser'
+              ? {
+                  ...spec,
+                  instructions: [spec.instructions, DEVICE_CHROME_GUIDE].filter(Boolean).join('\n'),
+                }
+              : spec,
+          )
+        : guided,
+  }
 }

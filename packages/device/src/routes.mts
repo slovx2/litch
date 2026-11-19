@@ -58,6 +58,7 @@ export function classify(method: string, params: unknown): Route {
   )
     return { kind: 'device' }
   // 手机上批准（clientApprovals 扩展）：卡片只在设备进程的内存里，不转给引擎（list 带的 threadId 不是指路的）
+  if (method.startsWith('litch/remoteChrome/')) return { kind: 'device' }
   if (method.startsWith('litch/approval/')) return { kind: 'device' }
   // 工作树（worktrees 扩展）：设备进程自己跑 git，记录存在它自己的库里
   if (method.startsWith('litch/worktree/')) return { kind: 'device' }

@@ -21,6 +21,7 @@ import {
 } from './pair-host.mjs'
 import type { PairingConfig } from './pairing.mjs'
 import { watchParent } from './parent-watch.mjs'
+import { deviceChromeCommand } from './remote-chrome-install.mjs'
 import { listenUnix, parseSocketUrl, socketExists, unixConnector } from './sockets.mjs'
 
 /**
@@ -86,6 +87,31 @@ async function main(): Promise<void> {
     process.stdout.write(`${USAGE}\n`)
     return
   }
+  const [mode, chromeAction, chromeState, chromeData, chromeSite] = argv
+  if (mode === '--chrome' && process.platform === 'linux') {
+    try {
+      if (
+        chromeAction === undefined ||
+        chromeState === undefined ||
+        chromeData === undefined ||
+        chromeSite === undefined ||
+        argv.length !== 5
+      )
+        throw new Error('Invalid device Chrome command.')
+      const status = await deviceChromeCommand(
+        chromeAction,
+        chromeState,
+        adapterCliPath(),
+        chromeData,
+        chromeSite,
+      )
+      process.stdout.write(`${JSON.stringify(status)}\n`)
+    } catch (error) {
+      process.stderr.write(`${error instanceof Error ? error.message : 'Device Chrome failed.'}\n`)
+      process.exitCode = 1
+    }
+    return
+  }
   const args = parseArgs(argv)
   // 标准输出是接到 Go 进程的管道，标准错误接在日志上。对面没了以后再写会报错，
   // 常驻的进程不能因为这个崩掉（那样就来不及清理套接字了）
@@ -103,6 +129,7 @@ async function main(): Promise<void> {
   const control = socketExists(controlPath) ? new SocketControl(controlPath, log) : undefined
   const device = new DeviceServer({
     stateDir: args.stateDir,
+    ...(process.platform === 'linux' ? { chromeBinary: adapterCliPath() } : {}),
     log,
     ...(summary ? { trace: summary.write } : {}),
     ...(args.processes ? { processes: args.processes } : {}),

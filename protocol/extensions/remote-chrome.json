@@ -1,0 +1,38 @@
+{
+  "extension": "remoteChrome",
+  "description": "Opt-in access to Chrome on the Linux session device. The device issues scoped routing handles. Controllers continue to execute their own Chrome actions through clientTools.",
+  "clientCapabilities": {
+    "litchExtensions": ["remoteChrome"],
+    "litchClientTools": {
+      "chromeTargetRouting": 1
+    }
+  },
+  "runtimeInfo": {
+    "device.extensions": ["remoteChrome"]
+  },
+  "clientToDevice": {
+    "litch/remoteChrome/configure": {
+      "params": "RemoteChromePolicyChange & { proof: string }",
+      "result": "RemoteChromePolicy",
+      "authorization": "The local Chrome user CLI reads the current service proof from a private file. It is not issued to model tools or device clients."
+    },
+    "litch/remoteChrome/status": {
+      "params": {},
+      "result": "RemoteChromeStatus"
+    }
+  },
+  "deviceToClient": {
+    "litch/remoteChrome/changed": "RemoteChromeStatus",
+    "litch/remoteChrome/cardsChanged": "ApprovalChangedNotification",
+    "litch/remoteChrome/approval": {
+      "params": "RemoteChromePrompt",
+      "result": "RemoteChromeAnswer | null"
+    }
+  },
+  "routing": {
+    "targetLocation": ["controller", "sessionDevice"],
+    "hostLabel": "Display only",
+    "handles": "Issued by the session device for the active harness, session and turn. Claims are single use. All actions in one batch must resolve to one execution end.",
+    "approval": "One device-issued prompt with a nonce bound to the in-flight request, forwarded only to an authorized desktop connection. Phone projections are read-only."
+  }
+}

@@ -27,7 +27,7 @@ import {
 const STATUS = 'litch/harness/status/changed'
 const SECTION_UPDATED = 'litch/thread/section/updated'
 const BOTH = ['harness', 'deviceWorkspaces']
-const DEVICE_MAIN = 'packages/device/dist/device/src/main.mjs'
+const DEVICE_MAIN = 'packages/device/dist/packages/device/src/main.mjs'
 
 interface Fixture {
   child: ChildProcessWithoutNullStreams

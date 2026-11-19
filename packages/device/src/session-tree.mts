@@ -22,11 +22,13 @@
 // 普通提案卡上的“在这里做”（proposalHere）：提案记 here，往父会话发一条用户消息，父会话在跑就排到回合结束后
 //（check 里先发它，再提醒、唤醒）。任务卡按 harness 关着（host.taskCards）时，新会话挑没有建议的那组工具
 //（currentSessionTools），已经带着 wrap_up 的会话也不再提醒。
+
 import { randomUUID } from 'node:crypto'
 import type { LitchBackgroundTask } from '../../protocol/src/background-tasks.mjs'
 import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { SESSION_TOOL, sessionTools } from '../../protocol/src/client-tools-sessions.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
+import { REMOTE_CHROME_PENDING_PREFIX } from '../../protocol/src/remote-chrome.mjs'
 import { parseSessionMentions } from '../../protocol/src/session-mentions.mjs'
 import type {
   SessionDelegatedResponse,
@@ -1538,11 +1540,13 @@ export class SessionTree {
    * 会话对象经过聚合面、发给声明了 sessionTree 的连接时：有父会话的挂上 litchLineage；
    * 记着建会话时带的动态工具的，挂上其中 litch_ 开头的命名空间（litchToolNamespaces）
    */
-  decorate(thread: Record<string, unknown>): void {
+  decorate(thread: Record<string, unknown>, remoteChrome = false): void {
     if (typeof thread.id !== 'string') return
     thread.litchIgnoredQuestions = this.store.ignoredQuestions(thread.id)
     thread.litchQuestionSettlements = this.store.questionSettlements(thread.id)
-    thread.litchPendingRequests = this.pendingRequests(thread.id)
+    thread.litchPendingRequests = this.pendingRequests(thread.id).filter(
+      (request) => remoteChrome || !request.id.startsWith(REMOTE_CHROME_PENDING_PREFIX),
+    )
     thread.litchDelegatedResponses = this.store.responses(thread.id)
     const lineage = this.lineage(thread.id)
     if (lineage) thread.litchLineage = lineage

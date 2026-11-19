@@ -80,10 +80,10 @@ for (const prefix of ['packages/pi', 'packages/device']) {
   if (build.status !== 0) throw new Error(`构建失败：${build.stdout}\n${build.stderr}`)
 }
 const { probePower } = await import(
-  pathToFileURL(join(repo, 'packages/device/dist/device/src/power-probe.mjs')).href
+  pathToFileURL(join(repo, 'packages/device/dist/packages/device/src/power-probe.mjs')).href
 )
 const { unixConnector } = await import(
-  pathToFileURL(join(repo, 'packages/device/dist/device/src/sockets.mjs')).href
+  pathToFileURL(join(repo, 'packages/device/dist/packages/device/src/sockets.mjs')).href
 )
 const adapter = join(repo, 'packages/pi/dist/pi/src/adapter.mjs')
 const resultFile = join(repo, '.local/keep-awake-probe-bench.json')

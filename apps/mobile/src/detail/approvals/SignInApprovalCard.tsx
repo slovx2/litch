@@ -20,7 +20,14 @@ export function SignInApprovalCard(props: {
         testID="request:browserSite"
       >
         <Why>{props.card.summary.origin}</Why>
-        <Why>{t('approval.siteDesktop')}</Why>
+        {props.card.summary.browser === 'chrome' ? <Why>{props.card.summary.device}</Why> : null}
+        <Why>
+          {t(
+            props.card.summary.location === 'sessionDevice'
+              ? 'approval.siteDeviceDesktop'
+              : 'approval.siteDesktop',
+          )}
+        </Why>
       </Card>
     )
   return props.card.kind === 'computerSelf' ? (

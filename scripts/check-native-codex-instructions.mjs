@@ -43,7 +43,7 @@ if (process.platform === 'win32') {
   console.log('跳过：Windows 上还不能把原生 Codex 接进来。')
   process.exit(0)
 }
-if (!existsSync(join(repo, 'packages/device/dist/device/src/main.mjs'))) {
+if (!existsSync(join(repo, 'packages/device/dist/packages/device/src/main.mjs'))) {
   console.error('没有找到设备进程的构建产物，请先运行 npm run build --prefix packages/device')
   process.exit(1)
 }

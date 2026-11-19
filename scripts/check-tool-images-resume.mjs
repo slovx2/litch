@@ -9,9 +9,9 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { PNG } from 'pngjs'
 import { WebSocket } from 'ws'
-import { DeviceServer } from '../packages/device/dist/device/src/device.mjs'
-import { listenUnix } from '../packages/device/dist/device/src/sockets.mjs'
-import { TestClient } from '../packages/device/dist/device/test/helpers.mjs'
+import { DeviceServer } from '../packages/device/dist/packages/device/src/device.mjs'
+import { listenUnix } from '../packages/device/dist/packages/device/src/sockets.mjs'
+import { TestClient } from '../packages/device/dist/packages/device/test/helpers.mjs'
 import { codexConfig, startResponsesModel } from './client-fixture-responses.mjs'
 
 const cli = process.env.CHA_CODEX_CLI

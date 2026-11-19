@@ -3,6 +3,7 @@ import type { Entry } from '../../../../../packages/ui/src/i18n/types.ts'
 
 export const zhCN = {
   'approval.siteDesktop': '请在执行浏览器操作的 Litch 桌面端打开此会话，处理网站审批。',
+  'approval.siteDeviceDesktop': '请在已连接的 Litch 桌面端打开此会话，处理设备 Chrome 的审批。',
   'approval.device': '会话所在设备',
   'approval.decline': '拒绝',
   'approval.unlock': '批准电脑上的操作',
@@ -23,6 +24,8 @@ export const zhCN = {
 export const en: Record<keyof typeof zhCN, Entry> = {
   'approval.siteDesktop':
     'Open this conversation in the Litch desktop running the browser to approve website access.',
+  'approval.siteDeviceDesktop':
+    'Open this conversation in a connected Litch desktop to approve access on the session device.',
   'approval.device': 'Session device',
   'approval.decline': 'Decline',
   'approval.unlock': 'Approve access on your computer',

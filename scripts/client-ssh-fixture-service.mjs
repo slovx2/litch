@@ -71,7 +71,7 @@ export async function prepareService({ repo, root, engines = {}, pace = 200 }) {
   for (const [path, hint] of [
     [cli, 'npm run build（根目录，要有 go）'],
     [join(repo, 'packages/pi/dist/pi/src/adapter.mjs'), 'npm run build --prefix packages/pi'],
-    [join(repo, 'packages/device/dist/device/src/main.mjs'), 'npm run build（根目录）'],
+    [join(repo, 'packages/device/dist/packages/device/src/main.mjs'), 'npm run build（根目录）'],
   ]) {
     if (!existsSync(path)) throw new Error(`没有找到 ${path}，请先运行 ${hint}`)
   }

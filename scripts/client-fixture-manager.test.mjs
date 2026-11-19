@@ -1,7 +1,7 @@
 // 脚本层契约检查：实际工具说明、真实事件格式经过三种模型接口；先构建 packages/device。
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { managerTools } from '../packages/device/dist/device/src/manager-rules.mjs'
+import { managerTools } from '../packages/device/dist/packages/device/src/manager-rules.mjs'
 import { MANAGER_TOOLS } from '../packages/device/dist/protocol/src/client-tools-manager.mjs'
 import {
   MANAGER_DEFAULT_CONTACT,

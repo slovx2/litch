@@ -14,12 +14,25 @@
 //     哪怕它没订阅、没收到那一份；
 //   - 答了之后它不发 serverRequest/resolved（实测）；有连接恢复会话时，还在等的请求会补发给它；
 //   - turn/start 不会让发起的连接订阅会话（实测），所以“发起回合的连接”要设备进程自己记。
-import { type ClientToolsDesktopInfo, clientToolFailure } from '../../protocol/src/client-tools.mjs'
+import { randomUUID } from 'node:crypto'
+import { setTimeout as delay } from 'node:timers/promises'
+import {
+  type ClientToolCallParams,
+  type ClientToolCallResponse,
+  type ClientToolsDesktopInfo,
+  clientToolFailure,
+} from '../../protocol/src/client-tools.mjs'
+import {
+  REMOTE_CHROME_APPROVAL,
+  type RemoteChromePrompt,
+} from '../../protocol/src/remote-chrome.mjs'
 import {
   type DeclaredClientTools,
   noClientToolExecutor,
   pickClientToolExecutor,
 } from '../../shared/src/client-tool-executor.mjs'
+import { requestChromeApproval } from './remote-chrome-approval.mjs'
+import type { RemoteChromeRouter } from './remote-chrome-routing.mjs'
 import type { UpstreamLink } from './upstream.mjs'
 import { type Frame, idKey, isObject, type RpcId } from './wire.mjs'
 
@@ -39,6 +52,8 @@ export interface ClientToolPeer {
   readonly clientToolNamespaces: DeclaredClientTools
   /** 握手时报的“我是哪台桌面端”（litchClientTools.desktop）。没报是 null */
   readonly desktop: ClientToolsDesktopInfo | null
+  readonly remoteChrome?: boolean
+  readonly chromeTargetRouting?: boolean
   /**
    * 把一次调用转给这条连接的客户端。frame 是上游发来的原样请求；客户端的答复交给 onAnswer。
    * 返回客户端看到的请求号（和这条连接上别的待答请求撞了时会换一个）
@@ -64,10 +79,15 @@ interface Call {
   facingId: RpcId | null
   /** 还没挑出执行方、在等别的几份到齐的计时 */
   grace: NodeJS.Timeout | null
+  remote: AbortController | null
 }
 
 export interface ClientToolRouterOptions {
   enabled?(harness: string, namespace: string): boolean
+  remoteChrome?: RemoteChromeRouter
+  chromeHostLabel?(): string
+  projectChromeApproval?(prompt: RemoteChromePrompt): () => void
+  chromeFullAccess?(harness: string, threadId: string): Promise<boolean>
 
   /**
    * 按已知的发起者和订阅者挑不出执行方时，等其余几份到齐的工夫（毫秒）。几份是 codex 一口气发给
@@ -90,10 +110,13 @@ export const CLIENT_TOOL_DONE_LIMIT = 16_384
 export class ClientToolRouter {
   private readonly options: ClientToolRouterOptions
   private readonly peers = new Set<ClientToolPeer>()
+  private readonly chromeDeliveries = new Map<ClientToolPeer, Set<() => void>>()
   /** 订阅着会话的连接，按订阅的先后。键：harness + 会话 */
   private readonly subscribers = new Map<string, ClientToolPeer[]>()
   /** 发起回合的连接。键：harness + 回合 */
   private readonly starters = new Map<string, ClientToolPeer>()
+  private readonly managedTurns = new Set<string>()
+  private readonly chromeOrigin = new Map<string, boolean>()
   /** 派出时父会话的获授权连接快照，仅在本设备进程内存活；断线后不转授给无关桌面。 */
   private readonly inherited = new Map<string, ClientToolPeer[]>()
   /** 还没了结的调用。键：harness + 会话 + callId */
@@ -142,7 +165,9 @@ export class ClientToolRouter {
 
   /** 这条连接发起了一个回合（turn/start 的应答回来了） */
   turnStarted(peer: ClientToolPeer, harness: string, turnId: string): void {
-    this.starters.set(harness + sep + turnId, peer)
+    const key = harness + sep + turnId
+    this.starters.set(key, peer)
+    if (this.options.remoteChrome) this.chromeOrigin.set(key, peer.remoteChrome === true)
   }
 
   /** 客户端上游或内部连接发来一份客户端工具请求；peer 为 null 的内部连接不参与挑选执行方。 */
@@ -171,12 +196,13 @@ export class ClientToolRouter {
         executor: null,
         facingId: null,
         grace: null,
+        remote: null,
       }
       this.calls.set(key, call)
       this.byRequest.set(link.harness + sep + idKey(upstreamId), key)
     }
     if (!call.copies.some((copy) => copy.link === link)) call.copies.push({ link, peer })
-    if (call.executor) return
+    if (call.executor || call.remote) return
     if (this.options.enabled?.(link.harness, call.namespace) === false) {
       this.finish(
         call,
@@ -189,13 +215,15 @@ export class ClientToolRouter {
       return
     }
     const executor = this.pick(call)
+    if (this.routeChrome(call, executor)) return
     if (executor) this.deliver(call, executor)
     else if (!call.grace)
       call.grace = setTimeout(() => {
         const current = this.calls.get(key)
-        if (!current || current.executor) return
+        if (!current || current.executor || current.remote) return
         current.grace = null
         const late = this.pick(current)
+        if (this.routeChrome(current, late)) return
         if (late) this.deliver(current, late)
         else this.finish(current, noClientToolExecutor(current.namespace), '没有能执行的连接')
       }, this.options.graceMs)
@@ -221,6 +249,180 @@ export class ClientToolRouter {
       [],
       (call.frame.params as { tool?: string }).tool,
     )
+  }
+
+  private routeChrome(call: Call, executor: ClientToolPeer | null): boolean {
+    const router = this.options.remoteChrome
+    if (!router || call.namespace !== 'litch_browser' || !isObject(call.frame.params)) return false
+    const raw = call.frame.params
+    if (
+      typeof raw.tool !== 'string' ||
+      typeof raw.callId !== 'string' ||
+      !call.threadId ||
+      !call.turnId
+    )
+      return false
+    const params: ClientToolCallParams = {
+      threadId: call.threadId,
+      turnId: call.turnId,
+      callId: raw.callId,
+      namespace: call.namespace,
+      tool: raw.tool,
+      arguments: raw.arguments,
+    }
+    const scope = { harness: call.harness, threadId: call.threadId, turnId: call.turnId }
+    const turn = call.harness + sep + call.turnId
+    // 老桌面发起的回合保持旧路由，包括发起者断线以后。
+    const negotiated =
+      this.chromeOrigin.get(turn) ??
+      (this.managedTurns.has(turn) ||
+        (call.copies.some((copy) => copy.peer?.remoteChrome) && executor?.remoteChrome !== false))
+    const abort = new AbortController()
+    const desktop = executor?.remoteChrome && executor.chromeTargetRouting ? executor : null
+    let fullAccess: Promise<boolean> | undefined
+    const fullAccessOf = () =>
+      (fullAccess ??=
+        this.options.chromeFullAccess?.(call.harness, call.threadId) ?? Promise.resolve(false))
+    const routed = router.route(scope, params, {
+      negotiated,
+      fullAccess: fullAccessOf,
+      signal: abort.signal,
+      controller: desktop
+        ? {
+            id: desktop.id,
+            hostLabel: desktop.desktop?.name || desktop.desktop?.hostname || 'Litch desktop',
+            ready: () => desktop.ready,
+            call: async (params, signal) => {
+              const result = await this.callDesktop(
+                desktop,
+                call.harness,
+                {
+                  id: `remote-chrome:${randomUUID()}`,
+                  method: 'item/tool/call',
+                  params,
+                },
+                signal,
+              )
+              if (
+                !isObject(result) ||
+                typeof result.success !== 'boolean' ||
+                !Array.isArray(result.contentItems)
+              )
+                return clientToolFailure(
+                  'failed',
+                  'The Chrome controller disconnected or did not reply.',
+                )
+              return result as unknown as ClientToolCallResponse
+            },
+          }
+        : null,
+      ask: async (ask, signal) => {
+        const fullAccess = await fullAccessOf()
+        if (signal.aborted) return null
+        if (fullAccess) {
+          if (ask.kind === 'site') return 'once'
+          throw new Error(
+            'Sign-in is required. Full access does not wait for manual login. Sign in on the device Chrome and retry.',
+          )
+        }
+        const approver = this.chromeApprover(call, desktop)
+        if (!approver)
+          throw new Error(
+            'Connect a Litch desktop to approve access on the session device. The requested action was not executed.',
+          )
+        return requestChromeApproval({
+          scope,
+          callId: params.callId,
+          ask,
+          signal,
+          hostLabel: this.options.chromeHostLabel?.() ?? '',
+          deliver: (prompt, signal) => this.deliverChromeApproval(call, approver, prompt, signal),
+          project: this.options.projectChromeApproval ?? (() => () => {}),
+        })
+      },
+    })
+    if (!routed) return false
+    if (call.grace) clearTimeout(call.grace)
+    call.grace = null
+    call.remote = abort
+    void routed.then((result) => {
+      if (this.calls.get(call.key) !== call) return
+      this.send(call, { id: call.upstreamId, result })
+      this.settle(call)
+    })
+    return true
+  }
+
+  private chromeApprover(call: Call, preferred: ClientToolPeer | null): ClientToolPeer | null {
+    const candidates = [
+      preferred,
+      this.starters.get(call.harness + sep + call.turnId),
+      ...(this.subscribers.get(call.harness + sep + call.threadId) ?? []),
+      ...(this.inherited.get(call.threadId) ?? []),
+    ]
+    return (
+      candidates.find(
+        (peer): peer is ClientToolPeer =>
+          !!peer?.ready && peer.remoteChrome === true && peer.chromeTargetRouting === true,
+      ) ?? null
+    )
+  }
+
+  private async deliverChromeApproval(
+    call: Call,
+    first: ClientToolPeer,
+    prompt: RemoteChromePrompt,
+    signal: AbortSignal,
+  ): Promise<unknown> {
+    let peer: ClientToolPeer | null = first
+    while (!signal.aborted) {
+      if (peer) {
+        const answer = await this.callDesktop(
+          peer,
+          call.harness,
+          {
+            id: `remote-chrome:${prompt.id}`,
+            method: REMOTE_CHROME_APPROVAL,
+            params: prompt,
+          },
+          signal,
+        )
+        if (answer !== null || peer.ready || signal.aborted) return answer
+      }
+      // 只重新送设备保管的卡，不重新执行 Chrome 请求。新连接必须已经订阅这一会话。
+      await delay(250, undefined, { signal })
+      peer = this.chromeApprover(call, null)
+    }
+    return null
+  }
+
+  private callDesktop(
+    peer: ClientToolPeer,
+    harness: string,
+    frame: Frame,
+    signal: AbortSignal,
+  ): Promise<unknown> {
+    if (!peer.ready || signal.aborted) return Promise.resolve(null)
+    return new Promise((resolve) => {
+      const pending = this.chromeDeliveries.get(peer) ?? new Set<() => void>()
+      this.chromeDeliveries.set(peer, pending)
+      let id: RpcId | null = null
+      const finish = (result: unknown) => {
+        signal.removeEventListener('abort', cancel)
+        pending.delete(cancel)
+        if (pending.size === 0) this.chromeDeliveries.delete(peer)
+        resolve(result)
+      }
+      const cancel = () => {
+        if (id !== null)
+          peer.withdrawClientTool(id, (frame.params as { threadId: string }).threadId)
+        finish(null)
+      }
+      pending.add(cancel)
+      signal.addEventListener('abort', cancel, { once: true })
+      id = peer.deliverClientTool(harness, frame, (reply) => finish(reply.result))
+      if (signal.aborted) cancel()
+    })
   }
 
   private deliver(call: Call, executor: ClientToolPeer): void {
@@ -272,6 +474,7 @@ export class ClientToolRouter {
   private withdraw(call: Call): void {
     const { executor, facingId } = call
     this.settle(call)
+    call.remote?.abort()
     if (executor && facingId !== null && executor.ready)
       executor.withdrawClientTool(facingId, call.threadId)
   }
@@ -305,6 +508,7 @@ export class ClientToolRouter {
 
   /** 会话真正离开运行时或归档、删除时释放状态；单条连接退订不代表会话卸载。 */
   threadClosed(harness: string, threadId: string): void {
+    this.options.remoteChrome?.endSession(harness, threadId)
     for (const call of [...this.calls.values()])
       if (call.harness === harness && call.threadId === threadId)
         this.finish(
@@ -319,6 +523,8 @@ export class ClientToolRouter {
     const turn = this.running.get(threadId)
     if (turn?.harness === harness) {
       this.starters.delete(harness + sep + turn.turnId)
+      this.managedTurns.delete(harness + sep + turn.turnId)
+      this.chromeOrigin.delete(harness + sep + turn.turnId)
       this.running.delete(threadId)
     }
   }
@@ -339,6 +545,9 @@ export class ClientToolRouter {
 
   /** 回合结束：撤回待答调用、清掉发起者；已了结记录仍挡住恢复会话时补发的旧调用。 */
   turnEnded(harness: string, turnId: string): void {
+    this.options.remoteChrome?.endTurn(harness, turnId)
+    this.managedTurns.delete(harness + sep + turnId)
+    this.chromeOrigin.delete(harness + sep + turnId)
     for (const call of [...this.calls.values()])
       if (call.harness === harness && call.turnId === turnId) this.withdraw(call)
     this.starters.delete(harness + sep + turnId)
@@ -349,6 +558,23 @@ export class ClientToolRouter {
   /** 会话的一个回合开始了（turn/started 通知；每条订阅着的连接各收到一份，记一次就够） */
   turnBegan(harness: string, threadId: string, turnId: string): void {
     this.running.set(threadId, { harness, turnId })
+  }
+
+  interrupt(harness: string, threadId: string, turnId: unknown): void {
+    const turn = this.running.get(threadId)
+    if (!this.options.remoteChrome || turn?.harness !== harness || turn.turnId !== turnId) return
+    this.options.remoteChrome.endTurn(harness, turn.turnId)
+    for (const call of [...this.calls.values()])
+      if (call.remote && call.harness === harness && call.turnId === turn.turnId)
+        this.finish(
+          call,
+          clientToolFailure('failed', 'The user interrupted this Chrome call.'),
+          '回合已打断',
+        )
+  }
+
+  managedTurn(harness: string, turnId: string): void {
+    this.managedTurns.add(harness + sep + turnId)
   }
 
   /** 子会话开回合前固定父会话当时的执行候选，支持跨 harness 和继续派出孙会话。 */
@@ -418,6 +644,7 @@ export class ClientToolRouter {
   /** 客户端连接断开：订阅、发起者里去掉它；它在执行的调用替它回 failed */
   left(peer: ClientToolPeer): void {
     this.peers.delete(peer)
+    for (const cancel of this.chromeDeliveries.get(peer) ?? []) cancel()
     for (const [key, list] of this.subscribers) {
       const rest = list.filter((one) => one !== peer)
       if (rest.length) this.subscribers.set(key, rest)

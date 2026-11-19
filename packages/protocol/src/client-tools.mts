@@ -36,6 +36,7 @@ export interface ClientToolsDeclaration {
   computerActions?: boolean
   /** 明确声明可执行 litch_browser.run_actions。 */
   browserActions?: boolean
+  chromeTargetRouting?: 1
   /** Litch 桌面端报的自己是哪台（声明了 litch_machine 时带）。设备进程按它列出、挑选桌面端 */
   desktop?: ClientToolsDesktopInfo
 }
@@ -118,6 +119,8 @@ export interface ClientToolCallParams {
   namespace: string | null
   tool: string
   arguments: unknown
+  /** 会话设备签发，只给声明 chromeTargetRouting 的桌面；与模型 arguments 分开。 */
+  litchChromeTargets?: { targetId: string; epoch: string; recover?: true }[]
 }
 
 /** 结果里的一项。图片只能是内联的 data: 地址，http(s) 地址会让整个结果作废 */

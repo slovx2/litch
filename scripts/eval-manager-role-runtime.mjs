@@ -301,7 +301,7 @@ export async function startRuntime(options, writer, registerCleanup) {
     }
     const socket = join(root, 'c.sock')
     const engine = join(repo, 'packages/claude/dist/claude/src/adapter.mjs')
-    const device = join(repo, 'packages/device/dist/device/src/main.mjs')
+    const device = join(repo, 'packages/device/dist/packages/device/src/main.mjs')
     for (const path of [engine, device])
       if (!existsSync(path)) throw new Error('请先构建 Claude 和 device，详见驱动头部用法')
     launch('claude', [engine, 'app-server', '--listen', `unix://${socket}`])

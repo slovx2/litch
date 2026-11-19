@@ -46,7 +46,7 @@ func (c configuration) deviceSocket() string {
 	return hostplatform.DeviceSocketPath(c.deviceDirectory())
 }
 func (c configuration) deviceMain() string {
-	return filepath.Join(c.root, "packages", "device", "dist", "device", "src", "main.mjs")
+	return filepath.Join(c.root, "packages", "device", "dist", "packages", "device", "src", "main.mjs")
 }
 func (c configuration) deviceLog() string { return filepath.Join(c.logsDirectory(), "device.log") }
 func (c configuration) serviceStatusPath() string {

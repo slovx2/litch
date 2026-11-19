@@ -1,5 +1,5 @@
 // 仅接受自己生成的 JSON 夹具；状态、工作线和引擎全部在 treeRig 临时目录中。
-import { treeRig } from '../packages/device/dist/device/test/tree-kit.mjs'
+import { treeRig } from '../packages/device/dist/packages/device/test/tree-kit.mjs'
 
 export function managerPagingRig(data, scale = 1) {
   const env = treeRig()

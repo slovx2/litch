@@ -313,6 +313,14 @@ export interface ClientRequests extends AcpControlsRequests {
     params: { threadId: string; completedSequence: number }
     result: import('./thread-read-state.mjs').ThreadReadState
   }
+  'litch/remoteChrome/configure': {
+    params: import('./remote-chrome.mjs').RemoteChromePolicyChange & { proof: string }
+    result: import('./remote-chrome.mjs').RemoteChromePolicy
+  }
+  'litch/remoteChrome/status': {
+    params: Record<string, never>
+    result: import('./remote-chrome.mjs').RemoteChromeStatus
+  }
   'litch/browserUpload/read': {
     params: import('./browser-upload.mjs').UploadReadParams
     result: import('./browser-upload.mjs').UploadReadResult
@@ -810,6 +818,8 @@ export interface ServerNotifications {
   'litch/pair/phones/changed': DevicePairPhonesChangedNotification
   /** 扩展，只发给握手时声明过 clientApprovals 的连接：一个会话挂着的卡片变了 */
   'litch/approval/changed': ApprovalChangedNotification
+  'litch/remoteChrome/changed': import('./remote-chrome.mjs').RemoteChromeStatus
+  'litch/remoteChrome/cardsChanged': ApprovalChangedNotification
   /** 扩展，只发给发卡片的那条连接：手机答了一张卡片（原样转交，没验签） */
   'litch/approval/answered': ApprovalAnsweredNotification
   /** 扩展，只发给握手时声明过 harnessInstall 的连接：一个安装任务的状态或日志变了 */
@@ -870,6 +880,10 @@ export type ServerNotificationMethod = keyof ServerNotifications
  * 对面发来、要客户端答复的请求。没列在这里的一律回“方法不存在”，对面的回合不会因此挂住。
  */
 export interface ServerRequests {
+  'litch/remoteChrome/approval': {
+    params: import('./remote-chrome.mjs').RemoteChromePrompt
+    result: import('./remote-chrome.mjs').RemoteChromeAnswer | null
+  }
   'item/commandExecution/requestApproval': {
     params: CommandExecutionRequestApprovalParams
     result: CommandExecutionRequestApprovalResponse

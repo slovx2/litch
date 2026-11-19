@@ -4,12 +4,12 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { runTurn } from '../packages/device/dist/device/src/engine-link.mjs'
-import { unixConnector } from '../packages/device/dist/device/src/sockets.mjs'
-import { FakeControl, managed } from '../packages/device/dist/device/test/fake-control.mjs'
-import { FakeEngine } from '../packages/device/dist/device/test/fake-engine.mjs'
-import { rig } from '../packages/device/dist/device/test/helpers.mjs'
-import { makeRepo } from '../packages/device/dist/device/test/worktree-kit.mjs'
+import { runTurn } from '../packages/device/dist/packages/device/src/engine-link.mjs'
+import { unixConnector } from '../packages/device/dist/packages/device/src/sockets.mjs'
+import { FakeControl, managed } from '../packages/device/dist/packages/device/test/fake-control.mjs'
+import { FakeEngine } from '../packages/device/dist/packages/device/test/fake-engine.mjs'
+import { rig } from '../packages/device/dist/packages/device/test/helpers.mjs'
+import { makeRepo } from '../packages/device/dist/packages/device/test/worktree-kit.mjs'
 import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
