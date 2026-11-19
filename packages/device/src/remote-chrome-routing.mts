@@ -28,6 +28,12 @@ interface Route {
   expires: number
 }
 
+interface BatchObservation {
+  tabId: string
+  handle: string
+  route: Route
+}
+
 interface Context {
   negotiated: boolean
   controller: ChromeController | null
@@ -167,6 +173,7 @@ export class RemoteChromeRouter {
 
     const routes: Route[] = []
     const claims: string[] = []
+    const tabs = new Map<string, BatchObservation>()
     const rewrite = (value: unknown): Record<string, unknown> => {
       if (!isObject(value)) throw new ChromeRouteError('Choose a Chrome handle from this turn.')
       const result = { ...value }
@@ -188,6 +195,8 @@ export class RemoteChromeRouter {
         result[field] = handle.raw
         sameCall.push(handle)
         if (field === 'claimToken') claims.push(id)
+        if (field === 'tabId')
+          tabs.set(handle.raw, { tabId: handle.raw, handle: id, route: handle })
       }
       const first = sameCall[0]
       if (!first)
@@ -302,11 +311,82 @@ export class RemoteChromeRouter {
           )
     signal.throwIfAborted()
     if (!reply) throw new ChromeRouteError('The controller disconnected.')
+    // 即使批次中途失败，已完成的步骤和最后一次安全观察也会返回。
+    if (params.tool === 'run_actions') return this.transformBatch(reply, args, tabs)
     if (!reply.success) return reply
-    return this.transform(reply, params.tool, args, {
-      ...route,
-      epoch: recoveryEpoch ?? route.epoch,
+    return this.transform(
+      reply,
+      params.tool,
+      args,
+      {
+        ...route,
+        epoch: recoveryEpoch ?? route.epoch,
+      },
+      isObject(params.arguments) ? params.arguments.tabId : undefined,
+    )
+  }
+
+  private transformBatch(
+    reply: ClientToolCallResponse,
+    args: Record<string, unknown>,
+    tabs: ReadonlyMap<string, BatchObservation>,
+  ): ClientToolCallResponse {
+    const summary = readObject(reply.contentItems[0])
+    const actions = args.actions
+    if (!summary || !Array.isArray(summary.steps) || !Array.isArray(actions)) return reply
+    const tabAt = (index: number): BatchObservation | undefined => {
+      const action: unknown = actions[index]
+      return isObject(action) &&
+        isObject(action.arguments) &&
+        typeof action.arguments.tabId === 'string'
+        ? tabs.get(action.arguments.tabId)
+        : undefined
+    }
+    const transform = (
+      tool: string,
+      items: ClientToolCallResponse['contentItems'],
+      tab: BatchObservation,
+    ) =>
+      this.transform(
+        { success: true, contentItems: items },
+        tool,
+        { tabId: tab.tabId },
+        tab.route,
+        tab.handle,
+      )
+    const steps = summary.steps.map((step: unknown, index: number) => {
+      const tab = tabAt(index)
+      if (
+        !tab ||
+        !isObject(step) ||
+        step.success !== true ||
+        (step.tool !== 'navigate' && step.tool !== 'wait') ||
+        typeof step.text !== 'string'
+      )
+        return step
+      const result = transform(step.tool, [{ type: 'inputText', text: step.text }], tab)
+      return {
+        ...step,
+        text: result.contentItems
+          .map((part) => (part.type === 'inputText' ? part.text : ''))
+          .join('\n'),
+      }
     })
+    const [, marker, ...items] = reply.contentItems
+    const last = tabAt(steps.length - 1)
+    return {
+      ...reply,
+      contentItems: [
+        { type: 'inputText', text: JSON.stringify({ ...summary, steps }) },
+        ...(marker ? [marker] : []),
+        ...(last &&
+        marker?.type === 'inputText' &&
+        marker.text === 'Final snapshot:' &&
+        summary.observationStatus === 'completed'
+          ? transform('snapshot', items, last).contentItems
+          : items),
+      ],
+    }
   }
 
   private describeTarget(
@@ -362,9 +442,23 @@ export class RemoteChromeRouter {
     tool: string,
     args: Record<string, unknown>,
     route: Route,
+    tabHandle: unknown,
   ): ClientToolCallResponse {
     const first = reply.contentItems[0]
     if (first?.type !== 'inputText') return reply
+    // 只改写执行器生成的标题。网页正文可能含同样的文字，不能做全文替换。
+    if (
+      (tool === 'snapshot' || tool === 'screenshot' || tool === 'wait') &&
+      typeof args.tabId === 'string' &&
+      typeof tabHandle === 'string'
+    ) {
+      const offset =
+        tool === 'wait' ? /^(?:Waited|Loaded|Found)\.\n/.exec(first.text)?.[0].length : 0
+      const observed =
+        offset === undefined ? first : observationHeader(first, args.tabId, tabHandle, offset)
+      if (observed !== first)
+        return { ...reply, contentItems: [observed, ...reply.contentItems.slice(1)] }
+    }
     const head = first.text.indexOf('{')
     const tail = first.text.indexOf('\n', head)
     if (
@@ -381,6 +475,7 @@ export class RemoteChromeRouter {
         ? (this.runtime.instances.find((i) => `chrome:${i.id}` === route.target)?.epoch ??
           route.epoch)
         : route.epoch
+    const content = reply.contentItems.slice(1)
     if (tool === 'tabs' && args.action === 'list' && Array.isArray(body.tabs)) {
       body.tabs = body.tabs.map((tab) =>
         isObject(tab) && typeof tab.claimToken === 'string'
@@ -397,13 +492,18 @@ export class RemoteChromeRouter {
           : tab,
       )
     } else if (typeof body.tabId === 'string' && body.tabId.startsWith('chrome:')) {
-      body.tabId = this.issue({
+      const raw = body.tabId
+      const handle = this.issue({
         ...route,
         epoch,
         kind: 'tabId',
-        raw: body.tabId,
+        raw,
         expires: Date.now() + 30 * 60_000,
       })
+      body.tabId = handle
+      // 重认领与快照自动恢复先返回 JSON，再返回独立快照。两处必须使用同一个新句柄。
+      if ((tool === 'ensure_claimed' || tool === 'snapshot') && content[0])
+        content[0] = observationHeader(content[0], raw, handle)
     } else return reply
     body.location = route.location
     body.hostLabel = route.controller?.hostLabel ?? this.runtime.status.hostLabel
@@ -418,7 +518,7 @@ export class RemoteChromeRouter {
               : ''
           }`,
         },
-        ...reply.contentItems.slice(1),
+        ...content,
       ],
     }
   }
@@ -448,6 +548,22 @@ export class RemoteChromeRouter {
 }
 
 class ChromeRouteError extends Error {}
+
+function observationHeader(
+  item: ClientToolCallResponse['contentItems'][number],
+  raw: string,
+  handle: string,
+  offset = 0,
+): ClientToolCallResponse['contentItems'][number] {
+  const prefix = `Tab ${raw}: `
+  return item.type === 'inputText' && item.text.startsWith(prefix, offset)
+    ? {
+        ...item,
+        text: `${item.text.slice(0, offset)}Tab ${handle}: ${item.text.slice(offset + prefix.length)}`,
+      }
+    : item
+}
+
 function readObject(
   item: ClientToolCallResponse['contentItems'][number] | undefined,
 ): Record<string, unknown> | null {
