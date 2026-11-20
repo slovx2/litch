@@ -454,7 +454,7 @@ export function createTab(
     userInput() {
       inputRevision++
       downloadOwner = undefined
-      if (agentActive && !isHandedOver(contents.id)) tab.release()
+      if (tab.kind === 'user' && agentActive && !isHandedOver(contents.id)) tab.release()
     },
     setAgentActive(active, owner) {
       controller = active ? owner : undefined

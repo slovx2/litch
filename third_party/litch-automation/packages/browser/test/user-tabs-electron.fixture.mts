@@ -145,6 +145,30 @@ void app
     }
     await until(() => page.inputRevision?.() !== revision)
     assert.equal(page.info().agentActive, false)
+    // 接管只交还用户标签；用户查看代理标签不能撤销代理归属或断开 CDP。
+    const agent = host.open({ deviceId: 'remote', threadId: 'remote-session' }, 'agent') as HostTab
+    await agent.load(url, 5000)
+    await agent.cdp('Runtime.evaluate', { expression: 'document.title' })
+    agent.setAgentActive(true)
+    const agentRevision = agent.inputRevision?.()
+    agent.view.webContents.sendInputEvent({
+      type: 'mouseDown',
+      x: 20,
+      y: 20,
+      button: 'left',
+      clickCount: 1,
+    })
+    agent.view.webContents.sendInputEvent({
+      type: 'mouseUp',
+      x: 20,
+      y: 20,
+      button: 'left',
+      clickCount: 1,
+    })
+    await until(() => agent.inputRevision?.() !== agentRevision)
+    assert.equal(agent.info().agentActive, true, '用户输入不撤销代理标签归属')
+    assert.equal(agent.view.webContents.debugger.isAttached(), true)
+    host.close(agent.id)
     assert.equal((await call('press', { tabId: page.id, key: 'Enter' })).success, false)
     const reclaimed = await ok('ensure_claimed', { tabId: page.id })
     await ok('click', { tabId: page.id, ref: ref(reclaimed, 'link "Download"') })
