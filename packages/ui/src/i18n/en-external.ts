@@ -158,11 +158,36 @@ export const enExternal: Record<keyof typeof zhExternal, Entry> = {
   'ext.ready.agentOwner':
     'The agent’s gh identity is your account {login}. Its comments will read as yours.',
   'ext.diag.feedbackOff': 'Instant feedback unavailable: the manager identity cannot comment',
-  'ext.code.authentication_verified': 'GitHub authentication OK',
-  'ext.code.route_eligible': 'Routing OK',
-  'ext.code.shared_host': 'Shares the host with agents (informational)',
-  'ext.code.write_scope_unverified': 'Write access unverified',
-  'ext.code.comment_permission_missing': 'Comment permission missing',
+  'ext.diag.unknown': 'Unrecognized check result. Run the check again.',
+  'ext.code.github_collection_available': 'GitHub event collection is available',
+  'ext.code.github_collection_blocked':
+    'Cannot collect events. Check the repository and GitHub credentials.',
+  'ext.code.source_paused': 'Repository collection is paused',
+  'ext.code.auto_notify_disabled': 'Automatic manager notifications are off',
+  'ext.code.manager_tools_ready': 'The manager’s GitHub tools are available',
+  'ext.code.manager_tools_outdated':
+    'No eligible manager is assigned, or its GitHub tools are not loaded',
+  'ext.code.agent_uses_device_credentials':
+    'Agents use credentials on this device. Execution isolation is unverified.',
+  'ext.code.device_autostart_ready': 'The device service starts automatically',
+  'ext.code.device_autostart_unverified': 'Automatic start for the device service is unverified',
+  'ext.code.manualInstance': 'Litch starts this device service on demand',
+  'ext.code.agent_github_identity_unverified': 'Cannot verify the agent’s gh account',
+  'ext.code.agent_github_owner_login_may_feed_back': 'The agent’s gh account is the owner',
+  'ext.code.agent_github_owner_login_not_detected': 'The agent’s gh account was verified',
+  'ext.code.github_repository_write_permission_unverified': 'Repository write access is unverified',
+  'ext.code.github_feedback_write_permission_required': 'The manager account cannot write comments',
+  'ext.code.github_robot_needs_repository_write_access':
+    'Give the bot write access to the repository in GitHub',
+  'ext.code.github_local_root_invalid': 'The working directory is not the root of a Git repository',
+  'ext.code.github_local_origin_mismatch':
+    'The working directory’s origin does not match this GitHub repository',
+  'ext.code.github_repository_unreachable':
+    'Cannot reach the GitHub repository. Check your network and repository access.',
+  'ext.code.github_repository_outside_credential':
+    'The selected GitHub credential cannot access this repository',
+  'ext.code.github_repository_verified': 'GitHub repository verified',
+  'ext.code.github_preview_limited': 'The preview does not cover all events',
   'ext.coverage': 'Coverage',
   'ext.coverage.last': 'Last success',
   'ext.coverage.next': 'Next',

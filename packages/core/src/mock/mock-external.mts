@@ -82,20 +82,25 @@ export function createMockExternal(clock: Clock, devices: () => DeviceView[]) {
       collect: {
         state: 'ok',
         diagnostics: [
-          { check: 'github', state: 'ok', code: 'authentication_verified', checkedAt: now() },
+          {
+            check: 'repository',
+            state: 'ok',
+            code: 'github_collection_available',
+            checkedAt: now(),
+          },
         ],
       },
       notify: {
         state: 'ok',
-        diagnostics: [{ check: 'routing', state: 'ok', code: 'route_eligible', checkedAt: now() }],
+        diagnostics: [{ check: 'managerTools', state: 'ok', code: 'manager_tools_ready' }],
       },
       dispatch: {
-        state: 'ok',
+        state: 'unverified',
         diagnostics: [
           {
             check: 'executionIsolation',
             state: 'unverified',
-            code: 'shared_host',
+            code: 'agent_uses_device_credentials',
             checkedAt: now(),
           },
         ],
@@ -103,11 +108,15 @@ export function createMockExternal(clock: Clock, devices: () => DeviceView[]) {
       write: {
         state: 'unverified',
         diagnostics: [
-          { check: 'write', state: 'unverified', code: 'write_scope_unverified' },
+          {
+            check: 'identity_repository_write',
+            state: 'unverified',
+            code: 'github_repository_write_permission_unverified',
+          },
           {
             check: 'immediateFeedbackComments',
             state: 'blocked',
-            code: 'comment_permission_missing',
+            code: 'github_feedback_write_permission_required',
           },
         ],
       },

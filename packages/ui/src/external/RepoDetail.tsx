@@ -23,11 +23,28 @@ const INTERVALS = [60, 120, 300, 600] as const
 const TRIGGERS = ['mention', 'assignment', 'reviewRequest', 'label'] as const
 
 const KNOWN_CODES = new Set([
-  'authentication_verified',
-  'route_eligible',
-  'shared_host',
-  'write_scope_unverified',
-  'comment_permission_missing',
+  'github_collection_available',
+  'github_collection_blocked',
+  'source_paused',
+  'auto_notify_disabled',
+  'manager_tools_ready',
+  'manager_tools_outdated',
+  'agent_uses_device_credentials',
+  'device_autostart_ready',
+  'device_autostart_unverified',
+  'manualInstance',
+  'agent_github_identity_unverified',
+  'agent_github_owner_login_may_feed_back',
+  'agent_github_owner_login_not_detected',
+  'github_repository_write_permission_unverified',
+  'github_feedback_write_permission_required',
+  'github_robot_needs_repository_write_access',
+  'github_local_root_invalid',
+  'github_local_origin_mismatch',
+  'github_repository_unreachable',
+  'github_repository_outside_credential',
+  'github_repository_verified',
+  'github_preview_limited',
 ])
 
 export function Diagnostic({ item }: { item: ExternalDiagnostic }) {
@@ -41,7 +58,7 @@ export function Diagnostic({ item }: { item: ExternalDiagnostic }) {
           ? t('ext.diag.feedbackOff')
           : known
             ? t(`ext.code.${item.code}` as Parameters<typeof t>[0])
-            : item.code}
+            : t('ext.diag.unknown')}
       </span>
       {item.checkedAt ? <Stamp className="dim" at={item.checkedAt * 1000} /> : null}
     </li>
@@ -69,7 +86,6 @@ export function RepoDetail({
   const [base] = useState(() => JSON.stringify(externalSourceDraft(status.source)))
   const [preview, setPreview] = useState<PreviewValue | null>(null)
   const act = useRun()
-  const check = useRun()
   const repo = draft.repos[0]
   if (!repo) return null
   const dirty = JSON.stringify(draft) !== base
@@ -105,13 +121,6 @@ export function RepoDetail({
     )
     if (result) setPreview(result)
   }
-  const recheck = () =>
-    check.run(() =>
-      channel.command('external.source.check', {
-        deviceId: device.id,
-        sourceId: status.source.sourceId,
-      }),
-    )
   const disabled = !online || !writable || act.busy
 
   return (
@@ -333,31 +342,38 @@ export function RepoDetail({
       ) : null}
       {preview ? <PreviewResult value={preview} /> : null}
       <Readiness
+        key={`${status.source.sourceId}/${changed}/${online}/${writable}`}
+        deviceId={device.id}
         status={status}
-        busy={check.busy || !online || !writable}
-        onCheck={() => void recheck()}
+        canCheck={online && writable}
       />
-      {check.error ? (
-        <div className="devp-note err" role="alert">
-          {check.error}
-        </div>
-      ) : null}
       <Coverage status={status} />
     </div>
   )
 }
 
 function Readiness({
+  deviceId,
   status,
-  busy,
-  onCheck,
+  canCheck,
 }: {
+  deviceId: string
   status: ExternalSourceStatus
-  busy: boolean
-  onCheck(): void
+  canCheck: boolean
 }) {
   const t = useT()
-  const agent = status.agentGhIdentity
+  const { channel } = useServices()
+  const check = useRun()
+  const [result, setResult] =
+    useState<Pick<ExternalSourceStatus, 'readiness' | 'agentGhIdentity'>>()
+  const readiness = result?.readiness ?? status.readiness
+  const agent = result ? result.agentGhIdentity : status.agentGhIdentity
+  const recheck = async () => {
+    const updated = await check.run(() =>
+      channel.command('external.source.check', { deviceId, sourceId: status.source.sourceId }),
+    )
+    setResult(updated)
+  }
   return (
     <div className="ext-sub" data-ext-readiness>
       <div className="ext-sub-head">
@@ -369,8 +385,8 @@ function Readiness({
           data-act="source-check"
           title={t('ext.ready.check')}
           aria-label={t('ext.ready.check')}
-          disabled={busy}
-          onClick={onCheck}
+          disabled={check.busy || !canCheck}
+          onClick={() => void recheck()}
         >
           <Icon name="reload" small />
         </button>
@@ -380,9 +396,14 @@ function Readiness({
           {t('ext.ready.agentOwner', { login: agent.login })}
         </div>
       ) : null}
+      {check.error ? (
+        <div className="devp-note err" role="alert">
+          {check.error}
+        </div>
+      ) : null}
       <ul className="ext-ready-list">
         {READINESS_AREAS.map((area) => {
-          const part = status.readiness?.[area]
+          const part = readiness?.[area]
           return (
             <li key={area} data-area={area}>
               <span className="ext-ready-area">

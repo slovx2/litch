@@ -3,7 +3,10 @@
 import { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { InboxDetail } from '../apps/mobile/src/screens/managers/external/InboxDetail.tsx'
-import type { ExternalAccess } from '../packages/protocol/src/external-sources.mts'
+import type {
+  ExternalAccess,
+  ExternalSourceStatus,
+} from '../packages/protocol/src/external-sources.mts'
 import { ServicesProvider } from '../packages/ui/src/app/services.tsx'
 import { InboxTriage } from '../packages/ui/src/external/InboxTriage.tsx'
 import { UnattendedPage } from '../packages/ui/src/external/UnattendedPage.tsx'
@@ -19,12 +22,50 @@ const head = {
 }
 const manager = { id: 'm1', deviceId: 'local', status: 'active', name: 'fixture' }
 const device = { id: 'local', connection: 'online', externalSources: true, name: 'fixture' }
+const sourceStatus: ExternalSourceStatus = {
+  source: {
+    sourceId: 'github-ready',
+    provider: 'github',
+    enabled: true,
+    revision: 1,
+    rulesVersion: 1,
+    createdAt: 1,
+    credentialRef: 'fixture',
+    botUserId: '99',
+    minRole: 'triage',
+    interval: 120,
+    routes: [],
+    triggers: { mention: true, assignment: true, reviewRequest: true, label: true, labelIds: [] },
+    writePolicy: { comment: true, draftPr: false, status: false, managedPush: false },
+    repos: [
+      {
+        repoId: '123',
+        owner: 'example',
+        name: 'demo',
+        url: 'https://github.com/example/demo',
+        localRoot: '/tmp/fixture',
+        allowedBase: ['main'],
+        headNamespace: 'litch/',
+      },
+    ],
+  },
+  readiness: {
+    collect: {
+      state: 'ok',
+      diagnostics: [{ check: 'repository', state: 'ok', code: 'github_collection_available' }],
+    },
+    notify: { state: 'ok', diagnostics: [] },
+    dispatch: { state: 'unverified', diagnostics: [] },
+    write: { state: 'unverified', diagnostics: [] },
+  },
+  coverage: [],
+}
 const sinks = new Set<{ snapshot(value: unknown): void }>()
 let access: ExternalAccess | undefined
 const calls: string[] = []
 const snapshot = () => ({
   access,
-  sources: { value: [] },
+  sources: { value: [sourceStatus] },
   configuration: { value: { revision: 1, identities: [], assignments: [] } },
   autostart: {
     value: {
@@ -47,6 +88,19 @@ const channel = {
     if (name === 'external.inbox.get') return { events: [head], intake }
     if (name === 'external.identity.repositories') return { repositories: [] }
     if (name === 'external.identity.list') return { identities: [] }
+    if (name === 'external.source.check')
+      return {
+        readiness: {
+          ...sourceStatus.readiness,
+          collect: {
+            state: 'blocked',
+            diagnostics: [
+              { check: 'repository', state: 'blocked', code: 'github_local_origin_mismatch' },
+            ],
+          },
+        },
+        agentGhIdentity: { userId: '42', login: 'fixture-owner', isOwner: true, checkedAt: 1 },
+      }
     return { identities: [], repositories: [] }
   },
 }
