@@ -4,6 +4,14 @@
 // 每一句的各语言文本在界面包的 i18n 目录里，那边有类型检查保证这里的每一句都有对应的文本。
 
 export type PhraseKey =
+  | 'external.invalid'
+  | 'external.invalidOwner'
+  | 'external.offline'
+  | 'external.ownerConflict'
+  | 'external.resolveFailed'
+  | 'external.resolveGhFailed'
+  | 'external.secretFailed'
+  | 'external.unsupported'
   | 'modelRanking.limitExceeded'
   | 'modelRanking.limitUnranked'
   | 'modelRanking.archivedSource'

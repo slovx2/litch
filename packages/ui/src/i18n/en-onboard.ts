@@ -110,6 +110,9 @@ export const enOnboard: Record<keyof typeof zhOnboard, Entry> = {
   'assist.confirm.erase.machineLog': 'Clear the log of {device}’s actions on this computer',
   'assist.confirm.eraseNote': 'This can’t be undone.',
   'assist.confirm.note': 'Declined automatically if not answered within 2 minutes.',
+  'assist.confirm.external': '{device}: {detail}',
+  'assist.externalTokenUnavailable':
+    'Desktop token entry is unavailable. On the target device, run the command with --stdin.',
   'assist.confirm.allow': 'Allow',
   'assist.confirm.decline': 'Decline',
   'assist.section.open': 'Config assistant',

@@ -213,6 +213,7 @@ export interface ConnectFailureView {
 }
 
 export interface DeviceView {
+  externalSources?: boolean
   remoteChrome?: import('../../protocol/src/remote-chrome.mjs').RemoteChromeStatus
   modelRanking?: boolean
   toolImagesEnabled?: boolean

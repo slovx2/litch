@@ -88,6 +88,8 @@ function applyPrefs(patch: Partial<ConfigPrefs>): void {
 /** 确认卡上一项的话 */
 export function itemText(item: ConfigConfirmItem, t: Translator): string {
   switch (item.kind) {
+    case 'external':
+      return t('assist.confirm.external', { device: item.device, detail: item.detail })
     case 'manager':
       return t('assist.confirm.manager', {
         action: t(
@@ -215,6 +217,7 @@ function ConfirmCard({
 
 /** 盖在应用上的那一个：做执行器要界面做的事、出确认卡、开出码对话框 */
 export function ConfigAgent() {
+  const t = useT()
   const { channel } = useServices()
   const look = useAppearance()
   const lookRef = useRef(look)
@@ -265,6 +268,9 @@ export function ConfigAgent() {
       handled.current.add(ask.id)
       const { request } = ask
       switch (request.kind) {
+        case 'external.token':
+          reply(ask, false, undefined, t('assist.externalTokenUnavailable'))
+          break
         case 'manual.get':
         case 'manual.set': {
           const bridge = manualBridge()
@@ -307,7 +313,7 @@ export function ConfigAgent() {
           reply(ask, false, undefined, 'This Litch window does not know how to do that.')
       }
     }
-  }, [view.asks, channel])
+  }, [view.asks, channel, t])
 
   const answer = (id: string, allow: boolean) => {
     channel.command('config.confirm', { id, allow }).catch(() => {

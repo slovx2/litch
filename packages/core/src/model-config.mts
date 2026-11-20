@@ -1,4 +1,6 @@
 import type { ChromeSettingsRequest } from '../../protocol/src/chrome-browser.mjs'
+import type { ExternalOwnerIdentity } from '../../protocol/src/external-sources.mjs'
+import type { ExternalOwnerInput } from './projection/external.mjs'
 // 配置 Litch（litch_config 执行器，14 号设计 3.3、3.4、3.5）在核心和界面、核心和主进程之间的约定。
 // 执行器在核心里（config/）：属于界面的几项（外观、语言、两个本地偏好、打开某一页、出码对话框）由核心经 config 主题
 // 发给界面，界面照做并用 config.reply 回话；放宽安全的那几项（E6）在界面上弹确认卡，人点了才执行（config.confirm）。
@@ -39,6 +41,7 @@ export type ConfigOpenPlace =
 
 /** 要界面做的一件事。界面做完用 config.reply 回：成了带 data，没成带 reason */
 export type ConfigUiRequest =
+  | { kind: 'external.token'; device: string; target: string }
   | { kind: 'manual.get' }
   | { kind: 'manual.set'; enabled: boolean }
   /** 现在的偏好。回 ConfigPrefs */
@@ -60,6 +63,7 @@ export interface ConfigUiAsk {
 
 /** 确认卡上“要做什么”的一项。字由界面拼 */
 export type ConfigConfirmItem =
+  | { kind: 'external'; device: string; detail: string }
   /** 创建即授权自主派活；扩大已有经理的派活能力也须确认。 */
   | {
       kind: 'manager'
@@ -138,6 +142,10 @@ export type ConfigMainRequest =
   /** host 给 null 是清空 */
   | { kind: 'browser.unblock'; host: string | null }
   | { kind: 'computer.status' }
+  | { kind: 'external.identity.avatar'; userId: string }
+  | { kind: 'external.owner.get' }
+  | { kind: 'external.owner.resolve'; input: ExternalOwnerInput }
+  | { kind: 'external.owner.save'; owner: ExternalOwnerIdentity; expectedRevision: number }
 
 /** 主进程的回话。data 的形状按 request.kind 定（见 config/ops-app.mts 里怎么读） */
 export type ConfigMainResult = { ok: true; data: unknown } | { ok: false; reason: string }

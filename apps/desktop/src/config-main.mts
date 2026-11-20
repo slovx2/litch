@@ -10,8 +10,10 @@ import type {
 import type { InstalledBrowser } from './browser/install.mjs'
 import type { BrowserTargets } from './chrome-browser/browser-targets.mjs'
 import type { ComputerUseSettings } from './computer-use/settings.mjs'
+import type { ExternalAccount } from './external-account.mjs'
 
 export interface ConfigMainDeps {
+  externalAccount?: ExternalAccount
   chrome?(): BrowserTargets | null
   /** 内置浏览器。应用起来之前是 null */
   browser(): InstalledBrowser | null
@@ -25,6 +27,24 @@ export function createConfigMain(deps: ConfigMainDeps) {
   return async (request: ConfigMainRequest): Promise<ConfigMainResult> => {
     try {
       switch (request.kind) {
+        case 'external.identity.avatar':
+          return { ok: true, data: (await deps.externalAccount?.avatar(request.userId)) ?? null }
+        case 'external.owner.get':
+          return deps.externalAccount
+            ? { ok: true, data: deps.externalAccount.get() }
+            : fail('unavailable')
+        case 'external.owner.save':
+          return deps.externalAccount?.save(request.owner, request.expectedRevision)
+            ? { ok: true, data: null }
+            : fail('conflict')
+        case 'external.owner.resolve':
+          try {
+            return deps.externalAccount
+              ? { ok: true, data: await deps.externalAccount.resolve(request.input) }
+              : fail('unavailable')
+          } catch {
+            return fail('identity-unavailable')
+          }
         case 'chrome.trust':
         case 'chrome.block':
         case 'chrome.unblock':

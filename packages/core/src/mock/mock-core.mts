@@ -71,6 +71,7 @@ import { createMockBackground } from './mock-background.mjs'
 import { createMockCompose } from './mock-compose.mjs'
 import { createMockConfig, RUNS_CONFIG } from './mock-config.mjs'
 import { createMockDiffs } from './mock-diffs.mjs'
+import { createMockExternal } from './mock-external.mjs'
 import { createMockFiles } from './mock-files.mjs'
 import { createMockGoal } from './mock-goal.mjs'
 import { createMockHarnessConfig } from './mock-harness-config.mjs'
@@ -474,6 +475,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   const chunkMs = options.chunkMs ?? 60
   const lang = options.lang ?? 'zh-CN'
   const app: AppView = sampleApp(lang, clock.now())
+  const external = createMockExternal(clock, () => app.devices)
   if (options.scene === 'fresh') freshLocal(app)
   const sidebars = new Map<string, SidebarView>(
     sampleSidebars(clock.now(), lang).map((view) => [view.deviceId, view]),
@@ -559,6 +561,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       .map((entry) => entry.id)
   }
   for (const device of app.devices) {
+    if (device.id === 'local' || device.id === 'build')
+      device.externalSources = options.scene !== 'fresh'
     if (device.connection === 'online') {
       device.stranded = strandedOf(device.id, device.harnesses)
     }
@@ -2666,6 +2670,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     fresh.restart = restart.viewOf(fresh)
     const index = app.devices.findIndex((entry) => entry.id === device.id)
     if (index !== -1) app.devices[index] = fresh
+    external.update(device.id)
     emit('app', [{ op: 'device.upsert', device: fresh }])
   }
   // 一开始的那几台：开关一栏先算好
@@ -2960,6 +2965,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     },
 
     async command(name, params, signal) {
+      const externalCall = external.command(name, params)
+      if (externalCall) return externalCall
       if (name === 'core.info') {
         return { version: options.version ?? '0.0.0', mock: true }
       }
@@ -3781,6 +3788,13 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     },
 
     subscribe(topic, sink) {
+      if (
+        topic.kind === 'externalDevice' ||
+        topic.kind === 'externalIdentityLogin' ||
+        topic.kind === 'externalInbox' ||
+        topic.kind === 'externalOutbox'
+      )
+        return external.of(topic.deviceId).open(topic, sink)
       if (topic.kind === 'organizer') return organizer.subscribe(sink)
       if (topic.kind === 'suggestions') {
         const listeners = suggestionSinks.get(topic.deviceId) ?? new Set<HostSink>()

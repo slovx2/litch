@@ -498,6 +498,10 @@ export class ExternalStore {
       ['manager_id=?', query.managerId],
       ['repo_id=?', query.repoId],
       ['status=?', query.status],
+      [
+        'status IN (SELECT value FROM json_each(?))',
+        query.statuses ? JSON.stringify(query.statuses) : undefined,
+      ],
       ['reason=?', query.reason],
     ])
     const limit = boundedLimit(query.limit)

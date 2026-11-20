@@ -53,6 +53,11 @@ export function createMockConfig(host: MockConfigHost): MockConfig {
 
   const main = async (request: ConfigMainRequest): Promise<ConfigMainResult> => {
     switch (request.kind) {
+      case 'external.identity.avatar':
+      case 'external.owner.get':
+      case 'external.owner.resolve':
+      case 'external.owner.save':
+        return { ok: false, reason: 'Use the mock external core' }
       case 'browser.sites':
         return { ok: true, data: sites.map((site) => ({ ...site })) }
       case 'browser.allow':

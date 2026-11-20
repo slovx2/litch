@@ -1248,6 +1248,18 @@ export const en: Record<MessageKey, Entry> = {
   'message.copy.failed': 'Could not copy. Try again or select the text to copy it.',
   'message.collapse': 'Show less',
   'ability.unsupported': 'The engine on this device doesn’t support this',
+  'external.invalid':
+    'Invalid configuration. Check the required fields, numeric IDs, and device version.',
+  'external.invalidOwner': 'Enter a GitHub profile URL or numeric user ID.',
+  'external.offline': 'Device offline',
+  'external.ownerConflict': 'The account changed elsewhere. Reload before syncing.',
+  'external.resolveFailed':
+    'Could not look up the GitHub user. Check the account and your connection.',
+  'external.resolveGhFailed':
+    'Could not read the local gh account. Install gh and sign in to github.com.',
+  'external.secretFailed':
+    'The device did not complete the credential operation. Check the token, repository permissions, and device version.',
+  'external.unsupported': 'This device service does not support this feature.',
   'turn.busy': 'A turn is running. Try again when it finishes.',
   'turn.fork': 'Fork from here',
   'turn.fork.done': 'Forked. Now viewing the new conversation.',

@@ -8,6 +8,7 @@ import { createConfigBridge } from './config/bridge.mjs'
 import { type ConfigExecutor, createConfigExecutor } from './config/executor.mjs'
 import { ConnectError } from './connection/transport.mjs'
 import { createDevice, type Device, type DeviceConfig } from './device/device.mjs'
+import { createExternalOwner } from './device/external-owner.mjs'
 import { channelFailure } from './device/faults.mjs'
 import type { AuthForwardPlatform } from './device/harness-config.mjs'
 import { createMachineExecutor, type MachineExecutorOptions } from './device/machine/executor.mjs'
@@ -48,6 +49,7 @@ import {
   type OrganizerStore,
 } from './organizer/host.mjs'
 import { phrase } from './phrase.mjs'
+import { isExternalCommand } from './projection/external.mjs'
 import { managerMark } from './projection/manager.mjs'
 import { outgoing } from './projection/outgoing.mjs'
 import { createToolHub } from './tool-hub.mjs'
@@ -177,6 +179,28 @@ export function createCore(options: CoreOptions): Core {
     (line) => options.log?.(line),
     options.clock.setTimer,
   )
+  const externalOwner = createExternalOwner({
+    main: (request) => hub.config(request),
+    devices: () =>
+      [...devices.values()].map(({ view }) => ({
+        id: view.id,
+        online: view.connection === 'online',
+      })),
+    get: async (id) =>
+      (
+        (await deviceOf(id).external.command(
+          'external.owner.get',
+          {},
+        )) as Commands['external.owner.get']['result']
+      ).owner,
+    set: async (id, params) =>
+      (
+        (await deviceOf(id).external.command(
+          'external.owner.set',
+          params,
+        )) as Commands['external.owner.set']['result']
+      ).owner,
+  })
   // —— litch_config：本机 harness 里的 litch config ——
   const configBridge = createConfigBridge(options.clock)
   const organizer = createOrganizerHost(
@@ -470,7 +494,38 @@ export function createCore(options: CoreOptions): Core {
     },
 
     async command(name, params, signal) {
+      if (isExternalCommand(name)) {
+        const { deviceId, ...args } = params as { deviceId: string }
+        return deviceOf(deviceId).external.command(name, args, signal)
+      }
       switch (name) {
+        case 'external.identity.avatar': {
+          const { userId } = params as Commands['external.identity.avatar']['params']
+          const avatar = await hub.config({ kind: 'external.identity.avatar', userId })
+          return avatar.ok &&
+            typeof avatar.data === 'string' &&
+            /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/u.test(avatar.data)
+            ? avatar.data
+            : null
+        }
+        case 'external.owner.resolve':
+          return externalOwner.resolve(params as Commands['external.owner.resolve']['params'])
+        case 'external.owner.global.get':
+          return externalOwner.get()
+        case 'external.owner.global.plan':
+          return externalOwner.plan(
+            (params as Commands['external.owner.global.plan']['params']).owner,
+          )
+        case 'external.owner.global.set':
+          return externalOwner.set(params as Commands['external.owner.global.set']['params'])
+        case 'external.inbox.more': {
+          const { deviceId, filter } = params as Commands['external.inbox.more']['params']
+          return deviceOf(deviceId).external.inboxMore(filter)
+        }
+        case 'external.outbox.more': {
+          const { deviceId, filter } = params as Commands['external.outbox.more']['params']
+          return deviceOf(deviceId).external.outboxMore(filter)
+        }
         case 'organizer.apply': {
           const { action } = params as Commands['organizer.apply']['params']
           return organizer.apply(action)
@@ -1943,6 +1998,13 @@ export function createCore(options: CoreOptions): Core {
         return device.projectPermissions.open(topic.cwd, topic.harness, sink)
       if (topic.kind === 'managers') return device.managers.open(sink)
       if (topic.kind === 'managerBoard') return device.managers.openBoard(topic.managerId, sink)
+      if (
+        topic.kind === 'externalDevice' ||
+        topic.kind === 'externalIdentityLogin' ||
+        topic.kind === 'externalInbox' ||
+        topic.kind === 'externalOutbox'
+      )
+        return device.external.open(topic, sink)
       if (topic.kind === 'tasks') return device.tasks.open(sink)
       if (topic.kind === 'pairing') return device.pairing.open(sink)
       // 手机批准：设备不支持时 available 是 false，照样成立

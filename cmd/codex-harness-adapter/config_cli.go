@@ -76,6 +76,16 @@ func runConfig(ctx context.Context, argv []string) error {
 
 func configMain(ctx context.Context, argv []string, io machineIO) int {
 	rest, asJSON := configArguments(argv)
+	if args, ok := externalStdinArgs(rest); ok {
+		return configExternalStdin(ctx, args, asJSON, io)
+	}
+	if externalDeviceCodeCommand(rest) {
+		return configExternalLogin(ctx, rest, asJSON, io)
+	}
+	return configDesktopMain(ctx, rest, asJSON, io)
+}
+
+func configDesktopMain(ctx context.Context, rest []string, asJSON bool, io machineIO) int {
 	lang := configLanguage(io.env)
 	thread := firstNonEmpty(io.env(machineThreadVariables[0]), io.env(machineThreadVariables[1]),
 		io.env(machineThreadVariables[2]), io.env(machineThreadVariables[3]))

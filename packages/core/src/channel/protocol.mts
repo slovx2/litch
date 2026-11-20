@@ -156,12 +156,21 @@ import type {
   WorktreeView,
 } from '../model-worktrees.mjs'
 import type { Phrase, Text } from '../phrase.mjs'
+import type {
+  ExternalCommands,
+  ExternalDeviceTopic,
+  ExternalDeviceView,
+  ExternalIdentityLoginView,
+  ExternalInboxView,
+  ExternalOutboxView,
+} from '../projection/external.mjs'
 import type { FileRef } from '../projection/file-refs.mjs'
 import type { SkippingOutput } from '../text/output-cap.mjs'
 
 // ---------- 主题 ----------
 
 export type Topic =
+  | ExternalDeviceTopic
   | { kind: 'fileChanges'; deviceId: string; root: string; path: string; directory?: boolean }
   | { kind: 'automationPreview'; deviceId: string; sessionId: string; observeOnly?: boolean }
   | { kind: 'app' }
@@ -255,6 +264,10 @@ export type Topic =
 export type TopicKind = Topic['kind']
 
 export interface TopicData {
+  externalDevice: ExternalDeviceView
+  externalIdentityLogin: ExternalIdentityLoginView
+  externalInbox: ExternalInboxView
+  externalOutbox: ExternalOutboxView
   fileChanges: { revision: number }
   automationPreview: AutomationPreviewView | null
   app: AppView
@@ -407,6 +420,10 @@ export type AccountLimitsOp = { op: 'limits.set'; view: AccountLimitsView }
 export type WorktreesOp = { op: 'worktrees.set'; view: WorktreesTopicView }
 
 export interface TopicOp {
+  externalDevice: never
+  externalIdentityLogin: never
+  externalInbox: never
+  externalOutbox: never
   fileChanges: never
   automationPreview: never
   app: AppOp
@@ -434,7 +451,7 @@ export interface TopicOp {
 
 // ---------- 命令 ----------
 
-export interface Commands {
+export interface Commands extends ExternalCommands {
   'managers.issues.list': {
     params: import('../../../protocol/src/manager-issues.mjs').ManagerIssueQuery & {
       deviceId: string

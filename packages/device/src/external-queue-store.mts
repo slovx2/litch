@@ -210,6 +210,7 @@ export class ExternalQueueStore {
       ['source_id=?', query.sourceId],
       ['manager_id=?', query.managerId],
       ['repo_id=?', query.repoId],
+      ["json_extract(body,'$.issueId')=?", query.issueId],
       ['state=?', query.state],
     ])
     const limit = boundedLimit(query.limit)

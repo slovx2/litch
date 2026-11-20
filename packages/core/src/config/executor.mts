@@ -27,6 +27,9 @@ import { APP_OPS } from './ops-app.mjs'
 import { AUTO_TITLE_OPS } from './ops-auto-title.mjs'
 import { CHROME_OPS } from './ops-chrome.mjs'
 import { DEVICE_OPS } from './ops-devices.mjs'
+import { EXTERNAL_CONFIG_OPS } from './ops-external.mjs'
+import { EXTERNAL_IDENTITY_CONFIG_OPS } from './ops-external-identities.mjs'
+import { EXTERNAL_LOGIN_CONFIG_OPS } from './ops-external-login.mjs'
 import { HARNESS_OPS } from './ops-harness.mjs'
 import { MANAGER_OPS } from './ops-managers.mjs'
 import { PLACE_OPS } from './ops-places.mjs'
@@ -53,6 +56,9 @@ export const CONFIG_HANDLERS: Record<string, OpSpec> = {
   ...CHROME_OPS,
   ...MANAGER_OPS,
   ...AUTO_TITLE_OPS,
+  ...EXTERNAL_CONFIG_OPS,
+  ...EXTERNAL_IDENTITY_CONFIG_OPS,
+  ...EXTERNAL_LOGIN_CONFIG_OPS,
 }
 
 /** 拿主题快照最多等多久（设备的设置要先向设备取） */
@@ -207,7 +213,14 @@ export function createConfigExecutor(host: ConfigHost): ConfigExecutor {
           const outcome = await host.bridge.confirm({
             session: await sessionOf(caller.threadId),
             harness: caller.harness,
-            command: argv.join(' '),
+            command: [
+              'external-owner',
+              'device-source',
+              'device-autostart',
+              'device-identity',
+            ].includes(cmd.group)
+              ? `${cmd.group} ${cmd.action}`
+              : argv.join(' '),
             items,
           })
           if (outcome === 'allow') return
