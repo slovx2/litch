@@ -1,5 +1,7 @@
 # Chrome 自动验收
 
+操作标记防闪烁：`npm run client:check:chrome -- --headless-only --presentation-only`。隔离 CFT 的扩展 worker 记录分组、徽标和图标 API 调用；正式执行器和原生桥执行快照、点击和输入，检查有效租约下标记不变、导航、交还、断线和停止后的状态。诊断时可用 `--measure-presentation` 只采集调用量和状态序列。
+
 动态 iframe 回归包含在 headless 场景中（`dynamic-origins.mjs`）：认领后通过页面按钮载入第二来源，分别验证信任所有网站、网站审批卡、黑名单和用户拒绝；未批准的正文不得出现在返回结果中。
 定向执行：`npm run client:check:chrome -- --headless-only --dynamic-origins-only`。
 

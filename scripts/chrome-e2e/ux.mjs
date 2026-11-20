@@ -98,7 +98,7 @@ export async function chromeUx({
     await inspect(`chrome.tabs.remove([${agentNative},${pinned.id}])`)
     claimed = await claim(user)
   })
-  await check('活动组颜色和逐标签 AI 徽标 / 异常后复原 / 不改 favicon', async () => {
+  await check('租约期间保持橙色和逐标签 AI 徽标 / 工具失败不闪回 / 不改 favicon', async () => {
     const before = (await state(user)).tab.favIconUrl
     const pending = call('evaluate', {
       tabId: claimed,
@@ -107,11 +107,11 @@ export async function chromeUx({
     await until(async () => (await state(user)).badge === 'AI', 'AI badge during operation')
     assert.equal((await state(user)).group.color, 'orange')
     assert.equal((await pending).success, true)
-    await until(async () => (await state(user)).badge === '', 'AI badge cleared')
-    assert.equal((await state(user)).group.color, 'blue')
+    assert.equal((await state(user)).badge, 'AI')
+    assert.equal((await state(user)).group.color, 'orange')
     assert.equal((await state(user)).tab.favIconUrl, before)
     assert.equal((await call('click', { tabId: claimed, ref: 'e999999' })).success, false)
-    assert.equal((await state(user)).badge, '')
+    assert.equal((await state(user)).badge, 'AI')
   })
   await check('Chrome 批量正常执行 / 中途失败 / 最后快照 / callId 不重放', async () => {
     const snapshot = await success('snapshot', { tabId: claimed })

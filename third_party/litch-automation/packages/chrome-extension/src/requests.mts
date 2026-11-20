@@ -41,21 +41,6 @@ function string(value: unknown): string {
 }
 
 export async function execute(state: ExtensionState, request: ChromeRequest): Promise<unknown> {
-  const grant = request.leaseId ? state.grants.get(request.leaseId) : undefined
-  const visible =
-    grant && ['command', 'pointer', 'navigate', 'history', 'show', 'console'].includes(request.op)
-  if (!visible) return executeRequest(state, request)
-  if (request.epoch !== state.epoch) throw new ChromeFault('staleLease', 'Chrome reconnected.')
-  await requireGrant(state, grant.leaseId, request.generation)
-  try {
-    await state.presentation.active(grant.tabId, grant.leaseId, true)
-    return await executeRequest(state, request)
-  } finally {
-    await state.presentation.active(grant.tabId, grant.leaseId, false).catch(() => {})
-  }
-}
-
-async function executeRequest(state: ExtensionState, request: ChromeRequest): Promise<unknown> {
   if (state.stopped && !['release', 'stop'].includes(request.op))
     throw new ChromeFault(
       'userStopped',
