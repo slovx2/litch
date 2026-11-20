@@ -20,6 +20,7 @@ export function SuggestionMeta({ row }: { row: SuggestionView }) {
       style={{ color: c.ink3, fontSize: font.size.small + 1 }}
     >
       <Text style={{ color: c.ink2 }}>{source.title}</Text>
+      {source.archived ? ` · ${t('suggestions.archived')}` : ''}
       {' · '}
       {device ? t.text(device.name) : deviceId}
       {' · '}

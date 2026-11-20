@@ -214,7 +214,8 @@ export async function checkChildModel(
     ...parentRows.map((row) => rankedModel(parentHarness, row.id, row)),
     ...targetRows.map((row) => rankedModel(harness, row.id, row)),
   ])
-  if (userPicked && model && child.available) return child.model
+  // 用户确认的 harness 默认也先解析为具体型号；后续复查实际创建型号，不能任意换档。
+  if (userPicked && child.available) return child.model
   if (child.model && rankingAllows(effective, parent, child)) return child.model
   const failure = modelLimitFailure(
     effective,

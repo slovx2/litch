@@ -48,6 +48,7 @@ export const zhModelRanking = {
   'ranking.cancel': '取消',
   'modelRanking.limitExceeded': '{child} 的等级高于父会话的 {parent}，不能直接开始。',
   'modelRanking.limitUnranked': '{child} 与父会话的 {parent} 有一个尚未分级，无法比较等级。',
+  'modelRanking.archivedSource': '来源会话已归档，无法核实委派模型上限。请在建议卡上确认开始。',
   'limit.pick': '可用的模型',
   'limit.start': '改用此模型开始',
   'limit.none': '没有不高于父会话的模型可选。',

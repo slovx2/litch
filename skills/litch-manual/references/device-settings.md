@@ -174,3 +174,6 @@ SSH 私钥和“操作这台电脑”的自定义位置属于桌面本机，始�
 越级派发直接失败，工具收到上限原因和允许模型列表，由模型重新选择。适用等级比较时，未分级仅允许沿用相同身份，换成另一型号会拒绝。用户在建议卡、任务卡或“派一个子会话”里点“开始”越级时，界面用一句话说明哪个模型高于父会话的哪个模型（或有一方未分级），可就地“改用此模型开始”（默认选父会话自己的模型），也可以跳去“调整模型等级”；父会话是经理时还有“改经理默认模型”（手机端经理设置仍在桌面，只给前两项）。经理设置里选“工作线模型”时，高于经理自己的模型会当场提示，不拦保存，派线时设备仍会校验。经理工作线再派孙线时也以实际发起工作线当前型号为上限，经理派发默认不构成额外授权。
 
 用户在建议卡编辑页亲自选定具体型号，本次可放行；直接点“开始”仍检查。预填型号不算用户选择，模型工具不能自行声明这个例外。权限限制照常生效。这里限制的是 Litch 子会话型号等级，不限制 effort、加价服务档、原生子代理或总费用。
+
+经理建议的来源工作线已归档时，用户直接点“开始”视为确认一次新的派发：优先使用卡片或编辑后的型号，其次是对应 harness 的经理派线默认型号，再用该 harness 默认型号。不恢复来源来比较模型，也不把经理当前回合的型号当成归档来源的上限；权限限制照常检查。模型工具不能自行取得此例外。来源仍活动时保留原有上限规则。
+For a manager suggestion from an archived workline, clicking **Start** confirms a new dispatch. Model priority is the card or edited value, the manager’s dispatch default for that harness, then the harness default. The source is not resumed and the manager’s current model is not substituted as its limit. Permission checks still apply. Model tools cannot claim this exception; suggestions from active sources retain their existing model limits.

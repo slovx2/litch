@@ -105,6 +105,9 @@ belongs to the workline and must not be replaced by a suggestion.
 
 Workline suggestions appear by default in the manager’s Suggestions page, labeled when awaiting review and retaining their source session. Starting from either the board or the source conversation creates a direct workline of the manager, alongside the source line and subject to the manager’s concurrency limit. Its brief identifies the source; forks retain the context and permissions of an unarchived source. If the source is archived, Start and Edit then start create a fresh direct workline using the card’s background and task, with defaults from the current manager and any card or edited overrides taking priority. They do not restore the source or inherit its fork history. Do in source restores the source before sending the task there. Existing nested sessions and ordinary-session suggestions are unchanged.
 
+来源工作线已归档时，用户可直接开始，无须先到菜单里另选模型。模型依次取卡片或编辑值、对应 harness 的经理派线默认、harness 默认；不会因无法读取归档来源的型号而拒绝，也不使用经理当前回合的型号作为替代上限。权限和并发限制不变。桌面和手机的来源信息均标出“来源已归档”。
+An archived source does not require selecting a model from a menu before starting. The card or edited model takes priority, followed by the manager’s dispatch default for the target harness and then its harness default. Missing archived source model data does not block the user’s start. Permission and concurrency limits remain in effect.
+
 经理自己提出的建议卡提供“开始”（创建工作线）、“编辑后开始”（修改简报后创建工作线）和“忽略”，不提供“在这里做”。普通会话和工作线提出的建议保持原有操作。旧客户端请求在经理会话执行建议时，设备会拒绝并提示开始工作线或忽略。
 
 Suggestions proposed by a manager offer **Start** (create a workline), **Edit before starting** (revise the brief and create a workline), and **Dismiss**, without **Do it here**. Suggestions from ordinary sessions and worklines keep their usual actions. Requests from older clients to run a manager’s suggestion in place are rejected with guidance to start a workline or dismiss it.

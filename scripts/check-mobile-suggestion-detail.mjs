@@ -8,6 +8,7 @@ import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/ch
 import { Cdp, until } from './chrome-m0/cdp.mjs'
 
 const url = process.argv[2] ?? 'http://localhost:5227/?app=1&scene=suggestion-detail'
+const archived = new URL(url).searchParams.get('archived') === '1'
 const output = process.env.LITCH_SUGGESTION_DETAIL_OUTPUT ?? '.artifacts/suggestion-detail'
 mkdirSync(output, { recursive: true })
 const work = mkdtempSync(join(tmpdir(), 'suggestion-detail-'))
@@ -68,6 +69,7 @@ try {
   await wait('!!document.querySelector(\'[data-testid="proposal:nebula-detail:start"]\')')
   await wait('document.body.innerText.includes("首次点击工具图片没有打开大图")')
   await wait('document.body.innerText.includes("保留回合展开保护")')
+  if (archived) await wait('document.body.innerText.includes("来源已归档")')
   assert.equal(
     await read('window.__suggestionDetail.calls.filter(c=>c[0]==="managers.board.detail").length'),
     1,
@@ -79,11 +81,21 @@ try {
   )
   await read('document.fonts.ready')
   writeFileSync(
-    join(output, 'mobile-suggestion-detail.png'),
+    join(
+      output,
+      archived ? 'mobile-archived-suggestion-detail.png' : 'mobile-suggestion-detail.png',
+    ),
     Buffer.from((await call('Page.captureScreenshot', { format: 'png' })).data, 'base64'),
   )
   await click('proposal:nebula-detail:start')
   await wait('window.__suggestionDetail.calls.some(c=>c[0]==="session.proposal.accept")')
+  assert.equal(
+    await read(
+      'window.__suggestionDetail.calls.find(c=>c[0]==="session.proposal.accept")[1].overrides?.modelSelected',
+    ),
+    undefined,
+    '直接开始不要求预先编辑具体型号',
+  )
   await click('proposal:nebula-detail:more')
   await wait('!!document.querySelector(\'[data-testid="proposal:nebula-detail:dismiss"]\')')
   writeFileSync(

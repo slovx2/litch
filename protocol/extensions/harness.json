@@ -158,6 +158,11 @@
           "litch": "sessionRecovering",
           "code": -32051,
           "description": "设备正在重启或恢复此会话，暂时不能执行 thread/resume 或 turn/steer。data 带 method、harness 和已知的 threadId。客户端可对订阅请求做有限次退避重试，不应将会话降级为永久只读；不得因此自动重发写操作。"
+        },
+        {
+          "litch": "archivedSourceModel",
+          "code": -32602,
+          "description": "模型自主开始的建议来源已归档，无法核实来源模型上限；请用户从卡片确认开始，不恢复来源。"
         }
       ],
       "data": {
@@ -172,7 +177,8 @@
               "unknownThread",
               "harnessUnavailable",
               "sessionRecovering",
-              "archiveBlocked"
+              "archiveBlocked",
+              "archivedSourceModel"
             ]
           },
           "method": { "type": "string" },

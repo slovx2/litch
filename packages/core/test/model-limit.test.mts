@@ -17,6 +17,17 @@ import { RpcFailure } from './fake-server.mjs'
 import { thread } from './fixtures.mjs'
 import { fakeClock, settle } from './helpers.mjs'
 
+test('归档来源模型校验使用结构化原因和可翻译文案，不按英文正文匹配', () => {
+  const failure = channelFailure(
+    new RpcError(-32602, 'upstream diagnostic', {
+      litch: 'archivedSourceModel',
+    }),
+  )
+  assert.equal(failure.code, 'rejected')
+  assert.equal(failure.text?.key, 'modelRanking.archivedSource')
+  assert.equal(failure.modelLimit, undefined, '不把经理型号伪装成归档来源的上限')
+})
+
 test('经理默认模型预检提供父子身份、可选型号、Phrase 和两条设置目标', () => {
   const config = sampleModelRanking('custom-cross')
   const parent = rankedModelSelection(config, 'claude-code', 'anthropic/claude-sonnet-5-5')
