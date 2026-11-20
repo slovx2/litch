@@ -15,6 +15,7 @@ import { managerQuestionToolAllowed } from '../../protocol/src/manager-question.
 import { parseSessionEvent, SESSION_TREE_METHOD } from '../../protocol/src/session-tree.mjs'
 import { MANAGER_SCHEMA_VERSION } from '../src/manager-store.mjs'
 import { startChild } from '../src/session-start.mjs'
+import { MANAGER_V9_SQL } from './fixtures/manager-v9.mjs'
 import { rig } from './helpers.mjs'
 import { refuseSteer, treeRig, until } from './tree-kit.mjs'
 
@@ -540,6 +541,23 @@ test('v6 连续升级保留 D/R/P/S/I、问答、关联、报告已阅；不建�
     }
     await env.device.close()
     const db = new DatabaseSync(join(env.stateDir, 'manager.sqlite'))
+    // 先按冻结的 v9 结构去掉后续新增表，再降到 v6；不能让新表伪装成旧库内容。
+    const historical = new DatabaseSync(':memory:')
+    try {
+      historical.exec(MANAGER_V9_SQL)
+      const names = new Set(
+        historical
+          .prepare("SELECT name FROM sqlite_schema WHERE type='table'")
+          .all()
+          .map((row) => String(row.name)),
+      )
+      for (const row of db.prepare("SELECT name FROM sqlite_schema WHERE type='table'").all()) {
+        const name = String(row.name)
+        if (!names.has(name)) db.exec(`DROP TABLE "${name.replaceAll('"', '""')}"`)
+      }
+    } finally {
+      historical.close()
+    }
     db.exec(
       'DROP TABLE manager_reset_requests; DROP TABLE manager_resets; DROP TABLE manager_history; DROP TABLE issues; DROP TABLE issue_comments; DROP TABLE issue_notifications; DROP TABLE issue_idempotency; DROP TABLE issue_meta; DROP TABLE issue_history; PRAGMA user_version=6',
     )
