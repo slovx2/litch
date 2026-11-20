@@ -34,6 +34,7 @@ import {
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { installNode, NODE_VERSION } from '../apps/desktop/scripts/node-runtime.mjs'
+import { GITHUB_CLI_VERSION, installGithubCli } from './github-cli-runtime.mjs'
 
 const repo = fileURLToPath(new URL('..', import.meta.url))
 
@@ -44,6 +45,7 @@ const repo = fileURLToPath(new URL('..', import.meta.url))
 export const STAGED_ENTRIES = [
   'bin',
   'node',
+  'tools',
   'packages',
   'node_modules',
   'protocol',
@@ -486,7 +488,10 @@ export async function stageAdapterTree(
     )
   }
 
-  const { node } = await installNode(join(out, 'node'), { platform, arch })
+  const [{ node }, gh] = await Promise.all([
+    installNode(join(out, 'node'), { platform, arch }),
+    installGithubCli(out, { platform, arch }),
+  ])
 
   const guardTarget = `${goOs(platform)}-${goArch}`
   const staged = PACKAGES.filter((spec) =>
@@ -525,6 +530,14 @@ export async function stageAdapterTree(
   // 给的是本机的系统和架构时试运行一下：Node 报得出预期的版本；
   // 命令行起得来，而且报得出版本号（它是从暂存目录里的 package.json 读的，这个文件不能少）
   if (platform === process.platform && arch === process.arch) {
+    const ghVersion = execFileSync(gh, ['--version'], {
+      encoding: 'utf8',
+      env: process.platform === 'win32' ? { SystemRoot: process.env.SystemRoot } : {},
+    })
+      .split('\n')[0]
+      ?.split(' ')[2]
+    if (ghVersion !== GITHUB_CLI_VERSION)
+      throw new Error(`内置的 GitHub CLI 版本应为 ${GITHUB_CLI_VERSION}，实际为 ${ghVersion}`)
     const version = execFileSync(node, ['--version'], { encoding: 'utf8' }).trim()
     if (version !== `v${NODE_VERSION}`) {
       throw new Error(`内置的 Node 报的版本是 ${version}，应为 v${NODE_VERSION}`)

@@ -183,12 +183,19 @@ export interface ExternalSourceDraft {
     labelIds: ExternalId[]
   }
   minRole: Exclude<ExternalRole, 'read'>
-  writePolicy: { comment: boolean; draftPr: boolean; status: boolean; managedPush: boolean }
+  writePolicy: {
+    comment: boolean
+    draftPr: boolean
+    status: boolean
+    managedPush: boolean
+    /** 设备管理员确认 litch/progress 未作为合并门禁。 */
+    statusGateConfirmed?: boolean
+  }
   interval: number
   repos: ExternalRepo[]
   routes: ExternalRoute[]
   /** 自动提醒默认关。经理的凭据注入由经理分配决定。 */
-  unattended?: { autoNotify: boolean }
+  unattended?: { autoNotify: boolean; autoLinkAgentPr?: boolean }
 }
 export interface ExternalSource extends ExternalSourceDraft {
   revision: number

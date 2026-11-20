@@ -127,6 +127,10 @@ async function main(): Promise<void> {
   summary?.write('start', { version: deviceVersion(), node: process.versions.node })
   const controlPath = controlSocketPath(args.stateDir)
   const control = socketExists(controlPath) ? new SocketControl(controlPath, log) : undefined
+  const runtimeRoot = process.env.LITCH_DEVICE_RUNTIME_ROOT
+  const proxySocket = process.env.LITCH_DEVICE_PROXY_SOCKET
+  delete process.env.LITCH_DEVICE_RUNTIME_ROOT
+  delete process.env.LITCH_DEVICE_PROXY_SOCKET
   const device = new DeviceServer({
     stateDir: args.stateDir,
     ...(process.platform === 'linux' ? { chromeBinary: adapterCliPath() } : {}),
@@ -136,6 +140,7 @@ async function main(): Promise<void> {
     ...(args.wrapUp === undefined ? {} : { wrapUp: args.wrapUp }),
     ...(args.wrapUpReminder === undefined ? {} : { wrapUpReminder: args.wrapUpReminder }),
     ...(control ? { control } : {}),
+    ...(runtimeRoot ? { external: { runtimeRoot, deviceSocket: args.listen } } : {}),
     pairing: pairingConfig(args.stateDir),
     dial: (socket) => unixConnector(parseSocketUrl(socket, '运行时的套接字')),
     upstreams: args.upstreams.map((upstream) => ({
@@ -143,16 +148,19 @@ async function main(): Promise<void> {
       connect: unixConnector(upstream.path),
     })),
   })
-  let listener: Awaited<ReturnType<typeof listenUnix>>
+  const listeners: Awaited<ReturnType<typeof listenUnix>>[] = []
   try {
+    await device.external?.agent?.start().catch(() => log('GitHub 凭据注入入口不可用'))
     if (control) {
       control.start()
       if (!(await control.ready(CONTROL_READY_MS)))
         log('适配器主进程还没有把各 harness 的状态送过来，先就绪，到了再补')
     }
-    listener = await listenUnix(args.listen, (wire) => device.attach(wire))
+    listeners.push(await listenUnix(args.listen, (wire) => device.attach(wire, true)))
+    if (proxySocket) listeners.push(await listenUnix(proxySocket, (wire) => device.attach(wire)))
     void device.attachments.start()
   } catch (error) {
+    await Promise.allSettled(listeners.map((listener) => listener.close()))
     control?.close()
     await device.close()
     throw error
@@ -161,7 +169,7 @@ async function main(): Promise<void> {
   const close = async () => {
     if (closing) return
     closing = true
-    await listener.close()
+    await Promise.all(listeners.map((listener) => listener.close()))
     control?.close()
     await device.close()
   }

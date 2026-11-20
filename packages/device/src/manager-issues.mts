@@ -541,7 +541,10 @@ export class ManagerIssues {
     }
     if (method === METHOD.read) {
       keys(p, ['managerId', 'id'])
-      return { issue: this.get(managerId, text(p.id, 'id')) }
+      const id = text(p.id, 'id')
+      return {
+        issue: this.owner.external ? this.getWithExternal(managerId, id) : this.get(managerId, id),
+      }
     }
     // 用户评论仍可保存到已结束经理；事件保持待投递，drain 不再启动它。
     if (actor === 'manager') this.owner.writer.active(managerId)

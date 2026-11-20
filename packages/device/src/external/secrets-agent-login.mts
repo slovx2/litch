@@ -9,7 +9,10 @@ import type { ExternalGithubSecrets, GithubCredentialSnapshot } from './secrets.
 import { agentHelperProgram, shellQuoteGithubHelper } from './secrets-agent-helper.mjs'
 import { ExternalPrivateFiles } from './secrets-files.mjs'
 
-type WorklineActor = Extract<ExternalToolActor, { kind: 'workline' }>
+type WorklineActor = Omit<Extract<ExternalToolActor, { kind: 'workline' }>, 'issueId'> & {
+  issueId?: Extract<ExternalToolActor, { kind: 'workline' }>['issueId']
+}
+export type GithubAgentActor = Extract<ExternalToolActor, { kind: 'manager' }> | WorklineActor
 export interface GithubManagerAssignment {
   identityId: string | null
   repoIds: readonly string[]
@@ -65,7 +68,7 @@ interface LaunchConfig {
   version: string
 }
 interface Launch {
-  actor: ExternalToolActor
+  actor: GithubAgentActor
   files: ExternalPrivateFiles
   configs: Map<string, LaunchConfig>
 }
@@ -74,6 +77,7 @@ interface ServiceOptions extends GithubAgentOptions {
   /** 设备私有 Unix socket 或 Windows named pipe。不能监听 TCP。 */
   callbackPath: string
   ghPath: string
+  hostGhPath?: string
   gitPath: string
   nodePath?: string
   isWorklineCurrent: (actor: WorklineActor) => boolean
@@ -102,9 +106,12 @@ export class GithubAgentLoginService {
   static async start(options: ServiceOptions): Promise<GithubAgentLoginService> {
     const node = options.nodePath ?? process.execPath
     if (
-      ![node, options.ghPath, options.gitPath].every(
-        (path) => isAbsolute(path) && !/["\r\n\0]/.test(path),
-      ) ||
+      ![
+        node,
+        options.ghPath,
+        options.gitPath,
+        ...(options.hostGhPath ? [options.hostGhPath] : []),
+      ].every((path) => isAbsolute(path) && !/["\r\n\0]/.test(path)) ||
       !(process.platform === 'win32'
         ? /^\\\\\.\\pipe\\[a-z\d._-]+$/i.test(options.callbackPath)
         : isAbsolute(options.callbackPath))
@@ -130,12 +137,13 @@ export class GithubAgentLoginService {
 
   /** 始终从宿主原始环境组装；结束会话/回合后由 H 调用 dispose。 */
   environment(
-    actor: ExternalToolActor,
+    actor: GithubAgentActor,
     env: NodeJS.ProcessEnv,
   ): {
     env: NodeJS.ProcessEnv
     resolution: GithubAgentResolution
     ghPath?: string
+    ghArgs?: string[]
     dispose(): void
   } {
     if (!this.authorized(actor))
@@ -158,6 +166,7 @@ export class GithubAgentLoginService {
         key,
         this.options.ghPath,
         this.options.gitPath,
+        this.options.hostGhPath ?? this.options.ghPath,
       ]
       const cmd = args.map(shell).join(' ')
       const isWindows = process.platform === 'win32'
@@ -179,6 +188,7 @@ export class GithubAgentLoginService {
       return {
         resolution,
         ghPath: shim,
+        ...(isWindows ? { ghArgs: [...args.slice(1), 'gh'] } : {}),
         env: {
           ...env,
           [pathKey]: `${files.directory}${env[pathKey] ? delimiter + env[pathKey] : ''}`,
@@ -236,7 +246,7 @@ export class GithubAgentLoginService {
       await new Promise<void>((resolve) => this.server.close(() => resolve()))
   }
 
-  private authorized(actor: ExternalToolActor): boolean {
+  private authorized(actor: GithubAgentActor): boolean {
     return (
       activeManager(this.options.store, actor) &&
       (actor.kind === 'manager' || this.options.isWorklineCurrent(actor))

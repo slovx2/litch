@@ -170,6 +170,12 @@ export class ExternalIntakeService {
       'inspectSubject' | 'snapshotLabels'
     >,
     observeAgentPr?: (sourceId: string, event: ExternalEvent) => Promise<boolean>,
+    waitForAgentPr?: (
+      source: ExternalSource,
+      repo: ExternalRepo,
+      event: ExternalEvent,
+    ) => Promise<boolean>,
+    limit = 100,
   ): Promise<void> {
     const source = this.store.config.source(scope.sourceId)
     const repo = source?.repos.find((item) => item.repoId === scope.repoId)
@@ -180,7 +186,15 @@ export class ExternalIntakeService {
     const accepted: ExternalEvent[] = []
     for (const {
       value: { event, observedAt },
-    } of evidence.pending(scope)) {
+    } of evidence.pending(scope, limit)) {
+      if (
+        waitForAgentPr &&
+        !this.store.ref(event.targetEvidence.subject) &&
+        event.kind === 'pull_request' &&
+        isLocalBot(routing, event.actorEvidence?.userId) &&
+        (await waitForAgentPr(source, repo, event))
+      )
+        continue
       let agent: 'marker' | 'head' | undefined
       let addressedBotIds: readonly string[] = []
       if (

@@ -49,7 +49,7 @@ func prepareRuntime(ctx context.Context, c configuration) (process *exec.Cmd, ve
 		return nil, "", nil, err
 	}
 	process = exec.Command(c.node, c.adapter(), "app-server", "--listen", hostplatform.ListenURL(c.socket()))
-	process.Env = c.environment()
+	process.Env = c.agentEnvironment()
 	return process, info.ProtocolVersion + " (codex-harness-adapter-" + c.harness + ")", selectedHarnessCLI(c, info.CLIPath, info.CLIBuild), nil
 }
 

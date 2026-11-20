@@ -186,6 +186,9 @@ export function managerInstructions(manager: RuleSettings, external = false): st
 export function lineInstructions(manager: RuleSettings, taskCards = true): string {
   return tagged(managerLineRules(manager.name, manager.dispatch, taskCards), manager)
 }
+export function managerRulesHaveExternalTools(recorded?: string): boolean {
+  return recorded === undefined ? false : ruleSettings(recorded)?.externalTools === true
+}
 export function refreshManagerRules(
   name: string,
   recorded: string,

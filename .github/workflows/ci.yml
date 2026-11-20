@@ -85,6 +85,7 @@ jobs:
         id: phase-11
       - run: npm run build
         id: phase-10
+      - run: npm run check:external-github
       - run: npm run mobile:test
         id: phase-9
       - run: node scripts/ci/test-shard.mjs pi

@@ -267,16 +267,20 @@ export class ExternalGithubOutbox {
   }
 
   /** B/H 在 PR 正式绑单前用准确的 head/base/作者暂挂活动。 */
-  pendingDraft(input: {
-    sourceId: string
-    repoId: string
-    head: string
-    base: string
-    botUserId: string
-  }): string | null {
+  pendingDraft(
+    input: {
+      sourceId: string
+      repoId: string
+      head: string
+      base: string
+      botUserId: string
+    },
+    includeConfirmed = false,
+  ): string | null {
     for (const entry of this.store.externalWritesForRepo(input.sourceId, input.repoId, 'draft_pr', [
       'sending',
       'unknown',
+      ...(includeConfirmed ? ['confirmed' as const] : []),
     ])) {
       try {
         const payload = this.payloads.get(entry.payloadRef, entry.payloadHash)

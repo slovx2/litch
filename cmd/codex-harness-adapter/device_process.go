@@ -35,7 +35,8 @@ func (d *deviceService) command(upstreams []configuration) *exec.Cmd {
 		args = append(args, "--upstream", upstream.harness+"="+hostplatform.ListenURL(upstream.socket()))
 	}
 	process := exec.Command(c.node, args...)
-	process.Env = c.serviceEnvironment()
+	process.Env = append(c.serviceEnvironment(), "LITCH_DEVICE_RUNTIME_ROOT="+c.root,
+		"LITCH_DEVICE_PROXY_SOCKET="+c.deviceProxySocket())
 	return process
 }
 
@@ -48,6 +49,10 @@ func (d *deviceService) runOnce(ctx context.Context, upstreams []configuration, 
 		return false, "start-failed", err
 	}
 	defer hostplatform.RemoveSocket(c.deviceSocket())
+	if err := hostplatform.RemoveSocket(c.deviceProxySocket()); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return false, "start-failed", err
+	}
+	defer hostplatform.RemoveSocket(c.deviceProxySocket())
 	log, err := openPrivateLog(c.logsDirectory(), "device.log")
 	if err != nil {
 		return false, "start-failed", err

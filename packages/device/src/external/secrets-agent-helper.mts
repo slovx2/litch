@@ -2,7 +2,7 @@
 export const agentHelperProgram = String.raw`
 const {connect} = require('node:net')
 const {spawn, spawnSync} = require('node:child_process')
-const [socket, key, gh, git, mode, ...args] = process.argv.slice(2)
+const [socket, key, gh, git, hostGh, mode, ...args] = process.argv.slice(2)
 
 function callback(request) {
   return new Promise((resolve) => {
@@ -74,7 +74,7 @@ async function main() {
       env.GH_CONFIG_DIR = config
       env.GH_HOST = 'github.com'
     }
-    const child = spawn(gh, args, {env, stdio: 'inherit', windowsHide: true})
+    const child = spawn(typeof config === 'string' ? gh : hostGh, args, {env, stdio: 'inherit', windowsHide: true})
     child.on('error', () => { process.exitCode = 1 })
     child.on('exit', (code) => { process.exitCode = code ?? 1 })
     return

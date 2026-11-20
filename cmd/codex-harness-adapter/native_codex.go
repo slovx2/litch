@@ -209,7 +209,7 @@ func inspectCodex(ctx context.Context, c configuration) (path, version string, e
 // 工作目录放在用户主目录：它不属于任何项目，不该捡到服务启动时所在目录里的项目配置。
 func codexCommand(c configuration, path string) *exec.Cmd {
 	process := hostCLICommand(context.Background(), path, c.environment(), "app-server", "--listen", "unix://"+codexSocketPath(c))
-	process.Env = c.environment()
+	process.Env = c.agentEnvironment()
 	if home, err := os.UserHomeDir(); err == nil {
 		process.Dir = home
 	}

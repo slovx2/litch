@@ -54,6 +54,8 @@ export interface ExternalDeliveryGroup {
   subjectKey: string
   eventKeys: string[]
   deliveryId?: string
+  /** 发送点的实际线程；经理换绑后仍按此线程对账。 */
+  target?: { threadId: string; harness: string }
   availableAt: number
   state: 'queued' | 'sending' | 'confirmed' | 'unknown' | 'blocked'
   turnId?: string

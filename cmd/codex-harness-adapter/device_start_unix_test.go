@@ -342,7 +342,7 @@ func TestDeviceProxyOnlyForwardsBytes(t *testing.T) {
 	if err := os.MkdirAll(cfg.deviceDirectory(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	listener, err := net.Listen("unix", cfg.deviceSocket())
+	listener, err := net.Listen("unix", cfg.deviceProxySocket())
 	if err != nil {
 		t.Fatal(err)
 	}

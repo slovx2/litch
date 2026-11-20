@@ -23,7 +23,10 @@ export type ExternalReadSelection =
   | { eventKey: string }
   | { issueId: ExternalIssueId; repoId: string; number: string }
 
-export function activeManager(store: ExternalStore, actor: ExternalToolActor): boolean {
+export function activeManager(
+  store: ExternalStore,
+  actor: Pick<ExternalToolActor, 'kind' | 'managerId' | 'threadId'>,
+): boolean {
   const manager = store.manager.manager(actor.managerId)
   return (
     manager?.status === 'active' &&

@@ -33,6 +33,7 @@ export interface InspectedExternalSubject {
   subject: ExternalSubject
   actorUserId?: string
   head?: { repoId: string; ref: string }
+  base?: string
   agentMarked: boolean
   agentOperationIds?: readonly string[]
 }

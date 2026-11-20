@@ -361,7 +361,10 @@ export class ExternalDispatch {
     })
   }
 
-  pressure(managerId: string): {
+  pressure(
+    managerId: string,
+    sourceId?: string,
+  ): {
     pendingGroups: number
     limitedGroups: number
     oldestWaitingSeconds: number
@@ -369,10 +372,11 @@ export class ExternalDispatch {
   } {
     const at = this.host.now()
     const groups = this.store.queue.deliveryGroups(managerId, 'queued')
+    const scope = sourceId ? groups.filter((group) => group.sourceId === sourceId) : groups
     let limitedGroups = 0
     let oldest = at
     let next = Number.POSITIVE_INFINITY
-    for (const group of groups) {
+    for (const group of scope) {
       for (const event of this.events(group)) oldest = Math.min(oldest, event.observedAt)
       const plan = this.queued(group, at, false)
       if (!plan) continue
@@ -385,7 +389,7 @@ export class ExternalDispatch {
         )
     }
     return {
-      pendingGroups: groups.length,
+      pendingGroups: scope.length,
       limitedGroups,
       oldestWaitingSeconds: at - oldest,
       nextAdmissionAt: Number.isFinite(next) ? next : null,
@@ -462,7 +466,10 @@ export class ExternalDispatch {
             if (!plan) return null
             const text = externalReminder(plan)
             if (expected.text !== text || expected.eventId !== eventId) return null
-            const staged = this.store.queue.stageDelivery(groupId, text, now)
+            const staged = this.store.queue.stageDelivery(groupId, text, now, {
+              threadId: manager.threadId,
+              harness: manager.harness,
+            })
             if (staged?.state !== 'sending' || !staged.deliveryId) return null
             this.host.feedback?.staged(staged, plan.category, plan.events)
             // 只对抵达引擎发送点的实际尝试记一次账，未知也视为可能已消耗。

@@ -57,7 +57,8 @@ export function githubPollFault(
     reason,
     ...(retryAt !== undefined ? { retryAt } : {}),
   })
-  if (kind === 'authentication') return fields('credential', true, 'credential-rejected')
+  if (kind === 'authentication' || kind === 'organization-approval')
+    return fields('credential', true, 'credential-rejected')
   if (kind === 'repository-changed') return fields('repository', true, 'repository-changed')
   if (kind === 'not-found') {
     if (at === 'repository') return fields(at, true, 'repository-unavailable')
