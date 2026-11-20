@@ -13,6 +13,7 @@ import type { ExternalIntake } from '../../../../../../packages/protocol/src/ext
 import { stamp } from '../../../../../../packages/ui/src/app/format.ts'
 import {
   allowed,
+  canTriageAction,
   operationId,
   subjectLabel,
 } from '../../../../../../packages/ui/src/external/model.ts'
@@ -73,6 +74,9 @@ export function InboxDetail({
     !disabled && allowed(access, 'triageInbox') && intake?.status === 'pending_triage'
   const canReassign =
     !disabled && allowed(access, 'reassignInbox') && intake?.status === 'pending_triage'
+  useEffect(() => {
+    if (!canReassign) setReassigning(false)
+  }, [canReassign])
   const others = managerIds
     .filter((id) => id !== manager.id)
     .map((id) => replica.store.get<ManagerView>(keys.manager(deviceId, id)))
@@ -84,7 +88,7 @@ export function InboxDetail({
     setMode(next)
   }
   const submit = async (action: ExternalTriageAction) => {
-    if (!intake) return
+    if (!intake || disabled || !canTriageAction(access, action.action)) return
     if (!attempt.current) attempt.current = operationId()
     setBusy(true)
     setNotice('')
@@ -152,7 +156,11 @@ export function InboxDetail({
           busy={busy}
           testID="github-triage-submit"
           disabled={
-            mode === 'accept' ? !fields.title.trim() || !fields.body.trim() : !fields.reason.trim()
+            !canTriageAction(access, mode) ||
+            disabled ||
+            (mode === 'accept'
+              ? !fields.title.trim() || !fields.body.trim()
+              : !fields.reason.trim())
           }
           onPress={() =>
             void submit(
@@ -237,12 +245,14 @@ export function InboxDetail({
         {mode === 'accept' ? (
           <>
             <Field
+              editable={canTriage && !busy}
               label={t('mgh.form.title')}
               value={fields.title}
               onChangeText={set('title')}
               testID="github-accept-title"
             />
             <Field
+              editable={canTriage && !busy}
               label={t('mgh.form.body')}
               value={fields.body}
               onChangeText={set('body')}
@@ -253,6 +263,7 @@ export function InboxDetail({
         ) : null}
         {mode === 'ignore' ? (
           <Field
+            editable={canTriage && !busy}
             label={t('mgh.form.reason')}
             value={fields.reason}
             onChangeText={set('reason')}
@@ -261,6 +272,7 @@ export function InboxDetail({
         ) : null}
         {mode ? (
           <Field
+            editable={canTriage && !busy}
             label={t('mgh.form.reply')}
             value={fields.reply}
             onChangeText={set('reply')}
@@ -274,7 +286,7 @@ export function InboxDetail({
         ) : null}
       </View>
       <Sheet
-        visible={reassigning}
+        visible={reassigning && canReassign}
         title={t('mgh.reassign.title')}
         {...(others.length ? {} : { note: t('mgh.reassign.none') })}
         onClose={() => setReassigning(false)}

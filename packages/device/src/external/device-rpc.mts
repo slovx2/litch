@@ -74,6 +74,8 @@ export class DeviceExternalRpc {
         case M.accessGet:
           args(key)
           return {
+            configure: access.admin,
+            configureAutostart: access.admin,
             pauseSource: access.admin,
             resumeSource: access.admin,
             reassignInbox: access.admin,

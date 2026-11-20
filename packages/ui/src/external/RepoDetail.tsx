@@ -54,12 +54,14 @@ export function RepoDetail({
   identities,
   repositories,
   managers,
+  writable,
 }: {
   device: DeviceView
   status: ExternalSourceStatus
   identities: IdentityHead[]
   repositories: ExternalIdentityRepository[]
   managers: ManagerChoice[]
+  writable: boolean
 }) {
   const t = useT()
   const { channel } = useServices()
@@ -110,7 +112,7 @@ export function RepoDetail({
         sourceId: status.source.sourceId,
       }),
     )
-  const disabled = !online || act.busy
+  const disabled = !online || !writable || act.busy
 
   return (
     <div className="ext-detail" data-ext-detail={status.source.sourceId}>
@@ -330,7 +332,11 @@ export function RepoDetail({
         </div>
       ) : null}
       {preview ? <PreviewResult value={preview} /> : null}
-      <Readiness status={status} busy={check.busy || !online} onCheck={() => void recheck()} />
+      <Readiness
+        status={status}
+        busy={check.busy || !online || !writable}
+        onCheck={() => void recheck()}
+      />
       {check.error ? (
         <div className="devp-note err" role="alert">
           {check.error}

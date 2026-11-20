@@ -1,7 +1,7 @@
 // 无人值守页 ① GitHub 身份：每个身份一行（头像、账号、凭据类型、状态点），行尾撤销；标题行的 + 打开添加向导。
 // 一个身份可挂多枚凭据（高级粘贴的细粒度令牌按资源所有者分），多于一枚时逐枚列出。
 import type { DeviceView, ExternalCredential, ExternalIdentity } from '@litch/core'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Confirm } from '../app/Confirm.tsx'
 import { Icon } from '../app/icons.tsx'
@@ -30,10 +30,12 @@ export function Identities({
   device,
   identities,
   error,
+  writable,
 }: {
   device: DeviceView
   identities: ExternalIdentity[] | null
   error: string
+  writable: boolean
 }) {
   const t = useT()
   const { channel } = useServices()
@@ -44,8 +46,14 @@ export function Identities({
   } | null>(null)
   const act = useRun()
   const online = device.connection === 'online'
+  useEffect(() => {
+    if (!writable || !online) {
+      setAdding(false)
+      setRevoking(null)
+    }
+  }, [writable, online])
   const revoke = async () => {
-    if (!revoking) return
+    if (!revoking || !writable || !online) return
     const { identity, credential } = revoking
     setRevoking(null)
     await act.run(() =>
@@ -69,7 +77,7 @@ export function Identities({
           data-act="identity-add"
           title={t('ext.identity.add')}
           aria-label={t('ext.identity.add')}
-          disabled={!online}
+          disabled={!online || !writable}
           onClick={() => setAdding(true)}
         >
           <Icon name="plus" small />
@@ -113,7 +121,7 @@ export function Identities({
                           data-act="identity-revoke"
                           title={t('ext.identity.revoke')}
                           aria-label={t('ext.identity.revoke')}
-                          disabled={!online || act.busy}
+                          disabled={!online || !writable || act.busy}
                           onClick={() => setRevoking({ identity, credential })}
                         >
                           <Icon name="trash" small />
@@ -132,7 +140,7 @@ export function Identities({
           {act.error}
         </div>
       ) : null}
-      {revoking ? (
+      {writable && online && revoking ? (
         <Confirm
           title={t('ext.identity.revokeTitle', { login: revoking.identity.login })}
           note={t('ext.identity.revokeNote')}
@@ -142,7 +150,9 @@ export function Identities({
           onClose={() => setRevoking(null)}
         />
       ) : null}
-      {adding ? <AddIdentity deviceId={device.id} onClose={() => setAdding(false)} /> : null}
+      {writable && online && adding ? (
+        <AddIdentity deviceId={device.id} onClose={() => setAdding(false)} />
+      ) : null}
     </section>
   )
 }

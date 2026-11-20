@@ -7,6 +7,7 @@ import { useT } from '../app/appearance.ts'
 import { useServices } from '../app/services.tsx'
 import { type ManagerChoice, useExternalDevice, useIdentityDetails, useRun } from './data.ts'
 import {
+  allowed,
   assignmentConflicts,
   type IdentityHead,
   operationId,
@@ -183,6 +184,7 @@ export function AssignmentRow({
 
 export function Assignments({
   device,
+  writable,
   managers,
   assignments,
   identities,
@@ -190,6 +192,7 @@ export function Assignments({
   repositories,
 }: {
   device: DeviceView
+  writable: boolean
   managers: ManagerChoice[]
   assignments: readonly ExternalManagerAssignment[] | null
   identities: readonly IdentityHead[]
@@ -218,7 +221,7 @@ export function Assignments({
               identities={identities}
               repos={repos}
               repositories={repositories}
-              disabled={device.connection !== 'online'}
+              disabled={device.connection !== 'online' || !writable}
             />
           ))}
         </div>
@@ -249,7 +252,7 @@ export function ManagerGithub({ device, manager }: { device: DeviceView; manager
         identities={configuration.identities}
         repos={repos}
         repositories={repositories}
-        disabled={!online}
+        disabled={!online || !allowed(view?.access, 'configure')}
         showName={false}
       />
     </div>

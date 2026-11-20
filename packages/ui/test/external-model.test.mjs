@@ -153,3 +153,23 @@ test('设备码倒计时：UTC 秒对客户端毫秒，不为负；显示为 分
   assert.equal(m.clockText(581), '9:41')
   assert.equal(m.clockText(5), '0:05')
 })
+
+test('配置和分拣权限独立，已选表单在撤权或缺 access 后不可提交', () => {
+  for (const access of [undefined, {}, { configure: false, configureAutostart: false }]) {
+    assert.equal(m.allowed(access, 'configure'), false)
+    assert.equal(m.allowed(access, 'configureAutostart'), false)
+    for (const action of ['accept', 'merge', 'ignore', 'reassign'])
+      assert.equal(m.canTriageAction(access, action), false)
+  }
+  const configure = { configure: true, configureAutostart: true }
+  assert.equal(m.allowed(configure, 'configure'), true)
+  assert.equal(m.allowed(configure, 'configureAutostart'), true)
+  assert.equal(m.canTriageAction(configure, 'accept'), false)
+  for (const action of ['accept', 'merge', 'ignore']) {
+    assert.equal(m.canTriageAction({ triageInbox: true }, action), true)
+    assert.equal(m.canTriageAction({ reassignInbox: true }, action), false)
+  }
+  assert.equal(m.canTriageAction({ reassignInbox: true }, 'reassign'), true)
+  assert.equal(m.canTriageAction({ triageInbox: true }, 'reassign'), false)
+  assert.equal(m.canTriageAction({ triageInbox: true }, null), false)
+})

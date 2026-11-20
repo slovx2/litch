@@ -587,6 +587,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "configure": { "type": "boolean" },
+        "configureAutostart": { "type": "boolean" },
         "pauseSource": { "type": "boolean" },
         "resumeSource": { "type": "boolean" },
         "triageInbox": { "type": "boolean" },

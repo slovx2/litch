@@ -169,7 +169,12 @@ else if (args[0] === 'api' || args[0] === 'pr') {
     phone.initialize(extensions),
     plain.initialize(coreExtensions),
   ])
-  assert.equal((await phone.call(E.accessGet, {})).triageInbox, false)
+  const adminAccess = await admin.call(E.accessGet, {})
+  const phoneAccess = await phone.call(E.accessGet, {})
+  for (const key of ['configure', 'configureAutostart', 'triageInbox']) {
+    assert.equal(adminAccess[key], true)
+    assert.equal(phoneAccess[key], false)
+  }
   assert.equal(
     (await phone.fails(E.identityAdd, { operationId: 'phone-not-admin', scopes: [] })).code,
     -32600,

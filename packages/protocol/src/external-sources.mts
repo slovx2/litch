@@ -329,6 +329,8 @@ export type ExternalInboxStatus =
   | 'notified'
 /** 只对当前连接生效。缺省或 false 都不授权，写请求仍由设备复核。 */
 export interface ExternalAccess {
+  configure?: boolean
+  configureAutostart?: boolean
   pauseSource?: boolean
   resumeSource?: boolean
   triageInbox?: boolean

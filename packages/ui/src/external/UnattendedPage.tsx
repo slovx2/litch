@@ -8,7 +8,7 @@ import { Assignments, type RepoChoice } from './Assignments.tsx'
 import { AutostartRow } from './Autostart.tsx'
 import { useDeviceManagers, useExternalDevice, useIdentityDetails } from './data.ts'
 import { Identities } from './Identities.tsx'
-import { repoLabel } from './model.ts'
+import { allowed, repoLabel } from './model.ts'
 import { Repos } from './Repos.tsx'
 
 export function UnattendedPage({
@@ -23,6 +23,7 @@ export function UnattendedPage({
   const t = useT()
   const view = useExternalDevice(device.id)
   const online = device.connection === 'online'
+  const writable = online && allowed(view?.access, 'configure')
   const configuration = view?.configuration?.value ?? null
   const sources = view?.sources.value ?? null
   const details = useIdentityDetails(device.id, configuration?.revision ?? null, online)
@@ -85,8 +86,17 @@ export function UnattendedPage({
               {snapshotError.text ? t.text(snapshotError.text) : snapshotError.message}
             </div>
           ) : null}
-          <AutostartRow device={device} status={view?.autostart.value ?? null} />
-          <Identities device={device} identities={details.identities} error={details.error} />
+          <AutostartRow
+            device={device}
+            status={view?.autostart.value ?? null}
+            writable={online && allowed(view?.access, 'configureAutostart')}
+          />
+          <Identities
+            device={device}
+            identities={details.identities}
+            error={details.error}
+            writable={writable}
+          />
           <Repos
             device={device}
             sources={sources}
@@ -98,6 +108,7 @@ export function UnattendedPage({
           />
           <Assignments
             device={device}
+            writable={writable}
             managers={managers}
             assignments={configuration?.assignments ?? null}
             identities={heads}

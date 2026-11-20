@@ -8,7 +8,7 @@ import type { ManagerIssueId } from '../../../protocol/src/manager-issues.mts'
 import { useT } from '../app/appearance.ts'
 import { useServices } from '../app/services.tsx'
 import { type ManagerChoice, useRun } from './data.ts'
-import { allowed, operationId } from './model.ts'
+import { allowed, canTriageAction, operationId } from './model.ts'
 
 type Mode = 'accept' | 'merge' | 'ignore' | 'reassign'
 
@@ -48,6 +48,7 @@ export function InboxTriage({
   const withReply = reply.trim() ? { reply: reply.trim() } : {}
 
   const submit = async () => {
+    if (disabled || !canTriageAction(access, mode)) return
     let action: ExternalTriageAction
     if (mode === 'accept') action = { action: 'accept', title: title.trim(), body, ...withReply }
     else if (mode === 'ignore') action = { action: 'ignore', reason: reason.trim(), ...withReply }
@@ -99,6 +100,7 @@ export function InboxTriage({
             ? Boolean(to)
             : false
   const off = disabled || act.busy
+  const formOff = off || !canTriageAction(access, mode)
   return (
     <div className="ext-triage" data-ext-triage>
       <div className="ext-row">
@@ -123,6 +125,7 @@ export function InboxTriage({
         <>
           <input
             className="req-input"
+            disabled={formOff}
             value={title}
             placeholder={t('ext.triage.title')}
             aria-label={t('ext.triage.title')}
@@ -130,6 +133,7 @@ export function InboxTriage({
           />
           <textarea
             className="req-input ext-text"
+            disabled={formOff}
             value={body}
             rows={3}
             placeholder={t('ext.triage.body')}
@@ -140,6 +144,7 @@ export function InboxTriage({
       ) : mode === 'merge' ? (
         <input
           className="req-input mono"
+          disabled={formOff}
           value={target}
           placeholder="X-1"
           aria-label={t('ext.triage.target')}
@@ -148,6 +153,7 @@ export function InboxTriage({
       ) : mode === 'ignore' ? (
         <input
           className="req-input"
+          disabled={formOff}
           value={reason}
           placeholder={t('ext.triage.reason')}
           aria-label={t('ext.triage.reason')}
@@ -156,6 +162,7 @@ export function InboxTriage({
       ) : mode === 'reassign' ? (
         <select
           className="ext-select"
+          disabled={formOff}
           value={to}
           aria-label={t('ext.triage.to')}
           onChange={(event) => setTo(event.target.value)}
@@ -171,6 +178,7 @@ export function InboxTriage({
       {mode && mode !== 'reassign' ? (
         <input
           className="req-input"
+          disabled={formOff}
           value={reply}
           placeholder={t('ext.triage.reply')}
           aria-label={t('ext.triage.reply')}
@@ -190,7 +198,7 @@ export function InboxTriage({
             type="button"
             className="btn primary"
             data-act="triage-submit"
-            disabled={off || !ready}
+            disabled={off || !ready || !canTriageAction(access, mode)}
             onClick={() => void submit()}
           >
             {t(`ext.triage.${mode}.yes`)}

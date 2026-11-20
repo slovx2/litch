@@ -1,0 +1,94 @@
+// 正式 React 组件的权限回归夹具。通道使用合成快照；手机原生控件在浏览器里映射为等价表单。
+
+import { useState } from 'react'
+import { createRoot } from 'react-dom/client'
+import { InboxDetail } from '../apps/mobile/src/screens/managers/external/InboxDetail.tsx'
+import type { ExternalAccess } from '../packages/protocol/src/external-sources.mts'
+import { ServicesProvider } from '../packages/ui/src/app/services.tsx'
+import { InboxTriage } from '../packages/ui/src/external/InboxTriage.tsx'
+import { UnattendedPage } from '../packages/ui/src/external/UnattendedPage.tsx'
+
+const intake = { intakeId: 'one', revision: 1, status: 'pending_triage', managerId: 'm1' }
+const head = {
+  eventKey: 'event',
+  intakeId: 'one',
+  kind: 'mention',
+  status: 'pending_triage',
+  subject: { number: '8', url: 'https://github.com/example/demo/issues/8' },
+  occurredAt: 1,
+}
+const manager = { id: 'm1', deviceId: 'local', status: 'active', name: 'fixture' }
+const device = { id: 'local', connection: 'online', externalSources: true, name: 'fixture' }
+const sinks = new Set<{ snapshot(value: unknown): void }>()
+let access: ExternalAccess | undefined
+const calls: string[] = []
+const snapshot = () => ({
+  access,
+  sources: { value: [] },
+  configuration: { value: { revision: 1, identities: [], assignments: [] } },
+  autostart: {
+    value: {
+      revision: 1,
+      state: 'disabled',
+      serviceManager: 'launchd',
+      requiresLogin: true,
+      instance: { mode: 'manual' },
+    },
+  },
+})
+const channel = {
+  subscribe(_topic: unknown, sink: { snapshot(value: unknown): void }) {
+    sinks.add(sink)
+    sink.snapshot(snapshot())
+    return () => sinks.delete(sink)
+  },
+  async command(name: string) {
+    calls.push(name)
+    if (name === 'external.inbox.get') return { events: [head], intake }
+    if (name === 'external.identity.repositories') return { repositories: [] }
+    if (name === 'external.identity.list') return { identities: [] }
+    return { identities: [], repositories: [] }
+  },
+}
+const replica = { store: { get: () => undefined, subscribe: () => () => {} } }
+Object.assign(window, { mobileServices: { channel, replica, intake } })
+function App() {
+  const [current, set] = useState<ExternalAccess>()
+  Object.assign(window, {
+    setAccess: (next: ExternalAccess | undefined) => {
+      access = next
+      set(next)
+      for (const sink of sinks) sink.snapshot(snapshot())
+    },
+  })
+  return (
+    <ServicesProvider value={{ channel, replica, shell: 'browser' } as never}>
+      <div id="desktop">
+        <UnattendedPage device={device as never} onBack={() => {}} onClose={() => {}} />
+      </div>
+      <div id="triage">
+        <InboxTriage
+          manager={manager}
+          intake={intake as never}
+          access={current}
+          managers={[{ id: 'm2', name: 'other' }]}
+          disabled={false}
+          onDone={() => {}}
+        />
+      </div>
+      <div id="mobile">
+        <InboxDetail
+          manager={manager as never}
+          head={head as never}
+          access={current}
+          disabled={false}
+          onClose={() => {}}
+        />
+      </div>
+    </ServicesProvider>
+  )
+}
+Object.assign(window, { accessCalls: calls })
+const root = document.getElementById('root')
+if (!root) throw new Error('缺少夹具根节点')
+createRoot(root).render(<App />)

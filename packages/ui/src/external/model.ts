@@ -44,6 +44,16 @@ export function allowed(access: ExternalAccess | undefined, key: keyof ExternalA
   return access?.[key] === true
 }
 
+/** 表单打开后也要按当前权限重新检查，不能沿用打开时的授权。 */
+export function canTriageAction(
+  access: ExternalAccess | undefined,
+  action: string | null,
+): boolean {
+  return action === 'reassign'
+    ? allowed(access, 'reassignInbox')
+    : ['accept', 'merge', 'ignore'].includes(action ?? '') && allowed(access, 'triageInbox')
+}
+
 export type SourceState = 'collecting' | 'paused' | 'backoff' | 'blocked'
 
 export function sourceState(status: ExternalSourceStatus): SourceState {

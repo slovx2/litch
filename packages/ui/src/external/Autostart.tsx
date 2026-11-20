@@ -2,7 +2,7 @@
 // 启用遇到手动起的实例要接管（会重启服务），关闭会停掉自启管着的实例：都先确认。
 // 设备回 accepted 只是排队，实际结果等重连后读 lastOperation 与状态。
 import type { DeviceAutostartStatus, DeviceView } from '@litch/core'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Confirm } from '../app/Confirm.tsx'
 import { useServices } from '../app/services.tsx'
@@ -15,9 +15,11 @@ type Ask = { action: 'enable'; takeover: boolean } | { action: 'disable'; stop: 
 export function AutostartRow({
   device,
   status,
+  writable,
 }: {
   device: DeviceView
   status: DeviceAutostartStatus | null
+  writable: boolean
 }) {
   const t = useT()
   const { channel } = useServices()
@@ -26,12 +28,16 @@ export function AutostartRow({
   const [linger, setLinger] = useState(false)
   const [queued, setQueued] = useState(false)
   const online = device.connection === 'online'
+  useEffect(() => {
+    if (!writable || !online) setAsk(null)
+  }, [writable, online])
   if (!status) return null
   const unsupported = status.state === 'unsupported' || status.serviceManager === 'unsupported'
   const on = status.state === 'enabled' || status.state === 'degraded'
   const pending = queued || status.lastOperation?.state === 'pending'
 
   const send = async (next: Ask) => {
+    if (!writable || !online) return
     setAsk(null)
     const base = {
       deviceId: device.id,
@@ -83,7 +89,7 @@ export function AutostartRow({
             <input
               type="checkbox"
               checked={linger || status.linger === 'enabled'}
-              disabled={status.linger === 'enabled' || !online}
+              disabled={status.linger === 'enabled' || !online || !writable}
               onChange={(event) => setLinger(event.target.checked)}
             />
             {t('ext.autostart.linger')}
@@ -93,7 +99,7 @@ export function AutostartRow({
           act="autostart"
           checked={on}
           label={t('ext.autostart')}
-          disabled={unsupported || !online || act.busy || pending}
+          disabled={unsupported || !online || !writable || act.busy || pending}
           onChange={toggle}
         />
       </div>
@@ -107,7 +113,7 @@ export function AutostartRow({
           {act.error}
         </div>
       ) : null}
-      {ask ? (
+      {writable && online && ask ? (
         <Confirm
           title={t(ask.action === 'enable' ? 'ext.autostart.takeover' : 'ext.autostart.stop')}
           note={t(

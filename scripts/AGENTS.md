@@ -141,3 +141,7 @@ plain `.mjs` / shell.
 ## 会话参数持久化验收
 
 `CHA_CODEX_CLI=<隔离安装的 Codex> node --import tsx scripts/check-session-settings.mjs` 用正式核心、原生 Codex 和回环假模型核验切换立即写入、无参数回合继承与重启恢复。配置和工作目录全部隔离，不读取个人凭据。Claude 的对应定向用例在 `packages/claude/test/session-settings-persistence.test.mts`，运行前按包内说明编译并预加载隔离环境。
+
+## 无人值守界面权限验收
+
+`node scripts/check-external-access.mjs` 用隔离 CFT 和正式 React 组件，验证缺 access 只读、配置与自启独立授权、打开配置向导与桌面/手机分拣表单后撤权。手机原生控件映射为浏览器表单，只验证组件权限逻辑；设备端权限由 `scripts/check-external-github.mjs` 的管理员/只读连接回归覆盖。

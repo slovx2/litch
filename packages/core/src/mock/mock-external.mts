@@ -379,7 +379,14 @@ export function createMockExternal(clock: Clock, devices: () => DeviceView[]) {
       let result: unknown
       switch (method) {
         case EXTERNAL_METHOD.accessGet:
-          result = { pauseSource: true, resumeSource: true, triageInbox: true, reassignInbox: true }
+          result = {
+            configure: true,
+            configureAutostart: true,
+            pauseSource: true,
+            resumeSource: true,
+            triageInbox: true,
+            reassignInbox: true,
+          }
           break
         case EXTERNAL_METHOD.ownerGet:
           result = { owner }

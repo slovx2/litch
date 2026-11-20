@@ -6,7 +6,7 @@ import type {
   ExternalIdentityRepository,
   ExternalSourceStatus,
 } from '@litch/core'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Caret, Icon } from '../app/icons.tsx'
 import { useServices } from '../app/services.tsx'
@@ -113,6 +113,7 @@ function RepoRow({
       {open ? (
         <RepoDetail
           device={device}
+          writable={allowed(access, 'configure')}
           status={status}
           identities={identities}
           repositories={repositories}
@@ -143,6 +144,10 @@ export function Repos({
   const t = useT()
   const [adding, setAdding] = useState(false)
   const online = device.connection === 'online'
+  const writable = online && allowed(access, 'configure')
+  useEffect(() => {
+    if (!writable) setAdding(false)
+  }, [writable])
   return (
     <section className="ext-block" data-ext-repos>
       <div className="ext-block-head">
@@ -154,7 +159,7 @@ export function Repos({
           data-act="repo-add"
           title={t(identities.length ? 'ext.repo.add' : 'ext.repo.needIdentity')}
           aria-label={t('ext.repo.add')}
-          disabled={!online || !identities.length}
+          disabled={!writable || !identities.length}
           onClick={() => setAdding(true)}
         >
           <Icon name="plus" small />
@@ -179,7 +184,7 @@ export function Repos({
           ))}
         </ul>
       )}
-      {adding ? (
+      {writable && adding ? (
         <AddRepo
           deviceId={device.id}
           repositories={repositories}

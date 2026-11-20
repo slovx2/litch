@@ -74,6 +74,8 @@ test('收件箱保留离线快照，重连读取新游标并替换已加载的�
   )
   await flush()
   assert.equal(snapshot.at(-1)?.access?.triageInbox, true)
+  assert.equal(snapshot.at(-1)?.access?.configure, false)
+  assert.equal(snapshot.at(-1)?.access?.configureAutostart, false)
   assert.equal(snapshot.at(-1)?.access?.reassignInbox, false)
   assert.equal(snapshot.at(-1)?.value?.entries[0]?.delivery?.state, 'queued')
   await device.inboxMore(filter)
@@ -101,9 +103,11 @@ test('收件箱保留离线快照，重连读取新游标并替换已加载的�
   assert.equal(snapshot.at(-1)?.access, undefined)
   assert.equal(snapshot.at(-1)?.value?.entries[0]?.status, 'pending_triage')
   assert.equal(snapshot.at(-1)?.value?.entries[0]?.delivery?.state, 'confirmed')
-  access = { reassignInbox: true }
+  access = { reassignInbox: true, configure: true, configureAutostart: true }
   assert.equal(device.notification(EXTERNAL_NOTIFICATION.accessChanged, {}), true)
   await flush()
+  assert.equal(snapshot.at(-1)?.access?.configure, true)
+  assert.equal(snapshot.at(-1)?.access?.configureAutostart, true)
   assert.equal(snapshot.at(-1)?.access?.reassignInbox, true)
   assert.equal(snapshot.at(-1)?.access?.triageInbox, false)
   access = {}
@@ -111,6 +115,8 @@ test('收件箱保留离线快照，重连读取新游标并替换已加载的�
   assert.equal(snapshot.at(-1)?.access, undefined)
   await flush()
   assert.equal(snapshot.at(-1)?.access?.reassignInbox, false)
+  assert.equal(snapshot.at(-1)?.access?.configure, false)
+  assert.equal(snapshot.at(-1)?.access?.configureAutostart, false)
   stop()
 })
 

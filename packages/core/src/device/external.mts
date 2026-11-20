@@ -114,6 +114,8 @@ export function createExternalDevice(host: ExternalHost) {
       const result = await host.request(EXTERNAL_METHOD.accessGet, {})
       return (
         result && {
+          configure: result.configure === true,
+          configureAutostart: result.configureAutostart === true,
           pauseSource: result.pauseSource === true,
           resumeSource: result.resumeSource === true,
           triageInbox: result.triageInbox === true,
