@@ -196,9 +196,16 @@ export const claim: Tool = async (call) => {
   const page = call.userTabs.take(token)
   const refusal = await call.userTabs.claim(page)
   if (refusal) return refusal
-  call.setCurrent(page)
-  call.args = { tabId: page.id }
-  return snapshot(call)
+  try {
+    call.setCurrent(page)
+    call.args = { tabId: page.id }
+    const result = await snapshot(call)
+    if (!result.success) call.userTabs.release(page)
+    return result
+  } catch (error) {
+    call.userTabs.release(page)
+    throw error
+  }
 }
 
 export const ensureClaimed: Tool = async (call) => {
@@ -208,9 +215,16 @@ export const ensureClaimed: Tool = async (call) => {
   if (!call.userTabs) throw new BadArgs('User tab claiming is unavailable in this host.')
   const refusal = await call.userTabs.claim(page)
   if (refusal) return refusal
-  call.setCurrent(page)
-  await page.waitForLoad(LOAD_MS, call.context.signal)
-  return snapshot(call)
+  try {
+    call.setCurrent(page)
+    await page.waitForLoad(LOAD_MS, call.context.signal)
+    const result = await snapshot(call)
+    if (!result.success && page.info().kind === 'user') call.userTabs.release(page)
+    return result
+  } catch (error) {
+    if (page.info().kind === 'user') call.userTabs.release(page)
+    throw error
+  }
 }
 
 export const release: Tool = async (call) => {

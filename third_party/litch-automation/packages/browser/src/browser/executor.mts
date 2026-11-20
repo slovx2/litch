@@ -26,6 +26,11 @@ import { TOOLS } from './tools.mjs'
 import { needsApproval, originOf } from './url.mjs'
 import { userTabs } from './user-tabs.mjs'
 
+interface FrameOrigins {
+  frame: { url: string }
+  childFrames?: FrameOrigins[]
+}
+
 /** 每个标签上执行器自己记的东西 */
 export interface TabState {
   documentStamp?: string
@@ -302,7 +307,7 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
             if (host.page(page.id) !== page || !owns(page))
               throw new BadArgs('The tab was released or closed.')
             if (options.handover?.active(page.id)) throw new SigningIn()
-            const refusal = await admit(page.info().url)
+            const refusal = await admitPage(page)
             if (refusal)
               throw new Error(
                 refusal.contentItems
@@ -384,6 +389,37 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
       }
     }
 
+    const admitPage = async (page: BrowserPage): Promise<ClientToolCallResponse | null> => {
+      page = host.page(page.id) ?? page
+      const refusal = await admit(page.info().url)
+      if (refusal || page.info().kind !== 'user') return refusal
+      users.check(page, owner, invocation.turnId)
+      // 用户页在认领前已经载入的框架没有经过代理导航闸，必须在观察前逐一核对。
+      // 只取框架身份和来源，不读取正文；检查期间接管、换页则拒绝这次观察。
+      const tree = await page.cdp<{ frameTree: FrameOrigins }>('Page.getFrameTree')
+      const origins = new Set<string>()
+      const visit = (frame: FrameOrigins): void => {
+        if (originOf(frame.frame.url)) origins.add(frame.frame.url)
+        for (const child of frame.childFrames ?? []) visit(child)
+      }
+      visit(tree.frameTree)
+      for (const url of origins) {
+        const denied = await admit(url)
+        if (denied) return denied
+      }
+      if (
+        context.signal.aborted ||
+        ended.has(turnKey) ||
+        !users.owns(page, owner, invocation.turnId)
+      )
+        throw new BadArgs('The user tab was released or the user took over.')
+      const current = await page.cdp('Page.getFrameTree')
+      users.check(page, owner, invocation.turnId)
+      if (JSON.stringify(current) !== JSON.stringify(tree))
+        throw new BadArgs('The document changed during site approval. Claim the tab again.')
+      return null
+    }
+
     let callArgs: Args = {}
     const kit: Call = {
       invocation,
@@ -413,7 +449,7 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
       current: currentPage,
       state: stateOf,
       admit,
-      admitPage: (page) => admit(page.info().url),
+      admitPage,
       done(page, text, images = []) {
         const lines = [text]
         if (
@@ -457,7 +493,7 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
           hold(page)
           users.acquire(page, owner, invocation.turnId)
           try {
-            const refusal = await admit(page.info().url)
+            const refusal = await admitPage(page)
             if (context.signal.aborted || ended.has(turnKey))
               throw new Error('The call was cancelled.')
             users.check(page, owner, invocation.turnId)

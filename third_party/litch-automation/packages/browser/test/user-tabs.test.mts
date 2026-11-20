@@ -206,3 +206,76 @@ test('调用被打断立即归还用户标签，不关闭页面或阻挡另一�
   assert.equal(f.host.page(f.page.id), f.page)
   assert.equal((await f.call('ensure_claimed', { tabId: f.page.id }, 'other')).success, true)
 })
+
+test('认领后的首次观察失败必须交还用户标签，另一会话可以重新认领', async () => {
+  const f = fixture()
+  const cdp = f.page.cdp.bind(f.page)
+  f.page.cdp = async <T,>(method: string, params?: Record<string, unknown>): Promise<T> => {
+    if (method === 'Accessibility.getFullAXTree') throw new Error('fixture observation failed')
+    return cdp<T>(method, params)
+  }
+  assert.equal((await f.call('claim', { claimToken: await f.token() })).success, false)
+  assert.equal(f.page.info().agentActive, false)
+  assert.ok(f.host.page(f.page.id))
+  f.page.cdp = cdp
+  assert.equal((await f.call('ensure_claimed', { tabId: f.page.id }, 'other')).success, true)
+})
+
+test('用户标签已载入的跨来源子框架也必须先获准，不返回被拒绝框架的正文', async () => {
+  const f = fixture()
+  await f.page.load('https://allowed.test', 1000)
+  f.sites.allowAlways('https://allowed.test')
+  f.answer('decline')
+  const cdp = f.page.cdp.bind(f.page)
+  f.page.cdp = async <T,>(method: string, params?: Record<string, unknown>): Promise<T> => {
+    if (method === 'Page.getFrameTree')
+      return {
+        frameTree: {
+          frame: { id: 'main', url: f.page.url },
+          childFrames: [{ frame: { id: 'private', url: 'https://private.test' } }],
+        },
+      } as T
+    if (method === 'Accessibility.getFullAXTree' && params?.frameId === 'private')
+      return {
+        nodes: [
+          { nodeId: 'private', role: { value: 'text' }, name: { value: 'PRIVATE_FRAME_SECRET' } },
+        ],
+      } as T
+    return cdp<T>(method, params)
+  }
+  const reply = await f.call('claim', { claimToken: await f.token() })
+  assert.equal(reply.success, false)
+  assert.doesNotMatch(text(reply), /PRIVATE_FRAME_SECRET/)
+  assert.ok(f.asked.some((ask: any) => ask.origin === 'https://private.test'))
+})
+
+test('观察过程中新增未授权子框架，丢弃本次读到的内容', async () => {
+  const f = fixture()
+  await f.call('claim', { claimToken: await f.token() })
+  f.answer('decline')
+  const cdp = f.page.cdp.bind(f.page)
+  let loaded = false
+  f.page.cdp = async <T,>(method: string, params?: Record<string, unknown>): Promise<T> => {
+    if (method === 'Page.getFrameTree')
+      return {
+        frameTree: {
+          frame: { id: 'main', url: f.page.url },
+          ...(loaded
+            ? { childFrames: [{ frame: { id: 'private', url: 'https://private.test' } }] }
+            : {}),
+        },
+      } as T
+    if (method === 'Accessibility.getFullAXTree') {
+      loaded = true
+      return {
+        nodes: [
+          { nodeId: 'private', role: { value: 'text' }, name: { value: 'PRIVATE_FRAME_SECRET' } },
+        ],
+      } as T
+    }
+    return cdp<T>(method, params)
+  }
+  const reply = await f.call('snapshot', { tabId: f.page.id })
+  assert.equal(reply.success, false)
+  assert.doesNotMatch(text(reply), /PRIVATE_FRAME_SECRET/)
+})
