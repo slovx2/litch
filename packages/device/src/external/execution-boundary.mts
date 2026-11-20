@@ -23,6 +23,12 @@ export function checkIdentityRepositoryWrites(input: {
       const active = input.secrets.activeForRepository(repoId, input.identityId)
       if (active.repos.find((repo) => repo.repoId === repoId)?.writeAccess !== 'missing')
         code = 'github_repository_write_permission_unverified'
+      if (
+        (['issue', 'pull_request'] as const).some((kind) =>
+          input.secrets.feedbackWriteMissing(active, repoId, kind),
+        )
+      )
+        code = 'github_feedback_write_permission_required'
     } catch {
       /* 未获得仓库权限的凭据不可用于写入。 */
     }

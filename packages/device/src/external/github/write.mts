@@ -5,7 +5,7 @@ import type {
 } from '../../../../protocol/src/external-sources.mjs'
 import type { ExternalOutboxRecord } from '../../external-store.mjs'
 import type { ExternalWritePayload } from '../outbox-payload.mjs'
-import { validateDraftLocation } from '../outbox-payload.mjs'
+import { isGithubFeedbackPayload, validateDraftLocation } from '../outbox-payload.mjs'
 import { matchesGithubThread } from '../outbox-read.mjs'
 import type { GithubCredentialSnapshot } from '../secrets.mjs'
 import {
@@ -18,6 +18,12 @@ import {
   numericId,
   object,
 } from './write-api.mjs'
+import {
+  type GithubPreparedWrite,
+  githubFeedbackProof,
+  lookupGithubFeedback,
+  prepareGithubFeedback,
+} from './write-feedback.mjs'
 import { githubStatusReceipt, matchesGithubStatus, prepareGithubStatus } from './write-status.mjs'
 
 export interface GithubWritten {
@@ -33,6 +39,7 @@ export interface GithubWriteContext {
   now: () => number
   beforeDispatch: () => void
   rememberPlatformId: (id: string) => void
+  ackCommentId?: string
 }
 export const externalWriteMarker = (operationId: string) =>
   `<!-- litch-operation:${operationId} -->`
@@ -55,8 +62,8 @@ function api(context: GithubWriteContext) {
   return {
     path,
     get: (endpoint: string) => send(credential.token, endpoint, { beforeDispatch }),
-    post: (endpoint: string, post: object) =>
-      send(credential.token, endpoint, { post, beforeDispatch }),
+    post: (endpoint: string, post: object, method?: 'PATCH') =>
+      send(credential.token, endpoint, { post, beforeDispatch, ...(method ? { method } : {}) }),
     web: `https://github.com/${repo.owner}/${repo.name}`,
   }
 }
@@ -76,13 +83,13 @@ async function verifyRepository(
   return metadata
 }
 
-export async function prepareGithubWrite(context: GithubWriteContext): Promise<{
-  endpoint: string
-  body: Record<string, string | boolean>
-}> {
+export async function prepareGithubWrite(
+  context: GithubWriteContext,
+): Promise<GithubPreparedWrite> {
   const gh = api(context)
   const metadata = await verifyRepository(context, gh)
   const { entry, payload } = context
+  if (isGithubFeedbackPayload(payload)) return prepareGithubFeedback(context, gh, payload)
   if (payload.action === 'status') {
     if (!entry.issueId || entry.targetRef.kind !== 'pull_request')
       throw new GithubWriteFault('external_progress_pr_head_unverified')
@@ -133,6 +140,8 @@ function proof(
 ): GithubWritten | null {
   const { entry, payload, repo, now } = context
   const gh = api(context)
+  if (isGithubFeedbackPayload(payload))
+    return githubFeedbackProof(context, gh, payload, value, via, requestId)
   const id = numericId(value.id)
   if (!id) return null
   const at =
@@ -201,12 +210,18 @@ export async function sendPreparedGithubWrite(
   context: GithubWriteContext,
   prepared: Awaited<ReturnType<typeof prepareGithubWrite>>,
 ): Promise<GithubWritten> {
-  const response = await api(context).post(prepared.endpoint, prepared.body)
+  const response = await api(context).post(prepared.endpoint, prepared.body, prepared.method)
   const value = object(response.body)
   const id = numericId(context.payload.action === 'draft_pr' ? value.number : value.id)
   if (id) context.rememberPlatformId(id)
   const written = proof(context, value, 'response', response.requestId)
-  if (response.status !== 201 || !written)
+  const acceptedResult =
+    context.payload.action === 'reaction_add'
+      ? [200, 201]
+      : prepared.method === 'PATCH'
+        ? [200]
+        : [201]
+  if (!acceptedResult.includes(response.status) || !written)
     throw new GithubWriteFault('github_write_receipt_unverified')
   return written
 }
@@ -217,6 +232,8 @@ export async function lookupGithubWrite(
 ): Promise<GithubWritten | null> {
   const gh = api(context)
   await verifyRepository(context, gh)
+  if (isGithubFeedbackPayload(context.payload))
+    return lookupGithubFeedback(context, gh, context.payload, knownId)
   const known = numericId(knownId)
   if (known && context.payload.action !== 'status') {
     const path =

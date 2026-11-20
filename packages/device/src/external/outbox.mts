@@ -30,13 +30,16 @@ import {
   type StatusGateConfirmed,
   sourceAndRepo,
 } from './outbox-authority.mjs'
+import { type FeedbackEnqueueResult, GithubFeedbackOutbox } from './outbox-feedback.mjs'
+import { type GithubFeedbackIntent, isGithubFeedbackAction } from './outbox-feedback-intent.mjs'
 import {
   type ExternalWriteIntent,
   ExternalWritePayloads,
+  isGithubFeedbackPayload,
   normalizedIntent,
 } from './outbox-payload.mjs'
 import { activeManager } from './outbox-read.mjs'
-import type { ExternalGithubSecrets } from './secrets.mjs'
+import type { ExternalGithubSecrets, GithubCredentialSnapshot } from './secrets.mjs'
 import type { GithubManagerAssignment } from './secrets-agent-login.mjs'
 import { privateName } from './secrets-files.mjs'
 
@@ -58,6 +61,7 @@ export class ExternalGithubOutbox {
   private readonly now: () => number
   private readonly assignmentForManager: (managerId: string) => GithubManagerAssignment | null
   private readonly statusGateConfirmed: StatusGateConfirmed | undefined
+  private readonly feedback: GithubFeedbackOutbox
   private readonly running = new Set<string>()
   private ticking = false
   private nextSweep = 0
@@ -70,6 +74,7 @@ export class ExternalGithubOutbox {
     now?: () => number
     assignmentForManager: (managerId: string) => GithubManagerAssignment | null
     statusGateConfirmed?: StatusGateConfirmed
+    feedbackEnabled?: (repo: ExternalRepo, source: ExternalSource) => boolean
   }) {
     this.store = input.store
     this.secrets = input.secrets
@@ -78,6 +83,19 @@ export class ExternalGithubOutbox {
     this.now = input.now ?? managerNow
     this.statusGateConfirmed = input.statusGateConfirmed
     this.assignmentForManager = input.assignmentForManager
+    this.feedback = new GithubFeedbackOutbox({
+      store: this.store,
+      secrets: this.secrets,
+      payloads: this.payloads,
+      now: this.now,
+      assign: this.assignmentForManager,
+      ...(input.feedbackEnabled ? { enabled: input.feedbackEnabled } : {}),
+    })
+  }
+
+  /** 只消费 C 已随入箱或投递事务持久化的固定动作，不注册成经理工具。 */
+  async enqueueFeedback(input: GithubFeedbackIntent): Promise<FeedbackEnqueueResult> {
+    return this.feedback.enqueue(input)
   }
 
   enqueue(actor: ExternalManagerActor, input: ExternalWriteRequest): ExternalOutboxSummary {
@@ -277,6 +295,7 @@ export class ExternalGithubOutbox {
   }
 
   private async trySend(queued: ExternalOutboxRecord): Promise<void> {
+    if (this.feedback.waitForOriginal(queued)) return
     const at = this.now()
     const started = this.store.queue.beginWrite(
       queued.operationId,
@@ -287,9 +306,18 @@ export class ExternalGithubOutbox {
     if (started.outcome !== 'applied') return
     const entry = started.record
     let dispatched = false
+    let credential: GithubCredentialSnapshot | undefined
     try {
-      const { source, repo } = recheckQueuedWrite(this.store, entry, this.statusGateConfirmed)
+      const { source, repo } = isGithubFeedbackAction(entry.action)
+        ? this.feedback.check(
+            entry.sourceId,
+            entry.managerId,
+            entry.targetRef,
+            entry.policyRevision,
+          )
+        : recheckQueuedWrite(this.store, entry, this.statusGateConfirmed)
       const context = this.context(entry, source, repo, 'send')
+      credential = context.credential
       const prepared = await prepareGithubWrite(context)
       const send: GithubSender = (token, path, options) => {
         if (!options?.post) throw new GithubWriteFault('github_write_request_invalid')
@@ -305,6 +333,18 @@ export class ExternalGithubOutbox {
       // 暂停、撤销与轮换阻止尚未发出的写入；已发出且有可靠回执仍要入账。
       this.confirm(entry, written)
     } catch (error) {
+      if (
+        dispatched &&
+        credential &&
+        isGithubFeedbackAction(entry.action) &&
+        error instanceof GithubWriteFault &&
+        error.code === 'github_permission_denied'
+      )
+        this.secrets.noteFeedbackWriteDenied(
+          credential,
+          entry.targetRef.repoId,
+          entry.targetRef.kind,
+        )
       this.store.queue.finishWrite(
         entry.operationId,
         entry.attempts,
@@ -320,7 +360,7 @@ export class ExternalGithubOutbox {
     mode: 'send' | 'lookup',
   ): GithubWriteContext {
     const payload = this.payloads.get(entry.payloadRef, entry.payloadHash)
-    if (payload.action !== entry.action)
+    if (String(payload.action) !== entry.action)
       throw new GithubWriteFault('external_write_identity_changed')
     const credential = this.secrets.active(payload.credentialRef, repo.repoId)
     if (credential.metadata.botUserId !== payload.botUserId)
@@ -330,6 +370,15 @@ export class ExternalGithubOutbox {
       repo,
       payload,
       credential,
+      ...(payload.action === 'ack_comment_update'
+        ? {
+            ackCommentId: this.feedback.originalCommentId(
+              entry,
+              payload.createKey,
+              payload.botUserId,
+            ),
+          }
+        : {}),
       now: this.now,
       send: async (...args) => {
         try {
@@ -342,9 +391,12 @@ export class ExternalGithubOutbox {
       rememberPlatformId: (id) => this.payloads.notePlatformId(entry.operationId, id),
       beforeDispatch: () => {
         if (mode === 'send') {
-          recheckQueuedWrite(this.store, entry, this.statusGateConfirmed)
-          if (this.assignedIdentity(entry.managerId, repo.repoId) !== payload.botUserId)
-            throw new GithubWriteFault('external_write_identity_changed')
+          if (isGithubFeedbackPayload(payload)) this.feedback.recheck(entry, credential)
+          else {
+            recheckQueuedWrite(this.store, entry, this.statusGateConfirmed)
+            if (this.assignedIdentity(entry.managerId, repo.repoId) !== payload.botUserId)
+              throw new GithubWriteFault('external_write_identity_changed')
+          }
         } else if (this.store.config.source(entry.sourceId)?.revision !== source.revision)
           throw new GithubWriteFault('external_write_policy_changed')
         if (!this.secrets.isCurrent(credential.metadata))

@@ -20,6 +20,7 @@ export interface GithubResolvedRepository {
 }
 export interface VerifiedGithubRepo extends GithubResolvedRepository {
   writeAccess: 'missing' | 'unverified'
+  feedbackWriteAccess: 'missing' | 'unverified'
 }
 
 export async function resolveGithubRepositories(
@@ -211,6 +212,15 @@ export async function probeGithubCredential(
       ...(defaultLabelId ? { defaultLabelId } : {}),
       writeAccess:
         permissions.push === false || listedPermissions.push === false ? 'missing' : 'unverified',
+      feedbackWriteAccess: [permissions, listedPermissions].some(
+        (role) =>
+          role.push === false &&
+          role.triage === false &&
+          role.maintain !== true &&
+          role.admin !== true,
+      )
+        ? 'missing'
+        : 'unverified',
     })
   }
   if (!resourceOwnerId) throw new GithubWriteFault('github_resource_owner_unverified')

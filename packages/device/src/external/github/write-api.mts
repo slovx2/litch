@@ -59,7 +59,7 @@ export interface GithubWriteResponse {
 export type GithubSender = (
   token: string,
   path: string,
-  options?: { post?: object; beforeDispatch?: () => void },
+  options?: { post?: object; method?: 'PATCH'; beforeDispatch?: () => void },
 ) => Promise<GithubWriteResponse>
 
 function transport(api: string): GithubSender {
@@ -72,7 +72,7 @@ function transport(api: string): GithubSender {
     let response: Response
     try {
       response = await fetch(url, {
-        method: options?.post ? 'POST' : 'GET',
+        method: options?.post ? (options.method ?? 'POST') : 'GET',
         headers: {
           authorization: `Bearer ${token}`,
           accept: 'application/vnd.github+json',

@@ -306,7 +306,11 @@ export class ExternalGithubSecrets {
       } catch {
         continue
       }
-      for (const { writeAccess, ...repo } of snapshot.repos) {
+      for (const {
+        writeAccess,
+        feedbackWriteAccess: _feedbackWriteAccess,
+        ...repo
+      } of snapshot.repos) {
         const existing = byId.get(repo.repoId) ?? { ...repo, grants: [] }
         existing.grants.push({
           identityId: credential.botUserId,
@@ -353,6 +357,39 @@ export class ExternalGithubSecrets {
       }
     }
     throw new GithubWriteFault('github_repository_outside_credential')
+  }
+
+  feedbackWriteMissing(
+    snapshot: GithubCredentialSnapshot,
+    repoId: string,
+    kind: 'issue' | 'pull_request',
+  ): boolean {
+    if (snapshot.repos.find((repo) => repo.repoId === repoId)?.feedbackWriteAccess === 'missing')
+      return true
+    const at = this.store.githubFeedbackPermissionFailure(
+      this.feedbackPermissionScope(snapshot, repoId, kind),
+    )
+    return at !== null && this.now() < at + 3600
+  }
+
+  noteFeedbackWriteDenied(
+    snapshot: GithubCredentialSnapshot,
+    repoId: string,
+    kind: 'issue' | 'pull_request',
+  ): void {
+    if (this.isCurrent(snapshot.metadata))
+      this.store.noteGithubFeedbackPermissionFailure(
+        this.feedbackPermissionScope(snapshot, repoId, kind),
+        this.now(),
+      )
+  }
+
+  private feedbackPermissionScope(
+    snapshot: GithubCredentialSnapshot,
+    repoId: string,
+    kind: 'issue' | 'pull_request',
+  ) {
+    return `${snapshot.metadata.credentialRef}/${snapshot.metadata.generation}/${repoId}/${kind}`
   }
 
   revoke(input: Mutation): CredentialResult {

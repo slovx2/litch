@@ -1,15 +1,27 @@
 import { join } from 'node:path'
 import type { ExternalIssueId, ExternalRepo } from '../../../protocol/src/external-sources.mjs'
 import { digest, GithubWriteFault, redactGithubSecrets } from './github/write-api.mjs'
+import { type GithubFeedbackAction, isGithubFeedbackAction } from './outbox-feedback-intent.mjs'
 import { ExternalPrivateFiles } from './secrets-files.mjs'
 
 export type ExternalWriteIntent =
   | { action: 'comment'; body: string }
   | { action: 'draft_pr'; title: string; body: string; base: string; head: string; headSha: string }
   | { action: 'status'; state: 'pending' | 'success' | 'error'; headSha: string }
-export type ExternalWritePayload = ExternalWriteIntent & {
-  botUserId: string
-  credentialRef: string
+export type ExternalWriteAuthorization = { botUserId: string; credentialRef: string }
+export type ExternalFeedbackPayload = GithubFeedbackAction & ExternalWriteAuthorization
+export type ExternalWritePayload =
+  | (ExternalWriteIntent & ExternalWriteAuthorization)
+  | ExternalFeedbackPayload
+
+export function isGithubFeedbackPayload(
+  payload: ExternalWritePayload,
+): payload is ExternalFeedbackPayload {
+  return isGithubFeedbackAction(payload.action)
+}
+
+export function feedbackBody(value: string): string {
+  return text(value, 8192)
 }
 
 export function validGithubBranch(branch: unknown): branch is string {
@@ -76,6 +88,7 @@ function text(value: unknown, maxBytes: number, empty = false): string {
     Buffer.byteLength(value) > maxBytes ||
     tokenPattern.test(value) ||
     value.includes('<!-- litch-operation:') ||
+    value.includes('<!-- litch-ack:') ||
     value.includes('\0') ||
     redactGithubSecrets(value) !== value
   )

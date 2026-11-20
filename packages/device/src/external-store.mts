@@ -108,6 +108,40 @@ export class ExternalStore {
     })
   }
 
+  githubFeedbackPermissionFailure(scope: string): number | null {
+    const row = this.db
+      .prepare(
+        "SELECT MAX(json_extract(body,'$.at')) AS at FROM external_config_requests WHERE scope=?",
+      )
+      .get(`feedback-write:${scope}`)
+    return typeof row?.at === 'number' ? row.at : null
+  }
+
+  noteGithubFeedbackPermissionFailure(scope: string, at: number): void {
+    this.db
+      .prepare('INSERT OR IGNORE INTO external_config_requests VALUES(?,?,?)')
+      .run(`feedback-write:${scope}`, String(at), encode({ at }))
+  }
+
+  /** 外部反馈编辑等待原评论回执；等待不占用尝试与发送租约。 */
+  deferQueuedExternalWrite(
+    operationId: string,
+    expectedRevision: number,
+    nextAttempt: number,
+  ): void {
+    this.transaction(() => {
+      const before = this.queue.outboxRecord(operationId)
+      if (before?.state !== 'queued' || before.revision !== expectedRevision) return
+      this.db
+        .prepare('UPDATE external_outbox SET next_attempt=?,body=? WHERE operation_id=?')
+        .run(
+          nextAttempt,
+          encode({ ...before, nextAttempt, revision: expectedRevision + 1 }),
+          operationId,
+        )
+    })
+  }
+
   /** 平台明确拒绝该代时断用；保留原作用域，供同机器人轮换。 */
   invalidateExternalCredential(
     credentialRef: string,
