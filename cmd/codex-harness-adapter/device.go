@@ -45,6 +45,7 @@ func (c configuration) deviceDirectory() string { return filepath.Join(c.home, "
 func (c configuration) deviceSocket() string {
 	return hostplatform.DeviceSocketPath(c.deviceDirectory())
 }
+func (c configuration) deviceProxySocket() string { return c.deviceSocket() + ".r" }
 func (c configuration) deviceMain() string {
 	return filepath.Join(c.root, "packages", "device", "dist", "packages", "device", "src", "main.mjs")
 }

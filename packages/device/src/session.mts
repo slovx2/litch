@@ -18,12 +18,18 @@ import {
   type HarnessInfo,
   type HarnessUnavailable,
 } from '../../protocol/src/device.mjs'
+import { DEVICE_AUTOSTART_EXTENSION } from '../../protocol/src/device-autostart.mjs'
 import { DEVICE_PAIR_ERROR } from '../../protocol/src/device-pairing.mjs'
 import { DEVICE_POWER_READ } from '../../protocol/src/device-power.mjs'
 import {
   DEVICE_SETTINGS_CHANGED,
   type DeviceSettingsChangedNotification,
 } from '../../protocol/src/device-settings.mjs'
+import {
+  EXTERNAL_NOTIFICATION,
+  EXTERNAL_SOURCES_EXTENSION,
+  projectExternalManagerPayload,
+} from '../../protocol/src/external-sources.mjs'
 import {
   ATTACHMENT_STATUS_METHOD,
   ATTACHMENT_WATCH_METHOD,
@@ -68,8 +74,10 @@ import { readCodexHistory, readsCodexHistory } from './codex-history.mjs'
 import type { CodexTitles } from './codex-titles.mjs'
 import type { ManagedHarness } from './control.mjs'
 import type { DeviceTrace } from './device.mjs'
+import type { DeviceAutostart, DeviceAutostartReply } from './device-autostart.mjs'
 import { DeviceCalls, type DeviceLayer } from './device-layer.mjs'
 import { type DeviceTools, declareDeviceTools } from './device-tools.mjs'
+import type { DeviceExternalRpc } from './external/device-rpc.mjs'
 import {
   HarnessConfigError,
   type HarnessConfigTranslator,
@@ -211,6 +219,8 @@ export interface SessionHost {
   /** 定时任务（deviceTasks 扩展）。任务库打不开时是 null，设备上就没有这项扩展 */
   tasks: DeviceTasks | null
   managers?: DeviceManagers
+  autostart?: DeviceAutostart
+  external?: DeviceExternalRpc
   /** 由设备进程自己执行的 litch_ 命名空间：替每条上游连接声明，调用落到哪条上就在那里拦（device-tools.mts） */
   deviceTools: DeviceTools
   /** 会话树（session-tree.mts） */
@@ -293,9 +303,11 @@ export class ClientSession implements ClientToolPeer {
   private readonly powerPending = new Set<() => void>()
   private readonly powerAvailable = new Set<string>()
 
-  constructor(host: SessionHost, wire: Wire) {
+  private readonly deviceAdmin: boolean
+  constructor(host: SessionHost, wire: Wire, deviceAdmin = false) {
     this.host = host
     this.wire = wire
+    this.deviceAdmin = deviceAdmin
     this.relay = new Relay({
       prepareMedia: async (link, frame, request) => {
         if (frame.id != null && typeof frame.method === 'string') return false
@@ -554,7 +566,11 @@ export class ClientSession implements ClientToolPeer {
     Promise.resolve(outcome).then((result) => {
       if (result === HANDLED) return
       this.traced(id, null)
-      if (this.state !== 'closed') this.wire.send(JSON.stringify({ id, result: result ?? {} }))
+      if (this.state === 'closed') return
+      if (method.startsWith('litch/device/autostart/')) {
+        const reply = result as DeviceAutostartReply
+        this.wire.send(JSON.stringify({ id, result: reply.result }), reply.afterReply)
+      } else this.wire.send(JSON.stringify({ id, result: result ?? {} }))
     }, fail)
   }
 
@@ -651,6 +667,23 @@ export class ClientSession implements ClientToolPeer {
     switch (route.kind) {
       case 'device':
         if (method === 'runtime/info') return this.runtimeInfo()
+        if (method.startsWith('litch/device/autostart/')) {
+          if (!this.host.autostart)
+            throw new DeviceError('unsupported', 'System autostart is unavailable')
+          return this.host.autostart.call(method, frame.params, {
+            declared: this.declared.has(DEVICE_AUTOSTART_EXTENSION),
+            canRead: true,
+            canConfigure: this.deviceAdmin,
+          })
+        }
+        if (method.startsWith('litch/external/')) {
+          if (!this.host.external)
+            throw new DeviceError('unsupported', 'External sources are unavailable')
+          return this.host.external.call(method, frame.params, {
+            declared: this.declared.has(EXTERNAL_SOURCES_EXTENSION),
+            admin: this.deviceAdmin,
+          })
+        }
         if (method.startsWith(REMOTE_CHROME_PREFIX)) {
           if (!this.remoteChrome)
             throw new DeviceError('extensionRequired', 'remoteChrome must be declared')
@@ -770,7 +803,10 @@ export class ClientSession implements ClientToolPeer {
               this.declared.has(EXTENSION.managerResetTarget),
             )
             .then((result) =>
-              managerResetProjection(result, this.declared.has(EXTENSION.managerResetTarget)),
+              projectExternalManagerPayload(
+                managerResetProjection(result, this.declared.has(EXTENSION.managerResetTarget)),
+                this.declared,
+              ),
             )
         if (method.startsWith(DEVICE_TASK_PREFIX)) return this.tasks(method, frame.params)
         return this.calls.call(method, frame.params)
@@ -1689,6 +1725,7 @@ export class ClientSession implements ClientToolPeer {
     if (this.state !== 'ready') return
     if (extension !== undefined && !this.declared.has(extension)) return
     if (this.optOut.has(method)) return
+    if (method === EXTERNAL_NOTIFICATION.identityLoginChanged && !this.deviceAdmin) return
     if (
       !this.remoteChrome &&
       method === 'litch/thread/pending/changed' &&
@@ -1705,7 +1742,10 @@ export class ClientSession implements ClientToolPeer {
         ),
       }
     if (method.startsWith('litch/manager/'))
-      params = managerResetProjection(params, this.declared.has(EXTENSION.managerResetTarget))
+      params = projectExternalManagerPayload(
+        managerResetProjection(params, this.declared.has(EXTENSION.managerResetTarget)),
+        this.declared,
+      )
     if (
       method === BACKGROUND_TASKS_NOTIFICATION.changed &&
       this.declared.has(EXTENSION.nativeBackgroundWake) &&
@@ -1848,6 +1888,8 @@ export class ClientSession implements ClientToolPeer {
     this.state = 'ready'
     this.host.clientTools.join(this)
     for (const text of held) this.wire.send(text)
+    if (this.host.external)
+      this.announce(EXTERNAL_NOTIFICATION.accessChanged, {}, EXTERNAL_SOURCES_EXTENSION)
     // 有客户端连着了：没人连着时攒下的唤醒现在可以做了
     this.host.sessionTree.clientJoined()
     return HANDLED

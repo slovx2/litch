@@ -73,6 +73,13 @@ export class ExternalFeedback {
     return identity ?? null
   }
 
+  private language(repoId: string): 'zh-CN' | 'en' {
+    const preferred = this.host
+      .configuration()
+      .repositories.find((item) => item.repoId === repoId)?.immediateFeedbackLanguage
+    return preferred && preferred !== 'follow-ui' ? preferred : (this.host.language?.() ?? 'zh-CN')
+  }
+
   private target(event: ExternalInboxEvent): FeedbackTarget | null {
     const { sourceId, managerId, subject } = event
     const identity = managerId
@@ -144,7 +151,7 @@ export class ExternalFeedback {
         ...target,
         action: 'ack_comment_create',
         idempotencyKey: ackKey(event.intakeId),
-        text: copy(this.host.language?.() ?? 'zh-CN', reason),
+        text: copy(this.language(target.subject.repoId), reason),
       })
     if (event.ruleId === 'mention') this.reaction(event, target, 'eyes')
   }
@@ -201,7 +208,7 @@ export class ExternalFeedback {
         action: 'ack_comment_update',
         idempotencyKey: `ack:update:${id}`,
         createKey,
-        text: this.host.language?.() === 'en' ? "Got it, I'm on it." : '收到，我在看了',
+        text: this.language(repoId) === 'en' ? "Got it, I'm on it." : '收到，我在看了',
       })
     }
     for (const key of plan.boundEventKeys) {

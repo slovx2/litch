@@ -22,6 +22,7 @@ export interface ExternalConfigurationSnapshot {
     repoId: string
     pollIdentity?: string | null
     immediateFeedback?: boolean
+    immediateFeedbackLanguage?: ExternalRepo['immediateFeedbackLanguage']
     labelRoutes?: readonly { labelId: string; managerId: string }[]
   }[]
   assignments: readonly {

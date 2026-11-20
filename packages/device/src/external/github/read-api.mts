@@ -10,6 +10,7 @@ export interface GithubRepository {
 
 export type GithubFaultKind =
   | 'authentication'
+  | 'organization-approval'
   | 'permission'
   | 'not-found'
   | 'repository-changed'
@@ -129,6 +130,7 @@ interface GithubApiOptions {
   generation: string
   now?: () => number
   jitter?: () => number
+  signal?: AbortSignal
 }
 
 export function createGithubApi(options: GithubApiOptions): GithubApi {
@@ -198,7 +200,9 @@ function githubApiAt(origin: string, options: GithubApiOptions): GithubApi {
           ...(etag ? { 'if-none-match': etag } : {}),
         },
         redirect: 'manual',
-        signal: AbortSignal.timeout(20_000),
+        signal: options.signal
+          ? AbortSignal.any([options.signal, AbortSignal.timeout(20_000)])
+          : AbortSignal.timeout(20_000),
       })
       const time = now()
       const date = Date.parse(response.headers.get('date') ?? '')
@@ -222,6 +226,8 @@ function githubApiAt(origin: string, options: GithubApiOptions): GithubApi {
           headers: response.headers,
         }
       }
+      if (response.status === 403 && response.headers.has('x-github-sso'))
+        throw new GithubFault('organization-approval')
       if (response.status === 401) {
         await response.body?.cancel()
         blocked = new GithubFault('authentication')

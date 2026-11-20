@@ -19,7 +19,6 @@ import {
 import {
   MANAGER_HANDOVER_PROMPT,
   MANAGER_SUMMARY_PROMPT,
-  managerBundle,
   managerFingerprint,
   managerHandoverIndex,
 } from './manager-rules.mjs'
@@ -54,13 +53,7 @@ export class ManagerResets {
   }
   state(manager: Manager): ManagerResetState {
     const record = this.owner.store.reset(manager.id)
-    const current = managerFingerprint(
-      managerBundle(
-        manager,
-        manager.harness === 'codex',
-        this.owner.tree.host.taskCards(manager.harness),
-      ),
-    )
+    const current = managerFingerprint(this.owner.bundle(manager))
     const applied = record?.applied ?? null
     return {
       mode: record?.plan?.mode ?? (manager.harness === 'claude-code' ? 'refresh' : 'replace'),
@@ -464,11 +457,7 @@ export class ManagerResets {
           dispatch: record.plan.target.dispatch ?? manager.dispatch,
         }
       : manager
-    const bundle = managerBundle(
-      targetManager,
-      targetLink.native,
-      tree.host.taskCards(targetHarness),
-    )
+    const bundle = this.owner.bundle(targetManager, targetLink.native)
     const names = new Set(bundle.map((spec) => spec.name))
     const known = new Set<string>(Object.values(CLIENT_TOOL_NAMESPACE))
     // 重置与恢复按同一份设备设置补齐或移除常驻工具；回滚仍原样恢复旧定义。

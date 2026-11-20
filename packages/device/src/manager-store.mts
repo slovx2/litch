@@ -174,6 +174,13 @@ export function openManagerDatabase(stateDir: string): DatabaseSync {
   }
 }
 
+/** 只供外部来源预览；复用实际规则和索引，预览的事件和授权不会写入设备账本。 */
+export function openPreviewManagerDatabase(): DatabaseSync {
+  const db = new DatabaseSync(':memory:')
+  for (const migration of MIGRATIONS) db.exec(migration)
+  return db
+}
+
 const body = <T,>(row: Record<string, unknown> | undefined): T | null =>
   row ? (JSON.parse(String(row.body)) as T) : null
 

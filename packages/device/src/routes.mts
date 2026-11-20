@@ -46,6 +46,7 @@ export function classify(method: string, params: unknown): Route {
   if (method === 'litch/paths/list') return { kind: 'device' }
   if (method.startsWith('litch/harnessProjectPermission/')) return { kind: 'device' }
   if (method.startsWith('litch/manager/')) return { kind: 'device' }
+  if (method.startsWith('litch/external/')) return { kind: 'device' }
   if (method === 'runtime/info') return { kind: 'device' }
   // 设备配置接口（设置、重启 harness、诊断、日志）：设备进程经控制通道交给适配器主进程
   if (method.startsWith('litch/device/')) return { kind: 'device' }

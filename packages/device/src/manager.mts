@@ -2,7 +2,11 @@ import { execFile } from 'node:child_process'
 // litchManager 的设备入口：建会话、读看板、投递持久事件，以及只向声明过的连接广播。
 import { createHash, randomUUID } from 'node:crypto'
 import { promisify } from 'node:util'
-import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
+import {
+  CLIENT_TOOL_NAMESPACE,
+  type ClientToolCallResponse,
+  clientToolFailure,
+} from '../../protocol/src/client-tools.mjs'
 import {
   managerEndText,
   managerOpenText,
@@ -28,6 +32,8 @@ import {
 } from '../../protocol/src/session-tree.mjs'
 import { proposalSummary, shortObjectId } from '../../protocol/src/suggestion-summary.mjs'
 import type { DeviceToolCall } from './device-tools.mjs'
+import { DEVICE_EXTERNAL_MANAGER_TOOLS } from './external/device-manager-tools.mjs'
+import type { DeviceExternalService } from './external/device-service.mjs'
 import { isDecision, ManagerBoardWriter } from './manager-board.mjs'
 import { validateManagerRuntime } from './manager-create-validation.mjs'
 import { ManagerEndings } from './manager-ending.mjs'
@@ -40,7 +46,13 @@ import { ManagerQuestions } from './manager-questions.mjs'
 import { projectedRelations } from './manager-relations.mjs'
 import { isRequest } from './manager-requests.mjs'
 import { ManagerResets } from './manager-reset.mjs'
-import { managerBundle, managerFingerprint, managerTools } from './manager-rules.mjs'
+import {
+  externalManagerUpgrade,
+  managerBundle,
+  managerFingerprint,
+  managerRulesHaveExternalTools,
+  managerTools,
+} from './manager-rules.mjs'
 import { ManagerStore, managerNow, openManagerDatabase } from './manager-store.mjs'
 import {
   fields,
@@ -81,6 +93,7 @@ export class DeviceManagers {
   readonly questions: ManagerQuestions
   readonly resets: ManagerResets
   readonly paging: ManagerPaging
+  external: DeviceExternalService | null = null
   private readonly draining = new Map<string, Promise<void>>()
   /** 先持久入队，再留一个固定的小窗口合并连发卡片；不会因持续提卡无限延后。 */
   private readonly suggestionTimers = new Map<string, NodeJS.Timeout>()
@@ -649,7 +662,7 @@ export class DeviceManagers {
       }
       manager.permission = permission
     }
-    const tools = managerBundle(manager, link.native, this.tree.host.taskCards(manager.harness))
+    const tools = this.bundle(manager, link.native)
     const created = await link.request('thread/start', {
       cwd: params.cwd,
       ...(permission ? { permissions: permission } : {}),
@@ -696,12 +709,39 @@ export class DeviceManagers {
     this.kick(manager.id)
     return { manager: this.manager(manager.id), threadId: thread.id }
   }
+
+  bundle(manager: Manager, native = manager.harness === 'codex') {
+    return managerBundle(
+      manager,
+      native,
+      this.tree.host.taskCards(manager.harness),
+      this.external ? DEVICE_EXTERNAL_MANAGER_TOOLS : undefined,
+    )
+  }
+
+  externalReady(manager: Manager) {
+    const record = this.store.reset(manager.id)
+    const fingerprint = record?.applied ?? null
+    return externalManagerUpgrade(
+      manager,
+      record && { threadId: record.committed?.manager.threadId ?? record.oldThreadId, fingerprint },
+      this.bundle(manager),
+    )
+  }
+
   private rememberRules(manager: Manager): void {
-    const tools = managerTools(manager, this.tree.host.taskCards(manager.harness))
     const record = this.tree.store.instructions(manager.threadId)
     if (record) {
       // 设置更新没有重新安装工具；只替换已登记的经理规则，保留后台接续等其他命名空间。
-      const updated = ruledNamespaces(tools)
+      const recorded = record.namespaces.find(({ name }) => name === CLIENT_TOOL_NAMESPACE.manager)
+      const hasExternal = managerRulesHaveExternalTools(recorded?.instructions)
+      const updated = ruledNamespaces(
+        managerTools(
+          manager,
+          this.tree.host.taskCards(manager.harness),
+          hasExternal ? DEVICE_EXTERNAL_MANAGER_TOOLS : undefined,
+        ),
+      )
       this.tree.store.setInstructions(manager.threadId, {
         ...record,
         namespaces: record.namespaces.map(
@@ -729,7 +769,24 @@ export class DeviceManagers {
           'litch_manager is available only in its owning manager session.',
         )
       let result: unknown
-      if (call.tool.startsWith('issue_')) {
+      if (this.external?.handles(call.tool, call.arguments)) {
+        if (questionManager)
+          throw new ManagerError(
+            'invalidManager',
+            'External tools require the owning manager thread.',
+          )
+        result = await this.external.managerTool(
+          {
+            managerId: manager.id,
+            threadId: call.threadId,
+            harness: call.harness,
+            turnId: call.turnId,
+          },
+          call.tool,
+          call.arguments,
+        )
+        if (call.tool === 'answer') this.changed(manager.id)
+      } else if (call.tool.startsWith('issue_')) {
         const args = validateTool(call.tool, call.arguments)
         if (questionManager) {
           const state = this.store.questions(manager.id).find((q) => q.threadId === call.threadId)
@@ -928,6 +985,7 @@ export class DeviceManagers {
     let suggestionsVisited = false
     for (const [index, event] of deliveries.entries()) {
       if (this.closed || this.resets.held(manager.threadId)) return
+      if (this.external?.store.queue.deliveryGroupForDelivery(event.id)) continue
       const parsed = parseSessionEvent(event.text)
       if (parsed.event?.kind === 'manager-issue' && manager.status !== 'active') continue
       if (parsed.event?.kind === 'manager-suggestions') {

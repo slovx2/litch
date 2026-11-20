@@ -104,6 +104,7 @@ func usage() string {
 			"公共选项: --home DIR --node PATH --root DIR\n"+
 			"SSH 入口: --ssh=on|off（默认 on）；off 时不启动给 Codex 桌面端的内置 SSH 服务，不占端口\n"+
 			"给 Litch 客户端: version 打印版本号；device-start 让常驻服务在后台运行（已在运行就直接成功）；device-proxy 把标准输入输出接到聚合面\n"+
+			"设备服务自启: device-autostart get|enable|disable；变更参数以 JSON 从标准输入提供\n"+
 			"操作用户的 Litch 桌面端: machine（短名 litch-machine）经设备服务请连着的 Litch 执行命令、读写文件，详见 litch-machine --help\n"+
 			"绑到手机: pair 在终端里画二维码，手机扫码后登记自己的钥匙（不用桌面端），详见 pair --help；pair-enroll 是配对时一次性钥匙的强制命令，不直接用\n"+
 			"设备 Chrome（Linux）：chrome --help 查看准备、状态和站点许可命令。\n"+
@@ -123,6 +124,7 @@ func usage() string {
 			"Common options: --home DIR --node PATH --root DIR\n"+
 			"SSH entries: --ssh=on|off (default on); off starts none of the built-in SSH servers for the Codex desktop app and takes no port\n"+
 			"For the Litch client: version prints the version; device-start keeps the service running in the background (succeeds at once if it already is); device-proxy connects stdin and stdout to the aggregate endpoint\n"+
+			"Device autostart: device-autostart get|enable|disable; pass mutation parameters as JSON on stdin\n"+
 			"Operating the user's Litch desktop: machine (short name litch-machine) asks the connected Litch to run commands and read or write files through the device service; see litch-machine --help\n"+
 			"Pairing a phone: pair draws a QR code in the terminal and the phone enrolls a key of its own (no desktop needed); see pair --help. pair-enroll is the forced command of the one-time pairing key, not for direct use\n"+
 			"Device Chrome (Linux): chrome --help lists setup, status, and website access commands.\n"+
@@ -163,6 +165,16 @@ func run(ctx context.Context, args []string) error {
 	if args[0] == "config" {
 		return runConfig(ctx, args[1:])
 	}
+	if args[0] == "device-autostart-worker" {
+		return runDeviceAutostartWorker(ctx, args[1:])
+	}
+	if args[0] == "device-autostart" {
+		return deviceAutostartCommand(ctx, args[1:])
+	}
+	args, marker, held, err := prepareAutostartStart(args)
+	if err != nil || held {
+		return err
+	}
 	command := args[0]
 	switch command {
 	case "start", "init", "serve", "ssh-config", "doctor", "device-start", "device-stop", "device-proxy":
@@ -175,6 +187,9 @@ func run(ctx context.Context, args []string) error {
 			return nil
 		}
 		return err
+	}
+	if marker != "" {
+		cfg.launch = append(cfg.launch, marker)
 	}
 	if cfg.localService && command != "device-start" {
 		return errors.New(tr("--local-service 只用于 device-start", "--local-service is only valid for device-start"))
@@ -404,6 +419,33 @@ var adapterCLIPath = sync.OnceValue(func() string {
 // 原生 codex 没有固定变量：它的数据目录是用户自己的，CODEX_HOME 由用户的环境（或者设置）说了算。
 func (c configuration) environment() []string {
 	return withFallbackCLI(c.harness, c.baseEnvironment())
+}
+
+// 仅实际运行时继承这些入口，按启动命令的线程向本机设备解析凭据。
+func (c configuration) agentEnvironment() []string {
+	const commandsKey = "LITCH_DEVICE_GITHUB_COMMANDS"
+	const harnessKey = "LITCH_DEVICE_GITHUB_HARNESS"
+	commands := filepath.Join(c.deviceDirectory(), "external-agent-gh", "command")
+	environment := c.environment()
+	var path string
+	for _, entry := range environment {
+		name, value, _ := strings.Cut(entry, "=")
+		if strings.EqualFold(name, "PATH") {
+			path = value
+		}
+	}
+	result := make([]string, 0, len(environment)+3)
+	for _, entry := range environment {
+		name, _, _ := strings.Cut(entry, "=")
+		if !strings.EqualFold(name, "PATH") && name != commandsKey && name != harnessKey {
+			result = append(result, entry)
+		}
+	}
+	if path != "" {
+		commandsPath := commands + string(os.PathListSeparator) + path
+		result = append(result, "PATH="+commandsPath)
+	}
+	return append(result, commandsKey+"="+commands, harnessKey+"="+c.harness)
 }
 
 // 不含自动选择后注入的 CLI 变量，用于准确判断用户配置与选择来源。

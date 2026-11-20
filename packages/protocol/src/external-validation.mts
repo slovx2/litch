@@ -101,7 +101,10 @@ const source = obj(
     }),
     minRole: exact('triage', 'write', 'maintain', 'admin'),
     interval: int(1),
-    writePolicy: obj({ comment: bool, draftPr: bool, status: bool, managedPush: bool }),
+    writePolicy: obj(
+      { comment: bool, draftPr: bool, status: bool, managedPush: bool },
+      { statusGateConfirmed: bool },
+    ),
     repos: array(
       obj(
         {
@@ -137,7 +140,7 @@ const source = obj(
       ),
     ),
   },
-  { unattended: obj({ autoNotify: bool }) },
+  { unattended: obj({ autoNotify: bool }, { autoLinkAgentPr: bool }) },
 )
 const query = { beforeSeq: int(1), limit: int(1, 100), ...sourceId, managerId: s, repoId: id }
 const status = exact('received', 'blocked', 'pending_triage', 'processed', 'notified')

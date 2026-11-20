@@ -175,6 +175,7 @@ export class ExternalStore {
         .prepare('UPDATE external_credentials SET body=? WHERE credential_ref=?')
         .run(encode({ ...before, state: 'invalid' }), credentialRef)
       this.recordExternalIdentityChange(before.botUserId)
+      this.config.bump()
       this.appendAudit({
         at,
         subject: `credential:${credentialRef}`,
@@ -689,6 +690,28 @@ export class ExternalStore {
     return page(entries, limit)
   }
 
+  inboxPending(sourceId: string, managerId?: string): number {
+    return Number(
+      this.db
+        .prepare(`SELECT count(*) AS count FROM external_intakes
+      WHERE status='pending_triage' AND json_extract(body,'$.sourceId')=?
+      AND (? IS NULL OR manager_id=?)`)
+        .get(sourceId, managerId ?? null, managerId ?? null)?.count ?? 0,
+    )
+  }
+
+  inboxFingerprint(sourceId: string): string {
+    const changes = this.db
+      .prepare(`SELECT count(*) AS count, max(seq) AS latest,
+      sum(json_extract(body,'$.revision')) AS revisions FROM external_inbox WHERE source_id=?`)
+      .get(sourceId)
+    const deliveries = this.db
+      .prepare(`SELECT state, count(*) AS count FROM external_deliveries
+      WHERE json_extract(body,'$.sourceId')=? GROUP BY state ORDER BY state`)
+      .all(sourceId)
+    return JSON.stringify([changes, deliveries])
+  }
+
   /** 已待发的绑定提醒属于投递调度，不占分类重试的批次。 */
   unclassifiedInbox(sourceId: string, beforeSeq?: number): ExternalPage<ExternalInboxEvent> {
     const limit = 100
@@ -892,6 +915,13 @@ export class ExternalStore {
     return this.db
       .prepare('SELECT body FROM external_refs WHERE manager_id=? AND issue_id=? ORDER BY rowid')
       .all(managerId, issueId)
+      .map((row) => decode<ExternalRef>(row))
+  }
+
+  refsForRepo(repoId: string): ExternalRef[] {
+    return this.db
+      .prepare("SELECT body FROM external_refs WHERE provider='github' AND repo_id=?")
+      .all(repoId)
       .map((row) => decode<ExternalRef>(row))
   }
 

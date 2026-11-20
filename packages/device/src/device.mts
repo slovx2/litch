@@ -24,9 +24,14 @@ import { BACKGROUND_TASKS_NOTIFICATION } from '../../protocol/src/background-tas
 import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { REPOSITORY_NAMESPACE } from '../../protocol/src/client-tools-repository.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
+import {
+  DEVICE_AUTOSTART_CHANGED,
+  DEVICE_AUTOSTART_EXTENSION,
+} from '../../protocol/src/device-autostart.mjs'
 import { HARNESS_INSTALL_NOTIFICATION } from '../../protocol/src/device-harness-install.mjs'
 import { DEVICE_POWER_CHANGED } from '../../protocol/src/device-power.mjs'
 import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.mjs'
+import { EXTERNAL_SOURCES_EXTENSION } from '../../protocol/src/external-sources.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
 import {
   NATIVE_BACKGROUND_NAMESPACE,
@@ -49,10 +54,13 @@ import { ClientToolInvoker } from './client-tool-invoke.mjs'
 import { ClientToolRouter } from './client-tools.mjs'
 import { CodexTitles } from './codex-titles.mjs'
 import type { ControlChannel, ControlState } from './control.mjs'
+import { DeviceAutostart } from './device-autostart.mjs'
 import { DeviceLayer } from './device-layer.mjs'
 import type { ProcessLimits } from './device-processes.mjs'
 import { DeviceTools } from './device-tools.mjs'
 import { connectEngineLink, type EngineLink, EngineUnavailable } from './engine-link.mjs'
+import { DeviceExternalRpc } from './external/device-rpc.mjs'
+import { type DeviceExternalOptions, DeviceExternalService } from './external/device-service.mjs'
 import type { FlowLimits } from './flow.mjs'
 import { deviceInfo, deviceVersion, HarnessCatalog } from './harness-info.mjs'
 import { WorkspaceImporter } from './importer.mjs'
@@ -107,6 +115,7 @@ export type DeviceTrace = (
 ) => void
 
 export interface DeviceOptions {
+  external?: Pick<DeviceExternalOptions, 'runtimeRoot' | 'deviceSocket' | 'fixture'>
   /** 隔离验收的附件主目录；生产取系统 home。 */
   attachmentHome?: string
 
@@ -314,6 +323,8 @@ export class DeviceServer {
   readonly modelRanking: DeviceModelRanking
   readonly sessionTree: SessionTree
   readonly managers: DeviceManagers
+  readonly external: DeviceExternalService | null
+  private readonly stopAutostartWatch: () => void
   /** 原生 codex 会话的自动起名 */
   readonly titles: CodexTitles
   /** 每个会话的后台任务（backgroundTasks 扩展） */
@@ -661,6 +672,22 @@ export class DeviceServer {
       this.titles?.born(harness, thread)
     })
     this.sessionTree.managers = this.managers
+    this.external = options.external
+      ? new DeviceExternalService({
+          ...options.external,
+          stateDirectory: options.stateDir,
+          managers: this.managers,
+          log,
+          announce: (method, params) => this.announce(method, params, EXTERNAL_SOURCES_EXTENSION),
+        })
+      : null
+    this.managers.external = this.external
+    if (this.external) info.extensions.push(EXTERNAL_SOURCES_EXTENSION)
+    const autostart = new DeviceAutostart(this.control, log)
+    if (this.control) info.extensions.push(DEVICE_AUTOSTART_EXTENSION)
+    this.stopAutostartWatch = autostart.watch(options.stateDir, (params) =>
+      this.announce(DEVICE_AUTOSTART_CHANGED, params, DEVICE_AUTOSTART_EXTENSION),
+    )
     this.deviceTools.allowed = (threadId, namespace, tool) =>
       this.managers.questions.allowed(threadId, namespace, tool) &&
       this.managers.resets.toolsAllowed(threadId, namespace, tool)
@@ -873,6 +900,8 @@ export class DeviceServer {
       clientInvoke: new ClientToolInvoker({ router, index: this.index, log }),
       tasks: this.tasks,
       managers: this.managers,
+      ...(this.external ? { external: new DeviceExternalRpc(this.external, autostart) } : {}),
+      autostart,
       deviceTools: this.deviceTools,
       modelRanking: this.modelRanking,
       sessionTree: this.sessionTree,
@@ -919,6 +948,7 @@ export class DeviceServer {
     this.importer?.kick()
     this.syncPower()
     void this.restart.recover()
+    this.external?.start()
     if (!this.control) this.tasks?.begin()
     else if (this.control.state) this.tasks?.begin(taskSettings(this.control.state))
     else if (this.tasks) {
@@ -1140,12 +1170,12 @@ export class DeviceServer {
   }
 
   /** 聚合面上进来了一条客户端连接。返回值接在这条连接的接收端上 */
-  attach(wire: Wire): WireHandlers {
+  attach(wire: Wire, deviceAdmin = false): WireHandlers {
     if (this.closed) {
       wire.close()
       return { message() {}, close() {} }
     }
-    const session = new ClientSession(this.host, wire)
+    const session = new ClientSession(this.host, wire, deviceAdmin)
     this.sessions.add(session)
     return {
       message: (text) => session.receive(text),
@@ -1402,6 +1432,8 @@ export class DeviceServer {
   async close(): Promise<void> {
     if (this.closed) return
     this.closed = true
+    this.stopAutostartWatch()
+    const externalClose = this.external?.close()
     this.resumeTools.close()
     this.restart.close()
     this.nativeBackground.close()
@@ -1425,6 +1457,7 @@ export class DeviceServer {
     // 先同步关闭所有输入，再等待清理；不能在 await 期间继续接收引擎消息或新客户端。
     await this.chrome?.close()
     await this.attachments.close()
+    await externalClose
     await this.managers.close()
     this.worktreeLife?.stop()
     this.titles.close()

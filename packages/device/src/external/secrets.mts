@@ -404,7 +404,9 @@ export class ExternalGithubSecrets {
     return identity
   }
 
-  repositories(input: { identityId?: string; cursor?: string; limit?: number } = {}) {
+  repositories(
+    input: { identityId?: string; repoId?: string; cursor?: string; limit?: number } = {},
+  ) {
     const byId = new Map<string, GithubIdentityRepository>()
     for (const credential of this.store.externalCredentials()) {
       if (input.identityId !== undefined && input.identityId !== credential.botUserId) continue
@@ -440,7 +442,11 @@ export class ExternalGithubSecrets {
       throw new GithubWriteFault('github_repository_cursor_invalid')
     const all = [...byId.values()]
       .sort((a, b) => a.repoId.localeCompare(b.repoId))
-      .filter((repo) => !after || repo.repoId.localeCompare(after) > 0)
+      .filter(
+        (repo) =>
+          (!input.repoId || repo.repoId === input.repoId) &&
+          (!after || repo.repoId.localeCompare(after) > 0),
+      )
     const limit = Number.isSafeInteger(input.limit)
       ? Math.max(1, Math.min(100, input.limit ?? 50))
       : 50

@@ -121,6 +121,7 @@ export function createGithubExternalVerification(
       const { raw, subject } = current
       const actor = githubActor(raw.user)
       const head = object(raw.head)
+      const base = object(raw.base).ref
       const headRepo = id(object(head.repo).id)
       const agentOperationIds = githubAgentMarkerIds(githubBody(raw))
       return {
@@ -129,6 +130,7 @@ export function createGithubExternalVerification(
         ...(headRepo && typeof head.ref === 'string'
           ? { head: { repoId: headRepo, ref: head.ref } }
           : {}),
+        ...(typeof base === 'string' ? { base } : {}),
         agentMarked: agentOperationIds.length > 0,
         agentOperationIds,
       }

@@ -1103,10 +1103,17 @@ export class SessionTree {
       onStarted?: (turnId: string) => void
       /** 完成引擎状态/恢复等等待后，在最终发送前同步重建；null 表示事件已失效。 */
       prepare?: () => { text: string; eventId: string } | null
+      external?: {
+        beforeSend(prepared: { text: string; eventId: string }): unknown
+      }
     } = {},
   ): Promise<boolean> {
     let sent = false
     const beforeSend = (prepared: { text: string; eventId: string }) => () => {
+      if (options.external) {
+        if (!options.external.beforeSend(prepared)) throw new Error('外部提醒已过期或当前不能投递')
+        return
+      }
       if (!options.prepare) return
       const current = options.prepare()
       if (!current || current.text !== prepared.text || current.eventId !== prepared.eventId)
@@ -1157,11 +1164,16 @@ export class SessionTree {
           } catch (error) {
             if (error instanceof UpstreamRpcError && error.code === -32601)
               this.noSteer.add(harness)
+            if (options.external) throw error
             this.host.log(`经理事件未插入当前回合，保留重试：${String(error)}`)
           }
         } else if (idle) {
           // 提卡审核不等待工作线结束，但沿用经理本身的自动唤醒保护与预算。
-          if (options.automatic && (!this.canAutoWake(threadId) || (await this.longIdle(threadId))))
+          if (
+            options.automatic &&
+            !options.external &&
+            (!this.canAutoWake(threadId) || (await this.longIdle(threadId)))
+          )
             return
           // 恢复只负责装载线程。起回合时沿用引擎的最新设置，不能把恢复应答里的旧快照再写回去：
           // 应答在途或回合请求排队时，用户仍可能修改型号、强度等参数。
@@ -1174,9 +1186,15 @@ export class SessionTree {
             'turn/start',
             {
               threadId,
+              ...(options.external && !link.native
+                ? { clientUserMessageId: prepared.eventId }
+                : {}),
               input: [{ type: 'text', text: prepared.text, text_elements: [] }],
             },
-            { restartable: !options.startOnly, beforeSend: beforeSend(prepared) },
+            {
+              restartable: !options.startOnly && !options.external,
+              beforeSend: beforeSend(prepared),
+            },
           )
           if (isObject(result?.turn) && typeof result.turn.id === 'string') {
             if (options.automatic) this.store.setWakes(threadId, this.store.wakes(threadId) + 1)
@@ -1277,7 +1295,7 @@ export class SessionTree {
   }
 
   /** 自动回合共用的保护；用户答复等有明确授权的经理事件不套此限制。 */
-  private canAutoWake(threadId: string): boolean {
+  private canAutoWake(threadId: string, external = false): boolean {
     const manager = this.managers?.store.forThread(threadId)
     return (
       !this.closed &&
@@ -1288,10 +1306,58 @@ export class SessionTree {
       !this.managers?.resets.held(threadId) &&
       !this.managers?.resets.handoverPending(threadId) &&
       !this.managers?.resets.refusal(threadId) &&
-      this.store.wakes(threadId) < SESSION_TREE_LIMITS.wakesPerUserMessage &&
+      (external || this.store.wakes(threadId) < SESSION_TREE_LIMITS.wakesPerUserMessage) &&
       !this.cutShort.has(threadId) &&
       (this.host.backgroundWorking?.(threadId) ?? this.host.backgroundRunning(threadId)) === 0
     )
+  }
+
+  canDeliverExternal(threadId: string): boolean {
+    return (
+      this.canAutoWake(threadId, true) &&
+      !this.waitingOnUser(threadId) &&
+      !this.userStops.has(threadId) &&
+      !this.host.continuationPending?.(threadId)
+    )
+  }
+
+  isCurrentExternalTurn(threadId: string, turnId: string): boolean {
+    return (
+      this.activeTurn(threadId) === turnId &&
+      !this.closed &&
+      !this.host.index.archived(threadId) &&
+      !this.userStops.has(threadId) &&
+      !this.host.restarting?.(threadId) &&
+      !this.managers?.resets.held(threadId) &&
+      !this.managers?.resets.refusal(threadId)
+    )
+  }
+
+  async externalDeliveryTurn(
+    threadId: string,
+    eventId: string,
+    text: string,
+  ): Promise<string | null> {
+    const { thread } = await this.read(threadId, true, 24)
+    const turns = Array.isArray(thread.turns) ? thread.turns : []
+    for (const turn of turns) {
+      if (!isObject(turn) || typeof turn.id !== 'string' || !Array.isArray(turn.items)) continue
+      if (
+        turn.items.some(
+          (item) =>
+            isObject(item) &&
+            item.type === 'userMessage' &&
+            (item.clientId === eventId ||
+              (Array.isArray(item.content) &&
+                item.content.length === 1 &&
+                isObject(item.content[0]) &&
+                item.content[0].type === 'text' &&
+                item.content[0].text === text)),
+        )
+      )
+        return turn.id
+    }
+    return null
   }
 
   /** 直接子会话里还在干活的有几个（在等用户答、挂满一阵的不算；回合停了、后台任务还在跑的算） */

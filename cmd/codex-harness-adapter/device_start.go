@@ -349,7 +349,7 @@ func launchService(ctx context.Context, c configuration, deadline time.Time, out
 
 // device-proxy：把标准输入输出接到聚合面，只做字节转发。标准输出里只有对面来的字节。
 func deviceProxy(ctx context.Context, c configuration) error {
-	connection, err := hostplatform.Dial(c.deviceSocket())
+	connection, err := hostplatform.Dial(c.deviceProxySocket())
 	if err != nil {
 		return fmt.Errorf(tr("聚合面连不上（%s）: %v；请先运行 codex-harness-adapter device-start", "cannot connect to the aggregate endpoint (%s): %v; run codex-harness-adapter device-start first"), c.deviceSocket(), err)
 	}

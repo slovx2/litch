@@ -1,5 +1,6 @@
 // 提醒和回写共用经理库；入队、尝试、回执及相应绑定按事务提交。
 import {
+  type ExternalInboxEvent,
   type ExternalOutboxQuery,
   type ExternalOutboxSummary,
   type ExternalPage,
@@ -48,6 +49,27 @@ export class ExternalQueueStore {
     )
   }
 
+  deliveryGroupForEvent(event: ExternalInboxEvent): ExternalDeliveryGroup | null {
+    if (!event.managerId) return null
+    if (event.intakeId) {
+      const intake = this.store.intake(event.intakeId)
+      const group = intake?.deliveryId && this.deliveryGroup(intake.deliveryId)
+      return group &&
+        group.managerId === event.managerId &&
+        group.eventKeys.includes(event.eventKey)
+        ? group
+        : null
+    }
+    return decode(
+      this.db
+        .prepare(`SELECT d.body FROM external_deliveries d
+      WHERE d.manager_id=? AND json_extract(d.body,'$.sourceId')=? AND EXISTS (
+        SELECT 1 FROM json_each(d.body,'$.eventKeys') WHERE value=?
+      ) ORDER BY d.rowid DESC LIMIT 1`)
+        .get(event.managerId, event.sourceId, event.eventKey),
+    )
+  }
+
   deliveryGroups(
     managerId: string,
     state: ExternalDeliveryGroup['state'],
@@ -85,13 +107,19 @@ export class ExternalQueueStore {
   }
 
   /** 入旧队列与记录发送意图同时提交，重启后用同一 deliveryId 核对。 */
-  stageDelivery(groupId: string, text: string, at: number): ExternalDeliveryGroup | null {
+  stageDelivery(
+    groupId: string,
+    text: string,
+    at: number,
+    target?: ExternalDeliveryGroup['target'],
+  ): ExternalDeliveryGroup | null {
     return this.store.transaction(() => {
       const before = this.deliveryGroup(groupId)
       if (before?.state !== 'queued' || before.availableAt > at) return before
       const record: ExternalDeliveryGroup = {
         ...before,
         deliveryId: this.store.manager.enqueue(before.managerId, text),
+        ...(target ? { target } : {}),
         state: 'sending',
       }
       this.writeDeliveryGroup(record)
@@ -219,6 +247,20 @@ export class ExternalQueueStore {
       .all(...bindings, limit + 1)
       .map((row) => externalOutboxSummary(numbered<ExternalOutboxRecord>(row)))
     return page(entries, limit)
+  }
+
+  outboxChanges(): { sourceId: string; managerId: string; pending: number; revision: number }[] {
+    return this.db
+      .prepare(`SELECT source_id, manager_id, sum(json_extract(body,'$.revision')) AS revision,
+      sum(CASE WHEN state IN ('queued', 'sending', 'unknown') THEN 1 ELSE 0 END) AS pending
+      FROM external_outbox GROUP BY source_id, manager_id`)
+      .all()
+      .map((row) => ({
+        sourceId: String(row.source_id),
+        managerId: String(row.manager_id),
+        pending: Number(row.pending),
+        revision: Number(row.revision),
+      }))
   }
 
   readyOutbox(at: number, limit = 50): ExternalOutboxRecord[] {

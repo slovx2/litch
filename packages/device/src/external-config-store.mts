@@ -1,6 +1,7 @@
 // 设备来源配置及公开凭据元数据；变更和审计共用经理库事务。
 import type {
   ExternalCredential,
+  ExternalManagerAssignment,
   ExternalOwner,
   ExternalOwnerIdentity,
   ExternalProvider,
@@ -19,6 +20,60 @@ export class ExternalConfigStore {
 
   private get db() {
     return this.store.manager.db
+  }
+
+  revision(): number {
+    return this.configRequest<{ revision: number }>('configuration', 'current')?.revision ?? 0
+  }
+
+  bump(): void {
+    this.db
+      .prepare(`INSERT INTO external_config_requests VALUES ('configuration','current',?)
+      ON CONFLICT(scope,operation_id) DO UPDATE SET body=excluded.body`)
+      .run(encode({ revision: this.revision() + 1 }))
+  }
+
+  assignments(): ExternalManagerAssignment[] {
+    return this.db
+      .prepare(`SELECT body FROM external_config_requests
+      WHERE scope='assignment:current' ORDER BY operation_id`)
+      .all()
+      .map((row) => decode<ExternalManagerAssignment>(row))
+  }
+
+  assignment(managerId: string): ExternalManagerAssignment {
+    return (
+      this.configRequest<ExternalManagerAssignment>('assignment:current', managerId) ?? {
+        managerId,
+        identityId: null,
+        repoIds: [],
+        revision: 0,
+      }
+    )
+  }
+
+  saveAssignment(
+    draft: Omit<ExternalManagerAssignment, 'revision'>,
+    expectedRevision: number,
+    operationId: string,
+    validate: () => void,
+  ): ExternalConfigResult<ExternalManagerAssignment> {
+    return this.store.transaction(() => {
+      const scope = `assignment:${draft.managerId}`
+      const replay = this.configRequest<ExternalManagerAssignment>(scope, operationId)
+      if (replay) return { outcome: 'applied', record: replay }
+      const before = this.assignment(draft.managerId)
+      if (before.revision !== expectedRevision) return { outcome: 'conflict', record: before }
+      validate()
+      const record = { ...draft, revision: expectedRevision + 1 }
+      this.db
+        .prepare(`INSERT INTO external_config_requests VALUES ('assignment:current',?,?)
+        ON CONFLICT(scope,operation_id) DO UPDATE SET body=excluded.body`)
+        .run(draft.managerId, encode(record))
+      this.saveConfigRequest(scope, operationId, record)
+      this.bump()
+      return { outcome: 'applied', record }
+    })
   }
 
   owner(provider: ExternalProvider): ExternalOwner | null {
@@ -54,6 +109,7 @@ export class ExternalConfigStore {
         )
         .run(record.provider, encode(record))
       this.saveConfigRequest(scope, operationId, record)
+      this.bump()
       this.store.appendAudit({
         subject: scope,
         action: 'owner_set',
@@ -108,10 +164,14 @@ export class ExternalConfigStore {
         botUserId,
         resourceOwnerId,
         createdAt,
-        expiresAt,
+        ...(expiresAt === undefined ? {} : { expiresAt }),
         lastVerifiedAt,
         state,
         generation,
+        ...(credential.credentialKind === undefined
+          ? {}
+          : { credentialKind: credential.credentialKind }),
+        ...(credential.scopes === undefined ? {} : { scopes: credential.scopes }),
       }
       this.db
         .prepare(
@@ -119,6 +179,7 @@ export class ExternalConfigStore {
         )
         .run(credentialRef, encode(record))
       this.saveConfigRequest(scope, operationId, record)
+      this.bump()
       this.store.appendAudit({
         at: managerNow(),
         subject: scope,
@@ -128,17 +189,7 @@ export class ExternalConfigStore {
       })
       return {
         outcome: 'applied',
-        record: {
-          credentialRef,
-          provider,
-          botUserId,
-          resourceOwnerId,
-          createdAt,
-          lastVerifiedAt,
-          state,
-          generation,
-          ...(expiresAt === undefined ? {} : { expiresAt }),
-        },
+        record,
       }
     })
   }
@@ -168,11 +219,32 @@ export class ExternalConfigStore {
       .map((row) => requireRow(this.source(String(row.source_id))))
   }
 
+  reconcilePollIdentity(source: ExternalSource, credential: ExternalCredential): boolean {
+    if (
+      source.credentialRef === credential.credentialRef &&
+      source.botUserId === credential.botUserId
+    )
+      return false
+    return this.store.transaction(() => {
+      const current = this.source(source.sourceId)
+      if (!current?.enabled || current.revision !== source.revision) return false
+      this.db
+        .prepare('UPDATE external_sources SET body=json_patch(body,?) WHERE source_id=?')
+        .run(
+          encode({ credentialRef: credential.credentialRef, botUserId: credential.botUserId }),
+          source.sourceId,
+        )
+      this.bump()
+      return true
+    })
+  }
+
   saveSource(
     draft: ExternalSourceDraft,
     expectedRevision: number,
     operationId: string,
     actorId: string,
+    verifiedAt?: number,
   ): ExternalConfigResult<ExternalSource> {
     return this.store.transaction(() => {
       const scope = `source:${draft.sourceId}`
@@ -206,6 +278,7 @@ export class ExternalConfigStore {
         interval,
         repos,
         routes,
+        unattended,
       } = draft
       const value = {
         sourceId,
@@ -217,9 +290,10 @@ export class ExternalConfigStore {
         minRole,
         writePolicy,
         interval,
+        ...(unattended === undefined ? {} : { unattended }),
         revision,
         rulesVersion: revision,
-        createdAt: before?.createdAt ?? managerNow(),
+        createdAt: before?.createdAt ?? verifiedAt ?? managerNow(),
       }
       this.db
         .prepare(
@@ -238,6 +312,7 @@ export class ExternalConfigStore {
           .run(sourceId, route.routeId, encode(route))
       const record = { ...value, repos, routes }
       this.saveConfigRequest(scope, operationId, record)
+      this.bump()
       this.store.appendAudit({
         at: managerNow(),
         subject: scope,
