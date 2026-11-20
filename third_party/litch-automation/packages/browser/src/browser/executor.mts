@@ -24,6 +24,7 @@ import type { BrowserHost, BrowserPage, TabOwner } from './model.mjs'
 import { type SiteBook, sessionKey } from './sites.mjs'
 import { TOOLS } from './tools.mjs'
 import { needsApproval, originOf } from './url.mjs'
+import { userTabs } from './user-tabs.mjs'
 
 /** 每个标签上执行器自己记的东西 */
 export interface TabState {
@@ -76,6 +77,14 @@ export interface Call {
   uploadMaxBytes?: number
   /** 交给人登录；没装（测试的宿主）是 null */
   handover: BrowserHandover | null
+  /** 内置用户标签的显式认领入口，不改变原会话归属。 */
+  userTabs?: {
+    token(page: BrowserPage): string
+    take(token: string): BrowserPage
+    owns(page: BrowserPage): boolean
+    claim(page: BrowserPage): Promise<ClientToolCallResponse | null>
+    release(page: BrowserPage): void
+  }
 }
 
 export type Tool = (call: Call) => Promise<ClientToolCallResponse>
@@ -189,6 +198,11 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
   /** 会话 → 正在进行的回合（导航闸门要按回合查“这一次”的允许） */
   const turns = new Map<string, string>()
   const ended = new Set<string>()
+  const busy = new Map<string, symbol>()
+  const users = userTabs(host, (id) => {
+    tabStates.delete(id)
+    for (const [session, current] of currents) if (current === id) currents.delete(session)
+  })
 
   const ownerKey = (owner: TabOwner) => sessionKey(owner.deviceId, owner.threadId)
   const stateOf = (page: BrowserPage): TabState => {
@@ -206,7 +220,7 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
     if (!needsApproval(url)) return true
     const origin = originOf(url)
     if (!origin) return false
-    const session = ownerKey(page.info().owner)
+    const session = ownerKey(users.controller(page) ?? page.info().owner)
     return sites.verdict(session, turns.get(session) ?? '', origin) === 'allow'
   })
 
@@ -244,20 +258,30 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
     turns.set(session, invocation.turnId)
     const used = new Set<BrowserPage>()
     const guarded = new Map<string, ReturnType<typeof guardedPage>>()
+    const lock = Symbol()
+    const hold = (page: BrowserPage) => {
+      if (page.info().kind !== 'user') return
+      if (busy.has(page.id) && busy.get(page.id) !== lock)
+        throw new BadArgs(
+          'This tab has another browser action in progress. Wait for it to finish before continuing.',
+        )
+      busy.set(page.id, lock)
+    }
+    const owns = (page: BrowserPage) =>
+      page.info().kind === 'user'
+        ? users.owns(page, owner, invocation.turnId)
+        : ownerKey(page.info().owner) === session
 
     const ensureAgent = (page: BrowserPage): BrowserPage => {
       const info = page.info()
-      if (ownerKey(info.owner) !== session)
+      if (info.kind === 'agent' && ownerKey(info.owner) !== session)
         throw new BadArgs(`no tab ${page.id} in this conversation`)
-      if (info.kind !== 'agent') {
-        throw new BadArgs(
-          `tab ${page.id} belongs to the user; you can only operate tabs you opened. Open the same address with \`navigate\` (newTab: true) instead.`,
-        )
-      }
+      if (info.kind === 'user') users.check(page, owner, invocation.turnId)
       if (options.handover?.active(page.id)) throw new SigningIn()
+      hold(page)
       if (!used.has(page)) {
         used.add(page)
-        page.setAgentActive(true)
+        page.setAgentActive(true, info.kind === 'user' ? owner : undefined)
       }
       let wrapped = guarded.get(page.id)
       if (!wrapped) {
@@ -275,11 +299,7 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
           async () => {
             if (context.signal.aborted || ended.has(turnKey))
               throw new Error('The call was cancelled.')
-            if (
-              host.page(page.id) !== page ||
-              ownerKey(page.info().owner) !== session ||
-              page.info().kind !== 'agent'
-            )
+            if (host.page(page.id) !== page || !owns(page))
               throw new BadArgs('The tab was released or closed.')
             if (options.handover?.active(page.id)) throw new SigningIn()
             const refusal = await admit(page.info().url)
@@ -307,8 +327,7 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
     const currentPage = (): BrowserPage | null => {
       const id = currents.get(session)
       const page = id ? host.page(id) : undefined
-      if (page && ownerKey(page.info().owner) === session && page.info().kind === 'agent')
-        return page
+      if (page && owns(page)) return page
       // 当前的那个没了：退到这个会话最近开的代理标签
       const mine = host
         .pages()
@@ -397,7 +416,11 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
       admitPage: (page) => admit(page.info().url),
       done(page, text, images = []) {
         const lines = [text]
-        if (page) {
+        if (
+          page &&
+          (!needsApproval(page.info().url) ||
+            sites.verdict(session, invocation.turnId, originOf(page.info().url) ?? '') === 'allow')
+        ) {
           // 单独成段，免得接在快照最后一行后面像是网页上的字
           const forwarded = kit.describeUrl(page.info().url)
           const state = stateOf(page)
@@ -421,6 +444,38 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
       },
       statFile,
       handover: options.handover ?? null,
+      userTabs: {
+        token: (page) => users.token(page, owner, invocation.turnId),
+        take: (token) => users.take(token, owner, invocation.turnId),
+        owns: (page) => users.owns(page, owner, invocation.turnId),
+        async claim(page) {
+          if (page.info().kind !== 'user') {
+            ensureAgent(page)
+            return admit(page.info().url)
+          }
+          if (options.handover?.hides(page.id)) throw new SigningIn()
+          hold(page)
+          users.acquire(page, owner, invocation.turnId)
+          try {
+            const refusal = await admit(page.info().url)
+            if (context.signal.aborted || ended.has(turnKey))
+              throw new Error('The call was cancelled.')
+            users.check(page, owner, invocation.turnId)
+            if (refusal) users.release(page.id, owner, invocation.turnId)
+            return refusal
+          } catch (error) {
+            users.release(page.id, owner, invocation.turnId)
+            throw error
+          }
+        },
+        release(page) {
+          if (page.info().kind !== 'user')
+            throw new BadArgs(
+              'release only returns user tabs. Keep an agent tab or close it with tabs.',
+            )
+          users.release(page.id, owner, invocation.turnId)
+        },
+      },
     }
 
     let onCancel: (() => void) | undefined
@@ -504,16 +559,20 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
       return clientToolFailure('failed', error instanceof Error ? error.message : String(error))
     } finally {
       if (onCancel) context.signal.removeEventListener('abort', onCancel)
+      if (context.signal.aborted) users.end(owner, invocation.turnId)
+      for (const [id, held] of busy) if (held === lock) busy.delete(id)
     }
   }
 
   function turnEnded(turn: { deviceId: string; threadId: string; turnId: string }): void {
     const session = sessionKey(turn.deviceId, turn.threadId)
     ended.add(JSON.stringify([session, turn.turnId]))
+    users.end({ deviceId: turn.deviceId, threadId: turn.threadId }, turn.turnId)
     if (ended.size > 512) ended.delete(ended.values().next().value ?? '')
     for (const page of host.pages()) {
       const info = page.info()
-      if (ownerKey(info.owner) !== session) continue
+      if (ownerKey(info.owner) !== session || (info.kind === 'user' && users.controller(page)))
+        continue
       if (info.kind === 'agent' && !info.keep) {
         host.close(page.id)
         tabStates.delete(page.id)

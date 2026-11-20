@@ -37,7 +37,9 @@ const publish = (next: State) => {
 /** 这个会话的标签，按开的先后 */
 export function tabsOf(tabs: readonly BrowserTabInfo[], owner: BrowserOwner): BrowserTabInfo[] {
   const key = ownerKey(owner)
-  return tabs.filter((tab) => ownerKey(tab.owner) === key)
+  return tabs.filter(
+    (tab) => ownerKey(tab.owner) === key || (tab.controller && ownerKey(tab.controller) === key),
+  )
 }
 
 /**
@@ -79,7 +81,7 @@ export function noteShow(
   tab: BrowserTabInfo,
   viewingKey: string | null,
 ): { state: State; open: boolean } {
-  const key = ownerKey(tab.owner)
+  const key = ownerKey(tab.controller ?? tab.owner)
   const tabs = upsert(current.tabs, tab)
   if (key === viewingKey) {
     return {

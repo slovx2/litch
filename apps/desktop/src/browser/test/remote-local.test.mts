@@ -493,6 +493,40 @@ function miniHost() {
   return host
 }
 
+test('远程借用本机用户标签按控制者改写 localhost；交还后的标签仍保活原隧道', async () => {
+  const fake = fakeDir()
+  const remote = await upstream()
+  const host = miniHost()
+  const original = host.open({ deviceId: 'local', threadId: 'user' }, 'user')
+  const info: TabInfo = {
+    ...original.info(),
+    controller: { deviceId: 'build', threadId: 'remote' },
+  }
+  const page = { ...original, info: () => info }
+  const forwarding = createBrowserForwarding({
+    targetOf: (id) => (id === 'build' ? ALIAS : null),
+    tabs: () => [info],
+    ssh: fakeSsh,
+    idleMs: 100,
+  })
+  try {
+    const rewritten = forwarding.rewrite(page, `http://localhost:${remote}/app`)
+    assert.ok(rewritten)
+    info.url = await rewritten
+    const port = Number(new URL(info.url).port)
+    assert.match(await get(port), /hello/)
+    delete info.controller
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    const before = fake.pid(port)
+    process.kill(before, 'SIGTERM')
+    await until('交还后仍在用的转发重建', () => fake.pid(port) !== before && alive(fake.pid(port)))
+    assert.match(await get(port), /hello/)
+    assert.equal(info.owner.deviceId, 'local')
+  } finally {
+    forwarding.close()
+  }
+})
+
 test('执行器：远程会话的 navigate 经转发打开、结果里说明；本机会话不动', async () => {
   fakeDir()
   const remote = await upstream()

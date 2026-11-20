@@ -36,6 +36,23 @@ test('只算这个会话的标签', () => {
   assert.deepEqual(tabsOf(all, { deviceId: 'local', threadId: '' }), [])
 })
 
+test('认领用户标签保留原会话归属，同时在控制会话显示提示；show 跟随控制者', () => {
+  const user = tab('user', 'original', {
+    kind: 'user',
+    agentActive: true,
+    controller: { deviceId: 'build', threadId: 'remote' },
+  })
+  assert.deepEqual(tabsOf([user], user.owner), [user])
+  assert.deepEqual(tabsOf([user], user.controller), [user])
+  assert.deepEqual(tabsOf([user], { deviceId: 'local', threadId: 'other' }), [])
+  const shown = noteShow(EMPTY_STATE, user, 'build\u0000remote')
+  assert.equal(shown.open, true)
+  assert.equal(shown.state.wanted['build\u0000remote'], 'user')
+  const { controller: _controller, ...released } = user
+  assert.deepEqual(tabsOf([released], { deviceId: 'build', threadId: 'remote' }), [])
+  assert.deepEqual(tabsOf([released], user.owner), [released])
+})
+
 test('眼前显示哪个：代理要给人看的、人点的、代理在用的、最近开的', () => {
   const mine = [tab('t1', 'a'), tab('t2', 'a', { agentActive: true }), tab('t3', 'a')]
   assert.equal(chooseTab(mine, undefined, undefined), 't2')

@@ -150,12 +150,12 @@ export class BrowserDownloads {
       origin = url.origin === 'null' ? new URL(tab.url).origin : url.origin
     } catch {}
     const total = item.getTotalBytes()
-    const approved = tab.kind === 'user'
+    const approved = tab.kind === 'user' && !tab.agentActive && !tab.downloadOwner
     const t: Transfer = {
       view: {
         id,
         tabId: tab.id,
-        owner: { ...tab.owner },
+        owner: { ...(tab.downloadOwner ?? tab.controller ?? tab.owner) },
         filename: safeDownloadName(item.getFilename()),
         origin,
         totalBytes: total > 0 ? total : null,

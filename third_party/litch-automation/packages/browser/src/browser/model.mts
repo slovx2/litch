@@ -9,7 +9,7 @@ export interface TabOwner {
   threadId: string
 }
 
-/** agent：代理开的（回合结束时关，留给用户的除外）；user：用户自己在面板里开的（代理只能看地址和标题） */
+/** agent：代理开的（回合结束时关，留给用户的除外）；user：用户开的，认领只借用、永不自动关闭。 */
 export type TabKind = 'agent' | 'user'
 
 /** 给界面和 tabs 工具的一个标签的样子 */
@@ -24,6 +24,10 @@ export interface TabInfo {
   canGoForward: boolean
   /** 代理这个回合正在用它：标签上出“代理在用”的记号 */
   agentActive: boolean
+  /** 用户标签的临时控制者；owner 始终保留原会话归属。 */
+  controller?: TabOwner
+  /** 最后一次代理操作的下载归属；交还后的延迟下载仍须审批，真实用户输入才清除。 */
+  downloadOwner?: TabOwner
   /** 代理标了“留给用户”：回合结束不关 */
   keep: boolean
 }
@@ -76,7 +80,9 @@ export interface BrowserPage {
   /** 攒下来的提示（被拦下的跳转、下载，被改成新标签的弹窗……），取了就清掉 */
   takeNotices(): string[]
   /** 代理开始或停止用它：开着时标签上出记号、不节流、跳转要经过审批 */
-  setAgentActive(active: boolean): void
+  setAgentActive(active: boolean, controller?: TabOwner): void
+  /** 用户真实操作后递增；执行器撤销旧租约和引用，不重放输入。 */
+  inputRevision?(): number
   /** 代理要在 (x, y) 动手了：画一下给人看（CSS 像素） */
   pointAt(x: number, y: number, width?: number, height?: number): Promise<void>
 }

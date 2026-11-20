@@ -61,7 +61,9 @@ export const requestSignIn: Tool = async (call) => {
       case 'failed':
         return call.done(
           null,
-          `The tab could not be reloaded safely around the sign-in handover for ${site}, so it was closed. Open the page again in a new tab; ask the user before requesting sign-in again.`,
+          page.info().kind === 'user'
+            ? `The user tab could not be reloaded safely around the sign-in handover for ${site}. It remains open; agent observation stays blocked until the user reloads or navigates it. Ask the user to reload this tab, then claim it again. Do not close it or bypass the sign-in pause.`
+            : `The tab could not be reloaded safely around the sign-in handover for ${site}, so it was closed. Open the page again in a new tab; ask the user before requesting sign-in again.`,
         )
       default:
         return call.done(null, 'The sign-in request was cancelled.')
