@@ -1,6 +1,7 @@
 // GitHub 等外部来源的设备账本，与 X-n 和模型投递共用经理库。
 import { randomUUID } from 'node:crypto'
 import {
+  type ExternalCredential,
   type ExternalEvent,
   type ExternalInboxEvent,
   type ExternalInboxQuery,
@@ -33,6 +34,7 @@ import type {
   ExternalAuditEntry,
   ExternalCursor,
   ExternalObservation,
+  ExternalOutboxRecord,
   ExternalPollPage,
   ExternalRunWatch,
   ExternalTriageCommit,
@@ -65,6 +67,129 @@ export class ExternalStore {
   /** 只在设备已校验调用者及平台证据后调用。嵌套调用复用外层经理库事务。 */
   transaction<T>(work: () => T): T {
     return this.db.isTransaction ? work() : this.manager.transaction(work)
+  }
+
+  /** 凭据重放只取公有回执，无需重新探测或覆盖已落盘的秘密。 */
+  credentialRequest(credentialRef: string, operationId: string): ExternalCredential | null {
+    return decode(
+      this.db
+        .prepare('SELECT body FROM external_config_requests WHERE scope=? AND operation_id=?')
+        .get(`credential:${credentialRef}`, operationId),
+    )
+  }
+
+  /** GitHub 身份以机器人数字 ID 归组；各资源所有者的凭据代次彼此独立。 */
+  externalCredentials(): ExternalCredential[] {
+    return this.db
+      .prepare('SELECT body FROM external_credentials ORDER BY credential_ref')
+      .all()
+      .map((row) => decode<ExternalCredential>(row))
+  }
+
+  externalIdentityProfile(identityId: string): { login: string; revision: number } | null {
+    return decode(
+      this.db
+        .prepare(
+          "SELECT body FROM external_config_requests WHERE scope=? ORDER BY json_extract(body,'$.revision') DESC LIMIT 1",
+        )
+        .get(`identity:${identityId}`),
+    )
+  }
+
+  recordExternalIdentityChange(identityId: string, verifiedLogin?: string): void {
+    this.transaction(() => {
+      const before = this.externalIdentityProfile(identityId)
+      const login = verifiedLogin ?? before?.login
+      if (!login) return
+      const revision = (before?.revision ?? 0) + 1
+      this.db
+        .prepare('INSERT INTO external_config_requests VALUES(?,?,?)')
+        .run(`identity:${identityId}`, String(revision), encode({ login, revision }))
+    })
+  }
+
+  /** 平台明确拒绝该代时断用；保留原作用域，供同机器人轮换。 */
+  invalidateExternalCredential(
+    credentialRef: string,
+    generation: number,
+    at: number,
+    reason: string,
+  ): void {
+    this.transaction(() => {
+      const before = this.config.credential(credentialRef)
+      if (before?.state !== 'active' || before.generation !== generation) return
+      this.db
+        .prepare('UPDATE external_credentials SET body=? WHERE credential_ref=?')
+        .run(encode({ ...before, state: 'invalid' }), credentialRef)
+      this.recordExternalIdentityChange(before.botUserId)
+      this.appendAudit({
+        at,
+        subject: `credential:${credentialRef}`,
+        action: 'credential_invalidated',
+        state: 'invalid',
+        reason,
+      })
+    })
+  }
+
+  /** 对账窗口以首次未知时间为准；暂停不会把操作重新排进发送队列。 */
+  unknownWritesDue(at: number, limit: number): ExternalOutboxRecord[] {
+    return this.db
+      .prepare(
+        `SELECT o.seq,o.body FROM external_outbox o
+       WHERE o.state='unknown' AND (o.next_attempt IS NULL OR o.next_attempt<=?)
+       AND COALESCE(json_extract(o.body,'$.errorClass'),'')<>'external_write_manual_confirmation_required'
+       ORDER BY COALESCE(o.next_attempt,0),o.seq LIMIT ?`,
+      )
+      .all(at, boundedLimit(limit))
+      .map((row) => numbered<ExternalOutboxRecord>(row))
+  }
+
+  deferUnknownWrite(
+    operationId: string,
+    revision: number,
+    at: number,
+    nextAttempt: number | null,
+    reason: string,
+  ): void {
+    this.transaction(() => {
+      const before = this.queue.outboxRecord(operationId)
+      if (before?.state !== 'unknown' || before.revision !== revision) return
+      const record = { ...before, revision: revision + 1, errorClass: reason }
+      if (nextAttempt === null) delete record.nextAttempt
+      else record.nextAttempt = nextAttempt
+      this.db
+        .prepare('UPDATE external_outbox SET next_attempt=?,body=? WHERE operation_id=?')
+        .run(nextAttempt, encode(record), operationId)
+      this.appendAudit({
+        at,
+        action: 'write_recheck_deferred',
+        state: 'unknown',
+        reason,
+        subject: externalSubjectKey(record.targetRef),
+        operationId,
+        managerId: record.managerId,
+        policyRevision: record.policyRevision,
+        ...(record.issueId ? { issueId: record.issueId } : {}),
+      })
+    })
+  }
+
+  externalWritesForRepo(
+    sourceId: string,
+    repoId: string,
+    action: ExternalOutboxRecord['action'],
+    states: readonly ExternalOutboxRecord['state'][],
+  ): ExternalOutboxRecord[] {
+    if (!states.length) return []
+    return this.db
+      .prepare(
+        `SELECT seq,body FROM external_outbox WHERE source_id=? AND repo_id=?
+       AND json_extract(body,'$.action')=? AND state IN (${states.map(() => '?').join(',')})
+       ORDER BY seq DESC`,
+      )
+      .all(sourceId, repoId, action, ...states)
+      .map((row) => numbered<ExternalOutboxRecord>(row))
   }
 
   cursor(sourceId: string, repoId: string, stream: string): ExternalCursor | null {
