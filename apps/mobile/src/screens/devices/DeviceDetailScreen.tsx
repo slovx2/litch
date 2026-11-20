@@ -1,5 +1,5 @@
 // 设备详情：连接（状态、没连上的原因和该怎么办、重新连接、重新信任主机钥匙）、这台设备（改名、线色、主机、
-// 钥匙和公钥、主机指纹、对面是什么）、定时任务（几个，点进这台设备的任务列表）、各 harness 的启停与设置（对面有设置接口时，manage 主题，ManageSection）、移除。
+// 钥匙和公钥、主机指纹、对面是什么）、定时任务（几个，点进这台设备的任务列表）、无人值守（UnattendedSection）、各 harness 的启停与设置（对面有设置接口时，manage 主题，ManageSection）、移除。
 import { type DeviceView, keys } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useState } from 'react'
@@ -22,6 +22,7 @@ import { HarnessList, ManageSection } from './ManageSection'
 import { PowerShortcut } from './PowerShortcut'
 import { FailureCard, InfoLine, PublicKeyCard, useHostTrust, WirePicker } from './parts'
 import { RemoveDevice } from './RemoveDevice'
+import { UnattendedSection } from './UnattendedSection'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DeviceDetail'>
 
@@ -202,6 +203,8 @@ export function DeviceDetailScreen({ route, navigation }: Props) {
 
         <SectionLabel>{t('tasks.title')}</SectionLabel>
         <TasksLine deviceId={deviceId} onPress={() => navigation.navigate('Tasks', { deviceId })} />
+
+        <UnattendedSection device={device} />
 
         <SectionLabel>{t('manage.harness.title')}</SectionLabel>
         {device.manageable && state === 'online' ? (

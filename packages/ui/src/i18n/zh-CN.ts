@@ -12,6 +12,7 @@ import { zhBackground } from './zh-CN-background.ts'
 import { zhBimport } from './zh-CN-bimport.ts'
 import { zhChrome } from './zh-CN-chrome.ts'
 import { zhComments } from './zh-CN-comments.ts'
+import { zhExternal } from './zh-CN-external.ts'
 import { zhGoal } from './zh-CN-goal.ts'
 import { zhHconfig } from './zh-CN-hconfig.ts'
 import { zhLimits } from './zh-CN-limits.ts'
@@ -90,6 +91,7 @@ export const zhCN = {
 
   ...zhSearch,
   ...zhManager,
+  ...zhExternal,
   ...zhManagerIssues,
   ...zhCNPathPicker,
   ...zhPreviewDocx,

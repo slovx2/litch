@@ -12,6 +12,7 @@ import { useT } from '../../ui/i18n'
 import { Fold } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import { Byline } from './Byline'
+import { AnswerSourceLink } from './external/IssueExternal'
 import { Markdown } from './IssueMarkdown'
 
 const closerKey = (by: ManagerActor) =>
@@ -65,6 +66,7 @@ export function DecisionAnswer({ decision }: { decision: ManagerDecision }) {
         )}
         at={parts.answer.at}
       />
+      <AnswerSourceLink source={parts.answer.answerSource} />
       {parts.chosen ? (
         <Option option={parts.chosen} recommend={decision.recommend === parts.chosen.id} />
       ) : null}

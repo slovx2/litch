@@ -92,7 +92,8 @@ export async function managerIssuesProbe() {
   assert(
     all('[data-inbox-tab]')
       .map((tab) => tab.dataset.inboxTab)
-      .join(',') === 'decisions,suggestions,requests,reports,issues',
+      // 模拟核心的本机支持外部来源，末尾多一个 GitHub 收件箱分段
+      .join(',') === 'decisions,suggestions,requests,reports,issues,github',
     '控制台分类标签不完整或顺序错误',
   )
   assert(

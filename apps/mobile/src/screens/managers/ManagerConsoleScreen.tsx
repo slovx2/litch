@@ -1,9 +1,11 @@
 // 手机经理工作台（35-manager 第十七节）：标题栏是经理名和状态，下面一排页签“控制台 · 对话 · 工作线 · 概览”。
 // 对话就是经理会话本身（与会话页同一套组件，detail/session-page.tsx），切到别的页签时不卸载、只是不显示，
+// 设备支持外部来源时控制台后多一个“GitHub”页签（收件箱，external/ExternalInbox.tsx）。
 // 回来时滚动位置和草稿都在；只有对话页签显示着才标已读。默认落在控制台；带 issue 的入口（经理事件、#D-n、受阻事项、
 // 工作线回经理）落到控制台（经理事项落到概览）并定位。当前页签存在路由参数里，回经理时可以直接改。
 // 议题卡在 Issue.tsx，对话里点编号拉起的半屏议题卡在 IssueSheet.tsx，工作线列表在 ManagerLines.tsx。
 import {
+  type DeviceView,
   keys,
   MANAGER_ISSUE_ORDERS,
   type ManagerBoardTopicView,
@@ -50,6 +52,7 @@ import { useTheme } from '../../ui/theme'
 import { rememberBoardScroll } from './board-return'
 import { BoardActionScrollView } from './CardActions'
 import { DraftSubmitBar } from './DraftSubmitBar'
+import { ExternalInbox, useGithubPending } from './external/ExternalInbox'
 import { Issue } from './Issue'
 import { IssueContext } from './IssueRelations'
 import { IssueSheet } from './IssueSheet'
@@ -71,9 +74,11 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ManagerConsole'>
 type Category = ManagerPost['kind']
 
 const TABS: readonly ManagerTab[] = ['console', 'chat', 'lines', 'overview']
+const GITHUB_TABS: readonly ManagerTab[] = ['console', 'github', 'chat', 'lines', 'overview']
 const TAB_LABEL = {
   chat: 'mgr.tab.chat',
   console: 'manager.inbox',
+  github: 'mgh.tab',
   lines: 'mgr.tab.lines',
   overview: 'manager.overview',
 } as const
@@ -109,7 +114,13 @@ export function ManagerConsoleScreen({ route, navigation }: Props) {
 function Workbench({ manager, route, navigation }: Props & { manager: ManagerView }) {
   const channel = useChannel()
   const { deviceId, id: managerId } = manager
-  const tab: ManagerTab = route.params.tab ?? 'console'
+  const device = useKey<DeviceView>(keys.device(deviceId))
+  const github = device?.externalSources === true
+  const asked: ManagerTab = route.params.tab ?? 'console'
+  const tab: ManagerTab = asked === 'github' && !github ? 'console' : asked
+  /** 对话和 GitHub 页签不显示看板滚动区 */
+  const offBoard = tab === 'chat' || tab === 'github'
+  const githubPending = useGithubPending(manager, github)
   const t = useT()
   const theme = useTheme()
   const { c, radius, font, hit } = theme
@@ -128,7 +139,6 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   }
   const suggestions = useKey<readonly SuggestionView[]>(keys.suggestions) ?? []
   const summary = useKey<SessionSummary>(keys.summary(deviceId, manager.threadId))
-  const device = useKey<{ connection?: string }>(keys.device(deviceId))
   const reset = useManagerReset(
     manager,
     device?.connection === 'online',
@@ -166,12 +176,12 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
     pending: boolean
   }>({ memory: null, y: 0, ready: false, pending: true })
   // 对话页会隐藏并缩短看板容器；期间的原生滚动归零不是新的阅读位置。
-  if (tab === 'chat') {
+  if (offBoard) {
     pagingScroll.current.pending = true
     pagingScroll.current.ready = false
   }
-  const boardVisible = useRef(focused && tab !== 'chat')
-  boardVisible.current = focused && tab !== 'chat'
+  const boardVisible = useRef(focused && !offBoard)
+  boardVisible.current = focused && !offBoard
   const restoreBoard = useCallback(() => {
     if (!boardVisible.current) return
     const state = pagingScroll.current
@@ -203,13 +213,13 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   useLayoutEffect(() => {
     const state = pagingScroll.current
     state.pending = true
-    if (focused && tab !== 'chat') requestAnimationFrame(restoreBoard)
-  }, [focused, tab, restoreBoard])
+    if (focused && !offBoard) requestAnimationFrame(restoreBoard)
+  }, [focused, offBoard, restoreBoard])
   const boardReady = !!view?.board
   useLayoutEffect(() => {
-    if (!pagingOn && tab !== 'chat')
+    if (!pagingOn && !offBoard)
       pagingQuery(boardPageMemory(memory, `mobile-unpaged:${tab}:${kind}`), boardReady)
-  }, [pagingOn, tab, kind, memory, boardReady, pagingQuery])
+  }, [pagingOn, offBoard, tab, kind, memory, boardReady, pagingQuery])
   useEffect(() => {
     if (!pagingOn || !sheet) return
     void channel
@@ -421,6 +431,15 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
             label: t('manager.pending', { n: pending }),
           }
         : null
+    if (key === 'github')
+      return githubPending
+        ? {
+            kind: 'count',
+            text: String(githubPending),
+            color: c.wait,
+            label: t('manager.pending', { n: githubPending }),
+          }
+        : null
     if (key === 'lines') {
       const running = manager.runningLines
       if (!running && !linesWaiting) return null
@@ -471,7 +490,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
         style={[styles.tabsRow, { borderColor: c.line1, backgroundColor: c.panel, height: hit }]}
         contentContainerStyle={styles.tabs}
       >
-        {TABS.map((key) => {
+        {(github ? GITHUB_TABS : TABS).map((key) => {
           const on = tab === key
           const mark = badge(key)
           return (
@@ -635,11 +654,19 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
               })}
             </Text>
           ) : null}
+          {tab === 'github' ? (
+            <ExternalInbox
+              key={managerId}
+              manager={manager}
+              disabled={device?.connection !== 'online' || manager.status !== 'active'}
+            />
+          ) : null}
           <BoardActionScrollView
             testID="manager-board-scroll"
             ref={scroll}
             style={[
               styles.fill,
+              tab === 'github' && styles.hidden,
               // 新控制台的加载、空状态和错误不能被旧分页位置恢复隐藏。
               restoringBoard &&
                 board &&

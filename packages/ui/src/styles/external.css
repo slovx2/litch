@@ -1,0 +1,463 @@
+/* 无人值守与 GitHub：设置里的账号、设备无人值守页、经理收件箱、X-n 的外部引用。
+   只用皮肤变量；行高紧凑，状态用点和小药丸，不另起一行。 */
+
+/* ---------- 共用小件 ---------- */
+.ext-avatar {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  background: var(--hover);
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 600;
+  object-fit: cover;
+}
+.ext-avatar.ghost {
+  visibility: hidden;
+}
+.ext-dot {
+  flex: none;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line-3);
+}
+.ext-dot[data-tone="ok"] {
+  background: var(--ok);
+}
+.ext-dot[data-tone="wait"] {
+  background: var(--wait);
+}
+.ext-dot[data-tone="err"] {
+  background: var(--err);
+}
+.ext-link {
+  width: 22px;
+  height: 22px;
+}
+.ext-text-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+.ext-text-link:hover {
+  text-decoration: underline;
+}
+.ext-account {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.ext-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.ext-check.locked {
+  color: var(--ink-3);
+}
+.ext-select,
+.ext-input {
+  height: 26px;
+  font-size: 12px;
+}
+.ext-select {
+  max-width: 200px;
+  padding: 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--win);
+  color: var(--ink);
+}
+.ext-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 420px;
+}
+.ext-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+.ext-chip {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.ext-chip[aria-pressed="true"] {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--ink);
+}
+.ext-chip[data-conflict] {
+  border-color: var(--err);
+}
+.ext-chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.ext-empty {
+  font-size: 12px;
+  color: var(--ink-3);
+  padding: 4px 0;
+}
+
+/* ---------- 设置 → GitHub 账号 ---------- */
+.ext-sync {
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.ext-sync-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ext-owner-form {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ext-owner-input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+/* ---------- 无人值守页 ---------- */
+.ext-wrap {
+  gap: 0;
+  padding-bottom: 32px;
+}
+.ext-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0 14px;
+  border-top: 1px solid var(--line-1);
+}
+.ext-block-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+}
+.ext-block-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.ext-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.ext-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  min-width: 0;
+  font-size: 13px;
+}
+.ext-list > .ext-row + .ext-row,
+.ext-list > li + li,
+.ext-list > .ext-assign + .ext-assign {
+  border-top: 1px solid var(--line-1);
+}
+.ext-row-name {
+  min-width: 0;
+  font-weight: 500;
+}
+.ext-row-meta {
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.ext-ready {
+  display: inline-flex;
+  gap: 3px;
+}
+.ext-ready .ext-dot {
+  width: 6px;
+  height: 6px;
+}
+.ext-repo[data-open="true"] {
+  padding-bottom: 8px;
+}
+.ext-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 2px 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--panel);
+}
+.ext-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 26px;
+  font-size: 12px;
+}
+.ext-field-label {
+  flex: 0 0 96px;
+  color: var(--ink-3);
+}
+.ext-field-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ext-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+  font-size: 12px;
+}
+.ext-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line-2);
+  font-size: 12px;
+}
+.ext-sub-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-2);
+  font-weight: 500;
+}
+.ext-ready-list,
+.ext-diags {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ext-ready-list > li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.ext-ready-area {
+  flex: 0 0 96px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+}
+.ext-diag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+  min-width: 0;
+  color: var(--ink-2);
+}
+.ext-assign {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0;
+}
+.ext-assign .ext-row-name {
+  flex: 0 1 140px;
+}
+.ext-inject {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+/* ---------- 对话框：添加身份、添加仓库 ---------- */
+.modal.ext-dialog {
+  width: min(520px, calc(100vw - 48px));
+}
+.ext-scopes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.ext-code {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+}
+.ext-code-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r3);
+  background: var(--sunken);
+}
+.ext-code-text {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  user-select: all;
+}
+.ext-code-line {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 12px;
+}
+.ext-done {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.ext-pick {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+}
+.ext-pick > li + li {
+  border-top: 1px solid var(--line-1);
+}
+.ext-pick-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  text-align: left;
+}
+.ext-pick-row:hover {
+  background: var(--hover);
+}
+.ext-pick-row[aria-pressed="true"] {
+  background: var(--sel);
+}
+
+/* 窄宽度：字段标签放到上面，选择框占满 */
+@container (max-width: 560px) {
+  .ext-field {
+    flex-wrap: wrap;
+  }
+  .ext-field-label {
+    flex-basis: 100%;
+  }
+}
+@media (max-width: 640px) {
+  .ext-detail {
+    margin-left: 0;
+  }
+  .ext-field {
+    flex-wrap: wrap;
+  }
+  .ext-field-label {
+    flex-basis: 100%;
+  }
+  .ext-assign .ext-row {
+    flex-wrap: wrap;
+  }
+}
+.ext-dialog .ext-detail {
+  margin-left: 0;
+}
+
+/* ---------- 经理收件箱 ---------- */
+.ext-inbox {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ext-inbox-item .ext-row {
+  gap: 6px;
+  font-size: 12px;
+}
+.ext-inbox-main {
+  min-width: 0;
+  flex: 0 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+}
+.ext-inbox-main .caret-ic {
+  flex: none;
+  transform: rotate(-90deg);
+  transition: transform 0.12s;
+}
+.ext-inbox-main[aria-expanded="true"] .caret-ic {
+  transform: none;
+}
+.ext-triage {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line-2);
+}
+.ext-triage .req-input {
+  width: 100%;
+}
+.ext-text {
+  min-height: 60px;
+  resize: vertical;
+}
+
+/* ---------- X-n 的外部引用、决策答复来源 ---------- */
+.ext-refs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.ext-refs .ext-row {
+  min-height: 26px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.ext-refs-label {
+  color: var(--ink-3);
+}
+.ext-answer-source {
+  font-size: 12px;
+}
+.ext-manager {
+  grid-column: 1 / -1;
+}
+.ext-inbox-main > :not(.ell) {
+  flex: none;
+  white-space: nowrap;
+}

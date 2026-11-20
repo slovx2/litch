@@ -28,6 +28,7 @@ import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
+import { ExternalInbox, useInboxPending } from '../external/Inbox.tsx'
 import { SessionTodo } from '../rail/InfoRail.tsx'
 import { onFindPreparing } from '../search/actions.ts'
 import { Transcript } from '../transcript/Transcript.tsx'
@@ -76,6 +77,21 @@ export interface ManagerPageLocation {
   draftFocus?: number
 }
 const defaultLocation: ManagerPageLocation = { tab: 'inbox', narrow: 'board', settings: false }
+
+/** Console 是否停在 GitHub 收件箱：按经理记在本窗口，离开再回来仍在 */
+const githubShown = new Map<string, boolean>()
+function useGithubTab(key: string) {
+  const [shown, setShown] = useState(() => githubShown.get(key) === true)
+  useEffect(() => setShown(githubShown.get(key) === true), [key])
+  const set = useCallback(
+    (next: boolean) => {
+      githubShown.set(key, next)
+      setShown(next)
+    },
+    [key],
+  )
+  return [shown, set] as const
+}
 
 const CATEGORY_KIND = {
   decisions: 'decision',
@@ -148,6 +164,10 @@ export function ManagerPage({
   )
   const requestLocated = useCallback(() => setRequestTarget(null), [])
   const reading = managerBoardMemory(manager.deviceId, manager.id)
+  const external = device?.externalSources === true
+  const [githubOn, setGithub] = useGithubTab(`${manager.deviceId}:${manager.id}`)
+  const github = external && githubOn
+  const githubPending = useInboxPending(manager, external)
   const [, renderCategory] = useState(0)
   // issue 控制台（设备支持 litchManagerIssues 时）：编号跳转与概览摘要的过滤都交给它
   const issues = useManagerIssues(view)
@@ -166,6 +186,7 @@ export function ManagerPage({
     onLocation({ ...location, tab: 'inbox', narrow: 'board' })
   }
   const openReference = (ref: BoardReference) => {
+    setGithub(false)
     if (issueMode && !ref.startsWith('I-')) {
       setBoardLayout({ open: true })
       setIssueTarget(ref)
@@ -259,6 +280,7 @@ export function ManagerPage({
       ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   }, [pickedTab])
   const pickIssueKind = (kind: ManagerIssueKind) => {
+    setGithub(false)
     reading.ordinary = kind === 'ordinary'
     if (kind !== 'ordinary') reading.category = kind
     renderCategory((value) => value + 1)
@@ -387,6 +409,7 @@ export function ManagerPage({
   }
   /** 概览跳到控制台某一类：和点控制台里的类别按钮是同一件事 */
   const openInbox = (kind: OverviewCategory) => {
+    setGithub(false)
     if (issueMode) {
       pickIssueKind(
         (
@@ -592,7 +615,9 @@ export function ManagerPage({
                   data-inbox-tab={kind}
                   data-board-tab={kind}
                   key={kind}
-                  aria-pressed={issueMode ? issueKind === CATEGORY_KIND[kind] : activeTab === kind}
+                  aria-pressed={
+                    !github && (issueMode ? issueKind === CATEGORY_KIND[kind] : activeTab === kind)
+                  }
                   onClick={() => openInbox(kind)}
                 >
                   {t(`manager.${kind}`)}
@@ -604,13 +629,28 @@ export function ManagerPage({
                   type="button"
                   data-inbox-tab="issues"
                   key="issues"
-                  aria-pressed={issueKind === 'ordinary'}
+                  aria-pressed={!github && issueKind === 'ordinary'}
                   onClick={() => pickIssueKind('ordinary')}
                 >
                   {t('issue.tab')}
                   {issueCounts?.unread ? (
                     <span className="pill wait">{issueCounts.unread}</span>
                   ) : null}
+                </button>
+              ) : null}
+              {external ? (
+                <button
+                  type="button"
+                  data-inbox-tab="github"
+                  key="github"
+                  aria-pressed={github}
+                  onClick={() => {
+                    setGithub(true)
+                    if (tab !== 'inbox') setTab('inbox')
+                  }}
+                >
+                  {t('ext.inbox.tab')}
+                  {githubPending ? <span className="pill wait">{githubPending}</span> : null}
                 </button>
               ) : null}
             </div>
@@ -631,7 +671,14 @@ export function ManagerPage({
           </p>
         ) : null}
         <div className="mg-body" ref={boardBody}>
-          {error ? (
+          {github && consoleTab ? (
+            <ExternalInbox
+              manager={manager}
+              disabled={disabled}
+              onOpenIssue={(id) => openReference(id as BoardReference)}
+            />
+          ) : null}
+          {github && consoleTab ? null : error ? (
             <p className="err" role="alert">
               {reasonOf(error, t)}
             </p>

@@ -4,6 +4,7 @@ import { useId, useState } from 'react'
 import type { ManagerDecisionView } from '../../../core/src/model-manager.mts'
 import type { ManagerActor, ManagerDecisionOption } from '../../../protocol/src/manager.mjs'
 import { useT } from '../app/appearance.ts'
+import { AnswerSource } from '../external/IssueExternal.tsx'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 
@@ -46,6 +47,9 @@ export function DecisionAnswer({ decision }: { decision: ManagerDecisionView }) 
                 : 'manager.answerYours',
           )}
         </b>
+        {parts.answer.answerSource?.kind === 'github' ? (
+          <AnswerSource source={parts.answer.answerSource} />
+        ) : null}
         <Stamp className="dim" at={parts.answer.at} />
       </header>
       {parts.chosen ? (
