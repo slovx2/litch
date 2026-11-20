@@ -131,6 +131,55 @@ void app.whenReady().then(async () => {
       '标签上显示网页标题',
       await until("document.querySelector('.bw-tab-name')?.textContent === 'Form'"),
     )
+    if (tab) {
+      const invoke = (tool: string, args: unknown) =>
+        browser.executor.call(
+          {
+            id: 'user-tab-ui',
+            callId: 'user-tab-ui',
+            namespace: 'litch_browser',
+            tool,
+            arguments: args,
+            device: { id: 'borrower-device', name: '隔离远程会话', kind: 'ssh', target: 'fixture' },
+            threadId: 'borrower-session',
+            turnId: 'borrower-turn',
+            harness: null,
+            cwd: null,
+          },
+          {
+            signal: new AbortController().signal,
+            ask: async () => {
+              throw new Error('回环用户标签认领不应出审批卡')
+            },
+          },
+        )
+      const listed = await invoke('tabs', { action: 'list' })
+      const body = listed.contentItems.find((item) => item.type === 'inputText')
+      if (body?.type !== 'inputText') throw new Error('没有标签列表')
+      const token = (
+        JSON.parse(body.text).tabs as Array<{ tabId: string; claimToken: string }>
+      ).find((entry) => entry.tabId === tab.id)?.claimToken
+      const claimed = await invoke('claim', { claimToken: token })
+      check('用户标签被跨设备会话认领', claimed.success, claimed)
+      check(
+        '原会话看到代理使用中和操作提示',
+        await until(
+          "document.querySelector('.bw-tab[data-kind=user][data-agent=true] .bw-busy') && document.querySelector('.bw-agent-bar')",
+        ),
+      )
+      await shot('user-claimed')
+      browser.executor.turnEnded({
+        deviceId: 'borrower-device',
+        threadId: 'borrower-session',
+        turnId: 'borrower-turn',
+      })
+      check(
+        '回合结束用户标签仍显示，控制提示撤销',
+        browser.host.page(tab.id)?.info().kind === 'user' &&
+          (await until("!document.querySelector('.bw-agent-bar')")),
+      )
+      browser.host.userNavigate(tab.id, 'reload')
+    }
     await pause(300)
     check('网页叠在矩形上', attached())
     const rect = (await page(

@@ -78,9 +78,15 @@ Claude 的新分叉和 hand_off 按当前开关重新整理工具；其余引擎
 - In the side panel, tab **Browser**: tabs, address bar (non-URLs search the web), back, forward,
   reload, "Open in system browser". One browser profile is shared by all sessions and devices: sign in
   once in the panel and agents can use that session.
-- Agents work in their own tabs (marked "Agent"); they can only read the address and title of the
-  user's tabs. Agent tabs close at the end of the turn unless the agent left one open for the user. To
-  stop an agent in the browser, interrupt the turn. `file:` pages cannot be opened.
+- 代理可以列出并认领内置浏览器里全部用户标签，不需要额外的标签级或浏览器实例级审批，站点许可仍适用。
+  每个用户标签同一时间只由一个会话、一个回合控制；原会话归属保留，原会话和控制会话的面板都显示“代理在用”。
+  回合结束、打断或失败后自动交还，绝不自动关闭用户标签。用户在网页中点击、滚动或输入，或操作地址栏时优先交还控制；
+  代理须重新认领并读取页面，旧引用不可继续使用。仅代理新开的临时标签在回合结束关闭，保留的除外。
+- Agents can list and claim every built-in user tab without a separate instance or tab approval.
+  Site permissions still apply. One session and turn holds the lease; both the original and controlling
+  conversation show **Agent active**. Turn end, interruption or failure returns control without closing user tabs.
+  User page input or address-bar navigation returns control; the agent must claim again and take a fresh observation.
+  Only temporary agent-created tabs close at turn end. `file:` pages cannot be opened.
 - **Site approval**: local addresses (localhost, 127.0.0.1, `*.localhost`) are always allowed. Any
   other site asks first, once per origin (scheme, host and port), with a card: Allow this turn / Allow
   for this session / Always allow / Trust all sites / Decline.
@@ -97,14 +103,14 @@ Claude 的新分叉和 hand_off 按当前开关重新整理工具；其余引擎
 ### 下载 / Downloads
 
 - 用户自己打开的标签下载自动保存到操作这台浏览器的电脑的系统“下载”目录；浏览器面板显示状态、最终路径和“在文件夹中显示”。同名文件自动编号，绝不覆盖已有文件，不自动打开或执行下载内容。
-- 代理标签的每个下载都要用户单独批准，卡片显示文件名、来源站点及大小（服务器没给大小则显示未知）。网站许可不等于下载许可。为避免混淆人工输入和代理输入，即使用户在保留的代理标签中点击，也仍需批准；用户可以自己新开标签下载。
+- 代理触发的下载（包括认领的用户标签及交还后才响应的下载）沿用代理下载规则：完全访问下自动通过，其他权限下逐个批准。卡片显示文件名、来源站点及大小（服务器没给大小则显示未知）。网站许可不等于下载许可。用户在用户标签中直接操作后恢复用户下载规则；保留的代理标签仍按代理下载处理。
 - 点击后立即用原始请求接收，不暂停后重试一次性链接。待批准文件临时存在本机私有目录，网页和浏览器工具读不到，临时路径不向 Agent 暴露；它不构成防御拥有完全文件权限 Agent 的操作系统安全边界。批准后才保存到“下载”，拒绝、十分钟超时、关闭待审批标签或应用退出时清理；崩溃残留在下次启动清理。
 - 单文件最多 1 GiB、同时最多 4 个下载、临时数据总量最多 2 GiB；超限或网络失败会明确显示失败，不自动重试。未知大小在传输过程中检查。
 - Agent 点击后使用 `litch_browser.downloads` 查询或处理延迟出现的下载审批；大文件尚未完成时稍后再查，完成结果给出最终本机路径。远程会话的文件也保存到控制端电脑。工具不接受任意保存路径，不会给 Agent 审批权限。不要重新点击一次性下载链接。
 
 Downloads in user-owned tabs save automatically to the controlling computer’s system Downloads folder. The browser panel shows progress, the saved path and **Show in folder**. Existing files are never overwritten; duplicate names receive a number. Files are never opened or executed automatically.
 
-Every download in an agent-owned tab requires individual approval, including manual clicks in a retained agent tab. The card shows the filename, source origin and size, or **Unknown size**. Website access does not authorize downloads. The original request is received once into a private temporary folder to avoid replaying one-time links. Pending paths and content are not exposed to browser tools or webpages. This is not an OS security boundary against an agent with unrestricted filesystem access. Approval publishes the file to Downloads. Rejection, a ten-minute timeout, closing a pending tab, or application exit deletes temporary data; startup cleans crash leftovers.
+Agent-triggered downloads, including claimed user tabs and delayed responses after release, require individual approval unless the session has full access. Direct user input in a user tab restores automatic user downloads; retained agent tabs keep agent download rules. The card shows filename, source origin and size, or **Unknown size**. Website access does not authorize downloads. The original request is received once into a private temporary folder to avoid replaying one-time links. Pending paths and content are not exposed to browser tools or webpages. This is not an OS security boundary against an agent with unrestricted filesystem access. Approval publishes the file to Downloads. Rejection, a ten-minute timeout, closing a pending tab, or application exit deletes temporary data; startup cleans crash leftovers.
 
 Limits are 1 GiB per file, four active downloads and 2 GiB of temporary data. Unknown sizes are checked during transfer. Failures never trigger an automatic retry. After clicking, call `litch_browser.downloads` to review pending approvals and progress; call again for delayed or large downloads. Completed results contain the controlling desktop’s local path, even for remote sessions. Agents cannot choose arbitrary save paths or approve downloads themselves. Do not repeat one-time download links.
 

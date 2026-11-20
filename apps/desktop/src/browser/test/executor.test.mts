@@ -396,11 +396,14 @@ test('信任所有网站：不问，黑名单里的（含子域名）回拒绝�
   assert.equal(host.gate(page, 'https://bank.test/'), false)
 })
 
-test('只许动这个会话里代理自己的标签', async () => {
+test('用户标签须先认领；代理标签仍只许原会话操作', async () => {
   const { run, host } = setup()
   const user = host.open({ deviceId: 'local', threadId: 'a' }, 'user')
   const reply = await run('click', { tabId: user.id, x: 1, y: 1 })
-  assert.match(text(reply), /belongs to the user/)
+  assert.match(text(reply), /claim it again/)
+  const listedUser = JSON.parse(text(await run('tabs', { action: 'list' }))).tabs[0]
+  assert.equal((await run('claim', { claimToken: listedUser.claimToken })).success, true)
+  assert.equal((await run('release', { tabId: user.id })).success, true)
   await run('navigate', { url: 'http://localhost/' })
   const mine = host.pages().find((one) => one.info().kind === 'agent') as BrowserPage
   assert.match(

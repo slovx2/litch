@@ -5,6 +5,7 @@ import { type Call, SIGNING_IN, type Tool } from './executor.mjs'
 import type { BrowserPage } from './model.mjs'
 import { pageLine } from './page-ops.mjs'
 import { sessionKey } from './sites.mjs'
+import { snapshot } from './tools-read.mjs'
 import { BLANK, isLocalHost, isOpenable, parseUrl, toAddress } from './url.mjs'
 
 /** 等页面加载的上限 */
@@ -71,7 +72,7 @@ export const tabs: Tool = async (call) => {
     const current = call.current()
     const list = call.host
       .pages()
-      .filter((page) => sameSession(call, page))
+      .filter((page) => page.info().kind === 'user' || sameSession(call, page))
       .map((page) => {
         const info = page.info()
         // 人正在登录的标签、交接期间开出来的弹窗：只给占位，不给地址和标题
@@ -92,12 +93,27 @@ export const tabs: Tool = async (call) => {
           title: info.title,
           url: info.url,
           loading: info.loading,
+          ...(info.kind === 'user' && call.userTabs
+            ? {
+                claimToken: call.userTabs.token(page),
+                claimed: call.userTabs.owns(page),
+                busy: info.agentActive && !call.userTabs.owns(page),
+              }
+            : {}),
         }
       })
     return call.done(
       null,
       list.length === 0 ? 'No tabs yet.' : JSON.stringify({ tabs: list }, null, 1),
     )
+  }
+  if (action === 'close' || action === 'keep') {
+    const id = str(call.args, 'tabId')
+    const page = id ? call.host.page(id) : call.current()
+    if (page?.info().kind === 'user')
+      throw new BadArgs(
+        'User tabs are never closed or made temporary by the agent. Call release(tabId) to return control.',
+      )
   }
   if (action === 'new') {
     const raw = str(call.args, 'url')
@@ -160,10 +176,48 @@ export const show: Tool = async (call) => {
   if (tabId !== undefined) {
     // 用户自己的标签也可以拿出来给用户看
     page = call.host.page(tabId)
-    if (!page || !sameSession(call, page)) throw new BadArgs(`no tab ${tabId} in this conversation`)
+    if (!page || (page.info().kind !== 'user' && !sameSession(call, page)))
+      throw new BadArgs(`no tab ${tabId} in this conversation`)
     if (call.handover?.hides(page.id)) return clientToolFailure('failed', SIGNING_IN)
   } else page = call.pickMaybe()
   if (!page) throw new BadArgs('no tab to show; call `navigate` first')
   call.host.show(page.id)
-  return call.done(page, `Showing ${pageLine(page)} in the Litch browser panel.`)
+  // 显示不等于站点授权；未认领用户页只能回标题/地址，不能附带网页对话框或通知。
+  return call.done(
+    page.info().kind === 'user' && !call.userTabs?.owns(page) ? null : page,
+    `Showing ${pageLine(page)} in the Litch browser panel.`,
+  )
+}
+
+/** 只做站点审批，没有标签级或实例级审批；成功返回全新观察，不复用上次租约引用。 */
+export const claim: Tool = async (call) => {
+  if (!call.userTabs) throw new BadArgs('User tab claiming is unavailable in this host.')
+  const token = str(call.args, 'claimToken', true)
+  const page = call.userTabs.take(token)
+  const refusal = await call.userTabs.claim(page)
+  if (refusal) return refusal
+  call.setCurrent(page)
+  call.args = { tabId: page.id }
+  return snapshot(call)
+}
+
+export const ensureClaimed: Tool = async (call) => {
+  const id = str(call.args, 'tabId', true)
+  const page = call.host.page(id)
+  if (!page) throw new BadArgs('The tab was closed. List tabs and choose the intended tab again.')
+  if (!call.userTabs) throw new BadArgs('User tab claiming is unavailable in this host.')
+  const refusal = await call.userTabs.claim(page)
+  if (refusal) return refusal
+  call.setCurrent(page)
+  await page.waitForLoad(LOAD_MS, call.context.signal)
+  return snapshot(call)
+}
+
+export const release: Tool = async (call) => {
+  const id = str(call.args, 'tabId', true)
+  const page = call.host.page(id)
+  if (!page) return call.done(null, 'The tab was already closed by the user.')
+  if (!call.userTabs) throw new BadArgs('User tab claiming is unavailable in this host.')
+  call.userTabs.release(page)
+  return call.done(null, `Released user tab ${id}; it remains open.`)
 }

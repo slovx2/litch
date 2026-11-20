@@ -98,6 +98,41 @@ async function until(test: () => boolean): Promise<void> {
   assert.fail('状态未在时限内落定')
 }
 
+test('用户标签被认领后和交还后的延迟下载都归控制会话审批；用户自己的下载仍自动保存', async () => {
+  const f = fixture()
+  const controller = { deviceId: 'ssh-device', threadId: 'remote-session' }
+  try {
+    for (const agentActive of [true, false]) {
+      const item = new Item()
+      f.manager.capture(item as unknown as DownloadItem, {
+        ...tab('user'),
+        agentActive,
+        downloadOwner: controller,
+        ...(agentActive ? { controller } : {}),
+      })
+      item.complete()
+      const pending = f.manager.list(controller, true).at(-1)
+      assert.ok(pending)
+      assert.equal(pending.status, 'pending')
+      assert.equal(pending.path, undefined)
+      await f.manager.askPending(controller, {
+        signal: new AbortController().signal,
+        ask: async (request) => {
+          assert.equal(request.kind, 'browserDownload')
+          return 'once'
+        },
+      })
+      await until(() => f.manager.list(controller, true).at(-1)?.status === 'completed')
+    }
+    const own = new Item()
+    f.capture(own, 'user')
+    own.complete()
+    await until(() => f.manager.list(owner).at(-1)?.status === 'completed')
+  } finally {
+    f.close()
+  }
+})
+
 test('待审批文件不发布、不暴露暂存路径或完整 URL，批准后仅最终路径可见', async () => {
   const f = fixture()
   try {

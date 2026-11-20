@@ -52,7 +52,7 @@ export function automationRecovery(
       retryable: true,
       needs_claim: true,
       next_action: 'ensure_claimed',
-      hint: 'Call ensure_claimed for the same Chrome tab, then inspect its fresh snapshot. Do not repeat prior input.',
+      hint: 'Call ensure_claimed for the same tab, then inspect its fresh snapshot. Do not repeat prior input.',
     }
   }
   if (

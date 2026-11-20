@@ -368,8 +368,8 @@ void app.whenReady().then(async () => {
     const userTab = host.openForUser({ deviceId: 'local', threadId: 'thread-a' }, `${pages.local}/`)
     reply = await run('click', { tabId: userTab.id, x: 1, y: 1 })
     check(
-      '代理不能动用户的标签',
-      !reply.success && textOf(reply).includes('belongs to the user'),
+      '用户标签先认领再操作',
+      !reply.success && textOf(reply).includes('claim it again'),
       textOf(reply),
     )
     check(
@@ -377,7 +377,19 @@ void app.whenReady().then(async () => {
       textOf(await run('tabs', { action: 'list' })).includes('"owner": "user"'),
     )
     reply = await run('tabs', { action: 'list' }, { threadId: 'thread-b' })
-    check('别的会话看不到这个会话的标签', textOf(reply).includes('No tabs'), textOf(reply))
+    check(
+      '别的会话也可发现用户标签',
+      textOf(reply).includes(`"tabId": "${userTab.id}"`),
+      textOf(reply),
+    )
+    const userToken = (
+      JSON.parse(textOf(reply)).tabs as Array<{ tabId: string; claimToken?: string }>
+    ).find((tab) => tab.tabId === userTab.id)?.claimToken
+    check('用户标签有认领口令', typeof userToken === 'string')
+    reply = await run('claim', { claimToken: userToken }, { threadId: 'thread-b' })
+    check('无需标签审批即可认领', reply.success, textOf(reply))
+    reply = await run('release', { tabId: userTab.id }, { threadId: 'thread-b' })
+    check('交还后用户标签仍在', reply.success && host.page(userTab.id) !== undefined, textOf(reply))
 
     // ---------- 按来源审批 ----------
     asked.length = 0

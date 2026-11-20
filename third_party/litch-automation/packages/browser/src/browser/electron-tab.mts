@@ -44,6 +44,8 @@ export interface HostTab extends BrowserPage {
   notice(text: string): void
   /** 交给人登录开始、结束（passwords/handover.mts）：样子跟着变（后退、前进不可用） */
   handoverChanged(): void
+  /** 宿主地址栏和原生输入都先交还控制，再执行用户操作。 */
+  userInput(): void
 }
 
 /** 子框架不许去的协议：本机文件、界面自己的、浏览器内部页 */
@@ -88,6 +90,12 @@ export function createTab(
   let dialog: DialogInfo | null = null
   let dialogWaiters: Array<(info: DialogInfo) => void> = []
   let agentActive = false
+  let controller: TabOwner | undefined
+  let downloadOwner: TabOwner | undefined
+  let inputRevision = 0
+  // Electron 同样报告 CDP 派发的 before-mouse/input。只消费当前命令对应的事件，
+  // 其他真实输入立即交还；不能笼统忽略整个异步命令期间的用户活动。
+  let expectedInput: { method: string; params: Record<string, unknown> } | undefined
   let highlightTimer: ReturnType<typeof setTimeout> | null = null
   let attaching: Promise<void> | null = null
   /** 网页自己的跳转被拦下来改写过几次，和最近的那一次（done：改写后的地址加载完；error：改写失败的原因） */
@@ -153,9 +161,12 @@ export function createTab(
         CDP_TIMEOUT_MS,
       )
     })
+    const expected = method.startsWith('Input.') ? { method, params: params ?? {} } : undefined
     try {
+      if (expected) expectedInput = expected
       return (await Promise.race([cdp.sendCommand(method, params), late])) as T
     } finally {
+      if (expectedInput === expected) expectedInput = undefined
       clearTimeout(timer)
     }
   }
@@ -277,6 +288,37 @@ export function createTab(
   contents.on('did-start-navigation', () => {
     gesture = null
   })
+  // 真实用户优先，后续代理步骤必须重新认领和观察。
+  contents.on('before-input-event', (_event, input) => {
+    const expected = expectedInput
+    if (
+      expected?.method === 'Input.dispatchKeyEvent' &&
+      String(expected.params.key ?? '').toLowerCase() === input.key.toLowerCase()
+    ) {
+      expectedInput = undefined
+      return
+    }
+    tab.userInput()
+  })
+  contents.on('before-mouse-event', (_event, mouse) => {
+    const expected = expectedInput
+    const type =
+      expected?.params.type === 'mousePressed'
+        ? 'mouseDown'
+        : expected?.params.type === 'mouseReleased'
+          ? 'mouseUp'
+          : expected?.params.type
+    if (
+      expected?.method === 'Input.dispatchMouseEvent' &&
+      type === mouse.type &&
+      Math.abs(Number(expected.params.x) - mouse.x) < 1 &&
+      Math.abs(Number(expected.params.y) - mouse.y) < 1
+    ) {
+      expectedInput = undefined
+      return
+    }
+    if (mouse.type === 'mouseDown' || mouse.type === 'mouseWheel') tab.userInput()
+  })
   contents.setWindowOpenHandler(({ url, disposition }) => {
     // 预加载报告的输入任务结束就撤销；时间上限防止框架销毁等情况漏掉结束消息。
     const foreground =
@@ -360,6 +402,8 @@ export function createTab(
         canGoBack: !isHandedOver(contents.id) && history.canGoBack(),
         canGoForward: !isHandedOver(contents.id) && history.canGoForward(),
         agentActive,
+        ...(controller ? { controller: { ...controller } } : {}),
+        ...(downloadOwner ? { downloadOwner: { ...downloadOwner } } : {}),
         keep: tab.keep,
       }
     },
@@ -406,7 +450,15 @@ export function createTab(
     handoverChanged() {
       hooks.changed()
     },
-    setAgentActive(active) {
+    inputRevision: () => inputRevision,
+    userInput() {
+      inputRevision++
+      downloadOwner = undefined
+      if (agentActive && !isHandedOver(contents.id)) tab.release()
+    },
+    setAgentActive(active, owner) {
+      controller = active ? owner : undefined
+      if (active) downloadOwner = owner ?? tab.owner
       if (agentActive === active) return
       agentActive = active
       // 代理在用时不节流：面板关着的时候页面也照常跑定时器和动画（实测过，见 probe-browser-v0.mts）

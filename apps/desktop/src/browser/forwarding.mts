@@ -54,10 +54,8 @@ export function createBrowserForwarding(options: {
   }
   const forwarder = createForwarder({
     targetOf,
-    inUse: (deviceId, localPort) =>
-      options
-        .tabs()
-        .some((tab) => tab.owner.deviceId === deviceId && portOf(tab.url) === localPort),
+    // 控制端端口在转发表里唯一。借用标签交还后仍可能显示转发地址，不能因 controller 已撤销就拆掉隧道。
+    inUse: (_deviceId, localPort) => options.tabs().some((tab) => portOf(tab.url) === localPort),
     ...(options.portsFile ? { portsFile: options.portsFile } : {}),
     ...(options.ssh ? { ssh: options.ssh } : {}),
     ...(options.idleMs ? { idleMs: options.idleMs } : {}),
@@ -85,7 +83,8 @@ export function createBrowserForwarding(options: {
       return resolver.describe(url, device.id)
     },
     rewrite(page, url) {
-      const deviceId = page.info().owner.deviceId
+      const info = page.info()
+      const deviceId = (info.controller ?? info.owner).deviceId
       return resolver.needs(url, deviceId) ? resolver.resolve(url, deviceId) : null
     },
     needs: (deviceId, url) => resolver.needs(url, deviceId),

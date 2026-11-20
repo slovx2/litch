@@ -24,6 +24,8 @@ export interface BrowserTabInfo {
   canGoForward: boolean
   /** 代理这个回合正在用它 */
   agentActive: boolean
+  /** 用户标签被其他会话临时认领时，原归属保持不变。 */
+  controller?: BrowserOwner
   /** 代理标了留给用户 */
   keep: boolean
 }
