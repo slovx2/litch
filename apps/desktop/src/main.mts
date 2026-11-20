@@ -38,6 +38,7 @@ import { createComputerUse, locateHelper } from './computer-use/index.mjs'
 import { createComputerUseSettings, fakePermissions } from './computer-use/settings.mjs'
 import { createConfigMain } from './config-main.mjs'
 import { draftImageFile } from './draft-images.mjs'
+import { createExternalAccount } from './external-account.mjs'
 import { installFileReveal } from './file-reveal-main.mjs'
 import { installFileSave } from './file-save-main.mjs'
 import {
@@ -765,7 +766,11 @@ ipcMain.handle(COMPUTER_SELF_REVOKE, (event) => {
 })
 
 /** litch config 里只有主进程做得了的几项：内置浏览器的网站和数据、Computer Use（config-main.mts） */
+let externalLoginEnv: ReturnType<typeof loginEnvironment> | undefined
 const configMain = createConfigMain({
+  externalAccount: createExternalAccount(app.getPath('userData'), {
+    env: async () => ({ ...process.env, ...(await (externalLoginEnv ??= loginEnvironment())) }),
+  }),
   browser: () => browser,
   computer: computerUseSettings,
   chrome: () => chromeTargets,

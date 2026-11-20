@@ -5,11 +5,25 @@ import type { ManagerIssueId } from './manager-issues.mjs'
 
 export const EXTERNAL_SOURCES_EXTENSION = 'litchExternalSources'
 export const EXTERNAL_METHOD = {
+  accessGet: 'litch/external/access/get',
   ownerGet: 'litch/external/owner/get',
   ownerSet: 'litch/external/owner/set',
   credentialConfigure: 'litch/external/credential/configure',
   credentialRotate: 'litch/external/credential/rotate',
   credentialRevoke: 'litch/external/credential/revoke',
+  identityList: 'litch/external/identities/list',
+  identityAdd: 'litch/external/identities/add',
+  identityImport: 'litch/external/identities/import',
+  identityPaste: 'litch/external/identities/paste',
+  identityLoginGet: 'litch/external/identities/login/get',
+  identityLoginCancel: 'litch/external/identities/login/cancel',
+  identityLoginConfirm: 'litch/external/identities/login/confirm',
+  identityRotate: 'litch/external/identities/rotate',
+  identityRevoke: 'litch/external/identities/revoke',
+  identityRepositories: 'litch/external/identities/repositories',
+  configurationGet: 'litch/external/configuration/get',
+  managerAssignmentGet: 'litch/external/manager/assignment/get',
+  managerAssignmentSet: 'litch/external/manager/assignment/set',
   sourceList: 'litch/external/source/list',
   sourceGet: 'litch/external/source/get',
   sourceUpsert: 'litch/external/source/upsert',
@@ -26,6 +40,10 @@ export const EXTERNAL_METHOD = {
   outboxCancel: 'litch/external/outbox/cancel',
 } as const
 export const EXTERNAL_NOTIFICATION = {
+  accessChanged: 'litch/external/accessChanged',
+  identityLoginChanged: 'litch/external/identities/login/changed',
+  configurationChanged: 'litch/external/configurationChanged',
+  ownerChanged: 'litch/external/ownerChanged',
   sourcesChanged: 'litch/external/sourcesChanged',
   inboxChanged: 'litch/external/inboxChanged',
   outboxChanged: 'litch/external/outboxChanged',
@@ -109,7 +127,10 @@ export interface ExternalCredential {
   credentialRef: string
   provider: ExternalProvider
   botUserId: ExternalId
+  /** OAuth 的资源所有者 ID 是账本键，不表示访问范围。 */
   resourceOwnerId: ExternalId
+  credentialKind?: 'oauth' | 'fine_grained'
+  scopes?: string[]
   createdAt: number
   expiresAt?: number
   lastVerifiedAt: number
@@ -124,6 +145,20 @@ export interface ExternalRepo {
   localRoot: string
   allowedBase: string[]
   headNamespace: string
+  /** null 或省略时，设备从有读取权限的身份中选择。 */
+  pollIdentity?: string | null
+  labelRoutes?: ExternalLabelRoute[]
+  /** 缺省开启；文案语言缺省跟随 Litch。 */
+  immediateFeedback?: boolean
+  immediateFeedbackLanguage?: 'follow-ui' | 'zh-CN' | 'en'
+}
+export interface ExternalResolvedRepo {
+  repoId: ExternalId
+  owner: string
+  name: string
+  url: string
+  defaultBranch: string
+  defaultLabelId?: ExternalId
 }
 export interface ExternalRoute {
   routeId: string
@@ -152,6 +187,8 @@ export interface ExternalSourceDraft {
   interval: number
   repos: ExternalRepo[]
   routes: ExternalRoute[]
+  /** 自动提醒默认关。经理的凭据注入由经理分配决定。 */
+  unattended?: { autoNotify: boolean }
 }
 export interface ExternalSource extends ExternalSourceDraft {
   revision: number
@@ -169,6 +206,16 @@ export interface ExternalCoverage {
 export interface ExternalSourceStatus {
   source: ExternalSource
   coverage: ExternalCoverage[]
+  runtime?: {
+    state: 'collecting' | 'paused' | 'backoff' | 'blocked'
+    lastAttemptAt?: number
+    lastSuccessAt?: number
+    nextAttemptAt?: number
+    credentialState?: ExternalCredential['state']
+    backlog: { pending: number; limited: number; oldestAt?: number; nextWakeAt?: number }
+  }
+  readiness?: ExternalReadiness
+  agentGhIdentity?: ExternalAgentGhIdentity
 }
 export interface ExternalDiagnostic {
   check: string
@@ -176,6 +223,96 @@ export interface ExternalDiagnostic {
   code: string
   checkedAt?: number
 }
+export interface ExternalIdentityHead {
+  identityId: string
+  botUserId: ExternalId
+  login: string
+}
+export interface ExternalIdentity extends ExternalIdentityHead {
+  revision: number
+  /** 同一个机器人账号可以持有多个资源所有者的凭据。 */
+  credentials: ExternalCredential[]
+}
+// 当前随附的官方 GitHub CLI 登录自动申请这三项；客户端必须事先告知。
+export const EXTERNAL_IDENTITY_REQUIRED_SCOPES = ['repo', 'read:org', 'gist'] as const
+export const EXTERNAL_IDENTITY_OPTIONAL_SCOPES = [
+  'workflow',
+  'read:packages',
+  'write:packages',
+] as const
+export type ExternalIdentityScope =
+  | (typeof EXTERNAL_IDENTITY_REQUIRED_SCOPES)[number]
+  | (typeof EXTERNAL_IDENTITY_OPTIONAL_SCOPES)[number]
+export const EXTERNAL_IDENTITY_VERIFICATION_URL = 'https://github.com/login/device'
+export interface ExternalIdentityAuthorization {
+  account: { login: string; userId: ExternalId; name?: string; avatarUrl?: string }
+  scopes: string[]
+  repositories: ExternalResolvedRepo[]
+  repositoriesTruncated?: boolean
+  isOwner: boolean
+  /** owner 显式确认前不持久化及返回身份。 */
+  identity?: ExternalIdentity
+}
+export type ExternalIdentityLogin = {
+  loginId: string
+  revision: number
+  expiresAt: number
+} & (
+  | {
+      state: 'waiting'
+      userCode: string
+      verificationUrl: typeof EXTERNAL_IDENTITY_VERIFICATION_URL
+    }
+  | { state: 'succeeded'; needsConfirmation: boolean; result: ExternalIdentityAuthorization }
+  | { state: 'canceled' | 'timed_out' | 'expired' }
+  | { state: 'error'; code: string }
+)
+export interface ExternalIdentityRepository extends ExternalResolvedRepo {
+  grants: {
+    identityId: string
+    botUserId: ExternalId
+    credentialRef: string
+    read: boolean
+    write: 'verified' | 'missing' | 'unverified'
+  }[]
+}
+export interface ExternalLabelRoute {
+  labelId: ExternalId
+  managerId: string
+}
+export interface ExternalManagerAssignment {
+  managerId: string
+  identityId: string | null
+  repoIds: ExternalId[]
+  /** 默认 true；停用注入不改变寻址。 */
+  injectCredentials?: boolean
+  revision: number
+}
+export interface ExternalConfiguration {
+  /** 每次身份可用集合、仓库或经理分配变化后递增；整份同版本读取。 */
+  revision: number
+  identities: ExternalIdentityHead[]
+  repositories: {
+    repoId: ExternalId
+    pollIdentity: string | null
+    labelRoutes: ExternalLabelRoute[]
+    immediateFeedback?: boolean
+    immediateFeedbackLanguage?: ExternalRepo['immediateFeedbackLanguage']
+  }[]
+  assignments: ExternalManagerAssignment[]
+}
+export interface ExternalAgentGhIdentity {
+  userId: ExternalId
+  login: string
+  /** 由设备和当前配置的 owner 数字 ID 比较。 */
+  isOwner: boolean
+  checkedAt: number
+}
+export type ExternalReadinessArea = 'collect' | 'notify' | 'dispatch' | 'write'
+export type ExternalReadiness = Record<
+  ExternalReadinessArea,
+  { state: ExternalDiagnostic['state']; diagnostics: ExternalDiagnostic[] }
+>
 
 export type ExternalInboxStatus =
   | 'received'
@@ -183,6 +320,18 @@ export type ExternalInboxStatus =
   | 'pending_triage'
   | 'processed'
   | 'notified'
+/** 只对当前连接生效。缺省或 false 都不授权，写请求仍由设备复核。 */
+export interface ExternalAccess {
+  pauseSource?: boolean
+  resumeSource?: boolean
+  triageInbox?: boolean
+  reassignInbox?: boolean
+}
+/** 投递进经理回合才算 confirmed；不改变候选的分拣状态。 */
+export interface ExternalInboxDelivery {
+  state: 'queued' | 'sending' | 'confirmed' | 'unknown' | 'blocked'
+  reason?: string
+}
 export interface ExternalInboxEvent {
   seq: number
   eventKey: string
@@ -203,6 +352,7 @@ export interface ExternalInboxEvent {
   intakeId?: string
   reason?: string
   status: ExternalInboxStatus
+  delivery?: ExternalInboxDelivery
   eventUrl: string
   contentVersion: string | null
   revision: number
@@ -227,11 +377,14 @@ export interface ExternalRef extends ExternalSubject {
   origin: 'intake' | 'write_receipt' | 'manual'
   createdAt: number
 }
-export type ExternalWriteAction = 'comment' | 'draft_pr' | 'status' | 'managed_push'
+export type ExternalManagerWriteAction = 'comment' | 'draft_pr' | 'status' | 'managed_push'
+/** 三种即时反馈动作只允许设备内部入队，不开放给经理的 external_write。 */
+export type ExternalFeedbackAction = 'ack_comment_create' | 'ack_comment_update' | 'reaction_add'
+export type ExternalWriteAction = ExternalManagerWriteAction | ExternalFeedbackAction
 export interface ExternalAuthorizedScope {
   repoId: ExternalId
   subjectKey: string
-  actions: ExternalWriteAction[]
+  actions: ExternalManagerWriteAction[]
 }
 export interface ExternalMandate {
   mandateId: string
@@ -304,8 +457,11 @@ export interface ExternalInboxQuery extends ExternalPageQuery {
   repoId?: ExternalId
   reason?: string
   status?: ExternalInboxStatus
+  /** 与 status 互斥；服务端统一排序和分页。 */
+  statuses?: ExternalInboxStatus[]
 }
 export interface ExternalOutboxQuery extends ExternalPageQuery {
+  issueId?: ExternalIssueId
   sourceId?: string
   managerId?: string
   repoId?: ExternalId
@@ -362,6 +518,7 @@ interface ExternalCredentialMutationParams {
 type Empty = Record<string, never>
 type Request<P, R> = { params: P; result: R }
 export interface ExternalRequests {
+  [EXTERNAL_METHOD.accessGet]: Request<Empty, ExternalAccess>
   [EXTERNAL_METHOD.ownerGet]: Request<Empty, { owner: ExternalOwner | null }>
   [EXTERNAL_METHOD.ownerSet]: Request<
     RevisionParams & { owner: ExternalOwnerIdentity },
@@ -379,6 +536,43 @@ export interface ExternalRequests {
     ExternalCredentialMutationParams,
     { credential: ExternalCredential }
   >
+  [EXTERNAL_METHOD.identityList]: Request<Empty, { identities: ExternalIdentity[] }>
+  [EXTERNAL_METHOD.identityAdd]: Request<
+    { operationId: string; scopes: ExternalIdentityScope[] },
+    ExternalIdentityLogin
+  >
+  [EXTERNAL_METHOD.identityImport]: Request<{ operationId: string }, ExternalIdentityLogin>
+  [EXTERNAL_METHOD.identityPaste]: Request<
+    { operationId: string; token: string },
+    ExternalIdentityLogin
+  >
+  [EXTERNAL_METHOD.identityLoginGet]: Request<{ loginId: string }, ExternalIdentityLogin>
+  [EXTERNAL_METHOD.identityLoginCancel]: Request<
+    { loginId: string; operationId: string },
+    ExternalIdentityLogin
+  >
+  [EXTERNAL_METHOD.identityLoginConfirm]: Request<
+    RevisionParams & { loginId: string },
+    ExternalIdentityLogin
+  >
+  [EXTERNAL_METHOD.identityRotate]: Request<
+    ExternalCredentialMutationParams & { identityId: string; token: string },
+    { identity: ExternalIdentity }
+  >
+  [EXTERNAL_METHOD.identityRevoke]: Request<
+    ExternalCredentialMutationParams & { identityId: string },
+    { identity: ExternalIdentity }
+  >
+  [EXTERNAL_METHOD.identityRepositories]: Request<
+    { identityId?: string; repoId?: ExternalId; cursor?: string; limit?: number },
+    { repositories: ExternalIdentityRepository[]; nextCursor: string | null }
+  >
+  [EXTERNAL_METHOD.configurationGet]: Request<Empty, ExternalConfiguration>
+  [EXTERNAL_METHOD.managerAssignmentGet]: Request<{ managerId: string }, ExternalManagerAssignment>
+  [EXTERNAL_METHOD.managerAssignmentSet]: Request<
+    RevisionParams & Omit<ExternalManagerAssignment, 'revision'>,
+    ExternalManagerAssignment
+  >
   [EXTERNAL_METHOD.sourceList]: Request<Empty, { sources: ExternalSourceStatus[] }>
   [EXTERNAL_METHOD.sourceGet]: Request<{ sourceId: string }, ExternalSourceStatus>
   [EXTERNAL_METHOD.sourceUpsert]: Request<
@@ -387,13 +581,20 @@ export interface ExternalRequests {
   >
   [EXTERNAL_METHOD.sourcePreview]: Request<
     { source: ExternalSourceDraft },
-    { matches: Omit<ExternalInboxEvent, 'seq' | 'revision'>[]; diagnostics: ExternalDiagnostic[] }
+    {
+      matches: Omit<ExternalInboxEvent, 'seq' | 'revision' | 'delivery'>[]
+      diagnostics: ExternalDiagnostic[]
+    }
   >
   [EXTERNAL_METHOD.sourcePause]: Request<ExternalSourceMutationParams, ExternalSourceStatus>
   [EXTERNAL_METHOD.sourceResume]: Request<ExternalSourceMutationParams, ExternalSourceStatus>
   [EXTERNAL_METHOD.sourceCheck]: Request<
     { sourceId: string },
-    { diagnostics: ExternalDiagnostic[] }
+    {
+      diagnostics: ExternalDiagnostic[]
+      readiness?: ExternalReadiness
+      agentGhIdentity?: ExternalAgentGhIdentity
+    }
   >
   [EXTERNAL_METHOD.inboxList]: Request<ExternalInboxQuery, ExternalPage<ExternalInboxEvent>>
   [EXTERNAL_METHOD.inboxGet]: Request<
@@ -413,6 +614,10 @@ export interface ExternalRequests {
   >
 }
 export interface ExternalNotifications {
+  [EXTERNAL_NOTIFICATION.accessChanged]: Empty
+  [EXTERNAL_NOTIFICATION.identityLoginChanged]: { loginId: string; revision: number }
+  [EXTERNAL_NOTIFICATION.configurationChanged]: { revision: number }
+  [EXTERNAL_NOTIFICATION.ownerChanged]: { revision: number }
   [EXTERNAL_NOTIFICATION.sourcesChanged]: { sourceId: string; revision: number }
   [EXTERNAL_NOTIFICATION.inboxChanged]: {
     sourceId: string

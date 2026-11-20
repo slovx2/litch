@@ -86,6 +86,211 @@
     },
     {
       "kind": "Method",
+      "name": "litch/external/identities/list",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["identities"],
+        "properties": {
+          "identities": { "type": "array", "items": { "$ref": "#/definitions/Identity" } }
+        }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/identities/add",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId", "scopes"],
+        "properties": {
+          "operationId": { "$ref": "#/definitions/OperationId" },
+          "scopes": {
+            "type": "array",
+            "uniqueItems": true,
+            "minItems": 3,
+            "maxItems": 6,
+            "items": {
+              "enum": ["repo", "read:org", "gist", "workflow", "read:packages", "write:packages"]
+            },
+            "allOf": [
+              { "contains": { "const": "repo" } },
+              { "contains": { "const": "read:org" } },
+              { "contains": { "const": "gist" } }
+            ]
+          }
+        }
+      },
+      "result": { "$ref": "#/definitions/IdentityLogin" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/identities/import",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId"],
+        "properties": { "operationId": { "$ref": "#/definitions/OperationId" } }
+      },
+      "result": { "$ref": "#/definitions/IdentityLogin" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/identities/paste",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId", "token"],
+        "properties": {
+          "operationId": { "$ref": "#/definitions/OperationId" },
+          "token": { "type": "string", "minLength": 1, "maxLength": 4096 }
+        }
+      },
+      "result": { "$ref": "#/definitions/IdentityLogin" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/identities/login/get",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["loginId"],
+        "properties": { "loginId": { "$ref": "#/definitions/LogicalId" } }
+      },
+      "result": { "$ref": "#/definitions/IdentityLogin" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/identities/login/cancel",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId", "loginId"],
+        "properties": {
+          "operationId": { "$ref": "#/definitions/OperationId" },
+          "loginId": { "$ref": "#/definitions/LogicalId" }
+        }
+      },
+      "result": { "$ref": "#/definitions/IdentityLogin" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/identities/login/confirm",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId", "loginId", "expectedRevision"],
+        "properties": {
+          "operationId": { "$ref": "#/definitions/OperationId" },
+          "loginId": { "$ref": "#/definitions/LogicalId" },
+          "expectedRevision": { "$ref": "#/definitions/ConfigurationRevision" }
+        }
+      },
+      "result": { "$ref": "#/definitions/IdentityLogin" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/identities/rotate",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId", "identityId", "credentialRef", "expectedGeneration", "token"],
+        "properties": {
+          "operationId": { "$ref": "#/definitions/OperationId" },
+          "identityId": { "$ref": "#/definitions/LogicalId" },
+          "credentialRef": { "$ref": "#/definitions/LogicalId" },
+          "expectedGeneration": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+          "token": { "type": "string", "minLength": 1, "maxLength": 4096 }
+        }
+      },
+      "result": { "$ref": "#/definitions/IdentityResult" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/identities/revoke",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId", "identityId", "credentialRef", "expectedGeneration"],
+        "properties": {
+          "operationId": { "$ref": "#/definitions/OperationId" },
+          "identityId": { "$ref": "#/definitions/LogicalId" },
+          "credentialRef": { "$ref": "#/definitions/LogicalId" },
+          "expectedGeneration": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+        }
+      },
+      "result": { "$ref": "#/definitions/IdentityResult" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/identities/repositories",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "identityId": { "$ref": "#/definitions/LogicalId" },
+          "repoId": { "$ref": "#/definitions/GitHubId" },
+          "cursor": { "type": "string", "minLength": 1, "maxLength": 2048 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["repositories", "nextCursor"],
+        "properties": {
+          "repositories": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/IdentityRepository" }
+          },
+          "nextCursor": { "type": ["string", "null"] }
+        }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/configuration/get",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": { "$ref": "#/definitions/ExternalConfiguration" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/manager/assignment/get",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["managerId"],
+        "properties": { "managerId": { "$ref": "#/definitions/LogicalId" } }
+      },
+      "result": { "$ref": "#/definitions/ManagerAssignment" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/manager/assignment/set",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId", "expectedRevision", "managerId", "identityId", "repoIds"],
+        "properties": {
+          "operationId": { "$ref": "#/definitions/OperationId" },
+          "expectedRevision": { "$ref": "#/definitions/ConfigurationRevision" },
+          "managerId": { "$ref": "#/definitions/LogicalId" },
+          "identityId": { "oneOf": [{ "$ref": "#/definitions/LogicalId" }, { "type": "null" }] },
+          "repoIds": { "$ref": "#/definitions/RepoIds" },
+          "injectCredentials": { "type": "boolean", "default": true }
+        }
+      },
+      "result": { "$ref": "#/definitions/ManagerAssignment" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/access/get",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": { "$ref": "#/definitions/Access" }
+    },
+    {
+      "kind": "Method",
       "name": "litch/external/source/list",
       "params": { "type": "object", "additionalProperties": false, "properties": {} },
       "result": {
@@ -168,7 +373,9 @@
         "additionalProperties": false,
         "required": ["diagnostics"],
         "properties": {
-          "diagnostics": { "type": "array", "items": { "$ref": "#/definitions/Diagnostic" } }
+          "diagnostics": { "type": "array", "items": { "$ref": "#/definitions/Diagnostic" } },
+          "readiness": { "$ref": "#/definitions/Readiness" },
+          "agentGhIdentity": { "$ref": "#/definitions/AgentGhIdentity" }
         }
       }
     },
@@ -292,6 +499,46 @@
     },
     {
       "kind": "Notification",
+      "name": "litch/external/identities/login/changed",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["loginId", "revision"],
+        "properties": {
+          "loginId": { "$ref": "#/definitions/LogicalId" },
+          "revision": { "$ref": "#/definitions/ConfigurationRevision" }
+        }
+      }
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/external/configurationChanged",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["revision"],
+        "properties": { "revision": { "$ref": "#/definitions/ConfigurationRevision" } }
+      }
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/external/accessChanged",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} }
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/external/ownerChanged",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["revision"],
+        "properties": {
+          "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+        }
+      }
+    },
+    {
+      "kind": "Notification",
       "name": "litch/external/sourcesChanged",
       "params": {
         "type": "object",
@@ -335,6 +582,27 @@
     }
   ],
   "definitions": {
+    "Access": {
+      "description": "Actions allowed on this connection. An absent field or false does not grant access.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pauseSource": { "type": "boolean" },
+        "resumeSource": { "type": "boolean" },
+        "triageInbox": { "type": "boolean" },
+        "reassignInbox": { "type": "boolean" }
+      }
+    },
+    "InboxDelivery": {
+      "description": "Delivery to the manager turn; confirmed delivery does not resolve a pending intake.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state"],
+      "properties": {
+        "state": { "enum": ["queued", "sending", "confirmed", "unknown", "blocked"] },
+        "reason": { "$ref": "#/definitions/LogicalId" }
+      }
+    },
     "Subject": {
       "type": "object",
       "additionalProperties": false,
@@ -494,12 +762,30 @@
         "credentialRef": { "type": "string", "minLength": 1, "maxLength": 256 },
         "provider": { "enum": ["github"] },
         "botUserId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
-        "resourceOwnerId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "resourceOwnerId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$",
+          "description": "OAuth 凭据中仅为账本键，不是 GitHub 资源访问范围。"
+        },
+        "credentialKind": { "enum": ["oauth", "fine_grained"] },
+        "scopes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/LogicalId" }
+        },
         "createdAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
         "lastVerifiedAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
         "state": { "enum": ["active", "invalid", "revoked"] },
         "generation": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
         "expiresAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+      }
+    },
+    "Unattended": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["autoNotify"],
+      "properties": {
+        "autoNotify": { "type": "boolean" }
       }
     },
     "Repo": {
@@ -516,7 +802,14 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1, "maxLength": 256 }
         },
-        "headNamespace": { "type": "string", "minLength": 1, "maxLength": 256 }
+        "headNamespace": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "pollIdentity": { "oneOf": [{ "$ref": "#/definitions/LogicalId" }, { "type": "null" }] },
+        "labelRoutes": { "type": "array", "items": { "$ref": "#/definitions/LabelRoute" } },
+        "immediateFeedback": { "type": "boolean", "default": true },
+        "immediateFeedbackLanguage": {
+          "enum": ["follow-ui", "zh-CN", "en"],
+          "default": "follow-ui"
+        }
       }
     },
     "Route": {
@@ -609,6 +902,7 @@
         },
         "interval": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
         "repos": { "type": "array", "items": { "$ref": "#/definitions/Repo" } },
+        "unattended": { "$ref": "#/definitions/Unattended" },
         "routes": { "type": "array", "items": { "$ref": "#/definitions/Route" } }
       }
     },
@@ -666,6 +960,7 @@
         },
         "interval": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
         "repos": { "type": "array", "items": { "$ref": "#/definitions/Repo" } },
+        "unattended": { "$ref": "#/definitions/Unattended" },
         "routes": { "type": "array", "items": { "$ref": "#/definitions/Route" } },
         "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
         "rulesVersion": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
@@ -705,7 +1000,291 @@
       "required": ["source", "coverage"],
       "properties": {
         "source": { "$ref": "#/definitions/Source" },
-        "coverage": { "type": "array", "items": { "$ref": "#/definitions/Coverage" } }
+        "coverage": { "type": "array", "items": { "$ref": "#/definitions/Coverage" } },
+        "runtime": { "$ref": "#/definitions/SourceRuntime" },
+        "readiness": { "$ref": "#/definitions/Readiness" },
+        "agentGhIdentity": { "$ref": "#/definitions/AgentGhIdentity" }
+      }
+    },
+    "SourceRuntime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "backlog"],
+      "properties": {
+        "state": { "enum": ["collecting", "paused", "backoff", "blocked"] },
+        "lastAttemptAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "lastSuccessAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "nextAttemptAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "credentialState": { "enum": ["active", "invalid", "revoked"] },
+        "backlog": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pending", "limited"],
+          "properties": {
+            "pending": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            "limited": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            "oldestAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            "nextWakeAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+          }
+        }
+      }
+    },
+    "LogicalId": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "OperationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "GitHubId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+    "ConfigurationRevision": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "RepoIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/definitions/GitHubId" }
+    },
+    "LabelRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["labelId", "managerId"],
+      "properties": {
+        "labelId": { "$ref": "#/definitions/GitHubId" },
+        "managerId": { "$ref": "#/definitions/LogicalId" }
+      }
+    },
+    "IdentityLogin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["loginId", "revision", "expiresAt", "state"],
+      "properties": {
+        "loginId": { "$ref": "#/definitions/LogicalId" },
+        "revision": { "$ref": "#/definitions/ConfigurationRevision" },
+        "expiresAt": { "$ref": "#/definitions/ConfigurationRevision" },
+        "state": { "enum": ["waiting", "succeeded", "canceled", "timed_out", "expired", "error"] },
+        "userCode": { "type": "string", "pattern": "^[A-Z0-9]{4}-[A-Z0-9]{4}$" },
+        "verificationUrl": { "const": "https://github.com/login/device" },
+        "result": { "$ref": "#/definitions/IdentityAuthorization" },
+        "needsConfirmation": { "type": "boolean" },
+        "code": { "$ref": "#/definitions/LogicalId" }
+      },
+      "oneOf": [
+        {
+          "properties": { "state": { "const": "waiting" } },
+          "required": ["userCode", "verificationUrl"],
+          "not": {
+            "anyOf": [
+              { "required": ["result"] },
+              { "required": ["needsConfirmation"] },
+              { "required": ["code"] }
+            ]
+          }
+        },
+        {
+          "properties": { "state": { "const": "succeeded" } },
+          "required": ["result", "needsConfirmation"],
+          "not": {
+            "anyOf": [
+              { "required": ["userCode"] },
+              { "required": ["verificationUrl"] },
+              { "required": ["code"] }
+            ]
+          }
+        },
+        {
+          "properties": { "state": { "enum": ["canceled", "timed_out", "expired"] } },
+          "not": {
+            "anyOf": [
+              { "required": ["userCode"] },
+              { "required": ["verificationUrl"] },
+              { "required": ["result"] },
+              { "required": ["needsConfirmation"] },
+              { "required": ["code"] }
+            ]
+          }
+        },
+        {
+          "properties": { "state": { "const": "error" } },
+          "required": ["code"],
+          "not": {
+            "anyOf": [
+              { "required": ["userCode"] },
+              { "required": ["verificationUrl"] },
+              { "required": ["result"] },
+              { "required": ["needsConfirmation"] }
+            ]
+          }
+        }
+      ]
+    },
+    "IdentityAuthorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["account", "scopes", "repositories", "isOwner"],
+      "properties": {
+        "account": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["login", "userId"],
+          "properties": {
+            "login": { "$ref": "#/definitions/LogicalId" },
+            "userId": { "$ref": "#/definitions/GitHubId" },
+            "name": { "$ref": "#/definitions/LogicalId" },
+            "avatarUrl": {
+              "type": "string",
+              "pattern": "^https://avatars\\.githubusercontent\\.com/[^\\s]+$"
+            }
+          }
+        },
+        "scopes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/LogicalId" }
+        },
+        "repositories": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/definitions/ResolvedRepo" }
+        },
+        "repositoriesTruncated": { "type": "boolean" },
+        "isOwner": { "type": "boolean" },
+        "identity": { "$ref": "#/definitions/Identity" }
+      }
+    },
+    "ResolvedRepo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repoId", "owner", "name", "url", "defaultBranch"],
+      "properties": {
+        "repoId": { "$ref": "#/definitions/GitHubId" },
+        "owner": { "$ref": "#/definitions/LogicalId" },
+        "name": { "$ref": "#/definitions/LogicalId" },
+        "url": { "type": "string", "pattern": "^https://github\\.com/[^\\s]+$" },
+        "defaultBranch": { "$ref": "#/definitions/LogicalId" },
+        "defaultLabelId": { "$ref": "#/definitions/GitHubId" }
+      }
+    },
+    "IdentityHead": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identityId", "botUserId", "login"],
+      "properties": {
+        "identityId": { "$ref": "#/definitions/LogicalId" },
+        "botUserId": { "$ref": "#/definitions/GitHubId" },
+        "login": { "$ref": "#/definitions/LogicalId" }
+      }
+    },
+    "Identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identityId", "botUserId", "login", "revision", "credentials"],
+      "properties": {
+        "identityId": { "$ref": "#/definitions/LogicalId" },
+        "botUserId": { "$ref": "#/definitions/GitHubId" },
+        "login": { "$ref": "#/definitions/LogicalId" },
+        "revision": { "$ref": "#/definitions/ConfigurationRevision" },
+        "credentials": { "type": "array", "items": { "$ref": "#/definitions/Credential" } }
+      }
+    },
+    "IdentityResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity"],
+      "properties": { "identity": { "$ref": "#/definitions/Identity" } }
+    },
+    "IdentityRepository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repoId", "owner", "name", "url", "defaultBranch", "grants"],
+      "properties": {
+        "repoId": { "$ref": "#/definitions/GitHubId" },
+        "owner": { "$ref": "#/definitions/LogicalId" },
+        "name": { "$ref": "#/definitions/LogicalId" },
+        "url": { "type": "string", "pattern": "^https://github\\.com/[^\\s]+$" },
+        "defaultBranch": { "$ref": "#/definitions/LogicalId" },
+        "defaultLabelId": { "$ref": "#/definitions/GitHubId" },
+        "grants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["identityId", "botUserId", "credentialRef", "read", "write"],
+            "properties": {
+              "identityId": { "$ref": "#/definitions/LogicalId" },
+              "botUserId": { "$ref": "#/definitions/GitHubId" },
+              "credentialRef": { "$ref": "#/definitions/LogicalId" },
+              "read": { "type": "boolean" },
+              "write": { "enum": ["verified", "missing", "unverified"] }
+            }
+          }
+        }
+      }
+    },
+    "ManagerAssignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["managerId", "identityId", "repoIds", "revision"],
+      "properties": {
+        "managerId": { "$ref": "#/definitions/LogicalId" },
+        "identityId": { "oneOf": [{ "$ref": "#/definitions/LogicalId" }, { "type": "null" }] },
+        "repoIds": { "$ref": "#/definitions/RepoIds" },
+        "injectCredentials": { "type": "boolean", "default": true },
+        "revision": { "$ref": "#/definitions/ConfigurationRevision" }
+      }
+    },
+    "ExternalConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "identities", "repositories", "assignments"],
+      "properties": {
+        "revision": { "$ref": "#/definitions/ConfigurationRevision" },
+        "identities": { "type": "array", "items": { "$ref": "#/definitions/IdentityHead" } },
+        "assignments": { "type": "array", "items": { "$ref": "#/definitions/ManagerAssignment" } },
+        "repositories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["repoId", "pollIdentity", "labelRoutes"],
+            "properties": {
+              "repoId": { "$ref": "#/definitions/GitHubId" },
+              "pollIdentity": {
+                "oneOf": [{ "$ref": "#/definitions/LogicalId" }, { "type": "null" }]
+              },
+              "labelRoutes": { "type": "array", "items": { "$ref": "#/definitions/LabelRoute" } },
+              "immediateFeedback": { "type": "boolean", "default": true },
+              "immediateFeedbackLanguage": {
+                "enum": ["follow-ui", "zh-CN", "en"],
+                "default": "follow-ui"
+              }
+            }
+          }
+        }
+      }
+    },
+    "AgentGhIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["userId", "login", "isOwner", "checkedAt"],
+      "properties": {
+        "userId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "login": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "isOwner": { "type": "boolean" },
+        "checkedAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+      }
+    },
+    "Readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collect", "notify", "dispatch", "write"],
+      "properties": {
+        "collect": { "$ref": "#/definitions/ReadinessCheck" },
+        "notify": { "$ref": "#/definitions/ReadinessCheck" },
+        "dispatch": { "$ref": "#/definitions/ReadinessCheck" },
+        "write": { "$ref": "#/definitions/ReadinessCheck" }
+      }
+    },
+    "ReadinessCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "diagnostics"],
+      "properties": {
+        "state": { "enum": ["ok", "blocked", "unverified"] },
+        "diagnostics": { "type": "array", "items": { "$ref": "#/definitions/Diagnostic" } }
       }
     },
     "Diagnostic": {
@@ -781,6 +1360,7 @@
           "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 256 }, { "type": "null" }]
         },
         "seq": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "delivery": { "$ref": "#/definitions/InboxDelivery" },
         "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
         "ruleId": { "type": "string", "minLength": 1, "maxLength": 256 },
         "rulesVersion": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
@@ -1016,7 +1596,18 @@
         "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 },
         "managerId": { "type": "string", "minLength": 1, "maxLength": 256 },
         "targetRef": { "$ref": "#/definitions/Subject" },
-        "action": { "enum": ["comment", "draft_pr", "status", "managed_push"] },
+        "action": {
+          "description": "ack_comment_create、ack_comment_update、reaction_add 只由设备内部即时反馈入队，不开放给经理工具。",
+          "enum": [
+            "comment",
+            "draft_pr",
+            "status",
+            "managed_push",
+            "ack_comment_create",
+            "ack_comment_update",
+            "reaction_add"
+          ]
+        },
         "state": {
           "enum": ["queued", "sending", "confirmed", "unknown", "failed", "blocked", "canceled"]
         },
@@ -1031,6 +1622,7 @@
     "InboxQuery": {
       "type": "object",
       "additionalProperties": false,
+      "not": { "required": ["status", "statuses"] },
       "properties": {
         "beforeSeq": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
         "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
@@ -1038,6 +1630,13 @@
         "managerId": { "type": "string", "minLength": 1, "maxLength": 256 },
         "repoId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
         "status": { "enum": ["received", "blocked", "pending_triage", "processed", "notified"] },
+        "statuses": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": { "enum": ["received", "blocked", "pending_triage", "processed", "notified"] }
+        },
         "reason": { "type": "string", "minLength": 1, "maxLength": 256 }
       }
     },
@@ -1047,6 +1646,7 @@
       "properties": {
         "beforeSeq": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
         "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "issueId": { "type": "string", "pattern": "^X-[1-9][0-9]*$" },
         "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 },
         "managerId": { "type": "string", "minLength": 1, "maxLength": 256 },
         "repoId": { "type": "string", "pattern": "^[1-9][0-9]*$" },

@@ -80,6 +80,7 @@ import { type DiffMode, runDiffChecks } from './probe-diff-run.mjs'
 import { draftImageReloadProbe } from './probe-draft-images.mjs'
 import { runEnginesChecks } from './probe-engines-run.mjs'
 import { entryProbe, judgeEntry } from './probe-entry.mjs'
+import { runExternalProbe } from './probe-external.mjs'
 import { type FilesMode, runFilesChecks } from './probe-files-run.mjs'
 import { runFirstTurnChecks } from './probe-first-turn.mjs'
 import { foldProbe, judgeFold } from './probe-fold.mjs'
@@ -147,6 +148,7 @@ type ProbeMode =
   | 'sidebar'
   | 'manager'
   | 'manager-issues'
+  | 'external'
   | 'navigation'
   | 'tasks'
   | 'tree'
@@ -205,6 +207,7 @@ const PROBE_MODES: readonly string[] = [
   'sidebar',
   'manager',
   'manager-issues',
+  'external',
   'navigation',
   'tasks',
   'tree',
@@ -232,6 +235,7 @@ export const MOCK_MODES: readonly string[] = [
   'sidebar',
   'manager',
   'manager-issues',
+  'external',
   'navigation',
   'tasks',
   'tree',
@@ -337,6 +341,7 @@ async function measure(
   if (mode === 'manager') {
     return runManagerChecks(window)
   }
+  if (mode === 'external') return runExternalProbe(window)
   if (mode === 'manager-issues') return [await runInPage(window, managerIssuesProbe), []]
   if (mode === 'navigation') return runNavigationChecks(window)
   if (mode === 'tasks') {

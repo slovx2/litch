@@ -44,6 +44,8 @@ export class RpcAbortError extends Error {
 export const NO_REPLY: unique symbol = Symbol('no-reply')
 
 export interface RpcRequestOptions {
+  /** 凭据请求只记方法与结果类别；对端错误可能意外包含请求内容。 */
+  sensitive?: boolean
   signal?: AbortSignalLike
   /** 不给就用连接的默认值；给 0 表示不设超时 */
   timeoutMs?: number
@@ -233,10 +235,10 @@ export function createRpc(transport: Transport, options: RpcOptions): Rpc {
             {
               method,
               id,
-              ...traceParams(params),
+              ...(requestOptions?.sensitive ? {} : traceParams(params)),
               ok: error === null,
               ms: options.clock.now() - at,
-              ...(error === null ? {} : { error: traceError(error) }),
+              ...(error === null || requestOptions?.sensitive ? {} : { error: traceError(error) }),
               ...(error instanceof RpcAbortError ? { aborted: error.reason } : {}),
             },
             error === null ? 'info' : 'warn',

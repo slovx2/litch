@@ -40,6 +40,7 @@ import {
 } from '../app/appearance.ts'
 import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { sendMode, setSendMode } from '../composer/send-mode.ts'
+import { ExternalTokenPrompt } from '../devices/ExternalControls.tsx'
 import { PairDialog } from '../devices/PairDialog.tsx'
 import type { Translator } from '../i18n/index.ts'
 import {
@@ -88,6 +89,8 @@ function applyPrefs(patch: Partial<ConfigPrefs>): void {
 /** 确认卡上一项的话 */
 export function itemText(item: ConfigConfirmItem, t: Translator): string {
   switch (item.kind) {
+    case 'external':
+      return t('external.confirmCli', { device: item.device, detail: item.detail })
     case 'manager':
       return t('assist.confirm.manager', {
         action: t(
@@ -215,6 +218,7 @@ function ConfirmCard({
 
 /** 盖在应用上的那一个：做执行器要界面做的事、出确认卡、开出码对话框 */
 export function ConfigAgent() {
+  const t = useT()
   const { channel } = useServices()
   const look = useAppearance()
   const lookRef = useRef(look)
@@ -265,6 +269,8 @@ export function ConfigAgent() {
       handled.current.add(ask.id)
       const { request } = ask
       switch (request.kind) {
+        case 'external.token':
+          break
         case 'manual.get':
         case 'manual.set': {
           const bridge = manualBridge()
@@ -317,10 +323,33 @@ export function ConfigAgent() {
 
   // 同时只出一张卡：先来的先问
   const card = view.confirms[0]
+  const tokenAsk = view.asks.find((ask) => ask.request.kind === 'external.token')
+  const tokenRequest = tokenAsk?.request
+  const tokenReply = (value?: string) => {
+    if (!tokenAsk) return
+    void channel
+      .command('config.reply', {
+        id: tokenAsk.id,
+        ok: !!value,
+        ...(value ? { data: value } : { reason: 'No token was submitted.' }),
+      })
+      .catch(() => {})
+  }
   return (
     <>
       {card ? (
         <ConfirmCard key={card.id} card={card} onAnswer={(allow) => answer(card.id, allow)} />
+      ) : null}
+      {!card && tokenRequest?.kind === 'external.token' ? (
+        <ExternalTokenPrompt
+          key={tokenAsk?.id}
+          target={t('external.tokenPrompt', {
+            device: tokenRequest.device,
+            target: tokenRequest.target,
+          })}
+          onSend={tokenReply}
+          onClose={() => tokenReply()}
+        />
       ) : null}
       {pair && pairDevice ? (
         <PairDialog

@@ -19,6 +19,7 @@ import { useServices } from '../../app/services.tsx'
 import { BoardMarkdown } from '../BoardMarkdown.tsx'
 import { CardActionScope } from '../CardActions.tsx'
 import { useDiscussionPane } from '../discussion-pane.ts'
+import { ExternalIssueEvidence } from '../ExternalIssueEvidence.tsx'
 import { RelationLink } from '../RelationLink.tsx'
 import type { IssueCommands } from './data.ts'
 import { IssueDiscussion } from './IssueDiscussion.tsx'
@@ -259,6 +260,14 @@ export function IssueThread({
         ) : (
           <p className="dim">{t('issue.noBody')}</p>
         )}
+        {issue.id.startsWith('X-') ? (
+          <ExternalIssueEvidence
+            issue={issue}
+            issueId={issue.id as `X-${number}`}
+            deviceId={manager.deviceId}
+            managerId={manager.id}
+          />
+        ) : null}
       </div>
     )
   // 抽屉直接问经理；卡片内的决策追问仍由决策卡随答复提交。

@@ -669,3 +669,79 @@ test('接线：只有本机的连接声明 litch_config；命令行调用交给�
   })
   assert.match(textOf(other), /^\[litch:/)
 })
+
+test('CLI 和设备详情操作同一仓库采集策略，经理分配按设备版本校验', async () => {
+  const core = createMockCore({ clock: fakeClock().clock, lang: 'zh-CN' })
+  const get = () =>
+    core.command('external.source.get', { deviceId: 'local', sourceId: 'github-demo' }, never)
+  const run = (argv: string[]) =>
+    core.command('config.run', { argv, json: true }, never) as Promise<{
+      ok: boolean
+      text: string
+    }>
+  const confirmed: ConfigTopicView['confirms'] = []
+  const observe = (view: ConfigTopicView) => {
+    for (const card of view.confirms) {
+      if (confirmed.some((one) => one.id === card.id)) continue
+      confirmed.push(card)
+      void core.command('config.confirm', { id: card.id, allow: true }, never)
+    }
+  }
+  const stop = core.subscribe(
+    { kind: 'config' },
+    {
+      snapshot: (data) => observe(data as ConfigTopicView),
+      delta: (ops) => {
+        for (const op of ops as ConfigTopicOp[]) observe(op.view)
+      },
+      error: (error) => assert.fail(error.message),
+    },
+  )
+  try {
+    assert.equal((await run(['device-source', 'pause', 'github-demo'])).ok, true)
+    assert.equal(((await get()) as { source: { enabled: boolean } }).source.enabled, false)
+    assert.equal((await run(['device-source', 'resume', 'github-demo'])).ok, true)
+    assert.equal(((await get()) as { source: { enabled: boolean } }).source.enabled, true)
+    assert.equal(confirmed.length, 1)
+    const rejected = await run([
+      'device-source',
+      'manager',
+      'set',
+      'm3',
+      '--identity',
+      'sample-bot',
+      '--repos',
+      '20394867',
+      '--revision',
+      '0',
+    ])
+    assert.equal(rejected.ok, false)
+    const allowed = await run([
+      'device-source',
+      'manager',
+      'set',
+      'm3',
+      '--identity',
+      'spare-bot',
+      '--repos',
+      '20394867',
+      '--revision',
+      '0',
+    ])
+    assert.equal(allowed.ok, true)
+    const assigned = await core.command(
+      'external.manager.assignment.get',
+      { deviceId: 'local', managerId: 'm3' },
+      never,
+    )
+    assert.deepEqual(assigned, {
+      managerId: 'm3',
+      identityId: 'spare-bot',
+      repoIds: ['20394867'],
+      injectCredentials: true,
+      revision: 1,
+    })
+  } finally {
+    stop()
+  }
+})

@@ -4,6 +4,7 @@ import { useId, useState } from 'react'
 import type { ManagerDecisionView } from '../../../core/src/model-manager.mts'
 import type { ManagerActor, ManagerDecisionOption } from '../../../protocol/src/manager.mjs'
 import { useT } from '../app/appearance.ts'
+import { ExternalLink } from '../devices/ExternalControls.tsx'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 
@@ -47,6 +48,11 @@ export function DecisionAnswer({ decision }: { decision: ManagerDecisionView }) 
           )}
         </b>
         <Stamp className="dim" at={parts.answer.at} />
+        {parts.answer.answerSource?.kind === 'github' ? (
+          <ExternalLink url={parts.answer.answerSource.url}>
+            {t('external.answerSource')}
+          </ExternalLink>
+        ) : null}
       </header>
       {parts.chosen ? (
         <Option option={parts.chosen} recommend={decision.recommend === parts.chosen.id} />

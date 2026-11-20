@@ -17,6 +17,7 @@ import {
   EXTERNAL_SOURCES_EXTENSION,
   type ExternalInboxEvent,
   type ExternalMandate,
+  type ExternalNotifications,
   type ExternalRef,
   type ExternalRequests,
   type ExternalSourceDraft,
@@ -143,6 +144,25 @@ test('所有 RPC 样本都通过定义和入站校验；公开结果不接收凭
     },
     [RPC.credentialRotate]: { ...credential, token: 'fixture-only' },
     [RPC.credentialRevoke]: credential,
+    [RPC.identityList]: {},
+    [RPC.identityAdd]: { operationId: 'op', scopes: ['repo', 'read:org', 'gist', 'workflow'] },
+    [RPC.identityImport]: { operationId: 'op' },
+    [RPC.identityPaste]: { operationId: 'op', token: 'fixture-only' },
+    [RPC.identityLoginGet]: { loginId: 'login' },
+    [RPC.identityLoginCancel]: { operationId: 'op', loginId: 'login' },
+    [RPC.identityLoginConfirm]: { ...revision, loginId: 'login' },
+    [RPC.identityRotate]: { ...credential, identityId: 'bot', token: 'fixture-only' },
+    [RPC.identityRevoke]: { ...credential, identityId: 'bot' },
+    [RPC.identityRepositories]: { identityId: 'bot', repoId: subject.repoId, limit: 50 },
+    [RPC.configurationGet]: {},
+    [RPC.managerAssignmentGet]: { managerId: 'm' },
+    [RPC.managerAssignmentSet]: {
+      ...revision,
+      managerId: 'm',
+      identityId: 'bot',
+      repoIds: [subject.repoId],
+    },
+    [RPC.accessGet]: {},
     [RPC.sourceList]: {},
     [RPC.sourceGet]: { sourceId: 's' },
     [RPC.sourceUpsert]: { ...revision, source },
@@ -165,9 +185,42 @@ test('所有 RPC 样本都通过定义和入站校验；公开结果不接收凭
     [RPC.outboxReconcile]: { operationId: 'op' },
     [RPC.outboxCancel]: { ...revision, targetOperationId: 'target-op' },
   } satisfies { [M in keyof ExternalRequests]: ExternalRequests[M]['params'] }
+  const readiness = {
+    collect: { state: 'ok', diagnostics: [] },
+    notify: { state: 'ok', diagnostics: [] },
+    dispatch: { state: 'unverified', diagnostics: [] },
+    write: {
+      state: 'blocked',
+      diagnostics: [
+        {
+          check: 'immediateFeedbackComments',
+          state: 'blocked',
+          code: 'comment_permission_missing',
+        },
+      ],
+    },
+  } as const
   const sourceStatus = {
-    source: { ...source, revision: 1, rulesVersion: 1, createdAt: 0 },
+    source: {
+      ...source,
+      revision: 1,
+      rulesVersion: 1,
+      createdAt: 0,
+      unattended: { autoNotify: true },
+      repos: source.repos.map((repo) => ({
+        ...repo,
+        pollIdentity: null,
+        labelRoutes: [{ labelId: '33', managerId: 'm' }],
+        immediateFeedback: false,
+        immediateFeedbackLanguage: 'follow-ui' as const,
+      })),
+    },
     coverage: [],
+    runtime: {
+      state: 'collecting' as const,
+      nextAttemptAt: 8,
+      backlog: { pending: 2, limited: 1, oldestAt: 4 },
+    },
   }
   const credentialResult = {
     credential: {
@@ -181,6 +234,44 @@ test('所有 RPC 样本都通过定义和入站校验；公开结果不接收凭
       generation: 1,
     },
   } as const
+  const identityHead = { identityId: 'bot', botUserId: '2', login: 'robot' }
+  const identity = { ...identityHead, revision: 1, credentials: [credentialResult.credential] }
+  const assignment = {
+    managerId: 'm',
+    identityId: 'bot',
+    repoIds: [subject.repoId],
+    injectCredentials: false,
+    revision: 1,
+  }
+  const resolved = {
+    repoId: subject.repoId,
+    owner: 'example',
+    name: 'repo',
+    url: 'https://github.com/example/repo',
+    defaultBranch: 'main',
+  }
+  const login = { loginId: 'login', expiresAt: 400, revision: 2 }
+  const authorization = {
+    account: {
+      login: 'robot',
+      userId: '2',
+      name: 'Sample Bot',
+      avatarUrl: 'https://avatars.githubusercontent.com/u/2',
+    },
+    scopes: ['repo', 'read:org', 'gist'],
+    repositories: [resolved],
+    isOwner: true,
+  }
+  const committed = {
+    ...identity,
+    credentials: [
+      {
+        ...credentialResult.credential,
+        credentialKind: 'oauth' as const,
+        scopes: authorization.scopes,
+      },
+    ],
+  }
   const outbox = {
     seq: 1,
     operationId: 'op',
@@ -199,14 +290,90 @@ test('所有 RPC 样本都通过定义和入站校验；公开结果不接收凭
     [RPC.credentialConfigure]: credentialResult,
     [RPC.credentialRotate]: credentialResult,
     [RPC.credentialRevoke]: { credential: { ...credentialResult.credential, state: 'revoked' } },
+    [RPC.identityList]: { identities: [identity] },
+    [RPC.identityAdd]: {
+      ...login,
+      state: 'waiting',
+      userCode: 'ABCD-1234',
+      verificationUrl: 'https://github.com/login/device',
+    },
+    [RPC.identityImport]: {
+      ...login,
+      state: 'succeeded',
+      needsConfirmation: true,
+      result: authorization,
+    },
+    [RPC.identityPaste]: {
+      ...login,
+      state: 'succeeded',
+      needsConfirmation: false,
+      result: { ...authorization, isOwner: false, scopes: [], identity },
+    },
+    [RPC.identityLoginGet]: { ...login, state: 'timed_out' },
+    [RPC.identityLoginCancel]: { ...login, state: 'canceled' },
+    [RPC.identityLoginConfirm]: {
+      ...login,
+      state: 'succeeded',
+      needsConfirmation: false,
+      result: { ...authorization, identity: committed },
+    },
+    [RPC.identityRotate]: { identity },
+    [RPC.identityRevoke]: { identity },
+    [RPC.identityRepositories]: {
+      nextCursor: null,
+      repositories: [
+        {
+          ...resolved,
+          grants: [
+            {
+              identityId: 'bot',
+              botUserId: '2',
+              credentialRef: 'cred',
+              read: true,
+              write: 'unverified',
+            },
+          ],
+        },
+      ],
+    },
+    [RPC.configurationGet]: {
+      revision: 2,
+      identities: [identityHead],
+      repositories: [
+        {
+          repoId: subject.repoId,
+          labelRoutes: [{ labelId: '33', managerId: 'm' }],
+          pollIdentity: null,
+          immediateFeedback: true,
+          immediateFeedbackLanguage: 'zh-CN',
+        },
+      ],
+      assignments: [assignment],
+    },
+    [RPC.managerAssignmentGet]: assignment,
+    [RPC.managerAssignmentSet]: assignment,
+    [RPC.accessGet]: { pauseSource: true, resumeSource: false, triageInbox: true },
     [RPC.sourceList]: { sources: [sourceStatus] },
     [RPC.sourceGet]: sourceStatus,
     [RPC.sourceUpsert]: sourceStatus,
     [RPC.sourcePreview]: { matches: [preview], diagnostics: [] },
     [RPC.sourcePause]: sourceStatus,
     [RPC.sourceResume]: sourceStatus,
-    [RPC.sourceCheck]: { diagnostics: [] },
-    [RPC.inboxList]: { entries: [inbox], nextBeforeSeq: null },
+    [RPC.sourceCheck]: {
+      diagnostics: [],
+      readiness: {
+        ...readiness,
+        collect: { ...readiness.collect, diagnostics: [] },
+        notify: { ...readiness.notify, diagnostics: [] },
+        dispatch: { ...readiness.dispatch, diagnostics: [] },
+        write: { ...readiness.write, diagnostics: [...readiness.write.diagnostics] },
+      },
+      agentGhIdentity: { userId: '3', login: 'owner', isOwner: true, checkedAt: 3 },
+    },
+    [RPC.inboxList]: {
+      entries: [{ ...inbox, delivery: { state: 'confirmed', reason: 'turn_started' } }],
+      nextBeforeSeq: null,
+    },
     [RPC.inboxGet]: { events: [inbox], intake: null },
     [RPC.inboxTriage]: {
       outcome: 'applied',
@@ -236,16 +403,66 @@ test('所有 RPC 样本都通过定义和入站校验；公开结果不接收凭
     assert.equal(isExternalMethodParams(method, params[method]), true)
     assert.equal(isExternalMethodParams(method, { ...params[method], unexpected: true }), false)
   }
-  for (const method of Object.values(EXTERNAL_NOTIFICATION))
-    assertWire(external, method, 'params', {
+  const notices = {
+    [EXTERNAL_NOTIFICATION.accessChanged]: {},
+    [EXTERNAL_NOTIFICATION.identityLoginChanged]: { loginId: 'login', revision: 1 },
+    [EXTERNAL_NOTIFICATION.ownerChanged]: { revision: 1 },
+    [EXTERNAL_NOTIFICATION.configurationChanged]: { revision: 1 },
+    [EXTERNAL_NOTIFICATION.sourcesChanged]: { sourceId: 's', revision: 1 },
+    [EXTERNAL_NOTIFICATION.inboxChanged]: { sourceId: 's', revision: 1, pending: 1 },
+    [EXTERNAL_NOTIFICATION.outboxChanged]: {
       sourceId: 's',
+      managerId: 'm',
       revision: 1,
-      ...(method === EXTERNAL_NOTIFICATION.sourcesChanged ? {} : { pending: 1, managerId: 'm' }),
-    })
+      pending: 1,
+    },
+  } satisfies ExternalNotifications
+  for (const method of Object.values(EXTERNAL_NOTIFICATION)) {
+    assertWire(external, method, 'params', notices[method])
+  }
+  assert.equal(
+    isExternalMethodParams(RPC.identityAdd, { operationId: 'op', scopes: ['repo', 'read:org'] }),
+    false,
+  )
+  assert.equal(
+    isExternalMethodParams(RPC.identityAdd, {
+      operationId: 'op',
+      scopes: ['repo', 'read:org', 'gist', 'admin:org'],
+    }),
+    false,
+  )
+  assertWire(external, RPC.sourceUpsert, 'params', {
+    ...revision,
+    source: {
+      ...source,
+      unattended: sourceStatus.source.unattended,
+      repos: sourceStatus.source.repos,
+    },
+  })
+  assert.ok(isExternalMethodParams(RPC.inboxList, { statuses: ['processed', 'notified'] }))
+  assert.equal(
+    isExternalMethodParams(RPC.inboxList, { status: 'processed', statuses: ['notified'] }),
+    false,
+  )
+  assert.equal(
+    isExternalMethodParams(RPC.managerAssignmentSet, {
+      ...params[RPC.managerAssignmentSet],
+      repoIds: ['2', '2'],
+    }),
+    false,
+  )
   const credentialSchema = ajv.compile({ $ref: `${external.extension}#/definitions/Credential` })
   assert.equal(credentialSchema({ ...credentialResult.credential, token: 'forbidden' }), false)
   const outboxSchema = ajv.compile({ $ref: `${external.extension}#/definitions/OutboxSummary` })
   assert.equal(outboxSchema({ ...outbox, payloadRef: 'private' }), false)
+  const mandateSchema = ajv.compile({ $ref: `${external.extension}#/definitions/Mandate` })
+  for (const action of ['ack_comment_create', 'ack_comment_update', 'reaction_add']) {
+    assert.ok(outboxSchema({ ...outbox, action }))
+    assert.equal(
+      mandateSchema({ ...mandate, authorizedScope: { ...scope, actions: [action] } }),
+      false,
+    )
+  }
   assert.equal(isExternalMethodParams(RPC.inboxList, { repoId: Number(subject.repoId) }), false)
   assert.equal(
     isExternalMethodParams(RPC.inboxTriage, {

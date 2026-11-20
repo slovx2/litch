@@ -16,6 +16,7 @@ import { Back, Close } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { AddDevice } from './AddDevice.tsx'
 import { DeviceChromeSection } from './DeviceChromeSection.tsx'
+import { ExternalDeviceSections } from './ExternalDeviceSections.tsx'
 import { INSTALL_SERVICE } from './guide.ts'
 import { HarnessList } from './HarnessList.tsx'
 import { HarnessSettingsPage } from './hconfig/HarnessSettingsPage.tsx'
@@ -343,6 +344,7 @@ export function DeviceDetail({ deviceId, section = null, onBack, onClose }: Devi
           {device.remoteChrome ? <DeviceChromeSection status={device.remoteChrome} /> : null}
           <ServiceSection device={device} reveal={section === 'service'} />
           <PhonesSection device={device} />
+          <ExternalDeviceSections key={device.id} device={device} />
           {managed ? (
             <ManagePanel
               device={device}

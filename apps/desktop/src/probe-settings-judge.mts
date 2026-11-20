@@ -77,13 +77,26 @@ const sectionsOn = (platform: string) =>
         'browser',
         'chrome',
         'computer',
+        'external-account',
         'notify',
         'assist',
         'keys',
         'about',
         'switches',
       ]
-    : ['look', 'lang', 'chat', 'browser', 'chrome', 'notify', 'assist', 'keys', 'about', 'switches']
+    : [
+        'look',
+        'lang',
+        'chat',
+        'browser',
+        'chrome',
+        'external-account',
+        'notify',
+        'assist',
+        'keys',
+        'about',
+        'switches',
+      ]
 const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
   const all =
     lang === 'en'
@@ -94,6 +107,7 @@ const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
           'Built-in browser',
           'Chrome',
           'Computer Use',
+          'My external account',
           'Notifications',
           'Config assistant',
           'Shortcuts',
@@ -107,6 +121,7 @@ const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
           '内置浏览器',
           'Chrome',
           'Computer Use',
+          '我的外部账号',
           '通知',
           '配置助手',
           '快捷键',

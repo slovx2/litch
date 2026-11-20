@@ -1,6 +1,8 @@
 // 连接层的中间一层：一台设备的一条连接。
 // 负责开传输、握手、断了之后按退避重连，并把状态变化报出去。连上之后的事（问设备信息、取目录）不归它管。
 
+import { DEVICE_AUTOSTART_EXTENSION } from '../../../protocol/src/device-autostart.mjs'
+import { EXTERNAL_SOURCES_EXTENSION } from '../../../protocol/src/external-sources.mjs'
 import type { ProjectPermissionRequests } from '../../../protocol/src/harness-project-permissions.mjs'
 import {
   CLIENT_TOOLS_CAPABILITY,
@@ -20,6 +22,7 @@ import { type Cancel, createCancel } from '../channel/cancel.mjs'
 import type { Clock } from '../channel/protocol.mjs'
 import type { ConnectGuide, ConnectStage } from '../model.mjs'
 import { phrase, type Text } from '../phrase.mjs'
+import type { ExternalWireRequests } from '../projection/external.mjs'
 import type { CoreTrace } from '../trace.mjs'
 import type { ManagerRequests } from './manager-protocol.mjs'
 import { createRpc, type Rpc, RpcAbortError, RpcError, type RpcRequestOptions } from './rpc.mjs'
@@ -92,16 +95,22 @@ export interface Link {
       | ClientRequestMethod
       | keyof ManagerRequests
       | keyof ProjectPermissionRequests
-      | keyof PathPickerRequests,
+      | keyof PathPickerRequests
+      | keyof ExternalWireRequests,
   >(
     method: M,
     params: (ClientRequests &
       ManagerRequests &
       ProjectPermissionRequests &
-      PathPickerRequests)[M]['params'],
+      PathPickerRequests &
+      ExternalWireRequests)[M]['params'],
     options?: RpcRequestOptions,
   ): Promise<
-    (ClientRequests & ManagerRequests & ProjectPermissionRequests & PathPickerRequests)[M]['result']
+    (ClientRequests &
+      ManagerRequests &
+      ProjectPermissionRequests &
+      PathPickerRequests &
+      ExternalWireRequests)[M]['result']
   >
 }
 
@@ -243,6 +252,8 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.planConfirmation,
                 // deviceTasks：声明了才收得到定时任务和运行的变化通知（litch/task/changed、litch/task/run/changed）
                 EXTENSION.deviceTasks,
+                EXTERNAL_SOURCES_EXTENSION,
+                DEVICE_AUTOSTART_EXTENSION,
                 EXTENSION.manager,
                 EXTENSION.managerResetTarget,
                 EXTENSION.managerPaging,

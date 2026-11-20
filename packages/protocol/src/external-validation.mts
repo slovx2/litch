@@ -1,5 +1,7 @@
 // 设备与核心共用的入站形状校验。GitHub 身份、写入和路由授权仍由设备核验。
 import {
+  EXTERNAL_IDENTITY_OPTIONAL_SCOPES,
+  EXTERNAL_IDENTITY_REQUIRED_SCOPES,
   EXTERNAL_METHOD,
   type ExternalAnswerSource,
   type ExternalEvent,
@@ -83,58 +85,108 @@ const eventKind = exact(
   'reopened',
   'ci',
 )
-const source = obj({
-  sourceId: s,
-  provider: exact('github'),
-  enabled: bool,
-  credentialRef: s,
-  botUserId: id,
-  triggers: obj({
-    mention: bool,
-    assignment: bool,
-    reviewRequest: bool,
-    label: bool,
-    labelIds: array(id),
-  }),
-  minRole: exact('triage', 'write', 'maintain', 'admin'),
-  interval: int(1),
-  writePolicy: obj({ comment: bool, draftPr: bool, status: bool, managedPush: bool }),
-  repos: array(
-    obj({
-      repoId: id,
-      owner: s,
-      name: s,
-      url,
-      localRoot: s,
-      allowedBase: array(s),
-      headNamespace: s,
+const source = obj(
+  {
+    sourceId: s,
+    provider: exact('github'),
+    enabled: bool,
+    credentialRef: s,
+    botUserId: id,
+    triggers: obj({
+      mention: bool,
+      assignment: bool,
+      reviewRequest: bool,
+      label: bool,
+      labelIds: array(id),
     }),
-  ),
-  routes: array(
-    obj(
-      {
-        routeId: s,
-        stableManagerId: s,
-        priority: int(Number.MIN_SAFE_INTEGER),
-        repoIds: array(id),
-        enabled: bool,
-      },
-      {
-        labelIds: array(id),
-        eventKinds: array(eventKind),
-      },
+    minRole: exact('triage', 'write', 'maintain', 'admin'),
+    interval: int(1),
+    writePolicy: obj({ comment: bool, draftPr: bool, status: bool, managedPush: bool }),
+    repos: array(
+      obj(
+        {
+          repoId: id,
+          owner: s,
+          name: s,
+          url,
+          localRoot: s,
+          allowedBase: array(s),
+          headNamespace: s,
+        },
+        {
+          pollIdentity: (value) => value === null || s(value),
+          labelRoutes: array(obj({ labelId: id, managerId: s })),
+          immediateFeedback: bool,
+          immediateFeedbackLanguage: exact('follow-ui', 'zh-CN', 'en'),
+        },
+      ),
     ),
-  ),
-})
+    routes: array(
+      obj(
+        {
+          routeId: s,
+          stableManagerId: s,
+          priority: int(Number.MIN_SAFE_INTEGER),
+          repoIds: array(id),
+          enabled: bool,
+        },
+        {
+          labelIds: array(id),
+          eventKinds: array(eventKind),
+        },
+      ),
+    ),
+  },
+  { unattended: obj({ autoNotify: bool }) },
+)
 const query = { beforeSeq: int(1), limit: int(1, 100), ...sourceId, managerId: s, repoId: id }
+const status = exact('received', 'blocked', 'pending_triage', 'processed', 'notified')
+const statuses: Check = (value) =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.length <= 5 &&
+  new Set(value).size === value.length &&
+  value.every(status)
 const triage = { intakeId: s, expectedRevision: revision, idempotencyKey: operationId }
 const reply = str(65536)
+const allScopes = [...EXTERNAL_IDENTITY_REQUIRED_SCOPES, ...EXTERNAL_IDENTITY_OPTIONAL_SCOPES]
+const scopes: Check = (value) =>
+  Array.isArray(value) &&
+  new Set(value).size === value.length &&
+  value.every(exact(...allScopes)) &&
+  EXTERNAL_IDENTITY_REQUIRED_SCOPES.every((scope) => value.includes(scope))
 const checks = {
+  [EXTERNAL_METHOD.accessGet]: obj(),
   [EXTERNAL_METHOD.ownerGet]: obj(),
   [EXTERNAL_METHOD.ownerSet]: obj({ ...mutation, owner }),
   [EXTERNAL_METHOD.credentialConfigure]: obj({ operationId, token, repoIds: array(id) }),
   [EXTERNAL_METHOD.credentialRotate]: obj({ ...credential, token }),
   [EXTERNAL_METHOD.credentialRevoke]: obj(credential),
+  [EXTERNAL_METHOD.identityList]: obj(),
+  [EXTERNAL_METHOD.identityAdd]: obj({ operationId, scopes }),
+  [EXTERNAL_METHOD.identityImport]: obj({ operationId }),
+  [EXTERNAL_METHOD.identityPaste]: obj({ operationId, token }),
+  [EXTERNAL_METHOD.identityLoginGet]: obj({ loginId: s }),
+  [EXTERNAL_METHOD.identityLoginCancel]: obj({ loginId: s, operationId }),
+  [EXTERNAL_METHOD.identityLoginConfirm]: obj({ ...mutation, loginId: s }),
+  [EXTERNAL_METHOD.identityRotate]: obj({ ...credential, identityId: s, token }),
+  [EXTERNAL_METHOD.identityRevoke]: obj({ ...credential, identityId: s }),
+  [EXTERNAL_METHOD.identityRepositories]: obj(
+    {},
+    { identityId: s, repoId: id, cursor: str(2048), limit: int(1, 100) },
+  ),
+  [EXTERNAL_METHOD.configurationGet]: obj(),
+  [EXTERNAL_METHOD.managerAssignmentGet]: obj({ managerId: s }),
+  [EXTERNAL_METHOD.managerAssignmentSet]: obj(
+    {
+      ...mutation,
+      managerId: s,
+      identityId: (value) => value === null || s(value),
+      repoIds: (value) =>
+        Array.isArray(value) && new Set(value).size === value.length && value.every(id),
+    },
+    { injectCredentials: bool },
+  ),
   [EXTERNAL_METHOD.sourceList]: obj(),
   [EXTERNAL_METHOD.sourceGet]: obj(sourceId),
   [EXTERNAL_METHOD.sourceUpsert]: obj({ ...mutation, source }),
@@ -142,13 +194,9 @@ const checks = {
   [EXTERNAL_METHOD.sourcePause]: obj({ ...mutation, ...sourceId }),
   [EXTERNAL_METHOD.sourceResume]: obj({ ...mutation, ...sourceId }),
   [EXTERNAL_METHOD.sourceCheck]: obj(sourceId),
-  [EXTERNAL_METHOD.inboxList]: obj(
-    {},
-    {
-      ...query,
-      status: exact('received', 'blocked', 'pending_triage', 'processed', 'notified'),
-      reason: s,
-    },
+  [EXTERNAL_METHOD.inboxList]: either(
+    obj({}, { ...query, status, reason: s }),
+    obj({ statuses }, { ...query, reason: s }),
   ),
   [EXTERNAL_METHOD.inboxGet]: either(obj({ eventKey: s }), obj({ intakeId: s })),
   [EXTERNAL_METHOD.inboxTriage]: either(
@@ -164,6 +212,7 @@ const checks = {
     {},
     {
       ...query,
+      issueId,
       state: exact('queued', 'sending', 'confirmed', 'unknown', 'failed', 'blocked', 'canceled'),
     },
   ),

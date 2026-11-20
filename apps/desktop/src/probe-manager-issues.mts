@@ -92,7 +92,7 @@ export async function managerIssuesProbe() {
   assert(
     all('[data-inbox-tab]')
       .map((tab) => tab.dataset.inboxTab)
-      .join(',') === 'decisions,suggestions,requests,reports,issues',
+      .join(',') === 'decisions,suggestions,requests,reports,issues,external',
     '控制台分类标签不完整或顺序错误',
   )
   assert(

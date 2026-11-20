@@ -1,5 +1,6 @@
 import { enPathPicker } from '../path-picker/messages.ts'
 import { enChrome } from './en-chrome.ts'
+import { enExternal } from './en-external.ts'
 import { enManager } from './en-manager.ts'
 import { enManagerIssues } from './en-manager-issues.ts'
 import { enModelRanking } from './en-model-ranking.ts'
@@ -40,6 +41,7 @@ const plural = (n: string | number | undefined, one: string, many: string) =>
   `${n} ${Number(n) === 1 ? one : many}`
 
 export const en: Record<MessageKey, Entry> = {
+  ...enExternal,
   'link.menu.openFailed': 'Could not open the link. Try again.',
   'link.menu.title': 'Web link',
   'link.menu.copy': 'Copy link',

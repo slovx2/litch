@@ -537,6 +537,18 @@ export function sampleManagers(
           text,
           by: entry === d13 ? 'user' : 'user-conversation',
           at: ago(entry === d13 ? 19 : 300),
+          ...(entry === d11
+            ? {
+                answerSource: {
+                  kind: 'github',
+                  repoId: '20394867',
+                  commentId: '9012',
+                  actorUserId: '41623758',
+                  url: 'https://github.com/sample-org/litch-demo/issues/107#issuecomment-9012',
+                  revision: 'sample',
+                },
+              }
+            : {}),
         }
         entry.landed = [{ kind: 'file', target: file, label: null }]
       }

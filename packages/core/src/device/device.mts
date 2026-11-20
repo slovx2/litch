@@ -50,10 +50,12 @@ import type {
 import { CONFIG_NAMESPACE } from '../../../protocol/src/client-tools-config.mjs'
 import type { MachineSpecContext } from '../../../protocol/src/client-tools-machine.mjs'
 import { clientToolSpecs } from '../../../protocol/src/client-tools-specs.mjs'
+import { DEVICE_AUTOSTART_EXTENSION } from '../../../protocol/src/device-autostart.mjs'
 import {
   DEVICE_POWER_CHANGED,
   type DevicePowerStatus,
 } from '../../../protocol/src/device-power.mjs'
+import { EXTERNAL_SOURCES_EXTENSION } from '../../../protocol/src/external-sources.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../../protocol/src/harness-config.mjs'
 import {
   CLIENT_TOOL_NAMESPACE,
@@ -163,6 +165,7 @@ import { type CodexThreadNotesStore, createDirectInstructions } from './codex-in
 import { createComposeAids } from './compose.mjs'
 import { createDiffs, type Diffs } from './diffs.mjs'
 import { createExec } from './exec.mjs'
+import { createExternalDevice, type ExternalDevice } from './external.mjs'
 import { channelFailure, lacksMethod, listNames } from './faults.mjs'
 import { createFiles, type Files } from './files.mjs'
 import {
@@ -458,6 +461,7 @@ export interface Device {
   readonly diffs: Diffs
   /** 这台设备上的定时任务：订阅、建、改、删、立即运行、运行记录（tasks.mts） */
   readonly tasks: Tasks
+  readonly external: ExternalDevice
   /** 设备上的普通待处理建议。 */
   readonly suggestions: Suggestions
   /** 设备上的经理列表与按需订阅的看板。 */
@@ -689,6 +693,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let reattachable = false
   /** 对面支不支持定时任务（deviceTasks 扩展）。认出来之前、对面不是设备服务时都是不支持 */
   let schedulable = false
+  let externalSourcesSupported = false
+  let autostartSupported = false
   let suggestionsOn = false
   let pathsSupported = false
   let projectPermissionsOn = false
@@ -901,6 +907,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     organizable,
     manageable,
     modelRanking: modelRankingSupported,
+    externalSources: externalSourcesSupported,
     ...(remoteChrome && online ? { remoteChrome } : {}),
     service,
     upgrade,
@@ -1985,6 +1992,9 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         recoverySupported = info.device.extensions?.includes(EXTENSION.turnRecovery) === true
         reattachable = info.device.extensions?.includes(EXTENSION.deviceProcesses) === true
         schedulable = info.device.extensions?.includes(EXTENSION.deviceTasks) === true
+        externalSourcesSupported =
+          info.device.extensions?.includes(EXTERNAL_SOURCES_EXTENSION) === true
+        autostartSupported = info.device.extensions?.includes(DEVICE_AUTOSTART_EXTENSION) === true
         suggestionsOn = info.device.extensions?.includes(EXTENSION.suggestionInbox) === true
         pathsSupported = info.device.extensions?.includes(PATH_PICKER_EXTENSION) === true
         projectPermissionsOn =
@@ -2034,6 +2044,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         manageable = false
         reattachable = false
         schedulable = false
+        externalSourcesSupported = false
+        autostartSupported = false
         suggestionsOn = false
         pathsSupported = false
         projectPermissionsOn = false
@@ -2141,6 +2153,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     files.resync()
     diffs.resync()
     tasks.resync()
+    external.connectionChanged()
     suggestions.resync()
     projectPermissions.resync()
     managers.resync()
@@ -2193,6 +2206,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (dropped) diffs.offline()
       manage.offline()
       tasks.offline()
+      external.connectionChanged()
       suggestions.offline()
       projectPermissions.resync()
       managers.offline()
@@ -2282,6 +2296,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (suggestions.notification(method, params)) return
       if (projectPermissions.notification(method)) return
       if (managers.notification(method, params)) return
+      if (external.notification(method, params)) return
       if (tasks.notification(method, params)) return
       // 扫码绑定手机：配对的状态、已绑定的手机
       if (pairing.notification(method, params)) return
@@ -2788,6 +2803,14 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     log,
   })
 
+  const external = createExternalDevice({
+    online: () => online,
+    now: options.clock.now,
+    sourcesSupported: () => externalSourcesSupported,
+    autostartSupported: () => autostartSupported,
+    request: (method, params, requestOptions) => link.request(method, params, requestOptions),
+    fail,
+  })
   const tasks = createTasks({
     deviceId: config.id,
     online: () => online,
@@ -3457,6 +3480,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     pathPicker,
     diffs,
     tasks,
+    external,
     suggestions,
     projectPermissions,
     managers,

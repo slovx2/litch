@@ -135,11 +135,14 @@ export function createConfigBridge(clock: Clock): ConfigBridge {
       }
       const id = `cfg-ask-${++seq}`
       return new Promise((resolve, reject) => {
-        const stopTimer = clock.setTimer(() => {
-          if (!settleAsk(id)) return
-          reject(new ConfigUiError('The Litch window did not answer in time.'))
-          emit()
-        }, ASK_TIMEOUT_MS)
+        const stopTimer = clock.setTimer(
+          () => {
+            if (!settleAsk(id)) return
+            reject(new ConfigUiError('The Litch window did not answer in time.'))
+            emit()
+          },
+          request.kind === 'external.token' ? CONFIRM_TIMEOUT_MS : ASK_TIMEOUT_MS,
+        )
         asks.set(id, { ask: { id, request }, sink, resolve, reject, stopTimer })
         emit()
       })

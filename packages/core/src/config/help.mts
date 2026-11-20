@@ -6,6 +6,13 @@ import type { Lang, OpSpec } from './context.mjs'
 const GROUP_NOTES: Record<string, { zh: string; en: string }> = {
   help: { zh: '帮助', en: 'Help' },
   status: { zh: '总览', en: 'Overview' },
+  'external-owner': { zh: '外部账号与设备同步', en: 'External account and device sync' },
+  'device-identity': { zh: '设备的 GitHub 身份与凭据', en: 'GitHub identities and credentials' },
+  'device-source': {
+    zh: '仓库采集策略与经理分配',
+    en: 'Repository collection and manager assignment',
+  },
+  'device-autostart': { zh: '设备服务自启', en: 'Device service autostart' },
   open: { zh: '在桌面端打开某一页', en: 'Open a page in the desktop app' },
   devices: {
     zh: '设备：添加、改名、线色、连接、重连、移除',
@@ -44,6 +51,7 @@ const GROUP_NOTES: Record<string, { zh: string; en: string }> = {
 const INTRO = {
   zh: [
     'litch config：配置 Litch。要 Litch 桌面端开着。',
+    '在 GitHub 源设备本机授权或轮换凭据时，可用 --stdin 直接连接设备服务。',
     '<device> 写设备的标识、名字或 local（本机）。加 --json 输出结构化结果。',
     '不可逆的（移除设备、撤销手机、删任务、清除浏览数据、清掉操作记录）先在对话里问过用户。',
     '放宽安全的（打开 Computer Use 或“操作这台电脑”、审批改成不问、访问范围全放开、一直允许网站）会在桌面端弹确认卡，用户点允许才生效。',
@@ -52,6 +60,7 @@ const INTRO = {
   ],
   en: [
     'litch config: configure Litch. The Litch desktop app must be running.',
+    'On the GitHub source device, authorize or rotate credentials directly through the device service with --stdin.',
     '<device> is a device id, its name, or local (this computer). Add --json for structured output.',
     'Irreversible ops (remove a device, revoke a phone, delete a task, clear browser data, clear the log): ask the user in the conversation first.',
     'Ops that widen access (turn on Computer Use or "use this computer", never-ask approval, open access, always-allow a site) show a confirmation card on the desktop and take effect only if the user allows.',

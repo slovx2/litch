@@ -19,6 +19,7 @@ export type {
   ChromeSettingsRequest,
   ChromeSettingsState,
 } from '../../protocol/src/chrome-browser.mjs'
+export type { DeviceAutostartStatus } from '../../protocol/src/device-autostart.mjs'
 // 扫码绑定手机：界面拼二维码文本、外壳造一次性私钥文件要用（和设备进程、手机用的是同一份）
 export {
   base64UrlDecode,
@@ -31,6 +32,41 @@ export {
   possibleTailnetHost,
   tailscaleVerifyUrl,
 } from '../../protocol/src/device-pairing.mjs'
+export type {
+  ExternalAccess,
+  ExternalAgentGhIdentity,
+  ExternalAnswerSource,
+  ExternalConfiguration,
+  ExternalCredential,
+  ExternalDiagnostic,
+  ExternalEventKind,
+  ExternalIdentity,
+  ExternalIdentityAuthorization,
+  ExternalIdentityLogin,
+  ExternalIdentityRepository,
+  ExternalIdentityScope,
+  ExternalInboxDelivery,
+  ExternalInboxEvent,
+  ExternalIssueFields,
+  ExternalIssueId,
+  ExternalLabelRoute,
+  ExternalManagerAssignment,
+  ExternalOutboxSummary,
+  ExternalOwnerIdentity,
+  ExternalReadiness,
+  ExternalReadinessArea,
+  ExternalRepo,
+  ExternalResolvedRepo,
+  ExternalRoute,
+  ExternalSourceDraft,
+  ExternalSourceStatus,
+  ExternalTriageAction,
+} from '../../protocol/src/external-sources.mjs'
+export {
+  EXTERNAL_IDENTITY_OPTIONAL_SCOPES,
+  EXTERNAL_IDENTITY_REQUIRED_SCOPES,
+  EXTERNAL_IDENTITY_VERIFICATION_URL,
+} from '../../protocol/src/external-sources.mjs'
 export type { AttachmentState } from '../../protocol/src/file-attachments.mjs'
 export { attachmentDetail, MAX_ATTACHMENT_BYTES } from '../../protocol/src/file-attachments.mjs'
 export { SHORT_MEDIA_BYTES } from '../../protocol/src/file-preview.mjs'
@@ -183,6 +219,11 @@ export {
   type Diffs,
   type DiffsHost,
 } from './device/diffs.mjs'
+export {
+  githubNumericId,
+  githubProfileLogin,
+  isExternalOwnerIdentity,
+} from './device/external-owner.mjs'
 export { createFiles, type Files, type FilesHost, LIST_TTL_MS } from './device/files.mjs'
 export { GIT_CAPS } from './device/git.mjs'
 export {
@@ -475,6 +516,21 @@ export {
   parseComments,
 } from './projection/comments.mjs'
 export { type EditableMessage, editableOf, resendOf } from './projection/edit.mjs'
+export {
+  type ExternalDeviceView,
+  type ExternalIdentityLoginView,
+  type ExternalInboxFilter,
+  type ExternalInboxView,
+  type ExternalOutboxFilter,
+  type ExternalOutboxView,
+  type ExternalOwnerInput,
+  type ExternalOwnerSyncRow,
+  type ExternalSnapshot,
+  externalFilterKey,
+  externalSourceDraft,
+  type GlobalExternalOwner,
+  githubExternalUrl,
+} from './projection/external.mjs'
 export {
   explicitFileRef,
   type FileRef,

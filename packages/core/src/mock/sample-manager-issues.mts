@@ -80,6 +80,46 @@ function ordinary(n: number, input: OrdinaryInput): ManagerIssue {
       ),
     ],
     quick: {},
+    ...(n === 1
+      ? {
+          externalRefs: [
+            {
+              provider: 'github',
+              repoId: '20394867',
+              number: '107',
+              kind: 'issue',
+              url: 'https://github.com/sample-org/litch-demo/issues/107',
+              issueId: 'X-1',
+              managerId: 'm1',
+              origin: 'intake',
+              createdAt: Math.floor(input.at / 1000),
+            },
+          ],
+          intakeMandates: [
+            {
+              mandateId: 'sample-mandate',
+              managerId: 'm1',
+              issueId: 'X-1',
+              subjectKey: 'github/20394867/107',
+              decision: 'accept',
+              requesterUserId: '41623758',
+              observedRole: 'owner',
+              eventKeys: ['github:107'],
+              ruleId: 'owner_comment',
+              rulesVersion: 1,
+              routeId: 'default',
+              acceptedBy: 'desktop',
+              acceptedAt: Math.floor(input.at / 1000),
+              policyRevision: 1,
+              authorizedScope: {
+                repoId: '20394867',
+                subjectKey: 'github/20394867/107',
+                actions: ['comment'],
+              },
+            },
+          ],
+        }
+      : {}),
     unread: input.unread ?? false,
   }
   issue.stateGroup = managerIssuePending(issue) ? 'open' : 'closed'

@@ -827,3 +827,9 @@ Sidebar and submit-bar counts include only active drafts. Drafts for answered, c
 经理事项（item）是经理自己的记录本，不应期待用户查看。需要用户注意、决定或处理的事，经理应提出决策（decision）或“请你做”（request）；新建事项的工具回执也会提醒这一点。
 
 Manager items are the manager’s own notebook; the manager must not rely on the user reading them. Anything requiring the user’s attention, decision or action belongs in a decision or a For you request. The tool repeats this reminder after creating an item.
+
+## 外部收件箱
+
+支持 GitHub 外部来源的设备，在经理 Console 内显示**外部收件箱**。待分拣可按积压原因筛选；已处理可只看已提醒；被挡下列出规则或权限原因。提醒送达经理后，候选仍留在待分拣，直到有人处置。离线时用缓存并标出读取时间。合规收件项可以接为新的 X-n、并入已有议题、忽略或改派给同设备的经理。新评论和 PR 可能因轮询覆盖或配额而延迟，先看设备的缺口和积压。
+
+X-n 详情显示 GitHub 原帖、接单人身份依据、规则版本、回写状态和回执链接；已有内部讨论保留。来自 GitHub 评论的决策答复会标出原评论链接。回写状态为待对账时，先核对 GitHub 原帖和设备记录，再决定如何处理。

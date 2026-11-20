@@ -1,4 +1,5 @@
 import { zhCNPathPicker } from '../path-picker/messages.ts'
+import { zhExternal } from './zh-CN-external.ts'
 import { zhModelRanking } from './zh-CN-model-ranking.ts'
 import { zhSearch } from './zh-CN-search.ts'
 // 中文文案。这一份是“有哪些句子”的依据：键的集合以这里为准，别的语言必须一句不少。
@@ -37,6 +38,7 @@ import { zhTasks } from './zh-CN-tasks.ts'
 import { zhWorktrees } from './zh-CN-worktrees.ts'
 
 export const zhCN = {
+  ...zhExternal,
   'link.menu.openFailed': '无法打开链接，请重试。',
   'link.menu.title': '网页链接',
   'link.menu.copy': '复制链接',
