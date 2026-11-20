@@ -4,6 +4,28 @@
   "workflow": ".github/workflows/full.yml",
   "cases": [
     {
+      "job": "browser / checks",
+      "test": "远程借用本机用户标签按控制者改写 localhost；交还后的标签仍保活原隧道",
+      "status": "active",
+      "events": [
+        {
+          "runId": 44751256716,
+          "attempt": 1,
+          "jobId": 136339617707,
+          "sha": "0e6e66bb044310592ac5fa8a899a0c4952bdf626",
+          "date": "2026-11-20T14:13:45Z",
+          "trigger": "push",
+          "url": "https://github.com/slovx2/litch/actions/runs/44751256716/job/136339617707",
+          "failure": "remote-local.test.mts 的假SSH重建用例 fetch 失败，ECONNREFUSED 127.0.0.1:49280；PID变化不等于端口监听是可能时序原因，尚未确证。",
+          "evidence": {
+            "kind": "local-rerun",
+            "reference": "docs/ci/browser-forward-restart-observation.md",
+            "note": "0e6e66bb 源码未改，本地 macOS arm64 / Node 24.19.0 执行 npm run test:browser --prefix apps/desktop 退出 0，主测试196/196（含该用例），读取器32通过1跳过。日志哈希与时间见报告；测试35个打包输入与C线19个改动文件交集为空。仅补跑失败job，未改产品或用例。"
+          }
+        }
+      ]
+    },
+    {
       "job": "client",
       "test": "client:remote:service",
       "status": "active",
