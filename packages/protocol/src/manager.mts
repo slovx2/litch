@@ -1,3 +1,4 @@
+import type { ExternalAnswerSource } from './external-sources.mjs'
 import { MANAGER_POST_METHOD } from './manager-posts.mjs'
 // 经理（litchManager）：设备持久化看板，客户端只经协议读写。定义见 protocol/extensions/manager.json。
 // 本文件自包含，不引用 codex.mts。时间一律为 Unix 秒；id 在一块看板内唯一，经理 id 在设备内唯一。
@@ -106,6 +107,8 @@ export interface ManagerDecisionOption {
 }
 export type ManagerDecisionDefault = { kind: 'ask' } | { kind: 'option'; optionId: string }
 export interface ManagerAnswer {
+  /** 仅向同时声明 litchManager 和 litchExternalSources 的连接发送。 */
+  answerSource?: ExternalAnswerSource
   optionId: string | null
   text: string
   by: 'user' | 'user-conversation'

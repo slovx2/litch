@@ -1,6 +1,15 @@
 // 经理看板不能重建：迁移只往后加，审计记录只追加。对象和事件在同一事务内提交。
 import { randomUUID } from 'node:crypto'
-import { closeSync, existsSync, openSync, statSync } from 'node:fs'
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  lstatSync,
+  openSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import type {
@@ -16,6 +25,7 @@ import type {
 } from '../../protocol/src/manager.mjs'
 import { assertStoreFormat, initializeStoreFormat } from '../../shared/src/store-format.mjs'
 import { ensureParent } from '../../shared/src/util.mjs'
+import { EXTERNAL_STORE_MIGRATION } from './external-store-schema.mjs'
 
 const MIGRATIONS = [
   `CREATE TABLE managers(id TEXT PRIMARY KEY, thread_id TEXT NOT NULL UNIQUE, body TEXT NOT NULL);
@@ -46,6 +56,7 @@ const MIGRATIONS = [
    CREATE INDEX issue_history_manager ON issue_history(manager_id,seq);`,
   `CREATE TABLE manager_reset_requests(manager_id TEXT NOT NULL, request_id TEXT NOT NULL, body TEXT NOT NULL,
    PRIMARY KEY(manager_id,request_id));`,
+  EXTERNAL_STORE_MIGRATION,
 ] as const
 export const MANAGER_SCHEMA_VERSION = MIGRATIONS.length
 export const managerNow = () => Math.floor(Date.now() / 1000)
@@ -101,9 +112,38 @@ export interface ResetRecord {
   handoverSettled?: boolean
 }
 
+/** VACUUM INTO 读取一致快照（含未 checkpoint 的 WAL），并保留升级前的版本标记。 */
+function snapshotManagerDatabase(db: DatabaseSync, path: string, version: number): void {
+  const destination = `${path}.before-v${version + 1}`
+  const temp = `${destination}.${randomUUID()}.tmp`
+  const fd = openSync(temp, 'wx', 0o600)
+  try {
+    try {
+      db.prepare('VACUUM INTO ?').run(temp)
+      fsyncSync(fd)
+    } finally {
+      closeSync(fd)
+    }
+    renameSync(temp, destination)
+  } finally {
+    if (existsSync(temp)) unlinkSync(temp)
+  }
+}
+
+function assertManagerFilePrivacy(path: string): void {
+  if (process.platform === 'win32') return
+  for (const file of [path, `${path}-wal`, `${path}-shm`]) {
+    const stat = lstatSync(file, { throwIfNoEntry: false })
+    if (!stat) continue
+    if (!stat.isFile() || (stat.mode & 0o077) !== 0 || stat.uid !== process.getuid?.())
+      throw new Error('经理库或 WAL 文件不是仅当前用户可访问的普通文件')
+  }
+}
+
 export function openManagerDatabase(stateDir: string): DatabaseSync {
   const path = join(stateDir, 'manager.sqlite')
   ensureParent(path)
+  assertManagerFilePrivacy(path)
   if (existsSync(path) && statSync(path).size > 0) assertStoreFormat(path)
   if (!existsSync(path)) closeSync(openSync(path, 'a', 0o600))
   const db = new DatabaseSync(path)
@@ -111,8 +151,11 @@ export function openManagerDatabase(stateDir: string): DatabaseSync {
     const version = Number(db.prepare('PRAGMA user_version').get()?.user_version ?? 0)
     if (version > MANAGER_SCHEMA_VERSION)
       throw new Error(`经理库版本 ${version} 高于支持的 ${MANAGER_SCHEMA_VERSION}，拒绝打开`)
-    initializeStoreFormat(db)
+    if (version > 0 && version < MANAGER_SCHEMA_VERSION) snapshotManagerDatabase(db, path, version)
+    if (version === 0) initializeStoreFormat(db)
     db.exec('PRAGMA journal_mode=WAL')
+    // SQLite 根据数据库权限创建 WAL/SHM；检查已有文件及本次打开后出现的文件。
+    assertManagerFilePrivacy(path)
     for (let step = version; step < MANAGER_SCHEMA_VERSION; step++) {
       db.exec('BEGIN IMMEDIATE')
       try {

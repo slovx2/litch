@@ -1,0 +1,145 @@
+{
+  "extension": "litchDeviceAutostart",
+  "description": "读取实际系统自启状态；仅明确的用户配置动作可以修改。",
+  "appliesTo": "设备聚合面。设备通过 runtime/info.device.extensions 声明；客户端按连接在 initialize 中声明。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "litchDeviceAutostart" }
+    }
+  },
+  "undeclared": "不提供自启方法，不接收自启通知，标准协议不增加字段。",
+  "rules": [
+    "启用时 takeover 和 allowLinger 必须分别明确授权。只有 confirmStop 为 true 才可停掉当前实例，resumeAfterRestart 走既有计划续跑资格。",
+    "accepted 表示已排队，reconnect 提示连接将断开；客户端重连后用 get 的实际状态和 lastOperation 核验。"
+  ],
+  "parts": [
+    {
+      "kind": "Method",
+      "name": "litch/device/autostart/get",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": { "$ref": "#/definitions/Status" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/device/autostart/enable",
+      "params": { "$ref": "#/definitions/Enable" },
+      "result": { "$ref": "#/definitions/MutationResult" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/device/autostart/disable",
+      "params": { "$ref": "#/definitions/Mutation" },
+      "result": { "$ref": "#/definitions/MutationResult" }
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/device/autostart/changed",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["revision"],
+        "properties": {
+          "revision": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "Mutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "expectedRevision"],
+      "properties": {
+        "operationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "expectedRevision": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "confirmStop": { "type": "boolean" },
+        "resumeAfterRestart": { "type": "boolean" }
+      }
+    },
+    "Enable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "expectedRevision"],
+      "properties": {
+        "operationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "expectedRevision": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "confirmStop": { "type": "boolean" },
+        "resumeAfterRestart": { "type": "boolean" },
+        "takeover": { "type": "boolean" },
+        "allowLinger": { "type": "boolean" }
+      }
+    },
+    "Status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "serviceManager", "state", "requiresLogin", "linger"],
+      "properties": {
+        "revision": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "serviceManager": { "enum": ["launchd", "systemd", "taskScheduler", "unsupported"] },
+        "state": { "enum": ["disabled", "enabled", "degraded", "unsupported"] },
+        "requiresLogin": { "type": "boolean" },
+        "linger": { "enum": ["enabled", "disabled", "unavailable", "notApplicable"] },
+        "serviceId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "instance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pid", "mode"],
+          "properties": {
+            "pid": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+            "mode": { "enum": ["managed", "manual"] }
+          }
+        },
+        "lastOperation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operationId", "action", "state"],
+          "properties": {
+            "operationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "action": { "enum": ["enable", "disable"] },
+            "state": { "enum": ["pending", "completed", "failed"] }
+          }
+        },
+        "repair": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "text"],
+          "properties": {
+            "code": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "text": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["zh-CN", "en"],
+              "properties": { "zh-CN": { "type": "string" }, "en": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    "MutationResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "status"],
+          "properties": {
+            "state": { "enum": ["completed"] },
+            "status": { "$ref": "#/definitions/Status" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "operationId", "reconnect"],
+          "properties": {
+            "state": { "enum": ["accepted"] },
+            "operationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "reconnect": { "type": "boolean" }
+          }
+        }
+      ]
+    }
+  }
+}
