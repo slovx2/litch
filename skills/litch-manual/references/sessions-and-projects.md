@@ -611,11 +611,14 @@ explain it:
   as written. Desktop and phone use the same rules.
 - **Mermaid diagrams**: a `mermaid` code block in a reply is drawn as a diagram once the block is
   complete (while it is still being written, the source shows). The block's header switches between
-  Diagram and Source and copies the source; Enlarge opens a viewer (wheel to zoom, drag to pan). If a
-  diagram can't be drawn (a syntax error), the source shows with the reason in the header. On the
-  phone each diagram is a fixed-height card with the whole diagram scaled down; tap it for full screen
+  Diagram and Source and copies the source. On desktop, Enlarge fits the whole diagram in the
+  window. Use the wheel or trackpad to zoom, drag to pan, and double-click to fit again. Press Esc
+  or use the close button in the top bar. If a diagram can't be drawn, the source shows with the
+  reason in the header. On the phone each diagram is a fixed-height card with the whole diagram
+  scaled down; tap it for full screen
   (pinch to zoom, drag, double-tap to reset, Source and Copy at the top, Back closes it). Diagrams are
   drawn on the desktop or phone itself, without a network connection.
+  桌面端点“放大”，整张图会按窗口空间等比缩放并居中。可用滚轮或触控板缩放、拖动平移，双击恢复适配；按 Esc 或点顶栏的关闭按钮退出。
 - **Goals** (Codex and Claude Code only; other harnesses show no goal controls): type `/goal` followed
   by what should be achieved and send it. Instead of a normal message this sets the session's goal,
   and the harness keeps working on it turn after turn while the session is idle, until the goal is

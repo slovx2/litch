@@ -8,6 +8,9 @@
 
 Manager board Markdown supports Mermaid diagrams in reports, decisions, discussions, issues, requests and suggestions. Diagrams use the conversation renderer and theme. The card header switches between diagram and source; copy and enlarge are icon buttons, named in tooltips and for screen readers. Rendering errors fall back to source on desktop and phone.
 
+桌面端的放大视图与对话区相同：整张图等比适配窗口，可缩放、拖动，按 Esc 或点击顶栏关闭。
+On desktop, Enlarge opens the same viewer as in conversations: fit the whole diagram to the window, zoom or pan, and close with Esc or the top bar button.
+
 ### issue 与评论 / Issues and comments
 
 概览中的决策、建议、请你做和报告计数分别打开对应类别；普通 issue 列表默认仍只显示普通 issue。

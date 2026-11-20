@@ -6,6 +6,8 @@ plain `.mjs` / shell.
 
 ## Map
 
+- `check-mermaid-viewer.mjs` — 对话 Mermaid 放大视图的隔离 Chromium 验收，验证三种皮肤、明暗和两档窗口尺寸，以及缩放、拖动、复位和关闭；`LITCH_MERMAID_EVIDENCE` 指定截图目录。
+
 - `codex-shim` — the `PATH` shim Codex App invokes. Routes `codex app-server`
   into the adapter (`CHA_CLAUDE_ADAPTER`); forwards everything else to the real
   Codex CLI (`CODEX_REAL`). Keep it dependency-free and POSIX-sh portable.

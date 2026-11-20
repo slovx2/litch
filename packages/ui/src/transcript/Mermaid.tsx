@@ -152,24 +152,30 @@ function place(
   if (stage) stage.style.transform = `translate(${x}px, ${y}px) scale(${scale})`
 }
 
-const MIN_SCALE = 0.2
 const MAX_SCALE = 8
+const FIT_MARGIN = 24
 
 /** 放大查看：盖在整个窗口上，滚轮缩放（以鼠标处为中心）、拖动平移、双击复原。Esc、点关闭按钮关上 */
 function MermaidViewer({ svg, onClose }: { svg: string; onClose(): void }) {
   const t = useT()
   const dialog = useRef<HTMLDialogElement>(null)
+  const canvas = useRef<HTMLDivElement>(null)
   const stage = useRef<HTMLDivElement>(null)
   const view = useRef({ x: 0, y: 0, scale: 1 })
   /** 刚打开时那一档：整张图放得下，最多放大到两倍 */
   const fit = useRef({ x: 0, y: 0, scale: 1 })
-  const drag = useRef<{ x: number; y: number } | null>(null)
+  const drag = useRef<{ id: number; x: number; y: number } | null>(null)
 
   useLayoutEffect(() => {
     const element = dialog.current
+    element?.showModal()
+    return () => element?.close()
+  }, [])
+
+  useLayoutEffect(() => {
+    const surface = canvas.current
     const holder = stage.current
-    if (!element || !holder) return
-    if (!element.open) element.showModal()
+    if (!surface || !holder) return
     holder.innerHTML = svg
     const figure = holder.querySelector('svg')
     if (!figure) return
@@ -180,73 +186,114 @@ function MermaidViewer({ svg, onClose }: { svg: string; onClose(): void }) {
     figure.style.maxWidth = 'none'
     figure.style.width = `${width}px`
     figure.style.height = `${height}px`
-    const room = element.getBoundingClientRect()
-    const scale = Math.min(2, (room.width - 64) / width, (room.height - 96) / height)
-    fit.current = {
-      scale,
-      x: (room.width - width * scale) / 2,
-      y: (room.height - height * scale) / 2,
+    const refit = () => {
+      const w = surface.clientWidth
+      const h = surface.clientHeight
+      if (!w || !h) return
+      const pad = Math.min(FIT_MARGIN, w / 4, h / 4)
+      const scale = Math.min(2, (w - 2 * pad) / width, (h - 2 * pad) / height)
+      fit.current = view.current = {
+        scale,
+        x: (w - width * scale) / 2,
+        y: (h - height * scale) / 2,
+      }
+      if (drag.current && surface.hasPointerCapture(drag.current.id))
+        surface.releasePointerCapture(drag.current.id)
+      drag.current = null
+      place(holder, view.current)
     }
-    view.current = { ...fit.current }
-    place(stage.current, view.current)
+    refit()
+    const observer = new ResizeObserver(refit)
+    observer.observe(surface)
+    const wheel = (event: WheelEvent) => {
+      // 触控板捏合也会发 wheel；拦住它的默认页面缩放。
+      event.preventDefault()
+      if (drag.current) return
+      const before = view.current
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? surface.clientHeight : 1
+      const scale = Math.min(
+        MAX_SCALE,
+        Math.max(
+          Math.min(0.2, fit.current.scale),
+          before.scale * Math.exp(-event.deltaY * unit * 0.002),
+        ),
+      )
+      // 缩放与图位移使用同一个画布坐标系，鼠标下的图点不动。
+      const rect = surface.getBoundingClientRect()
+      const x = event.clientX - rect.left
+      const y = event.clientY - rect.top
+      const ratio = scale / before.scale
+      view.current = {
+        scale,
+        x: x - (x - before.x) * ratio,
+        y: y - (y - before.y) * ratio,
+      }
+      place(holder, view.current)
+    }
+    surface.addEventListener('wheel', wheel, { passive: false })
+    return () => {
+      observer.disconnect()
+      surface.removeEventListener('wheel', wheel)
+    }
   }, [svg])
-
-  const onWheel = (event: React.WheelEvent) => {
-    const before = view.current
-    const scale = Math.min(
-      MAX_SCALE,
-      Math.max(MIN_SCALE, before.scale * Math.exp(-event.deltaY * 0.002)),
-    )
-    // 鼠标底下那一点缩放前后不动
-    const ratio = scale / before.scale
-    view.current = {
-      scale,
-      x: event.clientX - (event.clientX - before.x) * ratio,
-      y: event.clientY - (event.clientY - before.y) * ratio,
-    }
-    place(stage.current, view.current)
-  }
 
   return (
     <dialog
       ref={dialog}
-      className="viewer mmd-viewer"
+      className="mmd-viewer"
       aria-label={t('mermaid.label')}
-      onClose={onClose}
-      onWheel={onWheel}
-      onPointerDown={(event) => {
-        if (event.button !== 0 || (event.target as Element).closest('button')) return
-        drag.current = { x: event.clientX - view.current.x, y: event.clientY - view.current.y }
-        event.currentTarget.setPointerCapture(event.pointerId)
+      onClose={(event) => {
+        // StrictMode 的清理会排队发 close；重开的对话框不应被这条旧事件关闭。
+        if (!event.currentTarget.open) onClose()
       }}
-      onPointerMove={(event) => {
-        if (!drag.current) return
-        view.current = {
-          ...view.current,
-          x: event.clientX - drag.current.x,
-          y: event.clientY - drag.current.y,
-        }
-        place(stage.current, view.current)
-      }}
-      onPointerUp={() => {
-        drag.current = null
-      }}
-      onDoubleClick={() => {
-        view.current = { ...fit.current }
-        place(stage.current, view.current)
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') event.stopPropagation()
       }}
     >
-      <div ref={stage} className="mmd-stage" />
-      <div className="mmd-hint">{t('mermaid.hint')}</div>
-      <button
-        type="button"
-        className="ibtn viewer-x"
-        title={t('viewer.close')}
-        aria-label={t('viewer.close')}
-        onClick={onClose}
+      <header className="mmd-viewer-bar">
+        <span className="mmd-hint">{t('mermaid.hint')}</span>
+        <button
+          type="button"
+          className="ibtn mmd-viewer-close"
+          title={t('viewer.close')}
+          aria-label={t('viewer.close')}
+          onClick={() => dialog.current?.close()}
+        >
+          <Close />
+        </button>
+      </header>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: 图面保留 SVG 语义；这里只处理指针平移和复位。 */}
+      <div
+        ref={canvas}
+        className="mmd-canvas"
+        onPointerDown={(event) => {
+          if (event.button !== 0 || drag.current) return
+          drag.current = {
+            id: event.pointerId,
+            x: event.clientX - view.current.x,
+            y: event.clientY - view.current.y,
+          }
+          event.currentTarget.setPointerCapture(event.pointerId)
+        }}
+        onPointerMove={(event) => {
+          if (drag.current?.id !== event.pointerId) return
+          view.current = {
+            ...view.current,
+            x: event.clientX - drag.current.x,
+            y: event.clientY - drag.current.y,
+          }
+          place(stage.current, view.current)
+        }}
+        onLostPointerCapture={(event) => {
+          if (drag.current?.id === event.pointerId) drag.current = null
+        }}
+        onDoubleClick={() => {
+          view.current = fit.current
+          place(stage.current, view.current)
+        }}
       >
-        <Close />
-      </button>
+        <div ref={stage} className="mmd-stage" />
+      </div>
     </dialog>
   )
 }
