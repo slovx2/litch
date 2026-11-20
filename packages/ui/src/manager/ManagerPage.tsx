@@ -41,7 +41,6 @@ import { Decisions } from './Decisions.tsx'
 import { DiscussionPane } from './DiscussionPane.tsx'
 import { ManagerFeaturesContext, useManagerBoard } from './data.ts'
 import { DiscussionPaneContext } from './discussion-pane.ts'
-import { ExternalInbox } from './ExternalInbox.tsx'
 import { IssueOrderSelect } from './issue-order.tsx'
 import { useIssueCounts, useManagerIssues } from './issues/data.ts'
 import { IssueConsole, type IssuePreset } from './issues/IssueConsole.tsx'
@@ -120,7 +119,6 @@ export function ManagerPage({
   const page = useRef<HTMLElement>(null)
   const device = useKey<DeviceView>(keys.device(manager.deviceId))
   const { tab, narrow, settings } = location
-  const [externalOpen, setExternalOpen] = useState(false)
   useEffect(
     () =>
       onFindPreparing((deviceId, sessionId) => {
@@ -135,7 +133,6 @@ export function ManagerPage({
   )
   const boardBody = useRef<HTMLDivElement>(null)
   const setTab = (tab: ManagerPageLocation['tab']) => {
-    setExternalOpen(false)
     if (boardBody.current && !view?.paging) boardBody.current.scrollTop = 0
     onLocation({ ...location, tab })
   }
@@ -162,7 +159,6 @@ export function ManagerPage({
   /** 类别分段右端的位置：issue 页签的“新建 issue”放进来，和筛选分开 */
   const [issueAction, setIssueAction] = useState<HTMLDivElement | null>(null)
   const presetIssues = (patch: IssuePreset['patch']) => {
-    setExternalOpen(false)
     reading.ordinary = true
     renderCategory((value) => value + 1)
     setIssuePreset((now) => ({ patch, version: (now?.version ?? 0) + 1 }))
@@ -170,7 +166,6 @@ export function ManagerPage({
     onLocation({ ...location, tab: 'inbox', narrow: 'board' })
   }
   const openReference = (ref: BoardReference) => {
-    setExternalOpen(false)
     if (issueMode && !ref.startsWith('I-')) {
       setBoardLayout({ open: true })
       setIssueTarget(ref)
@@ -256,7 +251,7 @@ export function ManagerPage({
         )[tab as 'decisions'] ?? reading.category)
   // 类别分段放不下时横向滚动：选中的类别滚进可见区
   const inboxTabs = useRef<HTMLDivElement>(null)
-  const pickedTab = externalOpen ? 'external' : issueMode ? issueKind : activeTab
+  const pickedTab = issueMode ? issueKind : activeTab
   // biome-ignore lint/correctness/useExhaustiveDependencies: 选中项变化时重新对齐
   useEffect(() => {
     inboxTabs.current
@@ -264,7 +259,6 @@ export function ManagerPage({
       ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   }, [pickedTab])
   const pickIssueKind = (kind: ManagerIssueKind) => {
-    setExternalOpen(false)
     reading.ordinary = kind === 'ordinary'
     if (kind !== 'ordinary') reading.category = kind
     renderCategory((value) => value + 1)
@@ -418,7 +412,6 @@ export function ManagerPage({
         }
       : undefined
   const consoleTab = ['inbox', 'decisions', 'requests', 'suggestions', 'reports'].includes(tab)
-  const showExternal = externalOpen && consoleTab && device?.externalSources === true
   const readOnly = manager.status !== 'active'
   const readOnlyText = t(manager.status === 'ending' ? 'manager.endingNote' : 'manager.readOnly')
   const disabled = readOnly || device?.connection !== 'online'
@@ -599,10 +592,7 @@ export function ManagerPage({
                   data-inbox-tab={kind}
                   data-board-tab={kind}
                   key={kind}
-                  aria-pressed={
-                    !showExternal &&
-                    (issueMode ? issueKind === CATEGORY_KIND[kind] : activeTab === kind)
-                  }
+                  aria-pressed={issueMode ? issueKind === CATEGORY_KIND[kind] : activeTab === kind}
                   onClick={() => openInbox(kind)}
                 >
                   {t(`manager.${kind}`)}
@@ -614,7 +604,7 @@ export function ManagerPage({
                   type="button"
                   data-inbox-tab="issues"
                   key="issues"
-                  aria-pressed={!showExternal && issueKind === 'ordinary'}
+                  aria-pressed={issueKind === 'ordinary'}
                   onClick={() => pickIssueKind('ordinary')}
                 >
                   {t('issue.tab')}
@@ -623,22 +613,8 @@ export function ManagerPage({
                   ) : null}
                 </button>
               ) : null}
-              {device?.externalSources ? (
-                <button
-                  type="button"
-                  data-inbox-tab="external"
-                  aria-pressed={showExternal}
-                  onClick={() => {
-                    setExternalOpen(true)
-                    setTalk(null)
-                    if (boardBody.current) boardBody.current.scrollTop = 0
-                  }}
-                >
-                  {t('external.inbox')}
-                </button>
-              ) : null}
             </div>
-            {issueMode && !showExternal ? (
+            {issueMode ? (
               <div className="mg-inbox-act" ref={setIssueAction} data-inbox-action />
             ) : null}
           </div>
@@ -655,14 +631,7 @@ export function ManagerPage({
           </p>
         ) : null}
         <div className="mg-body" ref={boardBody}>
-          {showExternal ? (
-            <ExternalInbox
-              key={manager.id}
-              manager={manager}
-              disabled={disabled}
-              onOpenIssue={openReference}
-            />
-          ) : error ? (
+          {error ? (
             <p className="err" role="alert">
               {reasonOf(error, t)}
             </p>

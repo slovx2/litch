@@ -40,7 +40,6 @@ import {
 } from '../app/appearance.ts'
 import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { sendMode, setSendMode } from '../composer/send-mode.ts'
-import { ExternalTokenPrompt } from '../devices/ExternalControls.tsx'
 import { PairDialog } from '../devices/PairDialog.tsx'
 import type { Translator } from '../i18n/index.ts'
 import {
@@ -90,7 +89,7 @@ function applyPrefs(patch: Partial<ConfigPrefs>): void {
 export function itemText(item: ConfigConfirmItem, t: Translator): string {
   switch (item.kind) {
     case 'external':
-      return t('external.confirmCli', { device: item.device, detail: item.detail })
+      return t('assist.confirm.external', { device: item.device, detail: item.detail })
     case 'manager':
       return t('assist.confirm.manager', {
         action: t(
@@ -270,6 +269,7 @@ export function ConfigAgent() {
       const { request } = ask
       switch (request.kind) {
         case 'external.token':
+          reply(ask, false, undefined, t('assist.externalTokenUnavailable'))
           break
         case 'manual.get':
         case 'manual.set': {
@@ -313,7 +313,7 @@ export function ConfigAgent() {
           reply(ask, false, undefined, 'This Litch window does not know how to do that.')
       }
     }
-  }, [view.asks, channel])
+  }, [view.asks, channel, t])
 
   const answer = (id: string, allow: boolean) => {
     channel.command('config.confirm', { id, allow }).catch(() => {
@@ -323,33 +323,10 @@ export function ConfigAgent() {
 
   // 同时只出一张卡：先来的先问
   const card = view.confirms[0]
-  const tokenAsk = view.asks.find((ask) => ask.request.kind === 'external.token')
-  const tokenRequest = tokenAsk?.request
-  const tokenReply = (value?: string) => {
-    if (!tokenAsk) return
-    void channel
-      .command('config.reply', {
-        id: tokenAsk.id,
-        ok: !!value,
-        ...(value ? { data: value } : { reason: 'No token was submitted.' }),
-      })
-      .catch(() => {})
-  }
   return (
     <>
       {card ? (
         <ConfirmCard key={card.id} card={card} onAnswer={(allow) => answer(card.id, allow)} />
-      ) : null}
-      {!card && tokenRequest?.kind === 'external.token' ? (
-        <ExternalTokenPrompt
-          key={tokenAsk?.id}
-          target={t('external.tokenPrompt', {
-            device: tokenRequest.device,
-            target: tokenRequest.target,
-          })}
-          onSend={tokenReply}
-          onClose={() => tokenReply()}
-        />
       ) : null}
       {pair && pairDevice ? (
         <PairDialog

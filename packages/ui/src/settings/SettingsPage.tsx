@@ -13,7 +13,6 @@ import { ChromeSection } from './ChromeSection.tsx'
 import { ComputerSection } from './ComputerSection.tsx'
 import { computerBridge, computerIntro } from './computer-bridge.ts'
 import { DeviceNav } from './DeviceNav.tsx'
-import { ExternalAccount } from './ExternalAccount.tsx'
 import { HarnessSwitches } from './HarnessSwitches.tsx'
 import { LangSection, LookSection } from './Look.tsx'
 import { NotifySection } from './NotifySection.tsx'
@@ -32,7 +31,6 @@ export const SETTINGS_SECTIONS = [
   'browser',
   'chrome',
   'computer',
-  'external-account',
   'notify',
   'assist',
   'keys',
@@ -62,7 +60,6 @@ const TITLES: Record<SettingsSection, MessageKey> = {
   browser: 'settings.group.browser',
   chrome: 'chrome.title',
   computer: 'settings.group.computer',
-  'external-account': 'external.account',
   notify: 'settings.group.notify',
   assist: 'settings.group.assist',
   keys: 'settings.group.keys',
@@ -192,8 +189,6 @@ export function SettingsPage({
               <ChromeSection />
             ) : section === 'computer' ? (
               <ComputerSection onDevices={onDevices} />
-            ) : section === 'external-account' ? (
-              <ExternalAccount />
             ) : section === 'notify' ? (
               <NotifySection />
             ) : section === 'assist' ? (

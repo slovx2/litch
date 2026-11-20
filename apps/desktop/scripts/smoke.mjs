@@ -68,7 +68,6 @@ const probe = useRemote
           'sidebar',
           'manager',
           'manager-issues',
-          'external',
           'navigation',
           'tasks',
           'tree',
@@ -318,9 +317,6 @@ const child = spawn(
       CODEX_HOME: join(profile, 'codex'),
       CLAUDE_CONFIG_DIR: join(profile, 'claude'),
       LITCH_SMOKE: mode,
-      ...(probe === 'external' && process.env.LITCH_EXTERNAL_SCREENSHOTS
-        ? { LITCH_EXTERNAL_SCREENSHOTS: process.env.LITCH_EXTERNAL_SCREENSHOTS }
-        : {}),
       LITCH_SCROLL_CPU: process.env.LITCH_SCROLL_CPU ?? '1',
       LITCH_PROFILE: profile,
       // 上手功能：本机一个 harness 都没装的开局，首启引导照第一次启动那样出

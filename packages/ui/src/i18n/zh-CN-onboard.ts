@@ -100,6 +100,9 @@ export const zhOnboard = {
   'assist.confirm.erase.machineLog': '清空 {device} 操作本机的记录',
   'assist.confirm.eraseNote': '此操作不可撤销。',
   'assist.confirm.note': '两分钟内未处理将视为拒绝。',
+  'assist.confirm.external': '{device}：{detail}',
+  'assist.externalTokenUnavailable':
+    '桌面暂不支持输入令牌。请在目标设备上运行该命令，并加上 --stdin。',
   'assist.confirm.allow': '允许',
   'assist.confirm.decline': '拒绝',
   'assist.section.open': '配置助手',

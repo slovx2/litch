@@ -1,5 +1,4 @@
 import { zhCNPathPicker } from '../path-picker/messages.ts'
-import { zhExternal } from './zh-CN-external.ts'
 import { zhModelRanking } from './zh-CN-model-ranking.ts'
 import { zhSearch } from './zh-CN-search.ts'
 // 中文文案。这一份是“有哪些句子”的依据：键的集合以这里为准，别的语言必须一句不少。
@@ -38,7 +37,6 @@ import { zhTasks } from './zh-CN-tasks.ts'
 import { zhWorktrees } from './zh-CN-worktrees.ts'
 
 export const zhCN = {
-  ...zhExternal,
   'link.menu.openFailed': '无法打开链接，请重试。',
   'link.menu.title': '网页链接',
   'link.menu.copy': '复制链接',
@@ -1192,6 +1190,14 @@ export const zhCN = {
   'message.copy.failed': '无法写入剪贴板，请重试或选择文字复制',
   'message.collapse': '收起',
   'ability.unsupported': '此设备上的引擎不支持该操作',
+  'external.invalid': '配置无效。请核对必填项、数字 ID 和设备版本。',
+  'external.invalidOwner': '请填写 GitHub 个人主页或数字 ID。',
+  'external.offline': '设备离线',
+  'external.ownerConflict': '全局账号已在别处更改。请重新加载后再同步。',
+  'external.resolveFailed': '无法读取 GitHub 用户。请确认这是个人账号并检查网络。',
+  'external.resolveGhFailed': '无法读取本机 gh 登录。请确认已安装 gh 并登录 github.com。',
+  'external.secretFailed': '设备未完成凭据操作。请核对令牌、仓库权限和设备版本。',
+  'external.unsupported': '设备服务不支持此功能。',
   'turn.busy': '回合进行中，请在结束后再操作',
   'turn.fork': '从此处分叉为新会话',
   'turn.fork.done': '已分叉并切换到新会话',

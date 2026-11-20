@@ -17,7 +17,6 @@ import { EFFORT_TEXT } from '../composer/efforts.ts'
 import { useProjectPermission } from '../composer/project-permission.ts'
 import { SettingsBar, useComposeOptions, useNewSessionDefaults } from '../composer/SettingsBar.tsx'
 import { PathPicker } from '../path-picker/PathPicker.tsx'
-import { ExternalManagerAssignment } from './ExternalManagerAssignment.tsx'
 import {
   MANAGER_FORM_STEPS,
   type ManagerFormStep,
@@ -316,9 +315,6 @@ export function ManagerForm({
               onChange={(event) => change({ rules: event.target.value })}
             />
           </label>
-          {manager && device?.externalSources && step === 'basic' ? (
-            <ExternalManagerAssignment manager={manager} />
-          ) : null}
           {!manager ? (
             <label className="form-field">
               {t('manager.firstTask')}
