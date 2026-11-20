@@ -234,6 +234,159 @@ export class ExternalStore {
     )
   }
 
+  /** B 的原始动作不改写；供路由使用的当前标签快照和入箱同事务提交。 */
+  recordRoutingEvidence(
+    event: ExternalInboxEvent,
+    evidence: {
+      labelIds?: readonly string[]
+      resolvedLabelId?: string
+      addressedBotIds?: readonly string[]
+    },
+  ): void {
+    const key = { sourceId: event.sourceId, repoId: event.subject.repoId, stream: 'github:intake' }
+    if (this.pollCheckpoint(key.sourceId, key.repoId, key.stream, 'evidence', event.eventKey))
+      return
+    for (const id of [...(evidence.labelIds ?? []), ...(evidence.addressedBotIds ?? [])])
+      requireExternalId(id)
+    if (evidence.resolvedLabelId && !evidence.labelIds?.includes(evidence.resolvedLabelId))
+      throw new Error('动作标签 ID 不属于已核验的标签集合')
+    this.writePollCheckpoints(key, [{ bucket: 'evidence', key: event.eventKey, value: evidence }])
+  }
+
+  routingEvidence(
+    row: ExternalInboxEvent,
+  ): { event: ExternalEvent; addressedBotIds: string[] } | null {
+    const event = this.eventEvidence(row.eventKey)
+    if (!event) return null
+    const proof = this.pollCheckpoint<{
+      labelIds?: string[]
+      resolvedLabelId?: string
+      addressedBotIds?: string[]
+    }>(row.sourceId, row.subject.repoId, 'github:intake', 'evidence', row.eventKey)
+    return {
+      event: {
+        ...event,
+        targetEvidence: {
+          ...event.targetEvidence,
+          ...(proof?.labelIds ? { labelIds: proof.labelIds } : {}),
+          ...(proof?.resolvedLabelId ? { labelId: proof.resolvedLabelId } : {}),
+        },
+      },
+      addressedBotIds: proof?.addressedBotIds ?? [],
+    }
+  }
+
+  /** 复核已发生的撤销或内容改动，隔离同仓库的其他主题和来源。 */
+  laterEventEvidence(event: ExternalInboxEvent): ExternalEvent[] {
+    return this.db
+      .prepare(`
+      SELECT evidence.body FROM external_inbox AS inbox
+        JOIN external_event_evidence AS evidence USING (event_key)
+      WHERE inbox.source_id=? AND inbox.repo_id=? AND inbox.event_key<>?
+        AND json_extract(evidence.body,'$.subjectKey')=?
+        AND (json_extract(evidence.body,'$.occurredAt')>? OR (
+          json_extract(evidence.body,'$.occurredAt')=? AND (inbox.seq>? OR
+            json_extract(evidence.body,'$.kind') IN ('unassigned','unlabeled','review_request_removed'))))
+      ORDER BY inbox.seq DESC
+    `)
+      .all(
+        event.sourceId,
+        event.subject.repoId,
+        event.eventKey,
+        event.subjectKey,
+        event.occurredAt,
+        event.occurredAt,
+        event.seq,
+      )
+      .map((row) => decode<ExternalEvent>(row))
+  }
+
+  /** B 线仅在能区分不可读与已删除时写入该观察；不依赖评论正文。 */
+  observationUnavailable(event: ExternalInboxEvent): boolean {
+    const row = this.db
+      .prepare(`
+      SELECT json_extract(body,'$.unavailable') AS unavailable
+      FROM external_observed
+      WHERE source_id=? AND subject_key=? AND json_extract(body,'$.objectId')=?
+      ORDER BY json_extract(body,'$.observedAt') DESC, rowid DESC LIMIT 1
+    `)
+      .get(event.sourceId, event.subjectKey, event.sourceEventId)
+    return row?.unavailable === 'deleted' || row?.unavailable === 'revoked'
+  }
+
+  /** 额度按发送点记账，设备重启不清空；只读取仍在计额窗口的时间。 */
+  deliveryBudgetTimes(scope: 'source' | 'actor', id: string, after: number): number[] {
+    return this.db
+      .prepare(`
+      SELECT at FROM external_audit
+      WHERE subject=? AND at>? AND json_extract(body,'$.action')='delivery_budget'
+      ORDER BY at
+    `)
+      .all(`delivery:${scope}:${id}`, after)
+      .map((row) => Number(row.at))
+  }
+
+  wasIntakeReassigned(event: ExternalInboxEvent, managerId: string): boolean {
+    return Boolean(
+      this.db
+        .prepare(`
+      SELECT 1 FROM external_audit AS audit, json_each(audit.body, '$.eventKeys') AS event
+      WHERE audit.subject=? AND json_extract(audit.body,'$.action')='intake_reassigned'
+        AND json_extract(audit.body,'$.managerId')=? AND event.value=?
+      LIMIT 1
+    `)
+        .get(event.subjectKey, managerId, event.eventKey),
+    )
+  }
+
+  agentPullInbox(subject: ExternalSubject): ExternalInboxEvent[] {
+    return this.db
+      .prepare(`
+      SELECT seq,body FROM external_inbox
+      WHERE repo_id=? AND reason='agent_pr_needs_link' AND json_extract(body,'$.subjectKey')=?
+    `)
+      .all(subject.repoId, externalSubjectKey(subject))
+      .map((row) => numbered<ExternalInboxEvent>(row))
+  }
+
+  /** 停止跟进或终态处理时关闭已入队的绑定提醒，之后恢复跟进也不补发这批。 */
+  stopIssueDeliveries(
+    managerId: string,
+    issueId: ExternalIssueId,
+    at: number,
+    reason: string,
+  ): void {
+    this.transaction(() => {
+      for (const group of this.queue.deliveryGroups(managerId, 'queued')) {
+        if (group.issueId !== issueId) continue
+        this.queue.finishDelivery(group.groupId, 'blocked', at, { reason })
+        for (const key of group.eventKeys) {
+          const event = this.inboxEvent(key)
+          if (
+            event?.status === 'received' &&
+            event.issueId === issueId &&
+            event.managerId === managerId
+          )
+            this.updateInboxEvent(key, event.revision, { status: 'processed', reason })
+        }
+      }
+    })
+  }
+
+  /** 已在 B 入账但迟于恢复才分拣的事件，也按观察时的跟进状态决定是否补发。 */
+  issueFollowUpOffAt(managerId: string, issueId: ExternalIssueId, observedAt: number): boolean {
+    const row = this.db
+      .prepare(`
+      SELECT json_extract(body,'$.after.followUp.state') AS state FROM issue_history
+      WHERE manager_id=? AND json_extract(body,'$.objectId')=?
+        AND json_extract(body,'$.after.followUp.changedAt')<=?
+        AND EXISTS (SELECT 1 FROM json_each(body,'$.fields') WHERE value='followUp')
+      ORDER BY json_extract(body,'$.after.followUp.changedAt') DESC,rowid DESC LIMIT 1
+    `)
+      .get(managerId, issueId, observedAt)
+    return row?.state === 'off'
+  }
+
   inboxEvent(eventKey: string): ExternalInboxEvent | null {
     return numbered(
       this.db.prepare('SELECT seq, body FROM external_inbox WHERE event_key=?').get(eventKey),
@@ -350,6 +503,24 @@ export class ExternalStore {
     const limit = boundedLimit(query.limit)
     const entries = this.db
       .prepare(`SELECT seq,body FROM external_inbox ${sql} ORDER BY seq DESC LIMIT ?`)
+      .all(...bindings, limit + 1)
+      .map((row) => numbered<ExternalInboxEvent>(row))
+    return page(entries, limit)
+  }
+
+  /** 已待发的绑定提醒属于投递调度，不占分类重试的批次。 */
+  unclassifiedInbox(sourceId: string, beforeSeq?: number): ExternalPage<ExternalInboxEvent> {
+    const limit = 100
+    const { sql, bindings } = where([
+      ['source_id=?', sourceId],
+      ['seq<?', beforeSeq],
+    ])
+    const entries = this.db
+      .prepare(`
+      SELECT seq,body FROM external_inbox ${sql} AND status='received'
+        AND (reason IS NULL OR reason<>'awaiting_delivery')
+      ORDER BY seq DESC LIMIT ?
+    `)
       .all(...bindings, limit + 1)
       .map((row) => numbered<ExternalInboxEvent>(row))
     return page(entries, limit)

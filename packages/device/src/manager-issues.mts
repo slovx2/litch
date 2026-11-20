@@ -1,6 +1,7 @@
 // 公共 issue 只投影特殊对象；评论、跟进与投递在经理库的同一事务中保存。
 import { randomUUID } from 'node:crypto'
 import { EXTENSION } from '../../protocol/src/device.mjs'
+import type { ExternalIssueId } from '../../protocol/src/external-sources.mjs'
 import { managerRequestStatus } from '../../protocol/src/manager.mjs'
 import {
   type ManagerIssue,
@@ -19,6 +20,7 @@ import {
 import type { ManagerPost } from '../../protocol/src/manager-posts.mjs'
 import { formatSessionEvent } from '../../protocol/src/session-tree.mjs'
 import { managerSuggestionIssueStatus } from '../../protocol/src/suggestion-inbox.mjs'
+import { ExternalStore } from './external-store.mjs'
 import type { DeviceManagers } from './manager.mjs'
 import { addRelations, projectedRelations } from './manager-relations.mjs'
 import { isRequest } from './manager-requests.mjs'
@@ -55,6 +57,27 @@ export class ManagerIssues {
   }
   private get store() {
     return this.owner.store
+  }
+  /** 供已授权的外部投影入口使用；旧讨论区仍读取 get。 */
+  getWithExternal(managerId: string, ref: string): ManagerIssue {
+    const issue = this.get(managerId, ref)
+    return issue.kind === 'ordinary'
+      ? {
+          ...issue,
+          ...new ExternalStore(this.store).issueFields(managerId, issue.id as ExternalIssueId),
+        }
+      : issue
+  }
+  /** 已处在接单事务内；沿用现有关系和用户未读索引。 */
+  onExternalCreated(managerId: string, issueId: ExternalIssueId, related?: ExternalIssueId): void {
+    const issue = this.get(managerId, issueId, false)
+    if (related)
+      this.links(managerId, issueId, { related: [{ kind: 'issue', target: related }] }, 'manager')
+    this.event(managerId, issue, 'manager', 'issue-created')
+  }
+  /** 事务成功后才广播。 */
+  onExternalChanged(managerId: string, issueId: ExternalIssueId, created: boolean): void {
+    this.broadcast(managerId, this.get(managerId, issueId, false), created ? 'created' : 'updated')
   }
   seen(given: unknown): Promise<unknown> {
     if (this.closed) return Promise.reject(new ManagerError('closed', 'Manager service is closed.'))
@@ -733,6 +756,17 @@ export class ManagerIssues {
             revision: meta.revision + 1,
             updatedAt: at,
           })
+          if (
+            before.kind === 'ordinary' &&
+            (patch.followUp === 'off' || patch.status === 'resolved' || patch.status === 'closed')
+          ) {
+            new ExternalStore(this.store).stopIssueDeliveries(
+              managerId,
+              before.id as ExternalIssueId,
+              at,
+              patch.followUp === 'off' ? 'follow_up_off' : 'terminal_issue',
+            )
+          }
           this.links(managerId, before.id, patch, actor)
           this.store.recordIssue(
             managerId,

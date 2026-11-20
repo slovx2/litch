@@ -360,6 +360,8 @@ export type SessionEventKind =
   /** 工作线新提的建议独立通知经理审核，不依赖完成回报。 */
   | 'manager-suggestions'
   | 'manager-issue'
+  | 'manager-external-triage'
+  | 'manager-external-bound'
   | 'manager-open'
   | 'manager-end'
   | 'manager-rules'
@@ -477,8 +479,15 @@ export function formatSessionEvent(event: SessionEvent): string {
   if (event.kind.startsWith('manager-')) {
     if (!validManagerEvent(event)) throw new Error('Invalid manager session event')
     const manager = event.manager as ManagerEventData
+    const externalHead =
+      event.kind === 'manager-external-triage'
+        ? 'Litch collected an external request for triage. Read it with external_inbox_get.'
+        : event.kind === 'manager-external-bound'
+          ? 'Litch collected an external update for a bound issue. Read it with external_inbox_get.'
+          : null
     const head =
-      event.kind === 'manager-answers'
+      externalHead ??
+      (event.kind === 'manager-answers'
         ? manager.questions?.length || manager.requests?.length || manager.postQuestions?.length
           ? 'The user submitted these board entries.'
           : 'The user submitted these board answers.'
@@ -492,7 +501,7 @@ export function formatSessionEvent(event: SessionEvent): string {
                 ? 'The user created this manager.'
                 : event.kind === 'manager-rules'
                   ? 'The user updated this manager’s scope or rules.'
-                  : 'The user requested ending this manager.'
+                  : 'The user requested ending this manager.')
     return [
       `<${SESSION_EVENT_TAG} kind="${event.kind}">`,
       `${head} This message is from Litch, not typed by the user. Manager: ${manager.managerId}.`,
@@ -596,7 +605,7 @@ export function formatSessionEvent(event: SessionEvent): string {
  */
 export function parseSessionEvent(text: string): { event: SessionEvent | null; rest: string } {
   const pattern = new RegExp(
-    `^<${SESSION_EVENT_TAG} kind="(notes|wake|remind|manager-answers|manager-ignored|manager-suggestions|manager-issue|manager-open|manager-end|manager-rules)">\\n[\\s\\S]*?<!-- (\\{[\\s\\S]*?\\}) -->\\n</${SESSION_EVENT_TAG}>\\n?`,
+    `^<${SESSION_EVENT_TAG} kind="(notes|wake|remind|manager-answers|manager-ignored|manager-suggestions|manager-issue|manager-external-triage|manager-external-bound|manager-open|manager-end|manager-rules)">\\n[\\s\\S]*?<!-- (\\{[\\s\\S]*?\\}) -->\\n</${SESSION_EVENT_TAG}>\\n?`,
   )
   const match = pattern.exec(text)
   if (!match) return { event: null, rest: text }
