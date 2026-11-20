@@ -16,6 +16,7 @@ import { showToast } from '../app/toasts.tsx'
 import { EFFORT_TEXT } from '../composer/efforts.ts'
 import { useProjectPermission } from '../composer/project-permission.ts'
 import { SettingsBar, useComposeOptions, useNewSessionDefaults } from '../composer/SettingsBar.tsx'
+import { ManagerGithub } from '../external/Assignments.tsx'
 import { PathPicker } from '../path-picker/PathPicker.tsx'
 import {
   MANAGER_FORM_STEPS,
@@ -347,12 +348,24 @@ export function ManagerForm({
                 ['manager.model', manager.model ?? t('manager.default')],
                 ['manager.effort', manager.effort ?? t('manager.default')],
               ] as const
-            ).map(([label, value]) => (
-              <div className="form-field" key={label}>
-                <span>{t(label)}</span>
-                <span className="mg-fixed">{value}</span>
-              </div>
-            ))
+            )
+              .map(([label, value]) => (
+                <div className="form-field" key={label}>
+                  <span>{t(label)}</span>
+                  <span className="mg-fixed">{value}</span>
+                </div>
+              ))
+              .concat(
+                device ? (
+                  <ManagerGithub
+                    key="github"
+                    device={device}
+                    manager={{ id: manager.id, name: manager.name }}
+                  />
+                ) : (
+                  []
+                ),
+              )
           ) : (
             <>
               <label className="form-field">

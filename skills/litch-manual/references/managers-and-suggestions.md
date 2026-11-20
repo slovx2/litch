@@ -830,7 +830,11 @@ Manager items are the manager’s own notebook; the manager must not rely on the
 
 ## 外部收件箱
 
-桌面收件箱和议题来源界面待补。
+桌面：设备开启无人值守后，经理控制台多出“GitHub”分段，计数为待分拣数。里面分“待分拣、已处理、被挡下”：待分拣可按原因筛选，已处理可只看已提醒的。点一行展开证据和处置，接单、并入、忽略、改派按设备给的权限出现；并入要选已有议题，改派只列同设备的经理。X-n 下方的“GitHub”一行链接原帖，“接单依据”和“回写”展开明细。决策答复来自 GitHub 评论时，答复标题旁出现“来自 GitHub 评论”链接。
+
+手机：经理页多一个“GitHub”页签，分段和筛选与桌面相同；点一项在底部抽屉里看证据，可接单、忽略或改派（按设备权限），并入已有议题只在桌面。X-n 和决策答复的 GitHub 引用与桌面相同。
+
+The desktop manager console gains a **GitHub** segment (to triage, handled, blocked). Expand an entry to see evidence and accept, merge, ignore or reassign it, as the device allows. X-n issues show the GitHub link, intake basis and write-backs; decision answers taken from a GitHub comment link to it. On the phone the inbox is a **GitHub** tab; merging into an existing issue is desktop-only.
 
 外部收件箱保存设备采集并核验的 GitHub 事件。提醒送达经理后，候选仍待分拣，直到有人处置。合规收件项可以接为新的 X-n、并入已有议题、忽略或改派给同设备的经理。新评论和 PR 可能因轮询覆盖缺口或配额而延迟。
 

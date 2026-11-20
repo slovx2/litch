@@ -14,6 +14,8 @@ import { viaOf, wireStyle } from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
 import { Back, Close } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
+import { UnattendedPage } from '../external/UnattendedPage.tsx'
+import { UnattendedSection } from '../external/UnattendedSection.tsx'
 import { AddDevice } from './AddDevice.tsx'
 import { DeviceChromeSection } from './DeviceChromeSection.tsx'
 import { INSTALL_SERVICE } from './guide.ts'
@@ -54,6 +56,9 @@ export function DeviceDetail({ deviceId, section = null, onBack, onClose }: Devi
     section?.startsWith('harness:') ? section.slice('harness:'.length) : null,
   )
   const closeSettings = useCallback(() => setSettingsOf(null), [])
+  /** 开着无人值守页（盖住设备详情的一页） */
+  const [unattended, setUnattended] = useState(section === 'unattended')
+  const closeUnattended = useCallback(() => setUnattended(false), [])
   const field = useRef<HTMLInputElement>(null)
   /** 这一次改名已经有了结果（提交或者放弃）。输入框消失时还会再报一次失焦，不能当成又提交一次 */
   const settled = useRef(true)
@@ -72,7 +77,7 @@ export function DeviceDetail({ deviceId, section = null, onBack, onClose }: Devi
   }, [gone, onBack])
 
   // Esc 回到设备列表。开着确认框的时候 Esc 归确认框，开着详情设置时归那一页
-  const sub = settingsOf !== null
+  const sub = settingsOf !== null || unattended
   useEffect(() => {
     if (sub) return
     const onKey = (event: KeyboardEvent) => {
@@ -96,6 +101,8 @@ export function DeviceDetail({ deviceId, section = null, onBack, onClose }: Devi
       />
     )
   }
+  if (unattended)
+    return <UnattendedPage device={device} onBack={closeUnattended} onClose={onClose} />
   const online = device.connection === 'online'
   const managed = device.manageable && online
   /** 改名、改连接、移除只对加进来的远程设备有：本机就是这台电脑，只能换线色 */
@@ -343,6 +350,7 @@ export function DeviceDetail({ deviceId, section = null, onBack, onClose }: Devi
           {device.remoteChrome ? <DeviceChromeSection status={device.remoteChrome} /> : null}
           <ServiceSection device={device} reveal={section === 'service'} />
           <PhonesSection device={device} />
+          <UnattendedSection device={device} onOpen={() => setUnattended(true)} />
           {managed ? (
             <ManagePanel
               device={device}

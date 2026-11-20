@@ -16,6 +16,7 @@ import { useT } from '../../app/appearance.ts'
 import { reasonOf } from '../../app/errors.ts'
 import { Icon } from '../../app/icons.tsx'
 import { useServices } from '../../app/services.tsx'
+import { IssueExternal } from '../../external/IssueExternal.tsx'
 import { BoardMarkdown } from '../BoardMarkdown.tsx'
 import { CardActionScope } from '../CardActions.tsx'
 import { useDiscussionPane } from '../discussion-pane.ts'
@@ -342,6 +343,7 @@ export function IssueThread({
                 commands={commands}
               />
               <IssueRelationsRow manager={manager} issue={issue} onOpenItem={onOpenItem} />
+              <IssueExternal manager={manager} issue={issue} />
             </div>
           ) : null}
           <IssueDiscussion

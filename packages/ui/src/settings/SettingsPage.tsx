@@ -4,6 +4,7 @@ import { useT } from '../app/appearance.ts'
 import { Archive, Close, Forward } from '../app/icons.tsx'
 import { useServices } from '../app/services.tsx'
 import { AddDevice } from '../devices/AddDevice.tsx'
+import { OwnerSection } from '../external/OwnerSection.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 import { AboutSection } from './About.tsx'
 import { AssistSection } from './AssistSection.tsx'
@@ -32,6 +33,7 @@ export const SETTINGS_SECTIONS = [
   'chrome',
   'computer',
   'notify',
+  'github',
   'assist',
   'keys',
   'about',
@@ -61,6 +63,7 @@ const TITLES: Record<SettingsSection, MessageKey> = {
   chrome: 'chrome.title',
   computer: 'settings.group.computer',
   notify: 'settings.group.notify',
+  github: 'ext.settings.group',
   assist: 'settings.group.assist',
   keys: 'settings.group.keys',
   about: 'settings.group.about',
@@ -191,6 +194,8 @@ export function SettingsPage({
               <ComputerSection onDevices={onDevices} />
             ) : section === 'notify' ? (
               <NotifySection />
+            ) : section === 'github' ? (
+              <OwnerSection />
             ) : section === 'assist' ? (
               <AssistSection onClose={onClose} />
             ) : section === 'keys' ? (
