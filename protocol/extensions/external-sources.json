@@ -1,0 +1,1223 @@
+{
+  "extension": "litchExternalSources",
+  "description": "设备的 GitHub 来源、外部收件箱及回写状态。",
+  "appliesTo": "设备聚合面。设备通过 runtime/info.device.extensions 声明；客户端按连接在 initialize 中声明。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "litchExternalSources" }
+    }
+  },
+  "undeclared": "不提供外部来源方法及通知，不在现有经理对象上发送外部字段。",
+  "rules": [
+    "凭据变更只由设备管理员经私有控制通道提交。所有公开结果、通知及诊断均不得包含秘密、外部正文或待发载荷。",
+    "预览不推进水位、不写持久记录；对账只读核验外部证据。按收到请求或通知的连接核验权限和声明。",
+    "现有 ManagerIssue 的附加字段同时需要 litchManagerIssues；ManagerAnswer 的答复来源同时需要 litchManager。",
+    "平台数字 ID 用十进制字符串；时间用 UTC epoch 秒；分页用设备入账序号，不以外部时间充当游标。"
+  ],
+  "parts": [
+    {
+      "kind": "Method",
+      "name": "litch/external/owner/get",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["owner"],
+        "properties": {
+          "owner": { "oneOf": [{ "$ref": "#/definitions/Owner" }, { "type": "null" }] }
+        }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/owner/set",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId", "expectedRevision", "owner"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "expectedRevision": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "owner": { "$ref": "#/definitions/OwnerIdentity" }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["owner"],
+        "properties": { "owner": { "$ref": "#/definitions/Owner" } }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/credential/configure",
+      "params": { "$ref": "#/definitions/CredentialConfigure" },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["credential"],
+        "properties": { "credential": { "$ref": "#/definitions/Credential" } }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/credential/rotate",
+      "params": { "$ref": "#/definitions/CredentialRotate" },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["credential"],
+        "properties": { "credential": { "$ref": "#/definitions/Credential" } }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/credential/revoke",
+      "params": { "$ref": "#/definitions/CredentialRevoke" },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["credential"],
+        "properties": { "credential": { "$ref": "#/definitions/Credential" } }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/source/list",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sources"],
+        "properties": {
+          "sources": { "type": "array", "items": { "$ref": "#/definitions/SourceStatus" } }
+        }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/source/get",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sourceId"],
+        "properties": { "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 } }
+      },
+      "result": { "$ref": "#/definitions/SourceStatus" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/source/upsert",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId", "expectedRevision", "source"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "expectedRevision": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "source": { "$ref": "#/definitions/SourceDraft" }
+        }
+      },
+      "result": { "$ref": "#/definitions/SourceStatus" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/source/preview",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source"],
+        "properties": { "source": { "$ref": "#/definitions/SourceDraft" } }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["matches", "diagnostics"],
+        "properties": {
+          "matches": { "type": "array", "items": { "$ref": "#/definitions/PreviewMatch" } },
+          "diagnostics": { "type": "array", "items": { "$ref": "#/definitions/Diagnostic" } }
+        }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/source/pause",
+      "params": { "$ref": "#/definitions/SourceMutation" },
+      "result": { "$ref": "#/definitions/SourceStatus" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/source/resume",
+      "params": { "$ref": "#/definitions/SourceMutation" },
+      "result": { "$ref": "#/definitions/SourceStatus" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/source/check",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sourceId"],
+        "properties": { "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 } }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["diagnostics"],
+        "properties": {
+          "diagnostics": { "type": "array", "items": { "$ref": "#/definitions/Diagnostic" } }
+        }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/inbox/list",
+      "params": { "$ref": "#/definitions/InboxQuery" },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entries", "nextBeforeSeq"],
+        "properties": {
+          "entries": { "type": "array", "items": { "$ref": "#/definitions/InboxEvent" } },
+          "nextBeforeSeq": {
+            "oneOf": [
+              { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              { "type": "null" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/inbox/get",
+      "params": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["eventKey"],
+            "properties": { "eventKey": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["intakeId"],
+            "properties": { "intakeId": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          }
+        ]
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["events", "intake"],
+        "properties": {
+          "events": { "type": "array", "items": { "$ref": "#/definitions/InboxEvent" } },
+          "intake": { "oneOf": [{ "$ref": "#/definitions/Intake" }, { "type": "null" }] }
+        }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/inbox/triage",
+      "params": { "$ref": "#/definitions/TriageParams" },
+      "result": { "$ref": "#/definitions/TriageResult" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/outbox/list",
+      "params": { "$ref": "#/definitions/OutboxQuery" },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entries", "nextBeforeSeq"],
+        "properties": {
+          "entries": { "type": "array", "items": { "$ref": "#/definitions/OutboxSummary" } },
+          "nextBeforeSeq": {
+            "oneOf": [
+              { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              { "type": "null" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/outbox/get",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId"],
+        "properties": { "operationId": { "type": "string", "minLength": 1, "maxLength": 128 } }
+      },
+      "result": { "$ref": "#/definitions/OutboxSummary" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/outbox/reconcile",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId"],
+        "properties": { "operationId": { "type": "string", "minLength": 1, "maxLength": 128 } }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["receipt", "diagnostics"],
+        "properties": {
+          "receipt": { "oneOf": [{ "$ref": "#/definitions/Receipt" }, { "type": "null" }] },
+          "diagnostics": { "type": "array", "items": { "$ref": "#/definitions/Diagnostic" } }
+        }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/external/outbox/cancel",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId", "expectedRevision", "targetOperationId"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "expectedRevision": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "targetOperationId": { "type": "string", "minLength": 1, "maxLength": 128 }
+        }
+      },
+      "result": { "$ref": "#/definitions/OutboxSummary" }
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/external/sourcesChanged",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sourceId", "revision"],
+        "properties": {
+          "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+        }
+      }
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/external/inboxChanged",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sourceId", "revision", "pending"],
+        "properties": {
+          "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+          "pending": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "managerId": { "type": "string", "minLength": 1, "maxLength": 256 }
+        }
+      }
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/external/outboxChanged",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sourceId", "revision", "pending", "managerId"],
+        "properties": {
+          "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+          "pending": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "managerId": { "type": "string", "minLength": 1, "maxLength": 256 }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "Subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "repoId", "number", "kind", "url"],
+      "properties": {
+        "provider": { "enum": ["github"] },
+        "repoId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "number": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "kind": { "enum": ["issue", "pull_request"] },
+        "url": { "type": "string", "pattern": "^https://github\\.com/[^\\s]+$" }
+      }
+    },
+    "Event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "externalEventKey",
+        "subjectKey",
+        "kind",
+        "occurredAt",
+        "actorEvidence",
+        "targetEvidence",
+        "contentVersion",
+        "permalink"
+      ],
+      "properties": {
+        "provider": { "enum": ["github"] },
+        "externalEventKey": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "subjectKey": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "kind": {
+          "enum": [
+            "issue",
+            "pull_request",
+            "comment",
+            "review",
+            "review_comment",
+            "assigned",
+            "unassigned",
+            "review_requested",
+            "review_request_removed",
+            "labeled",
+            "unlabeled",
+            "closed",
+            "merged",
+            "reopened",
+            "ci"
+          ]
+        },
+        "occurredAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "actorEvidence": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["userId"],
+              "properties": {
+                "userId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+                "login": { "type": "string", "minLength": 1, "maxLength": 256 }
+              }
+            },
+            { "type": "null" }
+          ]
+        },
+        "targetEvidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["subject", "sourceEventId"],
+          "properties": {
+            "subject": { "$ref": "#/definitions/Subject" },
+            "sourceEventId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+            "assigneeUserId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+            "reviewerUserId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+            "labelId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+            "labelIds": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[1-9][0-9]*$" }
+            },
+            "mentionsBot": { "type": "boolean" },
+            "publication": { "enum": ["published", "edited"] },
+            "mentionedBotId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+            "labelName": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "run": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["runId", "attempt", "headSha", "workflowId", "status", "conclusion"],
+              "properties": {
+                "runId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+                "attempt": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+                "headSha": { "type": "string", "minLength": 1, "maxLength": 256 },
+                "workflowId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+                "status": { "type": "string", "minLength": 1, "maxLength": 256 },
+                "conclusion": {
+                  "oneOf": [
+                    { "type": "string", "minLength": 1, "maxLength": 256 },
+                    { "type": "null" }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "contentVersion": {
+          "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 256 }, { "type": "null" }]
+        },
+        "permalink": { "type": "string", "pattern": "^https://github\\.com/[^\\s]+$" }
+      }
+    },
+    "OwnerIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "userId", "loginCache", "profileUrl", "method"],
+      "properties": {
+        "provider": { "enum": ["github"] },
+        "userId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "loginCache": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "profileUrl": { "type": "string", "pattern": "^https://github\\.com/[^\\s]+$" },
+        "method": { "enum": ["profileUrl", "userId", "localGh"] }
+      }
+    },
+    "Owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "userId",
+        "loginCache",
+        "profileUrl",
+        "method",
+        "configuredBy",
+        "revision"
+      ],
+      "properties": {
+        "provider": { "enum": ["github"] },
+        "userId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "loginCache": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "profileUrl": { "type": "string", "pattern": "^https://github\\.com/[^\\s]+$" },
+        "method": { "enum": ["profileUrl", "userId", "localGh"] },
+        "configuredBy": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+      }
+    },
+    "Credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "credentialRef",
+        "provider",
+        "botUserId",
+        "resourceOwnerId",
+        "createdAt",
+        "lastVerifiedAt",
+        "state",
+        "generation"
+      ],
+      "properties": {
+        "credentialRef": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "provider": { "enum": ["github"] },
+        "botUserId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "resourceOwnerId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "createdAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "lastVerifiedAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "state": { "enum": ["active", "invalid", "revoked"] },
+        "generation": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "expiresAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+      }
+    },
+    "Repo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repoId", "owner", "name", "url", "localRoot", "allowedBase", "headNamespace"],
+      "properties": {
+        "repoId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "owner": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "url": { "type": "string", "pattern": "^https://github\\.com/[^\\s]+$" },
+        "localRoot": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "allowedBase": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+        },
+        "headNamespace": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "Route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["routeId", "stableManagerId", "priority", "repoIds", "enabled"],
+      "properties": {
+        "routeId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "stableManagerId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "priority": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "repoIds": { "type": "array", "items": { "type": "string", "pattern": "^[1-9][0-9]*$" } },
+        "enabled": { "type": "boolean" },
+        "labelIds": { "type": "array", "items": { "type": "string", "pattern": "^[1-9][0-9]*$" } },
+        "eventKinds": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "issue",
+              "pull_request",
+              "comment",
+              "review",
+              "review_comment",
+              "assigned",
+              "unassigned",
+              "review_requested",
+              "review_request_removed",
+              "labeled",
+              "unlabeled",
+              "closed",
+              "merged",
+              "reopened",
+              "ci"
+            ]
+          }
+        }
+      }
+    },
+    "SourceDraft": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceId",
+        "provider",
+        "enabled",
+        "credentialRef",
+        "botUserId",
+        "triggers",
+        "minRole",
+        "writePolicy",
+        "interval",
+        "repos",
+        "routes"
+      ],
+      "properties": {
+        "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "provider": { "enum": ["github"] },
+        "enabled": { "type": "boolean" },
+        "credentialRef": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "botUserId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "triggers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mention", "assignment", "reviewRequest", "label", "labelIds"],
+          "properties": {
+            "mention": { "type": "boolean" },
+            "assignment": { "type": "boolean" },
+            "reviewRequest": { "type": "boolean" },
+            "label": { "type": "boolean" },
+            "labelIds": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[1-9][0-9]*$" }
+            }
+          }
+        },
+        "minRole": { "enum": ["triage", "write", "maintain", "admin"] },
+        "writePolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["comment", "draftPr", "status", "managedPush"],
+          "properties": {
+            "comment": { "type": "boolean" },
+            "draftPr": { "type": "boolean" },
+            "status": { "type": "boolean" },
+            "managedPush": { "type": "boolean" }
+          }
+        },
+        "interval": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "repos": { "type": "array", "items": { "$ref": "#/definitions/Repo" } },
+        "routes": { "type": "array", "items": { "$ref": "#/definitions/Route" } }
+      }
+    },
+    "Source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceId",
+        "provider",
+        "enabled",
+        "credentialRef",
+        "botUserId",
+        "triggers",
+        "minRole",
+        "writePolicy",
+        "interval",
+        "repos",
+        "routes",
+        "revision",
+        "rulesVersion",
+        "createdAt"
+      ],
+      "properties": {
+        "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "provider": { "enum": ["github"] },
+        "enabled": { "type": "boolean" },
+        "credentialRef": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "botUserId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "triggers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mention", "assignment", "reviewRequest", "label", "labelIds"],
+          "properties": {
+            "mention": { "type": "boolean" },
+            "assignment": { "type": "boolean" },
+            "reviewRequest": { "type": "boolean" },
+            "label": { "type": "boolean" },
+            "labelIds": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[1-9][0-9]*$" }
+            }
+          }
+        },
+        "minRole": { "enum": ["triage", "write", "maintain", "admin"] },
+        "writePolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["comment", "draftPr", "status", "managedPush"],
+          "properties": {
+            "comment": { "type": "boolean" },
+            "draftPr": { "type": "boolean" },
+            "status": { "type": "boolean" },
+            "managedPush": { "type": "boolean" }
+          }
+        },
+        "interval": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "repos": { "type": "array", "items": { "$ref": "#/definitions/Repo" } },
+        "routes": { "type": "array", "items": { "$ref": "#/definitions/Route" } },
+        "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "rulesVersion": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "createdAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+      }
+    },
+    "Coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repoId", "stream", "coveredThrough"],
+      "properties": {
+        "repoId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "stream": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "coveredThrough": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            { "type": "null" }
+          ]
+        },
+        "checkedAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "backoffUntil": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "gap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["from", "to", "reason"],
+          "properties": {
+            "from": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            "to": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            "reason": { "type": "string", "minLength": 1, "maxLength": 256 }
+          }
+        }
+      }
+    },
+    "SourceStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "coverage"],
+      "properties": {
+        "source": { "$ref": "#/definitions/Source" },
+        "coverage": { "type": "array", "items": { "$ref": "#/definitions/Coverage" } }
+      }
+    },
+    "Diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check", "state", "code"],
+      "properties": {
+        "check": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "state": { "enum": ["ok", "blocked", "unverified"] },
+        "code": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "checkedAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+      }
+    },
+    "InboxEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventKey",
+        "sourceId",
+        "subjectKey",
+        "subject",
+        "kind",
+        "sourceEventId",
+        "actorId",
+        "actorRoleAtCheck",
+        "occurredAt",
+        "observedAt",
+        "status",
+        "eventUrl",
+        "contentVersion",
+        "seq",
+        "revision"
+      ],
+      "properties": {
+        "eventKey": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "subjectKey": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "subject": { "$ref": "#/definitions/Subject" },
+        "kind": {
+          "enum": [
+            "issue",
+            "pull_request",
+            "comment",
+            "review",
+            "review_comment",
+            "assigned",
+            "unassigned",
+            "review_requested",
+            "review_request_removed",
+            "labeled",
+            "unlabeled",
+            "closed",
+            "merged",
+            "reopened",
+            "ci"
+          ]
+        },
+        "sourceEventId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "actorId": {
+          "oneOf": [{ "type": "string", "pattern": "^[1-9][0-9]*$" }, { "type": "null" }]
+        },
+        "actorRoleAtCheck": {
+          "oneOf": [
+            { "enum": ["read", "triage", "write", "maintain", "admin", "owner"] },
+            { "type": "null" }
+          ]
+        },
+        "occurredAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "observedAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "status": { "enum": ["received", "blocked", "pending_triage", "processed", "notified"] },
+        "eventUrl": { "type": "string", "pattern": "^https://github\\.com/[^\\s]+$" },
+        "contentVersion": {
+          "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 256 }, { "type": "null" }]
+        },
+        "seq": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "ruleId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "rulesVersion": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "routeId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "managerId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "issueId": { "type": "string", "pattern": "^X-[1-9][0-9]*$" },
+        "intakeId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "PreviewMatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventKey",
+        "sourceId",
+        "subjectKey",
+        "subject",
+        "kind",
+        "sourceEventId",
+        "actorId",
+        "actorRoleAtCheck",
+        "occurredAt",
+        "observedAt",
+        "status",
+        "eventUrl",
+        "contentVersion"
+      ],
+      "properties": {
+        "eventKey": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "subjectKey": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "subject": { "$ref": "#/definitions/Subject" },
+        "kind": {
+          "enum": [
+            "issue",
+            "pull_request",
+            "comment",
+            "review",
+            "review_comment",
+            "assigned",
+            "unassigned",
+            "review_requested",
+            "review_request_removed",
+            "labeled",
+            "unlabeled",
+            "closed",
+            "merged",
+            "reopened",
+            "ci"
+          ]
+        },
+        "sourceEventId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "actorId": {
+          "oneOf": [{ "type": "string", "pattern": "^[1-9][0-9]*$" }, { "type": "null" }]
+        },
+        "actorRoleAtCheck": {
+          "oneOf": [
+            { "enum": ["read", "triage", "write", "maintain", "admin", "owner"] },
+            { "type": "null" }
+          ]
+        },
+        "occurredAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "observedAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "status": { "enum": ["received", "blocked", "pending_triage", "processed", "notified"] },
+        "eventUrl": { "type": "string", "pattern": "^https://github\\.com/[^\\s]+$" },
+        "contentVersion": {
+          "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 256 }, { "type": "null" }]
+        },
+        "ruleId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "rulesVersion": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "routeId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "managerId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "issueId": { "type": "string", "pattern": "^X-[1-9][0-9]*$" },
+        "intakeId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "Intake": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intakeId",
+        "sourceId",
+        "subjectKey",
+        "subject",
+        "eventKeys",
+        "autoNotifyUntil",
+        "status",
+        "revision"
+      ],
+      "properties": {
+        "intakeId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "subjectKey": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "subject": { "$ref": "#/definitions/Subject" },
+        "eventKeys": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+        },
+        "autoNotifyUntil": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "status": { "enum": ["pending_triage", "processed"] },
+        "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "managerId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "issueId": { "type": "string", "pattern": "^X-[1-9][0-9]*$" },
+        "deliveryId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "Ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "repoId",
+        "number",
+        "kind",
+        "url",
+        "managerId",
+        "issueId",
+        "origin",
+        "createdAt"
+      ],
+      "properties": {
+        "provider": { "enum": ["github"] },
+        "repoId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "number": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "kind": { "enum": ["issue", "pull_request"] },
+        "url": { "type": "string", "pattern": "^https://github\\.com/[^\\s]+$" },
+        "managerId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "issueId": { "type": "string", "pattern": "^X-[1-9][0-9]*$" },
+        "origin": { "enum": ["intake", "write_receipt", "manual"] },
+        "createdAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+      }
+    },
+    "Mandate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mandateId",
+        "managerId",
+        "issueId",
+        "subjectKey",
+        "decision",
+        "requesterUserId",
+        "observedRole",
+        "eventKeys",
+        "ruleId",
+        "rulesVersion",
+        "routeId",
+        "acceptedBy",
+        "acceptedAt",
+        "authorizedScope",
+        "policyRevision"
+      ],
+      "properties": {
+        "mandateId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "managerId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "issueId": { "type": "string", "pattern": "^X-[1-9][0-9]*$" },
+        "subjectKey": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "decision": { "enum": ["accept", "merge"] },
+        "requesterUserId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "observedRole": { "enum": ["read", "triage", "write", "maintain", "admin", "owner"] },
+        "eventKeys": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+        },
+        "ruleId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "rulesVersion": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "routeId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "acceptedBy": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "acceptedAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "authorizedScope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["repoId", "subjectKey", "actions"],
+          "properties": {
+            "repoId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+            "subjectKey": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "actions": {
+              "type": "array",
+              "items": { "enum": ["comment", "draft_pr", "status", "managed_push"] }
+            }
+          }
+        },
+        "policyRevision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "revokedAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+      }
+    },
+    "AnswerSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "repoId", "commentId", "actorUserId", "url", "revision"],
+      "properties": {
+        "kind": { "enum": ["github"] },
+        "repoId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "commentId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "actorUserId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "url": { "type": "string", "pattern": "^https://github\\.com/[^\\s]+$" },
+        "revision": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "Receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["objectId", "url", "at", "botUserId", "verifiedBy"],
+      "properties": {
+        "objectId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "url": { "type": "string", "pattern": "^https://github\\.com/[^\\s]+$" },
+        "at": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "botUserId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "verifiedBy": { "enum": ["response", "lookup", "manual"] },
+        "requestId": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "OutboxSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seq",
+        "operationId",
+        "sourceId",
+        "managerId",
+        "targetRef",
+        "action",
+        "state",
+        "revision",
+        "attempts"
+      ],
+      "properties": {
+        "seq": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "operationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "managerId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "targetRef": { "$ref": "#/definitions/Subject" },
+        "action": { "enum": ["comment", "draft_pr", "status", "managed_push"] },
+        "state": {
+          "enum": ["queued", "sending", "confirmed", "unknown", "failed", "blocked", "canceled"]
+        },
+        "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "attempts": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "issueId": { "type": "string", "pattern": "^X-[1-9][0-9]*$" },
+        "nextAttempt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "receipt": { "$ref": "#/definitions/Receipt" },
+        "errorClass": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "InboxQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "beforeSeq": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "managerId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "repoId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "status": { "enum": ["received", "blocked", "pending_triage", "processed", "notified"] },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "OutboxQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "beforeSeq": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "managerId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "repoId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "state": {
+          "enum": ["queued", "sending", "confirmed", "unknown", "failed", "blocked", "canceled"]
+        }
+      }
+    },
+    "TriageParams": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["intakeId", "expectedRevision", "idempotencyKey", "action", "title", "body"],
+          "properties": {
+            "intakeId": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "expectedRevision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+            "idempotencyKey": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "action": { "enum": ["accept"] },
+            "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "body": { "type": "string", "maxLength": 65536 },
+            "relatedIssueId": { "type": "string", "pattern": "^X-[1-9][0-9]*$" },
+            "reply": { "type": "string", "minLength": 1, "maxLength": 65536 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "intakeId",
+            "expectedRevision",
+            "idempotencyKey",
+            "action",
+            "issueId",
+            "expectedIssueRevision"
+          ],
+          "properties": {
+            "intakeId": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "expectedRevision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+            "idempotencyKey": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "action": { "enum": ["merge"] },
+            "issueId": { "type": "string", "pattern": "^X-[1-9][0-9]*$" },
+            "expectedIssueRevision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "reply": { "type": "string", "minLength": 1, "maxLength": 65536 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["intakeId", "expectedRevision", "idempotencyKey", "action", "reason"],
+          "properties": {
+            "intakeId": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "expectedRevision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+            "idempotencyKey": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "action": { "enum": ["ignore"] },
+            "reason": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "reply": { "type": "string", "minLength": 1, "maxLength": 65536 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["intakeId", "expectedRevision", "idempotencyKey", "action", "managerId"],
+          "properties": {
+            "intakeId": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "expectedRevision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+            "idempotencyKey": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "action": { "enum": ["reassign"] },
+            "managerId": { "type": "string", "minLength": 1, "maxLength": 256 }
+          }
+        }
+      ]
+    },
+    "TriageResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["outcome", "intake"],
+          "properties": {
+            "outcome": { "enum": ["applied"] },
+            "intake": { "$ref": "#/definitions/Intake" },
+            "ref": { "$ref": "#/definitions/Ref" },
+            "mandate": { "$ref": "#/definitions/Mandate" },
+            "reply": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["operationId"],
+                  "properties": {
+                    "operationId": { "type": "string", "minLength": 1, "maxLength": 128 }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["notQueued"],
+                  "properties": {
+                    "notQueued": { "type": "string", "minLength": 1, "maxLength": 256 }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["outcome", "reason", "intake"],
+          "properties": {
+            "outcome": { "enum": ["conflict"] },
+            "reason": { "enum": ["intake_revision", "issue_revision", "binding", "idempotency"] },
+            "intake": { "$ref": "#/definitions/Intake" },
+            "ref": { "$ref": "#/definitions/Ref" }
+          }
+        }
+      ]
+    },
+    "CredentialConfigure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "token", "repoIds"],
+      "properties": {
+        "operationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "token": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "repoIds": { "type": "array", "items": { "type": "string", "pattern": "^[1-9][0-9]*$" } }
+      }
+    },
+    "CredentialRotate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "credentialRef", "expectedGeneration", "token"],
+      "properties": {
+        "operationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "credentialRef": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "expectedGeneration": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "token": { "type": "string", "minLength": 1, "maxLength": 4096 }
+      }
+    },
+    "CredentialRevoke": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "credentialRef", "expectedGeneration"],
+      "properties": {
+        "operationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "credentialRef": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "expectedGeneration": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+      }
+    },
+    "SourceMutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "expectedRevision", "sourceId"],
+      "properties": {
+        "operationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "expectedRevision": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    }
+  },
+  "existingFields": {
+    "ManagerIssue.externalRefs": { "type": "array", "items": { "$ref": "#/definitions/Ref" } },
+    "ManagerIssue.intakeMandates": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/Mandate" }
+    },
+    "ManagerAnswer.answerSource": { "$ref": "#/definitions/AnswerSource" }
+  }
+}

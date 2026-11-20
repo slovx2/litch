@@ -1,5 +1,6 @@
 // 经理 issue 的公共协议外壳。特殊 issue 的权威仍在 manager.mts、manager-posts.mts 和提案表；
 // 这里定义 X-n 与现有类型编号、评论、时间线、过滤和设备通知，供设备与两端共用。
+import type { ExternalIssueFields } from './external-sources.mjs'
 import type { ManagerDecisionOption, ManagerDiscussion, ManagerQuestion } from './manager.mjs'
 import type { ManagerRelation } from './manager-posts.mjs'
 
@@ -120,7 +121,7 @@ export interface ManagerIssueQuickActions {
   report?: { unread: boolean; canMarkRead: boolean }
 }
 
-export interface ManagerIssue {
+export interface ManagerIssue extends ExternalIssueFields {
   /** 普通 issue 为 X-n；D/R/P/S 保持原编号，I-n 不属于 issue。 */
   id: ManagerIssueId
   kind: ManagerIssueKind
