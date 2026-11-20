@@ -7,6 +7,8 @@ import {
   MANAGER_IGNORED_TEXT,
   MANAGER_ITEM_NOTE,
 } from '../../protocol/src/client-tools-manager.mjs'
+import type { ExternalAnswerSource } from '../../protocol/src/external-sources.mjs'
+import { isExternalAnswerSource } from '../../protocol/src/external-validation.mjs'
 import type {
   ManagerActor,
   ManagerAnswersSubmitResponse,
@@ -115,6 +117,7 @@ export class ManagerBoardWriter {
     given: unknown,
     turnId?: string,
     actor: ManagerActor = 'manager',
+    verifiedAnswerSource?: ExternalAnswerSource,
   ): unknown {
     const args = validateTool(tool, given)
     if (tool === 'get') {
@@ -288,11 +291,19 @@ export class ManagerBoardWriter {
           })
           if (error) invalid(error)
           by = 'user-conversation'
-          why = 'User answered in conversation'
+          why = verifiedAnswerSource
+            ? 'Verified GitHub owner answer'
+            : 'User answered in conversation'
           patch = {
             status: 'answered',
             closed: null,
-            answer: { optionId: args.optionId, text: args.text, by, at: managerNow() },
+            answer: {
+              optionId: args.optionId,
+              text: args.text,
+              by,
+              at: managerNow(),
+              ...(verifiedAnswerSource ? { answerSource: verifiedAnswerSource } : {}),
+            },
           }
           break
         }
@@ -301,6 +312,25 @@ export class ManagerBoardWriter {
       }
       return { object: this.change(managerId, before, patch, by, why) }
     })
+  }
+  /** 设备外部工具先独立复取评论、校验 owner；普通工具入参不能提交来源对象。 */
+  answerFromExternal(
+    managerId: string,
+    answer: unknown,
+    expectedRevision: number,
+    source: ExternalAnswerSource,
+    turnId: string,
+  ): unknown {
+    this.active(managerId)
+    const args = validateTool('answer', answer)
+    const decision = this.object(managerId, args.id)
+    if (!isDecision(decision) || decision.revision !== expectedRevision)
+      throw new ManagerError(
+        'decisionConflict',
+        'The decision changed; review the owner answer again.',
+      )
+    if (!isExternalAnswerSource(source)) invalid('Invalid verified owner answer source.')
+    return this.tool(managerId, 'answer', args, turnId, 'manager', source)
   }
   private answerFailure(decision: ManagerDecision, answer: ManagerSubmittedAnswer): string | null {
     if (
