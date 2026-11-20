@@ -73,9 +73,13 @@ async function verifyRepository(
   gh: ReturnType<typeof api>,
 ): Promise<JsonObject> {
   const metadata = object((await gh.get(gh.path)).body)
+  const verifiedOwner = context.credential.repos.find(
+    (repo) => repo.repoId === context.repo.repoId,
+  )?.resourceOwnerId
   if (
     numericId(metadata.id) !== context.repo.repoId ||
-    numericId(object(metadata.owner).id) !== context.credential.metadata.resourceOwnerId ||
+    !verifiedOwner ||
+    numericId(object(metadata.owner).id) !== verifiedOwner ||
     typeof metadata.full_name !== 'string' ||
     metadata.full_name.toLowerCase() !== `${context.repo.owner}/${context.repo.name}`.toLowerCase()
   )

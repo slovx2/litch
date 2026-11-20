@@ -10,11 +10,18 @@ import {
   type GithubSender,
   GithubWriteFault,
   isFineGrainedToken,
+  isGithubScopedToken,
+  isManagedGithubToken,
   login,
   numericId,
   sendGithub,
 } from './github/write-api.mjs'
 import { ExternalPrivateFiles, privateName } from './secrets-files.mjs'
+import {
+  type GithubGhScope,
+  type GithubOAuthProbe,
+  probeGithubGhToken,
+} from './secrets-oauth-probe.mjs'
 import {
   type GithubResolvedRepository,
   listGithubCredentialRepoIds,
@@ -27,11 +34,16 @@ interface StoredSecret {
   token: string
   botLogin: string
   repos: VerifiedGithubRepo[]
+  ownerConfirmedRevision?: number
+}
+export type GithubPublicCredential = ExternalCredential & {
+  credentialKind?: 'oauth' | 'fine_grained'
+  scopes?: string[]
 }
 export interface GithubCredentialSnapshot extends StoredSecret {
-  metadata: ExternalCredential
+  metadata: GithubPublicCredential
 }
-export type CredentialResult = ExternalConfigResult<ExternalCredential> & {
+export type CredentialResult = ExternalConfigResult<GithubPublicCredential> & {
   diagnostics: ExternalDiagnostic[]
 }
 type Mutation = { operationId: string; credentialRef: string; expectedGeneration: number }
@@ -41,7 +53,7 @@ export interface GithubDeviceIdentity {
   botUserId: string
   login: string
   revision: number
-  credentials: ExternalCredential[]
+  credentials: GithubPublicCredential[]
 }
 export interface GithubIdentityRepository extends GithubResolvedRepository {
   grants: Array<{
@@ -56,6 +68,17 @@ export interface GithubIdentityRepository extends GithubResolvedRepository {
 function identityCredentialRef(botUserId: string, resourceOwnerId: string): string {
   return `gh-${digest(JSON.stringify([botUserId, resourceOwnerId])).slice(0, 40)}`
 }
+function credentialGrant(credential: ExternalCredential | null): GithubPublicCredential | null {
+  return credential
+}
+
+export interface PreparedGithubGhAuthorization {
+  // 此对象只在设备登录任务的内存中停留，不能直接做 RPC 投影。
+  token: string
+  ownerRevision: number
+  previous: GithubPublicCredential | null
+  probe: GithubOAuthProbe
+}
 
 /** 私有设备控制面调用 configure/rotate/revoke。读取快照只供设备适配器。 */
 export class ExternalGithubSecrets {
@@ -65,6 +88,7 @@ export class ExternalGithubSecrets {
   private readonly send: GithubSender
   private readonly now: () => number
   private readonly listeners = new Set<() => void>()
+  private readonly preparedGh = new WeakSet<PreparedGithubGhAuthorization>()
   constructor(
     store: ExternalStore,
     stateDirectory: string,
@@ -85,16 +109,22 @@ export class ExternalGithubSecrets {
     token: string
     repoIds?: string[]
     resourceOwnerId?: string
+    signal?: AbortSignal
   }): Promise<CredentialResult> {
     this.checkMutation(input.operationId)
     const owner = this.store.config.owner('github')
     if (!owner) throw new GithubWriteFault('github_owner_not_configured')
     if (!isFineGrainedToken(input.token))
       throw new GithubWriteFault('github_fine_grained_pat_required')
+    const send: GithubSender = (token, path, options) =>
+      this.send(token, path, {
+        ...options,
+        ...(input.signal ? { signal: input.signal } : {}),
+      })
     const repoIds =
-      input.repoIds ??
-      (await listGithubCredentialRepoIds(this.send, input.token, input.resourceOwnerId))
-    const probe = await probeGithubCredential(this.send, input.token, owner.userId, repoIds)
+      input.repoIds ?? (await listGithubCredentialRepoIds(send, input.token, input.resourceOwnerId))
+    const probe = await probeGithubCredential(send, input.token, owner.userId, repoIds)
+    if (input.signal?.aborted) throw input.signal.reason
     if (input.resourceOwnerId && probe.resourceOwnerId !== input.resourceOwnerId)
       throw new GithubWriteFault('github_resource_owner_unverified')
     const credentialRef = identityCredentialRef(probe.botUserId, probe.resourceOwnerId)
@@ -121,11 +151,67 @@ export class ExternalGithubSecrets {
     return this.save(input)
   }
 
-  async addIdentity(input: { operationId: string; token: string }) {
+  async prepareGhAuthorization(
+    token: string,
+    scopes: readonly GithubGhScope[],
+    signal?: AbortSignal,
+  ) {
+    const owner = this.store.config.owner('github')
+    if (!owner) throw new GithubWriteFault('github_owner_not_configured')
+    const probe = await probeGithubGhToken(this.send, token, owner.userId, scopes, signal)
+    if (signal?.aborted) throw new GithubWriteFault('github_gh_login_canceled')
+    const ref = identityCredentialRef(probe.botUserId, 'oauth')
+    const prepared = {
+      token,
+      ownerRevision: owner.revision,
+      previous: this.store.config.credential(ref),
+      probe,
+    }
+    this.preparedGh.add(prepared)
+    return prepared
+  }
+
+  commitGhAuthorization(
+    prepared: PreparedGithubGhAuthorization,
+    operationId: string,
+    confirmOwner = false,
+  ) {
+    this.checkMutation(operationId)
+    if (!this.preparedGh.delete(prepared))
+      throw new GithubWriteFault('github_gh_authorization_not_current')
+    const { token, ownerRevision, previous, probe } = prepared
+    if (probe.isOwner && !confirmOwner)
+      throw new GithubWriteFault('github_gh_owner_confirmation_required')
+    const credentialRef = identityCredentialRef(probe.botUserId, 'oauth')
+    const result = this.commit(
+      { token, credentialRef, operationId, expectedGeneration: previous?.generation ?? 0 },
+      probe,
+      ownerRevision,
+      previous,
+      {
+        credentialKind: 'oauth',
+        scopes: probe.scopes,
+        ...(probe.isOwner ? { ownerConfirmedRevision: ownerRevision } : {}),
+      },
+    )
+    if (result.outcome !== 'applied')
+      throw new GithubWriteFault('github_credential_generation_changed')
+    return this.identity(result.record.botUserId)
+  }
+
+  async addIdentity(input: { operationId: string; token: string; signal?: AbortSignal }) {
     const result = await this.configure(input)
     if (result.outcome !== 'applied')
       throw new GithubWriteFault('github_identity_credential_already_exists')
     return { identity: this.identity(result.record.botUserId) }
+  }
+
+  credentialWasWrittenBy(credentialRef: string, operationId: string): boolean {
+    const current = this.store.config.credential(credentialRef)
+    return (
+      current?.state === 'active' &&
+      this.store.credentialRequest(credentialRef, operationId)?.generation === current.generation
+    )
   }
 
   async rotateIdentityCredential(input: Mutation & { identityId: string; token: string }) {
@@ -158,7 +244,8 @@ export class ExternalGithubSecrets {
   ) {
     const snapshot = 'credentialRef' in input ? this.active(input.credentialRef) : undefined
     const token = 'token' in input ? input.token : snapshot?.token
-    if (!isFineGrainedToken(token)) throw new GithubWriteFault('github_fine_grained_pat_required')
+    if (!isManagedGithubToken(token) || (!snapshot && !isFineGrainedToken(token)))
+      throw new GithubWriteFault('github_fine_grained_pat_required')
     const beforeDispatch = () => {
       if (snapshot && !this.isCurrent(snapshot.metadata))
         throw new GithubWriteFault('github_credential_generation_changed')
@@ -174,10 +261,12 @@ export class ExternalGithubSecrets {
       },
       input.repositories,
       snapshot ? new Set(snapshot.repos.map((repo) => repo.repoId)) : undefined,
+      snapshot?.metadata.credentialKind === 'oauth',
     )
     beforeDispatch()
     if (
-      result.botUserId === this.store.config.owner('github')?.userId ||
+      (snapshot?.metadata.credentialKind !== 'oauth' &&
+        result.botUserId === this.store.config.owner('github')?.userId) ||
       (snapshot && result.botUserId !== snapshot.metadata.botUserId)
     )
       throw new GithubWriteFault('github_dedicated_bot_required')
@@ -196,6 +285,8 @@ export class ExternalGithubSecrets {
       (!input.repoIds && (!previous || previous.state === 'revoked'))
     )
       return { outcome: 'conflict', record: previous, diagnostics: [] }
+    if (credentialGrant(previous)?.credentialKind === 'oauth')
+      throw new GithubWriteFault('github_gh_reauthorize_required')
     if (!isFineGrainedToken(token)) throw new GithubWriteFault('github_fine_grained_pat_required')
     const owner = this.store.config.owner('github')
     if (!owner) throw new GithubWriteFault('github_owner_not_configured')
@@ -215,7 +306,14 @@ export class ExternalGithubSecrets {
     input: Mutation & { token: string },
     probe: Awaited<ReturnType<typeof probeGithubCredential>>,
     ownerRevision: number,
-    previous: ExternalCredential | null,
+    previous: GithubPublicCredential | null,
+    grant: {
+      credentialKind: 'fine_grained' | 'oauth'
+      scopes?: string[]
+      ownerConfirmedRevision?: number
+    } = {
+      credentialKind: 'fine_grained',
+    },
   ): CredentialResult {
     const { operationId, credentialRef, token, expectedGeneration } = input
     const at = this.now()
@@ -229,7 +327,7 @@ export class ExternalGithubSecrets {
       this.store.config.owner('github')?.revision !== ownerRevision
     )
       return { outcome: 'conflict', record: current, diagnostics: [] }
-    const record: ExternalCredential = {
+    const record: GithubPublicCredential = {
       credentialRef,
       provider: 'github',
       botUserId: probe.botUserId,
@@ -238,6 +336,8 @@ export class ExternalGithubSecrets {
       lastVerifiedAt: at,
       state: 'active',
       generation: expectedGeneration + 1,
+      credentialKind: grant.credentialKind,
+      ...(grant.scopes ? { scopes: grant.scopes } : {}),
       ...(probe.expiresAt === undefined ? {} : { expiresAt: probe.expiresAt }),
     }
     const key = this.fileKey(record)
@@ -248,14 +348,25 @@ export class ExternalGithubSecrets {
         token,
         botLogin: probe.botLogin,
         repos: probe.repos,
+        ...(grant.ownerConfirmedRevision !== undefined
+          ? { ownerConfirmedRevision: grant.ownerConfirmedRevision }
+          : {}),
       } satisfies StoredSecret),
     )
-    let result: ExternalConfigResult<ExternalCredential>
+    let result: ExternalConfigResult<GithubPublicCredential>
     try {
       result = this.store.transaction(() => {
         const saved = this.store.config.saveCredential(record, expectedGeneration, operationId)
-        if (saved.outcome === 'applied')
+        if (saved.outcome === 'applied') {
+          this.store.setExternalCredentialGrant(
+            credentialRef,
+            operationId,
+            grant.credentialKind,
+            grant.scopes,
+          )
           this.store.recordExternalIdentityChange(record.botUserId, probe.botLogin)
+          return { outcome: 'applied', record } as const
+        }
         return saved
       })
     } catch {
@@ -309,6 +420,7 @@ export class ExternalGithubSecrets {
       for (const {
         writeAccess,
         feedbackWriteAccess: _feedbackWriteAccess,
+        resourceOwnerId: _resourceOwnerId,
         ...repo
       } of snapshot.repos) {
         const existing = byId.get(repo.repoId) ?? { ...repo, grants: [] }
@@ -348,7 +460,14 @@ export class ExternalGithubSecrets {
   }
 
   activeForRepository(repoId: string, identityId?: string): GithubCredentialSnapshot {
-    for (const credential of this.store.externalCredentials()) {
+    const entries = this.store
+      .externalCredentials()
+      .sort(
+        (a, b) =>
+          Number(credentialGrant(a)?.credentialKind === 'oauth') -
+          Number(credentialGrant(b)?.credentialKind === 'oauth'),
+      )
+    for (const credential of entries) {
       if (identityId !== undefined && credential.botUserId !== identityId) continue
       try {
         return this.active(credential.credentialRef, repoId)
@@ -396,7 +515,7 @@ export class ExternalGithubSecrets {
     const { operationId, credentialRef, expectedGeneration } = input
     this.checkMutation(operationId, credentialRef)
     const repeated = this.store.credentialRequest(credentialRef, operationId)
-    const before = this.store.config.credential(credentialRef)
+    const before = credentialGrant(this.store.config.credential(credentialRef))
     if (repeated) {
       if (repeated.state !== 'revoked')
         return { outcome: 'conflict', record: before, diagnostics: [] }
@@ -416,7 +535,18 @@ export class ExternalGithubSecrets {
         expectedGeneration,
         operationId,
       )
-      if (saved.outcome === 'applied') this.store.recordExternalIdentityChange(before.botUserId)
+      if (saved.outcome === 'applied') {
+        if (before.credentialKind)
+          this.store.setExternalCredentialGrant(
+            credentialRef,
+            operationId,
+            before.credentialKind,
+            before.scopes,
+          )
+        this.store.recordExternalIdentityChange(before.botUserId)
+        const record = this.store.credentialRequest(credentialRef, operationId) ?? saved.record
+        return { outcome: 'applied' as const, record }
+      }
       return saved
     })
     if (result.outcome === 'applied') this.notify()
@@ -435,15 +565,22 @@ export class ExternalGithubSecrets {
   }
 
   isCurrent(snapshot: ExternalCredential): boolean {
-    const current = this.store.config.credential(snapshot.credentialRef)
+    const current = credentialGrant(this.store.config.credential(snapshot.credentialRef))
     const owner = this.store.config.owner('github')
-    return (
-      current?.generation === snapshot.generation &&
-      current?.state === 'active' &&
-      (current.expiresAt === undefined || current.expiresAt > this.now()) &&
-      owner !== null &&
-      owner.userId !== current.botUserId
+    if (
+      current?.generation !== snapshot.generation ||
+      current?.state !== 'active' ||
+      (current.expiresAt !== undefined && current.expiresAt <= this.now()) ||
+      !owner
     )
+      return false
+    if (owner.userId !== current.botUserId) return true
+    if (current.credentialKind !== 'oauth') return false
+    try {
+      return this.readStored(current).ownerConfirmedRevision === owner.revision
+    } catch {
+      return false
+    }
   }
 
   /** 只有平台明确拒绝此令牌或指出组织审批时才能使该代断用。 */
@@ -504,7 +641,9 @@ export class ExternalGithubSecrets {
       if (!contents) throw new Error()
       const stored = JSON.parse(contents) as StoredSecret
       if (
-        !isFineGrainedToken(stored.token) ||
+        !(credentialGrant(record)?.credentialKind === 'oauth'
+          ? isGithubScopedToken(stored.token)
+          : isFineGrainedToken(stored.token)) ||
         !login(stored.botLogin) ||
         !Array.isArray(stored.repos)
       )
@@ -533,7 +672,7 @@ export class ExternalGithubSecrets {
   private checkMutation(operationId: string, ref?: string): void {
     if (
       !privateName(operationId) ||
-      isFineGrainedToken(operationId) ||
+      isManagedGithubToken(operationId) ||
       (ref !== undefined && !/^gh-[a-f\d]{40}$/.test(ref))
     )
       throw new GithubWriteFault('github_credential_operation_invalid')

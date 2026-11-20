@@ -8,3 +8,10 @@
 - `ExternalGithubRead` 只接受已核准事件键或 X-n 的绑定主题；与 C 核对工具归属后调用。回写用 `ExternalGithubOutbox`，传同份经理分配回调，按经理身份代写。C 可把 `prepareTriageReply` 的结果放进 `commitTriage` 同事务；H 串行调度 `tick`、管理员单项 `reconcile/cancel`，把 `pendingDraft` 交给 B 处理未绑单 PR 的活动。默认没有提交状态写权；设置开启后还需 H 提供管理员确认的 `statusGateConfirmed`，已知用于门禁时仍拒绝。
 - 即时反馈把 C 的 `ExternalFeedbackHost.enqueue` 接到 `outbox.enqueueFeedback(intent)`。它只消费 C 随入箱或真实投递持久化的意图，独立于经理的注入开关。状态评论更新等待创建回执，回写不确定时只查证；角色明确缺权或同代已收到写入拒绝时跳过，`checkIdentityRepositoryWrites` 返回诊断。不要在经理工具 schema 中开放这三个固定动作。
 - 设备备份、诊断和运行环境日志排除 `external-credentials`、`external-agent-gh`、`external-outbox`。设备 RPC 只返回公有元数据和结构化诊断。产品手册与共同入口随 H 上线。
+
+## GitHub CLI 授权（D-141）
+
+- H 把官方 **gh 2.102.0** 及平台所需制品核验后安装到 `<runtimeRoot>/tools/github-cli/2.102.0/<platform>-<arch>/bin/gh[.exe]`；路径以 `bundledGithubCliPath` 为准。设备确认版本完全相等，从不搜索 PATH。根目录应由设备安装器管理；Linux、macOS、Windows 的发行打包和安装由 H 接入。
+- 私有管理员 RPC 以 `GithubGhAuthorizationService.create({ secrets, stateDirectory, runtimeRoot, systemGithubConfig, changed })` 构造。分别映射 `add/importLogin/paste/get/cancel/confirm`；`changed` 只推 `{loginId, revision}`。开始设备码登录等待首个码或错误，最长等待提示 20 秒；桌面仅打开等待态中的固定 GitHub 网址。导入或粘贴等待完整的 API 核验，RPC 超时需覆盖多页读取。用新 `operationId` 重新开始已过期的登录；设备关闭时 `close()`。
+- 新授权和导入核验 `X-OAuth-Scopes` 的三项必要 scope 和实际请求的可选 scope。OAuth 的公有 `resourceOwnerId` 仅作账本键；设备按每个仓库记录的真实数字所有者核验。OAuth 公共元数据包含 `credentialKind` 和实际 scopes。若为 owner，确认前只有短时私有暂存，未进入身份和路由。确认后 owner 会进入设备的机器人 ID 防循环集合；已在 GitHub 签发的令牌仍需在 GitHub 撤销。
+- 导入仅运行 `gh auth token` 读取 `systemGithubConfig` 指定的目录；缺省遵循系统 gh 配置目录规则。高级细粒度 PAT 不需要 gh 二进制。设备备份另排除 `external-gh-logins`，此目录只有每次设备码尝试的私有临时配置。

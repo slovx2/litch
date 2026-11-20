@@ -78,6 +78,24 @@ export class ExternalStore {
     )
   }
 
+  /** 保存公开凭据类型；与 A 的凭据元数据和幂等回执在同一事务。 */
+  setExternalCredentialGrant(
+    credentialRef: string,
+    operationId: string,
+    credentialKind: 'oauth' | 'fine_grained',
+    scopes?: string[],
+  ): void {
+    const grant = encode({ credentialKind, ...(scopes ? { scopes } : {}) })
+    this.db
+      .prepare('UPDATE external_credentials SET body=json_patch(body,?) WHERE credential_ref=?')
+      .run(grant, credentialRef)
+    this.db
+      .prepare(
+        'UPDATE external_config_requests SET body=json_patch(body,?) WHERE scope=? AND operation_id=?',
+      )
+      .run(grant, `credential:${credentialRef}`, operationId)
+  }
+
   /** GitHub 身份以机器人数字 ID 归组；各资源所有者的凭据代次彼此独立。 */
   externalCredentials(): ExternalCredential[] {
     return this.db

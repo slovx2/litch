@@ -118,11 +118,15 @@ export class ExternalGithubRead {
         throw new GithubWriteFault('external_read_scope_changed')
     }
     const path = githubRepoPath(repo)
+    const verifiedOwner = credential.repos.find(
+      (allowed) => allowed.repoId === repo.repoId,
+    )?.resourceOwnerId
     return withIsolatedGithubGh({ ghPath, token: credential.token, beforeRead }, async (get) => {
       const actual = await get(path)
       if (
         numericId(actual.id) !== repo.repoId ||
-        numericId(object(actual.owner).id) !== credential.metadata.resourceOwnerId ||
+        !verifiedOwner ||
+        numericId(object(actual.owner).id) !== verifiedOwner ||
         typeof actual.full_name !== 'string' ||
         actual.full_name.toLowerCase() !== `${repo.owner}/${repo.name}`.toLowerCase()
       )

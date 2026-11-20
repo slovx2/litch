@@ -207,7 +207,7 @@ export class GithubAgentLoginService {
     for (const launch of this.launches.values()) {
       const live = this.credentials(launch)
       for (const [owner, config] of launch.configs) {
-        const fresh = live.find((entry) => entry.metadata.resourceOwnerId === owner)
+        const fresh = live.find((entry) => entry.metadata.credentialRef === owner)
         try {
           if (fresh) this.syncGh(launch, fresh)
           else {
@@ -261,22 +261,34 @@ export class GithubAgentLoginService {
     const [owner, name, extra] = repository.split('/')
     if (!login(owner) || !repoName(name) || extra !== undefined) return undefined
     const resolved = this.resolve(launch.actor.managerId)
-    const allowed = new Set(resolved.repoIds)
-    return this.credentials(launch).find((entry) =>
-      entry.repos.some(
-        (repo) =>
-          allowed.has(repo.repoId) &&
-          repo.owner.toLowerCase() === owner.toLowerCase() &&
-          repo.name.toLowerCase() === name.toLowerCase(),
-      ),
-    )
+    if (!this.authorized(launch.actor) || !resolved.identityId) return undefined
+    for (const repoId of resolved.repoIds) {
+      try {
+        const entry = this.options.secrets.activeForRepository(repoId, resolved.identityId)
+        if (
+          entry.repos.some(
+            (repo) =>
+              repo.repoId === repoId &&
+              repo.owner.toLowerCase() === owner.toLowerCase() &&
+              repo.name.toLowerCase() === name.toLowerCase(),
+          )
+        )
+          return entry
+      } catch {
+        /* 代次或分配已经变更。 */
+      }
+    }
+    return undefined
   }
 
   private syncGh(launch: Launch, credential: GithubCredentialSnapshot): string {
     const ownerId = numericId(credential.metadata.resourceOwnerId)
     if (!ownerId) throw new Error('external_agent_github_scope_invalid')
-    const cached = launch.configs.get(ownerId)
-    const files = cached?.files ?? new ExternalPrivateFiles(launch.files.path(`owner-${ownerId}`))
+    const ref = credential.metadata.credentialRef
+    const cached = launch.configs.get(ref)
+    const directory =
+      credential.metadata.credentialKind === 'oauth' ? `oauth-${ref}` : `owner-${ownerId}`
+    const files = cached?.files ?? new ExternalPrivateFiles(launch.files.path(directory))
     const version = `${credential.metadata.credentialRef}/${credential.metadata.generation}`
     if (cached?.version !== version) {
       const { botLogin, token } = credential
@@ -293,7 +305,7 @@ export class GithubAgentLoginService {
           '',
         ].join('\n'),
       )
-      launch.configs.set(ownerId, { files, version })
+      launch.configs.set(ref, { files, version })
     }
     return files.directory
   }

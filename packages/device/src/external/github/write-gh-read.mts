@@ -9,7 +9,7 @@ import type { Duplex } from 'node:stream'
 import {
   GITHUB_WRITE_API_VERSION,
   GithubWriteFault,
-  isFineGrainedToken,
+  isManagedGithubToken,
   object,
   parseExternalGithubJson,
 } from './write-api.mjs'
@@ -26,7 +26,7 @@ export async function withIsolatedGithubGh<T>(
   },
   run: (get: (path: string) => Promise<Record<string, unknown>>) => Promise<T>,
 ): Promise<T> {
-  if (!isAbsolute(input.ghPath) || !isFineGrainedToken(input.token))
+  if (!isAbsolute(input.ghPath) || !isManagedGithubToken(input.token))
     throw new GithubWriteFault('github_gh_unavailable')
   const dir = await realpath(await mkdtemp(join(tmpdir(), 'litch-external-gh-')))
   const sockets = new Set<Duplex>()

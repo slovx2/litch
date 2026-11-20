@@ -19,6 +19,7 @@ export interface GithubResolvedRepository {
   defaultLabelId?: string
 }
 export interface VerifiedGithubRepo extends GithubResolvedRepository {
+  resourceOwnerId: string
   writeAccess: 'missing' | 'unverified'
   feedbackWriteAccess: 'missing' | 'unverified'
 }
@@ -27,6 +28,7 @@ export async function resolveGithubRepositories(
   get: (path: string) => ReturnType<GithubSender>,
   repositories: readonly string[],
   allowedIds?: ReadonlySet<string>,
+  oauth = false,
 ): Promise<{ repositories: GithubResolvedRepository[]; botUserId: string }> {
   if (
     !repositories.length ||
@@ -44,7 +46,10 @@ export async function resolveGithubRepositories(
   const botUserId = numericId(self.id)
   if (!botUserId || self.type !== 'User' || !login(self.login))
     throw new GithubWriteFault('github_bot_identity_unverified')
-  const listed = await githubPages(get, '/user/repos?affiliation=owner,organization_member')
+  const listed = await githubPages(
+    get,
+    `/user/repos?affiliation=owner,${oauth ? 'collaborator,' : ''}organization_member`,
+  )
   const resolved: GithubResolvedRepository[] = []
   let resourceOwnerId: string | undefined
   for (const { owner, name } of parsed) {
@@ -71,9 +76,9 @@ export async function resolveGithubRepositories(
       !['User', 'Organization'].includes(String(resourceOwner.type))
     )
       throw new GithubWriteFault('github_repository_unverified')
-    if (resourceOwner.type === 'User' && resourceId !== botUserId)
+    if (!oauth && resourceOwner.type === 'User' && resourceId !== botUserId)
       throw new GithubWriteFault('github_personal_repository_requires_resource_owner')
-    if (resourceOwnerId && resourceOwnerId !== resourceId)
+    if (!oauth && resourceOwnerId && resourceOwnerId !== resourceId)
       throw new GithubWriteFault('github_single_resource_owner_required')
     resourceOwnerId = resourceId
     const defaultLabelId = await githubDefaultLabel(get, path)
@@ -207,6 +212,7 @@ export async function probeGithubCredential(
     const defaultLabelId = await githubDefaultLabel(get, path)
     repos.push({
       ...repo,
+      resourceOwnerId: id,
       url: `https://github.com/${repo.owner}/${repo.name}`,
       defaultBranch: metadata.default_branch,
       ...(defaultLabelId ? { defaultLabelId } : {}),

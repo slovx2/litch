@@ -19,6 +19,10 @@ export const repoName = (value: unknown): value is string =>
   typeof value === 'string' && /^[a-z\d_.-]{1,100}$/i.test(value) && value !== '.' && value !== '..'
 export const isFineGrainedToken = (token: unknown): token is string =>
   typeof token === 'string' && /^github_pat_[A-Za-z0-9_]{20,255}$/.test(token)
+export const isGithubScopedToken = (token: unknown): token is string =>
+  typeof token === 'string' && /^gh[op]_[A-Za-z0-9]{20,255}$/.test(token)
+export const isManagedGithubToken = (token: unknown): token is string =>
+  isFineGrainedToken(token) || isGithubScopedToken(token)
 export function redactGithubSecrets(text: string): string {
   return text.replace(/(?:github_pat_|gh[pousr]_)[a-z\d_]{15,}/gi, '[已移除凭据]')
 }
@@ -55,16 +59,17 @@ export interface GithubWriteResponse {
   requestId?: string
   next: boolean
   expiresAt?: number
+  oauthScopes?: string[]
 }
 export type GithubSender = (
   token: string,
   path: string,
-  options?: { post?: object; method?: 'PATCH'; beforeDispatch?: () => void },
+  options?: { post?: object; method?: 'PATCH'; beforeDispatch?: () => void; signal?: AbortSignal },
 ) => Promise<GithubWriteResponse>
 
 function transport(api: string): GithubSender {
   return async (token, path, options) => {
-    if (!/^\/(?!\/)[a-z\d_.~/%?=&:+,-]+$/i.test(path) || !isFineGrainedToken(token))
+    if (!/^\/(?!\/)[a-z\d_.~/%?=&:+,-]+$/i.test(path) || !isManagedGithubToken(token))
       throw new GithubWriteFault('github_request_invalid')
     const url = new URL(path, api)
     if (url.origin !== api) throw new GithubWriteFault('github_request_invalid')
@@ -81,7 +86,9 @@ function transport(api: string): GithubSender {
         },
         ...(options?.post ? { body: JSON.stringify(options.post) } : {}),
         redirect: 'manual',
-        signal: AbortSignal.timeout(15_000),
+        signal: options?.signal
+          ? AbortSignal.any([options.signal, AbortSignal.timeout(15_000)])
+          : AbortSignal.timeout(15_000),
       })
     } catch {
       throw new GithubWriteFault('github_transport_unknown')
@@ -121,12 +128,18 @@ function transport(api: string): GithubSender {
     const expiresAt = Date.parse(
       response.headers.get('github-authentication-token-expiration') ?? '',
     )
+    const oauthScopes = response.headers
+      .get('x-oauth-scopes')
+      ?.split(',')
+      .map((scope) => scope.trim())
+      .filter((scope) => /^[a-z][a-z\d_]*(?::[a-z\d_]+)*$/.test(scope))
     return {
       body: parseExternalGithubJson(await responseText(response)),
       status,
       next: /;\s*rel="next"/.test(response.headers.get('link') ?? ''),
       ...(requestId ? { requestId } : {}),
       ...(Number.isFinite(expiresAt) ? { expiresAt: Math.floor(expiresAt / 1000) } : {}),
+      ...(oauthScopes ? { oauthScopes: [...new Set(oauthScopes)] } : {}),
     }
   }
 }

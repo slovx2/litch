@@ -93,7 +93,7 @@ async function main() {
   if (fields.get('host') !== 'github.com' || fields.get('protocol') !== 'https') return
   const repo = repository(fields.get('path'))
   const result = repo ? await callback({ mode: 'git', host: 'github.com', protocol: 'https', repository: repo }) : null
-  if (typeof result?.token === 'string' && /^github_pat_[a-zA-Z0-9_]{20,255}$/.test(result.token)) {
+  if (typeof result?.token === 'string' && /^(?:github_pat_[a-zA-Z0-9_]{20,255}|gh[op]_[a-zA-Z0-9]{20,255})$/.test(result.token)) {
     process.stdout.write('username=x-access-token\npassword=' + result.token + '\n\n')
     return
   }
