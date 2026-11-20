@@ -18,14 +18,14 @@ interface SavedTab {
   pinned: boolean
   original: GroupInfo | null
   groupId: number | null
-  title: string
 }
 
 /** 所有写入串行化；先落恢复记录，再改 Chrome，恢复成功才删记录。失败下次启动/定时重试。 */
 export class TabPresentation {
   private tail: Promise<unknown> = Promise.resolve()
   private records = new Map<number, SavedTab>()
-  private busy = new Map<number, number>()
+  private paintedGroups = new Set<number>()
+  private cleared = new WeakSet<SavedTab>()
   private restoredGroups = new Map<number, number>()
   private chrome: any
   private productName: string
@@ -79,7 +79,6 @@ export class TabPresentation {
             }
           : null,
         groupId: null,
-        title: `${this.productName} · ${short}`,
         temporary: !grant.original && !grant.keep,
       }
       await this.save(record)
@@ -100,39 +99,33 @@ export class TabPresentation {
         ...(existing ? { groupId: existing.id } : { createProperties: { windowId: tab.windowId } }),
       })
       await this.save(record)
-      await this.paint(record)
+      await this.paintBadge(record.tabId)
+      if (record.groupId !== null && !this.paintedGroups.has(record.groupId)) {
+        await this.chrome.tabGroups.update(record.groupId, {
+          title: `▶ AI · ${this.productName} · ${short}`,
+          color: 'orange',
+        })
+        this.paintedGroups.add(record.groupId)
+      }
     })
   }
-  async active(tabId: number, leaseId: string, active: boolean): Promise<void> {
+
+  /** Chrome 可能在主文档导航时清掉逐标签徽标；实际丢失才重新写。 */
+  async navigated(tabId: number, leaseId: string): Promise<void> {
     return this.serial(async () => {
       const record = this.records.get(tabId)
-      if (!record || record.leaseId !== leaseId) return
-      this.busy.set(tabId, Math.max(0, (this.busy.get(tabId) ?? 0) + (active ? 1 : -1)))
-      await this.paint(record)
+      if (!record || record.leaseId !== leaseId || record.restoring) return
+      if ((await this.chrome.action.getBadgeText({ tabId })) !== 'AI') await this.paintBadge(tabId)
     })
   }
-  private async paint(record: SavedTab): Promise<void> {
-    const active = (this.busy.get(record.tabId) ?? 0) > 0
-    await this.chrome.action.setBadgeText({ tabId: record.tabId, text: active ? 'AI' : '' })
-    await this.chrome.action.setBadgeBackgroundColor({ tabId: record.tabId, color: '#B85A00' })
+
+  private async paintBadge(tabId: number): Promise<void> {
+    await this.chrome.action.setBadgeBackgroundColor({ tabId, color: '#B85A00' })
     await this.chrome.action.setTitle({
-      tabId: record.tabId,
-      title: active
-        ? `${this.productName} — AI operating this tab · Click to stop`
-        : `${this.productName} — Stop browser control`,
+      tabId,
+      title: `${this.productName} — AI controls this tab · Click to stop`,
     })
-    if (record.groupId === null) return
-    if (!(await this.chrome.tabGroups.get(record.groupId).catch(() => null))) return
-    const running = [...this.records.values()].filter(
-      (other) => other.groupId === record.groupId && (this.busy.get(other.tabId) ?? 0) > 0,
-    )
-    const tab =
-      running.length === 1 ? await this.chrome.tabs.get(running[0]?.tabId).catch(() => null) : null
-    const suffix = tab ? ` · ${[...(tab.title || 'Tab')].slice(0, 18).join('')}` : ''
-    await this.chrome.tabGroups.update(record.groupId, {
-      title: running.length ? `▶ AI · ${record.title.slice(8)}${suffix}` : record.title,
-      color: running.length ? 'orange' : 'blue',
-    })
+    await this.chrome.action.setBadgeText({ tabId, text: 'AI' })
   }
   async release(tabId: number, leaseId: string): Promise<void> {
     return this.serial(async () => {
@@ -153,7 +146,6 @@ export class TabPresentation {
     return this.serial(async () => {
       for (const record of [...this.records.values()]) {
         if (!live.has(record.leaseId)) await this.restore(record).catch(() => {})
-        else await this.paint(record).catch(() => {})
       }
     })
   }
@@ -164,11 +156,15 @@ export class TabPresentation {
       tab = null
     }
     if (tab) {
-      await this.chrome.action.setBadgeText({ tabId: tab.id, text: '' })
-      await this.chrome.action.setTitle({
-        tabId: tab.id,
-        title: `${this.productName} — Stop browser control`,
-      })
+      if (!this.cleared.has(record)) {
+        // 释放逐标签覆盖，让停止控制的全局 OFF 徽标接管。
+        await this.chrome.action.setBadgeText({ tabId: tab.id, text: null })
+        await this.chrome.action.setTitle({
+          tabId: tab.id,
+          title: `${this.productName} — Browser control`,
+        })
+        this.cleared.add(record)
+      }
       // 用户手动移动过标签时尊重当前窗口和分组；不把用户的新布局再拉回。
       const currentGroup =
         tab.groupId >= 0 ? await this.chrome.tabGroups.get(tab.groupId).catch(() => null) : null
@@ -203,12 +199,12 @@ export class TabPresentation {
         await this.chrome.tabs.move(tab.id, { index: record.index })
       }
     }
-    this.busy.delete(record.tabId)
-    const sibling = [...this.records.values()].find(
-      (other) => other !== record && other.groupId === record.groupId,
-    )
-    if (sibling) await this.paint(sibling)
     await this.chrome.storage.local.remove(`${this.prefix}${record.tabId}`)
     this.records.delete(record.tabId)
+    if (
+      record.groupId !== null &&
+      ![...this.records.values()].some((other) => other.groupId === record.groupId)
+    )
+      this.paintedGroups.delete(record.groupId)
   }
 }

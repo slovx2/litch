@@ -193,9 +193,13 @@ export function createExtensionRuntime(options: ExtensionOptions) {
         .then((tab) => state.send({ kind: 'tab', tab }))
         .catch(() => {})
     })
-    listen(chrome.webNavigation.onCommitted, (event: { tabId: number }) => {
-      for (const grant of state.grants.values())
-        if (grant.tabId === event.tabId) void disposePointer(state, grant)
+    listen(chrome.webNavigation.onCommitted, (event: { tabId: number; frameId: number }) => {
+      for (const grant of state.grants.values()) {
+        if (grant.tabId !== event.tabId) continue
+        void disposePointer(state, grant)
+        if (event.frameId === 0)
+          void state.presentation.navigated(grant.tabId, grant.leaseId).catch(() => {})
+      }
       state.console.delete(event.tabId)
       state.generations.set(event.tabId, (state.generations.get(event.tabId) ?? 0) + 1)
       void tabState(state, event.tabId)

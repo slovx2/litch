@@ -31,6 +31,8 @@ await runtime.stop()
 
 AI 工具定义与宿主侧执行器在 `@litch/chrome-bridge`，不是通过网页消息调用本库。wire 类型来自 automation-contracts 唯一源；v1 中 `litchVersion`/`litchOutdated` 字段名是既有线上协议，不代表默认信任 Litch 身份。光标的 isolated-world 私有符号也保留原名以保持页面观察语义，不作为跨扩展信任凭证。
 
+橙色组和逐标签 `AI` 徽标表示有效租约。续租、短暂空闲和连续工具调用不重涂；交还、停止、断线或租约到期立即恢复。主文档导航后仅在 Chrome 清除了逐标签徽标时补画。
+
 测试：`npm run test --prefix packages/chrome-extension`；完整隔离 Chrome 链路见 `scripts/chrome-e2e/README.md`。正式 Chrome 商店签名安装、其他宿主产品打包和真实用户 profile 不在这些测试内。Chrome 实际允许多个扩展 attach 同一标签；库先用 getTargets 拒绝已附着的目标，attach 后验证目标仍存在并附着。没有其他调试器时，单个 Litch 的正常认领不受影响。
 
 按随包 LICENSE 的 MIT 条款分发。未包含他人产品素材或私钥；宿主自己发布和审核其扩展实例。
