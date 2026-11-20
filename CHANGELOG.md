@@ -7,6 +7,22 @@ versioning or publishing metadata.
 
 ## 未发布
 
+## 0.45.0（2026-11-20）
+
+### 中文
+
+- 新增远程 Linux 设备 Chrome 控制试用，默认关闭；同一会话可同时使用本机和远程设备的 Chrome，设备页提供状态和准备命令。
+- 内置浏览器中的 AI 可直接认领你打开的标签，无需逐个审批，网站许可规则不变；你操作标签时立即交还控制。
+- 修复本机发送的附件在历史消息中误报“请在发送文件的设备上打开”的问题。
+- 修复来源会话已归档的经理建议卡无法开始的问题。
+
+### English
+
+- Added experimental Chrome control on remote Linux devices, off by default. A session can use Chrome on both this computer and a remote device, with status and setup commands on the device page.
+- AI can now claim tabs you open in the built-in browser without approval for each tab. Site permissions still apply, and control returns immediately when you interact with a tab.
+- Fixed attachments sent from this computer incorrectly asking you to open them on the sending device when viewed in message history.
+- Fixed manager suggestions failing to start after their source session was archived.
+
 ## 0.44.1（2026-11-18）
 
 ### 中文
