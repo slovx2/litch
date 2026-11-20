@@ -32,6 +32,8 @@ Chrome 桥复用的低层模块：
 
 同一 `CdpHost` 由语义 driver 或工具 executor 其中一个接管导航闸；不要把两者同时装在同一 host 上。两者复用页面操作实现，但不是可以叠加的拦截器。非 CDP 宿主自行实现语义 `BrowserDriver`，不能直接使用 CDP 工具 executor。WKWebView/Tauri 的可信输入、跨域 frame 和隔离登录等能力仍需该宿主实现并验收。
 
+工具 executor 的 `tabs(list)` 也列出全部用户标签，并提供 `builtin:` 认领口令。`claim` / `ensure_claimed(tabId)` 只检查站点许可，不增加实例/标签审批；租约按会话和回合独占，`release` 和 `turnEnded` 交还用户标签而不关闭。`TabInfo.owner` 保持原归属，新增可选 `controller` 供宿主显示控制者；`downloadOwner` 保留交还后的延迟下载归属。宿主应把所有回合终态和断开转给 `turnEnded`。Electron 原生输入和地址栏操作撤销租约，旧观察失效；认领期间暂停自动填充。`node packages/browser/scripts/check-user-tabs.mjs` 使用隐藏窗口、隔离目录与回环站点验证认领、输入冲突、批量、下载和跨设备会话身份。
+
 ## Electron 宿主接入
 
 以下 `@litch/browser` 指本地 tarball 的内部包名。示例在宿主主进程执行，变量 `stateDir`、`preloadPath`、`failurePage` 由应用提供：
@@ -109,6 +111,8 @@ ref 含文档代次（如 `e3g12`）；同一文档保留稳定编号，文档�
 已知连续操作优先 run_actions，以 wait(selector/text/url) 结束验证业务条件。结果新增 `verification.status`（matched/notConfirmed/notRequested），只证明所给条件匹配；业务结果仍由调用方判断。最终快照优先紧凑 diff。截图继续显式调用 screenshot。
 
 ### 文件上传
+
+用户标签认领后的首次观察失败会交还租约，保留原标签。认领前已载入或观察期间新增的跨来源子框架仍须通过站点许可；被拒绝的框架内容不会返回给代理。
 
 `upload` 接受文件框、上传按钮或可点击上传区域的 ref。隐藏文件框在快照中仍有 ref，并标注 `hidden`。按钮路径先拦截 `Page.fileChooserOpened`，再点击一次；没有选择器事件时，仅使用 label、form 或最近祖先中唯一的文件框。拦截结束或调用取消时撤订阅并关闭拦截，不修改页面 DOM/样式。多文件、目录、禁用和 accept 不符会明确报错。
 

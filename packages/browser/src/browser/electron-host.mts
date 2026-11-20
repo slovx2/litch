@@ -157,7 +157,7 @@ export function createElectronHost(options: ElectronHostOptions): ElectronBrowse
         rewrite: (page, url) => rewrite(page, url),
         popup(from, url, foreground) {
           // 网页要开的新窗口改成同一个会话里的新标签。代理的标签开出来的还是代理的（回合结束时关）
-          if (from.kind === 'agent' && from.info().agentActive && !gate(from, url)) {
+          if (from.info().agentActive && !gate(from, url)) {
             from.notice(
               `The page tried to open ${url} in a new window, which is not approved yet; it was blocked.`,
             )
@@ -167,7 +167,11 @@ export function createElectronHost(options: ElectronHostOptions): ElectronBrowse
           // 交给人登录的标签开的弹窗（单点登录常用）：开成用户的标签，代理碰不到，交接结束时一并处理
           // 弹窗里再开的弹窗也记进同一次交接
           const handover = handoverOf(from.view.webContents.id, from.id)
-          const next = open(from.owner, handover !== null ? 'user' : from.kind)
+          const info = from.info()
+          const next = open(
+            info.controller ?? from.owner,
+            handover !== null ? 'user' : info.agentActive ? 'agent' : from.kind,
+          )
           if (handover !== null) notePopup(handover, next.id)
           const rewritten = rewrite(from, url)
           if (rewritten) {
@@ -280,6 +284,7 @@ export function createElectronHost(options: ElectronHostOptions): ElectronBrowse
       const tab = tabs.get(id)
       if (!tab) return
       const contents = tab.view.webContents
+      tab.userInput()
       // 交给人登录期间不许后退、前进（往返缓存会恢复代理执行过脚本的旧文档）；面板上的按钮也是灰的
       if ((to === 'back' || to === 'forward') && isHandedOver(contents.id)) return
       if (to === 'back') contents.navigationHistory.goBack()

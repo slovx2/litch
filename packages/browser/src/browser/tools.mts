@@ -3,7 +3,7 @@ import type { Tool } from './executor.mjs'
 import { click, dialog, press, scroll, type, upload } from './tools-act.mjs'
 import { consoleTool, evaluate, screenshot, snapshot, wait } from './tools-read.mjs'
 import { requestSignIn } from './tools-signin.mjs'
-import { navigate, show, tabs } from './tools-tabs.mjs'
+import { claim, ensureClaimed, navigate, release, show, tabs } from './tools-tabs.mjs'
 
 export const TOOLS: Readonly<Record<string, Tool>> = {
   downloads: async (call) =>
@@ -12,6 +12,9 @@ export const TOOLS: Readonly<Record<string, Tool>> = {
       'Download status follows. Pending files require individual user approval; do not retry a download.',
     ),
   tabs,
+  claim,
+  ensure_claimed: ensureClaimed,
+  release,
   navigate,
   snapshot,
   click,

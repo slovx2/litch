@@ -41,7 +41,7 @@ export const autofillTab = (contentsId: number): AutofillTab | undefined => tabs
 export function autofillKind(contentsId: number): TabKind | null {
   const tab = tabs.get(contentsId)
   if (!tab) return null
-  return handedOver.has(contentsId) ? 'user' : tab.kind
+  return handedOver.has(contentsId) ? 'user' : tab.info().agentActive ? 'agent' : tab.kind
 }
 
 /** 代理的标签交给人登录（on）或交还（off） */

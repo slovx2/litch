@@ -51,7 +51,10 @@ export function guardedPage(
       if (key === 'cdp')
         return async (method: string, params?: Record<string, unknown>) => {
           await guard(true)
-          return target.cdp(method, params)
+          const result = await target.cdp(method, params)
+          // 用户接管、回合结束或跳到未授权站点时，异步尾部不能再把页面内容带回代理。
+          await check()
+          return result
         }
       if (key === 'interceptFileChooser' && target.interceptFileChooser)
         return async (signal: AbortSignal) => {

@@ -157,7 +157,7 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
   tools: [
     fn(
       'downloads',
-      'Built-in browser only: list this conversation’s downloads and ask the user to approve pending files. Downloads are received once into a private temporary area; approval publishes them to the controlling desktop’s system Downloads folder (not the remote session device). No arbitrary save paths. Pending paths/content are never exposed. Completed results include the local path; do not execute files automatically. Rejection, 10-minute timeout or shutdown deletes temporary files. Limits: 1 GiB/file, 2 GiB temporary data, 4 active files. Call after a download click and again for delayed/large transfers; never repeat a one-time download link. User-owned tabs save automatically; agent-owned tabs require approval unless the session has full access.',
+      'Built-in browser only: list this conversation’s downloads and ask the user to approve pending files. Downloads are received once into a private temporary area; approval publishes them to the controlling desktop’s system Downloads folder (not the remote session device). No arbitrary save paths. Pending paths/content are never exposed. Completed results include the local path; do not execute files automatically. Rejection, 10-minute timeout or shutdown deletes temporary files. Limits: 1 GiB/file, 2 GiB temporary data, 4 active files. Call after a download click and again for delayed/large transfers; never repeat a one-time download link. Downloads triggered by the agent, including in claimed user tabs, require approval unless the session has full access. User-initiated downloads in user tabs save automatically.',
       {},
     ),
     fn(
@@ -167,7 +167,7 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
     ),
     fn(
       'ensure_claimed',
-      'Chrome only: list, select, claim, wait for load and return a fresh snapshot in one call. Give tabId to recover the same known tab; otherwise targetId with an exact url, or omit url for the current tab. Never guesses among multiple matches. Automatically recovers a stale lease once; never replays input. Signing-in, denied sites and user stop require the user; do not poll.',
+      'Claim a known built-in user tab by tabId, wait for load and return a fresh snapshot. For Chrome, give tabId to recover the same known tab; otherwise targetId with an exact url, or omit url for the current Chrome tab. Never guesses among multiple matches. Instance and tab claims need no separate approval; site permissions still apply. A user tab is leased to one session and turn, released on turn end, interruption or failure, and never closed. User input returns built-in control; take a new observation before continuing and never replay earlier input. Signing-in, denied sites and user stop require the user; do not poll.',
       {
         targetId,
         tabId,
@@ -179,16 +179,16 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
     ),
     fn(
       'claim',
-      'Claim one Chrome tab after its site permissions are checked. Use a fresh claimToken from tabs.',
+      'Claim one built-in or Chrome user tab after its site permissions are checked. Use a fresh claimToken from tabs. No separate instance or tab approval. A busy lease cannot be taken over; wait for its session to release or finish. The returned snapshot has fresh refs; previous lease refs are invalid.',
       { claimToken: { type: 'string' } },
       ['claimToken'],
     ),
-    fn('release', 'Release a claimed Chrome tab without closing the user tab.', { tabId }, [
+    fn('release', 'Release a claimed built-in or Chrome user tab without closing it.', { tabId }, [
       'tabId',
     ]),
     fn(
       'tabs',
-      'List, open, select, close or keep browser tabs of this conversation. Tabs you open are temporary and are closed when your turn ends unless you keep them (keep:true here or in `navigate`). `list` also shows tabs the user opened (owner "user"); you can read their URL and title but can only operate your own tabs. For Chrome, current:true marks the active tab in its last-focused window; when the user says "this page" or "current tab", prefer claiming that tab. Listing does not focus windows or switch tabs. `keep` marks one of your tabs to stay open for the user after your turn.',
+      'List, open, select, close or keep browser tabs. Tabs you open are temporary and close when your turn ends unless kept (keep:true here or in navigate). Built-in list includes all user tabs across conversations and your own agent tabs. User tabs expose titles and URLs with claimTokens: call claim(token) or ensure_claimed(tabId) before snapshot or input. One session and turn holds the lease; release returns control and never closes user tabs. close and keep apply only to your agent tabs. For Chrome, current:true marks the active tab in its last-focused window; prefer it for "this page" or "current tab". Listing does not focus windows or switch tabs.',
       {
         action: { type: 'string', enum: ['list', 'new', 'select', 'close', 'keep'] },
         targetId,

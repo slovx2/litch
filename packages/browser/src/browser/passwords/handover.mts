@@ -132,6 +132,7 @@ export function createHandover(options: HandoverOptions): BrowserHandover {
   const declined = new Map<string, { turnId: string; origins: Set<string> }>()
   /** 已经挂上“销毁时收拾”的标签 */
   const watched = new WeakSet<WebContents>()
+  const userRoots = new Set<number>()
 
   const contentsOf = (tabId: string): WebContents | null => {
     const page = host.page(tabId) as HostTab | undefined
@@ -139,9 +140,31 @@ export function createHandover(options: HandoverOptions): BrowserHandover {
     return contents && !contents.isDestroyed() ? contents : null
   }
 
-  /** 交接期间开的弹窗（连弹窗里再开的）关掉 */
+  /** 用户原标签及其登录弹窗不关闭；不安全的旧文档保持观察闸，用户换新文档后再解除。 */
+  const retain = (page: HostTab) => {
+    const contents = page.view.webContents
+    if (contents.isDestroyed()) return
+    frozen.add(page.id)
+    setHandedOver(contents.id, true)
+    page.userInput()
+    page.release()
+    watch(page.id, contents)
+    contents.once('did-navigate', () => {
+      forget(page)
+      contents.navigationHistory.clear()
+      setHandedOver(contents.id, false)
+      frozen.delete(page.id)
+      page.handoverChanged()
+    })
+  }
+
+  /** 代理临时标签的登录弹窗仍关闭；用户标签发起的保留并清除代理观察。 */
   const closePopups = (contentsId: number) => {
-    for (const id of takePopups(contentsId)) host.close(id)
+    for (const id of takePopups(contentsId)) {
+      const page = host.page(id) as HostTab | undefined
+      if (userRoots.has(contentsId) && page?.info().kind === 'user') retain(page)
+      else host.close(id)
+    }
   }
 
   /**
@@ -156,6 +179,7 @@ export function createHandover(options: HandoverOptions): BrowserHandover {
       scripted.delete(tabId)
       frozen.delete(tabId)
       closePopups(contentsId)
+      userRoots.delete(contentsId)
       signIns.tabGone(tabId)
     })
   }
@@ -194,7 +218,8 @@ export function createHandover(options: HandoverOptions): BrowserHandover {
       // 已经交给人了（同一个标签前后脚两次调用）：不动那一次交接的任何状态
       if (frozen.has(page.id)) return 'busy'
       const contentsId = contents.id
-      const owner = page.info().owner
+      if (page.info().kind === 'user') userRoots.add(contentsId)
+      const owner = page.info().controller ?? page.info().owner
       const session = sessionOf(owner)
       // 代理给的源和页面的真实源不一样：不出卡片
       if (ask.origin !== null && ask.origin !== originOf(contents.getURL())) return 'origin_changed'
@@ -234,6 +259,16 @@ export function createHandover(options: HandoverOptions): BrowserHandover {
        */
       const fail = (): SignInOutcome => {
         if (contents.isDestroyed()) return gone()
+        if (page.info().kind === 'user') {
+          // 用户原标签不能为安全收尾而销毁。继续冻结代理观察，直到用户主动加载新文档；
+          // 本机输入不被阻挡，已失败的登录卡撤销，旧租约通过输入代次失效。
+          signIns.tabGone(page.id)
+          contents.removeListener('before-input-event', holdKeys)
+          const original = host.page(page.id) as HostTab | undefined
+          if (original) retain(original)
+          closePopups(contentsId)
+          return 'failed'
+        }
         signIns.closed({
           owner,
           tabId: page.id,
