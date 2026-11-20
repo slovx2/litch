@@ -410,9 +410,9 @@ Click the extension icon to stop control of that profile. Its OFF badge and stop
 
 The connection boundary uses a Native Messaging extension ID allowlist, a host token generated when the desktop starts, and private per-user configuration and socket access. These do not defend against malicious software running as the same OS user with arbitrary execution and access to the configuration. An unpacked extension's fixed ID does not attest that its code came from the official store. Enable control only when you trust the software and extensions running under that OS account.
 
-Chrome 同样可由 Agent 使用已有的授权凭据直接登录。需要用户本人操作时才调用 `request_sign_in`：完全访问下立即返回；普通模式显示登录卡并暂停此 Chrome 实例中的代理观察与操作，不自动切换窗口。请打开 Chrome 的 `Litch · 会话标题简写` 标签组，完成登录后在 Litch 选择“登录已完成”。手动交还后页面重新载入，代理须重新认领。
+Chrome 同样可由 Agent 使用已有的授权凭据直接登录。需要用户本人操作时才调用 `request_sign_in`：完全访问下立即返回；普通模式显示登录卡并暂停此 Chrome 实例中的代理观察与操作，不自动切换窗口。请打开 Chrome 的 `▶ AI · Litch · 会话标题简写` 标签组，完成登录后在 Litch 选择“登录已完成”。手动交还后页面重新载入，代理须重新认领。
 
-Agents can also sign in to Chrome with available authorized credentials. Use `request_sign_in` only when user action is needed: full access returns immediately; other modes display a sign-in card and pause observation and actions in that instance without switching windows. Open the `Litch · session title` tab group, sign in, then choose **Sign-in complete** in Litch. The page reloads and the agent must claim it again. Remote sessions can upload files from their session device. Cross-device downloads are not supported.
+Agents can also sign in to Chrome with available authorized credentials. Use `request_sign_in` only when user action is needed: full access returns immediately; other modes display a sign-in card and pause observation and actions in that instance without switching windows. Open the `▶ AI · Litch · session title` tab group, sign in, then choose **Sign-in complete** in Litch. The page reloads and the agent must claim it again. Remote sessions can upload files from their session device. Cross-device downloads are not supported.
 
 Chrome 上传本地文件不需要“允许访问文件网址”。可用 `upload` 把会话所在设备绝对路径的文件交给文件输入框，也可直接传上传按钮或可点击上传区域的 ref；工具先拦截文件选择器再点击，不弹出系统窗口。隐藏文件框会在 snapshot 中标注 hidden 并提供 ref。没有选择器事件时，仅选择 label 关联、同一 form 或最近祖先中唯一的文件框；多个候选时要求重新定位。文件数量和 accept 类型必须符合站点规则；拖放区域用 `mode: "drop"` 和区域的 ref。每次最多 32 个文件、总计 512 MiB，内置浏览器仍为单文件 100 MiB。Chrome 上传按 192 KiB 分块，先在隔离上下文组装文件，再向输入框派发 input/change，或向拖放区域派发 dragenter/dragover/drop。分块期间继续检查网站权限、租约和文档；中断不会自动重传。文件名、常见格式 MIME 和修改时间随文件传入页面，本机完整路径不传给页面。
 
@@ -445,19 +445,21 @@ New popups are unclaimed and require source approval before observation or actio
 
 Sessions can operate separate claimed tabs concurrently; each tab has one owner. Busy errors name the owning session and explain release. To hand off Chrome, release every claimed tab. Releasing the last tab also returns that session's macOS Computer Use input ownership without ending the turn. Active native input must cancel and finish before another session can use the lane. There is no forced takeover by an agent. Turn completion, interruption and failure release its leases. Chrome tabs return after five minutes without tool calls, except during an active call or manual sign-in. Idle macOS app ownership expires after 60 seconds; running actions remain exclusive. Reclaim returned tabs before using fresh references.
 
-代理打开或认领的标签按会话放进 `Litch · 会话标题简写` 标签组。同一会话跨多个 Chrome 窗口时，每个窗口各有一组，不搬动窗口。
+代理打开或认领的标签按会话放进 `▶ AI · Litch · 会话标题简写` 标签组。同一会话跨多个 Chrome 窗口时，每个窗口各有一组，不搬动窗口。
 
 新标签默认在现有普通窗口的后台创建，不切换当前标签；没有普通窗口时新建不获取焦点的窗口。认领、导航、点击、输入和批量操作不主动激活 Chrome。可自行点开标签组查看，或在对话里明确要求“显示给我看”，代理才调用 `show` 激活对应窗口与标签。后台输入不需要通过 `show` 才能生效。
 
-New tabs open in the background of an existing normal window without switching its active tab. If none exists, Litch creates an unfocused window. Claiming, navigation, clicks, typing and batches do not activate Chrome. Open the `Litch · session title` group yourself, or explicitly ask the agent to show the page; only then should it call `show` to activate that tab and window. Background tabs, fully covered windows and minimized windows support input without `show`. Litch confirms emulated page focus before input and checks that the document responds; missing animation frames only skip the visual wait. If the document itself does not respond, wait for load and take a fresh snapshot, or reload if it remains stuck. A `notDispatched` receipt alone does not diagnose window focus; read its error. Sign-in pauses, revoked leases and site permissions still require their own resolution.
+New tabs open in the background of an existing normal window without switching its active tab. If none exists, Litch creates an unfocused window. Claiming, navigation, clicks, typing and batches do not activate Chrome. Open the `▶ AI · Litch · session title` group yourself, or explicitly ask the agent to show the page; only then should it call `show` to activate that tab and window. Background tabs, fully covered windows and minimized windows support input without `show`. Litch confirms emulated page focus before input and checks that the document responds; missing animation frames only skip the visual wait. If the document itself does not respond, wait for load and take a fresh snapshot, or reload if it remains stuck. A `notDispatched` receipt alone does not diagnose window focus; read its error. Sign-in pauses, revoked leases and site permissions still require their own resolution.
 用户标签只临时归组；释放、回合结束、断开或停止控制后，恢复原组、位置和固定状态。原组最后一个标签被临时移走时，恢复会重新创建同名、同色、同折叠状态的组。
 用户控制期间自行移动了窗口或分组时，保留用户的新布局。代理临时标签仍在回合结束关闭；标记保留的标签交还给用户并移出代理组。
 
-空闲的代理组为蓝色；执行操作时组变橙色，组名显示 `▶ AI` 和正在操作的标签标题，当前标签对应的扩展工具栏图标显示 `AI`。网页的标题与 favicon 不会被改写。
+认领期间标签组保持橙色，当前标签被认领时，扩展工具栏图标上显示 `AI` 徽标。两条命令之间仍显示认领状态；交还、停止或断开时清除。网页的标题与 favicon 不会被改写。
+
+Claimed tabs stay in an orange `▶ AI · Litch · session title` group. The toolbar icon shows an `AI` badge when the selected tab is claimed. The indicators stay visible between commands and clear on release, stop or disconnect. The extension does not change page titles or favicons.
 网页中的虚拟指针在最后一次更新后 2 秒到期。正常交还同步移除指针，重新认领先清除旧节点。外部撤销调试连接后不抢回连接，页面自行清理；后台计时器被节流或页面被冻结时，DOM 清理可能延迟，动画按时间线隐藏过期指针，页面恢复绘制或再次认领时不保留旧指针。
 
 The virtual pointer expires two seconds after its last update. Normal release removes it synchronously, and reclaiming a tab clears stale nodes first. If another debugger disconnects Litch, the page expires its own pointer without taking back the connection. Background timer throttling or a frozen page can delay DOM removal; its animation hides the expired pointer on the next rendered frame, and reclaiming clears it synchronously.
-操作失败也会撤销活动标记。扩展启动时读取恢复记录，清理上次遗留分组和徽标；恢复未完成的记录保留并重试。点击扩展图标仍是停止控制。
+单次操作失败时，如果租约仍有效，认领状态继续显示。扩展启动时读取恢复记录，清理上次遗留分组和徽标；恢复未完成的记录保留并重试。点击扩展图标可停止控制。
 
 升级开发版扩展：先更新 Litch，在设置的 Chrome 页准备扩展，再到 `chrome://extensions` 重新加载 Litch Browser。新增 `tabGroups` 权限允许管理标签组；Chrome 如提示“查看和管理标签组”，确认后才能继续使用。重载会释放现有认领，代理需要重新列出并认领标签。
 

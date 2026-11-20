@@ -17,6 +17,7 @@ import { fixtures } from './fixtures.mjs'
 import { chromeHandoff } from './handoff.mjs'
 import { inputChecks } from './input-check.mjs'
 import { chromeLifecycle } from './lifecycle.mjs'
+import { chromePresentation } from './presentation.mjs'
 import { remoteCheck } from './remote-check.mjs'
 import { remoteUploadChecks } from './remote-upload.mjs'
 import { secondIdentity } from './second-identity.mjs'
@@ -295,7 +296,20 @@ try {
   }
   let tabId
   const dynamicOnly = process.argv.includes('--dynamic-origins-only')
-  if (dynamicOnly) await dynamicOriginChecks({ executor, targetId, site, invocation, check })
+  const measurePresentation = process.argv.includes('--measure-presentation')
+  const presentationOnly = process.argv.includes('--presentation-only') || measurePresentation
+  if (presentationOnly)
+    report.presentation = await chromePresentation({
+      cdp,
+      identity,
+      bridge,
+      targetId,
+      origin: site.origin,
+      success,
+      text,
+      measure: measurePresentation,
+    })
+  else if (dynamicOnly) await dynamicOriginChecks({ executor, targetId, site, invocation, check })
   else
     report.handoff = await chromeHandoff({
       executor,
@@ -307,7 +321,7 @@ try {
       cdp,
       identity,
     })
-  if (dynamicOnly || process.argv.includes('--handoff-only')) {
+  if (presentationOnly || dynamicOnly || process.argv.includes('--handoff-only')) {
     report.success = true
     await cleanup()
     report.elapsedMs = Date.now() - started

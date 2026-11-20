@@ -26,7 +26,7 @@ function fixture() {
     stopped: false,
     paused: new Set(),
     stoppedTurns: new Set(),
-    presentation: { active: async () => {}, keep: async () => {} },
+    presentation: { keep: async () => {} },
     chrome: {
       windows: { getLastFocused: async () => ({ id: 1 }) },
       tabs: {
