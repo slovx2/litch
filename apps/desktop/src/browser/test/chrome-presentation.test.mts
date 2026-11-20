@@ -8,6 +8,7 @@ function fixture() {
   const tabs = new Map<number, any>()
   const groups = new Map<number, any>()
   const badges = new Map<number, string>()
+  const writes: unknown[] = []
   let seq = 10
   let fail = false
   const removeEmpty = () => {
@@ -62,12 +63,24 @@ function fixture() {
         if (!groups.has(id)) throw Error('gone')
         return { ...groups.get(id) }
       },
-      update: async (id: number, values: object) => Object.assign(groups.get(id), values),
+      update: async (id: number, values: object) => {
+        writes.push(['group', id, values])
+        return Object.assign(groups.get(id), values)
+      },
     },
     action: {
-      setBadgeText: async ({ tabId, text }: any) => badges.set(tabId, text),
-      setBadgeBackgroundColor: async () => {},
-      setTitle: async () => {},
+      getBadgeText: async ({ tabId }: { tabId: number }) => badges.get(tabId) ?? '',
+      setBadgeText: async ({ tabId, text }: { tabId: number; text: string | null }) => {
+        writes.push(['badge', tabId, text])
+        if (text === null) badges.delete(tabId)
+        else badges.set(tabId, text)
+      },
+      setBadgeBackgroundColor: async (value: object) => {
+        writes.push(['badgeColor', value])
+      },
+      setTitle: async (value: object) => {
+        writes.push(['title', value])
+      },
     },
   }
   const add = (id: number, groupId = -1, pinned = false, windowId = 1) => {
@@ -97,6 +110,7 @@ function fixture() {
     groups,
     badges,
     saved,
+    writes,
     add,
     grant,
     fail: (value: boolean) => {
@@ -126,24 +140,37 @@ test('同会话同窗口复用组，不跨窗口搬标签；还原单成员原�
   assert.equal(Object.keys(f.saved).length, 0)
 })
 
-test('并发活动计数、失败归零和旧租约迟到清理不覆盖新状态', async () => {
+test('有效租约对账和导航不重绘，丢失徽标才补写，旧租约迟到清理不覆盖新状态', async () => {
   const f = fixture()
   f.add(1)
   await f.presentation.claim(f.grant(1))
-  await f.presentation.active(1, 'lease-1', true)
-  await f.presentation.active(1, 'lease-1', true)
-  await f.presentation.active(1, 'lease-1', false)
   assert.equal(f.badges.get(1), 'AI')
   assert.equal(f.groups.get(f.tabs.get(1).groupId).color, 'orange')
-  await f.presentation.active(1, 'lease-1', false)
-  assert.equal(f.badges.get(1), '')
-  assert.equal(f.groups.get(f.tabs.get(1).groupId).color, 'blue')
-  await f.presentation.release(1, 'lease-1')
-  await f.presentation.claim(f.grant(1, 'session', 'new-lease'))
-  await f.presentation.active(1, 'new-lease', true)
-  await f.presentation.release(1, 'lease-1')
-  await f.presentation.active(1, 'lease-1', false)
+  const claimedWrites = structuredClone(f.writes)
+  for (let n = 0; n < 3; n++) await f.presentation.retry(new Set(['lease-1']))
+  await f.presentation.navigated(1, 'lease-1')
+  assert.deepEqual(f.writes, claimedWrites, '有效租约不重复写入任何 Chrome 呈现 API')
+  f.badges.delete(1)
+  await f.presentation.navigated(1, 'lease-1')
   assert.equal(f.badges.get(1), 'AI')
+  assert.deepEqual(f.writes.slice(claimedWrites.length), [
+    ['badgeColor', { tabId: 1, color: '#B85A00' }],
+    ['title', { tabId: 1, title: 'Litch — AI controls this tab · Click to stop' }],
+    ['badge', 1, 'AI'],
+  ])
+  await f.presentation.release(1, 'lease-1')
+  assert.equal(f.badges.has(1), false, '交还清除逐标签覆盖')
+  assert.equal(f.tabs.get(1).groupId, -1)
+  await f.presentation.claim(f.grant(1, 'session', 'new-lease'))
+  const newWrites = structuredClone(f.writes)
+  const saved = structuredClone(f.saved)
+  await f.presentation.release(1, 'lease-1')
+  await f.presentation.navigated(1, 'lease-1')
+  await f.presentation.retry(new Set(['new-lease']))
+  assert.equal(f.badges.get(1), 'AI')
+  assert.equal(f.groups.get(f.tabs.get(1).groupId).color, 'orange')
+  assert.deepEqual(f.writes, newWrites)
+  assert.deepEqual(f.saved, saved)
 })
 
 test('扩展重启从 local 日志恢复；恢复失败保留日志并重试；用户手动移动优先', async () => {
@@ -152,17 +179,18 @@ test('扩展重启从 local 日志恢复；恢复失败保留日志并重试；�
   f.add(2)
   await f.presentation.claim(f.grant(1))
   await f.presentation.claim(f.grant(2))
-  await f.presentation.active(1, 'lease-1', true)
+  assert.equal(f.badges.get(1), 'AI')
   f.tabs.get(2).windowId = 3
   f.tabs.get(2).groupId = -1
   f.fail(true)
   const restart = new TabPresentation(f.chrome)
   await restart.recover()
   assert.ok(Object.keys(f.saved).length > 0)
+  assert.equal(f.badges.has(1), false, '分组恢复失败也先清除逐标签徽标')
   f.fail(false)
   await restart.retry(new Set())
   assert.equal(f.tabs.get(1).groupId, -1)
-  assert.equal(f.badges.get(1), '')
+  assert.equal(f.badges.has(1), false)
   assert.equal(f.tabs.get(2).windowId, 3)
   assert.equal(Object.keys(f.saved).length, 0)
 })
