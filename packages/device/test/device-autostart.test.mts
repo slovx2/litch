@@ -16,7 +16,7 @@ function fixture() {
     onInstall: null,
     async request(method, params) {
       calls.push({ method, params })
-      if (method === 'autostart.enable')
+      if (method === 'autostart.enable' || method === 'autostart.disable')
         return { state: 'accepted', operationId: 'operation', reconnect: true }
       return {}
     },
@@ -25,19 +25,22 @@ function fixture() {
   return { autostart: new DeviceAutostart(control, () => {}), calls }
 }
 
-test('自启请求和重连许可分别发生在应答前后', async () => {
-  const { autostart, calls } = fixture()
-  const reply = await autostart.call(DEVICE_AUTOSTART_METHOD.enable, approved, admin)
-  assert.deepEqual(reply.result, { state: 'accepted', operationId: 'operation', reconnect: true })
-  assert.deepEqual(calls, [{ method: 'autostart.enable', params: approved }])
+for (const method of [DEVICE_AUTOSTART_METHOD.enable, DEVICE_AUTOSTART_METHOD.disable])
+  test(`${method}：自启请求和重连许可分别发生在应答前后`, async () => {
+    const { autostart, calls } = fixture()
+    const reply = await autostart.call(method, approved, admin)
+    assert.deepEqual(reply.result, { state: 'accepted', operationId: 'operation', reconnect: true })
+    const controlMethod =
+      method === DEVICE_AUTOSTART_METHOD.enable ? 'autostart.enable' : 'autostart.disable'
+    assert.deepEqual(calls, [{ method: controlMethod, params: approved }])
 
-  assert.ok(reply.afterReply)
-  reply.afterReply()
-  assert.deepEqual(calls.at(-1), {
-    method: 'autostart.release',
-    params: { operationId: 'operation' },
+    assert.ok(reply.afterReply)
+    reply.afterReply()
+    assert.deepEqual(calls.at(-1), {
+      method: 'autostart.release',
+      params: { operationId: 'operation' },
+    })
   })
-})
 
 test('自启读取要求声明及设备读权限，修改要求设备配置权限', async () => {
   const { autostart, calls } = fixture()

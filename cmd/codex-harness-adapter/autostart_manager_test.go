@@ -236,8 +236,14 @@ func TestAutostartManagerLifecycle(t *testing.T) {
 			if !got.running || !got.exact || got.foreign {
 				t.Fatalf("升级后运行实例不符: %+v", got)
 			}
-			if foreign := b.inspect(ctx, next); !foreign.foreign {
+			foreign := b.inspect(ctx, next)
+			if !foreign.foreign {
 				t.Fatalf("无登记凭据却识别为本产品: %+v", foreign)
+			}
+			// 同名、同配置也不能替代登记凭据；拒绝删除且不能调用管理器变更。
+			mutations := len(f.mutations)
+			if err := b.remove(ctx, next, foreign); err == nil || len(f.mutations) != mutations {
+				t.Fatalf("删除了不属于当前登记的服务: %v, %v", err, f.mutations)
 			}
 			if err := b.remove(ctx, next, got); err != nil {
 				t.Fatal(err)
