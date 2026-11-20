@@ -19,6 +19,7 @@ import { Chip } from '../../../ui/kit/controls'
 import { Fold, IconButton } from '../../../ui/kit/Icon'
 import { useTheme } from '../../../ui/theme'
 import { Byline } from '../Byline'
+import { IssueExternal } from '../external/IssueExternal'
 import { Markdown } from '../IssueMarkdown'
 import type { IssueCommands } from './data'
 
@@ -218,6 +219,7 @@ export function IssueThread({
             ) : (
               <Text style={{ color: c.ink3 }}>{t('issue.noBody')}</Text>
             ))}
+          <IssueExternal issue={issue} />
           {ordinary ? (
             <View style={styles.controls}>
               <View style={styles.wrap} role="radiogroup" aria-label={t('issue.filter.status')}>

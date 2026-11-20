@@ -13,6 +13,7 @@ import * as compose from './messages/compose'
 import * as connection from './messages/connection'
 import * as detail from './messages/detail'
 import * as devices from './messages/devices'
+import * as external from './messages/external'
 import * as filePreview from './messages/file-preview'
 import * as hconfig from './messages/hconfig'
 import * as managers from './messages/managers'
@@ -51,6 +52,7 @@ const zhCN = {
   ...approvals.zhCN,
   ...managers.zhCN,
   ...organizer.zhCN,
+  ...external.zhCN,
 }
 type MobileKey = keyof typeof zhCN
 const en: Record<MobileKey, Entry> = {
@@ -75,6 +77,7 @@ const en: Record<MobileKey, Entry> = {
   ...approvals.en,
   ...managers.en,
   ...organizer.en,
+  ...external.en,
 }
 const MOBILE: Record<Lang, Record<MobileKey, Entry>> = { 'zh-CN': zhCN, en }
 
