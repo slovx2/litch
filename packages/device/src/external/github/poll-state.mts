@@ -1,3 +1,4 @@
+import type { ExternalEvent } from '../../../../protocol/src/external-sources.mjs'
 import type { GithubBoundPull, GithubRunDiscovery, GithubRunKey } from './actions.mjs'
 import type { GithubActorEvidence } from './identity.mjs'
 import type { GithubFault } from './read-api.mjs'
@@ -30,48 +31,9 @@ export type GithubIssueAction =
   | 'closed'
   | 'reopened'
 
-export interface GithubTargetEvidence {
-  subject: {
-    provider: 'github'
-    repoId: string
-    number: string
-    kind: 'issue' | 'pull_request'
-    url: string
-  }
-  sourceEventId: string
-  publication?: 'published' | 'edited'
-  mentionsBot?: boolean
-  mentionedBotId?: string
-  assigneeUserId?: string
-  reviewerUserId?: string
-  labelId?: string
-  labelName?: string
-  run?: Pick<GithubRunKey, 'runId' | 'attempt' | 'headSha' | 'workflowId'> & {
-    status: string
-    conclusion: string | null
-  }
-}
-
-// 对齐 A 线约定：数字标识一律是十进制字符串，归一事件的时间为 UTC epoch 秒。
-export interface GithubPollEvent {
-  provider: 'github'
-  externalEventKey: string
-  subjectKey: string
-  kind:
-    | 'issue'
-    | 'pull_request'
-    | 'comment'
-    | 'review'
-    | 'review_comment'
-    | GithubIssueAction
-    | 'merged'
-    | 'ci'
-  occurredAt: number
-  actorEvidence: GithubActorEvidence | null
-  targetEvidence: GithubTargetEvidence
-  contentVersion: string | null
-  permalink: string
-}
+// 归一事件直接沿用公共协议；内部扫描时间仍为毫秒，入库时转换。
+export type GithubPollEvent = ExternalEvent
+export type GithubTargetEvidence = ExternalEvent['targetEvidence']
 
 export interface GithubObjectObservation {
   objectKey: string
@@ -212,6 +174,12 @@ export interface GithubAccessGate {
   fault: GithubPollFault
 }
 
+export interface GithubReviewSelection {
+  boundNumbers?: readonly number[]
+  resume?: boolean
+  tag?: string
+}
+
 export interface GithubPollStore {
   getGate(key: { sourceId: string; repoId?: string }): Promise<GithubAccessGate | undefined>
   setGate(key: { sourceId: string; repoId?: string }, gate: GithubAccessGate | null): Promise<void>
@@ -226,6 +194,7 @@ export interface GithubPollStore {
     scope: GithubScope,
     recentSince: number,
     limit: number,
+    selection?: GithubReviewSelection,
   ): Promise<readonly number[]>
   // 同一事务：替换游标、入账事件（按 externalEventKey 去重）、保存观察、候选、缺口及页证明。
   // 多来源共享事件键，其他数据按 sourceId/repoId/stream 隔离。正文永不交给存储。

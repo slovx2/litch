@@ -33,6 +33,7 @@ import type {
   ExternalAuditEntry,
   ExternalCursor,
   ExternalObservation,
+  ExternalPollCheckpoint,
   ExternalPollPage,
   ExternalRunWatch,
   ExternalTriageCommit,
@@ -105,7 +106,7 @@ export class ExternalStore {
     return decode(
       this.db
         .prepare(
-          "SELECT body FROM external_observed WHERE source_id=? AND repo_id=? AND object_key=? ORDER BY json_extract(body,'$.updatedAt') DESC,rowid DESC LIMIT 1",
+          "SELECT body FROM external_observed WHERE source_id=? AND repo_id=? AND object_key=? ORDER BY json_extract(body,'$.updatedAt') DESC,json_extract(body,'$.observedAt') DESC,rowid DESC LIMIT 1",
         )
         .get(sourceId, repoId, objectKey),
     )
@@ -140,21 +141,7 @@ export class ExternalStore {
           )
           .run(sourceId, repoId, stream, observed.objectKey, observed.subjectKey, encode(observed))
       }
-      for (const { bucket, key, value } of checkpoints) {
-        if (value === null) {
-          this.db
-            .prepare(
-              'DELETE FROM external_poll_checkpoints WHERE source_id=? AND repo_id=? AND stream=? AND bucket=? AND checkpoint_key=?',
-            )
-            .run(sourceId, repoId, stream, bucket, key)
-        } else {
-          this.db
-            .prepare(
-              'INSERT INTO external_poll_checkpoints VALUES(?,?,?,?,?,?) ON CONFLICT(source_id,repo_id,stream,bucket,checkpoint_key) DO UPDATE SET body=excluded.body',
-            )
-            .run(sourceId, repoId, stream, bucket, key, encode(value))
-        }
-      }
+      this.writePollCheckpoints({ sourceId, repoId, stream }, checkpoints)
       const stored = events.map((event) => {
         if (event.sourceId !== sourceId || event.subject.repoId !== repoId)
           throw new Error('采集页与事件的仓库不符')
@@ -197,6 +184,48 @@ export class ExternalStore {
       )
       .all(sourceId, repoId, stream, bucket)
       .map((row) => decode<T>(row))
+  }
+
+  /** 同一轮采集可写同仓库的共享检查点；不带仓库 ID 时为整个来源的状态。 */
+  writePollCheckpoints(
+    scope: { sourceId: string; repoId?: string; stream: string },
+    checkpoints: readonly ExternalPollCheckpoint[],
+  ): void {
+    if (checkpoints.length === 0) return
+    const { sourceId, repoId = '', stream } = scope
+    if (scope.repoId !== undefined) requireExternalId(repoId)
+    this.transaction(() => {
+      for (const { bucket, key, value } of checkpoints) {
+        if (value === null) {
+          this.db
+            .prepare(
+              'DELETE FROM external_poll_checkpoints WHERE source_id=? AND repo_id=? AND stream=? AND bucket=? AND checkpoint_key=?',
+            )
+            .run(sourceId, repoId, stream, bucket, key)
+        } else {
+          this.db
+            .prepare(
+              'INSERT INTO external_poll_checkpoints VALUES(?,?,?,?,?,?) ON CONFLICT(source_id,repo_id,stream,bucket,checkpoint_key) DO UPDATE SET body=excluded.body',
+            )
+            .run(sourceId, repoId, stream, bucket, key, encode(value))
+        }
+      }
+    })
+  }
+
+  /** 按检查点键继续读取，供需要有界处理的来源队列使用。 */
+  pollCheckpointPage<T extends object>(
+    scope: { sourceId: string; repoId: string; stream: string },
+    bucket: string,
+    limit: number,
+    after = '',
+  ): { key: string; value: T }[] {
+    return this.db
+      .prepare(
+        'SELECT checkpoint_key,body FROM external_poll_checkpoints WHERE source_id=? AND repo_id=? AND stream=? AND bucket=? AND checkpoint_key>? ORDER BY checkpoint_key LIMIT ?',
+      )
+      .all(scope.sourceId, scope.repoId, scope.stream, bucket, after, boundedLimit(limit))
+      .map((row) => ({ key: String(row.checkpoint_key), value: decode<T>(row) }))
   }
 
   eventEvidence(eventKey: string): ExternalEvent | null {

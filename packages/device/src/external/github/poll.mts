@@ -1,5 +1,6 @@
 import { type GithubBoundPull, validGithubSha } from './actions.mjs'
 import { type GithubActorEvidence, verifyGithubBot } from './identity.mjs'
+import { githubPageTag } from './poll-pages.mjs'
 import {
   type GithubScanContext,
   type GithubStreamResult,
@@ -33,6 +34,7 @@ export type {
   GithubStream,
   GithubStreamKey,
 } from './poll-state.mjs'
+export { SqliteGithubPollStore } from './poll-store.mjs'
 
 export interface GithubPollOptions {
   sourceId: string
@@ -195,6 +197,13 @@ async function pollOnce(options: GithubPollOptions): Promise<GithubPollResult> {
     scope,
     scanTo - 30 * githubDay,
     options.reviewBudget ?? 4,
+    {
+      tag: githubPageTag(api, bot),
+      ...(options.boundPulls
+        ? { boundNumbers: options.boundPulls.map((pull) => pull.number) }
+        : {}),
+      ...(options.resume ? { resume: true } : {}),
+    },
   )) {
     await scan(`reviews:${number}`, number)
     if (fault) return { streams, bot, fault }
