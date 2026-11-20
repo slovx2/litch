@@ -22,6 +22,7 @@ import { I18nContext, translator } from '../ui/i18n'
 import { makeTheme, ThemeContext } from '../ui/theme'
 
 const now = Date.now()
+const archived = new URLSearchParams(window.location.search).get('archived') === '1'
 const row: SuggestionView = {
   deviceId: 'local',
   managerId: 'm1',
@@ -32,7 +33,7 @@ const row: SuggestionView = {
     harness: 'codex',
     cwd: '/work/nebula',
     project: null,
-    archived: false,
+    archived,
   },
   proposal: {
     id: 'nebula-detail',

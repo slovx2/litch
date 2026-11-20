@@ -46,6 +46,16 @@ test('有效身份、缺省型号、跨引擎自定义与仅用户选择例外',
   )
   assert.equal(await checkChildModel(tree, 'claude-code', 'opus', 'claude-code', null), 'opus')
   assert.equal(
+    await checkChildModel(tree, 'claude-code', 'sonnet', 'claude-code', null, true),
+    'opus',
+    '用户确认的默认型号也须先解析，不能被无关父模型挡住',
+  )
+  await assert.rejects(
+    checkChildModel(tree, 'claude-code', 'sonnet', 'claude-code', null),
+    /limit/,
+    '模型自行沿用默认仍受父模型上限约束',
+  )
+  assert.equal(
     await checkChildModel(tree, 'claude-code', 'opus', 'claude-code', 'fable', true),
     'fable',
   )

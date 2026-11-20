@@ -7,11 +7,13 @@ import { globSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { withChromiumTestArgs } from '../third_party/litch-automation/scripts/chromium-test-args.mjs'
+import { verifyArchivedSuggestion } from './check-archived-suggestion.mjs'
 import { verifyPinnedRecent } from './check-local-workspace-recent.mjs'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
 
 const mobile = process.argv.includes('--mobile')
 const recent = process.argv.includes('--recent')
+const archivedSuggestion = process.argv.includes('--archived-suggestion')
 const base = process.env.LITCH_LOCAL_WORKSPACE_UI ?? `http://127.0.0.1:${mobile ? 5289 : 5299}`
 if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(base)) throw new Error('只接受回环夹具')
 const output = resolve(
@@ -110,7 +112,10 @@ try {
     )
     await shot(mobile ? 'mobile-failure.png' : 'desktop-failure.png')
   }
-  if (recent) {
+  if (archivedSuggestion) {
+    await verifyArchivedSuggestion({ call, base, run, click, exists, shot, until })
+    report.checks.push('归档来源经理建议可直接开始；无需编辑型号；本机/远程、中英文')
+  } else if (recent) {
     await verifyPinnedRecent({ call, base, run, click, exists, shot, until })
     report.checks.push(
       '查看置顶会话后进入最近；置顶项目内的会话也进入最近，未读仍排除，每个主项只有一行',
@@ -288,7 +293,13 @@ try {
   writeFileSync(
     join(
       output,
-      mobile ? 'mobile-report.json' : recent ? 'recent-report.json' : 'desktop-report.json',
+      mobile
+        ? 'mobile-report.json'
+        : archivedSuggestion
+          ? 'archived-suggestion-report.json'
+          : recent
+            ? 'recent-report.json'
+            : 'desktop-report.json',
     ),
     JSON.stringify(report, null, 2),
   )

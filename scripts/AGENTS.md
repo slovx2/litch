@@ -116,6 +116,10 @@ plain `.mjs` / shell.
 
 `npm run client:check:manager-mobile` 先生成手机 WebView 资源，再自动分配空闲端口，启动本工作树的隔离 Expo 预览并运行正式页面验收，结束或中断时清理自有进程。需要先安装 `apps/mobile` 依赖和隔离 Chrome for Testing（可用 `LITCH_CHROME_BINARY` 指定）。入口是 `check-manager-mobile-run.mjs`，生命周期实现与单测在 `manager-mobile-runner*`；不设置 `CI=1`，不改现有服务器或工作树配置。
 
+## 归档来源建议开始验收
+
+设备定向回归见 `packages/device/test/archived-proposal-model.test.mts`，与原有 `manager-archived-proposals`、`model-ranking` 用例一起跑。回环 Vite 下跑 `node scripts/check-local-workspace-ui.mjs --archived-suggestion` 验两种设备身份及中英文卡片；Expo 预览 `scene=suggestion-detail&archived=1` 可交给 `scripts/check-mobile-suggestion-detail.mjs` 验手机。界面夹具只替换动作回包，不作为设备策略的证据。
+
 ## 引擎启动恢复验收
 
 `node scripts/check-harness-recovery.mjs [Expo 预览 URL] [截图目录]` 使用正式设备列表与隔离核心，验证启动中、启动失败和停止时的直接重启、忙中取消及 force 确认；传 Expo URL 时同时验手机。Claude 大历史启动及按需修复的定向回归在 `packages/claude/test/startup-history.test.mts`，按包内说明编译并预加载隔离环境。

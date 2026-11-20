@@ -53,6 +53,8 @@ export const enModelRanking = {
     '{child} ranks above the parent’s {parent}, so it can’t start as is.',
   'modelRanking.limitUnranked':
     '{child} or the parent’s {parent} is unranked, so their ranks can’t be compared.',
+  'modelRanking.archivedSource':
+    'The source session is archived, so its model limit cannot be verified. Start this suggestion from its card.',
   'limit.pick': 'Allowed models',
   'limit.start': 'Start with this model',
   'limit.none': 'No model at or below the parent’s rank is available.',

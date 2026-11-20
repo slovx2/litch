@@ -400,6 +400,8 @@ export const DEVICE_ERROR_CODE = {
   sessionRecovering: -32051,
   /** 任意层级的子会话仍在运行，不能归档父会话。 */
   archiveBlocked: -32600,
+  /** 归档来源不能证明委派模型上限；只允许用户从卡片确认开始。 */
+  archivedSourceModel: -32602,
 } as const
 
 export type DeviceErrorReason = keyof typeof DEVICE_ERROR_CODE

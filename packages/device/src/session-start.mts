@@ -51,7 +51,7 @@ import { repoOf } from './worktree-git.mjs'
 import { worktreeCwd } from './worktrees.mjs'
 
 export interface ChildSpec {
-  /** 仅设备 UI 提案入口设置，工具参数不可写。 */
+  /** 仅设备 UI 提案入口设置；含用户开始归档建议时确认的默认策略，工具参数不可写。 */
   userPickedModel?: boolean
 
   /** 设备解析出的归属父会话；工作线建议保留来源的分叉上下文和权限，但由经理接收回报。 */
@@ -471,14 +471,23 @@ async function createChild(
         ? parentConfig
         : (await parentSettings(tree, manager.threadId, manager.harness)).config
       : null
+  // 归档建议的用户开始是一次新的选择：卡片、经理派线默认、目标 harness 默认。
+  // 经理当前回合的型号不代表已归档来源的型号，也不作为这次用户选择的上限。
+  const archivedUserStart = Boolean(spec.suggestionSource && spec.userPickedModel)
+  const dispatchModel =
+    archivedUserStart && harness !== (manager?.dispatch.harness || manager?.harness)
+      ? null
+      : manager?.dispatch.model
   let model =
     spec.model ||
-    manager?.dispatch.model ||
-    (manager
-      ? harness === manager.harness
-        ? (textOf(managerConfig?.model) ?? manager.model)
-        : parentModel
-      : parentModel)
+    dispatchModel ||
+    (archivedUserStart
+      ? null
+      : manager
+        ? harness === manager.harness
+          ? (textOf(managerConfig?.model) ?? manager.model)
+          : parentModel
+        : parentModel)
   model = await checkChildModel(
     tree,
     parentHarness,
@@ -760,7 +769,7 @@ export async function acceptProposal(
   if (tree.accepting.has(proposalId)) throw new ProtocolError(-32602, `提案 ${proposalId} 正在开始`)
   const proposal = tree.pendingProposal(proposalId, from)
   const { manager, archivedSource, parentId } = proposalParent(tree, proposal)
-  if (archivedSource && !(actor === 'user' && overrides.modelSelected && overrides.model)) {
+  if (archivedSource && actor !== 'user') {
     const config = await tree.host.modelRanking?.()
     const sourceHarness = tree.host.index.lookup(proposal.threadId)
     const target =
@@ -769,9 +778,12 @@ export async function acceptProposal(
       config?.mode === 'custom' ||
       (sourceHarness === target && ['claude-code', 'codex'].includes(target ?? ''))
     )
-      throw new ProtocolError(
-        -32602,
-        'Cannot compare the archived source model. Select a specific model on the proposal card before starting; the manager model is not an inherited ceiling.',
+      throw Object.assign(
+        new ProtocolError(
+          -32602,
+          'Cannot compare the archived source model. The user must start this suggestion from its card.',
+        ),
+        { data: { litch: 'archivedSourceModel' } },
       )
   }
   const pick = (value: string | undefined, fallback: string | null) =>
@@ -793,7 +805,8 @@ export async function acceptProposal(
           }
         : {}),
       userPickedModel:
-        actor === 'user' && overrides.modelSelected === true && Boolean(overrides.model),
+        actor === 'user' &&
+        (archivedSource || (overrides.modelSelected === true && Boolean(overrides.model))),
       harness: pick(overrides.harness, proposal.harness),
       model: pick(overrides.model, proposal.model),
       effort: pick(overrides.effort, proposal.effort ?? null),

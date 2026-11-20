@@ -6,6 +6,7 @@
 export type PhraseKey =
   | 'modelRanking.limitExceeded'
   | 'modelRanking.limitUnranked'
+  | 'modelRanking.archivedSource'
   | 'notice.signInRequired'
   | 'session.inputSyncing'
   | 'session.inputNoSteer'

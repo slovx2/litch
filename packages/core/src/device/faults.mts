@@ -82,6 +82,8 @@ function fromDevice(error: RpcError, fault: DeviceErrorData, nameOf: HarnessName
     return archiveChildrenFailure(fault.blockingSessions)
   if (reason === 'managerResetBusy')
     return new ChannelError('busy', error.message, phrase('manager.resetApplying'))
+  if (reason === 'archivedSourceModel')
+    return new ChannelError('rejected', error.message, phrase('modelRanking.archivedSource'))
   if (reason === 'harnessUnavailable' && fault.harness) {
     const name = nameOf(fault.harness)
     return new ChannelError('remote', error.message, phrase('fault.harnessUnavailable', { name }))
