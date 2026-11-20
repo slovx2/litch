@@ -87,6 +87,8 @@ Claude 的新分叉和 hand_off 按当前开关重新整理工具；其余引擎
   conversation show **Agent active**. Turn end, interruption or failure returns control without closing user tabs.
   User page input or address-bar navigation returns control; the agent must claim again and take a fresh observation.
   Only temporary agent-created tabs close at turn end. `file:` pages cannot be opened.
+- 用户标签里已载入或观察期间新增的跨来源框架同样受站点许可约束；认领后的首次观察失败会交还租约。设备 Chrome 双端模式不截获内置用户标签的认领令牌。
+- Cross-origin frames already loaded in user tabs or added during observation still require site permission. A failed initial observation releases the lease. Dual Chrome routing leaves built-in claim tokens with the built-in browser.
 - **Site approval**: local addresses (localhost, 127.0.0.1, `*.localhost`) are always allowed. Any
   other site asks first, once per origin (scheme, host and port), with a card: Allow this turn / Allow
   for this session / Always allow / Trust all sites / Decline.

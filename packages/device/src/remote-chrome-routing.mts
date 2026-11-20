@@ -65,7 +65,9 @@ function hasChrome(args: unknown, opaqueOnly = false): boolean {
       typeof args[field] === 'string' &&
       (opaqueOnly
         ? args[field].startsWith(prefix)
-        : field !== 'tabId' || args[field].startsWith('chrome:')),
+        : field === 'claimToken'
+          ? !args[field].startsWith('builtin:')
+          : field !== 'tabId' || args[field].startsWith('chrome:')),
   )
 }
 

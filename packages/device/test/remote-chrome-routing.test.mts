@@ -166,6 +166,7 @@ test('双端模式不截获无 Chrome 句柄的内置浏览器认领与释放', 
   } as unknown as DeviceChromeRuntime)
   const scope = { harness: 'codex', threadId: 'thread', turnId: 'turn' }
   for (const [tool, args] of [
+    ['claim', { claimToken: 'builtin:fixture-user-tab' }],
     ['ensure_claimed', { url: 'https://fixture.invalid' }],
     ['ensure_claimed', { tabId: 'builtin-tab' }],
     ['release', { tabId: 'builtin-tab' }],
