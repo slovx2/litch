@@ -41,6 +41,9 @@ func start(ctx context.Context, c configuration) error {
 	stage := newStartStage(entries)
 	manager.stage = stage
 	device := openDeviceService(c)
+	if isAutostartManaged(c) && device.lock == nil {
+		return errors.New(tr("受管设备服务未能取得状态目录的锁", "the managed device service could not acquire the state directory lock"))
+	}
 	manager.aggregate = device.provides()
 	deviceContext, stopDevice := context.WithCancel(ctx)
 	// 拿着设备锁的那一份服务管日志目录的轮转和清理：同一个状态目录只有一份在扫
