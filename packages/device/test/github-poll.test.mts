@@ -47,9 +47,12 @@ test('混合分页核验原生动作和三种 PR 评论，正文只保存摘要�
     ...ref,
     id: 401,
     event: 'assigned',
+    // 仓库事件把 actor 写成受派人，实际操作者在 assigner；议题时间线则把操作者写进 actor。
+    actor: bot,
     assigner: { id: 43, login: 'actual-assigner' },
     assignee: bot,
   }
+  const timelineAssign = { ...assign, actor: assign.assigner, assigner: null }
   const label = { ...ref, id: 402, event: 'labeled', label: { id: 42, name: 'litch' } }
   const requestReview = {
     ...ref,
@@ -95,7 +98,7 @@ test('混合分页核验原生动作和三种 PR 评论，正文只保存摘要�
             }
       case `${base}/issues/1/timeline`:
         return second
-          ? { body: [noEvidence, label, assign] }
+          ? { body: [noEvidence, label, timelineAssign] }
           : { body: [{ id: 401, event: 'commented' }], headers: { Link: next(url) } }
       case `${base}/issues/2/timeline`:
         return { body: [requestReview] }

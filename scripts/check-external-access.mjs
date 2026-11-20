@@ -157,8 +157,19 @@ try {
   await read('setAccess({configure:true})')
   await wait('!document.querySelector("[data-act=identity-add]").disabled')
   assert.equal(await read('document.querySelector("[data-act=autostart]").disabled'), true)
+  await read('window.__litchLook.set({lang:"zh-CN"})')
+  await click('[data-act=source-expand]')
+  const readinessText = 'document.querySelector("[data-ext-readiness]").innerText'
+  assert.match(await read(readinessText), /可以从 GitHub 采集事件/)
+  await click('[data-act=source-check]')
+  await wait(
+    'document.querySelector("[data-ext-readiness] [data-check=repository]")?.dataset.state === "blocked"',
+  )
+  assert.match(await read(readinessText), /工作目录的 origin 与此 GitHub 仓库不匹配/)
+  assert.equal(await read('!!document.querySelector("[data-agent-owner]")'), true)
   await read('setAccess(undefined)')
   await wait('document.querySelector("[data-act=identity-add]").disabled')
+  assert.equal(await read('!!document.querySelector("[data-agent-owner]")'), false)
   assert.equal(await read('accessCalls.includes("external.inbox.triage")'), false)
   console.log(
     '通过：缺 access 只读、有权限可编辑、撤权关闭配置向导且桌面/手机已开表单立即只读、配置与自启独立',
