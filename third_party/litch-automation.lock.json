@@ -1,7 +1,7 @@
 {
   "repository": "https://github.com/slovx2/litch-automation.git",
-  "commit": "1264ad7539d05d2b9be9623ccb23240dc034f4f5",
-  "tree": "543b045df1d708f878969d9e81e82e2a035b8a07",
+  "commit": "f66d64e4cb05e3aecd8a5c2ba91860e1ba568b37",
+  "tree": "aea8df59e4ab487348f65c3725a424b8e72a65b7",
   "files": {
     ".gitignore": "2f693b87eb1cba728f3c91d3a37d72c2e12879ce5a19b3ef4e54c4075be037cf",
     "LICENSE": "136c14fd21bf7d8004c9f022a427077ca6d0c0870db035d12141aa95d79336ee",
@@ -195,7 +195,7 @@
     "packages/browser/src/browser/download-files.mts": "97828ba21f7dee06e1ef05c0abc738d366c08f25fb35ee00d56649c36238fc4c",
     "packages/browser/src/browser/downloads.mts": "7c3e86649920d0ce6dd0f32cb0718c658fbcbb0694f239e8a40215d15c04ae92",
     "packages/browser/src/browser/electron-host.mts": "652c1f902494c459fc6372c7a03f2487cf9d718778cf2a7f7ca102a27d311591",
-    "packages/browser/src/browser/electron-tab.mts": "4a1406a74f4f60bb4ccf3eba81c936513ec4f96bb555f33668c69d7eacfa7b32",
+    "packages/browser/src/browser/electron-tab.mts": "fb968a459761c05eec05bbbb1836d7bb9074d2f622adc924ca40d409adae8494",
     "packages/browser/src/browser/executor.mts": "6a9a8b0df58b79d0897b642a71d0ff469b3287b9c912af0237249ef0cd32bde4",
     "packages/browser/src/browser/file-chooser.mts": "db8aec971346e687ef0eebe86c0cc0252eee01cf7c17480e5706e4d79750129b",
     "packages/browser/src/browser/file-input-snapshot.mts": "4fbd65b92988f212ba3601abb59e11172b1a884c8fdda74107fcaf4e8d11eabd",
@@ -254,7 +254,7 @@
     "packages/browser/test/policy.test.mts": "bd7dcb81a521b6deb86ac769f1e7ea7cc81a645d4fad967a859d761973dfc9eb",
     "packages/browser/test/remote-upload.fixture.mts": "7300f06bd2dcde6fd656ba83c54b30ce993850c835c4d0df474aca6c683a35d8",
     "packages/browser/test/upload.test.mts": "4c0d8ff74543bb78c4bdccf2ab2c2467ae105bc387be9a25791c5b5449856240",
-    "packages/browser/test/user-tabs-electron.fixture.mts": "837d7fa1b77c7f0302e7d3bd8a47ae0ac68025c8795ce182d08779e62d1e29d8",
+    "packages/browser/test/user-tabs-electron.fixture.mts": "b78658128e817c271b72bc7c10a2bfe78e1cf6f49bbe15546dbfccaf1bb1cf46",
     "packages/browser/test/user-tabs.test.mts": "810f57f1e0ea78ef5b0db31e957ad816d78014bd9e08a77e526de657796c2036",
     "packages/browser/tsconfig.json": "731a1adfc5aaa8f44817a9c7b699f8515f03bedda426ff68aea38115a94ad32b",
     "packages/chrome-bridge/CHANGELOG.md": "86a1e55a9e59517477d9ed42513e009230690b6d0edaa820f76daea11082fe5d",
