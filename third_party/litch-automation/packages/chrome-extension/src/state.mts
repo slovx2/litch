@@ -3,13 +3,14 @@ import type {
   ChromeGrant,
   ChromeTabState,
 } from '../../automation-contracts/src/litch/chrome-browser.mjs'
+import { attachFailure, chromeText, restrictedPage } from './attach-error.mjs'
 import { chromeOrigin } from './origin.mjs'
 import type { TabPresentation } from './presentation.mjs'
 
 export class ChromeFault extends Error {
   readonly code: ChromeErrorCode
-  constructor(code: ChromeErrorCode, message: string) {
-    super(message)
+  constructor(code: ChromeErrorCode, message: string, options?: ErrorOptions) {
+    super(message, options)
     this.code = code
   }
 }
@@ -67,6 +68,8 @@ export async function framesOf(
 
 export async function inspectOrigins(state: ExtensionState, tabId: number): Promise<string[]> {
   const tab = await tabState(state, tabId)
+  const restriction = restrictedPage(tab.url, chromeText(state.chrome))
+  if (restriction) throw new ChromeFault('targetUnavailable', restriction)
   const origin = chromeOrigin(tab.url)
   if (!origin)
     throw new ChromeFault(
@@ -77,6 +80,8 @@ export async function inspectOrigins(state: ExtensionState, tabId: number): Prom
   const origins = new Set<string>([origin])
   for (const frame of frames) {
     if (frame.url === 'about:blank' || frame.url === 'about:srcdoc') continue
+    const restriction = restrictedPage(frame.url, chromeText(state.chrome))
+    if (restriction) throw new ChromeFault('targetUnavailable', restriction)
     const next = chromeOrigin(frame.url)
     if (!next)
       throw new ChromeFault(
@@ -156,6 +161,9 @@ export async function attach(
   tabId: number,
   expectedTargetId?: string,
 ): Promise<void> {
+  const tab = await tabState(state, tabId)
+  const restriction = restrictedPage(tab.url, chromeText(state.chrome))
+  if (restriction) throw new ChromeFault('targetUnavailable', restriction)
   // Chrome 可让多个扩展同时 attach；不能依靠 attach 自动拒绝已经存在的调试器。
   // 合作宿主先在原生层取得文件锁；此检查同时保护未加入锁约定的其他调试器。
   const targets: Array<{ tabId?: number; attached: boolean; id?: string }> =
@@ -171,7 +179,10 @@ export async function attach(
   if (targets.some((target) => target.tabId === tabId && target.attached))
     throw new ChromeFault(
       'busy',
-      'Another debugger is already attached to this Chrome tab. Release it before claiming; do not take over its connection.',
+      chromeText(state.chrome)(
+        '此 Chrome 标签已有调试器连接。释放该连接后再认领，不要接管其他调试器。',
+        'Another debugger is already attached to this Chrome tab. Release it before claiming; do not take over its connection.',
+      ),
     )
   let attached = false
   try {
@@ -181,12 +192,16 @@ export async function attach(
       await state.chrome.debugger.getTargets()
     if (!current.some((target) => target.tabId === tabId && target.attached))
       throw new Error('Chrome target disappeared after attach')
-  } catch {
+  } catch (error) {
     if (attached) await state.chrome.debugger.detach({ tabId }).catch(() => {})
-    throw new ChromeFault(
-      'targetUnavailable',
-      'Chrome cannot attach to this tab. Close its DevTools or another debugger, then claim again.',
-    )
+    const raw =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : String(error)
+    // 不记录页面 URL、正文或凭据；保留 Chrome 原始异常供扩展 worker 排障。
+    console.error('Chrome debugger attach failed', { tabId, error: raw })
+    const failure = attachFailure(raw, tab.url, chromeText(state.chrome))
+    throw new ChromeFault(failure.code, failure.message, { cause: error })
   }
 }
 
