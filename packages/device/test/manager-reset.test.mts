@@ -8,7 +8,8 @@ import {
   MANAGER_METHOD,
 } from '../../protocol/src/manager.mjs'
 import { ManagerResets } from '../src/manager-reset.mjs'
-import { managerBundle, managerFingerprint } from '../src/manager-rules.mjs'
+import { DEVICE_EXTERNAL_MANAGER_TOOLS } from '../src/external/device-manager-tools.mjs'
+import { externalManagerUpgrade, managerBundle, managerFingerprint } from '../src/manager-rules.mjs'
 import { startChild } from '../src/session-start.mjs'
 import { rig } from './helpers.mjs'
 import { treeRig, until } from './tree-kit.mjs'
@@ -260,6 +261,38 @@ test('能力指纹稳定：文字规则不显示落后，工具缺失和固定�
     assert.equal(managers.manager(first.id).reset?.outdated, true)
     tree.store.setTools(first.threadId, installed)
     assert.equal(managers.manager(first.id).reset?.outdated, false)
+  } finally {
+    await env.close()
+  }
+})
+
+test('外部经理在原帖回报结果；旧指令触发刷新，普通经理不注入回评规则', async () => {
+  const env = await setup('claude-code')
+  try {
+    const manager = env.device.managers.manager(env.manager.id)
+    const instructions = (specs: readonly ClientToolNamespaceSpec[]) =>
+      specs.find((spec) => spec.name === 'litch_manager')?.instructions ?? ''
+    assert.doesNotMatch(instructions(managerBundle(manager, false)), /substantive result comment/)
+    const expected = managerBundle(manager, false, true, DEVICE_EXTERNAL_MANAGER_TOOLS)
+    const text = instructions(expected)
+    assert.match(text, /substantive result comment on the original issue or PR/)
+    assert.match(text, /external_write with action comment and the existing intake mandate/)
+    assert.match(text, /do not bypass the write policy/)
+    const older = expected.map((spec) =>
+      spec.name === 'litch_manager'
+        ? {
+            ...spec,
+            instructions: text.replace(/\n\nWhen finishing an accepted GitHub request[^\n]+/, ''),
+          }
+        : spec,
+    )
+    const applied = { threadId: manager.threadId, fingerprint: managerFingerprint(older) }
+    assert.deepEqual(externalManagerUpgrade(manager, applied, expected, older), {
+      ready: false,
+      reason: 'manager_tools_outdated',
+      action: 'refresh',
+    })
+    assert.deepEqual(externalManagerUpgrade(manager, applied, expected, expected), { ready: true })
   } finally {
     await env.close()
   }
