@@ -4,7 +4,7 @@
 //     声明了我们扩展的客户端）。官方桌面端、命令行直接连 codex 建的不管；临时会话不管；设备进程自己建的（会话树的子会话、定时任务的会话）本来就带名字，
 //     也不经那里；codex 自己派的子代理线程不走 thread/start，也来不了。
 //   - 首条有文字的消息成功提交后独立起名，不等主回合结束；主回合中断、编辑重发不取消或重复起名。
-//     提交失败不消耗机会；起名请求本身出错、超时仍只试一次。
+//     提交失败不消耗机会；命名回合只发一次。若读会话时历史文件尚为空，只重试读取。
 //   - 只用 GPT Luna 命名。型号取自 Codex 模型清单，提供商取自当前生效的配置（含项目层），与主回合的型号无关。
 //     Codex 0.166+ 拒绝非当前提供商的回合。找不到 Luna、请求失败或超时，用首条文字的开头兜底。
 //   - 临时会话：ephemeral、只读、审批 never、关掉工具和功能、MCP 全停，threadSource 记 thread_title。
@@ -14,6 +14,7 @@
 //     经各条客户端连接照常转过去，协议不用加东西。
 //   - 开关是 harness 详情设置里的“自动起名”（codex-settings.mts 的 AUTO_TITLE_KEY），存在 sessions.sqlite 的
 //     harness_options，默认开；关掉之后新建的会话不再起名。
+import { setTimeout as delay } from 'node:timers/promises'
 import { activeProvider } from './codex-providers.mjs'
 import { type EngineLink, runTurn } from './engine-link.mjs'
 import { isObject, UpstreamRpcError } from './wire.mjs'
@@ -23,6 +24,9 @@ const OPTION = 'autoTitle'
 
 /** 生成标题的预算（毫秒）；复查手动名称和写回各有独立的短超时 */
 const TITLE_TIMEOUT_MS = 30_000
+
+// 首回合已应答，但 Codex 可能还没把会话元数据写入刚建的历史文件。
+const EMPTY_ROLLOUT_RETRY_MS = [50, 150, 400, 900]
 
 /** 标题最长多少个字（按码点算），模型给长了截掉 */
 export const TITLE_MAX_CHARS = 40
@@ -159,9 +163,16 @@ export class CodexTitles {
     const deadline = Date.now() + (this.host.timeoutMs ?? TITLE_TIMEOUT_MS)
     const left = () => Math.max(1, deadline - Date.now())
     const link = await this.link(harness)
-    const thread = await readThread(link, threadId, false, left())
+    const thread = await readThread(link, threadId, left())
     // 会话树的子会话建出来就带名字，这里再看一眼，免得哪条路漏了
-    if (!thread || hasName(thread) || thread.ephemeral === true || thread.parentThreadId) return
+    if (
+      this.closed ||
+      !thread ||
+      hasName(thread) ||
+      thread.ephemeral === true ||
+      thread.parentThreadId
+    )
+      return
     if (this.host.store.parentOf(threadId)) return
     const { title, failure } = await generateTitle(link, cwdOf(thread), request, left)
     if (failure)
@@ -171,7 +182,7 @@ export class CodexTitles {
     if (this.closed) return
     // 模型超时也要留出写回的时间；重新读取，保留用户在此期间设置的名称。
     const writeLink = await this.link(harness)
-    const now = await readThread(writeLink, threadId, false, 5000)
+    const now = await readThread(writeLink, threadId, 5000)
     if (this.closed || !now || hasName(now)) return
     await writeLink.request(
       'thread/name/set',
@@ -240,6 +251,7 @@ function httpStatus(value: string | null): string | null {
 
 function errorKind(error: unknown): string {
   if (error instanceof UpstreamRpcError) {
+    if (isEmptyRolloutRead(error)) return '会话历史文件尚为空（RPC -32603）'
     if (isObject(error.data) && error.data.type === 'modelProviderMismatch')
       return '当前 Codex 不允许向非当前提供商启动回合'
     return httpStatus(error.message) ?? `RPC ${error.code}`
@@ -259,14 +271,37 @@ const clip = (value: string, limit: number): string => {
   return chars.length <= limit ? value : `${chars.slice(0, limit).join('')}…`
 }
 
+function isEmptyRolloutRead(error: unknown): boolean {
+  return (
+    error instanceof UpstreamRpcError &&
+    error.code === -32603 &&
+    /^failed to read thread: thread-store internal error: failed to read session metadata (.+): rollout at \1 is empty$/u.test(
+      error.message,
+    )
+  )
+}
+
 async function readThread(
   link: EngineLink,
   threadId: string,
-  includeTurns: boolean,
   timeoutMs: number,
 ): Promise<Record<string, unknown> | null> {
-  const result = await link.request('thread/read', { threadId, includeTurns }, { timeoutMs })
-  return isObject(result) && isObject(result.thread) ? result.thread : null
+  const deadline = Date.now() + timeoutMs
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const result = await link.request(
+        'thread/read',
+        { threadId, includeTurns: false },
+        { timeoutMs: Math.max(1, deadline - Date.now()) },
+      )
+      return isObject(result) && isObject(result.thread) ? result.thread : null
+    } catch (error: unknown) {
+      const wait = EMPTY_ROLLOUT_RETRY_MS[attempt]
+      if (!isEmptyRolloutRead(error) || wait === undefined || Date.now() + wait >= deadline)
+        throw error
+      await delay(wait)
+    }
+  }
 }
 
 /** 只取本次提交的文字，不把图片、文件地址或设备层追加的消息当命名材料。 */

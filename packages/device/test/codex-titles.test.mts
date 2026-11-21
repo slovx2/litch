@@ -23,6 +23,12 @@ const LUNA = [
 const KEY = 'litch.autoTitle'
 type Named = { threadId?: string; threadName?: string }
 const text = (value: string) => [{ type: 'text', text: value, text_elements: [] }]
+const rollout = '/fixture/codex/sessions/rollout.jsonl'
+const emptyRollout = () =>
+  new RpcFailure(
+    -32603,
+    `failed to read thread: thread-store internal error: failed to read session metadata ${rollout}: rollout at ${rollout} is empty`,
+  )
 
 interface Options {
   models?: unknown[]
@@ -33,6 +39,7 @@ interface Options {
   rejectProviderMismatch?: boolean
   temporaryProvider?: string
   activeProvider?: string
+  readFailure?(attempt: number): RpcFailure | null
   /** 临时会话跑着的时候用户手动改了名 */
   renameDuring?: string
   /** 命名回合等待测试主动放行，用来确定中断与重发的先后。 */
@@ -50,6 +57,7 @@ async function setup(options: Options = {}) {
   }
   let serial = 100
   let userThreadId = ''
+  let threadReads = 0
   let titleBegan!: () => void
   const titleStarted = new Promise<void>((resolve) => {
     titleBegan = resolve
@@ -84,6 +92,10 @@ async function setup(options: Options = {}) {
   codex.handlers['thread/read'] = (params) => {
     const thread = codex.threads.find((item) => item.id === params.threadId)
     if (!thread) throw new Error('未知会话')
+    if (!thread.ephemeral) {
+      const failure = options.readFailure?.(++threadReads)
+      if (failure) throw failure
+    }
     // 特意不提供历史：起名必须用提交时的文字，不能等主回合写入历史。
     return { thread: { ...thread, turns: [] } }
   }
@@ -192,6 +204,82 @@ test('消息发出后不等主回合结束：设备进程开只读、不带工�
     await env.device.titles.settled()
     assert.equal(temporaries().length, 1)
     assert.equal(sentTo(codex, 'thread/name/set').length, 1)
+  } finally {
+    client.close()
+    await env.close()
+  }
+})
+
+test('首回合已应答但 rollout 暂时为空：重读会话后用 Luna 正常命名', async () => {
+  const { env, codex, firstTurn, temporaries } = await setup({
+    activeProvider: 'gateway-fixture',
+    readFailure: (attempt) => (attempt <= 2 ? emptyRollout() : null),
+  })
+  const client = env.connect()
+  try {
+    await client.initialize(['harness'])
+    const threadId = await firstTurn(client, { model: 'glm-5.3' })
+    await env.device.titles.settled()
+    assert.equal(codex.threads.find((thread) => thread.id === threadId)?.name, 'CSV 转 JSON 脚本')
+    assert.equal(temporaries().length, 1, '只生成一次，不靠首条文字兜底')
+    assert.equal(temporaries()[0]?.modelProvider, 'gateway-fixture')
+    assert.equal(sentTo(codex, 'thread/read').length, 4)
+  } finally {
+    client.close()
+    await env.close()
+  }
+})
+
+test('写回前读到空 rollout 也重读，仍保留等待期间设置的手动名称', async () => {
+  const { env, codex, firstTurn, temporaries } = await setup({
+    renameDuring: '手动名称',
+    readFailure: (attempt) => (attempt === 2 ? emptyRollout() : null),
+  })
+  const client = env.connect()
+  try {
+    await client.initialize(['harness'])
+    const threadId = await firstTurn(client)
+    await env.device.titles.settled()
+    assert.equal(temporaries().length, 1)
+    assert.equal(sentTo(codex, 'thread/read').length, 3)
+    assert.equal(sentTo(codex, 'thread/name/set').length, 0)
+    assert.equal(codex.threads.find((thread) => thread.id === threadId)?.name, '手动名称')
+  } finally {
+    client.close()
+    await env.close()
+  }
+})
+
+test('rollout 一直为空：有界退出，不发命名回合或写入标题', async () => {
+  const { env, codex, firstTurn, temporaries } = await setup({ readFailure: emptyRollout })
+  const client = env.connect()
+  try {
+    await client.initialize(['harness'])
+    await firstTurn(client)
+    await env.device.titles.settled()
+    assert.equal(sentTo(codex, 'thread/read').length, 5)
+    assert.equal(temporaries().length, 0)
+    assert.equal(sentTo(codex, 'thread/name/set').length, 0)
+    assert.ok(env.logs.some((line) => line.includes('会话历史文件尚为空')))
+    assert.ok(!env.logs.some((line) => line.includes(rollout)))
+  } finally {
+    client.close()
+    await env.close()
+  }
+})
+
+test('会话读取的其他内部错误不重试，也不启动命名回合', async () => {
+  const { env, codex, firstTurn, temporaries } = await setup({
+    readFailure: () => new RpcFailure(-32603, 'failed to read thread: fixture database error'),
+  })
+  const client = env.connect()
+  try {
+    await client.initialize(['harness'])
+    await firstTurn(client)
+    await env.device.titles.settled()
+    assert.equal(sentTo(codex, 'thread/read').length, 1)
+    assert.equal(temporaries().length, 0)
+    assert.ok(env.logs.some((line) => line.includes('RPC -32603')))
   } finally {
     client.close()
     await env.close()
