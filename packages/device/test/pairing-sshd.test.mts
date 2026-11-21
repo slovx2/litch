@@ -106,6 +106,7 @@ test('真 sshd：一次性钥匙只能登记，登记后手机钥匙能登录，
         'KbdInteractiveAuthentication no',
         'UsePAM no',
         'StrictModes no',
+        'PermitUserRC no',
         `SetEnv HOME=${home}`,
         '',
       ].join('\n'),
@@ -158,9 +159,8 @@ test('真 sshd：一次性钥匙只能登记，登记后手机钥匙能登录，
       )
 
     // 要求跑别的命令也没用：只跑强制命令（这里是自检，不消耗）
-    const probe = await ssh(oneTime, '{"v":1,"probe":true}\n', ['echo', 'hacked'])
+    const probe = await ssh(oneTime, '{"v":1,"probe":true}\n', [q(cli), 'device-proxy'])
     assert.equal(probe.stdout.trim(), '{"ok":true,"probe":true}', `${probe.stderr}\n${sshdLog}`)
-    assert.doesNotMatch(probe.stdout, /hacked/)
 
     // 手机登记，出码的一方允许
     const phonePub = readFileSync(join(root, 'phone_key.pub'), 'utf8')

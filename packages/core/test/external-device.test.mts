@@ -7,9 +7,10 @@ import {
   EXTERNAL_METHOD as RPC,
 } from '../../protocol/src/external-sources.mjs'
 import { ChannelError } from '../src/channel/protocol.mjs'
-import type { RpcRequestOptions } from '../src/connection/rpc.mjs'
+import { RpcError, type RpcRequestOptions } from '../src/connection/rpc.mjs'
 import { createExternalDevice } from '../src/device/external.mjs'
 import { createExternalOwner } from '../src/device/external-owner.mjs'
+import { channelFailure } from '../src/device/faults.mjs'
 import type { ConfigMainResult } from '../src/model-config.mjs'
 import type {
   ExternalInboxView,
@@ -18,6 +19,33 @@ import type {
 } from '../src/projection/external.mjs'
 
 const flush = () => new Promise<void>((resolve) => setImmediate(resolve))
+
+test('设备权限拒绝可本地化，凭据操作也不带回协议正文', async () => {
+  const marker = 'fixture-secret-in-error'
+  const device = createExternalDevice({
+    online: () => true,
+    sourcesSupported: () => true,
+    autostartSupported: () => true,
+    now: () => 42,
+    fail: (error) => channelFailure(error),
+    async request() {
+      throw new RpcError(-32600, marker, { litch: 'deviceAdminRequired' })
+    },
+  })
+  for (const [method, args] of [
+    ['external.identity.list', {}],
+    ['external.identity.paste', { operationId: 'fixture', token: marker }],
+    ['external.autostart.enable', { operationId: 'fixture', expectedRevision: 0 }],
+  ] as const) {
+    await assert.rejects(device.command(method, args), (error) => {
+      assert.ok(error instanceof ChannelError)
+      assert.equal(error.code, 'rejected')
+      assert.equal(error.text?.key, 'external.adminRequired')
+      assert.doesNotMatch(error.message, /fixture-secret/)
+      return true
+    })
+  }
+})
 
 test('收件箱保留离线快照，重连读取新游标并替换已加载的页', async () => {
   let online = true

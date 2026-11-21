@@ -7,6 +7,7 @@ export type PhraseKey =
   | 'external.invalid'
   | 'external.invalidOwner'
   | 'external.offline'
+  | 'external.adminRequired'
   | 'external.ownerConflict'
   | 'external.resolveFailed'
   | 'external.resolveGhFailed'

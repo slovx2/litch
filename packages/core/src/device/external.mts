@@ -314,7 +314,7 @@ export function createExternalDevice(host: ExternalHost) {
       return result
     } catch (error) {
       const failure = host.fail(error)
-      if (!sensitive) throw failure
+      if (!sensitive || failure.text?.key === 'external.adminRequired') throw failure
       // 凭据类远端错误正文可能复述请求；只让稳定类别穿过通道。
       throw new ChannelError(
         failure.code,

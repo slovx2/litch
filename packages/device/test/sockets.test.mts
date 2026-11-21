@@ -1,11 +1,51 @@
 // 套接字文件的路径里有空格、有中文时也要连得上。
 // 用户的主目录就可能是这样（macOS 上带空格的全名、中文的用户名），状态目录默认在主目录下面。
 import assert from 'node:assert/strict'
-import { mkdirSync, rmSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { mkdirSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
-import { listenUnix, unixConnector } from '../src/sockets.mjs'
+import { listenDeviceEndpoints, listenUnix, unixConnector } from '../src/sockets.mjs'
 import { tempDir } from './helpers.mjs'
+
+test('本机和代理走同一管理员监听器；Unix 两条套接字均为 0600', async () => {
+  const root = tempDir()
+  const local =
+    process.platform === 'win32'
+      ? '\\\\.\\pipe\\litch-device-test-' + randomUUID()
+      : join(root, 'device.sock')
+  const paths = [local, local + '.r'] as const
+  const seen: boolean[] = []
+  const listeners = await listenDeviceEndpoints(...paths, (wire, admin) => ({
+    message(text) {
+      seen.push(admin)
+      wire.send(text)
+    },
+    close() {},
+  }))
+  try {
+    assert.equal(listeners.length, 2)
+    for (const path of paths) {
+      if (process.platform !== 'win32') {
+        const file = statSync(path)
+        assert.equal(file.mode & 0o777, 0o600)
+        assert.equal(file.uid, process.getuid?.())
+      }
+      let reply!: (text: string) => void
+      const promise = new Promise<string>((resolve) => {
+        reply = resolve
+      })
+      const wire = await unixConnector(path)({ message: reply, close() {} })
+      wire.send(path)
+      assert.equal(await promise, path)
+      wire.close()
+    }
+    assert.deepEqual(seen, [true, true])
+  } finally {
+    await Promise.all(listeners.map((listener) => listener.close()))
+    rmSync(root, { recursive: true, force: true })
+  }
+})
 
 test('一批同步请求之间投递已完成应答，不等整批处理完', async () => {
   const { WebSocket } = await import('ws')

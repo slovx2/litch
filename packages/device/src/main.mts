@@ -22,7 +22,13 @@ import {
 import type { PairingConfig } from './pairing.mjs'
 import { watchParent } from './parent-watch.mjs'
 import { deviceChromeCommand } from './remote-chrome-install.mjs'
-import { listenUnix, parseSocketUrl, socketExists, unixConnector } from './sockets.mjs'
+import {
+  type Listener,
+  listenDeviceEndpoints,
+  parseSocketUrl,
+  socketExists,
+  unixConnector,
+} from './sockets.mjs'
 
 /**
  * 命令行给的日志目录（<状态目录>/logs），一加载就从环境里拿走：属于设备的终端、设备进程起的命令看不到它。
@@ -148,7 +154,7 @@ async function main(): Promise<void> {
       connect: unixConnector(upstream.path),
     })),
   })
-  const listeners: Awaited<ReturnType<typeof listenUnix>>[] = []
+  let listeners: Listener[] = []
   try {
     await device.external?.agent?.start().catch(() => log('GitHub 凭据注入入口不可用'))
     if (control) {
@@ -156,8 +162,9 @@ async function main(): Promise<void> {
       if (!(await control.ready(CONTROL_READY_MS)))
         log('适配器主进程还没有把各 harness 的状态送过来，先就绪，到了再补')
     }
-    listeners.push(await listenUnix(args.listen, (wire) => device.attach(wire, true)))
-    if (proxySocket) listeners.push(await listenUnix(proxySocket, (wire) => device.attach(wire)))
+    listeners = await listenDeviceEndpoints(args.listen, proxySocket, (wire, admin) =>
+      device.attach(wire, admin),
+    )
     void device.attachments.start()
   } catch (error) {
     await Promise.allSettled(listeners.map((listener) => listener.close()))

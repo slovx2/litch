@@ -153,17 +153,19 @@ export function Repos({
       <div className="ext-block-head">
         <h3>{t('ext.repos')}</h3>
         <span className="grow" />
-        <button
-          type="button"
-          className="ibtn"
-          data-act="repo-add"
-          title={t(identities.length ? 'ext.repo.add' : 'ext.repo.needIdentity')}
-          aria-label={t('ext.repo.add')}
-          disabled={!writable || !identities.length}
-          onClick={() => setAdding(true)}
-        >
-          <Icon name="plus" small />
-        </button>
+        {writable ? (
+          <button
+            type="button"
+            className="ibtn"
+            data-act="repo-add"
+            title={t(identities.length ? 'ext.repo.add' : 'ext.repo.needIdentity')}
+            aria-label={t('ext.repo.add')}
+            disabled={!identities.length}
+            onClick={() => setAdding(true)}
+          >
+            <Icon name="plus" small />
+          </button>
+        ) : null}
       </div>
       {sources === null ? (
         <div className="ext-empty">{error || t('ext.loading')}</div>

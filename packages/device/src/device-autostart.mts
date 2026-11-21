@@ -59,7 +59,7 @@ export class DeviceAutostart {
       )
     if (!this.control) throw new DeviceError('unsupported', 'System autostart is unavailable')
     if (!access.canRead || (method !== DEVICE_AUTOSTART_METHOD.get && !access.canConfigure))
-      throw new ProtocolError(-32600, 'This connection cannot access device autostart')
+      throw new DeviceError('deviceAdminRequired', 'This operation requires a device administrator')
 
     switch (method) {
       case DEVICE_AUTOSTART_METHOD.get: {

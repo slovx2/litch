@@ -26,7 +26,7 @@ export function UnattendedPage({
   const writable = online && allowed(view?.access, 'configure')
   const configuration = view?.configuration?.value ?? null
   const sources = view?.sources.value ?? null
-  const details = useIdentityDetails(device.id, configuration?.revision ?? null, online)
+  const details = useIdentityDetails(device.id, configuration?.revision ?? null, writable)
   const managers = useDeviceManagers(device.id)
   const heads = configuration?.identities ?? []
   const repos: RepoChoice[] = (sources ?? []).flatMap((status) =>
@@ -96,6 +96,7 @@ export function UnattendedPage({
             identities={details.identities}
             error={details.error}
             writable={writable}
+            readOnly={online && view?.access?.configure === false}
           />
           <Repos
             device={device}

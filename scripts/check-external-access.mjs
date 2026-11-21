@@ -128,15 +128,27 @@ try {
   const wait = (expression) => until(() => read(expression), expression)
   const click = (s) => read(`document.querySelector(${JSON.stringify(s)}).click()`)
   await cdp.call('Page.navigate', { url: `http://127.0.0.1:${server.address().port}` })
-  await wait('!!document.querySelector("[data-act=identity-add]")')
-  await wait('document.querySelector("[data-act=identity-add]").disabled')
+  const identityAdd = '[data-act=identity-add]'
+  const repoAdd = '[data-act=repo-add]'
+  const hidden = (selector) => `!document.querySelector(${JSON.stringify(selector)})`
+  const enabled = (selector) =>
+    `document.querySelector(${JSON.stringify(selector)})?.disabled === false`
+  await wait('!!document.querySelector("[data-ext-page=remote] [data-ext-identities]")')
+  assert.equal(await read(hidden(identityAdd)), true)
+  assert.equal(await read(hidden(repoAdd)), true)
+  assert.equal(await read('accessCalls.includes("external.identity.list")'), false)
+  assert.equal(await read('accessCalls.includes("external.identity.repositories")'), false)
+  assert.match(
+    await read('document.querySelector("[data-ext-assignments]").textContent'),
+    /Remote fixture manager/,
+  )
   assert.equal(await read('document.querySelector("[data-act=autostart]").disabled'), true)
   assert.equal(await read('!!document.querySelector("#mobile [data-testid=github-accept]")'), false)
   await read(
     'setAccess({configure:true,configureAutostart:true,triageInbox:true,reassignInbox:true})',
   )
-  await wait('!document.querySelector("[data-act=identity-add]").disabled')
-  await click('[data-act=identity-add]')
+  await wait(enabled(identityAdd))
+  await click(identityAdd)
   await wait('!!document.querySelector("dialog[open]")')
   await click('#triage [data-act=triage-accept]')
   await click('#mobile [data-testid=github-accept]')
@@ -153,9 +165,31 @@ try {
     await read('document.querySelector("#mobile [data-testid=github-triage-submit]").disabled'),
     true,
   )
-  assert.equal(await read('document.querySelector("[data-act=identity-add]").disabled'), true)
+  assert.equal(await read(hidden(identityAdd)), true)
+  assert.equal(await read(hidden(repoAdd)), true)
+  const detailReads = await read(
+    'accessCalls.filter(name => /^external.identity.(list|repositories)$/.test(name)).length',
+  )
+  await read('setAccess({configure:false})')
+  await wait('!!document.querySelector("[data-ext-admin-required]")')
+  const permissionText = 'document.querySelector("[data-ext-admin-required]")?.textContent'
+  await read('window.__litchLook.set({lang:"en"})')
+  await wait(`/This connection is read-only/.test(${permissionText})`)
+  await read('window.__litchLook.set({lang:"zh-CN"})')
+  await wait(`/当前连接只能查看/.test(${permissionText})`)
+  assert.equal(
+    await read(
+      'accessCalls.filter(name => /^external.identity.(list|repositories)$/.test(name)).length',
+    ),
+    detailReads,
+  )
   await read('setAccess({configure:true})')
-  await wait('!document.querySelector("[data-act=identity-add]").disabled')
+  await wait(enabled(identityAdd))
+  await wait(enabled(repoAdd))
+  await click(repoAdd)
+  await wait('document.querySelector("dialog[open] [data-repo]")?.dataset.repo === "456"')
+  await read('document.querySelector("dialog[open] .modal-head button").click()')
+  await wait('!document.querySelector("dialog[open]")')
   assert.equal(await read('document.querySelector("[data-act=autostart]").disabled'), true)
   await read('window.__litchLook.set({lang:"zh-CN"})')
   await click('[data-act=source-expand]')
@@ -178,11 +212,12 @@ try {
   await click('[data-act=identity-use-token]')
   await wait('!!document.querySelector("dialog[open] input[type=password]")')
   await read('setAccess(undefined)')
-  await wait('document.querySelector("[data-act=identity-add]").disabled')
+  await wait(hidden(identityAdd))
+  assert.equal(await read(hidden(repoAdd)), true)
   assert.equal(await read('!!document.querySelector("[data-agent-owner]")'), false)
   assert.equal(await read('accessCalls.includes("external.inbox.triage")'), false)
   console.log(
-    '通过：配置权限与撤权、桌面/手机已开表单立即只读、配置与自启独立、GitHub CLI 下载提示及令牌替代入口',
+    '通过：远程设备的身份和仓库入口、按设备列出经理、无配置权限不读身份明细、撤权即只读及下载提示',
   )
 } finally {
   cdp?.close()

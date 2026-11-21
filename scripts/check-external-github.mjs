@@ -8,7 +8,7 @@ import test from 'node:test'
 import { promisify } from 'node:util'
 import { DeviceServer } from '../packages/device/dist/packages/device/src/device.mjs'
 import { managedGithubCliPath } from '../packages/device/dist/packages/device/src/external/github/gh-version.mjs'
-import { listenUnix } from '../packages/device/dist/packages/device/src/sockets.mjs'
+import { listenDeviceEndpoints } from '../packages/device/dist/packages/device/src/sockets.mjs'
 import { FakeControl, managed } from '../packages/device/dist/packages/device/test/fake-control.mjs'
 import { FakeEngine, resultOf } from '../packages/device/dist/packages/device/test/fake-engine.mjs'
 import { TestClient } from '../packages/device/dist/packages/device/test/helpers.mjs'
@@ -38,7 +38,7 @@ test('设备 GitHub：授权、只读连接、待分拣、真实提醒、对账�
   const state = join(dir, 'state')
   const root = join(dir, 'repo')
   const socket = join(state, 'device.sock')
-  const restricted = `${socket}.r`
+  const proxySocket = `${socket}.r`
   const clock = { now: Math.floor(Date.now() / 1000) }
   const mock = await scenario(t, clock)
   const pi = new FakeEngine('pi')
@@ -71,10 +71,9 @@ test('设备 GitHub：授权、只读连接、待分拣、真实提醒、对账�
       },
     })
     await device.external.agent.start()
-    listeners = [
-      await listenUnix(socket, (wire) => device.attach(wire, true)),
-      await listenUnix(restricted, (wire) => device.attach(wire)),
-    ]
+    listeners = await listenDeviceEndpoints(socket, proxySocket, (wire, admin) =>
+      device.attach(wire, admin),
+    )
   }
   const stop = async () => {
     await Promise.all(listeners.map((listener) => listener.close()))
@@ -161,22 +160,36 @@ else if (args[0] === 'api' || args[0] === 'pr') {
   )
   handoff.close()
   const admin = await TestClient.overSocket(socket)
-  const phone = await TestClient.overSocket(restricted)
+  const proxy = await TestClient.overSocket(proxySocket)
+  // 直接接入非管理员会话，只验拒绝与通知裁剪；这不是 SSH 入口。
+  const viewOnly = new TestClient(device)
   const plain = await TestClient.overSocket(socket)
   await Promise.all([
     admin.initialize(extensions),
-    phone.initialize(extensions),
+    proxy.initialize([...extensions, 'litchDeviceAutostart']),
+    viewOnly.initialize(extensions),
     plain.initialize(coreExtensions),
   ])
   const adminAccess = await admin.call(E.accessGet, {})
-  const phoneAccess = await phone.call(E.accessGet, {})
+  const proxyAccess = await proxy.call(E.accessGet, {})
+  const viewOnlyAccess = await viewOnly.call(E.accessGet, {})
   for (const key of ['configure', 'configureAutostart', 'triageInbox']) {
     assert.equal(adminAccess[key], true)
-    assert.equal(phoneAccess[key], false)
+    assert.equal(proxyAccess[key], true)
+    assert.equal(viewOnlyAccess[key], false)
   }
   assert.equal(
-    (await phone.fails(E.identityAdd, { operationId: 'phone-not-admin', scopes: [] })).code,
-    -32600,
+    (await viewOnly.fails(E.identityAdd, { operationId: 'not-admin', scopes: [] })).data.litch,
+    'deviceAdminRequired',
+  )
+  assert.equal(
+    (
+      await proxy.call('litch/device/autostart/enable', {
+        operationId: 'proxy-start',
+        expectedRevision: 0,
+      })
+    ).state,
+    'accepted',
   )
   assert.equal((await plain.fails(E.sourceList, {})).data.litch, 'extensionRequired')
   await admin.call(E.ownerSet, {
@@ -190,10 +203,12 @@ else if (args[0] === 'api' || args[0] === 'pr') {
       method: 'userId',
     },
   })
-  const waiting = await admin.call(E.identityAdd, {
+  const loginRequest = {
     operationId: 'device-code',
     scopes: ['repo', 'read:org', 'gist'],
-  })
+  }
+  const waiting = await proxy.call(E.identityAdd, loginRequest)
+  assert.equal((await admin.call(E.identityAdd, loginRequest)).loginId, waiting.loginId)
   assert.equal(waiting.state, 'waiting')
   assert.equal(waiting.userCode, 'ABCD-EFGH')
   let login
@@ -205,8 +220,11 @@ else if (args[0] === 'api' || args[0] === 'pr') {
   assert.equal(login.result.identity.botUserId, bot)
   assert.ok(!JSON.stringify(admin.raw).includes(oauth))
   assert.ok(
-    !phone.notifications.some(({ method }) => method === 'litch/external/identities/login/changed'),
+    !viewOnly.notifications.some(
+      ({ method }) => method === 'litch/external/identities/login/changed',
+    ),
   )
+  viewOnly.close()
   const {
     repositories: [selected],
   } = await admin.call(E.identityRepositories, { repoId: repo.id })
@@ -261,14 +279,18 @@ else if (args[0] === 'api' || args[0] === 'pr') {
       },
     ],
   }
-  await admin.call(E.sourceUpsert, { source, expectedRevision: 0, operationId: 'add-repo' })
-  await admin.call(E.managerAssignmentSet, {
+  await proxy.call(E.sourceUpsert, { source, expectedRevision: 0, operationId: 'add-repo' })
+  await proxy.call(E.managerAssignmentSet, {
     managerId: manager.id,
     identityId: bot,
     repoIds: [repo.id],
     expectedRevision: 0,
     operationId: 'assign-repo',
   })
+  assert.equal(
+    (await admin.call(E.managerAssignmentGet, { managerId: manager.id })).identityId,
+    bot,
+  )
   await until(
     async () =>
       (await admin.call(E.sourceGet, { sourceId: source.sourceId })).runtime.lastSuccessAt != null,
