@@ -9,6 +9,7 @@ import {
   keys,
   type ManageRevisions,
   type ManageSchema,
+  MODEL_RANKING_ENABLED,
   type SettingGroupView,
   type SettingSpecView,
   type SettingsSnapshotView,
@@ -202,7 +203,7 @@ export function ManagePanel({
 
   return (
     <div className="mng" data-manage-state="ready" data-version={snapshot.version}>
-      {device.modelRanking && !harnessId && (
+      {MODEL_RANKING_ENABLED && device.modelRanking && !harnessId && (
         <ModelRanking
           device={device}
           reveal={revealRanking}

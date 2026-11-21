@@ -3,6 +3,7 @@
 
 import {
   emptyRanking,
+  MODEL_RANKING_ENABLED,
   MODEL_RANKING_REVISION,
   type ModelRankingSnapshot,
   mergeRanking,
@@ -120,7 +121,11 @@ export const SAMPLE_HOSTS: (DiscoveredHost & {
   { alias: 'bastion', host: 'bastion.example.com', user: 'ops', port: 22, result: 'untrusted' },
 ]
 
-export function sampleApp(_lang: SampleLang, now: number): AppView {
+export function sampleApp(
+  _lang: SampleLang,
+  now: number,
+  modelRankingEnabled = MODEL_RANKING_ENABLED,
+): AppView {
   const harness = sampleHarness
   const devices: DeviceView[] = [
     {
@@ -168,7 +173,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       stale: false,
       organizable: true,
       manageable: true,
-      modelRanking: true,
+      modelRanking: modelRankingEnabled,
       // 在跑的就是应用自带的那一份。别的情形由对话里的关键字来演（mock-service.mts）
       ...sampleLocalService(now),
       remoteUpgrade: null,

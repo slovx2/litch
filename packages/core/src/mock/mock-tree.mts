@@ -1325,7 +1325,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
         spawnDemo(view, turnId)
         return true
       }
-      if (/模型越级建议|model limit proposal/i.test(message.text)) {
+      if (host.modelRanking && /模型越级建议|model limit proposal/i.test(message.text)) {
         modelLimitDemo(view, turnId)
         return true
       }

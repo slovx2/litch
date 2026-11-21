@@ -87,9 +87,35 @@ test('预检身份沿用目录中唯一供应商别名，歧义与缺失不借�
   assert.equal(uncertain.failure?.reason.kind, 'unranked')
 })
 
+test('暂停排序时，新的客户端不声明或读取旧设备仍支持的排名扩展', async () => {
+  const world = deviceWorld([harness('pi')], {
+    prepare: (device) => {
+      device.extensions.push('modelRanking')
+    },
+  })
+  world.core.start()
+  try {
+    await settle()
+    assert.equal(world.device()?.connection, 'online')
+    assert.equal(world.device()?.modelRanking, false)
+    const greeting = world.sent('initialize')[0]?.capabilities as {
+      litchExtensions: string[]
+    }
+    assert.ok(!greeting.litchExtensions.includes('modelRanking'))
+    await assert.rejects(world.command('device.modelRanking.read', {}), { code: 'unsupported' })
+    assert.equal(world.sent('litch/device/modelRanking/read').length, 0)
+  } finally {
+    world.core.stop()
+  }
+})
+
 test('mock 保存开关为设备有效规则，恢复内置清掉开关', async () => {
   const time = fakeClock()
-  const core = createMockCore({ clock: time.clock, modelRankingScenario: 'custom-cross' })
+  const core = createMockCore({
+    clock: time.clock,
+    modelRankingEnabled: true,
+    modelRankingScenario: 'custom-cross',
+  })
   const signal = new AbortController().signal
   const read = (await core.command(
     'device.modelRanking.read',
@@ -171,6 +197,7 @@ test('mock 场景覆盖开关、未分级、部分目录失败，建议卡越级
   const core = createMockCore({
     clock: clock.clock,
     chunkMs: 0,
+    modelRankingEnabled: true,
     modelRankingScenario: 'custom-local',
   })
   let view: SessionView | undefined

@@ -113,7 +113,7 @@ export interface MockManageProbe {
   skins: string[]
 }
 
-export async function mockManageProbe(): Promise<MockManageProbe> {
+export async function mockManageProbe(modelRankingEnabled: boolean): Promise<MockManageProbe> {
   const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
   const frame = () => new Promise<void>((done) => requestAnimationFrame(() => done()))
   const until = async <T,>(
@@ -300,41 +300,45 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   // ---- 二、本机：一打开只露一眼要看的；点开之后是 harness、每种类型的控件、密钥、入口的状况 ----
   const page = await openDetail('local')
   await ready()
-  const ranking = await until('模型等级设置入口', () => one('[data-model-ranking]'))
-  const rankingMode = () =>
-    one<HTMLElement>('[data-model-ranking] .mng-sum[data-mode]')?.dataset.mode ?? ''
-  const unsaved = () => text(one('[data-model-ranking] .mng-sec-head')).includes('有未保存')
-  one<HTMLButtonElement>('.fold', ranking)?.click()
-  // 找一条至少两级的阶梯，把最高一级的第一个模型拖进下一级：两者落在同一格
-  const ladder = await until('内置型号预排', () =>
-    all('[data-model-ranking] .rk-ladder').find(
-      (entry) => entry.querySelectorAll('.rk-level').length > 1,
-    ),
-  )
-  const [top, next] = all('.rk-level', ladder)
-  const dragged = one<HTMLElement>('.rk-row', top)?.dataset.model ?? ''
-  const peer = one<HTMLElement>('.rk-row', next)?.dataset.model ?? ''
-  const transfer = new DataTransfer()
-  one(`[data-rank-handle="${CSS.escape(dragged)}"]`)?.dispatchEvent(
-    new DragEvent('dragstart', { bubbles: true, dataTransfer: transfer }),
-  )
-  await frame()
-  next?.dispatchEvent(
-    new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer }),
-  )
-  next?.dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer: transfer }))
-  await until('拖动到同级组', () => {
-    const level = one(`[data-model="${CSS.escape(dragged)}"]`)?.closest('.rk-level')
-    return unsaved() && !!level?.querySelector(`[data-model="${CSS.escape(peer)}"]`)
-  })
-  await frame()
-  one<HTMLButtonElement>('[data-act="ranking-save"]')?.click()
-  await until('自定义模型排序保存', () => rankingMode() === 'custom' && !unsaved())
-  one<HTMLButtonElement>('[data-act="ranking-reset"]')?.click()
-  await frame()
-  one<HTMLButtonElement>('[data-act="ranking-reset-confirm"]')?.click()
-  await until('恢复内置排序', () => rankingMode() === 'builtin')
-  one<HTMLButtonElement>('.fold', ranking)?.click()
+  if (modelRankingEnabled) {
+    const ranking = await until('模型等级设置入口', () => one('[data-model-ranking]'))
+    const rankingMode = () =>
+      one<HTMLElement>('[data-model-ranking] .mng-sum[data-mode]')?.dataset.mode ?? ''
+    const unsaved = () => text(one('[data-model-ranking] .mng-sec-head')).includes('有未保存')
+    one<HTMLButtonElement>('.fold', ranking)?.click()
+    // 找一条至少两级的阶梯，把最高一级的第一个模型拖进下一级：两者落在同一格
+    const ladder = await until('内置型号预排', () =>
+      all('[data-model-ranking] .rk-ladder').find(
+        (entry) => entry.querySelectorAll('.rk-level').length > 1,
+      ),
+    )
+    const [top, next] = all('.rk-level', ladder)
+    const dragged = one<HTMLElement>('.rk-row', top)?.dataset.model ?? ''
+    const peer = one<HTMLElement>('.rk-row', next)?.dataset.model ?? ''
+    const transfer = new DataTransfer()
+    one(`[data-rank-handle="${CSS.escape(dragged)}"]`)?.dispatchEvent(
+      new DragEvent('dragstart', { bubbles: true, dataTransfer: transfer }),
+    )
+    await frame()
+    next?.dispatchEvent(
+      new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer }),
+    )
+    next?.dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer: transfer }))
+    await until('拖动到同级组', () => {
+      const level = one(`[data-model="${CSS.escape(dragged)}"]`)?.closest('.rk-level')
+      return unsaved() && !!level?.querySelector(`[data-model="${CSS.escape(peer)}"]`)
+    })
+    await frame()
+    one<HTMLButtonElement>('[data-act="ranking-save"]')?.click()
+    await until('自定义模型排序保存', () => rankingMode() === 'custom' && !unsaved())
+    one<HTMLButtonElement>('[data-act="ranking-reset"]')?.click()
+    await frame()
+    one<HTMLButtonElement>('[data-act="ranking-reset-confirm"]')?.click()
+    await until('恢复内置排序', () => rankingMode() === 'builtin')
+    one<HTMLButtonElement>('.fold', ranking)?.click()
+  } else if (one('[data-model-ranking]')) {
+    throw new Error('暂停后设备详情仍显示模型等级排序')
+  }
   await ready()
   deviceActs.push(actsOf(page))
   const foldedShown = [

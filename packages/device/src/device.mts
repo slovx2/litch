@@ -4,6 +4,7 @@ import {
   deviceToolSwitches,
 } from '../../protocol/src/client-tools-settings.mjs'
 import { MANAGER_NOTIFICATION } from '../../protocol/src/manager.mjs'
+import { MODEL_RANKING_ENABLED } from '../../protocol/src/model-ranking.mjs'
 import { PATH_PICKER_EXTENSION } from '../../protocol/src/path-picker.mjs'
 import { THREAD_READ_STATE } from '../../protocol/src/thread-read-state.mjs'
 import { protectedAttachmentOwners } from './attachment-active.mjs'
@@ -118,6 +119,8 @@ export interface DeviceOptions {
   external?: Pick<DeviceExternalOptions, 'deviceSocket' | 'fixture'>
   /** 隔离验收的附件主目录；生产取系统 home。 */
   attachmentHome?: string
+  /** 隔离测试可开启暂时隐藏的模型等级排序。 */
+  modelRankingEnabled?: boolean
 
   /** 无控制进程的隔离夹具使用；生产开关来自设备设置。 */
   clientToolSettings?: Record<string, boolean>
@@ -346,6 +349,7 @@ export class DeviceServer {
 
   constructor(options: DeviceOptions) {
     mkdirSync(options.stateDir, { recursive: true, mode: 0o700 })
+    const modelRankingEnabled = options.modelRankingEnabled ?? MODEL_RANKING_ENABLED
     this.options = options
     this.control = options.control ?? null
     this.version = options.version ?? deviceVersion()
@@ -425,7 +429,8 @@ export class DeviceServer {
     this.recovery.resumed(this.control?.state?.wake)
     this.recovery.start()
     // 设置功能要有适配器主进程在管才有：客户端看这份列表决定出不出设置界面
-    if (this.control) info.extensions.push(EXTENSION.deviceSettings, EXTENSION.modelRanking)
+    if (this.control) info.extensions.push(EXTENSION.deviceSettings)
+    if (this.control && modelRankingEnabled) info.extensions.push(EXTENSION.modelRanking)
     if (this.control) info.extensions.push(EXTENSION.harnessRuntime)
     // 服务的来历也是主进程给的：有它在管，声明过的客户端才问得到“在跑的是哪一份”
     if (this.control) info.extensions.push(EXTENSION.serviceActivity)
@@ -548,7 +553,7 @@ export class DeviceServer {
     if (this.worktrees) info.extensions.push(EXTENSION.worktrees)
     this.orchestrating = this.sessionTreeOn()
     this.sessionTree = new SessionTree({
-      modelRanking: () => this.modelRanking.config(),
+      ...(modelRankingEnabled ? { modelRanking: () => this.modelRanking.config() } : {}),
       toolsBusy: (threadId) => this.deviceTools.busy(threadId),
       clientRequests: (threadId) =>
         this.approvals.list(threadId, true).map((card) => ({
@@ -903,7 +908,7 @@ export class DeviceServer {
       ...(this.external ? { external: new DeviceExternalRpc(this.external, autostart) } : {}),
       autostart,
       deviceTools: this.deviceTools,
-      modelRanking: this.modelRanking,
+      ...(this.sessionTree.host.modelRanking ? { modelRanking: this.modelRanking } : {}),
       sessionTree: this.sessionTree,
       sessionTreeOn: () => this.sessionTreeOn(),
       pairing: this.pairing,
@@ -1220,6 +1225,7 @@ export class DeviceServer {
               harness,
               connect: source.connect,
               dialect: dialectFor(source.managed ? source.managed.native : source.native),
+              modelRankingEnabled: Boolean(this.sessionTree.host.modelRanking),
               version: this.version,
               handshakeTimeoutMs: options.handshakeTimeoutMs ?? this.taskTiming.handshakeTimeoutMs,
               requestTimeoutMs: this.taskTiming.requestTimeoutMs,

@@ -785,8 +785,10 @@ export class ClientSession implements ClientToolPeer {
         if (method === DEVICE_POWER_READ && !this.declared.has(EXTENSION.devicePower))
           throw new DeviceError('extensionRequired', `${method} requires devicePower`)
         if (method.startsWith('litch/device/modelRanking/')) {
-          if (!this.declared.has(EXTENSION.modelRanking) || !this.host.modelRanking)
+          if (!this.declared.has(EXTENSION.modelRanking))
             throw new DeviceError('extensionRequired', 'modelRanking must be declared')
+          if (!this.host.modelRanking)
+            throw new DeviceError('unsupported', 'Model ranking unavailable')
           return this.host.modelRanking.call(method, frame.params)
         }
         if (method.startsWith(MANAGEMENT_PREFIX))

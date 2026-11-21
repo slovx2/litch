@@ -10,9 +10,9 @@ import { acceptProposal, startChild } from '../src/session-start.mjs'
 import { RpcFailure } from './fake-upstream.mjs'
 import { treeRig, until } from './tree-kit.mjs'
 
-for (const mode of ['builtin', 'custom'] as const) {
+for (const mode of ['builtin', 'custom', 'off'] as const) {
   for (const selection of ['card', 'dispatch', 'default', 'cross-harness'] as const) {
-    test(`归档建议 ${mode}/${selection}：用户直接开始按卡片、派线默认、harness 默认选模型`, async () => {
+    test(`归档建议 ${mode}/${selection}：按卡片、派线默认、harness 默认选模型`, async () => {
       const env = treeRig()
       try {
         const engine = env.claude
@@ -90,8 +90,8 @@ for (const mode of ['builtin', 'custom'] as const) {
             throw new RpcFailure(-32600, '测试禁止恢复归档来源')
           return resume(params, connection)
         }
-        tree.host.modelRanking = async () => ({ ...emptyRanking(), mode })
-        if (mode === 'custom' || selection !== 'cross-harness')
+        if (mode !== 'off') tree.host.modelRanking = async () => ({ ...emptyRanking(), mode })
+        if (mode !== 'off' && (mode === 'custom' || selection !== 'cross-harness'))
           await assert.rejects(
             acceptProposal(tree, proposal.id),
             (error: unknown) => {
@@ -116,16 +116,23 @@ for (const mode of ['builtin', 'custom'] as const) {
             },
             '确认型号不能提升权限',
           )
-        const accepted = await client.call('litch/sessionProposal/accept', {
-          threadId: source.threadId,
-          proposalId: proposal.id,
-          overrides: { worktree: false },
-        })
+        const accepted =
+          mode === 'off' && selection !== 'default'
+            ? await acceptProposal(tree, proposal.id)
+            : await client.call('litch/sessionProposal/accept', {
+                threadId: source.threadId,
+                proposalId: proposal.id,
+                overrides: { worktree: false },
+              })
         const requests = engine.seen.slice(before)
         assert.equal(
           target.seen.slice(beforeTarget).find((request) => request.method === 'thread/start')
             ?.params.model,
-          selection === 'cross-harness' ? undefined : selection === 'default' ? 'opus' : 'fable',
+          selection === 'cross-harness' || (mode === 'off' && selection === 'default')
+            ? undefined
+            : selection === 'default'
+              ? 'opus'
+              : 'fable',
         )
         assert.equal(tree.lineage(accepted.threadId)?.parentThreadId, threadId)
         assert.equal(tree.host.index.archived(source.threadId), true)

@@ -10,6 +10,7 @@ import {
   type InstallTopicView,
   keys,
   type ManageSchema,
+  MODEL_RANKING_ENABLED,
   type SettingEditView,
   type SettingSpecView,
   type SettingsSnapshotView,
@@ -571,7 +572,9 @@ export function ManageSection({
   const loose = deviceSpecs.filter((spec) => !groups.some((group) => group.id === spec.group))
   return (
     <View testID="manage">
-      {device.modelRanking && <ModelRanking device={device} reveal={revealRanking} />}
+      {MODEL_RANKING_ENABLED && device.modelRanking && (
+        <ModelRanking device={device} reveal={revealRanking} />
+      )}
       {device.harnesses.map((harness) => {
         const specs = schema.settings.filter((spec) => belongsTo(spec, harness.id))
         const enable =

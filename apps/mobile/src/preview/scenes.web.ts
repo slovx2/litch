@@ -2,7 +2,7 @@
 // 数据全来自模拟核心（packages/core/src/mock/）。每次打开场景都重新载入，模拟数据跟着重置。
 // 示例数据里的标识（设备 local、build、nas、gpu，会话 s2、b1 等）见 packages/core/src/mock/sample-data.mts；
 // “新建会话说一句”的场景靠模拟核心认的触发词（同目录 mock-*.mts 开头的正则）。
-import type { LocalGroup } from '@litch/core'
+import { type LocalGroup, MODEL_RANKING_ENABLED } from '@litch/core'
 import type { RootStackParamList, RouteName } from '../nav/routes'
 
 export type SceneStep =
@@ -204,13 +204,17 @@ export const SCENES: Scene[] = [
     note: '四种经理事件与未知类型兜底；仅展开正文，无看板操作',
     steps: [],
   },
-  {
-    id: 'model-ranking',
-    group: '设备',
-    name: '模型等级排序',
-    note: '地址加 rank=off|on|unranked|partial|limit：分组阶梯、共用阶梯、未分级、读不到、越级提示',
-    steps: [],
-  },
+  ...(MODEL_RANKING_ENABLED
+    ? [
+        {
+          id: 'model-ranking',
+          group: '设备',
+          name: '模型等级排序',
+          note: '地址加 rank=off|on|unranked|partial|limit：分组阶梯、共用阶梯、未分级、读不到、越级提示',
+          steps: [],
+        },
+      ]
+    : []),
   {
     id: 'wake-off',
     group: '会话',

@@ -8,7 +8,11 @@ import type {
   DeviceSettingsReadResponse,
   DeviceSettingsSnapshot,
 } from '../../../protocol/src/device-settings.mjs'
-import { MODEL_RANKING, type ModelRankingSnapshot } from '../../../protocol/src/model-ranking.mjs'
+import {
+  MODEL_RANKING,
+  MODEL_RANKING_ENABLED,
+  type ModelRankingSnapshot,
+} from '../../../protocol/src/model-ranking.mjs'
 import { PATH_PICKER_EXTENSION } from '../../../protocol/src/path-picker.mjs'
 import {
   REMOTE_CHROME_APPROVAL,
@@ -1987,7 +1991,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         for (const entry of info.harnesses) remember(entry.id, termsOf(entry))
         // 设置接口有没有，看它声明的扩展，不看版本号
         manageable = info.device.extensions?.includes(EXTENSION.deviceSettings) === true
-        modelRankingSupported = info.device.extensions?.includes(EXTENSION.modelRanking) === true
+        modelRankingSupported =
+          MODEL_RANKING_ENABLED && info.device.extensions?.includes(EXTENSION.modelRanking) === true
         powerSupported = info.device.extensions?.includes(EXTENSION.devicePower) === true
         recoverySupported = info.device.extensions?.includes(EXTENSION.turnRecovery) === true
         reattachable = info.device.extensions?.includes(EXTENSION.deviceProcesses) === true
@@ -2285,7 +2290,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         return
       }
       if (method === MODEL_RANKING.changed) {
-        manage.rankingChanged(params as ModelRankingSnapshot)
+        if (modelRankingSupported) manage.rankingChanged(params as ModelRankingSnapshot)
         return
       }
       if (method === DEVICE_POWER_CHANGED) {
@@ -3458,6 +3463,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     },
     openManage: (sink) => manage.open(sink),
     modelRanking: async (action, params = {}) => {
+      if (!modelRankingSupported) throw new ChannelError('unsupported', 'Model ranking unavailable')
       const result = (await link.request(
         MODEL_RANKING[action] as never,
         params as never,

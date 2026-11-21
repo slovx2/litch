@@ -34,6 +34,7 @@ import { sampleChecks, sampleLog, sampleSshConfig } from './sample-diagnostics.m
 import { both, sampleSettings } from './sample-manage.mjs'
 
 export interface MockManageHost {
+  modelRankingEnabled: boolean
   modelRankingScenario?: SampleModelRankingScenario
   clock: Clock
   /** 流式回答每一小块之间隔多久。这里的“过一会儿”都是它的倍数；0 表示不拖时间 */
@@ -174,7 +175,7 @@ export function createMockManagement(host: MockManageHost): MockManagement {
     powers.set(deviceId, JSON.stringify(power))
     return {
       deviceId,
-      modelRanking: rankingOf(deviceId),
+      ...(host.modelRankingEnabled ? { modelRanking: rankingOf(deviceId) } : {}),
       power,
       groups: state.groups,
       settings: state.settings,
@@ -391,6 +392,8 @@ export function createMockManagement(host: MockManageHost): MockManagement {
       // 这几个命令没做成时都以拒绝的方式结束，不在调用的地方当场抛出来
       return (async () => {
         if (name.startsWith('device.modelRanking.')) {
+          if (!host.modelRankingEnabled)
+            throw new ChannelError('unsupported', 'Model ranking unavailable')
           const input = params as Commands['device.modelRanking.write']['params']
           reach(input.deviceId)
           const before = rankingOf(input.deviceId)

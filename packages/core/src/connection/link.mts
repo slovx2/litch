@@ -15,6 +15,7 @@ import {
   EXTENSION,
   type InitializeResponse,
   type JsonRpcId,
+  MODEL_RANKING_ENABLED,
 } from '../../../protocol/src/index.mjs'
 import type { PathPickerRequests } from '../../../protocol/src/path-picker.mjs'
 import { PATH_PICKER_EXTENSION } from '../../../protocol/src/path-picker.mjs'
@@ -224,7 +225,7 @@ export function createLink(options: LinkOptions): Link {
               // deviceProcesses：声明了，起进程时的扩展参数才生效，才收得到设备上终端增减的通知
               litchExtensions: [
                 EXTENSION.threadCapabilities,
-                EXTENSION.modelRanking,
+                ...(MODEL_RANKING_ENABLED ? [EXTENSION.modelRanking] : []),
                 EXTENSION.acpControls,
                 EXTENSION.filePreview,
                 EXTENSION.fileBrowser,
