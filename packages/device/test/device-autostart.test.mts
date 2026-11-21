@@ -50,11 +50,11 @@ test('自启读取要求声明及设备读权限，修改要求设备配置权�
   )
   await assert.rejects(
     autostart.call(DEVICE_AUTOSTART_METHOD.get, {}, { ...admin, canRead: false }),
-    /cannot access/,
+    { data: { litch: 'deviceAdminRequired' } },
   )
   await assert.rejects(
     autostart.call(DEVICE_AUTOSTART_METHOD.enable, approved, { ...admin, canConfigure: false }),
-    /cannot access/,
+    { data: { litch: 'deviceAdminRequired' } },
   )
   await assert.rejects(
     autostart.call(DEVICE_AUTOSTART_METHOD.disable, { ...approved, allowLinger: true }, admin),

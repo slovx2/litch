@@ -1,5 +1,6 @@
 // 正式 React 组件的权限回归夹具。通道使用合成快照；手机原生控件在浏览器里映射为等价表单。
 
+import { keys } from '@litch/core'
 import { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { InboxDetail } from '../apps/mobile/src/screens/managers/external/InboxDetail.tsx'
@@ -21,8 +22,36 @@ const head = {
   subject: { number: '8', url: 'https://github.com/example/demo/issues/8' },
   occurredAt: 1,
 }
-const manager = { id: 'm1', deviceId: 'local', status: 'active', name: 'fixture' }
-const device = { id: 'local', connection: 'online', externalSources: true, name: 'fixture' }
+const device = {
+  id: 'remote',
+  kind: 'ssh',
+  connection: 'online',
+  externalSources: true,
+  name: 'SSH fixture',
+}
+const manager = { id: 'm1', deviceId: device.id, status: 'active', name: 'Remote fixture manager' }
+const identity = {
+  identityId: 'fixture',
+  botUserId: '99',
+  login: 'fixture-bot',
+  revision: 1,
+  credentials: [],
+}
+const availableRepo = {
+  repoId: '456',
+  owner: 'example',
+  name: 'available',
+  url: 'https://github.com/example/available',
+  grants: [
+    {
+      identityId: identity.identityId,
+      botUserId: '99',
+      credentialRef: 'fixture',
+      read: true,
+      write: 'verified',
+    },
+  ],
+}
 const sourceStatus: ExternalSourceStatus = {
   source: {
     sourceId: 'github-ready',
@@ -70,7 +99,7 @@ const calls: string[] = []
 const snapshot = () => ({
   access,
   sources: { value: [sourceStatus] },
-  configuration: { value: { revision: 1, identities: [], assignments: [] } },
+  configuration: { value: { revision: 1, identities: [identity], assignments: [] } },
   autostart: {
     value: {
       revision: 1,
@@ -92,11 +121,16 @@ const channel = {
     sink.snapshot(snapshot())
     return () => sinks.delete(sink)
   },
-  async command(name: string) {
+  async command(name: string, args: { deviceId?: string } = {}) {
     calls.push(name)
+    if (
+      /^external\.(?:identity\.(?:list|repositories|add)|source\.check)$/.test(name) &&
+      args.deviceId !== device.id
+    )
+      throw new Error('没有选中远程夹具')
     if (name === 'external.inbox.get') return { events: [head], intake }
-    if (name === 'external.identity.repositories') return { repositories: [] }
-    if (name === 'external.identity.list') return { identities: [] }
+    if (name === 'external.identity.repositories') return { repositories: [availableRepo] }
+    if (name === 'external.identity.list') return { identities: [identity] }
     if (name === 'external.identity.add') return login
     if (name === 'external.source.check')
       return {
@@ -114,7 +148,11 @@ const channel = {
     return { identities: [], repositories: [] }
   },
 }
-const replica = { store: { get: () => undefined, subscribe: () => () => {} } }
+const managers = new Map<string, unknown>([
+  [keys.managerIds(device.id), [manager.id]],
+  [keys.manager(device.id, manager.id), manager],
+])
+const replica = { store: { get: (key: string) => managers.get(key), subscribe: () => () => {} } }
 Object.assign(window, { mobileServices: { channel, replica, intake } })
 function App() {
   const [current, set] = useState<ExternalAccess>()

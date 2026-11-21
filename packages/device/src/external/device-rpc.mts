@@ -57,10 +57,7 @@ export class DeviceExternalRpc {
     if (!knownMethods.has(method)) throw new ProtocolError(-32601, 'Unknown external source method')
     const key = method as Method
     if (!access.admin && !publicReads.has(key))
-      throw new ProtocolError(
-        -32600,
-        'This operation requires a private device administrator connection',
-      )
+      throw new DeviceError('deviceAdminRequired', 'This operation requires a device administrator')
     const args = <K extends Method>(type: K): ExternalRequests[K]['params'] => {
       const params = raw === undefined ? {} : raw
       if (!isExternalMethodParams(type, params))

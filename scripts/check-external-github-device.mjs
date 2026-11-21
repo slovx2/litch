@@ -1,18 +1,20 @@
 // 真正的 Go 生命周期、Node 设备入口和本机/代理套接字，GitHub 只在隔离子进程中重定向到回环。
 import assert from 'node:assert/strict'
-import { execFile } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { execFile, spawn } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { Duplex } from 'node:stream'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { WebSocket } from 'ws'
 import { TestClient } from '../packages/device/dist/packages/device/test/helpers.mjs'
 import { owner, scenario } from './external-github-mock.mjs'
 
 const exec = promisify(execFile)
 const root = fileURLToPath(new URL('..', import.meta.url))
 
-test('本机设备服务：系统自启状态、私有配置、受限代理和停机重连', { timeout: 55_000 }, async (t) => {
+test('本机设备服务：本机和代理同权、系统自启状态和停机重连', { timeout: 55_000 }, async (t) => {
   const home = mkdtempSync('/tmp/lg-device-')
   const socket = join(home, 'device', 'device.sock')
   const { origin } = await scenario(t, { now: Math.floor(Date.now() / 1000) })
@@ -41,17 +43,16 @@ globalThis.fetch = (input, init) => {
     CHA_LANG: 'en',
     GIT_CONFIG_NOSYSTEM: '1',
   }
-  const cli = (args) =>
-    exec(
-      join(root, 'bin', 'codex-harness-adapter'),
-      [...args, '--home', home, '--root', root, '--node', process.execPath],
-      { env, timeout: 30_000 },
-    )
+  const adapter = join(root, 'bin', 'codex-harness-adapter')
+  const argsFor = (args) => [...args, '--home', home, '--root', root, '--node', process.execPath]
+  const cli = (args) => exec(adapter, argsFor(args), { env, timeout: 30_000 })
   let local
   let remote
+  let proxy
   const stop = async () => {
     local?.close()
     remote?.close()
+    proxy?.kill()
     await cli(['device-stop'])
   }
   t.after(async () => {
@@ -71,7 +72,20 @@ globalThis.fetch = (input, init) => {
     }
     const extensions = ['harness', 'litchExternalSources', 'litchDeviceAutostart']
     local = await TestClient.overSocket(socket)
-    remote = await TestClient.overSocket(`${socket}.r`)
+    proxy = spawn(adapter, argsFor(['device-proxy']), { env, stdio: ['pipe', 'pipe', 'inherit'] })
+    const ws = new WebSocket('ws://localhost/', {
+      createConnection: () => Duplex.from({ readable: proxy.stdout, writable: proxy.stdin }),
+    })
+    await new Promise((resolve, reject) => {
+      ws.once('open', resolve)
+      ws.once('error', reject)
+      proxy.once('error', reject)
+    })
+    remote = new TestClient((wire) => {
+      ws.on('message', (data) => wire.send(data.toString()))
+      ws.once('close', () => wire.close())
+      return { message: (text) => ws.send(text), close: () => ws.close() }
+    })
     await Promise.all([local.initialize(extensions), remote.initialize(extensions)])
   }
   await start()
@@ -80,15 +94,22 @@ globalThis.fetch = (input, init) => {
   assert.equal(status.serviceManager, process.platform === 'darwin' ? 'launchd' : 'systemd')
   const direct = await cli(['device-autostart', 'get'])
   assert.equal(JSON.parse(direct.stdout).state, status.state)
-  assert.equal(
-    (
-      await remote.fails('litch/device/autostart/enable', {
-        operationId: 'forbidden',
-        expectedRevision: 0,
-      })
-    ).code,
-    -32600,
-  )
+  assert.equal(statSync(dirname(socket)).mode & 0o777, 0o700)
+  for (const path of [socket, `${socket}.r`]) assert.equal(statSync(path).mode & 0o777, 0o600)
+  for (const peer of [local, remote]) {
+    const access = await peer.call('litch/external/access/get', {})
+    assert.equal(access.configure, true)
+    assert.equal(access.configureAutostart, true)
+    // 用无效参数证明通过权限闸门，不实际启动设备码流程或更改系统自启。
+    for (const method of [
+      'litch/external/identities/add',
+      'litch/external/source/upsert',
+      'litch/external/manager/assignment/set',
+      'litch/device/autostart/enable',
+    ]) {
+      assert.equal((await peer.fails(method, {})).code, -32602, method)
+    }
+  }
   await local.call('litch/external/owner/set', {
     expectedRevision: 0,
     operationId: 'owner-1',
@@ -100,7 +121,7 @@ globalThis.fetch = (input, init) => {
       method: 'userId',
     },
   })
-  assert.equal((await remote.call('litch/external/access/get', {})).pauseSource, false)
+  assert.equal((await remote.call('litch/external/owner/get', {})).owner.userId, owner)
   await stop()
   await start()
   assert.equal((await local.call('litch/external/owner/get', {})).owner.userId, owner)

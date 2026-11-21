@@ -1254,6 +1254,8 @@ export const en: Record<MessageKey, Entry> = {
     'Invalid configuration. Check the required fields, numeric IDs, and device version.',
   'external.invalidOwner': 'Enter a GitHub profile URL or numeric user ID.',
   'external.offline': 'Device offline',
+  'external.adminRequired':
+    'This connection is read-only. To configure the device, connect from the desktop app using the device account.',
   'external.ownerConflict': 'The account changed elsewhere. Reload before syncing.',
   'external.resolveFailed':
     'Could not look up the GitHub user. Check the account and your connection.',

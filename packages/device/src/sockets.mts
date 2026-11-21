@@ -87,6 +87,24 @@ export interface Listener {
   close(): Promise<void>
 }
 
+/** 代理与本机入口都经过系统权限检查。Windows 默认管道 ACL 不允许其他普通用户发起双向 RPC。 */
+export async function listenDeviceEndpoints(
+  local: string,
+  proxy: string | undefined,
+  attach: (wire: Wire, deviceAdmin: true) => WireHandlers,
+): Promise<Listener[]> {
+  const listeners: Listener[] = []
+  const accept = (wire: Wire) => attach(wire, true)
+  try {
+    for (const path of proxy && proxy !== local ? [local, proxy] : [local])
+      listeners.push(await listenUnix(path, accept))
+    return listeners
+  } catch (error) {
+    await Promise.allSettled(listeners.map((listener) => listener.close()))
+    throw error
+  }
+}
+
 /**
  * 在 unix 套接字上提供聚合面。套接字文件只有属主可读写：
  * 能连上它就等同于拥有这个用户的 shell（终端和文件都不加沙箱），不能让别的用户连。

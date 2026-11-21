@@ -390,6 +390,8 @@ export const DEVICE_ERROR_CODE = {
   unsupported: -32601,
   /** 握手时没有声明聚合面要求的扩展 */
   extensionRequired: -32600,
+  /** 此连接不能配置设备。 */
+  deviceAdminRequired: -32600,
   /** `harness` 参数填的不是这台设备上配置的 harness */
   unknownHarness: -32602,
   /** 哪个 harness 都不认识这个会话 */

@@ -31,11 +31,13 @@ export function Identities({
   identities,
   error,
   writable,
+  readOnly,
 }: {
   device: DeviceView
   identities: ExternalIdentity[] | null
   error: string
   writable: boolean
+  readOnly: boolean
 }) {
   const t = useT()
   const { channel } = useServices()
@@ -71,19 +73,24 @@ export function Identities({
       <div className="ext-block-head">
         <h3>{t('ext.identities')}</h3>
         <span className="grow" />
-        <button
-          type="button"
-          className="ibtn"
-          data-act="identity-add"
-          title={t('ext.identity.add')}
-          aria-label={t('ext.identity.add')}
-          disabled={!online || !writable}
-          onClick={() => setAdding(true)}
-        >
-          <Icon name="plus" small />
-        </button>
+        {writable ? (
+          <button
+            type="button"
+            className="ibtn"
+            data-act="identity-add"
+            title={t('ext.identity.add')}
+            aria-label={t('ext.identity.add')}
+            onClick={() => setAdding(true)}
+          >
+            <Icon name="plus" small />
+          </button>
+        ) : null}
       </div>
-      {identities === null ? (
+      {readOnly ? (
+        <div className="ext-empty" data-ext-admin-required>
+          {t('external.adminRequired')}
+        </div>
+      ) : !online && identities === null ? null : identities === null ? (
         <div className="ext-empty">{error || t('ext.loading')}</div>
       ) : identities.length === 0 ? (
         <div className="ext-empty">{t('ext.identity.none')}</div>

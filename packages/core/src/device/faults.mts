@@ -78,6 +78,12 @@ export const harnessDownError = (name: string): ChannelError =>
 
 function fromDevice(error: RpcError, fault: DeviceErrorData, nameOf: HarnessNamer): ChannelError {
   const reason: string = fault.litch
+  if (reason === 'deviceAdminRequired')
+    return new ChannelError(
+      'rejected',
+      'Device administrator required',
+      phrase('external.adminRequired'),
+    )
   if (reason === 'archiveBlocked' && fault.blockingSessions)
     return archiveChildrenFailure(fault.blockingSessions)
   if (reason === 'managerResetBusy')

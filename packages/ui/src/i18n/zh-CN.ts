@@ -1195,6 +1195,7 @@ export const zhCN = {
   'external.invalid': '配置无效。请核对必填项、数字 ID 和设备版本。',
   'external.invalidOwner': '请填写 GitHub 个人主页或数字 ID。',
   'external.offline': '设备离线',
+  'external.adminRequired': '当前连接只能查看。请用设备账号从桌面连接后配置。',
   'external.ownerConflict': '全局账号已在别处更改。请重新加载后再同步。',
   'external.resolveFailed': '无法读取 GitHub 用户。请确认这是个人账号并检查网络。',
   'external.resolveGhFailed': '无法读取本机 gh 登录。请确认已安装 gh 并登录 github.com。',

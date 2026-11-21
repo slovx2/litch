@@ -123,14 +123,20 @@ export function useDeviceManagers(deviceId: string): ManagerChoice[] {
 }
 
 /** 身份的凭据明细与各身份能访问的仓库：配置版本变了重读 */
-export function useIdentityDetails(deviceId: string, revision: number | null, online: boolean) {
+export function useIdentityDetails(deviceId: string, revision: number | null, canRead: boolean) {
   const { channel } = useServices()
   const t = useT()
   const [identities, setIdentities] = useState<ExternalIdentity[] | null>(null)
   const [repositories, setRepositories] = useState<ExternalIdentityRepository[]>([])
   const [error, setError] = useState('')
   useEffect(() => {
-    if (revision === null || !online) return
+    if (!canRead) {
+      setIdentities(null)
+      setRepositories([])
+      setError('')
+      return
+    }
+    if (revision === null) return
     let live = true
     const load = async () => {
       try {
@@ -147,6 +153,7 @@ export function useIdentityDetails(deviceId: string, revision: number | null, on
               limit: 100,
               ...(cursor ? { cursor } : {}),
             })
+          if (!live) return
           all.push(...result.repositories)
           cursor = result.nextCursor
           if (!cursor) break
@@ -163,6 +170,8 @@ export function useIdentityDetails(deviceId: string, revision: number | null, on
     return () => {
       live = false
     }
-  }, [channel, deviceId, revision, online, t])
-  return { identities, repositories, error }
+  }, [channel, deviceId, revision, canRead, t])
+  return canRead
+    ? { identities, repositories, error }
+    : { identities: null, repositories: [], error: '' }
 }
