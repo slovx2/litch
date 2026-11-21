@@ -32,6 +32,7 @@ interface Options {
   /** 模拟 Codex 拒绝在非当前提供商上开始回合。 */
   rejectProviderMismatch?: boolean
   temporaryProvider?: string
+  activeProvider?: string
   /** 临时会话跑着的时候用户手动改了名 */
   renameDuring?: string
   /** 命名回合等待测试主动放行，用来确定中断与重发的先后。 */
@@ -43,7 +44,10 @@ async function setup(options: Options = {}) {
   const env = codexRig()
   const { codex } = env
   const state = installConfig(codex)
-  state.user = { mcp_servers: { docs: { command: '/bin/echo' } } }
+  state.user = {
+    ...(options.activeProvider ? { model_provider: options.activeProvider } : {}),
+    mcp_servers: { docs: { command: '/bin/echo' } },
+  }
   let serial = 100
   let userThreadId = ''
   let titleBegan!: () => void
@@ -71,7 +75,10 @@ async function setup(options: Options = {}) {
       thread: { ...thread, turns: [] },
       model: params.model ?? 'gpt-6-sol',
       modelProvider:
-        (params.ephemeral ? options.temporaryProvider : null) ?? params.modelProvider ?? 'openai',
+        (params.ephemeral ? options.temporaryProvider : null) ??
+        params.modelProvider ??
+        options.activeProvider ??
+        'openai',
     }
   }
   codex.handlers['thread/read'] = (params) => {
@@ -282,18 +289,18 @@ test('只发图片不消耗命名机会，之后提交文字再起名', async ()
   }
 })
 
-test('非 GPT 会话的临时命名仍走内置 OpenAI 的 GPT Luna', async () => {
-  const { env, codex, firstTurn, temporaries } = await setup()
+test('自定义网关同时提供非 GPT 会话模型和 GPT Luna 时，命名使用该网关', async () => {
+  const { env, codex, firstTurn, temporaries } = await setup({ activeProvider: 'gateway-fixture' })
   const client = env.connect()
   try {
     await client.initialize(['harness'])
-    const threadId = await firstTurn(client, { model: 'deepseek-fixture', modelProvider: 'custom' })
+    const threadId = await firstTurn(client, { model: 'deepseek-fixture' })
     await env.device.titles.settled()
     const [main] = sentTo(codex, 'thread/start').filter(({ ephemeral }) => !ephemeral)
     assert.equal(main.model, 'deepseek-fixture')
-    assert.equal(main.modelProvider, 'custom')
+    assert.equal(main.modelProvider, undefined)
     assert.equal(temporaries()[0]?.model, 'gpt-6-luna')
-    assert.equal(temporaries()[0]?.modelProvider, 'openai')
+    assert.equal(temporaries()[0]?.modelProvider, 'gateway-fixture')
     assert.equal(codex.threads.find((thread) => thread.id === threadId)?.name, 'CSV 转 JSON 脚本')
   } finally {
     client.close()
@@ -309,7 +316,7 @@ for (const [name, options, log, expectedTemporaries, expectedTurns] of [
     0,
     1,
   ],
-  ['临时会话未使用指定提供商', { temporaryProvider: 'custom' }, '未使用指定提供商和模型', 1, 1],
+  ['临时会话未使用指定提供商', { temporaryProvider: 'openai' }, '未使用指定提供商和模型', 1, 1],
   [
     '上游拒绝跨提供商开始回合',
     { rejectProviderMismatch: true },
@@ -326,15 +333,17 @@ for (const [name, options, log, expectedTemporaries, expectedTurns] of [
   ],
   ['标题格式不对', { answer: 'invalid fixture output' }, '模型未返回可用标题', 1, 2],
 ] as const) {
-  test(`${name}：首条文字作标题，不改用自定义提供商`, async () => {
-    const { env, codex, temporaries } = await setup(options as Options)
+  test(`${name}：首条文字作标题，不换提供商`, async () => {
+    const { env, codex, temporaries } = await setup({
+      ...(options as Options),
+      activeProvider: 'gateway-fixture',
+    })
     const client = env.connect()
     try {
       await client.initialize(['harness'])
       const started = await client.call('thread/start', {
         ...CODEX,
         model: 'deepseek-fixture',
-        modelProvider: 'custom',
       })
       const threadId = started.thread.id as string
       await client.call('turn/start', { threadId, input: text(`  第一行\n ${'文'.repeat(50)}  `) })

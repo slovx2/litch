@@ -230,7 +230,7 @@ function definitionOf(table: Record<string, unknown>): Record<string, HarnessSet
 }
 
 /** 当前在用的 provider（不写是 openai） */
-export const activeProvider = (snapshot: CodexSnapshot): string =>
+export const activeProvider = (snapshot: Pick<CodexSnapshot, 'config'>): string =>
   typeof snapshot.config.model_provider === 'string' && snapshot.config.model_provider
     ? snapshot.config.model_provider
     : OPENAI

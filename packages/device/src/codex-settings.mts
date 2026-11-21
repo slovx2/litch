@@ -88,8 +88,8 @@ export const AUTO_TITLE_KEY = 'litch.autoTitle'
 function autoTitleSpec(): Spec {
   return {
     ...boolSpec(AUTO_TITLE_KEY, 'behavior', ['自动起名', 'Name sessions automatically'], true, [
-      '在 Litch 里新建的会话，首条文字消息发送成功后独立命名。Litch 使用 Codex 内置 OpenAI 提供商的 GPT Luna 命名；无法生成时使用首条消息的开头。手动设置的名称不受影响。',
-      'Sessions started in Litch are named independently after the first text message is accepted. Litch uses GPT Luna on the built-in OpenAI provider. If generation fails, the title uses the start of that message. Names you set yourself are kept.',
+      '在 Litch 里新建的会话，首条文字消息发送成功后独立命名。Litch 使用 Codex 当前提供商的 GPT Luna 命名；无法生成时使用首条消息的开头。手动设置的名称不受影响。',
+      'Sessions started in Litch are named independently after the first text message is accepted. Litch uses GPT Luna on the active Codex provider. If generation fails, the title uses the start of that message. Names you set yourself are kept.',
     ]),
     write: { kind: 'autoTitle' },
   }

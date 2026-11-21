@@ -103,9 +103,9 @@ harness's own config files on that device (shared with its CLI there):
   limit that apply to every model. Some changes say they need a new session or a restart; the page
   offers the restart. Codex's Config tab also has **Name sessions automatically** (on by default; it is
   Litch's own switch, kept on the device, not in Codex's config file): after the first text message of a
-  session started in Litch is accepted, Litch uses GPT Luna on Codex's built-in OpenAI provider,
-  regardless of the session's model. If Luna is unavailable, Litch uses the beginning of the first
-  text message. A name set by the user is kept. Naming does not wait for the main turn to finish
+  session started in Litch is accepted, Litch uses GPT Luna from the current Codex provider,
+  regardless of the session's model. If that provider cannot run Luna, Litch uses the beginning
+  of the first text message. A name set by the user is kept. Naming does not wait for the main turn to finish
   and continues if it is interrupted. Failed sends do not consume the naming opportunity. Turning
   it off affects sessions started afterwards. DSH's Config tab lists its built-in plugins; the
   ones DSH cannot run without are locked on (turning them off broke turns, restarts or this page).

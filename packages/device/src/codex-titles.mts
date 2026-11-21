@@ -5,8 +5,8 @@
 //     也不经那里；codex 自己派的子代理线程不走 thread/start，也来不了。
 //   - 首条有文字的消息成功提交后独立起名，不等主回合结束；主回合中断、编辑重发不取消或重复起名。
 //     提交失败不消耗机会；起名请求本身出错、超时仍只试一次。
-//   - 始终让 Codex 内置 OpenAI 提供商的 GPT Luna 命名；临时会话不能沿用主会话的自定义提供商。
-//     清单没有 GPT Luna、上游拒绝跨提供商的回合、生成失败或超时，都用首条文字的开头兜底。
+//   - 只用 GPT Luna 命名。型号取自 Codex 模型清单，提供商取自当前生效的配置（含项目层），与主回合的型号无关。
+//     Codex 0.166+ 拒绝非当前提供商的回合。找不到 Luna、请求失败或超时，用首条文字的开头兜底。
 //   - 临时会话：ephemeral、只读、审批 never、关掉工具和功能、MCP 全停，threadSource 记 thread_title。
 //     开在设备进程自己的一条引擎连接上（不接会话树、定时任务的回合钩子），用完退订。codex 把它的 thread/started
 //     广播给每条连接，客户端认得 ephemeral、不放进侧栏（core 的 device.mts），线程列表也不列临时会话。
@@ -14,7 +14,7 @@
 //     经各条客户端连接照常转过去，协议不用加东西。
 //   - 开关是 harness 详情设置里的“自动起名”（codex-settings.mts 的 AUTO_TITLE_KEY），存在 sessions.sqlite 的
 //     harness_options，默认开；关掉之后新建的会话不再起名。
-import { OPENAI } from './codex-providers.mjs'
+import { activeProvider } from './codex-providers.mjs'
 import { type EngineLink, runTurn } from './engine-link.mjs'
 import { isObject, UpstreamRpcError } from './wire.mjs'
 
@@ -188,14 +188,20 @@ async function generateTitle(
   request: string,
   left: () => number,
 ): Promise<{ title: string; failure?: never } | { title?: never; failure: string }> {
-  let phase = '查询模型清单'
+  let phase = '读取当前提供商配置'
   try {
+    const read = await link.request('config/read', cwd ? { cwd } : {}, { timeoutMs: left() })
+    if (!isObject(read) || !isObject(read.config)) return { failure: 'Codex 未返回生效配置' }
+    const config = read.config
+    const provider = activeProvider({ config })
+    phase = '查询模型清单'
     const model = pickTitleModel(await listModels(link, left))
     if (!model) return { failure: '模型清单中没有 GPT Luna' }
     phase = '创建临时会话'
-    const temporary = await startTemporary(link, model.model, cwd, left)
+    const servers = isObject(config.mcp_servers) ? Object.keys(config.mcp_servers) : []
+    const temporary = await startTemporary(link, model.model, provider, cwd, servers, left)
     try {
-      if (temporary.provider !== OPENAI || temporary.model !== model.model)
+      if (temporary.provider !== provider || temporary.model !== model.model)
         return { failure: 'Codex 返回的临时会话未使用指定提供商和模型' }
       phase = '请求命名回合'
       const result = await runTurn(
@@ -341,17 +347,16 @@ export function pickTitleModel(
 async function startTemporary(
   link: EngineLink,
   model: string,
+  modelProvider: string,
   cwd: string | null,
+  servers: string[],
   left: () => number,
 ): Promise<{ id: string; provider: unknown; model: unknown }> {
-  const read = await link.request('config/read', cwd ? { cwd } : {}, { timeoutMs: left() })
-  const config = isObject(read) && isObject(read.config) ? read.config : null
-  const servers = isObject(config?.mcp_servers) ? Object.keys(config.mcp_servers) : []
   const started = await link.request(
     'thread/start',
     {
       model,
-      modelProvider: OPENAI,
+      modelProvider,
       ...(cwd ? { cwd } : {}),
       sandbox: 'read-only',
       approvalPolicy: 'never',
