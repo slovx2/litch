@@ -12,6 +12,13 @@ import type {
 } from '../../protocol/src/external-sources.mjs'
 import type { ManagerIssue } from '../../protocol/src/manager-issues.mjs'
 
+/** 平台当前对象状态，时间单位为秒；不保存正文。 */
+export interface ExternalSubjectObservation {
+  subject: ExternalSubject
+  state: 'open' | 'closed' | 'merged'
+  updatedAt: number
+}
+
 export interface ExternalCursor extends ExternalCoverage {
   sourceId: string
   window?: { from: number; to: number; nextPage?: string; expiresAt?: number }

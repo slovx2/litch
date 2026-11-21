@@ -16,8 +16,8 @@ import {
   INBOX_TABS,
   type InboxTab,
   inboxFilter,
-  KNOWN_REASONS,
   subjectLabel,
+  TRIAGE_REASONS,
 } from './model.ts'
 import { reasonText } from './Preview.tsx'
 import { ExtLink } from './parts.tsx'
@@ -196,7 +196,7 @@ export function ExternalInbox({
             onChange={(event) => setReason(event.target.value)}
           >
             <option value="">{t('ext.inbox.allReasons')}</option>
-            {KNOWN_REASONS.filter((one) => one !== 'manual').map((one) => (
+            {TRIAGE_REASONS.filter((one) => one !== 'manual').map((one) => (
               <option key={one} value={one}>
                 {t(`ext.reason.${one}`)}
               </option>
@@ -269,7 +269,11 @@ export function ExternalInbox({
                         {head.issueId}
                       </button>
                     ) : (
-                      <span className="pill mute">{t(`ext.status.${head.status}`)}</span>
+                      <span className="pill mute">
+                        {head.reason === 'external_closed' || head.reason === 'external_merged'
+                          ? reasonText(t, head.reason)
+                          : t(`ext.status.${head.status}`)}
+                      </span>
                     )
                   ) : null}
                   <ExtLink url={head.eventUrl} />

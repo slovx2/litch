@@ -61,6 +61,13 @@ export interface GithubPullObservation extends GithubBoundPull {
   mergedAt?: number
 }
 
+/** 对象当前状态独立于正文版本；评论、关闭和重新打开都可能只推进更新时间。 */
+export interface GithubSubjectObservation {
+  subject: ExternalEvent['targetEvidence']['subject']
+  state: 'open' | 'closed' | 'merged'
+  updatedAt: number
+}
+
 export interface GithubContentCandidate
   extends Pick<
     GithubObjectObservation,
@@ -160,6 +167,7 @@ export interface GithubPollFault {
 }
 
 export interface GithubPageChanges {
+  subjects?: readonly GithubSubjectObservation[]
   events?: readonly GithubPollEvent[]
   observations?: readonly GithubObjectObservation[]
   candidates?: readonly GithubPullCandidate[]

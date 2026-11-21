@@ -238,6 +238,8 @@ export const enExternal: Record<keyof typeof zhExternal, Entry> = {
   'ext.reason.route_missing': 'No route',
   'ext.reason.route_conflict': 'Route conflict',
   'ext.reason.manual': 'Handled manually',
+  'ext.reason.external_closed': 'Closed on GitHub',
+  'ext.reason.external_merged': 'Merged on GitHub',
   'ext.inbox.tab': 'GitHub',
   'ext.inbox.pending': 'To triage',
   'ext.inbox.processed': 'Processed',

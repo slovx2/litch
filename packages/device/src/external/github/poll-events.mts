@@ -10,6 +10,7 @@ import type {
   GithubPullCandidate,
   GithubPullObservation,
   GithubSubjectKind,
+  GithubSubjectObservation,
   GithubTargetEvidence,
 } from './poll-state.mjs'
 import {
@@ -52,6 +53,21 @@ export function requiredTime(value: unknown): number {
 
 export function subjectKind(raw: JsonObject): GithubSubjectKind {
   return raw.pull_request ? 'pull' : 'issue'
+}
+
+export function githubSubjectObservation(
+  raw: JsonObject,
+  repo: GithubRepository,
+  kind: GithubSubjectKind,
+): GithubSubjectObservation {
+  if (raw.state !== 'open' && raw.state !== 'closed') throw new GithubFault('invalid-response')
+  const merged = kind === 'pull' && raw.merged_at != null
+  if (merged) requiredTime(raw.merged_at)
+  return {
+    subject: eventTarget(repo, requiredNumber(raw.number), kind, requiredId(raw.id)).subject,
+    state: merged ? 'merged' : raw.state,
+    updatedAt: requiredTime(raw.updated_at),
+  }
 }
 
 function eventTarget(

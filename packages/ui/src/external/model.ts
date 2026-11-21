@@ -97,7 +97,7 @@ export function repoLabel(repo: { owner: string; name: string }): string {
 }
 
 /** 设备给的原因码中界面认得的几个；其余原样显示 */
-export const KNOWN_REASONS = [
+export const TRIAGE_REASONS = [
   'rate_limited',
   'role_below_minimum',
   'manager_busy',
@@ -110,6 +110,7 @@ export const KNOWN_REASONS = [
   'route_conflict',
   'manual',
 ] as const
+export const KNOWN_REASONS = [...TRIAGE_REASONS, 'external_closed', 'external_merged'] as const
 export type KnownReason = (typeof KNOWN_REASONS)[number]
 export function knownReason(reason: string | undefined): KnownReason | null {
   return reason && (KNOWN_REASONS as readonly string[]).includes(reason)

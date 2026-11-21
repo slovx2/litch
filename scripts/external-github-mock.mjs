@@ -155,6 +155,21 @@ export async function scenario(t, clock) {
     ...mock,
     states,
     sent,
+    requestPull(number) {
+      const pull = openPull(number)
+      pull.user = ownerAccount
+      pull.body = '@litch-device please review this fixture'
+      pull.head.ref = 'feature/fixture'
+      return pull
+    },
+    setSubjectState(number, state, merged = false) {
+      const row = issues.get(String(number)) ?? pulls.get(String(number))
+      if (!row) throw new Error('夹具主题不存在')
+      row.state = state
+      row.updated_at = stamp()
+      row.closed_at = state === 'closed' ? stamp() : null
+      if (pulls.has(String(number))) row.merged_at = merged ? stamp() : null
+    },
     request(number, user = 'owner', body = '@litch-device please handle this fixture') {
       const issue = {
         id: String(number + 1000),

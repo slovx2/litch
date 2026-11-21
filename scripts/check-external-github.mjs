@@ -32,7 +32,7 @@ const extensions = [...coreExtensions, EXTERNAL_SOURCES_EXTENSION]
 const main = 'litch_manager'
 
 test('设备 GitHub：授权、待分拣、反馈后接单、对账、X-n、凭据继承与 CI', {
-  timeout: 45_000,
+  timeout: 60_000,
 }, async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'lg-'))
   const state = join(dir, 'state')
@@ -529,4 +529,85 @@ else if (args[0] === 'api' || args[0] === 'pr') {
   )
   assert.equal(tookComment.outcome, 'applied', JSON.stringify(tookComment))
   assert.equal(tookComment.mandate.issueId, 'X-2')
+
+  // 当前状态轮询不依赖正文变化或关闭事件；此阶段关闭即时反馈，断言没有平台写入。
+  const latestSource = (await final.call(E.sourceGet, { sourceId: source.sourceId })).source
+  await final.call(E.sourceUpsert, {
+    source: { ...source, repos: source.repos.map((r) => ({ ...r, immediateFeedback: false })) },
+    expectedRevision: latestSource.revision,
+    operationId: 'closed-intake-no-feedback',
+  })
+  clock.now += 10
+  mock.request(13)
+  mock.requestPull(14)
+  mock.requestPull(15)
+  clock.now += 131
+  let pendingClosed
+  await until(
+    async () => {
+      const page = await final.call(E.inboxList, { status: 'pending_triage' })
+      pendingClosed = page.entries.filter(({ subject }) =>
+        ['13', '14', '15'].includes(subject.number),
+      )
+      return pendingClosed.length === 3
+    },
+    'issue 与两个 PR 先进入待分拣',
+    6500,
+  )
+  const writes = { ...mock.states }
+  const starts = pi.sent('turn/start').length
+  clock.now += 10
+  mock.setSubjectState(13, 'closed')
+  mock.setSubjectState(14, 'closed')
+  mock.setSubjectState(15, 'closed', true)
+  mock.setSubjectState(8, 'closed') // X-1 已绑定，继续遵循原有跟进策略。
+  clock.now += 131
+  await until(
+    async () => {
+      const page = await final.call(E.inboxList, { status: 'processed' })
+      return pendingClosed.every(({ eventKey, subject }) =>
+        page.entries.some(
+          (entry) =>
+            entry.eventKey === eventKey &&
+            entry.reason === (subject.number === '15' ? 'external_merged' : 'external_closed'),
+        ),
+      )
+    },
+    '关闭和合并自动进入已处理',
+    6500,
+  )
+  const pendingAfterClose = await final.call(E.inboxList, { status: 'pending_triage' })
+  assert.ok(
+    !pendingAfterClose.entries.some(({ subject }) => ['13', '14', '15'].includes(subject.number)),
+  )
+  for (const entry of pendingClosed) {
+    const detail = await final.call(E.inboxGet, { intakeId: entry.intakeId })
+    assert.equal(detail.intake.status, 'processed')
+    assert.ok(
+      device.external.store
+        .audit(entry.subjectKey)
+        .some(
+          ({ action, reason }) => action === 'intake_obsoleted' && reason === detail.intake.reason,
+        ),
+    )
+  }
+  assert.deepEqual(mock.states, writes, '自动收尾不执行任何 GitHub 写入')
+  assert.equal(pi.sent('turn/start').length, starts, '自动收尾不接单或启动经理回合')
+  const boundAfterClose = await final.call(E.inboxGet, { intakeId: intake.intakeId })
+  assert.equal(boundAfterClose.intake.issueId, 'X-1')
+  assert.notEqual(boundAfterClose.intake.reason, 'external_closed')
+  clock.now += 10
+  mock.setSubjectState(13, 'open')
+  mock.comment(13, '402')
+  clock.now += 131
+  await until(
+    async () =>
+      (await final.call(E.inboxList, { status: 'pending_triage' })).entries.some(
+        ({ subject, intakeId }) =>
+          subject.number === '13' &&
+          intakeId !== pendingClosed.find((row) => row.subject.number === '13').intakeId,
+      ),
+    '重新打开后的新提及重新分拣',
+    6500,
+  )
 })

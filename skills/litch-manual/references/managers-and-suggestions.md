@@ -836,7 +836,9 @@ Manager items are the manager’s own notebook; the manager must not rely on the
 
 The desktop manager console gains a **GitHub** segment (to triage, handled, blocked). Expand an entry to see evidence and accept, merge, ignore or reassign it, as the device allows. X-n issues show the GitHub link, intake basis and write-backs; decision answers taken from a GitHub comment link to it. On the phone the inbox is a **GitHub** tab; merging into an existing issue is desktop-only.
 
-外部收件箱保存设备采集并核验的 GitHub 事件。提醒送达经理后，候选仍待分拣，直到有人处置。合规收件项可以接为新的 X-n、并入已有议题、忽略或改派给同设备的经理。新评论和 PR 可能因轮询覆盖缺口或配额而延迟。
+外部收件箱保存设备采集并核验的 GitHub 事件。提醒送达经理后，候选仍待分拣。轮询确认未绑定的 issue 或 PR 已关闭或合并时，候选自动移到“已处理”，标明“GitHub 已关闭”或“GitHub 已合并”，取消尚未发送的分拣提醒并保留审计；不会自动接单或回写 GitHub。已绑定的主题保留原有跟进规则。重新打开后按现有触发规则重新评估，不恢复旧候选。合规收件项可以接为新的 X-n、并入已有议题、忽略或改派给同设备的经理。新评论和 PR 可能因轮询覆盖缺口或配额而延迟。
+
+After a reminder is delivered, the intake remains pending. When polling confirms that an unbound issue or PR has closed or merged, Litch moves it to **Processed**, labels the reason **Closed on GitHub** or **Merged on GitHub**, cancels unsent triage reminders and records an audit entry. This does not accept the request or write to GitHub. Bound subjects keep their existing follow-up rules. Reopening uses the existing trigger rules to evaluate new requests; it does not restore the old intake.
 
 接单时会复查先前登记的原始提及。如果机器人回复或添加表情反应只是改变了帖子的更新时间，仍可接单。复查时正文不一致，该条提及不能继续作为接单依据。
 
