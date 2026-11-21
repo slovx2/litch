@@ -7,6 +7,26 @@ versioning or publishing metadata.
 
 ## 未发布
 
+## 0.46.0（2026-11-21）
+
+### 中文
+
+- 新增 GitHub 无人值守：设备定时采集事件，有人 @ 机器人、指派任务、请求 review 或打上 `litch` 标签时，进入经理收件箱供分拣、接单或并入已有议题，并即时在 GitHub 回复接收或排队状态。
+- GitHub 身份支持设备码授权；在设备详情的“无人值守”配置仓库与经理，在经理控制台的 GitHub 页签处理收件箱，在设置中登记 GitHub 账号。
+- 支持设备服务开机自启；客户端断开后，设备仍可继续采集 GitHub 事件并通知经理。
+- 无人值守就绪检查提供中英文诊断，点击“重新检查”后显示最新结果和身份提醒。
+- 修复 AI 操作 Chrome 时标签组和扩展图标高频闪烁的问题；认领期间保持标记，交还、停止或断线时恢复。
+- 修复 Mermaid 图放大后只显示屏幕中间一小块的问题，放大视图支持全窗口显示、缩放和平移。
+
+### English
+
+- Added unattended GitHub workflows: devices poll for mentions of the bot, assignments, review requests, and the `litch` label. Events enter the manager’s inbox for triage, acceptance, or merging into an existing issue, with immediate receipt or queue status comments on GitHub.
+- Authorize GitHub identities with a device code. Configure repositories and managers under **Unattended** in device details, handle the inbox in the manager Console’s **GitHub** tab, and register your GitHub account in Settings.
+- Device services can now start automatically. GitHub collection and manager notifications continue when the client disconnects.
+- Unattended readiness checks now show localized diagnostics and display fresh results and identity warnings after rechecking.
+- Fixed Chrome tab groups and the extension icon flickering during AI operations. Indicators remain stable while tabs are claimed and clear on release, stop, or disconnect.
+- Fixed enlarged Mermaid diagrams being clipped to a small area in the middle of the screen. The viewer now fills the window and supports zooming and panning.
+
 ## 0.45.0（2026-11-20）
 
 ### 中文
