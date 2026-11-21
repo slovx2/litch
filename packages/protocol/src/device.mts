@@ -8,6 +8,7 @@
 // 和 codex 类型拼在一起的形状放在 device-codex.mts。
 import type { DeviceServiceInfo } from './device-service.mjs'
 import type { HarnessFeatures, PermissionPreset } from './harness-capabilities.mjs'
+import { MANAGER_BOARD_TRANSFER_EXTENSION } from './manager.mjs'
 
 /**
  * 握手时 `capabilities` 里的键：客户端在这里列出自己认识的扩展名，一个扩展一个名字。
@@ -25,6 +26,7 @@ export const EXTENSION = {
   /** 设备上的经理、看板和工作线；字段与通知只发给声明过 litchManager 的连接（manager.mts）。 */
   manager: 'litchManager',
   managerResetTarget: 'litchManagerResetTarget',
+  managerBoardTransfer: MANAGER_BOARD_TRANSFER_EXTENSION,
   /**
    * 经理的后加能力（功能探测，不是新的投递声明；方法、字段、通知仍以连接声明 litchManager 为门禁）。
    * 设备信息的 extensions 里列了才有，没列的是旧设备：客户端禁用对应入口并写明原因（manager.json）。

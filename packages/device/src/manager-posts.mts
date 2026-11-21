@@ -9,6 +9,7 @@ import type {
 import { formatSessionEvent } from '../../protocol/src/session-tree.mjs'
 import type { DeviceManagers } from './manager.mjs'
 import { isDecision } from './manager-board.mjs'
+import { archivedBoardSuggestion, archivedBoardSuggestions } from './manager-board-transfer.mjs'
 import { addRelations } from './manager-relations.mjs'
 import { isRequest } from './manager-requests.mjs'
 import { managerNow, type QuestionState } from './manager-store.mjs'
@@ -36,6 +37,7 @@ export class ManagerPosts {
       .filter((o) => isDecision(o) || isRequest(o))
       .map((o) => o.id as ManagerPostId)
     ids.push(...this.store.publishedReports(managerId).map((r) => r.id))
+    ids.push(...archivedBoardSuggestions(this.store, managerId).map((suggestion) => suggestion.id))
     for (const proposal of this.owner.tree.store.allSuggestions())
       if (
         !proposal.offer &&
@@ -73,26 +75,42 @@ export class ManagerPosts {
         fields: { title: report.title, body: report.body },
       }
     } else if (id.startsWith('S-')) {
-      const proposal = this.owner.tree.store.proposal(id.slice(2))
-      if (
-        !proposal ||
-        proposal.offer ||
-        (this.owner.store.historical(proposal.threadId)?.id ??
-          this.owner.lines.mark(proposal.threadId)?.managerId) !== managerId
-      )
-        invalid('This suggestion does not belong to this manager.')
-      const version = this.store.suggestionVersion(managerId, id)
-      original = {
-        id: id as ManagerPostId,
-        kind: 'suggestion',
-        title: proposal.title,
-        body: proposal.prompt,
-        revision: version?.revision ?? 1,
-        createdAt: proposal.createdAt,
-        updatedAt: version?.updatedAt ?? proposal.createdAt,
-        proposalId: proposal.id,
-        sourceThreadId: proposal.threadId,
-        fields: { title: proposal.title, body: proposal.prompt, status: proposal.status },
+      const archived = archivedBoardSuggestion(this.store, managerId, id)
+      if (archived) {
+        const { sourceDevice, sourceStatus, ...post } = archived
+        original = {
+          ...post,
+          kind: 'suggestion',
+          fields: {
+            title: post.title,
+            body: post.body,
+            status: 'withdrawn',
+            sourceDevice,
+            sourceStatus,
+          },
+        }
+      } else {
+        const proposal = this.owner.tree.store.proposal(id.slice(2))
+        if (
+          !proposal ||
+          proposal.offer ||
+          (this.owner.store.historical(proposal.threadId)?.id ??
+            this.owner.lines.mark(proposal.threadId)?.managerId) !== managerId
+        )
+          invalid('This suggestion does not belong to this manager.')
+        const version = this.store.suggestionVersion(managerId, id)
+        original = {
+          id: id as ManagerPostId,
+          kind: 'suggestion',
+          title: proposal.title,
+          body: proposal.prompt,
+          revision: version?.revision ?? 1,
+          createdAt: proposal.createdAt,
+          updatedAt: version?.updatedAt ?? proposal.createdAt,
+          proposalId: proposal.id,
+          sourceThreadId: proposal.threadId,
+          fields: { title: proposal.title, body: proposal.prompt, status: proposal.status },
+        }
       }
     } else {
       const obj = this.owner.writer.object(managerId, id)

@@ -724,6 +724,22 @@ export class SessionStore {
     return (this.statements.allSuggestions?.all() ?? []).map(proposalOf)
   }
 
+  /** 看板导出包含已处理的建议；不导出用于向用户询问开会话方式的 offer。 */
+  boardSuggestions(root: string): SessionProposal[] {
+    return this.db
+      .prepare(`
+      WITH RECURSIVE selected(id) AS (
+        VALUES(?) UNION
+        SELECT l.thread_id FROM lineage l JOIN selected s ON l.parent_thread_id=s.id
+        WHERE l.detached_at IS NULL
+      )
+      SELECT proposals.* FROM proposals JOIN selected ON proposals.thread_id=selected.id
+      WHERE offer=0 ORDER BY created_at, proposals.id
+    `)
+      .all(root)
+      .map(proposalOf)
+  }
+
   /** 看板分页只读头字段，已了结建议也能按状态访问；rowid 用于稳定的创建上界。 */
   suggestionHeads(threadIds: readonly string[]): {
     serial: number

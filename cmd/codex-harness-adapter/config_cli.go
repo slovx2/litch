@@ -3,7 +3,7 @@ package main
 // config 子命令：配置 Litch 本身（产品手册里的 `litch config …` 落到这里）。这里只是一层薄壳：
 // 取出 --json，按环境猜语言，认出是哪个会话发起的，把其余参数原样经本机设备服务的 litch/clientTool/invoke
 // 交给连着的 Litch 桌面端（命名空间 litch_config、工具 run，参数形状见 packages/protocol/src/client-tools-config.mts）。
-// 有哪些操作、怎么解析、帮助怎么写都在桌面端的执行器里，这里不认操作名，加操作不用改 Go。
+// 设备本地管理命令单独分流；其余操作的解析与帮助由桌面端执行器处理。
 
 import (
 	"context"
@@ -76,6 +76,9 @@ func runConfig(ctx context.Context, argv []string) error {
 
 func configMain(ctx context.Context, argv []string, io machineIO) int {
 	rest, asJSON := configArguments(argv)
+	if len(rest) >= 2 && rest[0] == "managers" && (rest[1] == "board-export" || rest[1] == "board-import") {
+		return configManagerBoard(ctx, rest[1], rest[2:], asJSON, io)
+	}
 	if args, ok := externalStdinArgs(rest); ok {
 		return configExternalStdin(ctx, args, asJSON, io)
 	}

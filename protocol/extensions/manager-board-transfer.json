@@ -1,0 +1,118 @@
+{
+  "extension": "litchManagerBoardTransfer",
+  "description": "管理员在设备侧导出、预演和事务导入一个经理的看板。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "litchManagerBoardTransfer" }
+    }
+  },
+  "methods": {
+    "litch/manager/board/export": {
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["managerId"],
+        "properties": { "managerId": { "type": "string" } }
+      },
+      "result": { "$ref": "#/definitions/Archive" }
+    },
+    "litch/manager/board/import": {
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["managerId", "archive"],
+        "properties": {
+          "managerId": { "type": "string" },
+          "archive": { "$ref": "#/definitions/Archive" },
+          "preview": { "type": "boolean" },
+          "verifiedUnreferenced": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[DIRPX]-[1-9][0-9]{0,8}$" }
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [
+          "exportId",
+          "source",
+          "counts",
+          "conflicts",
+          "destinationRenumbered",
+          "importedRenumbered"
+        ],
+        "properties": {
+          "exportId": { "type": "string" },
+          "source": { "type": "object" },
+          "counts": { "type": "object", "additionalProperties": { "type": "integer" } },
+          "conflicts": { "type": "array", "items": { "type": "object" } },
+          "destinationRenumbered": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "importedRenumbered": { "type": "object", "additionalProperties": { "type": "string" } },
+          "preview": { "type": "boolean" },
+          "alreadyImported": { "type": "boolean" },
+          "backupPath": { "type": "string" },
+          "backupRotationFailed": { "type": "boolean" },
+          "reportId": { "type": "string" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Archive": {
+      "type": "object",
+      "required": ["format", "version", "exportId", "source", "tables"],
+      "properties": {
+        "format": { "const": "litch-manager-board" },
+        "version": { "const": 1 },
+        "exportId": { "type": "string" },
+        "source": {
+          "type": "object",
+          "required": ["device", "managerId", "name"],
+          "properties": {
+            "device": { "type": "string" },
+            "managerId": { "type": "string" },
+            "name": { "type": "string" }
+          }
+        },
+        "tables": {
+          "type": "object",
+          "required": [
+            "objects",
+            "manager_reports",
+            "manager_board_archived_suggestions",
+            "questions",
+            "issues",
+            "issue_comments",
+            "issue_meta",
+            "manager_relations",
+            "changes",
+            "issue_history",
+            "situations"
+          ],
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["keys", "value"],
+              "properties": {
+                "keys": { "type": "array", "items": { "type": "string" } },
+                "value": { "type": "object" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "invariants": [
+    "设备管理员连接；未声明扩展时请求失败。档案不进入模型工具、日志或会话。",
+    "预演不写入任何文件或数据库；真正导入要求目标经理空闲。改变看板前一致备份数据库，保留最近四份。",
+    "相同档案重复导入返回已有回执。已知被对外引用的目标编号保留；只有经过人工核证的目标冲突编号才可改号。"
+  ]
+}

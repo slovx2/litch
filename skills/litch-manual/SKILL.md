@@ -123,6 +123,7 @@ Every operation, with the reference that explains it. Exact arguments: `scripts/
 | `scripts/litch assist get` / `manual` | Manual installation status and switch | `references/concepts-and-ui.md` |
 | `scripts/litch chrome get` / `set` | Chrome control and remote-device access | `references/browser-and-computer-use.md` |
 | `scripts/litch managers list` / `get` / `create` / `set` | Manager instructions, dispatch and notifications | `references/managers-and-suggestions.md` |
+| `litch config managers board-export` / `board-import` | Local administrator: move manager board records between devices | `references/managers-and-suggestions.md` |
 | `scripts/litch diagnose run` / `logs` / `ssh-config` | Diagnostics, logs, SSH entries for the official Codex app | `references/troubleshooting.md` |
 
 ## References

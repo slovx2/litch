@@ -99,7 +99,9 @@ export function RelationLink({
   }
   return (
     <>
-      {target.kind === 'url' && /^https?:\/\//i.test(target.target) ? (
+      {target.kind === 'url' && target.target.startsWith('litch-source-record:') ? (
+        <span data-relation-target={target.target}>{label ?? target.label ?? target.target}</span>
+      ) : target.kind === 'url' && /^https?:\/\//i.test(target.target) ? (
         <span data-relation-target={target.target}>
           <ExternalLink href={target.target}>{content}</ExternalLink>
         </span>

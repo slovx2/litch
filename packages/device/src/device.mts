@@ -700,6 +700,7 @@ export class DeviceServer {
     info.extensions.push(
       EXTENSION.manager,
       EXTENSION.managerResetTarget,
+      EXTENSION.managerBoardTransfer,
       EXTENSION.managerFeedback,
       EXTENSION.managerPosts,
       EXTENSION.managerIgnore,

@@ -15,6 +15,7 @@ import {
 } from '../../protocol/src/manager-paging.mjs'
 import type { DeviceManagers } from './manager.mjs'
 import { isDecision } from './manager-board.mjs'
+import { archivedBoardSuggestions } from './manager-board-transfer.mjs'
 import { ManagerPageQueryStore, type ManagerPagingSuggestion } from './manager-page-query.mjs'
 import { projectedLineRelations, projectedRelations } from './manager-relations.mjs'
 import { fields, keys, ManagerError, text } from './manager-validate.mjs'
@@ -38,7 +39,10 @@ export class ManagerPaging {
     const threads = new Set([manager.threadId, ...history])
     for (const line of this.owner.tree.store.children())
       if (this.owner.lines.mark(line.threadId)?.managerId === id) threads.add(line.threadId)
-    return this.owner.tree.store.suggestionHeads([...threads]).flatMap((proposal) => {
+    const archived = archivedBoardSuggestions(this.owner.store, id)
+    const archivedIds = new Set<string>(archived.map((suggestion) => suggestion.id))
+    const live = this.owner.tree.store.suggestionHeads([...threads]).flatMap((proposal) => {
+      if (archivedIds.has(`S-${proposal.id}`)) return []
       const version = this.owner.store.suggestionVersion(id, `S-${proposal.id}`)
       const review = this.owner.store.suggestionReview(id, proposal.id)
       const own = proposal.threadId === manager.threadId || history.includes(proposal.threadId)
@@ -63,6 +67,23 @@ export class ManagerPaging {
         },
       ]
     })
+    return [
+      ...live,
+      ...archived.map(
+        (entry, index): ManagerPagingSuggestion => ({
+          id: entry.id,
+          serial: -index - 1,
+          createdAt: entry.createdAt,
+          updatedAt: entry.updatedAt,
+          revision: entry.revision,
+          title: entry.title,
+          preview: entry.body.slice(0, 240),
+          kind: 'suggestion',
+          status: 'withdrawn',
+          pending: false,
+        }),
+      ),
+    ]
   }
   snapshot(id: string): ManagerLinesPage {
     const lines = this.owner.lines.lines(id).map(({ report, unverified, ...line }) => ({

@@ -363,6 +363,35 @@ scripts/litch open managers
 override. Changing one field preserves others. Verify with `managers get` after saving. These are
 configuration commands; answering a decision and ending a manager remain explicit board actions.
 
+#### Move a manager board to another device
+
+Run each command on the device that owns its manager. Use the local administrator account and real
+manager IDs. No desktop connection is required:
+
+```sh
+litch config managers board-export <source-manager-id> --file ./board.json
+litch config managers board-import <target-manager-id> --file ./board.json --dry-run --json
+litch config managers board-import <target-manager-id> --file ./board.json --json
+```
+
+Copy the private archive to the destination through a channel you trust. The archive can contain
+private board text. It contains decisions, items, issues, requests, reports, suggestions, discussion,
+history, relations and the current situation. It does not copy credentials, worklines, session
+contents or current runs. Links to paths and sessions are shown as text with their source device,
+and imported suggestions are kept as records rather than live task cards. If an older source device
+does not offer the export RPC, use a newer CLI there and append
+`--from-state <device-state-directory>` to the export command to read its board files without starting
+or modifying the source service.
+
+Preview reports counts and number conflicts without writing. Check GitHub comments and other
+external references for any conflicting target IDs. By default the target keeps its existing
+numbers; add `--renumber-unreferenced <id>` once per collision only after verifying that the target
+number has no external references. Known external bindings always protect a target ID. Wait for the
+target manager and its input queue to be idle before applying. A successful import reports its
+database backup, counts and migration report ID. The report records both number maps and any
+previous target situation; the device retains the four newest import backups. Applying the same
+archive again returns the original receipt without inserting duplicate records.
+
 Creating a manager authorizes it to dispatch work autonomously, including during event-driven turns.
 The command therefore always shows a desktop confirmation card before creating anything. It names
 the manager, summarizes custom instructions, and shows the device, folder, manager/workline harness,

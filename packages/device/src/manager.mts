@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process'
 // litchManager 的设备入口：建会话、读看板、投递持久事件，以及只向声明过的连接广播。
 import { createHash, randomUUID } from 'node:crypto'
+import { hostname } from 'node:os'
+import { join } from 'node:path'
 import { promisify } from 'node:util'
 import {
   CLIENT_TOOL_NAMESPACE,
@@ -15,6 +17,7 @@ import {
 import { ruledNamespaces } from '../../protocol/src/codex-developer-instructions.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import {
+  MANAGER_BOARD_TRANSFER_METHOD,
   MANAGER_METHOD,
   MANAGER_NOTIFICATION,
   type Manager,
@@ -35,6 +38,11 @@ import type { DeviceToolCall } from './device-tools.mjs'
 import { DEVICE_EXTERNAL_MANAGER_TOOLS } from './external/device-manager-tools.mjs'
 import type { DeviceExternalService } from './external/device-service.mjs'
 import { isDecision, ManagerBoardWriter } from './manager-board.mjs'
+import {
+  boardSuggestions,
+  exportManagerBoard,
+  importManagerBoard,
+} from './manager-board-transfer.mjs'
 import { validateManagerRuntime } from './manager-create-validation.mjs'
 import { ManagerEndings } from './manager-ending.mjs'
 import { submitManagerFeedback } from './manager-feedback.mjs'
@@ -84,6 +92,7 @@ export function managerResetProjection(value: unknown, declared: boolean): unkno
 }
 
 export class DeviceManagers {
+  private readonly boardBackupDir: string
   readonly store: ManagerStore
   readonly lines: ManagerLines
   readonly endings: ManagerEndings
@@ -110,6 +119,7 @@ export class DeviceManagers {
     this.tree = tree
     this.born = born
     this.store = new ManagerStore(openManagerDatabase(stateDir))
+    this.boardBackupDir = join(stateDir, 'board-backups')
     this.lines = new ManagerLines(this.store, tree)
     this.endings = new ManagerEndings(this.store, tree, (id) => this.changed(id))
     this.writer = new ManagerBoardWriter(
@@ -239,6 +249,78 @@ export class DeviceManagers {
       activities,
       changes,
     }
+  }
+  async boardTransfer(method: string, given: unknown): Promise<unknown> {
+    const input = fields(given)
+    const id = text(input.managerId, 'managerId')
+    const manager = this.store.manager(id)
+    if (!manager) throw new ManagerError('unknownManager', 'This manager does not exist.')
+    if (method === MANAGER_BOARD_TRANSFER_METHOD.export) {
+      keys(input, ['managerId'])
+      const sourceDevice = hostname()
+      return exportManagerBoard(
+        this.store,
+        id,
+        boardSuggestions(this.store, this.tree.store, id, sourceDevice),
+        sourceDevice,
+      )
+    }
+    if (method !== MANAGER_BOARD_TRANSFER_METHOD.import)
+      throw new ManagerError('methodNotFound', 'Unknown manager board transfer method.')
+    keys(input, ['managerId', 'archive', 'preview', 'verifiedUnreferenced'])
+    if (input.preview !== undefined && typeof input.preview !== 'boolean')
+      throw new ManagerError('invalidManagerBoard', 'preview must be a boolean.')
+    if (
+      input.verifiedUnreferenced !== undefined &&
+      (!Array.isArray(input.verifiedUnreferenced) ||
+        !input.verifiedUnreferenced.every(
+          (value) => typeof value === 'string' && /^[DIRPX]-[1-9]\d{0,8}$/.test(value),
+        ))
+    )
+      throw new ManagerError(
+        'invalidManagerBoard',
+        'verifiedUnreferenced must contain only numbered board IDs.',
+      )
+    const options = {
+      verifiedUnreferenced: (input.verifiedUnreferenced ?? []) as string[],
+      backupDir: this.boardBackupDir,
+      liveSuggestions: boardSuggestions(this.store, this.tree.store, id).map(
+        (suggestion) => suggestion.id,
+      ),
+    }
+    const preview = importManagerBoard(this.store, id, input.archive, { ...options, preview: true })
+    if (input.preview || preview.alreadyImported) return preview
+    {
+      const threadId = manager.threadId
+      const { thread } = await this.tree.read(threadId, false)
+      const link = await this.tree.link(manager.harness)
+      const queue = await link.request('thread/queue/list', { threadId })
+      if (
+        manager.status !== 'active' ||
+        !isObject(thread.status) ||
+        thread.status.type !== 'idle' ||
+        !isObject(queue) ||
+        !Array.isArray(queue.data) ||
+        queue.data.length > 0 ||
+        this.tree.occupiesSlot(threadId) ||
+        this.tree.pendingRequests(threadId).length > 0 ||
+        this.questions.busy(id) ||
+        this.resets.held(threadId) ||
+        this.store.manager(id)?.threadId !== threadId
+      )
+        throw new ManagerError(
+          'managerBoardBusy',
+          'Wait for the manager and its input queue to become idle.',
+        )
+    }
+    const result = importManagerBoard(this.store, id, input.archive, {
+      ...options,
+      liveSuggestions: boardSuggestions(this.store, this.tree.store, id).map(
+        (suggestion) => suggestion.id,
+      ),
+    })
+    if (!result.alreadyImported) this.changed(id)
+    return result
   }
   changed(id: string): void {
     if (this.closed) return

@@ -202,13 +202,15 @@ export class ManagerIssues {
               }
             : post.kind === 'report'
               ? { report: { unread: !!post.unread, canMarkRead: !!post.unread } }
-              : {
-                  suggestion: {
-                    proposalId: post.proposalId!,
-                    canStart: rawStatus === 'pending' && review?.state !== 'dismissed',
-                    reviewed: !!review || ownSuggestion,
-                  },
-                }),
+              : post.proposalId
+                ? {
+                    suggestion: {
+                      proposalId: post.proposalId,
+                      canStart: rawStatus === 'pending' && review?.state !== 'dismissed',
+                      reviewed: !!review || ownSuggestion,
+                    },
+                  }
+                : {}),
       },
     }
   }
