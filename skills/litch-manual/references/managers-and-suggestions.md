@@ -875,6 +875,10 @@ At acceptance, Litch rechecks the original mention it recorded. A bot reply or r
 
 外部议题保留 GitHub 原帖、接单依据和回写回执；来自 GitHub 评论的决策答复保留原评论引用。回写待对账时，应先核对 GitHub 原帖和设备记录。
 
+经理完成已接单的 GitHub 请求或交回人工评审时，应在原 issue 或 PR 回复处理结果，说明改动、相关 PR 或提交、验证情况和剩余事项。自动状态评论和内部看板记录不能替代结果回复。若权限不允许或回复失败，经理应在看板记录原因并告诉用户；排队中的回复不代表已发送，也不因此获得合并、关闭或部署权限。
+
+When a manager finishes an accepted GitHub request or hands it back for review, it should comment on the original issue or PR with the changes, related PR or commit, verification and remaining work. Automatic acknowledgments and internal board updates do not replace this result. If the reply is forbidden or fails, the manager should record the reason on the board and tell the user. A queued reply is not a sent reply, and this rule does not authorize merging, closing or deploying.
+
 经理的文字规则可以随时保存，下一回合按新规则执行，GitHub 请求照常投递。旧工具确实需要更新时，收件箱和设备的「无人值守」会显示原因；有候选在等待时，经理看板也会显示恢复入口。Claude Code 会在满足投递条件时尝试原地刷新；若刷新失败，可按提示重试。需要换会话的经理走原有的接班确认。
 
 Editing a manager’s written rules takes effect on the next turn and does not block GitHub delivery. When the GitHub tools need an update, the inbox and Unattended settings show the reason; the manager board also shows a recovery action when a request is waiting. Claude Code tries to refresh the current session when delivery is allowed. If it fails, retry from the recovery action. A change that requires a new session uses the existing handover confirmation.

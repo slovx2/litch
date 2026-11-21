@@ -7,15 +7,14 @@ import { GithubFault, githubId, githubObject, githubRepoPath, githubTime } from 
 
 const overlap = 5_000
 const pageBudget = 4
-const minimumInterval = 60_000
+export const GITHUB_NOTIFICATION_MIN_INTERVAL_SECONDS = 60
 
 type Options = Parameters<typeof notificationEvidence>[0] & {
   enabledAt: number
-  interval: number
 }
 
 export async function pollGithubNotifications(options: Options): Promise<GithubCursor> {
-  const { api, bot, enabledAt, interval, repo, scope, store } = options
+  const { api, bot, enabledAt, repo, scope, store } = options
   const key: GithubStreamKey = { ...scope, stream: `notifications:${bot.userId}` }
   const tag = githubPageTag(api, bot, githubRepoPath(repo))
   const previous = await store.getCursor(key)
@@ -45,7 +44,8 @@ export async function pollGithubNotifications(options: Options): Promise<GithubC
   const seen = () => [...versions.values()]
   let path = pending?.next ?? first
   let newestAt = pending?.newestAt ?? cursor.coveredThrough
-  let nextAt = at + Math.max(interval, minimumInterval)
+  // 通知有自己的 GitHub 轮询节奏，不沿用仓库流的采集间隔。
+  let nextAt = at + GITHUB_NOTIFICATION_MIN_INTERVAL_SECONDS * 1000
   let fault: GithubPollFault | undefined
   let headers = conditional
   let changes = githubPageChanges()

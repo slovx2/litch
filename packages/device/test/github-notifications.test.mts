@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { DeviceGithubPoll } from '../src/external/device-poll.mjs'
 import { pollGithubRepository } from '../src/external/github/poll.mjs'
 import { pollGithubNotifications } from '../src/external/github/poll-notifications.mjs'
+import {
+  externalFixture,
+  actor as managerActor,
+  bot as managerBot,
+  repoPath as managerRepoPath,
+  subject as managerSubject,
+} from './fixtures/external-d.mjs'
 import {
   actor,
   apiHost,
@@ -86,7 +94,7 @@ test('通知只读，带 since 和重叠，按 ID 与更新时间去重，并遵
     return undefined
   })
   const store = new MemoryGithubStore()
-  const read = (interval = 120_000) =>
+  const read = () =>
     pollGithubNotifications({
       api: fx.api,
       repo,
@@ -96,7 +104,6 @@ test('通知只读，带 since 和重叠，按 ID 与更新时间去重，并遵
       botIds: new Set(['99']),
       boundNumbers: new Set(),
       enabledAt: start,
-      interval,
     })
   const first = await read()
   assert.equal(first.coveredThrough, stamp)
@@ -123,10 +130,74 @@ test('通知只读，带 since 和重叠，按 ID 与更新时间去重，并遵
   fx.advance(1000)
   version = 'v2'
   body = [note(1, 1, 'mention', stamp + 240_000, false, 'issues/comments/12')]
-  const updated = await read(300_000)
-  assert.equal(updated.nextPollAt, fx.now() + 300_000, '不小于来源默认间隔')
+  const updated = await read()
+  assert.equal(updated.nextPollAt, fx.now() + 180_000, '新响应可以调低先前建议的间隔')
   assert.equal(store.events.size, 2)
   assert.ok(fx.requests.every((row) => row.method === 'GET'))
+})
+
+test('设备通知至少 60 秒且遵守 304 的间隔，仓库轮询仍按来源配置', async (t) => {
+  const path = `${managerRepoPath}/notifications`
+  const f = await externalFixture(t, (req, res, url) => {
+    if (url.pathname !== path) return false
+    const unchanged = req.headers['if-none-match'] === '"cadence"'
+    res.writeHead(unchanged ? 304 : 200, {
+      'Content-Type': 'application/json',
+      ETag: '"cadence"',
+      'X-Poll-Interval': unchanged ? '180' : '15',
+    })
+    res.end(unchanged ? undefined : '[]')
+    return true
+  })
+  const current = f.store.config.source(f.source.sourceId)
+  assert.ok(current)
+  assert.equal(
+    f.store.config.saveSource(
+      { ...f.source, interval: 120 },
+      current.revision,
+      'set-repository-interval',
+      'fixture',
+    ).outcome,
+    'applied',
+  )
+  const source = f.store.config.source(f.source.sourceId)
+  assert.ok(source)
+  f.store.config.saveAssignment(
+    { managerId: managerActor.managerId, identityId: managerBot, repoIds: [managerSubject.repoId] },
+    0,
+    'assign-notification-fixture',
+    () => {},
+  )
+  // 凭据权限由其他用例覆盖；此处验证实际设备调度和两次 HTTP 轮询。
+  t.mock.method(f.secrets, 'notificationCredential', (repoId: string, identityId: string) =>
+    f.secrets.activeForRepository(repoId, identityId),
+  )
+  const poll = new DeviceGithubPoll({
+    store: f.store,
+    secrets: f.secrets,
+    now: f.now,
+    loopbackFixture: f.origin,
+    changed() {},
+  })
+  t.after(() => poll.close())
+  const initial = f.clock.at
+  await poll.collect(source)
+  await poll.collectNotifications(source)
+  assert.equal(poll.status(source).nextAttemptAt, initial + 120)
+  f.clock.at = initial + 59
+  assert.equal(poll.notificationsDue(source), false)
+  f.clock.at = initial + 60
+  assert.equal(poll.notificationsDue(source), true)
+  assert.equal(poll.due(source), false)
+  await poll.collectNotifications(source)
+  assert.equal(f.requests.filter((r) => r.path.startsWith(path)).length, 2)
+  f.clock.at = initial + 120
+  assert.equal(poll.due(source), true)
+  assert.equal(poll.notificationsDue(source), false)
+  f.clock.at = initial + 239
+  assert.equal(poll.notificationsDue(source), false)
+  f.clock.at = initial + 240
+  assert.equal(poll.notificationsDue(source), true)
 })
 
 test('指派与评审还原原生事件键；仓库积压续扫时仍先收到一轮内的通知', async (t) => {
@@ -173,7 +244,6 @@ test('指派与评审还原原生事件键；仓库积压续扫时仍先收到�
       botIds: new Set(['99', '98']),
       boundNumbers: new Set(),
       enabledAt: start,
-      interval: 60_000,
     })
   const fallback = () =>
     pollGithubRepository({

@@ -6,7 +6,10 @@ import type {
 } from '../../../protocol/src/external-sources.mjs'
 import type { ExternalStore } from '../external-store.mjs'
 import { pollGithubRepository, SqliteGithubPollStore } from './github/poll.mjs'
-import { pollGithubNotifications } from './github/poll-notifications.mjs'
+import {
+  GITHUB_NOTIFICATION_MIN_INTERVAL_SECONDS,
+  pollGithubNotifications,
+} from './github/poll-notifications.mjs'
 import {
   createGithubApi,
   type GithubApi,
@@ -163,8 +166,9 @@ export class DeviceGithubPoll {
     if (!source.enabled || !repo) return
     const { store, secrets, now } = this.options
     const at = now()
+    const retryAt = at + GITHUB_NOTIFICATION_MIN_INTERVAL_SECONDS
     const next = {
-      next: at + source.interval,
+      next: retryAt,
       diagnostics: this.notificationDiagnostics(source),
     }
     this.notificationState.set(source.sourceId, next)
@@ -198,7 +202,6 @@ export class DeviceGithubPoll {
           boundNumbers,
           bot: { userId: snapshot.metadata.botUserId, login: snapshot.botLogin },
           enabledAt: Math.max(enabledAt, (assigned?.at ?? 0) * 1000),
-          interval: source.interval * 1000,
         })
         const fault = cursor.fault?.kind
         return {
@@ -225,7 +228,7 @@ export class DeviceGithubPoll {
           at,
         ),
       )
-      next.next = Math.min(...results.map((row) => row.next ?? at + source.interval))
+      next.next = Math.min(...results.map((row) => row.next ?? retryAt))
     })
   }
 
