@@ -13,10 +13,16 @@ export async function chromeAttachErrors({
 }) {
   const evidence = []
   for (const [url, reason] of [
-    ['chrome://version/', /internal Chrome/],
-    [`chrome-extension://${identity.id}/test-wake.html`, /extension page/],
-    ['https://chromewebstore.google.com/detail/isolated-fixture', /Chrome Web Store/],
-    ['https://chrome.google.com/webstore/detail/isolated-fixture', /Chrome Web Store/],
+    ['chrome://version/', /internal Chrome|Chrome 内部页面/],
+    [`chrome-extension://${identity.id}/test-wake.html`, /extension page|扩展页面/],
+    [
+      'https://chromewebstore.google.com/detail/isolated-fixture',
+      /Chrome Web Store|Chrome 网上应用店/,
+    ],
+    [
+      'https://chrome.google.com/webstore/detail/isolated-fixture',
+      /Chrome Web Store|Chrome 网上应用店/,
+    ],
   ]) {
     const target = await cdp.call('Target.createTarget', { url, background: true })
     try {
@@ -32,7 +38,7 @@ export async function chromeAttachErrors({
         const failure = JSON.parse(text(result))
         assert.equal(failure.code, 'targetUnavailable')
         assert.match(failure.message, reason)
-        assert.match(failure.message, /Open a new regular HTTP\(S\) tab/)
+        assert.match(failure.message, /Open a new regular HTTP\(S\) tab|请新开普通 HTTP\(S\)/)
         assert.doesNotMatch(failure.message, /Close.*DevTools/)
         evidence.push({ url, code: failure.code, message: failure.message })
       })
@@ -43,7 +49,7 @@ export async function chromeAttachErrors({
   await check('拒绝受限页面后可新开回环网页，导航不更换实例 targetId', async () => {
     const result = await call('navigate', { targetId, url: site.origin, newTab: true })
     assert.equal(result.success, true, text(result))
-    const { tabId } = JSON.parse(text(result))
+    const { tabId } = JSON.parse(text(result).split('\n')[0])
     const snapshot = await call('snapshot', { tabId })
     assert.equal(snapshot.success, true, text(snapshot))
     const next = await call('navigate', { tabId, url: `${site.origin}/?next=1` })
