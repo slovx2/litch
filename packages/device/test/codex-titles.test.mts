@@ -28,6 +28,10 @@ interface Options {
   models?: unknown[]
   /** 临时会话的回答 */
   answer?: string
+  titleFailure?: string
+  /** 模拟 Codex 拒绝在非当前提供商上开始回合。 */
+  rejectProviderMismatch?: boolean
+  temporaryProvider?: string
   /** 临时会话跑着的时候用户手动改了名 */
   renameDuring?: string
   /** 命名回合等待测试主动放行，用来确定中断与重发的先后。 */
@@ -63,7 +67,12 @@ async function setup(options: Options = {}) {
       preview: '',
     })
     codex.threads.push(thread)
-    return { thread: { ...thread, turns: [] }, model: params.model ?? 'gpt-6-sol' }
+    return {
+      thread: { ...thread, turns: [] },
+      model: params.model ?? 'gpt-6-sol',
+      modelProvider:
+        (params.ephemeral ? options.temporaryProvider : null) ?? params.modelProvider ?? 'openai',
+    }
   }
   codex.handlers['thread/read'] = (params) => {
     const thread = codex.threads.find((item) => item.id === params.threadId)
@@ -82,6 +91,8 @@ async function setup(options: Options = {}) {
     const thread = codex.threads.find((item) => item.id === params.threadId)
     if (!thread?.ephemeral) userThreadId = params.threadId as string
     if (thread?.ephemeral) {
+      if (options.rejectProviderMismatch)
+        throw new RpcFailure(-32600, '上游错误正文', { type: 'modelProviderMismatch' })
       const user = codex.threads.find((item) => item.id === userThreadId)
       if (options.renameDuring && user) user.name = options.renameDuring
       const turnId = result.turn.id
@@ -97,7 +108,14 @@ async function setup(options: Options = {}) {
             text: options.answer ?? '{"title": "“CSV 转 JSON 脚本”。"}',
           },
         })
-        send('turn/completed', { turn: { id: turnId, status: 'completed', items: [] } })
+        send('turn/completed', {
+          turn: {
+            id: turnId,
+            status: options.titleFailure ? 'failed' : 'completed',
+            items: [],
+            ...(options.titleFailure ? { error: { message: options.titleFailure } } : {}),
+          },
+        })
       }
       if (options.holdTitle) replies.push(reply)
       else setTimeout(reply, 5)
@@ -117,8 +135,11 @@ async function setup(options: Options = {}) {
   }
 
   /** 客户端新建会话、发一句话；主回合不发完成通知。 */
-  async function firstTurn(client: ReturnType<typeof env.connect>) {
-    const started = await client.call('thread/start', { ...CODEX, cwd: '/work/codex' })
+  async function firstTurn(
+    client: ReturnType<typeof env.connect>,
+    options: { model?: string; modelProvider?: string } = {},
+  ) {
+    const started = await client.call('thread/start', { ...CODEX, ...options, cwd: '/work/codex' })
     const threadId = started.thread.id as string
     await client.call('turn/start', { threadId, input: text('帮我写个 CSV 转 JSON 的脚本') })
     return threadId
@@ -143,6 +164,7 @@ test('消息发出后不等主回合结束：设备进程开只读、不带工�
     assert.equal((named.params as Named).threadName, 'CSV 转 JSON 脚本')
     const [temporary] = temporaries()
     assert.equal(temporary.model, 'gpt-6-luna')
+    assert.equal(temporary.modelProvider, 'openai')
     assert.equal(temporary.sandbox, 'read-only')
     assert.equal(temporary.approvalPolicy, 'never')
     assert.equal(temporary.threadSource, 'thread_title')
@@ -260,22 +282,79 @@ test('只发图片不消耗命名机会，之后提交文字再起名', async ()
   }
 })
 
-test('模型清单里没有 luna 时不起名', async () => {
-  const plain = await setup({ models: [{ id: 'gpt-6-sol', model: 'gpt-6-sol' }] })
-  const client = plain.env.connect()
+test('非 GPT 会话的临时命名仍走内置 OpenAI 的 GPT Luna', async () => {
+  const { env, codex, firstTurn, temporaries } = await setup()
+  const client = env.connect()
   try {
-    await client.initialize(['harness', 'harnessConfig'])
-    const threadId = await plain.firstTurn(client)
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    await plain.env.device.titles.settled()
-    assert.equal(plain.temporaries().length, 0, '没有 luna 不退回别的模型')
-    assert.equal(sentTo(plain.codex, 'thread/name/set').length, 0)
-    assert.ok(plain.env.logs.some((line) => line.includes('没有 luna') && line.includes(threadId)))
+    await client.initialize(['harness'])
+    const threadId = await firstTurn(client, { model: 'deepseek-fixture', modelProvider: 'custom' })
+    await env.device.titles.settled()
+    const [main] = sentTo(codex, 'thread/start').filter(({ ephemeral }) => !ephemeral)
+    assert.equal(main.model, 'deepseek-fixture')
+    assert.equal(main.modelProvider, 'custom')
+    assert.equal(temporaries()[0]?.model, 'gpt-6-luna')
+    assert.equal(temporaries()[0]?.modelProvider, 'openai')
+    assert.equal(codex.threads.find((thread) => thread.id === threadId)?.name, 'CSV 转 JSON 脚本')
   } finally {
     client.close()
-    await plain.env.close()
+    await env.close()
   }
 })
+
+for (const [name, options, log, expectedTemporaries, expectedTurns] of [
+  [
+    '清单里没有 GPT Luna',
+    { models: [{ model: 'gpt-6-sol' }, { model: 'custom-luna' }] },
+    '模型清单中没有 GPT Luna',
+    0,
+    1,
+  ],
+  ['临时会话未使用指定提供商', { temporaryProvider: 'custom' }, '未使用指定提供商和模型', 1, 1],
+  [
+    '上游拒绝跨提供商开始回合',
+    { rejectProviderMismatch: true },
+    '不允许向非当前提供商启动回合',
+    1,
+    2,
+  ],
+  [
+    '命名回合失败',
+    { titleFailure: 'unexpected status 400 Bad Request: private-fixture-marker' },
+    'HTTP 400',
+    1,
+    2,
+  ],
+  ['标题格式不对', { answer: 'invalid fixture output' }, '模型未返回可用标题', 1, 2],
+] as const) {
+  test(`${name}：首条文字作标题，不改用自定义提供商`, async () => {
+    const { env, codex, temporaries } = await setup(options as Options)
+    const client = env.connect()
+    try {
+      await client.initialize(['harness'])
+      const started = await client.call('thread/start', {
+        ...CODEX,
+        model: 'deepseek-fixture',
+        modelProvider: 'custom',
+      })
+      const threadId = started.thread.id as string
+      await client.call('turn/start', { threadId, input: text(`  第一行\n ${'文'.repeat(50)}  `) })
+      await env.device.titles.settled()
+      assert.equal(
+        codex.threads.find((thread) => thread.id === threadId)?.name,
+        `第一行 ${'文'.repeat(TITLE_MAX_CHARS - 5)}…`,
+      )
+      assert.equal(temporaries().length, expectedTemporaries)
+      assert.equal(sentTo(codex, 'turn/start').length, expectedTurns)
+      assert.equal(sentTo(codex, 'thread/name/set').length, 1)
+      assert.equal(sentTo(codex, 'thread/unsubscribe').length, expectedTemporaries)
+      assert.ok(env.logs.some((line) => line.includes(log) && line.includes('首条消息')))
+      assert.ok(!env.logs.some((line) => /private-fixture-marker|上游错误正文/.test(line)))
+    } finally {
+      client.close()
+      await env.close()
+    }
+  })
+}
 
 test('起名途中用户手动改了名：不覆盖', async () => {
   const { env, codex, firstTurn, temporaries } = await setup({ renameDuring: '我自己起的' })

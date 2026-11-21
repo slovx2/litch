@@ -103,13 +103,14 @@ harness's own config files on that device (shared with its CLI there):
   limit that apply to every model. Some changes say they need a new session or a restart; the page
   offers the restart. Codex's Config tab also has **Name sessions automatically** (on by default; it is
   Litch's own switch, kept on the device, not in Codex's config file): after the first text message of a
-  session started in Litch is accepted, Litch names it independently with a small model of the luna
-  family, only if the account's model list has one, and never over a name the user set. Naming does
-  not wait for the main turn to finish and continues if it is interrupted. Failed sends do not
-  consume the naming opportunity. Turning it off affects sessions started
-  afterwards. DSH's Config tab lists its built-in plugins; the ones DSH cannot run without are locked
-  on (turning them off broke turns, restarts or this page), and one that is already off can be turned
-  back on (it says so). Turning off any other removes what it provides.
+  session started in Litch is accepted, Litch uses GPT Luna on Codex's built-in OpenAI provider,
+  regardless of the session's model. If Luna is unavailable, Litch uses the beginning of the first
+  text message. A name set by the user is kept. Naming does not wait for the main turn to finish
+  and continues if it is interrupted. Failed sends do not consume the naming opportunity. Turning
+  it off affects sessions started afterwards. DSH's Config tab lists its built-in plugins; the
+  ones DSH cannot run without are locked on (turning them off broke turns, restarts or this page).
+  One that is already off can be turned back on (it says so). Turning off any other removes what
+  it provides.
 - **Accounts**: sign in (browser, device code, or pasting a code back), set an API key, add custom
   providers, switch the active provider. Codex can stay signed in to ChatGPT while using an API-key
   provider. OAuth credentials stay in the harness's own store; keys the harness only reads from
