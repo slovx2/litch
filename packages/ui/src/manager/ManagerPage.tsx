@@ -28,7 +28,9 @@ import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
-import { ExternalInbox, useInboxPending } from '../external/Inbox.tsx'
+import { ExternalInbox, useInboxSummary } from '../external/Inbox.tsx'
+import { ManagerRecovery } from '../external/ManagerRecovery.tsx'
+import { reasonText } from '../external/Preview.tsx'
 import { SessionTodo } from '../rail/InfoRail.tsx'
 import { onFindPreparing } from '../search/actions.ts'
 import { Transcript } from '../transcript/Transcript.tsx'
@@ -167,7 +169,7 @@ export function ManagerPage({
   const external = device?.externalSources === true
   const [githubOn, setGithub] = useGithubTab(`${manager.deviceId}:${manager.id}`)
   const github = external && githubOn
-  const githubPending = useInboxPending(manager, external)
+  const { pending: githubPending, blocked: githubBlocked } = useInboxSummary(manager, external)
   const [, renderCategory] = useState(0)
   // issue 控制台（设备支持 litchManagerIssues 时）：编号跳转与概览摘要的过滤都交给它
   const issues = useManagerIssues(view)
@@ -582,6 +584,16 @@ export function ManagerPage({
         className="mg-board"
         aria-label={t('manager.board')}
       >
+        {githubBlocked?.recovery ? (
+          <div className="ext-row ext-delivery-note" role="status">
+            <span>{reasonText(t, githubBlocked.reason)}</span>
+            <ManagerRecovery
+              deviceId={manager.deviceId}
+              recovery={githubBlocked.recovery}
+              disabled={disabled}
+            />
+          </div>
+        ) : null}
         <div className="side-tabs">
           <div className="side-tablist" role="tablist">
             {(['inbox', 'overview', 'items'] as const).map((key) => (

@@ -52,6 +52,7 @@ export type {
   ExternalIssueId,
   ExternalLabelRoute,
   ExternalManagerAssignment,
+  ExternalManagerRecovery,
   ExternalOutboxSummary,
   ExternalOwnerIdentity,
   ExternalReadiness,

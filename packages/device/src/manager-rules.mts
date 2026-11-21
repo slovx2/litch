@@ -209,11 +209,70 @@ export function refreshManagerRules(
   return null
 }
 
-/** 旧经理先走现有刷新或重置；只认当前线程实际确认的完整工具指纹。 */
+/** 保留已经安装的静态指令，剔除随经理设置变动的文字及内部元数据。 */
+function toolInstructions(name: string, instructions: string): string {
+  const settings = ruleSettings(instructions)
+  if (!settings) return instructions
+  let text = instructions.slice(0, instructions.lastIndexOf(MARK))
+  if (name === MANAGER_TOOLS.name) {
+    const suffix = [managerSettingsRules(settings.dispatch, settings.contact), settings.rules]
+      .filter(Boolean)
+      .join('\n\n')
+    const start = text.lastIndexOf(`\n\n${suffix}`)
+    if (suffix && start >= 0) text = text.slice(0, start) + text.slice(start + suffix.length + 2)
+    if (settings.scope.trim()) text = text.replace(`Your scope: ${settings.scope}. `, '')
+  } else if (name === 'litch_sessions')
+    text = text.replace(
+      `at most ${settings.dispatch.maxRunningLines} lines`,
+      'at most {limit} lines',
+    )
+  return text
+}
+
+/** 按生成顺序取出同一组命名空间；缺一个就不能声明整组已安装。 */
+export function installedManagerBundle(
+  expected: readonly ClientToolNamespaceSpec[],
+  installed: readonly unknown[],
+): unknown[] {
+  const rows = installed.filter(
+    (one): one is Record<string, unknown> => !!one && typeof one === 'object' && 'name' in one,
+  )
+  return expected.map(({ name }) => rows.find((row) => row.name === name) ?? null)
+}
+
+/** 工具形状、说明和静态指令取自应用时保存的清单；不能按当前规则倒推实际安装。 */
+export function managerCapabilities(
+  expected: readonly ClientToolNamespaceSpec[],
+  installed: readonly unknown[] | null,
+  applied: string | null,
+) {
+  const normalized = (spec: unknown) =>
+    typeof spec === 'object' &&
+    spec !== null &&
+    'instructions' in spec &&
+    'name' in spec &&
+    typeof spec.instructions === 'string' &&
+    typeof spec.name === 'string'
+      ? { ...spec, instructions: toolInstructions(spec.name, spec.instructions) }
+      : spec
+  const current = managerFingerprint(expected.map((spec) => normalized({ ...spec })))
+  // 没有已装快照时，只有完整指纹本来就一致才足以确认；不把缺失的能力当成已安装。
+  return {
+    current,
+    applied: installed
+      ? managerFingerprint(installedManagerBundle(expected, installed).map(normalized))
+      : applied === managerFingerprint(expected)
+        ? current
+        : null,
+  }
+}
+
+/** 只认可当前线程的实际工具能力。 */
 export function externalManagerUpgrade(
   manager: Pick<Manager, 'threadId' | 'harness' | 'status'>,
   applied: { threadId: string; fingerprint: string | null } | null,
   expected: readonly ClientToolNamespaceSpec[],
+  installed: readonly unknown[] | null,
 ):
   | { ready: true }
   | {
@@ -223,15 +282,13 @@ export function externalManagerUpgrade(
     } {
   if (manager.status !== 'active') return { ready: false, reason: 'manager_inactive' }
   const managerTools = expected.find((bundle) => bundle.name === MANAGER_TOOLS.name)
-  const installed = MANAGER_EXTERNAL_TOOLS.every((tool) =>
+  const supportsExternal = MANAGER_EXTERNAL_TOOLS.every((tool) =>
     managerTools?.tools.some((entry) => entry.name === tool.name),
   )
-  if (
-    installed &&
-    applied?.threadId === manager.threadId &&
-    applied.fingerprint === managerFingerprint(expected)
-  )
-    return { ready: true }
+  if (supportsExternal && applied?.threadId === manager.threadId) {
+    const capability = managerCapabilities(expected, installed, applied.fingerprint)
+    if (capability.applied === capability.current) return { ready: true }
+  }
   return {
     ready: false,
     reason: 'manager_tools_outdated',

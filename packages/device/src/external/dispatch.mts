@@ -80,7 +80,8 @@ export interface ExternalDispatchHost {
   configuration: ExternalRoutingPolicy
   feedback?: ExternalFeedback
   /** H 用实时状态区分等待忙碌、显式暂停；C 自己核算额度。 */
-  feedbackWaitReason?(manager: Manager, sourceId: string): 'manager_busy' | 'paused' | null
+  feedbackWaitReason?(manager: Manager, sourceId: string): FeedbackWaitReason | null
+  prepareDelivery?(manager: Manager, sourceId: string): void
   /** 最终发送前也要返回真：当前线程、能力确认、停止、审批/答复、后台、归档、重置和重启。 */
   canDeliver(manager: Manager, sourceId: string): boolean
   /** 与会话树共用串行列。先生成请求，再在低层发送钩子调用 beforeSend；null 取消。 */
@@ -316,7 +317,10 @@ export class ExternalDispatch {
           a.group.availableAt - b.group.availableAt,
       )
       for (const plan of plans) {
-        if (!this.host.canDeliver(manager, plan.group.sourceId)) continue
+        if (!this.host.canDeliver(manager, plan.group.sourceId)) {
+          this.host.prepareDelivery?.(manager, plan.group.sourceId)
+          continue
+        }
         const decision = this.admit(plan, at, plans.length)
         if (decision.outcome === 'deferred') continue
         if (decision.outcome === 'rejected') {

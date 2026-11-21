@@ -9,6 +9,7 @@ import type {
   ManagerResetState,
 } from '../../protocol/src/manager.mjs'
 import { questionsOfHistory } from '../../protocol/src/pending-history.mjs'
+import { RESUME_TOOLS_READ } from '../../protocol/src/resume-tools.mjs'
 import type { DeviceManagers } from './manager.mjs'
 import {
   type ManagerResetPlan,
@@ -17,8 +18,10 @@ import {
   resetTarget,
 } from './manager-create-validation.mjs'
 import {
+  installedManagerBundle,
   MANAGER_HANDOVER_PROMPT,
   MANAGER_SUMMARY_PROMPT,
+  managerCapabilities,
   managerFingerprint,
   managerHandoverIndex,
 } from './manager-rules.mjs'
@@ -53,8 +56,13 @@ export class ManagerResets {
   }
   state(manager: Manager): ManagerResetState {
     const record = this.owner.store.reset(manager.id)
-    const current = managerFingerprint(this.owner.bundle(manager))
-    const applied = record?.applied ?? null
+    const bundle = this.owner.bundle(manager)
+    const bound = (record?.committed?.manager.threadId ?? record?.oldThreadId) === manager.threadId
+    const { current, applied } = managerCapabilities(
+      bundle,
+      bound ? this.owner.tree.store.tools(manager.threadId) : null,
+      bound ? (record?.applied ?? null) : null,
+    )
     return {
       mode: record?.plan?.mode ?? (manager.harness === 'claude-code' ? 'refresh' : 'replace'),
       current,
@@ -470,7 +478,13 @@ export class ManagerResets {
       ),
       ...bundle,
     ])
-    const fingerprint = managerFingerprint(bundle)
+    const expected = managerFingerprint(bundle)
+    const confirmedFingerprint = (snapshot: readonly unknown[] | null): string => {
+      const actual = snapshot && managerFingerprint(installedManagerBundle(bundle, snapshot))
+      if (actual !== expected)
+        throw new Error('The installed manager tools do not match this reset; reset again.')
+      return actual
+    }
     if (
       (record.plan?.mode ?? (manager.harness === 'claude-code' ? 'refresh' : 'replace')) ===
       'refresh'
@@ -500,7 +514,14 @@ export class ManagerResets {
           excludeTurns: true,
           dynamicTools: tools,
         })
-        tree.store.setTools(manager.threadId, tools)
+        // 恢复应答只是接受请求；以引擎当前清单确认替换已经生效。
+        const snapshot: unknown = await link.request(RESUME_TOOLS_READ, {
+          threadId: manager.threadId,
+        })
+        const installed =
+          isObject(snapshot) && Array.isArray(snapshot.dynamicTools) ? snapshot.dynamicTools : null
+        const fingerprint = confirmedFingerprint(installed)
+        if (installed) tree.store.setTools(manager.threadId, installed)
         this.owner.store.transaction(() => {
           this.owner.store.saveReset({
             ...(record.operation
@@ -664,7 +685,8 @@ export class ManagerResets {
     }
     tree.host.index.see({ ...thread, id: newId }, targetHarness)
     tree.noteSubscribed(targetHarness, newId)
-    record.applied = fingerprint
+    // 跨重启复用候选时，不能拿本次的期望值替早先建好的会话声明已安装。
+    record.applied = confirmedFingerprint(tree.store.tools(newId))
     record.cleanup = this.owner.questions.retirement(manager.id, manager.harness)
     record.handoverEventId ??= `litch-manager-handover-${record.operation?.requestId ?? newId}`
     record.committed = {

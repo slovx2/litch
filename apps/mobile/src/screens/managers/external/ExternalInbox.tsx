@@ -22,9 +22,13 @@ import { deliveryLabel, failureText, kindLabel, openGithub, reasonLabel, roleLab
 import { useExternalInbox } from './use-external'
 
 /** 页签计数：待分拣的候选数（按候选聚合，不按事件） */
-export function useGithubPending(manager: ManagerView, enabled: boolean): number {
+export function useGithubSummary(manager: ManagerView, enabled: boolean) {
   const view = useExternalInbox(manager.deviceId, inboxFilter('pending', manager.id), enabled)
-  return view?.value ? groupInbox(view.value.entries).length : 0
+  const rows = view?.value?.entries ?? []
+  return {
+    pending: groupInbox(rows).length,
+    blocked: rows.find(({ delivery }) => delivery?.recovery)?.delivery,
+  }
 }
 
 export function ExternalInbox({ manager, disabled }: { manager: ManagerView; disabled: boolean }) {
@@ -144,7 +148,11 @@ export function ExternalInbox({ manager, disabled }: { manager: ManagerView; dis
                   {[
                     roleLabel(t, head.actorRoleAtCheck),
                     stamp(head.occurredAt * 1000, Date.now(), t.lang),
-                    head.delivery ? deliveryLabel(t, head.delivery) : '',
+                    head.delivery?.reason
+                      ? reasonLabel(t, head.delivery.reason)
+                      : head.delivery
+                        ? deliveryLabel(t, head.delivery)
+                        : '',
                     head.reason &&
                     (tab !== 'processed' ||
                       head.reason === 'external_closed' ||

@@ -11,6 +11,7 @@ import { useServices } from '../app/services.tsx'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { type ManagerChoice, useDeviceManagers, useExternalInbox, useRun } from './data.ts'
 import { InboxTriage } from './InboxTriage.tsx'
+import { ManagerRecovery } from './ManagerRecovery.tsx'
 import {
   groupInbox,
   INBOX_TABS,
@@ -31,9 +32,13 @@ const DELIVERY_TONE = {
 } as const
 
 /** Console 分段上的待分拣数：与收件箱共用同一份快照 */
-export function useInboxPending(manager: Pick<ManagerView, 'deviceId' | 'id'>, enabled: boolean) {
+export function useInboxSummary(manager: Pick<ManagerView, 'deviceId' | 'id'>, enabled: boolean) {
   const view = useExternalInbox(manager.deviceId, inboxFilter('pending', manager.id), enabled)
-  return view?.value ? groupInbox(view.value.entries).length : 0
+  const rows = view?.value?.entries ?? []
+  return {
+    pending: groupInbox(rows).length,
+    blocked: rows.find(({ delivery }) => delivery?.recovery)?.delivery,
+  }
 }
 
 function Role({ event }: { event: ExternalInboxEvent }) {
@@ -103,6 +108,13 @@ function Detail({
         {head.delivery?.reason && head.delivery.reason !== head.reason ? (
           <span>{reasonText(t, head.delivery.reason)}</span>
         ) : null}
+        {head.delivery?.recovery ? (
+          <ManagerRecovery
+            deviceId={manager.deviceId}
+            recovery={head.delivery.recovery}
+            disabled={disabled}
+          />
+        ) : null}
         {issueId ? (
           <button
             type="button"
@@ -162,7 +174,7 @@ export function ExternalInbox({
   const [open, setOpen] = useState<string | null>(null)
   const filter = inboxFilter(tab, manager.id, { reason, onlyNotified })
   const view = useExternalInbox(manager.deviceId, filter)
-  const pending = useInboxPending(manager, true)
+  const { pending } = useInboxSummary(manager, true)
   const managers = useDeviceManagers(manager.deviceId)
   const more = useRun()
   const page = view?.value ?? null
@@ -252,10 +264,14 @@ export function ExternalInbox({
                   <span className="grow" />
                   {tab === 'pending' && head.delivery ? (
                     <span
-                      className={DELIVERY_TONE[head.delivery.state]}
+                      className={
+                        head.delivery.recovery ? 'pill wait' : DELIVERY_TONE[head.delivery.state]
+                      }
                       title={head.delivery.reason ? reasonText(t, head.delivery.reason) : undefined}
                     >
-                      {t(`ext.delivery.${head.delivery.state}`)}
+                      {head.delivery.recovery
+                        ? reasonText(t, head.delivery.reason)
+                        : t(`ext.delivery.${head.delivery.state}`)}
                     </span>
                   ) : tab === 'blocked' ? (
                     <span className="pill err">{reasonText(t, head.reason)}</span>

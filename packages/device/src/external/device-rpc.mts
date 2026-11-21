@@ -297,7 +297,7 @@ export class DeviceExternalRpc {
   }
 
   status(id: string): ExternalSourceStatus & { readiness: ExternalReadiness } {
-    const { store, poll, dispatch, options, secrets } = this.service
+    const { store, poll, dispatch, secrets } = this.service
     const source = store.config.source(id)
     if (!source) externalInput('external_source_not_found')
     const [repo] = source.repos
@@ -318,12 +318,17 @@ export class DeviceExternalRpc {
     const pressure = assigned.map(({ managerId }) => dispatch.pressure(managerId, id))
     const collect = source.enabled && pollStatus.state !== 'blocked'
     const notify = source.unattended?.autoNotify === true
-    const managersReady =
-      assigned.length > 0 &&
-      assigned.every(({ managerId }) => {
-        const manager = store.manager.manager(managerId)
-        return manager !== null && options.managers.externalReady(manager).ready
-      })
+    const blocks = assigned.flatMap(({ managerId }) => {
+      const blocked = this.service.managerBlock(store.manager.manager(managerId))
+      return blocked
+        ? [
+            {
+              ...diagnostic('managerTools', 'blocked', blocked.reason),
+              ...(blocked.recovery ? { recovery: blocked.recovery } : {}),
+            },
+          ]
+        : []
+    })
     const missingFeedback =
       repo?.immediateFeedback !== false &&
       assigned.some(({ identityId }) => {
@@ -349,17 +354,13 @@ export class DeviceExternalRpc {
             : 'source_paused',
         ),
       ),
-      notify: area(
-        diagnostic(
-          'managerTools',
-          notify && managersReady ? 'ok' : 'blocked',
-          !notify
-            ? 'auto_notify_disabled'
-            : managersReady
-              ? 'manager_tools_ready'
-              : 'manager_tools_outdated',
-        ),
-      ),
+      notify: !notify
+        ? area(diagnostic('managerTools', 'blocked', 'auto_notify_disabled'))
+        : !assigned.length
+          ? area(diagnostic('managerTools', 'blocked', 'manager_unassigned'))
+          : blocks.length
+            ? area(...blocks)
+            : area(diagnostic('managerTools', 'ok', 'manager_tools_ready')),
       dispatch: area(
         diagnostic('executionIsolation', 'unverified', 'agent_uses_device_credentials'),
       ),

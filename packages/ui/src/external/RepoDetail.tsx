@@ -14,6 +14,7 @@ import { Icon } from '../app/icons.tsx'
 import { useServices } from '../app/services.tsx'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { type ManagerChoice, useRun } from './data.ts'
+import { ManagerRecovery } from './ManagerRecovery.tsx'
 import { type IdentityHead, operationId, READINESS_AREAS } from './model.ts'
 import { PreviewResult, type PreviewValue } from './Preview.tsx'
 import { Dot, Field, readinessTone, Switch } from './parts.tsx'
@@ -29,6 +30,8 @@ const KNOWN_CODES = new Set([
   'auto_notify_disabled',
   'manager_tools_ready',
   'manager_tools_outdated',
+  'manager_inactive',
+  'manager_unassigned',
   'agent_uses_device_credentials',
   'device_autostart_ready',
   'device_autostart_unverified',
@@ -47,7 +50,15 @@ const KNOWN_CODES = new Set([
   'github_preview_limited',
 ])
 
-export function Diagnostic({ item }: { item: ExternalDiagnostic }) {
+export function Diagnostic({
+  item,
+  deviceId,
+  canCheck,
+}: {
+  item: ExternalDiagnostic
+  deviceId?: string
+  canCheck?: boolean
+}) {
   const t = useT()
   const known = KNOWN_CODES.has(item.code)
   return (
@@ -61,6 +72,9 @@ export function Diagnostic({ item }: { item: ExternalDiagnostic }) {
             : t('ext.diag.unknown')}
       </span>
       {item.checkedAt ? <Stamp className="dim" at={item.checkedAt * 1000} /> : null}
+      {deviceId && item.recovery ? (
+        <ManagerRecovery deviceId={deviceId} recovery={item.recovery} disabled={!canCheck} />
+      ) : null}
     </li>
   )
 }
@@ -366,7 +380,9 @@ function Readiness({
   const check = useRun()
   const [result, setResult] =
     useState<Pick<ExternalSourceStatus, 'readiness' | 'agentGhIdentity'>>()
-  const readiness = result?.readiness ?? status.readiness
+  const readiness = result?.readiness
+    ? { ...result.readiness, notify: status.readiness?.notify ?? result.readiness.notify }
+    : status.readiness
   const agent = result ? result.agentGhIdentity : status.agentGhIdentity
   const recheck = async () => {
     const updated = await check.run(() =>
@@ -414,8 +430,13 @@ function Readiness({
                 {t(`ext.ready.${area}`)}
               </span>
               <ul className="ext-diags">
-                {(part?.diagnostics ?? []).map((item) => (
-                  <Diagnostic key={`${item.check}:${item.code}`} item={item} />
+                {(part?.diagnostics ?? []).map((item, index) => (
+                  <Diagnostic
+                    key={`${item.check}:${item.code}:${item.recovery?.managerId ?? index}`}
+                    item={item}
+                    deviceId={deviceId}
+                    canCheck={canCheck}
+                  />
                 ))}
               </ul>
             </li>

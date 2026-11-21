@@ -224,11 +224,18 @@ export interface ExternalSourceStatus {
   readiness?: ExternalReadiness
   agentGhIdentity?: ExternalAgentGhIdentity
 }
+export interface ExternalManagerRecovery {
+  managerId: string
+  threadId: string
+  action: 'refresh' | 'replace'
+}
+
 export interface ExternalDiagnostic {
   check: string
   state: 'ok' | 'blocked' | 'unverified'
   code: string
   checkedAt?: number
+  recovery?: ExternalManagerRecovery
 }
 export interface ExternalIdentityHead {
   identityId: string
@@ -345,6 +352,7 @@ export interface ExternalAccess {
 export interface ExternalInboxDelivery {
   state: 'queued' | 'sending' | 'confirmed' | 'unknown' | 'blocked'
   reason?: string
+  recovery?: ExternalManagerRecovery
 }
 export interface ExternalInboxEvent {
   seq: number

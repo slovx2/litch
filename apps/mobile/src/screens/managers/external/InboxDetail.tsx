@@ -25,6 +25,7 @@ import { Sheet } from '../../../ui/kit/overlays'
 import { useTheme } from '../../../ui/theme'
 import { DiscussionDrawer } from '../DiscussionDrawer'
 import { deliveryLabel, failureText, kindLabel, openGithub, reasonLabel, roleLabel } from './labels'
+import { ManagerRecovery } from './ManagerRecovery'
 
 type Mode = null | 'accept' | 'ignore'
 
@@ -140,8 +141,11 @@ export function InboxDetail({
           string,
         ][])
       : []),
-    ...(head.reason
-      ? ([[t('mgh.field.reason'), reasonLabel(t, head.reason)]] as [string, string][])
+    ...(head.delivery?.reason || head.reason
+      ? ([[t('mgh.field.reason'), reasonLabel(t, head.delivery?.reason ?? head.reason)]] as [
+          string,
+          string,
+        ][])
       : []),
     ...(head.issueId ? ([[t('mgh.field.issue'), head.issueId]] as [string, string][]) : []),
     [t('mgh.field.occurred'), stamp(head.occurredAt * 1000, Date.now(), t.lang)],
@@ -221,6 +225,14 @@ export function InboxDetail({
             </Text>
           </View>
         ))}
+        {head.delivery?.recovery ? (
+          <ManagerRecovery
+            deviceId={deviceId}
+            recovery={head.delivery.recovery}
+            disabled={disabled}
+            onOpen={onClose}
+          />
+        ) : null}
         {events.length > 1 ? (
           <View style={styles.events}>
             <Text style={{ color: c.ink3, fontSize: font.size.meta }}>

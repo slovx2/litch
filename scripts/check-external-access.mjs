@@ -25,7 +25,7 @@ const plugins = [
       b.onResolve(
         {
           filter:
-            /react-native$|\/shell\/services$|\/ui\/theme$|\/ui\/i18n$|\/ui\/kit\/(controls|Icon|overlays)$|\.\/DiscussionDrawer$/,
+            /react-native$|^@react-navigation\/native$|\/shell\/services$|\/ui\/theme$|\/ui\/i18n$|\/ui\/kit\/(controls|Icon|overlays)$|\.\/DiscussionDrawer$/,
         },
         (args) => {
           if (!args.importer.includes('/apps/mobile/')) return
@@ -38,17 +38,19 @@ const plugins = [
         contents:
           path === 'react-native'
             ? native
-            : /shell\/services/.test(path)
-              ? `export const useChannel=()=>window.mobileServices.channel; export const useReplica=()=>window.mobileServices.replica; export const useKey=()=>[];`
-              : /ui\/theme/.test(path)
-                ? `export const useTheme=()=>({c:{},font:{size:{meta:12}}});`
-                : /ui\/i18n/.test(path)
-                  ? `export const useT=()=>Object.assign(x=>x,{lang:'en',text:x=>x});`
-                  : /overlays/.test(path)
-                    ? `import React from 'react'; export const Sheet=({visible,actions})=>visible?<div>{actions.map((a,i)=><button key={i} onClick={a.onPress}>{a.label}</button>)}</div>:null;`
-                    : /DiscussionDrawer/.test(path)
-                      ? `import React from 'react'; export const DiscussionDrawer=({children,footer})=><div>{children}{footer}</div>;`
-                      : controls,
+            : path === '@react-navigation/native'
+              ? `export const useNavigation=()=>({navigate:(route,args)=>{ window.externalRecoveryNavigation = {route,args} }});`
+              : /shell\/services/.test(path)
+                ? `export const useChannel=()=>window.mobileServices.channel; export const useReplica=()=>window.mobileServices.replica; export const useKey=()=>[];`
+                : /ui\/theme/.test(path)
+                  ? `export const useTheme=()=>({c:{},font:{size:{meta:12}}});`
+                  : /ui\/i18n/.test(path)
+                    ? `export const useT=()=>Object.assign(x=>x,{lang:'en',text:x=>x});`
+                    : /overlays/.test(path)
+                      ? `import React from 'react'; export const Sheet=({visible,actions})=>visible?<div>{actions.map((a,i)=><button key={i} onClick={a.onPress}>{a.label}</button>)}</div>:null;`
+                      : /DiscussionDrawer/.test(path)
+                        ? `import React from 'react'; export const DiscussionDrawer=({children,footer})=><div>{children}{footer}</div>;`
+                        : controls,
       }))
     },
   },
@@ -59,6 +61,7 @@ const result = await build({
   write: false,
   format: 'esm',
   jsx: 'automatic',
+  loader: { '.css': 'empty' },
   plugins,
   nodePaths: [resolve('packages/ui/node_modules')],
   alias: {
@@ -195,6 +198,21 @@ try {
   await click('[data-act=source-expand]')
   const readinessText = 'document.querySelector("[data-ext-readiness]").innerText'
   assert.match(await read(readinessText), /可以从 GitHub 采集事件/)
+  const recover = '[data-ext-readiness] [data-check=managerTools] [data-act=manager-reset]'
+  await wait(enabled(recover))
+  assert.match(await read(readinessText), /GitHub 工具需要更新/)
+  await click(recover)
+  await wait('!!document.querySelector("dialog[open]")')
+  assert.match(await read('document.querySelector("dialog[open]").textContent'), /刷新|保留/)
+  await click('dialog[open] .pick-ask-actions button')
+  await wait('!document.querySelector("dialog[open]")')
+  await read(
+    `[...document.querySelectorAll('#mobile button')].find(b => b.textContent === 'mgh.openManagerRecovery').click()`,
+  )
+  assert.deepEqual(await read('window.externalRecoveryNavigation'), {
+    route: 'ManagerConsole',
+    args: { deviceId: 'remote', managerId: 'm1', tab: 'console' },
+  })
   await click('[data-act=source-check]')
   await wait(
     'document.querySelector("[data-ext-readiness] [data-check=repository]")?.dataset.state === "blocked"',
@@ -217,7 +235,7 @@ try {
   assert.equal(await read('!!document.querySelector("[data-agent-owner]")'), false)
   assert.equal(await read('accessCalls.includes("external.inbox.triage")'), false)
   console.log(
-    '通过：远程设备的身份和仓库入口、按设备列出经理、无配置权限不读身份明细、撤权即只读及下载提示',
+    '通过：远程设备的身份和仓库入口、按设备列出经理、无配置权限不读身份明细、撤权即只读、下载提示、桌面工具恢复及手机跳转',
   )
 } finally {
   cdp?.close()

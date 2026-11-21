@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import {
   EXTERNAL_NOTIFICATION,
   type ExternalInboxEvent,
+  type ExternalManagerRecovery,
   type ExternalNotifications,
   type ExternalSource,
   type ExternalTriageParams,
@@ -17,7 +18,7 @@ import { ExternalDeviceConfiguration, externalInput } from './device-configurati
 import { callExternalGithubTool } from './device-manager-tools.mjs'
 import { DeviceGithubPoll } from './device-poll.mjs'
 import { ExternalDispatch, type ExternalSendResult } from './dispatch.mjs'
-import { ExternalFeedback } from './feedback.mjs'
+import { ExternalFeedback, type FeedbackWaitReason } from './feedback.mjs'
 import { ManagedGithubCli } from './github/gh-install.mjs'
 import { type GithubSender, githubWriterForLoopbackTest } from './github/write-api.mjs'
 import { ExternalIntakeService } from './intake.mjs'
@@ -65,6 +66,8 @@ export class DeviceExternalService {
   private readonly running = new Map<string, Promise<unknown>>()
   private readonly stopSecrets: () => void
   private readonly sourceRevision = new Map<string, number>()
+  private readonly readinessCache = new Map<string, string>()
+  private readonly refreshAttempt = new Map<string, string>()
   private readonly dirty = new Map<string, string>()
   private readonly outboxRevision = new Map<string, number>()
   private readonly reconcilingAt = new Map<string, number>()
@@ -129,13 +132,9 @@ export class DeviceExternalService {
       configuration,
       feedback: this.feedback,
       now: this.now,
-      feedbackWaitReason: (manager, sourceId) =>
-        this.canDeliver(manager, sourceId)
-          ? null
-          : this.store.config.source(sourceId)?.unattended?.autoNotify
-            ? 'manager_busy'
-            : 'paused',
+      feedbackWaitReason: (manager, sourceId) => this.deliveryWaitReason(manager, sourceId),
       canDeliver: (manager, sourceId) => this.canDeliver(manager, sourceId),
+      prepareDelivery: (manager, sourceId) => this.refreshForDelivery(manager, sourceId),
       send: async ({ manager, prepare, beforeSend }) => {
         let turnId: string | undefined
         try {
@@ -252,32 +251,91 @@ export class DeviceExternalService {
     })
   }
 
+  /** 就绪卡和队列投影共用当前经理、能力版本和恢复方式。 */
+  managerBlock(
+    manager: Manager | null,
+  ): { reason: string; recovery?: ExternalManagerRecovery } | null {
+    if (!manager) return { reason: 'manager_inactive' }
+    const ready = this.options.managers.externalReady(manager)
+    if (ready.ready) return null
+    return {
+      reason: ready.reason,
+      ...(ready.action
+        ? {
+            recovery: { managerId: manager.id, threadId: manager.threadId, action: ready.action },
+          }
+        : {}),
+    }
+  }
+
+  managerChanged(id: string): void {
+    const manager = this.store.manager.manager(id)
+    const block = this.managerBlock(manager)
+    if (!block?.recovery) this.refreshAttempt.delete(id)
+    const state = JSON.stringify(block)
+    if (this.readinessCache.get(id) === state) return
+    this.readinessCache.set(id, state)
+    const repos = this.store.config.assignment(id).repoIds
+    for (const source of this.store.config.sources())
+      if (source.repos.some(({ repoId }) => repos.includes(repoId))) this.changed(source, id)
+  }
+
   project(event: ExternalInboxEvent): ExternalInboxEvent {
     const group = this.store.queue.deliveryGroupForEvent(event)
-    return group
-      ? {
-          ...event,
-          delivery: {
-            state: group.state,
-            ...(group.reason ? { reason: group.reason } : {}),
-          },
-        }
-      : event
+    if (!group) return event
+    const manager = this.store.manager.manager(group.managerId)
+    const waiting = group.state === 'queued' ? this.sourceWaitReason(group.sourceId) : null
+    const block = group.state === 'queued' && waiting === null ? this.managerBlock(manager) : null
+    const reason =
+      group.reason || block?.reason || (waiting === 'paused' ? 'source_paused' : waiting)
+    return {
+      ...event,
+      delivery: {
+        state: group.state,
+        ...(reason ? { reason } : {}),
+        ...(block?.recovery ? { recovery: block.recovery } : {}),
+      },
+    }
+  }
+
+  private sourceWaitReason(sourceId: string): 'paused' | 'identity_unavailable' | null {
+    const source = this.store.config.source(sourceId)
+    if (this.closed || !source?.enabled || source.unattended?.autoNotify !== true) return 'paused'
+    const current = this.store.config.credential(source.credentialRef)
+    return current?.state === 'active' &&
+      (current.expiresAt === undefined || current.expiresAt > this.now())
+      ? null
+      : 'identity_unavailable'
+  }
+
+  private deliveryWaitReason(manager: Manager, sourceId: string): FeedbackWaitReason | null {
+    const pause = this.sourceWaitReason(sourceId)
+    if (pause) return pause
+    const ready = this.options.managers.externalReady(manager)
+    if (!ready.ready) return ready.reason
+    return this.options.managers.tree.canDeliverExternal(manager.threadId) ? null : 'manager_busy'
   }
 
   canDeliver(manager: Manager, sourceId: string): boolean {
-    const source = this.store.config.source(sourceId)
+    return this.deliveryWaitReason(manager, sourceId) === null
+  }
+
+  private refreshForDelivery(manager: Manager, sourceId: string): void {
+    if (this.sourceWaitReason(sourceId)) return
     const { managers } = this.options
-    const current = source && this.store.config.credential(source.credentialRef)
-    return (
-      !this.closed &&
-      !!source?.enabled &&
-      current?.state === 'active' &&
-      (current.expiresAt === undefined || current.expiresAt > this.now()) &&
-      source.unattended?.autoNotify === true &&
-      managers.externalReady(manager).ready &&
-      managers.tree.canDeliverExternal(manager.threadId)
+    const ready = managers.externalReady(manager)
+    if (
+      ready.ready ||
+      ready.action !== 'refresh' ||
+      !managers.tree.canDeliverExternal(manager.threadId)
     )
+      return
+    const saved = managers.store.reset(manager.id)
+    // 同一线程的自动刷新只尝试一次；用户取消或失败后留手动入口。
+    if (saved && ['failed', 'summaryFailed'].includes(saved.phase)) return
+    if (this.refreshAttempt.get(manager.id) === manager.threadId) return
+    this.refreshAttempt.set(manager.id, manager.threadId)
+    managers.resets.request(manager.id, false)
   }
 
   async adminTriage(request: ExternalTriageParams) {

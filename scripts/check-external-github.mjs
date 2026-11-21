@@ -297,6 +297,19 @@ else if (args[0] === 'api' || args[0] === 'pr') {
     '初始仓库轮询',
   )
   clock.now += 10
+  await admin.call('litch/manager/update', {
+    managerId: manager.id,
+    rules: 'Check source evidence before replying.',
+    name: 'Updated manager',
+    scope: 'Loopback repository only',
+  })
+  await until(() => pi.running(tid), '规则更新进入经理回合')
+  pi.end(tid, 'completed', '已采用规则')
+  await until(() => !device.sessionTree.activeTurn(tid), '规则更新回合完成')
+  assert.equal(
+    (await admin.call(E.sourceGet, { sourceId: source.sourceId })).readiness.notify.state,
+    'ok',
+  )
   const originalIssue = mock.request(8)
   const issueBody = originalIssue.body
   mock.request(9, 'outsider')

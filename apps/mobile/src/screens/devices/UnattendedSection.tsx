@@ -14,7 +14,8 @@ import { type Key, useT } from '../../ui/i18n'
 import { SectionLabel } from '../../ui/kit/controls'
 import { IconButton } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
-import { failureText } from '../managers/external/labels'
+import { failureText, reasonLabel } from '../managers/external/labels'
+import { ManagerRecovery } from '../managers/external/ManagerRecovery'
 import { useExternalDevice } from '../managers/external/use-external'
 import { InfoLine } from './parts'
 
@@ -81,6 +82,22 @@ export function UnattendedSection({ device }: { device: DeviceView }) {
                 {t(`mgh.source.${state}` as Key)}
                 {pending ? ` · ${t('mgh.source.pending', { n: pending })}` : ''}
               </Text>
+              {status.readiness?.notify.diagnostics
+                .filter(({ state }) => state === 'blocked')
+                .map((item, index) => (
+                  <View key={item.recovery?.managerId ?? index}>
+                    <Text style={{ color: c.ink2, fontSize: font.size.meta }}>
+                      {reasonLabel(t, item.code)}
+                    </Text>
+                    {item.recovery ? (
+                      <ManagerRecovery
+                        deviceId={device.id}
+                        recovery={item.recovery}
+                        disabled={!online}
+                      />
+                    ) : null}
+                  </View>
+                ))}
             </View>
             {can ? (
               <IconButton
