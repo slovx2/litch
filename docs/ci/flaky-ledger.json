@@ -572,6 +572,32 @@
           }
         }
       ]
+    },
+    {
+      "job": "windows / windows",
+      "test": "Windows 真脚本：中文、字节范围、追加、junction、目录裁剪和命令退出码",
+      "status": "active",
+      "events": [
+        {
+          "runId": 44935387860,
+          "attempt": 1,
+          "jobId": 136940753040,
+          "sha": "5b25cba0e37dcad6ff2a2f3d81293fb186b69224",
+          "date": "2026-11-21T18:24:51Z",
+          "trigger": "push",
+          "url": "https://github.com/slovx2/litch/actions/runs/44935387860/job/136940753040",
+          "failure": "该用例在 windows / windows 作业的第 1 次独立 CI 偶发事件：spawnSync powershell.exe ETIMEDOUT，PowerShell 子进程达到 30 秒时限。",
+          "evidence": {
+            "kind": "same-sha-pass",
+            "runId": 44935387860,
+            "attempt": 2,
+            "jobId": 136946109909,
+            "sha": "5b25cba0e37dcad6ff2a2f3d81293fb186b69224",
+            "reference": "https://github.com/slovx2/litch/actions/runs/44935387860/job/136946109909",
+            "note": "首轮 job 136940753040 失败；只重跑 Windows 作业后，attempt 2 / job 136946109909 的同名用例通过，作业 success。已分别核对两份日志中 Windows git.exe log -1 --format=%H 的实际输出；未修改时限、断言或移出用例。"
+          }
+        }
+      ]
     }
   ],
   "audit": {
@@ -659,7 +685,10 @@
       "test": "远程借用本机用户标签按控制者改写 localhost；交还后的标签仍保活原隧道",
       "sha": "ea15597296da5cef36fc665bd49fcb78974091d8",
       "observedAt": "2026-11-21T18:01:12.922Z",
-      "environment": { "platform": "darwin-arm64", "node": "24.19.0" },
+      "environment": {
+        "platform": "darwin-arm64",
+        "node": "24.19.0"
+      },
       "failure": "浏览器主测试 196 项只有该用例失败：fetch failed，ECONNREFUSED 127.0.0.1:65142。与两次 CI 的 49280 不同，不能据此认定端口写死，时序原因仍未确证。",
       "failureLog": {
         "name": "i343-chrome-browser.log",
