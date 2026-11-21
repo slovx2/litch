@@ -85,6 +85,8 @@ export interface ChromeTabState {
 }
 
 export interface ChromeListedTab extends ChromeTabState {
+  /** 已知受限页面可列举，但在认领前明确拒绝。 */
+  unavailableReason?: string
   origins: string[]
   busy: boolean
   /** 列举时在所在窗口中是否为活动标签。增量字段不要求商店扩展同步更新。 */

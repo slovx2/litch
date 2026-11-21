@@ -377,6 +377,10 @@ In a new conversation, `targets()` identifies the controller and session device 
 
 Ordinary claiming and release without Chrome handles still use the built-in browser. In dual Chrome mode, the tab handle in the snapshot header can be reused in the current turn. After Chrome reconnects, continue with the fresh tab handle returned by `ensure_claimed`; old handles are not silently rebound. Turning off the device or harness browser switch while site approval is pending prevents a late approval from restoring access.
 
+设备路由签发的 `targetId`、`tabId`、`claimToken` 只在当前回合有效。回合结束、中断或重启后，先重新调用 `targets`；即使结果在中断后才返回，仍属于旧回合。普通页面导航仅使文档 refs 过期，不更换实例 targetId。Chrome 内部页、扩展页面、网上应用店和错误页无法认领；列表的 `unavailableReason` 给出原因，请新开普通 HTTP(S) 网页。其他 attach 失败会保留 Chrome 原始错误，区分调试器占用、策略限制和目标消失。
+
+Device-issued `targetId`, `tabId` and `claimToken` handles belong to the current turn. Call `targets` again after turn end, interruption or restart; a late result still belongs to the old turn. Page navigation invalidates document refs, not the instance targetId. Chrome internal pages, extension pages, Web Store and error pages cannot be claimed. Read `unavailableReason` and open a regular HTTP(S) tab. Other attach failures preserve Chrome's original error and distinguish debugger conflicts, management policy and disappeared targets.
+
 设备 Chrome 的站点策略在设备上管理：在 Chrome 所属用户的终端运行 `codex-harness-adapter chrome sites` 查看；用 `trust-on` 或 `trust-off` 更改信任开关，用 `block <域名>`、`unblock <域名>` 管理信任模式下的黑名单，用 `forget <来源>` 删除永久许可。默认关闭信任开关。
 
 Manage the device’s site policy in its Chrome user’s terminal. Run `codex-harness-adapter chrome sites` to inspect settings, `trust-on` or `trust-off` to change site trust, `block <host>` or `unblock <host>` to manage the blocklist used in trust mode, and `forget <origin>` to remove a saved approval. Site trust is off by default.

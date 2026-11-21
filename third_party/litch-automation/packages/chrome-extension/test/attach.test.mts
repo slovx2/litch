@@ -6,6 +6,7 @@ test('已有调试器时不执行 attach，不影响对方连接', async () => {
   let attached = 0,
     detached = 0
   const state = {
+    generations: new Map(),
     chrome: {
       debugger: {
         getTargets: async () => [{ tabId: 1, attached: true }],
@@ -16,6 +17,7 @@ test('已有调试器时不执行 attach，不影响对方连接', async () => {
           detached++
         },
       },
+      tabs: { get: async () => ({ url: 'https://example.test' }) },
     },
   } as unknown as ExtensionState
   await assert.rejects(attach(state, 1), /already attached/)
@@ -27,6 +29,7 @@ test('单宿主 attach 后正常附着，不误判为其他宿主', async () => 
   let attached = false,
     detached = 0
   const state = {
+    generations: new Map(),
     chrome: {
       debugger: {
         getTargets: async () => [{ tabId: 1, attached }],
@@ -37,6 +40,7 @@ test('单宿主 attach 后正常附着，不误判为其他宿主', async () => 
           detached++
         },
       },
+      tabs: { get: async () => ({ url: 'https://example.test' }) },
     },
   } as unknown as ExtensionState
   await attach(state, 1)
@@ -48,6 +52,7 @@ test('attach 后 target 丢失时收尾自身连接', async () => {
   let queried = 0,
     detached = 0
   const state = {
+    generations: new Map(),
     chrome: {
       debugger: {
         getTargets: async () => (queried++ ? [] : [{ tabId: 1, attached: false }]),
@@ -56,8 +61,9 @@ test('attach 后 target 丢失时收尾自身连接', async () => {
           detached++
         },
       },
+      tabs: { get: async () => ({ url: 'https://example.test' }) },
     },
   } as unknown as ExtensionState
-  await assert.rejects(attach(state, 1), /cannot attach/)
+  await assert.rejects(attach(state, 1), /target closed or changed/)
   assert.equal(detached, 1)
 })
