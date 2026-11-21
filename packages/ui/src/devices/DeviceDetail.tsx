@@ -347,7 +347,7 @@ export function DeviceDetail({ deviceId, section = null, onBack, onClose }: Devi
             ) : null}
           </section>
           <ToolSwitches device={device} reveal={section === 'tools'} />
-          {device.remoteChrome ? <DeviceChromeSection status={device.remoteChrome} /> : null}
+          <DeviceChromeSection device={device} />
           <ServiceSection device={device} reveal={section === 'service'} />
           <PhonesSection device={device} />
           <UnattendedSection device={device} onOpen={() => setUnattended(true)} />
