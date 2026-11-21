@@ -1,12 +1,16 @@
 // 开始子会话时模型越级（高于父会话、或有一方未分级）：从错误里取出设备给的结构，
 // 列出能改用的模型。桌面和手机共用；文字由设备给的那一句（Phrase）按界面语言说。
-import type { ModelLimitFailureView, ModelLimitSettingsTarget } from '@litch/core'
+import {
+  MODEL_RANKING_ENABLED,
+  type ModelLimitFailureView,
+  type ModelLimitSettingsTarget,
+} from '@litch/core'
 
 export type { ModelLimitFailureView, ModelLimitSettingsTarget }
 
 /** 这个错误是不是模型越级；不是就是 null，照一般的失败原因说 */
 export function modelLimitOf(error: unknown): ModelLimitFailureView | null {
-  if (!error || typeof error !== 'object') return null
+  if (!MODEL_RANKING_ENABLED || !error || typeof error !== 'object') return null
   return (error as { modelLimit?: ModelLimitFailureView }).modelLimit ?? null
 }
 

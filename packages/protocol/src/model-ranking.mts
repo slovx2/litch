@@ -1,4 +1,7 @@
 // 型号等级是委派策略，不是性能测试或费用预算。跨 harness 比较仅由独立开关启用。
+// 暂停产品入口和委派比较；协议和已存的配置留待功能恢复时沿用。
+export const MODEL_RANKING_ENABLED: boolean = false
+
 export const MODEL_RANKING = {
   changed: 'litch/device/modelRanking/changed',
   read: 'litch/device/modelRanking/read',

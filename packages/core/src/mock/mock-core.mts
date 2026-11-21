@@ -9,6 +9,7 @@ import { SAMPLE_TOOL_IMAGES } from './sample-tool-images.mjs'
 // 它会把回答按小块流出来，发送、排队、打断、审批、提问也都有个样子，让界面的每条路径真的被走到。
 
 import type { ThreadItem } from '../../../protocol/src/index.mjs'
+import { MODEL_RANKING_ENABLED } from '../../../protocol/src/model-ranking.mjs'
 import { recoverMessage } from '../../../protocol/src/system-messages.mjs'
 import {
   ChannelError,
@@ -128,6 +129,8 @@ import { SAMPLE_TEXT, type SampleLang } from './sample-text.mjs'
 import { dumpCall, shotsCall } from './sample-tools.mjs'
 
 export interface MockCoreOptions {
+  /** 隔离测试可开启暂时隐藏的模型等级排序。 */
+  modelRankingEnabled?: boolean
   modelRankingScenario?: import('./sample-data.mjs').SampleModelRankingScenario
   clock: Clock
   /** E2E 显式推进后台任务、目标和提案过期；缺省仍按真实场景计时。 */
@@ -474,7 +477,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   const organizer = createOrganizerHost(options.organizer ?? memoryOrganizerStore(), clock.now)
   const chunkMs = options.chunkMs ?? 60
   const lang = options.lang ?? 'zh-CN'
-  const app: AppView = sampleApp(lang, clock.now())
+  const modelRankingEnabled = options.modelRankingEnabled ?? MODEL_RANKING_ENABLED
+  const app: AppView = sampleApp(lang, clock.now(), modelRankingEnabled)
   const external = createMockExternal(clock, () => app.devices)
   if (options.scene === 'fresh') freshLocal(app)
   const sidebars = new Map<string, SidebarView>(
@@ -1950,6 +1954,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   // 电脑操作预览（mock-automation.mts）
   const automation = createMockAutomation(clock)
   const manage = createMockManagement({
+    modelRankingEnabled,
     ...(options.modelRankingScenario ? { modelRankingScenario: options.modelRankingScenario } : {}),
     clock,
     stepMs: chunkMs,
@@ -2447,7 +2452,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
 
   // 会话树：Litch 子会话、提案、回报与唤醒，引擎自己的子代理线程（mock-tree.mts）
   const tree = createMockTree({
-    modelRanking: manage.modelRanking,
+    ...(modelRankingEnabled ? { modelRanking: manage.modelRanking } : {}),
     lang,
     setProposalTimer: (run, ms) => scenarioClock.setTimer(run, ms),
     now: () => clock.now(),

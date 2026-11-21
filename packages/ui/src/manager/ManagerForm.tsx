@@ -1,4 +1,10 @@
-import { type DeviceView, keys, projectPermissionChoice, type WorkspaceView } from '@litch/core'
+import {
+  type DeviceView,
+  keys,
+  MODEL_RANKING_ENABLED,
+  projectPermissionChoice,
+  type WorkspaceView,
+} from '@litch/core'
 import { useEffect, useRef, useState } from 'react'
 import type { ManagerDraft, ManagerView } from '../../../core/src/model-manager.mts'
 import {
@@ -572,14 +578,16 @@ export function ManagerForm({
                   </option>
                 ))}
               </select>
-              <ManagerLimitHint
-                device={device}
-                sessionId={manager?.threadId ?? ''}
-                harness={form.harness}
-                model={model?.id ?? form.model}
-                lineHarness={form.dispatch.harness ?? form.harness}
-                lineModel={lineModel?.id ?? form.dispatch.model}
-              />
+              {MODEL_RANKING_ENABLED && (
+                <ManagerLimitHint
+                  device={device}
+                  sessionId={manager?.threadId ?? ''}
+                  harness={form.harness}
+                  model={model?.id ?? form.model}
+                  lineHarness={form.dispatch.harness ?? form.harness}
+                  lineModel={lineModel?.id ?? form.dispatch.model}
+                />
+              )}
             </label>
             <label className="form-field">
               {t('manager.lineEffort')}

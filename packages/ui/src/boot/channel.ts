@@ -7,6 +7,7 @@ import {
   connectChannel,
   createMockCore,
   createPortPair,
+  MODEL_RANKING_ENABLED,
   type Port,
   type SampleModelRankingScenario,
   serveChannel,
@@ -167,7 +168,9 @@ export async function openChannel(lang: 'zh-CN' | 'en'): Promise<Boot> {
   }
   const [uiPort, corePort] = createPortPair()
   // 预览地址带 mockRanking=builtin|custom-local|custom-cross|partial：模型等级排序用模拟核心的那个场景
-  const ranking = new URLSearchParams(location.search).get('mockRanking')
+  const ranking = MODEL_RANKING_ENABLED
+    ? new URLSearchParams(location.search).get('mockRanking')
+    : null
   const modelRankingScenario = MOCK_RANKINGS.find((entry) => entry === ranking)
   serveChannel(
     corePort,

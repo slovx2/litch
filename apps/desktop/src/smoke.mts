@@ -41,7 +41,7 @@
 // first-turn 对着同一种隔离设备，只走主路径：每个真的 harness（含原生 codex）从界面新建会话、发头一句、收到回话
 // （probe-first-turn.mts）。由 scripts/check-first-turn.mjs 起。
 
-import { OUTPUT_KEEP, PART_CHARS } from '@litch/core'
+import { MODEL_RANKING_ENABLED, OUTPUT_KEEP, PART_CHARS } from '@litch/core'
 import { app, type BrowserWindow } from 'electron'
 import { activityProbe, judgeActivity } from './probe-activity.mjs'
 import { backgroundProbe, judgeBackground } from './probe-background.mjs'
@@ -470,7 +470,7 @@ async function measure(
     process.env.LITCH_PICK_FILE = '/tmp/litch-fixture-cli'
     let result: Awaited<ReturnType<typeof mockManageProbe>>
     try {
-      result = await runInPage(window, mockManageProbe)
+      result = await runInPage(window, mockManageProbe, MODEL_RANKING_ENABLED)
     } finally {
       delete process.env.LITCH_PICK_FILE
     }
@@ -478,7 +478,7 @@ async function measure(
     return [{ ...result, service }, [...judgeMockManage(result), ...judgeMockService(service)]]
   }
   if (mode === 'manage') {
-    const result = await runInPage(window, manageProbe)
+    const result = await runInPage(window, manageProbe, MODEL_RANKING_ENABLED)
     const service = await runInPage(window, serviceProbe)
     return [{ ...result, service }, [...judgeManage(result), ...judgeService(service)]]
   }

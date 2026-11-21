@@ -1,7 +1,20 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { builtinTier, emptyRanking, modelKey } from '../../protocol/src/model-ranking.mjs'
+import { sessionTools } from '../../protocol/src/client-tools-sessions.mjs'
+import { EXTENSION } from '../../protocol/src/device.mjs'
+import {
+  MANAGER_DEFAULT_CONTACT,
+  MANAGER_DEFAULT_DISPATCH,
+  MANAGER_METHOD,
+} from '../../protocol/src/manager.mjs'
+import {
+  builtinTier,
+  emptyRanking,
+  MODEL_RANKING,
+  modelKey,
+} from '../../protocol/src/model-ranking.mjs'
 import { checkChildModel, rankedModel } from '../src/model-ranking.mjs'
+import { startChild } from '../src/session-start.mjs'
 import type { SessionTree } from '../src/session-tree.mjs'
 import { resultOf } from './fake-engine.mjs'
 import { brief, litch, SESSIONS, text, treeRig } from './tree-kit.mjs'
@@ -106,7 +119,7 @@ test('custom 关闭跨 harness 时不读对方目录，未分级父子也不会�
   )
 })
 test('设备入口：工具拒绝、普通卡开始拒绝、实际用户选择放行且权限仍检查', async () => {
-  const env = treeRig()
+  const env = treeRig({}, { modelRankingEnabled: true })
   try {
     env.claude.handlers['model/list'] = () => ({ data: rows, nextCursor: null })
     Object.assign(env.claude.config, { model: 'opus' })
@@ -180,8 +193,116 @@ test('设备入口：工具拒绝、普通卡开始拒绝、实际用户选择�
   }
 })
 
-test('等级设置声明门禁、设备持久配置、通知只发给声明连接', async () => {
+test('暂停排序时旧客户端读不到等级，已存配置不影响目录、默认值或派发', async () => {
   const env = treeRig({}, { values: {} })
+  try {
+    assert.ok(env.control)
+    const ranking = {
+      ...emptyRanking(),
+      mode: 'custom' as const,
+      revision: 8,
+      crossHarness: true,
+      tiers: [
+        [modelKey('pi', 'pi-model')],
+        [modelKey('claude-code', 'opus', 'account')],
+        [modelKey('claude-code', 'fable', 'account')],
+      ],
+    }
+    env.control.ranking = structuredClone(ranking)
+    // 目录顺序故意与存下来的等级相反；默认型号也不在目录第一项。
+    const catalog = [rows[2], rows[0], rows[1]]
+    env.claude.handlers['model/list'] = () => ({ data: catalog, nextCursor: null })
+    Object.assign(env.pi.config, { model: 'pi-model' })
+    Object.assign(env.claude.config, { model: 'opus' })
+    const client = env.connect()
+    await client.initialize(['harness', 'sessionTree', EXTENSION.modelRanking])
+    const info = await client.call('runtime/info', {})
+    assert.ok(!info.device.extensions.includes(EXTENSION.modelRanking))
+    await assert.rejects(client.call(MODEL_RANKING.read, {}), {
+      message: 'Model ranking unavailable',
+      data: { litch: 'unsupported' },
+    })
+    assert.deepEqual((await client.call('model/list', { harness: 'claude-code' })).data, catalog)
+
+    const { thread } = await client.call('thread/start', { harness: 'pi', cwd: env.stateDir })
+    const tree = env.device.sessionTree
+    for (const model of ['fable', null]) {
+      const started = await startChild(
+        tree,
+        thread.id,
+        {
+          title: '跨 harness 派发',
+          prompt: '运行夹具',
+          kind: 'fresh',
+          harness: 'claude-code',
+          model,
+          wakeParent: false,
+          worktree: false,
+        },
+        'model',
+      )
+      assert.ok(started.threadId)
+      assert.equal(env.claude.sent('thread/start').at(-1)?.model, model ?? undefined)
+      assert.ok(
+        env.claude.sent('turn/start').some((params) => params.threadId === started.threadId),
+      )
+    }
+    assert.deepEqual(env.control.ranking, ranking)
+    assert.ok(!env.control.requests.some(({ method }) => method.startsWith('modelRanking.')))
+  } finally {
+    await env.close()
+  }
+})
+
+test('经理的跨 harness 工作线再派同 harness 子会话时，省略模型仍用目标默认', async () => {
+  const env = treeRig()
+  try {
+    env.claude.handlers['model/list'] = () => ({ data: rows, nextCursor: null })
+    Object.assign(env.claude.config, { model: 'fable' })
+    const client = env.connect()
+    await client.initialize(['harness', 'sessionTree', 'litchManager'])
+    const { threadId } = await client.call(MANAGER_METHOD.create, {
+      cwd: env.stateDir,
+      harness: 'pi',
+      model: null,
+      effort: null,
+      name: '经理',
+      scope: '',
+      rules: '',
+      template: 'blank',
+      firstTask: '',
+      dispatch: { ...MANAGER_DEFAULT_DISPATCH, harness: 'claude-code', worktree: false },
+      contact: { ...MANAGER_DEFAULT_CONTACT },
+    })
+    const tree = env.device.sessionTree
+    const spec = {
+      title: '测试跨 harness 派发',
+      prompt: '运行夹具',
+      kind: 'fresh' as const,
+      harness: 'claude-code',
+      wakeParent: false,
+      worktree: false,
+    }
+    const line = await startChild(tree, threadId, { ...spec, model: 'fable' }, 'user')
+    assert.equal(env.claude.sent('thread/start').at(-1)?.model, 'fable')
+    assert.ok(env.claude.sent('turn/start').some((params) => params.threadId === line.threadId))
+    await startChild(tree, line.threadId, spec, 'model')
+    assert.equal(env.claude.sent('thread/start').at(-1)?.model, undefined)
+  } finally {
+    await env.close()
+  }
+})
+
+test('收尾建议仍说明默认模型，但不把已暂停的等级限制交给模型', () => {
+  const wrapUp = sessionTools(true).tools.find((tool) => tool.name === 'wrap_up')
+  assert.ok(wrapUp)
+  const schema = JSON.stringify(wrapUp.inputSchema)
+  assert.match(schema, /target harness’s default when the harness differs/)
+  assert.doesNotMatch(schema, /parent model rank|over-limit start|custom device ranking/)
+})
+
+test('等级设置声明门禁、设备持久配置、通知只发给声明连接', async () => {
+  const env = treeRig({}, { values: {}, modelRankingEnabled: true })
   try {
     env.claude.handlers['model/list'] = () => ({ data: rows, nextCursor: null })
     const plain = await litch(env)
@@ -224,7 +345,7 @@ test('等级设置声明门禁、设备持久配置、通知只发给声明连�
 })
 
 test('引擎创建后确认了超限型号，不发送第一个任务', async () => {
-  const env = treeRig()
+  const env = treeRig({}, { modelRankingEnabled: true })
   try {
     env.claude.handlers['model/list'] = () => ({ data: rows, nextCursor: null })
     Object.assign(env.claude.config, { model: 'opus' })

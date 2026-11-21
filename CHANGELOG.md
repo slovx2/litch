@@ -7,6 +7,9 @@ versioning or publishing metadata.
 
 ## 未发布
 
+- 暂停桌面和手机的模型等级排序；派发子会话不再按等级限制，已保存的排序配置保留。
+- Paused model ranking on desktop and mobile. Model ranks no longer limit sub-sessions, and saved rankings are kept.
+
 ## 0.46.1（2026-11-21）
 
 - 修复远程设备的“无人值守”页无法配置的问题，现在可管理 GitHub 身份、仓库、经理分配和设备服务自启。

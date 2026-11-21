@@ -11,6 +11,7 @@ import {
   type ClientToolFunctionSpec,
   type ClientToolNamespaceSpec,
 } from './client-tools.mjs'
+import { MODEL_RANKING_ENABLED } from './model-ranking.mjs'
 import { CODEX_WAIT_RULE } from './native-background-wake.mjs'
 import type { SessionDelegatedResponse, SessionPendingRequest } from './session-pending.mjs'
 import { SESSION_TREE_LIMITS, type SessionLineageKind } from './session-tree.mjs'
@@ -597,7 +598,11 @@ const WRAP_UP_TOOL: ClientToolFunctionSpec = {
             model: {
               type: 'string',
               description:
-                'Default: this session’s current model (the target harness’s default when the harness differs). Children cannot exceed the parent model rank; custom device ranking also applies across harnesses. Unknown models may only inherit the same identity. An over-limit start fails with allowed models; choose one and retry. Pass a model id listed by options.',
+                'Default: this session’s current model (the target harness’s default when the harness differs). ' +
+                (MODEL_RANKING_ENABLED
+                  ? 'Children cannot exceed the parent model rank; custom device ranking also applies across harnesses. Unknown models may only inherit the same identity. An over-limit start fails with allowed models; choose one and retry. '
+                  : '') +
+                'Pass a model id listed by options.',
             },
             permission: {
               type: 'string',

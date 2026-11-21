@@ -98,6 +98,7 @@ const HELD_GRACE_MS = 300
 const HELD_RECHECK_MS = 5_000
 
 export interface EngineLinkOptions {
+  modelRankingEnabled?: boolean
   prepareQuestionInput?(
     method: string,
     params: Record<string, unknown>,
@@ -330,7 +331,7 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
             requestAttestation: false,
             [EXTENSIONS_CAPABILITY]: [
               EXTENSION.backgroundTasks,
-              EXTENSION.modelRanking,
+              ...(options.modelRankingEnabled ? [EXTENSION.modelRanking] : []),
               EXTENSION.threadCapabilities,
               EXTENSION.acpControls,
               EXTENSION.peerMessages,

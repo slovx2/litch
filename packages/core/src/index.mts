@@ -1,5 +1,6 @@
 export type { AcpAuthLogin, AcpAuthView } from '../../protocol/src/acp-controls.mjs'
 export {
+  MODEL_RANKING_ENABLED,
   type ModelLimitFailure,
   type ModelRankingConfig,
   type ModelRankingSnapshot,

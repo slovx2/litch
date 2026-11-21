@@ -69,7 +69,7 @@ export interface ManageProbe {
   sshSwitchesOn: string
 }
 
-export async function manageProbe(): Promise<ManageProbe> {
+export async function manageProbe(modelRankingEnabled: boolean): Promise<ManageProbe> {
   const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
   const frame = () => new Promise<void>((done) => requestAnimationFrame(() => done()))
   const until = async <T,>(
@@ -216,40 +216,45 @@ export async function manageProbe(): Promise<ManageProbe> {
   one<HTMLButtonElement>('.devp-row', item)?.click()
   await until('管理数据', () => one('[data-manage-state="ready"]'))
   await piReady()
-  // 经真正的设备服务和 Go 配置文件读取、保存、重读、恢复；不运行真实模型。
-  const ranking = await until('模型等级入口', () => one('[data-model-ranking]'))
-  const rankingMode = () =>
-    one<HTMLElement>('[data-model-ranking] .mng-sum[data-mode]')?.dataset.mode ?? ''
-  const unsaved = () => text(one('[data-model-ranking] .mng-sec-head')).includes('有未保存')
-  one<HTMLButtonElement>('.fold', ranking)?.click()
-  const handle = await until('设备型号清单', () =>
-    one<HTMLButtonElement>('[data-model-ranking] [data-rank-handle]'),
-  )
-  // 第一个模型的调级菜单里挑第一项能做的
-  handle.click()
-  const action = await until('调级菜单', () =>
-    all('[data-model-ranking] .rk-pop [role="menuitem"]').find(
-      (item) => item.getAttribute('aria-disabled') !== 'true',
-    ),
-  )
-  action.click()
-  await until('草稿有改动', () => unsaved())
-  one<HTMLButtonElement>('[data-act="ranking-save"]')?.click()
-  await until('设备保存自定义等级', () => rankingMode() === 'custom' && !unsaved())
-  one<HTMLButtonElement>('[data-act="ranking-reload"]')?.click()
-  await frame()
-  await until(
-    '自定义配置重读',
-    () =>
-      rankingMode() === 'custom' && !one<HTMLButtonElement>('[data-act="ranking-reset"]')?.disabled,
-  )
-  one<HTMLButtonElement>('[data-act="ranking-reset"]')?.click()
-  const resetConfirm = await until('恢复等级确认按钮', () =>
-    one<HTMLButtonElement>('[data-act="ranking-reset-confirm"]'),
-  )
-  resetConfirm.click()
-  await until('设备恢复内置等级', () => rankingMode() === 'builtin')
-  one<HTMLButtonElement>('.fold', ranking)?.click()
+  if (modelRankingEnabled) {
+    // 经真正的设备服务和 Go 配置文件读取、保存、重读、恢复；不运行真实模型。
+    const ranking = await until('模型等级入口', () => one('[data-model-ranking]'))
+    const rankingMode = () =>
+      one<HTMLElement>('[data-model-ranking] .mng-sum[data-mode]')?.dataset.mode ?? ''
+    const unsaved = () => text(one('[data-model-ranking] .mng-sec-head')).includes('有未保存')
+    one<HTMLButtonElement>('.fold', ranking)?.click()
+    const handle = await until('设备型号清单', () =>
+      one<HTMLButtonElement>('[data-model-ranking] [data-rank-handle]'),
+    )
+    // 第一个模型的调级菜单里挑第一项能做的
+    handle.click()
+    const action = await until('调级菜单', () =>
+      all('[data-model-ranking] .rk-pop [role="menuitem"]').find(
+        (item) => item.getAttribute('aria-disabled') !== 'true',
+      ),
+    )
+    action.click()
+    await until('草稿有改动', () => unsaved())
+    one<HTMLButtonElement>('[data-act="ranking-save"]')?.click()
+    await until('设备保存自定义等级', () => rankingMode() === 'custom' && !unsaved())
+    one<HTMLButtonElement>('[data-act="ranking-reload"]')?.click()
+    await frame()
+    await until(
+      '自定义配置重读',
+      () =>
+        rankingMode() === 'custom' &&
+        !one<HTMLButtonElement>('[data-act="ranking-reset"]')?.disabled,
+    )
+    one<HTMLButtonElement>('[data-act="ranking-reset"]')?.click()
+    const resetConfirm = await until('恢复等级确认按钮', () =>
+      one<HTMLButtonElement>('[data-act="ranking-reset-confirm"]'),
+    )
+    resetConfirm.click()
+    await until('设备恢复内置等级', () => rankingMode() === 'builtin')
+    one<HTMLButtonElement>('.fold', ranking)?.click()
+  } else if (one('[data-model-ranking]')) {
+    throw new Error('暂停后设备详情仍显示模型等级排序')
+  }
   // 一打开只有 harness 各一行，设置项都收着
   const folded = `${all('[data-setting]').length}/${all('[data-harness-block] .mng-h-link').length}`
   await unfold()
