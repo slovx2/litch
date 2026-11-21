@@ -1,6 +1,6 @@
 {
   "name": "@litch/chrome-extension",
-  "version": "0.45.1",
+  "version": "0.46.0",
   "type": "module",
   "license": "MIT",
   "description": "可嵌入的 Chrome 扩展运行时",
