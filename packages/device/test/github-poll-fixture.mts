@@ -62,17 +62,21 @@ export async function githubFixture(
 ) {
   let now = initial
   const requests: {
+    method: string | undefined
     path: string
     query: string
     etag: string | undefined
+    modifiedSince: string | undefined
     version: string | undefined
   }[] = []
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', apiHost)
     requests.push({
+      method: req.method,
       path: url.pathname,
       query: url.search,
       etag: req.headers['if-none-match'],
+      modifiedSince: req.headers['if-modified-since'],
       version: req.headers['x-github-api-version'] as string | undefined,
     })
     const reply =

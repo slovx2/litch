@@ -99,6 +99,10 @@ export const zhCN = {
   'mgh.source.paused': '已暂停',
   'mgh.source.backoff': '退避中',
   'mgh.source.blocked': '受阻',
+  'mgh.source.github_notifications_scope_required': '缺少通知权限，请在桌面端为机器人加权限。',
+  'mgh.source.github_notifications_access_denied': 'GitHub 拒绝读取通知，请在桌面端重新授权。',
+  'mgh.source.github_notifications_unavailable': '暂时无法读取 GitHub 通知。',
+  'mgh.source.github_notifications_rate_limited': 'GitHub 通知达到限额，设备将自动重试。',
   'mgh.source.pending': '待分拣 {n}',
   'mgh.source.pause': '暂停采集',
   'mgh.source.resume': '恢复采集',
@@ -214,6 +218,14 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'mgh.source.paused': 'Paused',
   'mgh.source.backoff': 'Backing off',
   'mgh.source.blocked': 'Blocked',
+  'mgh.source.github_notifications_scope_required':
+    'Add notifications permission for the bot on desktop.',
+  'mgh.source.github_notifications_access_denied':
+    'GitHub denied access to notifications. Reauthorize the bot on desktop.',
+  'mgh.source.github_notifications_unavailable':
+    'GitHub notifications are temporarily unavailable.',
+  'mgh.source.github_notifications_rate_limited':
+    'GitHub notifications are rate limited. Litch will retry.',
   'mgh.source.pending': '{n} to triage',
   'mgh.source.pause': 'Pause collection',
   'mgh.source.resume': 'Resume collection',

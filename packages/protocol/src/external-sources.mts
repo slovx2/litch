@@ -250,6 +250,7 @@ export interface ExternalIdentity extends ExternalIdentityHead {
 // 当前随附的官方 GitHub CLI 登录自动申请这三项；客户端必须事先告知。
 export const EXTERNAL_IDENTITY_REQUIRED_SCOPES = ['repo', 'read:org', 'gist'] as const
 export const EXTERNAL_IDENTITY_OPTIONAL_SCOPES = [
+  'notifications',
   'workflow',
   'read:packages',
   'write:packages',

@@ -87,7 +87,8 @@ export const EXTERNAL_LOGIN_CONFIG_OPS: Record<string, OpSpec> = {
   'device-identity add': {
     args: [0, 0],
     options: ['device', 'scopes'],
-    usage: 'device-identity add [--scopes <workflow,read:packages,write:packages>] [--device <id>]',
+    usage:
+      'device-identity add [--scopes <notifications,workflow,read:packages,write:packages>] [--device <id>]',
     summary: {
       zh: '用 GitHub CLI 设备码授权 GitHub 身份',
       en: 'Authorize a GitHub identity with a GitHub CLI device code',

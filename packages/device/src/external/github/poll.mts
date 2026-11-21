@@ -42,11 +42,14 @@ export interface GithubPollOptions {
   botUserId: string
   // 由来源启用时的 GitHub 服务端时钟确定。所有流使用同一启用点，重启不重设。
   enabledAt: number
+  newStreamAt?: number
   api: GithubApi
   store: GithubPollStore
   boundPulls?: readonly { number: number; workflowIds?: readonly string[] }[]
+  boundSubjects?: readonly { number: number; pull: boolean; since: number }[]
   pageBudget?: number
   reviewBudget?: number
+  reconcile?: boolean
   resume?: boolean
 }
 
@@ -142,10 +145,16 @@ async function pollOnce(options: GithubPollOptions): Promise<GithubPollResult> {
     number?: number,
     bound?: GithubBoundPull,
     boundPeers?: readonly GithubBoundPull[],
+    since?: number,
   ) {
     const ctx: GithubScanContext = {
       ...context,
       key: { ...scope, stream },
+      ...(since !== undefined
+        ? { newStreamAt: Math.max(since, options.newStreamAt ?? context.enabledAt) }
+        : options.newStreamAt !== undefined
+          ? { newStreamAt: options.newStreamAt }
+          : {}),
       ...(number !== undefined ? { number } : {}),
       ...(bound ? { bound } : {}),
       ...(boundPeers ? { boundPeers } : {}),
@@ -159,7 +168,7 @@ async function pollOnce(options: GithubPollOptions): Promise<GithubPollResult> {
     }
     return result
   }
-  // 活跃绑定先核对当前 head，其次近期发现流，再轮扫全部已知 PR。
+  // 活跃绑定先核对当前 head；低频的仓库核对不影响通知的时钟。
   const heads: GithubBoundPull[] = []
   for (const binding of [...(options.boundPulls ?? [])].sort((a, b) => a.number - b.number)) {
     const { pull } = await scan(`pull:${binding.number}`, binding.number)
@@ -183,22 +192,38 @@ async function pollOnce(options: GithubPollOptions): Promise<GithubPollResult> {
     )
     if (fault) return { streams, bot, fault }
   }
-  for (const stream of [
-    'issues',
-    'issue-events',
-    'issue-comments',
-    'review-comments',
-    'pull-catalog',
-  ] as const) {
-    await scan(stream)
+  for (const subject of options.boundSubjects ?? []) {
+    await scan(
+      `subject-comments:${subject.number}`,
+      subject.number,
+      undefined,
+      undefined,
+      subject.since,
+    )
     if (fault) return { streams, bot, fault }
+    if (subject.pull)
+      await scan(
+        `subject-review-comments:${subject.number}`,
+        subject.number,
+        undefined,
+        undefined,
+        subject.since,
+      )
+    if (fault) return { streams, bot, fault }
+  }
+  if (options.reconcile !== false) {
+    for (const stream of ['issues', 'issue-comments', 'review-comments', 'issue-events'] as const) {
+      await scan(stream)
+      if (fault) return { streams, bot, fault }
+    }
   }
   for (const number of await store.listReviewCandidates(
     scope,
-    scanTo - 30 * githubDay,
+    Math.max(options.enabledAt, scanTo - 30 * githubDay),
     options.reviewBudget ?? 4,
     {
       tag: githubPageTag(api, bot),
+      ...(options.reconcile === false ? { boundOnly: true } : {}),
       ...(options.boundPulls
         ? { boundNumbers: options.boundPulls.map((pull) => pull.number) }
         : {}),

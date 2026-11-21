@@ -167,6 +167,17 @@ export const zhExternal = {
   'ext.diag.unknown': '无法识别此检查结果，请重新检查',
   'ext.code.github_collection_available': '可以从 GitHub 采集事件',
   'ext.code.github_collection_blocked': '无法采集事件，请检查仓库和 GitHub 凭据',
+  'ext.code.github_notifications_unverified': '尚未检查 GitHub 通知',
+  'ext.code.github_notifications_ready': '可以接收机器人账号的 GitHub 通知',
+  'ext.code.github_notifications_scope_required':
+    '缺少 notifications 权限。请在 GitHub 身份里选择「加权限」。',
+  'ext.code.github_notifications_access_denied':
+    'GitHub 拒绝读取通知。请重新授权机器人账号，并检查组织授权。',
+  'ext.code.github_notifications_unavailable':
+    'GitHub 通知接口不可用。设备将重试，并继续核对仓库事件。',
+  'ext.code.github_notifications_rate_limited': 'GitHub 通知达到限额，设备将在限额恢复后重试。',
+  'ext.identity.addPermissions': '加权限',
+  'ext.identity.notificationsAccount': '请使用 @{login} 登录 GitHub 并授予 notifications 权限。',
   'ext.code.source_paused': '仓库采集已暂停',
   'ext.code.auto_notify_disabled': '未开启自动提醒经理',
   'ext.code.manager_tools_ready': '经理的 GitHub 工具可用',

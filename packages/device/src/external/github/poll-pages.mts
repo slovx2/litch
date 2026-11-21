@@ -28,12 +28,13 @@ export function githubNextPage(
   headers: Headers,
   path: string,
   repo: GithubRepository,
+  relation: 'next' | 'last' | 'prev' = 'next',
 ): string | null {
   let next: string | null = null
   for (const match of (headers.get('link') ?? '').matchAll(
     /<([^>]+)>\s*;\s*rel="?([^";,\s]+)"?/g,
   )) {
-    if (match[2] !== 'next') continue
+    if (match[2] !== relation) continue
     if (next || !match[1]) throw new GithubFault('invalid-response')
     try {
       const current = new URL(path, apiHost)
@@ -56,7 +57,9 @@ export function githubNextPage(
       if (
         page.length !== 1 ||
         !/^[1-9]\d*$/.test(page[0] ?? '') ||
-        Number(page[0]) !== currentPage + 1
+        (relation === 'last'
+          ? Number(page[0]) <= currentPage
+          : Number(page[0]) !== currentPage + (relation === 'next' ? 1 : -1))
       )
         throw new Error()
       current.searchParams.delete('page')
@@ -69,7 +72,7 @@ export function githubNextPage(
       throw new GithubFault('invalid-response')
     }
   }
-  if (!next && /\brel\s*=\s*"?next\b/.test(headers.get('link') ?? ''))
+  if (!next && new RegExp(`\\brel\\s*=\\s*"?${relation}\\b`).test(headers.get('link') ?? ''))
     throw new GithubFault('invalid-response')
   return next
 }

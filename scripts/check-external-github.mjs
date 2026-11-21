@@ -291,6 +291,23 @@ else if (args[0] === 'api' || args[0] === 'pr') {
     (await admin.call(E.managerAssignmentGet, { managerId: manager.id })).identityId,
     bot,
   )
+  const withoutScope = await admin.call(E.sourceGet, { sourceId: source.sourceId })
+  assert.equal(withoutScope.readiness.collect.state, 'blocked')
+  assert.ok(
+    withoutScope.readiness.collect.diagnostics.some(
+      ({ code }) => code === 'github_notifications_scope_required',
+    ),
+  )
+  assert.equal(mock.notificationRequests.length, 0)
+  mock.enableNotificationScope()
+  const addPermissions = await admin.call(E.identityAdd, {
+    operationId: 'add-notification-scope',
+    scopes: ['repo', 'read:org', 'gist', 'notifications'],
+  })
+  await until(async () => {
+    const login = await admin.call(E.identityLoginGet, { loginId: addPermissions.loginId })
+    return login.state === 'succeeded' && login.result.scopes.includes('notifications')
+  }, '原机器人新增通知权限')
   await until(
     async () =>
       (await admin.call(E.sourceGet, { sourceId: source.sourceId })).runtime.lastSuccessAt != null,
@@ -574,7 +591,7 @@ else if (args[0] === 'api' || args[0] === 'pr') {
   mock.setSubjectState(14, 'closed')
   mock.setSubjectState(15, 'closed', true)
   mock.setSubjectState(8, 'closed') // X-1 已绑定，继续遵循原有跟进策略。
-  clock.now += 131
+  clock.now += 311
   await until(
     async () => {
       const page = await final.call(E.inboxList, { status: 'processed' })
@@ -622,5 +639,90 @@ else if (args[0] === 'api' || args[0] === 'pr') {
       ),
     '重新打开后的新提及重新分拣',
     6500,
+  )
+  // 保留仓库历史积压，但评审请求、指派和提及都在一次通知轮询返回。
+  mock.setHistory(2300)
+  mock.setDiscovery(false)
+  const configured = (await final.call(E.sourceGet, { sourceId: source.sourceId })).source
+  await final.call(E.sourceUpsert, {
+    source,
+    expectedRevision: configured.revision,
+    operationId: 'restore-feedback',
+  })
+  clock.now += 10
+  mock.request(16)
+  mock.requestPull(17, true)
+  mock.assign(18)
+  const beforeNotifications = mock.notificationRequests.length
+  clock.now += 121
+  await until(
+    async () => {
+      const { entries } = await final.call(E.inboxList, { status: 'pending_triage' })
+      return ['16', '17', '18'].every((number) =>
+        entries.some(({ subject }) => subject.number === number),
+      )
+    },
+    '提及、评审请求、指派一轮入箱',
+    6500,
+  )
+  assert.equal(mock.notificationRequests.length, beforeNotifications + 1)
+  const collected = (await final.call(E.inboxList, { status: 'pending_triage' })).entries
+  assert.deepEqual(
+    collected
+      .filter(({ subject }) => ['16', '17', '18'].includes(subject.number))
+      .map(({ kind, sourceEventId }) => [kind, sourceEventId])
+      .sort(),
+    [
+      ['assigned', '5018'],
+      ['issue', '1016'],
+      ['review_requested', '5017'],
+    ],
+  )
+  await until(
+    () => mock.states.created === writes.created + 3,
+    '三个新请求各收到一条状态评论',
+    6500,
+  )
+  mock.setDiscovery(true)
+  clock.now += 311
+  await until(
+    async () =>
+      (await final.call(E.sourceGet, { sourceId: source.sourceId })).runtime.lastSuccessAt ===
+      clock.now,
+    '仓库兜底再次核对',
+    6500,
+  )
+  const deduped = (await final.call(E.inboxList, {})).entries
+  for (const number of ['16', '17', '18'])
+    assert.equal(deduped.filter(({ subject }) => subject.number === number).length, 1)
+  assert.equal(mock.states.created, writes.created + 3, '仓库兜底和机器人通知不产生额外状态评论')
+  assert.ok(
+    mock.notificationRequests.every(
+      ({ method, since, all }) => method === 'GET' && since && all === 'true',
+    ),
+  )
+  assert.ok(
+    mock.requests.every(({ method, path }) => !path.includes('/notifications') || method === 'GET'),
+  )
+  mock.limitNotifications()
+  clock.now += 121
+  await until(
+    async () => {
+      const { readiness } = await final.call(E.sourceGet, { sourceId: source.sourceId })
+      return (
+        readiness.collect.state === 'blocked' &&
+        readiness.collect.diagnostics.some(
+          ({ code }) => code === 'github_notifications_rate_limited',
+        )
+      )
+    },
+    'GitHub 通知限流在来源就绪状态中可见',
+    6500,
+  )
+  assert.equal(
+    (await final.call(E.sourceGet, { sourceId: source.sourceId })).coverage.find(({ stream }) =>
+      stream.startsWith('notifications:'),
+    ).backoffUntil,
+    clock.now + 180,
   )
 })

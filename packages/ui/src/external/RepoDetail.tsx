@@ -26,6 +26,12 @@ const TRIGGERS = ['mention', 'assignment', 'reviewRequest', 'label'] as const
 const KNOWN_CODES = new Set([
   'github_collection_available',
   'github_collection_blocked',
+  'github_notifications_unverified',
+  'github_notifications_ready',
+  'github_notifications_scope_required',
+  'github_notifications_access_denied',
+  'github_notifications_unavailable',
+  'github_notifications_rate_limited',
   'source_paused',
   'auto_notify_disabled',
   'manager_tools_ready',
@@ -378,8 +384,11 @@ function Readiness({
   const t = useT()
   const { channel } = useServices()
   const check = useRun()
-  const [result, setResult] =
-    useState<Pick<ExternalSourceStatus, 'readiness' | 'agentGhIdentity'>>()
+  const [manual, setManual] = useState<{
+    snapshot: ExternalSourceStatus
+    result: Pick<ExternalSourceStatus, 'readiness' | 'agentGhIdentity'>
+  }>()
+  const result = manual?.snapshot === status ? manual.result : undefined
   const readiness = result?.readiness
     ? { ...result.readiness, notify: status.readiness?.notify ?? result.readiness.notify }
     : status.readiness
@@ -388,7 +397,7 @@ function Readiness({
     const updated = await check.run(() =>
       channel.command('external.source.check', { deviceId, sourceId: status.source.sourceId }),
     )
-    setResult(updated)
+    if (updated) setManual({ snapshot: status, result: updated })
   }
   return (
     <div className="ext-sub" data-ext-readiness>

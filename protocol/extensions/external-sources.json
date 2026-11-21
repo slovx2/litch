@@ -112,7 +112,15 @@
             "minItems": 3,
             "maxItems": 6,
             "items": {
-              "enum": ["repo", "read:org", "gist", "workflow", "read:packages", "write:packages"]
+              "enum": [
+                "repo",
+                "read:org",
+                "gist",
+                "notifications",
+                "workflow",
+                "read:packages",
+                "write:packages"
+              ]
             },
             "allOf": [
               { "contains": { "const": "repo" } },

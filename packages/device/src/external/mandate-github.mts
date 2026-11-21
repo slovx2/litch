@@ -11,8 +11,12 @@ import {
   mentionsGithubLogin,
   verifyGithubBot,
 } from './github/identity.mjs'
-import { githubActionStub, githubActionType } from './github/poll-events.mjs'
-import { githubNextPage } from './github/poll-pages.mjs'
+import type { GithubActionStub } from './github/poll-state.mjs'
+import {
+  type GithubTimelinePage,
+  githubTimelinePath,
+  recentGithubTimelinePage,
+} from './github/poll-timeline.mjs'
 import {
   type GithubApi,
   githubRepoPath,
@@ -209,7 +213,7 @@ export function createGithubExternalVerification(
     event: ExternalEvent,
     current: NonNullable<Awaited<ReturnType<typeof subjectInRepo>>>,
   ) {
-    const { base, raw, subject, labels } = current
+    const { raw, subject, labels } = current
     const target = event.targetEvidence
     const currentLabel =
       event.kind === 'labeled' && Array.isArray(raw.labels)
@@ -253,17 +257,14 @@ export function createGithubExternalVerification(
       !action.entries.some((one) => id(object(one).id) === action.id)
     )
       return null
-    let path: string | undefined = `${base}/issues/${subject.number}/timeline?per_page=100&page=1`
-    let matched: ReturnType<typeof githubActionStub> | undefined
+    let path: GithubTimelinePage | null = { path: githubTimelinePath(repo, Number(subject.number)) }
+    let matched: GithubActionStub | undefined
     // 达到边界仍有下一页时，不从不完整的历史推断原触发仍然有效。
     for (let page = 0; path && page < 8; page++) {
-      const response = await api.get(path)
-      if (!Array.isArray(response.body) || response.body.length > 100) return null
-      for (const value of response.body) {
-        const row = object(value)
-        const kind = githubActionType(row)
-        if (!kind || (kind !== event.kind && kind !== action.withdrawn)) continue
-        const stub = githubActionStub(row, kind)
+      const timeline = await recentGithubTimelinePage(api, repo, path, event.occurredAt * 1000)
+      for (const stub of timeline.actions) {
+        const kind = stub.action
+        if (kind !== event.kind && kind !== action.withdrawn) continue
         const namedLabel =
           action.field === 'labelId' &&
           !stub.labelId &&
@@ -282,7 +283,7 @@ export function createGithubExternalVerification(
         )
           matched = stub
       }
-      path = githubNextPage(response.headers, path, repo) ?? undefined
+      path = timeline.next
     }
     if (path || !matched?.actor) return null
     const label =

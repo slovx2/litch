@@ -462,6 +462,33 @@ export class ExternalGithubSecrets {
     return new Set(this.store.externalCredentials().map((credential) => credential.botUserId))
   }
 
+  notificationCredential(repoId: string, identityId: string): GithubCredentialSnapshot | undefined {
+    for (const credential of this.store.externalCredentials()) {
+      if (
+        credential.botUserId !== identityId ||
+        credential.credentialKind !== 'oauth' ||
+        !credential.scopes?.includes('notifications')
+      )
+        continue
+      try {
+        return this.active(credential.credentialRef, repoId)
+      } catch {
+        // 只使用当前仍可读这个仓库的 OAuth 授权。
+      }
+    }
+  }
+
+  hasNotificationScope(identityId: string): boolean {
+    return this.store
+      .externalCredentials()
+      .some(
+        (credential) =>
+          credential.botUserId === identityId &&
+          credential.credentialKind === 'oauth' &&
+          credential.scopes?.includes('notifications'),
+      )
+  }
+
   activeForRepository(repoId: string, identityId?: string): GithubCredentialSnapshot {
     const entries = this.store
       .externalCredentials()

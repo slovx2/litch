@@ -183,11 +183,13 @@ SSH 私钥和“操作这台电脑”的自定义位置属于桌面本机，始�
 
 1. **GitHub 身份**：设备可用 GitHub CLI 设备码授权机器人账号，也可导入目标设备的 gh 登录或接收细粒度令牌。如果授权的是所有者账号，须明确确认。一个身份可为不同资源所有者绑定多份细粒度令牌；明文不会显示。
 
-   目标设备首次用设备码授权时会下载并校验 GitHub CLI，可通过代理下载。下载失败时，可改用“粘贴令牌（高级）”或导入设备上已登录的系统 gh。设备码授权固定申请 `repo`、`read:org` 和 `gist`；需要限制仓库或权限时，可用作用范围更窄的细粒度令牌。OAuth 的凭据不按一个资源所有者限制。
+   目标设备首次用设备码授权时会下载并校验 GitHub CLI，可通过代理下载。设备码授权固定申请 `repo`、`read:org` 和 `gist`；桌面向导默认勾选 `notifications`。已有机器人缺少此权限时，在「GitHub 身份」找到它，点「加权限」，用同一个机器人账号重新授权。也可导入设备上已具备该权限的 gh 登录。细粒度令牌可继续用于仓库兜底，不提供机器人通知。
 2. **仓库**：从已授权身份可读的仓库中添加，每台设备同一仓库只采集一次。填写目标设备上的工作目录、允许的 base 分支；采集身份可由设备选择或手动指定。设置触发项、标签路由与回写权限。近 24 小时预览不会写 GitHub、移动水位或启动模型；诊断可能指出未查全的范围。
 3. **经理分配**：一位经理使用一个 GitHub 身份并接收指定仓库的事件。同一仓库里，一个身份只能分给一位经理。@、指派和 review 请求按身份寻址；标签按仓库路由。默认给经理与工作线注入这一身份的凭据；关闭后改用系统 gh 凭据，寻址身份保持不变。
 
-即时反馈默认开启，语言默认跟随 Litch 界面。正常采集时，最大延迟等于轮询间隔（默认 120 秒）。经理身份没有评论写权限时，就绪检查会说明即时反馈不可用。评论和草稿 PR 开关允许经理通过 Litch 工具代写；Agent 也可按设备自身的 gh、git、SSH 配置工作。Agent 的 gh 身份如果是你的账号，它发的评论会被视作你的评论。
+设备首先查看每个经理所绑定的机器人在已分配仓库中的通知，接收 @ 提及、指派和评审请求。已读通知也会采集；Litch 不会标为已读或改订阅。通常在一个轮询间隔（默认 120 秒）内收件；GitHub 要求延长间隔或限流时，设备按返回时间重试。仓库事件另行核对，负责已绑定主题的跟进、CI、关闭与合并，也补查漏掉的请求。可在仓库的「就绪检查」查看通知权限与接口状态。
+
+即时反馈默认开启，语言默认跟随 Litch 界面。经理身份没有评论写权限时，就绪检查会说明即时反馈不可用。评论和草稿 PR 开关允许经理通过 Litch 工具代写；Agent 也可按设备自身的 gh、git、SSH 配置工作。Agent 的 gh 身份如果是你的账号，它发的评论会被视作你的评论。
 
 先开启采集，再单独打开自动提醒经理。暂停采集不删除历史；就绪检查分别显示采集、提醒、派工作线和回写。检查限额、覆盖缺口和积压，再决定是否恢复。执行隔离结果供参考。设备服务自启是独立开关；Linux 是否能在登出后工作取决于 systemd linger，macOS、Windows 的用户服务要登录后才运行。受控接管或卸载可能重启或停止当前服务，以重连后读到的状态为准。
 
@@ -197,7 +199,7 @@ SSH 私钥和“操作这台电脑”的自定义位置属于桌面本机，始�
 
 - `scripts/litch external-owner resolve <主页或数字ID>`，或使用 `--local-gh`；`scripts/litch external-owner get` 查看同步状态，加 `--device <设备>` 查看实际值；`scripts/litch external-owner set <主页或数字ID>` 解析后由桌面确认。
 - `scripts/litch device-identity list` 获取身份、凭据引用与代次；`scripts/litch device-identity repositories` 查看可访问仓库，按需使用 `--identity`、`--cursor`。
-- `scripts/litch device-identity add` 用 GitHub CLI 设备码授权，在终端显示一次性码并等待；用 `--scopes workflow,write:packages` 追加所需权限。用 `scripts/litch device-identity login status <登录ID>` 查询，`scripts/litch device-identity login cancel <登录ID>` 取消，或用 `scripts/litch device-identity login confirm <登录ID>` 确认使用自己的账号。
+- `scripts/litch device-identity add --scopes notifications` 用 GitHub CLI 设备码授权并允许采集通知。已有机器人用同一个账号重做；要保留其他可选权限，在 `--scopes` 里一起列出。用 `scripts/litch device-identity login status <登录ID>` 查询，`scripts/litch device-identity login cancel <登录ID>` 取消，或用 `scripts/litch device-identity login confirm <登录ID>` 确认使用自己的账号。
 - `scripts/litch device-identity import` 可导入设备上已登录的 gh 账号；`scripts/litch device-identity revoke <身份ID> <凭据引用>` 撤销指定凭据。
 - 在目标设备运行 `scripts/litch device-identity paste --stdin` 或 `scripts/litch device-identity rotate <身份ID> <凭据引用> --stdin`。别名 `scripts/litch device-source credential configure --stdin` 与 `scripts/litch device-source credential rotate <身份ID> <凭据引用> --stdin` 也接受相同的输入。安装后的命令可写为 `litch config`，替换 `scripts/litch`。令牌须从管道或重定向读入。不要把令牌放进参数、对话、环境输出或 shell 历史。
 - `scripts/litch device-source list --json` 查看来源及版本；`scripts/litch device-source preview --draft '<来源JSON>'` 预览；`scripts/litch device-source upsert --draft '<来源JSON>' --revision <版本>` 经预览和桌面确认后保存。新来源版本为 0；JSON 仅包含公开配置和凭据引用。每个来源传一个仓库，通过仓库字段设置 `pollIdentity`、`labelRoutes`、`immediateFeedback` 和 `immediateFeedbackLanguage`。

@@ -3,11 +3,14 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type TestContext, test } from 'node:test'
+import { DeviceGithubPoll } from '../src/external/device-poll.mjs'
 import {
   type GithubPollEvent,
   pollGithubRepository,
   SqliteGithubPollStore,
 } from '../src/external/github/poll.mjs'
+import { githubPageTag } from '../src/external/github/poll-pages.mjs'
+import { ExternalGithubSecrets } from '../src/external/secrets.mjs'
 import { ExternalStore } from '../src/external-store.mjs'
 import { ManagerStore, openManagerDatabase } from '../src/manager-store.mjs'
 import {
@@ -38,10 +41,85 @@ function disk(t: TestContext, now: () => number) {
     manager?.close()
     manager = new ManagerStore(openManagerDatabase(path))
     const external = new ExternalStore(manager)
-    return { external, store: new SqliteGithubPollStore(external, now) }
+    return { external, path, store: new SqliteGithubPollStore(external, now) }
   }
   return reopen
 }
+
+test('启用点迁移使用已有完整水位，仓库续页和来源版本在重启后保持不变', async (t) => {
+  const fx = await githubFixture(t, () => undefined)
+  const reopen = disk(t, fx.now)
+  let { external, path, store } = reopen()
+  const draft = {
+    sourceId,
+    provider: 'github' as const,
+    enabled: true,
+    credentialRef: 'fixture-credential',
+    botUserId: '99',
+    triggers: { mention: true, assignment: true, reviewRequest: true, label: false, labelIds: [] },
+    minRole: 'triage' as const,
+    writePolicy: { comment: false, draftPr: false, status: false, managedPush: false },
+    interval: 120,
+    repos: [
+      {
+        ...repo,
+        url: 'https://github.com/org/sample',
+        localRoot: '/demo',
+        allowedBase: ['main'],
+        headNamespace: 'litch/',
+      },
+    ],
+    routes: [],
+  }
+  const old = external.config.saveSource(draft, 0, 'before-upgrade', 'fixture', start / 1000)
+  assert.equal(old.outcome, 'applied')
+  const key = { ...scope, stream: 'github:notifications' }
+  external.writePollCheckpoints(key, [{ bucket: 'floor', key: 'state', value: null }])
+  const stream = { ...scope, stream: 'issue-events' } as const
+  const saved = {
+    tag: githubPageTag(fx.api, { userId: '99', login: 'litch-bot' }),
+    coveredThrough: at,
+    scan: {
+      kind: 'forward' as const,
+      from: at,
+      to: at + 5000,
+      expiresAt: fx.now() + 60_000,
+      rows: 200,
+      next: `${base}/issues/events?per_page=100&page=3`,
+    },
+  }
+  await store.commit(stream, saved, {})
+  ;({ external, path, store } = reopen())
+  const poll = new DeviceGithubPoll({
+    store: external,
+    secrets: new ExternalGithubSecrets(external, path),
+    now: () => fx.now() / 1000,
+    changed() {},
+  })
+  poll.close()
+  const floor = external.pollCheckpoint<{ at: number }>(
+    sourceId,
+    repo.repoId,
+    key.stream,
+    'floor',
+    'state',
+  )
+  assert.equal(floor?.at, at / 1000)
+  assert.deepEqual(await store.getCursor(stream), saved)
+  assert.deepEqual(external.config.source(sourceId), old.record)
+  await pollGithubRepository({ ...defaults, api: fx.api, store, newStreamAt: at })
+  const called = fx.requests.filter((row) => row.path === `${base}/issues/events`)
+  assert.deepEqual(
+    called.map(({ query }) => new URLSearchParams(query).get('page')),
+    ['3'],
+  )
+  assert.equal(
+    new URLSearchParams(fx.requests.find(({ path }) => path === `${base}/issues`)?.query).get(
+      'since',
+    ),
+    '2026-02-10T00:00:19Z',
+  )
+})
 
 test('SQLite 重启从已入账的 PR 明细续跑；完整水位、观察与页证明按秒存储', async (t) => {
   const fx = await githubFixture(t, (url) => {
@@ -227,7 +305,7 @@ test('PR 目录跨流合并并按最近尝试轮扫；换凭据后能重查旧�
   })
   assert.deepEqual(
     await store.listReviewCandidates(scope, start, 5, { boundNumbers: [2] }),
-    [1, 2, 3, 4],
+    [2, 3, 4],
   )
   await store.commit({ ...scope, stream: 'reviews:1' }, snapshot, {})
   now += 2000
@@ -240,8 +318,14 @@ test('PR 目录跨流合并并按最近尝试轮扫；换凭据后能重查旧�
     {},
   )
   ;({ external, store } = reopen())
-  assert.deepEqual(await store.listReviewCandidates(scope, start, 5, { tag: 'first' }), [4, 1])
-  assert.deepEqual(await store.listReviewCandidates(scope, start, 5, { tag: 'rotated' }), [4, 1, 3])
+  assert.deepEqual(
+    await store.listReviewCandidates(scope, start, 5, { tag: 'first', boundNumbers: [1] }),
+    [4, 1],
+  )
+  assert.deepEqual(
+    await store.listReviewCandidates(scope, start, 5, { tag: 'rotated', boundNumbers: [1] }),
+    [4, 1, 3],
+  )
   assert.equal(
     external.pollCheckpoint<{ attemptedAt: number }>(
       sourceId,

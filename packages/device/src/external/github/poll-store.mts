@@ -166,14 +166,15 @@ export class SqliteGithubPollStore implements GithubPollStore {
     scope: GithubScope,
     recentSince: number,
     limit: number,
-    { boundNumbers = [], resume, tag }: GithubReviewSelection = {},
+    { boundNumbers = [], boundOnly, resume, tag }: GithubReviewSelection = {},
   ): Promise<readonly number[]> {
     const key = { ...scope, stream: repoStream }
     const numbers = new Set(boundNumbers)
-    for (const candidate of this.checkpoints<GithubPullCandidate>(key, 'pull-candidate')) {
-      const { number, state, discoveredAt, updatedAt, closedAt } = candidate
-      if (state === 'open' || Math.max(discoveredAt, updatedAt ?? 0, closedAt ?? 0) >= recentSince)
-        numbers.add(number)
+    for (const candidate of boundOnly
+      ? []
+      : this.checkpoints<GithubPullCandidate>(key, 'pull-candidate')) {
+      const { number, discoveredAt, updatedAt, closedAt } = candidate
+      if (Math.max(discoveredAt, updatedAt ?? 0, closedAt ?? 0) >= recentSince) numbers.add(number)
     }
     const now = this.now()
     const schedule = new Map(
@@ -280,7 +281,12 @@ export class SqliteGithubPollStore implements GithubPollStore {
         checkpoints: local,
       })
       this.store.writePollCheckpoints(repoKey, shared)
-      this.evidence.stage(key, changes.events ?? [], seconds(at))
+      this.evidence.stage(
+        key,
+        changes.events ?? [],
+        seconds(at),
+        key.stream.startsWith('notifications:'),
+      )
       for (const subject of changes.subjects ?? [])
         this.store.observeSubject(
           key.sourceId,

@@ -23,6 +23,13 @@ export async function scenario(t, clock) {
   const pulls = new Map()
   const comments = new Map()
   const sent = new Map()
+  const notices = new Map()
+  const timelines = new Map()
+  const notificationRequests = []
+  let notificationScope = false
+  let notificationLimit = false
+  let history = 0
+  let discovery = true
   const states = {
     created: 0,
     updated: 0,
@@ -32,6 +39,21 @@ export async function scenario(t, clock) {
     run: null,
   }
   const stamp = () => new Date(clock.now * 1000).toISOString()
+  const notify = (number, reason, detail = null) => {
+    const pull = pulls.has(String(number))
+    notices.set(number, {
+      id: String(number),
+      reason,
+      unread: false,
+      updated_at: stamp(),
+      repository: { id: repo.id },
+      subject: {
+        type: pull ? 'PullRequest' : 'Issue',
+        url: `${api}/${pull ? 'pulls' : 'issues'}/${number}`,
+        latest_comment_url: detail,
+      },
+    })
+  }
   const touchSubject = (num) => {
     const parent = issues.get(num) ?? pulls.get(num)
     if (parent) parent.updated_at = stamp()
@@ -62,17 +84,39 @@ export async function scenario(t, clock) {
     res.setHeader('date', new Date(clock.now * 1000).toUTCString())
     if (p === `/user/${owner}` || p === '/users/owner') respond(res, ownerAccount)
     else if (p === '/user' && req.headers.authorization === `Bearer ${oauth}`) {
-      res.setHeader('X-OAuth-Scopes', 'repo, read:org, gist')
+      res.setHeader(
+        'X-OAuth-Scopes',
+        `repo, read:org, gist${notificationScope ? ', notifications' : ''}`,
+      )
       respond(res, account)
     } else if (p === '/user/repos') respond(res, [repo])
     else if (p === '/users/outsider') respond(res, outsider)
     else if (p === `${repoPath}/collaborators/outsider/permission`)
       respond(res, { permission: 'read', role_name: 'read', user: outsider })
-    else if (p === repoPath) respond(res, repo)
+    else if (p === `${repoPath}/notifications`) {
+      notificationRequests.push({
+        method: req.method,
+        since: url.searchParams.get('since'),
+        all: url.searchParams.get('all'),
+      })
+      if (!notificationScope || req.method !== 'GET') respond(res, {}, 403)
+      else if (notificationLimit) {
+        res.setHeader('X-RateLimit-Remaining', '0')
+        res.setHeader('X-RateLimit-Reset', String(clock.now + 180))
+        respond(res, {}, 403)
+      } else {
+        const rows = [...notices.values()].filter(
+          ({ updated_at }) =>
+            Date.parse(updated_at) > Date.parse(url.searchParams.get('since') ?? ''),
+        )
+        res.setHeader('X-Poll-Interval', '60')
+        respond(res, rows)
+      }
+    } else if (p === repoPath) respond(res, repo)
     else if (p === `${repoPath}/issues`)
       respond(res, [
-        ...issues.values(),
-        ...[...pulls.values()].map((pull) => ({
+        ...(discovery ? issues.values() : []),
+        ...[...(discovery ? pulls.values() : [])].map((pull) => ({
           ...pull,
           html_url: `${web}/pull/${pull.number}`,
           pull_request: { url: `${api}/pulls/${pull.number}` },
@@ -86,8 +130,29 @@ export async function scenario(t, clock) {
           respond(res, openPull(11), 201)
         }
       } else respond(res, [...pulls.values()])
-    } else if (p === `${repoPath}/issues/events` || p === `${repoPath}/pulls/comments`)
-      respond(res, [])
+    } else if (p === `${repoPath}/issues/events`) {
+      const page = Number(url.searchParams.get('page') ?? 1)
+      const next = new URL(url)
+      next.searchParams.set('page', String(page + 1))
+      if (page * 100 < history)
+        res.setHeader('Link', `<https://api.github.com${next.pathname}${next.search}>; rel="next"`)
+      const actions = [...(discovery ? timelines : [])].flatMap(([number, events]) =>
+        events.map((event) => ({
+          ...event,
+          issue: issues.get(String(number)) ?? { ...pulls.get(String(number)), pull_request: {} },
+        })),
+      )
+      const old = new Date((clock.now - 86_400) * 1000).toISOString()
+      const rows = Array.from(
+        { length: Math.min(100, Math.max(0, history - (page - 1) * 100)) },
+        (_, i) => ({
+          id: String(20000 + (page - 1) * 100 + i),
+          event: 'mentioned',
+          created_at: old,
+        }),
+      )
+      respond(res, page === 1 ? [...actions, ...rows].slice(0, 100) : rows)
+    } else if (p === `${repoPath}/pulls/comments`) respond(res, [])
     else if (p === `${repoPath}/actions/runs`)
       respond(res, {
         total_count: states.run ? 1 : 0,
@@ -131,6 +196,7 @@ export async function scenario(t, clock) {
             updated_at: stamp(),
           }
           sent.set(id, row)
+          notify(num, 'mention', `${api}/issues/comments/${id}`)
           if (states.disconnectWrite) {
             states.disconnectWrite = false
             res.destroy()
@@ -142,7 +208,12 @@ export async function scenario(t, clock) {
               issue_url.endsWith(`/${num}`),
             ),
           )
-      } else respond(res, issue ?? {}, issue ? 200 : 404)
+      } else if (tail === 'timeline') respond(res, timelines.get(num) ?? [])
+      else {
+        const pull = pulls.get(num)
+        const row = issue ?? (pull ? { ...pull, pull_request: { url: pull.url } } : null)
+        respond(res, row ?? {}, row ? 200 : 404)
+      }
     } else if (p.startsWith(`${repoPath}/pulls/`)) {
       const [num, tail] = p.slice(`${repoPath}/pulls/`.length).split('/')
       const pull = pulls.get(num)
@@ -155,11 +226,40 @@ export async function scenario(t, clock) {
     ...mock,
     states,
     sent,
-    requestPull(number) {
+    notificationRequests,
+    enableNotificationScope() {
+      notificationScope = true
+    },
+    limitNotifications() {
+      notificationLimit = true
+    },
+    setHistory(rows) {
+      history = rows
+    },
+    setDiscovery(visible) {
+      discovery = visible
+    },
+    requestPull(number, isReviewRequest = false) {
       const pull = openPull(number)
       pull.user = ownerAccount
-      pull.body = '@litch-device please review this fixture'
+      pull.body = isReviewRequest
+        ? 'Fixture review requested'
+        : '@litch-device please review this fixture'
       pull.head.ref = 'feature/fixture'
+      if (isReviewRequest) {
+        pull.requested_reviewers = [account]
+        timelines.set(String(number), [
+          {
+            id: String(number + 5000),
+            event: 'review_requested',
+            created_at: stamp(),
+            actor: ownerAccount,
+            review_requester: ownerAccount,
+            requested_reviewer: account,
+          },
+        ])
+      }
+      notify(String(number), isReviewRequest ? 'review_requested' : 'mention')
       return pull
     },
     setSubjectState(number, state, merged = false) {
@@ -186,7 +286,24 @@ export async function scenario(t, clock) {
         assignees: [],
       }
       issues.set(String(number), issue)
+      if (body.includes('@litch-device')) notify(String(number), 'mention')
       return issue
+    },
+    assign(number) {
+      const row = this.request(number, 'owner', 'Fixture assigned')
+      row.assignees = [account]
+      timelines.set(String(number), [
+        {
+          id: String(number + 5000),
+          event: 'assigned',
+          created_at: stamp(),
+          actor: account,
+          assigner: ownerAccount,
+          assignee: account,
+        },
+      ])
+      notify(String(number), 'assign')
+      return row
     },
     comment(number, id, body = '@litch-device please handle this comment') {
       const row = {
@@ -200,6 +317,7 @@ export async function scenario(t, clock) {
       }
       comments.set(id, row)
       touchSubject(String(number))
+      notify(String(number), 'mention', `${api}/issues/comments/${id}`)
       return row
     },
     completeRun(number) {

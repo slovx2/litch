@@ -42,6 +42,7 @@ export function Identities({
   const t = useT()
   const { channel } = useServices()
   const [adding, setAdding] = useState(false)
+  const [reauthorize, setReauthorize] = useState<{ login: string; scopes: readonly string[] }>()
   const [revoking, setRevoking] = useState<{
     identity: ExternalIdentity
     credential: ExternalCredential
@@ -51,6 +52,7 @@ export function Identities({
   useEffect(() => {
     if (!writable || !online) {
       setAdding(false)
+      setReauthorize(undefined)
       setRevoking(null)
     }
   }, [writable, online])
@@ -80,7 +82,10 @@ export function Identities({
             data-act="identity-add"
             title={t('ext.identity.add')}
             aria-label={t('ext.identity.add')}
-            onClick={() => setAdding(true)}
+            onClick={() => {
+              setReauthorize(undefined)
+              setAdding(true)
+            }}
           >
             <Icon name="plus" small />
           </button>
@@ -115,6 +120,22 @@ export function Identities({
                     <span className="ext-row-meta mono">#{credential.resourceOwnerId}</span>
                   ) : null}
                   <span className="grow" />
+                  {index === 0 && writable ? (
+                    <button
+                      type="button"
+                      className="ext-text-link"
+                      disabled={!online}
+                      onClick={() => {
+                        setReauthorize({
+                          login: identity.login,
+                          scopes: identity.credentials.flatMap((one) => one.scopes ?? []),
+                        })
+                        setAdding(true)
+                      }}
+                    >
+                      {t('ext.identity.addPermissions')}
+                    </button>
+                  ) : null}
                   {credential ? (
                     <>
                       <Dot
@@ -158,7 +179,11 @@ export function Identities({
         />
       ) : null}
       {writable && online && adding ? (
-        <AddIdentity deviceId={device.id} onClose={() => setAdding(false)} />
+        <AddIdentity
+          deviceId={device.id}
+          onClose={() => setAdding(false)}
+          {...(reauthorize ? { reauthorize } : {})}
+        />
       ) : null}
     </section>
   )

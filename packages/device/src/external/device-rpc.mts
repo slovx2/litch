@@ -303,6 +303,7 @@ export class DeviceExternalRpc {
     const [repo] = source.repos
     const coverage = store
       .cursors(id)
+      .filter(({ stream }) => stream !== 'pull-catalog')
       .map(({ repoId, stream, coveredThrough, checkedAt, backoffUntil, gap }) => ({
         repoId,
         stream,
@@ -374,6 +375,11 @@ export class DeviceExternalRpc {
         ),
       ),
     }
+    const notifications = poll.notificationDiagnostics(source)
+    readiness.collect.diagnostics.push(...notifications)
+    if (notifications.some(({ state }) => state === 'blocked')) readiness.collect.state = 'blocked'
+    else if (collect && notifications.some(({ state }) => state === 'unverified'))
+      readiness.collect.state = 'unverified'
     if (repo)
       for (const { identityId } of assigned) {
         if (identityId)

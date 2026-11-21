@@ -71,6 +71,19 @@ export class ExternalConfigStore {
         ON CONFLICT(scope,operation_id) DO UPDATE SET body=excluded.body`)
         .run(draft.managerId, encode(record))
       this.saveConfigRequest(scope, operationId, record)
+      if (draft.identityId) {
+        for (const repoId of draft.repoIds) {
+          if (before.identityId === draft.identityId && before.repoIds.includes(repoId)) continue
+          const source = this.db
+            .prepare('SELECT source_id FROM external_repos WHERE repo_id=? LIMIT 1')
+            .get(repoId)
+          if (!source) continue
+          this.store.writePollCheckpoints(
+            { sourceId: String(source.source_id), repoId, stream: 'github:notifications' },
+            [{ bucket: 'assigned', key: draft.identityId, value: { at: managerNow() } }],
+          )
+        }
+      }
       this.bump()
       return { outcome: 'applied', record }
     })
@@ -306,6 +319,22 @@ export class ExternalConfigStore {
         this.db
           .prepare('INSERT INTO external_repos VALUES(?,?,?,?,?)')
           .run(sourceId, repo.repoId, provider, enabled ? 1 : 0, encode(repo))
+      if (enabled && !before?.enabled) {
+        for (const { repoId } of repos) {
+          const key = { sourceId, repoId, stream: 'github:notifications' }
+          const hasWatermark = this.db
+            .prepare('SELECT 1 FROM external_cursor WHERE source_id=? AND repo_id=? LIMIT 1')
+            .get(sourceId, repoId)
+          if (!hasWatermark)
+            this.store.writePollCheckpoints(key, [
+              {
+                bucket: 'floor',
+                key: 'state',
+                value: { at: verifiedAt ?? managerNow() },
+              },
+            ])
+        }
+      }
       for (const route of routes)
         this.db
           .prepare('INSERT INTO external_routes VALUES(?,?,?)')
