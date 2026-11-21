@@ -38,6 +38,7 @@ import type {
   ExternalPollCheckpoint,
   ExternalPollPage,
   ExternalRunWatch,
+  ExternalSubjectObservation,
   ExternalTriageCommit,
   ExternalTriageHooks,
   NewExternalInboxEvent,
@@ -752,6 +753,70 @@ export class ExternalStore {
     )
   }
 
+  /** 轮询当前状态与正文版本分开保存；旧分页不能把重新打开的主题覆盖成关闭。 */
+  observeSubject(sourceId: string, observation: ExternalSubjectObservation, at: number): void {
+    this.transaction(() => {
+      const { subject, updatedAt } = observation
+      const subjectKey = externalSubjectKey(subject)
+      this.checkSubject(subject, subjectKey)
+      const key = { sourceId, repoId: subject.repoId, stream: 'github:subject-state' }
+      const previous = this.pollCheckpoint<ExternalSubjectObservation>(
+        sourceId,
+        subject.repoId,
+        key.stream,
+        'subject',
+        subjectKey,
+      )
+      if (previous && previous.updatedAt > updatedAt) return
+      this.writePollCheckpoints(key, [{ bucket: 'subject', key: subjectKey, value: observation }])
+      const pending = this.db
+        .prepare(
+          "SELECT body FROM external_intakes WHERE subject_key=? AND status='pending_triage' AND json_extract(body,'$.sourceId')=?",
+        )
+        .all(subjectKey, sourceId)
+      for (const row of pending) {
+        const intake = decode<ExternalIntake>(row)
+        if (intake) this.finishClosedIntake(intake, observation, at)
+      }
+    })
+  }
+
+  private finishClosedIntake(
+    intake: ExternalIntake,
+    observation: ExternalSubjectObservation,
+    at: number,
+  ): ExternalIntake {
+    if (observation.state === 'open' || intake.issueId || this.ref(intake.subject)) return intake
+    const events = intake.eventKeys.map((key) => this.inboxEvent(key))
+    // 比状态快照更新的请求须等下一次平台观察，不能被旧关闭状态结算。
+    if (events.some((event) => !event || event.occurredAt > observation.updatedAt)) return intake
+    const reason = observation.state === 'merged' ? 'external_merged' : 'external_closed'
+    const record: ExternalIntake = {
+      ...intake,
+      status: 'processed',
+      reason,
+      revision: intake.revision + 1,
+    }
+    this.writeIntake(record)
+    if (intake.deliveryId && this.queue.deliveryGroup(intake.deliveryId)?.state === 'queued')
+      this.queue.finishDelivery(intake.deliveryId, 'blocked', at, { reason })
+    for (const event of events) {
+      if (!event || event.intakeId !== intake.intakeId) throw new Error('候选事件在关闭时不一致')
+      this.updateInboxEvent(event.eventKey, event.revision, { status: 'processed', reason })
+    }
+    this.appendAudit({
+      at,
+      subject: intake.subjectKey,
+      action: 'intake_obsoleted',
+      ...(intake.managerId ? { managerId: intake.managerId } : {}),
+      eventKeys: intake.eventKeys,
+      previousState: intake.status,
+      state: record.status,
+      reason,
+    })
+    return record
+  }
+
   /** C 线在同一事务里更新事件到候选的索引。重复出现的证据不增加版本。 */
   collectIntake(candidate: Omit<ExternalIntake, 'revision' | 'status'>): ExternalIntake {
     return this.transaction(() => {
@@ -786,7 +851,14 @@ export class ExternalStore {
           ...(record.managerId === undefined ? {} : { managerId: record.managerId }),
         })
       }
-      return record
+      const observation = this.pollCheckpoint<ExternalSubjectObservation>(
+        record.sourceId,
+        record.subject.repoId,
+        'github:subject-state',
+        'subject',
+        record.subjectKey,
+      )
+      return observation ? this.finishClosedIntake(record, observation, managerNow()) : record
     })
   }
 

@@ -145,7 +145,12 @@ export function ExternalInbox({ manager, disabled }: { manager: ManagerView; dis
                     roleLabel(t, head.actorRoleAtCheck),
                     stamp(head.occurredAt * 1000, Date.now(), t.lang),
                     head.delivery ? deliveryLabel(t, head.delivery) : '',
-                    tab !== 'processed' && head.reason ? reasonLabel(t, head.reason) : '',
+                    head.reason &&
+                    (tab !== 'processed' ||
+                      head.reason === 'external_closed' ||
+                      head.reason === 'external_merged')
+                      ? reasonLabel(t, head.reason)
+                      : '',
                     head.issueId ?? '',
                   ]
                     .filter(Boolean)

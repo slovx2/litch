@@ -234,6 +234,8 @@ export const zhExternal = {
   'ext.reason.route_missing': '没有路由',
   'ext.reason.route_conflict': '路由冲突',
   'ext.reason.manual': '人工处置',
+  'ext.reason.external_closed': 'GitHub 已关闭',
+  'ext.reason.external_merged': 'GitHub 已合并',
   // 经理收件箱
   'ext.inbox.tab': 'GitHub',
   'ext.inbox.pending': '待分拣',

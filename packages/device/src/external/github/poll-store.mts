@@ -281,6 +281,15 @@ export class SqliteGithubPollStore implements GithubPollStore {
       })
       this.store.writePollCheckpoints(repoKey, shared)
       this.evidence.stage(key, changes.events ?? [], seconds(at))
+      for (const subject of changes.subjects ?? [])
+        this.store.observeSubject(
+          key.sourceId,
+          {
+            ...subject,
+            updatedAt: seconds(subject.updatedAt),
+          },
+          seconds(at),
+        )
     })
   }
 

@@ -68,8 +68,23 @@ test('主题标签从规范链接读出 owner/name#n，读不出只给编号', (
 
 test('原因码：认得的返回码本身，其余为 null', () => {
   assert.equal(m.knownReason('rate_limited'), 'rate_limited')
+  assert.equal(m.knownReason('external_closed'), 'external_closed')
+  assert.equal(m.knownReason('external_merged'), 'external_merged')
+  assert.ok(!m.TRIAGE_REASONS.includes('external_closed'))
+  assert.ok(!m.TRIAGE_REASONS.includes('external_merged'))
   assert.equal(m.knownReason('whatever'), null)
   assert.equal(m.knownReason(undefined), null)
+})
+
+test('GitHub 关闭与合并的两端中英文原因一致，已处理筛选包含这些终态', async () => {
+  const { zhExternal } = await import('../src/i18n/zh-CN-external.ts')
+  const { enExternal } = await import('../src/i18n/en-external.ts')
+  const mobile = await import('../../../apps/mobile/src/ui/messages/external.ts')
+  for (const reason of ['external_closed', 'external_merged']) {
+    assert.equal(zhExternal[`ext.reason.${reason}`], mobile.zhCN[`mgh.reason.${reason}`])
+    assert.equal(enExternal[`ext.reason.${reason}`], mobile.en[`mgh.reason.${reason}`])
+    assert.ok(m.inboxFilter('processed', 'm1').statuses.includes('processed'))
+  }
 })
 
 test('同一候选的多条事件聚合成一行，保留先到的作代表', () => {

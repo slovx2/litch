@@ -17,6 +17,7 @@ import {
   githubPullObservation,
   githubPullTerminal,
   githubRunEvent,
+  githubSubjectObservation,
   githubVerifiedAction,
   requiredNumber,
   requiredTime,
@@ -36,6 +37,7 @@ import type {
   GithubScan,
   GithubStreamKey,
   GithubSubjectKind,
+  GithubSubjectObservation,
 } from './poll-state.mjs'
 import {
   type GithubApi,
@@ -62,6 +64,7 @@ export interface GithubProcessContext {
 
 export function githubPageChanges() {
   return {
+    subjects: [] as GithubSubjectObservation[],
     events: [] as GithubPollEvent[],
     observations: [] as GithubObjectObservation[],
     candidates: [] as GithubPullCandidate[],
@@ -113,6 +116,7 @@ async function addPull(
   expectedId?: string,
 ) {
   const pull = githubPullObservation(raw, ctx.repo, number, expectedId)
+  changes.subjects.push(githubSubjectObservation(raw, ctx.repo, 'pull'))
   changes.pulls.push(pull)
   changes.candidates.push(githubPullCandidate(raw, ctx.scan.to, ctx.key.stream.startsWith('pull:')))
   if (within(ctx, pull.updatedAt))
@@ -210,8 +214,10 @@ export async function processGithubPage(ctx: GithubProcessContext, body: unknown
       if (!recent(at)) continue
       const number = requiredNumber(raw.number)
       const kind = subjectKind(raw)
-      if (kind === 'issue')
+      if (kind === 'issue') {
+        changes.subjects.push(githubSubjectObservation(raw, ctx.repo, kind))
         await content(ctx, githubContentCandidate(raw, kind, number, ctx.bot), kind, changes)
+      }
       if (kind === 'pull') {
         changes.candidates.push(githubPullCandidate(raw, ctx.scan.to))
         // Issues 与 Pulls 的对象 ID 不共用；用固定仓库数字 ID 和共享编号核对。

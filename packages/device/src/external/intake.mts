@@ -610,7 +610,7 @@ export class ExternalIntakeService {
       autoNotifyUntil: expires,
     })
     const queued = this.store.inboxEvent(row.eventKey) ?? next
-    if (auto && at < expires) {
+    if (intake.status === 'pending_triage' && auto && at < expires) {
       const previous = intake.deliveryId ? this.store.queue.deliveryGroup(intake.deliveryId) : null
       // 同一待分拣已经送过或发送不明；新证据仍能从原候选读取。
       if (!previous || previous.state === 'queued' || previous.state === 'blocked') {
