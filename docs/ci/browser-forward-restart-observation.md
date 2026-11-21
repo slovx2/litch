@@ -25,3 +25,16 @@
 
 CI 没有留下第二次 fetch 的阶段及监听事件时间，不能把这一窗口写成本次失败的已证根因。
 同 SHA 未改代码复跑通过足以按账本规则确认偶发；没有发现 C 引入回归的证据。
+
+## I-343 集成本地观察
+
+- 2026-11-21 UTC，`ea15597296da5cef36fc665bd49fcb78974091d8`，macOS arm64、Node 24.19.0；
+  `npm run test:browser --prefix apps/desktop` 中该用例报 `ECONNREFUSED 127.0.0.1:65142`，
+  主测试 195/196 通过，读取器 32 通过、1 项沿用原条件跳过。原 Chrome current-tab 回归用例已通过。
+- 使用原脚本相同的 esbuild 配置打包 `remote-local.test.mts`，在相同产品源码上用
+  `node --test --test-name-pattern=远程借用本机用户标签 <打包输出>` 定向复跑，1/1 通过。
+  未改用例、时限或加入重试；工作树待提交的源码锁和 Chrome 定向脚本不在浏览器产品依赖中。
+- 失败日志 SHA-256：`dd193c06489e489df446a7e1285f6f980814fa0e26384ef89dd5ecd242a4e9ef`；
+  通过日志 SHA-256：`1e77f8dbae4333c7f48647a3dcf92f680d419ca1f2aa9cbd781835a67cd0c2e7`。
+- 此次本地端口与两次 CI 的 49280 不同，不能据此认定端口写死；时序原因仍未确证。
+  仅加入 localObservations，不计入 CI 三次阈值。

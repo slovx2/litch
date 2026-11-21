@@ -653,6 +653,29 @@
   },
   "localObservations": [
     {
+      "id": "2026-11-21-i343-browser-forward-restart",
+      "source": "local",
+      "suite": "desktop browser full",
+      "test": "远程借用本机用户标签按控制者改写 localhost；交还后的标签仍保活原隧道",
+      "sha": "ea15597296da5cef36fc665bd49fcb78974091d8",
+      "observedAt": "2026-11-21T18:01:12.922Z",
+      "environment": { "platform": "darwin-arm64", "node": "24.19.0" },
+      "failure": "浏览器主测试 196 项只有该用例失败：fetch failed，ECONNREFUSED 127.0.0.1:65142。与两次 CI 的 49280 不同，不能据此认定端口写死，时序原因仍未确证。",
+      "failureLog": {
+        "name": "i343-chrome-browser.log",
+        "sha256": "dd193c06489e489df446a7e1285f6f980814fa0e26384ef89dd5ecd242a4e9ef"
+      },
+      "evidence": {
+        "kind": "same-sha-local-rerun",
+        "reference": "docs/ci/browser-forward-restart-observation.md",
+        "result": "相同浏览器产品源码和 esbuild 配置，按完整用例名单独复跑 1/1 通过；未改断言、时限或加入重试。",
+        "log": "i343-browser-recheck.log",
+        "sha256": "1e77f8dbae4333c7f48647a3dcf92f680d419ca1f2aa9cbd781835a67cd0c2e7"
+      },
+      "countedInCiThreshold": false,
+      "note": "仅本地观察，没有新 CI run/job，不增加已登记的两个独立 CI run 次数。工作树待提交的源码锁和 Chrome 定向验收脚本不在本用例的产品依赖中。"
+    },
+    {
       "id": "2026-11-11-ws-integration-claude-listing",
       "source": "local",
       "suite": "device full, default concurrency",

@@ -30,10 +30,16 @@ export async function chromeAttachErrors({
         const tab = await until(async () => {
           const listed = await call('tabs', { action: 'list', targetId })
           assert.equal(listed.success, true, text(listed))
-          return JSON.parse(text(listed)).tabs.find((tab) => tab.url === url)
+          const body = JSON.parse(text(listed))
+          assert.ok(
+            body.tabs.every((tab) => tab.url !== url),
+            '受限页不能混入可接管 tabs',
+          )
+          return body.unavailableTabs?.find((tab) => tab.url === url)
         }, 'Restricted tab listed')
         assert.match(tab.unavailableReason, reason)
-        const result = await call('claim', { claimToken: tab.claimToken })
+        assert.equal('claimToken' in tab, false, '诊断项不签发认领令牌')
+        const result = await call('ensure_claimed', { targetId, url })
         assert.equal(result.success, false)
         const failure = JSON.parse(text(result))
         assert.equal(failure.code, 'targetUnavailable')
