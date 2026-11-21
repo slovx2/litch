@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { promisify } from 'node:util'
 import { DeviceServer } from '../packages/device/dist/packages/device/src/device.mjs'
-import { bundledGithubCliPath } from '../packages/device/dist/packages/device/src/external/github/gh-version.mjs'
+import { managedGithubCliPath } from '../packages/device/dist/packages/device/src/external/github/gh-version.mjs'
 import { listenUnix } from '../packages/device/dist/packages/device/src/sockets.mjs'
 import { FakeControl, managed } from '../packages/device/dist/packages/device/test/fake-control.mjs'
 import { FakeEngine, resultOf } from '../packages/device/dist/packages/device/test/fake-engine.mjs'
@@ -37,7 +37,6 @@ test('设备 GitHub：授权、只读连接、待分拣、真实提醒、对账�
   const dir = mkdtempSync(join(tmpdir(), 'lg-'))
   const state = join(dir, 'state')
   const root = join(dir, 'repo')
-  const runtimeRoot = join(dir, 'runtime')
   const socket = join(state, 'device.sock')
   const restricted = `${socket}.r`
   const clock = { now: Math.floor(Date.now() / 1000) }
@@ -64,7 +63,6 @@ test('设备 GitHub：授权、只读连接、待分拣、真实提醒、对账�
       wrapUpReminder: false,
       importExisting: false,
       external: {
-        runtimeRoot,
         deviceSocket: socket,
         fixture: { github: mock.origin, now: () => clock.now },
       },
@@ -91,7 +89,8 @@ test('设备 GitHub：授权、只读连接、待分拣、真实提醒、对账�
   mkdirSync(root)
   execFileSync('git', ['-C', root, 'init', '-q'])
   execFileSync('git', ['-C', root, 'remote', 'add', 'origin', `${web}.git`])
-  const gh = bundledGithubCliPath(runtimeRoot)
+  const gh = managedGithubCliPath(state)
+  mkdirSync(join(state, 'tools', 'github-cli'), { recursive: true, mode: 0o700 })
   mkdirSync(dirname(gh), { recursive: true })
   writeFileSync(
     gh,

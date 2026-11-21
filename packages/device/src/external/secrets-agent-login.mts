@@ -3,7 +3,7 @@ import { chmodSync, rmSync } from 'node:fs'
 import { createServer, type Server, type Socket } from 'node:net'
 import { delimiter, isAbsolute, join } from 'node:path'
 import type { ExternalStore } from '../external-store.mjs'
-import { login, numericId, object, repoName } from './github/write-api.mjs'
+import { GithubWriteFault, login, numericId, object, repoName } from './github/write-api.mjs'
 import { activeManager, type ExternalToolActor } from './outbox-read.mjs'
 import type { ExternalGithubSecrets, GithubCredentialSnapshot } from './secrets.mjs'
 import { agentHelperProgram, shellQuoteGithubHelper } from './secrets-agent-helper.mjs'
@@ -77,6 +77,7 @@ interface ServiceOptions extends GithubAgentOptions {
   /** 设备私有 Unix socket 或 Windows named pipe。不能监听 TCP。 */
   callbackPath: string
   ghPath: string
+  prepareGh?: () => Promise<string>
   hostGhPath?: string
   gitPath: string
   nodePath?: string
@@ -166,7 +167,7 @@ export class GithubAgentLoginService {
         key,
         this.options.ghPath,
         this.options.gitPath,
-        this.options.hostGhPath ?? this.options.ghPath,
+        this.options.hostGhPath ?? (this.options.prepareGh ? '' : this.options.ghPath),
       ]
       const cmd = args.map(shell).join(' ')
       const isWindows = process.platform === 'win32'
@@ -327,13 +328,14 @@ export class GithubAgentLoginService {
     socket.setTimeout(2500, () => socket.destroy())
     let raw = ''
     socket.setEncoding('utf8')
-    socket.on('data', (part) => {
+    const data = (part: string) => {
       raw += part
       if (raw.length > 1024) {
         socket.destroy()
         return
       }
       if (!raw.endsWith('\n')) return
+      socket.off('data', data)
       try {
         const request = object(JSON.parse(raw))
         const launch = typeof request.key === 'string' ? this.launches.get(request.key) : undefined
@@ -343,12 +345,48 @@ export class GithubAgentLoginService {
         const credential =
           launch && (isGit || isGh) ? this.credentialFor(launch, request.repository) : undefined
         if (credential && isGit) socket.end(JSON.stringify({ token: credential.token }))
-        else if (credential && launch && isGh)
-          socket.end(JSON.stringify({ config: this.syncGh(launch, credential) }))
-        else socket.end('{}')
+        else if (credential && launch && isGh) {
+          socket.setTimeout(115_000)
+          void this.ghConfig(socket, launch, request.key, request.repository, credential)
+        } else socket.end('{}')
       } catch {
         socket.destroy()
       }
-    })
+    }
+    socket.on('data', data)
+  }
+
+  private async ghConfig(
+    socket: Socket,
+    launch: Launch,
+    key: unknown,
+    repository: unknown,
+    initial: GithubCredentialSnapshot,
+  ) {
+    try {
+      // 仅对获准使用受管 gh 的仓库下载；Git 凭据回调和非分派仓库不需要它。
+      if (this.options.prepareGh) await this.options.prepareGh()
+      if (socket.destroyed) return
+      const credential =
+        typeof key === 'string' && this.launches.get(key) === launch
+          ? this.credentialFor(launch, repository)
+          : undefined
+      if (
+        !credential ||
+        credential.metadata.credentialRef !== initial.metadata.credentialRef ||
+        credential.metadata.generation !== initial.metadata.generation
+      ) {
+        socket.end(JSON.stringify({ error: 'github_gh_scope_changed' }))
+        return
+      }
+      socket.end(JSON.stringify({ config: this.syncGh(launch, credential) }))
+    } catch (error) {
+      if (!socket.destroyed)
+        socket.end(
+          JSON.stringify({
+            error: error instanceof GithubWriteFault ? error.code : 'github_gh_unavailable',
+          }),
+        )
+    }
   }
 }

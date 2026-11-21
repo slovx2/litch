@@ -11,7 +11,7 @@
 
 ## GitHub CLI 授权（D-141）
 
-- H 把官方 **gh 2.102.0** 及平台所需制品核验后安装到 `<runtimeRoot>/tools/github-cli/2.102.0/<platform>-<arch>/bin/gh[.exe]`；路径以 `bundledGithubCliPath` 为准。设备确认版本完全相等，从不搜索 PATH。根目录应由设备安装器管理；Linux、macOS、Windows 的发行打包和安装由 H 接入。
-- 私有管理员 RPC 以 `GithubGhAuthorizationService.create({ secrets, stateDirectory, runtimeRoot, systemGithubConfig, changed })` 构造。分别映射 `add/importLogin/paste/get/cancel/confirm`；`changed` 只推 `{loginId, revision}`。开始设备码登录等待首个码或错误，最长等待提示 20 秒；桌面仅打开等待态中的固定 GitHub 网址。导入或粘贴等待完整的 API 核验，RPC 超时需覆盖多页读取。用新 `operationId` 重新开始已过期的登录；设备关闭时 `close()`。
+- 设备首次需要受管 **gh 2.102.0** 时，从 GitHub 官方 Release 下载归档，用内置 SHA-256 校验后装到 `<stateDirectory>/tools/github-cli/2.102.0/<platform>-<arch>/bin/gh[.exe]`，再核对版本。下载和退避由设备状态锁下的各入口共用；只清理较旧且在正常退出时确认无人使用的版本。受管 gh 不搜索 PATH；明确导入系统登录时才查找系统 gh。
+- 私有管理员 RPC 以 `GithubGhAuthorizationService.create({ secrets, stateDirectory, managedCli, systemGithubConfig, changed })` 构造。`changed` 只推 `{loginId, revision}`。首次设备码登录可先返回下载阶段，经同一登录 ID 订阅或查询；下载结束后，等待首个设备码最多 20 秒。桌面仅打开等待态中的固定 GitHub 网址。系统导入和粘贴令牌只等待 API 核验，不会下载受管 gh。
 - 新授权和导入核验 `X-OAuth-Scopes` 的三项必要 scope 和实际请求的可选 scope。OAuth 的公有 `resourceOwnerId` 仅作账本键；设备按每个仓库记录的真实数字所有者核验。OAuth 公共元数据包含 `credentialKind` 和实际 scopes。若为 owner，确认前只有短时私有暂存，未进入身份和路由。确认后 owner 会进入设备的机器人 ID 防循环集合；已在 GitHub 签发的令牌仍需在 GitHub 撤销。
 - 导入仅运行 `gh auth token` 读取 `systemGithubConfig` 指定的目录；缺省遵循系统 gh 配置目录规则。高级细粒度 PAT 不需要 gh 二进制。设备备份另排除 `external-gh-logins`，此目录只有每次设备码尝试的私有临时配置。

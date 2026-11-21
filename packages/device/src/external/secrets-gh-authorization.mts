@@ -3,8 +3,10 @@ import { randomUUID } from 'node:crypto'
 import { realpathSync, rmSync, statSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { managerNow } from '../manager-store.mjs'
+import { executableOnPath } from './device-agent-command.mjs'
 import { readGithubGhToken, runGithubGhDeviceLogin } from './github/gh-auth-process.mjs'
-import { locateSystemGithubConfig, resolveBundledGithubCli } from './github/gh-version.mjs'
+import type { ManagedGithubCli } from './github/gh-install.mjs'
+import { locateSystemGithubConfig } from './github/gh-version.mjs'
 import { digest, GithubWriteFault, isManagedGithubToken } from './github/write-api.mjs'
 import type {
   ExternalGithubSecrets,
@@ -29,6 +31,7 @@ export interface GithubIdentityAuthorization {
   identity?: GithubDeviceIdentity
 }
 type LoginPhase =
+  | { state: 'preparing'; phase: 'download' | 'device_code' }
   | { state: 'waiting'; userCode: string; verificationUrl: typeof GITHUB_GH_VERIFICATION_URL }
   | { state: 'succeeded'; needsConfirmation: boolean; result: GithubIdentityAuthorization }
   | { state: 'canceled' | 'timed_out' | 'expired' }
@@ -56,9 +59,10 @@ interface Job {
 interface Options {
   secrets: ExternalGithubSecrets
   stateDirectory: string
-  runtimeRoot: string
+  managedCli: ManagedGithubCli
   /** 仅由私有设备控制面解析的系统 gh 配置目录；协议不接收任意设备路径。 */
   systemGithubConfig?: () => string | undefined
+  systemGithubCli?: () => string | undefined
   changed?: (event: { loginId: string; revision: number }) => void
   loginTimeoutMs?: number
   promptTimeoutMs?: number
@@ -93,37 +97,44 @@ export class GithubGhAuthorizationService {
 
   add(input: { operationId: string; scopes: readonly string[] }): Promise<GithubIdentityLogin> {
     const scopes = requestedGithubGhScopes(input.scopes)
-    return this.begin(input.operationId, JSON.stringify(['device', scopes]), async (job) => {
-      const ghPath = await resolveBundledGithubCli(this.options.runtimeRoot)
-      const directory = this.root.path(`attempt-${job.id}`)
-      const files = new ExternalPrivateFiles(directory)
-      try {
-        await runGithubGhDeviceLogin({
-          ghPath,
-          configDirectory: files.directory,
-          scopes,
-          signal: job.controller.signal,
-          promptTimeoutMs: this.options.promptTimeoutMs ?? 20_000,
-          onCode: ({ userCode, verificationUrl }) => {
-            this.transition(
-              job,
-              { state: 'waiting', userCode, verificationUrl },
-              this.now() + deviceCodeSeconds,
-            )
-          },
-        })
-        const token = await readGithubGhToken({
-          ghPath,
-          configDirectory: files.directory,
-          signal: job.controller.signal,
-        })
-        // 获取后先清理 gh 临时配置；其后的步骤只需要内存中的令牌。
-        rmSync(directory, { recursive: true, force: true })
-        await this.verify(job, input.operationId, token, scopes)
-      } finally {
-        rmSync(directory, { recursive: true, force: true })
-      }
-    })
+    return this.begin(input.operationId, JSON.stringify(['device', scopes]), (job) =>
+      this.options.managedCli.use(
+        async (ghPath) => {
+          if (job.state?.state === 'preparing')
+            this.transition(job, { state: 'preparing', phase: 'device_code' })
+          const directory = this.root.path(`attempt-${job.id}`)
+          const files = new ExternalPrivateFiles(directory)
+          try {
+            await runGithubGhDeviceLogin({
+              ghPath,
+              configDirectory: files.directory,
+              scopes,
+              signal: job.controller.signal,
+              promptTimeoutMs: this.options.promptTimeoutMs ?? 20_000,
+              onCode: ({ userCode, verificationUrl }) => {
+                this.transition(
+                  job,
+                  { state: 'waiting', userCode, verificationUrl },
+                  this.now() + deviceCodeSeconds,
+                )
+              },
+            })
+            const token = await readGithubGhToken({
+              ghPath,
+              configDirectory: files.directory,
+              signal: job.controller.signal,
+            })
+            // 获取后先清理 gh 临时配置；其后的步骤只需要内存中的令牌。
+            rmSync(directory, { recursive: true, force: true })
+            await this.verify(job, input.operationId, token, scopes)
+          } finally {
+            rmSync(directory, { recursive: true, force: true })
+          }
+        },
+        () => this.transition(job, { state: 'preparing', phase: 'download' }),
+        job.controller.signal,
+      ),
+    )
   }
 
   importLogin(input: {
@@ -145,8 +156,12 @@ export class GithubGhAuthorizationService {
         } catch {
           throw new GithubWriteFault('github_gh_import_configuration_unavailable')
         }
+        const ghPath = (
+          this.options.systemGithubCli ?? (() => executableOnPath('gh', process.env))
+        )()
+        if (!ghPath) throw new GithubWriteFault('github_gh_import_binary_missing')
         const token = await readGithubGhToken({
-          ghPath: await resolveBundledGithubCli(this.options.runtimeRoot),
+          ghPath,
           configDirectory: directory,
           workingDirectory: this.root.directory,
           signal: job.controller.signal,
@@ -210,7 +225,7 @@ export class GithubGhAuthorizationService {
     if (job.pending) {
       this.clearPending(job)
       this.transition(job, { state: 'canceled' })
-    } else if (!job.state || job.state.state === 'waiting') {
+    } else if (!job.state || job.state.state === 'waiting' || job.state.state === 'preparing') {
       job.controller.abort(new GithubWriteFault('github_gh_login_canceled'))
       await job.done
     }
@@ -391,6 +406,7 @@ export class GithubGhAuthorizationService {
       if (
         job.state &&
         job.state.state !== 'waiting' &&
+        job.state.state !== 'preparing' &&
         !job.pending &&
         job.expiresAt + terminalRetentionSeconds <= now
       ) {

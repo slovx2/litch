@@ -3,6 +3,7 @@ import {
   EXTERNAL_IDENTITY_REQUIRED_SCOPES,
   type ExternalIdentityLogin,
   type ExternalIdentityScope,
+  isGithubCliSetupFailure,
 } from '../../../protocol/src/external-sources.mjs'
 import type { DeviceView } from '../model.mjs'
 import type { OpContext, OpSpec } from './context.mjs'
@@ -10,6 +11,10 @@ import { getDevice, invalid, newOperation, writing } from './ops-external.mjs'
 
 export function authorizationText(ctx: OpContext, login: ExternalIdentityLogin): string {
   switch (login.state) {
+    case 'preparing':
+      return login.phase === 'download'
+        ? ctx.say('正在下载 GitHub CLI。', 'Downloading GitHub CLI.')
+        : ctx.say('正在获取 GitHub 授权码。', 'Requesting a GitHub device code.')
     case 'waiting':
       return ctx.say(
         `授权码：${login.userCode}。请用机器人账号打开 ${login.verificationUrl}。授权页显示 GitHub CLI。登录 ID：${login.loginId}`,
@@ -41,7 +46,12 @@ export function authorizationText(ctx: OpContext, login: ExternalIdentityLogin):
     case 'expired':
       return ctx.say('授权已过期。', 'Authorization expired.')
     case 'error':
-      return ctx.say(`授权失败：${login.code}。`, `Authorization failed: ${login.code}.`)
+      return isGithubCliSetupFailure(login.code)
+        ? ctx.say(
+            `GitHub CLI 准备失败（${login.code}）。可以在目标设备用 litch config device-identity paste --stdin 粘贴令牌（高级）。`,
+            `Could not prepare GitHub CLI (${login.code}). Use litch config device-identity paste --stdin on the target device to paste a token (advanced).`,
+          )
+        : ctx.say(`授权失败：${login.code}。`, `Authorization failed: ${login.code}.`)
   }
 }
 

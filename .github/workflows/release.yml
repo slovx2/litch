@@ -150,11 +150,10 @@ jobs:
           sh -n scripts/install.sh
           sh -n scripts/adapter-launcher.sh
           shellcheck --shell=sh scripts/install.sh scripts/adapter-launcher.sh
-      # 三个平台的包在这一台机器上出：命令行是 Go 交叉编译的，Node 和 gh 取各平台已校验的官方包，
+      # 三个平台的包在这一台机器上出：命令行是 Go 交叉编译的，Node 取各平台已校验的官方包，
       # 其余依赖裁剪后全是纯 JavaScript（暂存时会查，混进了分平台的东西就不让过）
       - name: 出包
         run: |
-          node --test scripts/github-cli-runtime.test.mjs
           SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" node scripts/package-adapter.mjs --target all --out "${RUNNER_TEMP}/release"
           cat "${RUNNER_TEMP}/release/codex-harness-adapter-SHA256SUMS.txt"
       # 拿刚出的那个 linux-x64 的包，在干净的容器里把安装、连接、升级、卸载过一遍（含装一份 Pi 跑通一个回合），

@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client'
 import { InboxDetail } from '../apps/mobile/src/screens/managers/external/InboxDetail.tsx'
 import type {
   ExternalAccess,
+  ExternalIdentityLogin,
   ExternalSourceStatus,
 } from '../packages/protocol/src/external-sources.mts'
 import { ServicesProvider } from '../packages/ui/src/app/services.tsx'
@@ -61,6 +62,9 @@ const sourceStatus: ExternalSourceStatus = {
   coverage: [],
 }
 const sinks = new Set<{ snapshot(value: unknown): void }>()
+const loginSinks = new Set<{ snapshot(value: unknown): void }>()
+const pendingLogin = { loginId: 'fixture-login', revision: 1, expiresAt: 2_000_000_000 } as const
+let login: ExternalIdentityLogin = { ...pendingLogin, state: 'preparing', phase: 'download' }
 let access: ExternalAccess | undefined
 const calls: string[] = []
 const snapshot = () => ({
@@ -78,7 +82,12 @@ const snapshot = () => ({
   },
 })
 const channel = {
-  subscribe(_topic: unknown, sink: { snapshot(value: unknown): void }) {
+  subscribe(topic: { kind: string }, sink: { snapshot(value: unknown): void }) {
+    if (topic.kind === 'externalIdentityLogin') {
+      loginSinks.add(sink)
+      sink.snapshot({ value: login })
+      return () => loginSinks.delete(sink)
+    }
     sinks.add(sink)
     sink.snapshot(snapshot())
     return () => sinks.delete(sink)
@@ -88,6 +97,7 @@ const channel = {
     if (name === 'external.inbox.get') return { events: [head], intake }
     if (name === 'external.identity.repositories') return { repositories: [] }
     if (name === 'external.identity.list') return { identities: [] }
+    if (name === 'external.identity.add') return login
     if (name === 'external.source.check')
       return {
         readiness: {
@@ -142,7 +152,13 @@ function App() {
     </ServicesProvider>
   )
 }
-Object.assign(window, { accessCalls: calls })
+Object.assign(window, {
+  accessCalls: calls,
+  failGithubCliDownload: () => {
+    login = { ...pendingLogin, revision: 2, state: 'error', code: 'github_gh_download_unavailable' }
+    for (const sink of loginSinks) sink.snapshot({ value: login })
+  },
+})
 const root = document.getElementById('root')
 if (!root) throw new Error('缺少夹具根节点')
 createRoot(root).render(<App />)

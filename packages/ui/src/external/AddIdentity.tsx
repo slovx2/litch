@@ -1,4 +1,4 @@
-// 添加 GitHub 身份的向导（对话框）。三种方式：设备码授权（默认，借用设备上随附的 GitHub CLI 登录）、
+// 添加 GitHub 身份的向导（对话框）。三种方式：设备码授权（默认，设备按需下载 GitHub CLI）、
 // 导入设备上 gh 已登录的账号、粘贴令牌（高级）。设备码模式下必要权限锁定，可选权限可加；
 // 等待时大号显示一次性码，可复制、可在系统浏览器打开 github.com/login/device。
 // 授权到的是 owner 本人时要明确确认才保存；关掉对话框时仍在等待的授权一并取消。
@@ -7,6 +7,7 @@ import {
   EXTERNAL_IDENTITY_REQUIRED_SCOPES,
   type ExternalIdentityLogin,
   type ExternalIdentityScope,
+  isGithubCliSetupFailure,
 } from '@litch/core'
 import { useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
@@ -79,8 +80,10 @@ export function AddIdentity({ deviceId, onClose }: { deviceId: string; onClose()
   const act = useRun()
   const snapshot = useIdentityLogin(deviceId, loginId)
   const login = snapshot?.value ?? first
-  const waiting =
-    login?.state === 'waiting' || (login?.state === 'succeeded' && login.needsConfirmation)
+  const pending = login?.state === 'preparing' || login?.state === 'waiting'
+  const awaiting = pending || (login?.state === 'succeeded' && login.needsConfirmation)
+  const offerPaste =
+    way === 'device' && login?.state === 'error' && isGithubCliSetupFailure(login.code)
 
   useEffect(() => {
     const element = dialog.current
@@ -88,7 +91,7 @@ export function AddIdentity({ deviceId, onClose }: { deviceId: string; onClose()
   }, [])
 
   const cancel = () => {
-    if (!login || !waiting) return Promise.resolve()
+    if (!login || !awaiting) return Promise.resolve()
     return channel
       .command('external.identity.login.cancel', {
         deviceId,
@@ -198,6 +201,12 @@ export function AddIdentity({ deviceId, onClose }: { deviceId: string; onClose()
         ) : null}
       </>
     )
+  } else if (login.state === 'preparing') {
+    body = (
+      <div className="devp-note" role="status" data-ext-login={login.phase}>
+        {t(`ext.wizard.preparing.${login.phase}`)}
+      </div>
+    )
   } else if (login.state === 'waiting') {
     body = <Waiting login={login} />
   } else if (login.state === 'succeeded') {
@@ -225,7 +234,7 @@ export function AddIdentity({ deviceId, onClose }: { deviceId: string; onClose()
   } else {
     body = (
       <div className="devp-note err" role="alert" data-ext-login={login.state}>
-        {t(`ext.wizard.end.${login.state}`)}
+        {offerPaste ? t('ext.wizard.setupFailed') : t(`ext.wizard.end.${login.state}`)}
         {login.state === 'error' ? ` (${login.code})` : ''}
       </div>
     )
@@ -299,7 +308,7 @@ export function AddIdentity({ deviceId, onClose }: { deviceId: string; onClose()
             >
               {t('ext.wizard.done')}
             </button>
-          ) : login.state === 'waiting' ? (
+          ) : pending ? (
             <button
               type="button"
               className="btn ghost"
@@ -309,9 +318,24 @@ export function AddIdentity({ deviceId, onClose }: { deviceId: string; onClose()
               {t('ext.cancel')}
             </button>
           ) : (
-            <button type="button" className="btn" data-act="identity-retry" onClick={restart}>
-              {t('ext.wizard.retry')}
-            </button>
+            <>
+              <button type="button" className="btn" data-act="identity-retry" onClick={restart}>
+                {t('ext.wizard.retry')}
+              </button>
+              {offerPaste ? (
+                <button
+                  type="button"
+                  className="btn primary"
+                  data-act="identity-use-token"
+                  onClick={() => {
+                    restart()
+                    setWay('paste')
+                  }}
+                >
+                  {t('ext.wizard.way.paste')}
+                </button>
+              ) : null}
+            </>
           )}
         </div>
       </form>

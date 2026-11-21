@@ -86,6 +86,7 @@ jobs:
       - run: npm run build
         id: phase-10
       - run: npm run check:external-github
+      - run: node --import ./packages/device/dist/packages/device/test/isolate-process.mjs --test packages/device/dist/packages/device/test/github-cli-install.test.mjs packages/device/dist/packages/device/test/external-gh-authorization.test.mjs
       - run: npm run mobile:test
         id: phase-9
       - run: node scripts/ci/test-shard.mjs pi

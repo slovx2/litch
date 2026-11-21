@@ -1,12 +1,22 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import {
+  copyFileSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { createServer } from 'node:http'
 import { dirname, join } from 'node:path'
 import test, { type TestContext } from 'node:test'
+import { githubCliAsset, MANAGED_GITHUB_CLI_VERSION } from '../src/external/github/gh-download.mjs'
+import { ManagedGithubCli } from '../src/external/github/gh-install.mjs'
 import {
-  BUNDLED_GITHUB_CLI_VERSION,
-  bundledGithubCliPath,
+  installedGithubCli,
   locateSystemGithubConfig,
-  resolveBundledGithubCli,
+  managedGithubCliPath,
 } from '../src/external/github/gh-version.mjs'
 import { ExternalGithubOutbox } from '../src/external/outbox.mjs'
 import { GithubGhAuthorizationService } from '../src/external/secrets-gh-authorization.mjs'
@@ -39,6 +49,7 @@ type Setup = {
   loginTimeoutMs?: number
   promptTimeoutMs?: number
   ownerConfirmationTimeoutMs?: number
+  offlineDownload?: boolean
 }
 
 async function fixture(t: TestContext, setup: Setup = {}) {
@@ -71,11 +82,14 @@ async function fixture(t: TestContext, setup: Setup = {}) {
     } else return false
     return true
   })
-  const runtimeRoot = join(f.dir, 'runtime')
-  const executable = bundledGithubCliPath(runtimeRoot)
+  const stateDirectory = join(f.dir, 'gh-state')
+  const executable = managedGithubCliPath(stateDirectory)
+  const managedRoot = join(stateDirectory, 'tools', 'github-cli')
+  const systemCli = join(f.dir, 'system-cli')
   const scenario = join(f.dir, 'behavior')
   const invocation = join(f.dir, 'gh-invocation')
   const system = join(f.dir, 'system-gh')
+  mkdirSync(managedRoot, { recursive: true, mode: 0o700 })
   mkdirSync(dirname(executable), { recursive: true })
   mkdirSync(system)
   writeFileSync(join(system, 'hosts.yml'), `${oauthToken}\n`, { mode: 0o600 })
@@ -132,13 +146,36 @@ if (mode === 'garbled' || mode === 'garbled-hang') {
 `,
       { mode: 0o700 },
     )
-  setBinary(BUNDLED_GITHUB_CLI_VERSION)
+  setBinary(MANAGED_GITHUB_CLI_VERSION)
+  copyFileSync(executable, systemCli)
+  let downloads = 0
+  let managedCli = new ManagedGithubCli(stateDirectory)
+  if (setup.offlineDownload) {
+    rmSync(executable)
+    const server = createServer((_request, response) => {
+      downloads++
+      response.writeHead(503).end()
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    t.after(() => {
+      server.close()
+    })
+    const address = server.address()
+    assert.ok(address && typeof address !== 'string')
+    const asset = githubCliAsset(process.platform, process.arch)
+    managedCli = new ManagedGithubCli(stateDirectory, undefined, {
+      asset: { ...asset, url: new URL(asset.filename, `http://127.0.0.1:${address.port}/`) },
+      proxyEnv: {},
+      backoffMs: 1,
+    })
+  }
   const changes: Array<{ loginId: string; revision: number }> = []
   const service = await GithubGhAuthorizationService.create({
     secrets: f.secrets,
     stateDirectory: f.dir,
-    runtimeRoot,
+    managedCli,
     systemGithubConfig: () => system,
+    systemGithubCli: () => systemCli,
     changed: (data) => changes.push(data),
     ...(setup.loginTimeoutMs === undefined ? {} : { loginTimeoutMs: setup.loginTimeoutMs }),
     ...(setup.promptTimeoutMs === undefined ? {} : { promptTimeoutMs: setup.promptTimeoutMs }),
@@ -146,14 +183,21 @@ if (mode === 'garbled' || mode === 'garbled-hang') {
       ? {}
       : { ownerConfirmationTimeoutMs: setup.ownerConfirmationTimeoutMs }),
   })
-  t.after(() => service.close())
+  t.after(async () => {
+    managedCli.abort()
+    await service.close()
+    await managedCli.retire(true)
+  })
   return {
     ...f,
     service,
     changes,
     system,
     systemBefore,
-    runtimeRoot,
+    stateDirectory,
+    managedRoot,
+    managedCli,
+    downloads: () => downloads,
     setBinary,
     changeBehavior: (behavior: Behavior) => writeFileSync(scenario, behavior),
     commands: () =>
@@ -172,14 +216,11 @@ test('固定 gh 搜索不走 PATH，三平台资产路径和精确版本均可�
     const file = os === 'win32' ? 'gh.exe' : 'gh'
     for (const arch of ['x64', 'arm64'] as const)
       assert.equal(
-        bundledGithubCliPath(f.runtimeRoot, os, arch),
-        join(f.runtimeRoot, 'tools', 'github-cli', '2.102.0', `${os}-${arch}`, 'bin', file),
+        managedGithubCliPath(f.stateDirectory, os, arch),
+        join(f.stateDirectory, 'tools', 'github-cli', '2.102.0', `${os}-${arch}`, 'bin', file),
       )
   }
-  assert.equal(
-    await resolveBundledGithubCli(f.runtimeRoot),
-    realpathSync(bundledGithubCliPath(f.runtimeRoot)),
-  )
+  assert.equal(await f.managedCli.ensure(), realpathSync(managedGithubCliPath(f.stateDirectory)))
   assert.equal(
     locateSystemGithubConfig({ GH_CONFIG_DIR: f.system, XDG_CONFIG_HOME: f.dir }, 'linux', f.dir),
     f.system,
@@ -188,9 +229,9 @@ test('固定 gh 搜索不走 PATH，三平台资产路径和精确版本均可�
     locateSystemGithubConfig({ APPDATA: f.dir }, 'win32', f.dir),
     join(f.dir, 'GitHub CLI'),
   )
-  await assert.rejects(resolveBundledGithubCli(join(f.dir, 'missing')), /bundled_binary_missing/)
+  assert.equal(await installedGithubCli(join(f.dir, 'missing'), f.dir), null)
   f.setBinary('2.102.1')
-  await assert.rejects(resolveBundledGithubCli(f.runtimeRoot), /version_mismatch/)
+  await assert.rejects(f.managedCli.ensure(), /version_mismatch/)
 })
 
 test('设备码登录推送结构化等待态，再核验 scopes/数字身份并保存跨所有者 OAuth 仓库', async (t) => {
@@ -422,16 +463,22 @@ test('导入只调用 gh auth token；必要 scope 或请求的可选 scope 缺�
   )
 })
 
-test('受管 gh 不可用时，仍能通过高级入口存入细粒度 PAT', async (t) => {
+test('受管 gh 下载失败后，仍可粘贴令牌或导入系统 gh，两个入口均不下载', async (t) => {
   if (process.platform === 'win32') return t.skip('假 gh 使用 Unix 可执行脚本')
-  const f = await fixture(t)
-  f.setBinary('2.102.1')
-  const badBinary = await f.service.add({ operationId: 'wrong-binary', scopes: [] })
+  const f = await fixture(t, { offlineDownload: true })
+  const first = await f.service.add({ operationId: 'download-failure', scopes: [] })
+  assert.equal(first.state, 'preparing')
+  assert.equal(first.state === 'preparing' && first.phase, 'download')
+  const badBinary = await f.service.wait(first.loginId)
   assert.ok(badBinary.state === 'error')
-  assert.equal(badBinary.code, 'github_gh_version_mismatch')
+  assert.equal(badBinary.code, 'github_gh_download_unavailable')
+  assert.equal(f.downloads(), 3)
   const advanced = await f.service.paste({ operationId: 'advanced', token: token('advanced') })
   assert.ok(advanced.state === 'succeeded')
   assert.equal(advanced.result.identity?.credentials[0]?.credentialKind, 'fine_grained')
   assert.deepEqual(advanced.result.scopes, [])
   assert.doesNotMatch(JSON.stringify(advanced), /github_pat_/)
+  const imported = await f.service.importLogin({ operationId: 'system-import' })
+  assert.equal(imported.state, 'succeeded')
+  assert.equal(f.downloads(), 3)
 })
