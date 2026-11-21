@@ -429,6 +429,58 @@
       "issues": ["https://github.com/slovx2/litch/issues/34"]
     },
     {
+      "job": "unit-claude (1)",
+      "test": "MCP-004：真实 SDK stdio elicitation url accept metadata=object 控制文件副作用",
+      "status": "active",
+      "events": [
+        {
+          "runId": 44865225422,
+          "attempt": 1,
+          "jobId": 136727273774,
+          "sha": "793a332c7172db0b35b0c7c361119f0503324edd",
+          "date": "2026-11-21T04:15:47Z",
+          "trigger": "push",
+          "url": "https://github.com/slovx2/litch/actions/runs/44865225422/job/136727273774",
+          "failure": "首次 unit-claude (1) 失败，真实 SDK stdio URL 接受（metadata=object）场景的测试服务器收到几十个意外的 / 请求；底层原因尚未确认。",
+          "evidence": {
+            "kind": "same-sha-pass",
+            "runId": 44865225422,
+            "attempt": 2,
+            "jobId": 136730907081,
+            "sha": "793a332c7172db0b35b0c7c361119f0503324edd",
+            "reference": "https://github.com/slovx2/litch/actions/runs/44865225422/job/136730907081",
+            "note": "同一 SHA 793a332c7172db0b35b0c7c361119f0503324edd，仅重跑失败 job；attempt 2 的 unit-claude (1) 日志确认本用例通过，未改测试、断言或超时。"
+          }
+        }
+      ]
+    },
+    {
+      "job": "unit-claude (1)",
+      "test": "MCP-012：真实 WebSocket 客户端断开后旧 OAuth 回调失效，守护进程继续服务新客户端",
+      "status": "active",
+      "events": [
+        {
+          "runId": 44865225422,
+          "attempt": 1,
+          "jobId": 136727273774,
+          "sha": "793a332c7172db0b35b0c7c361119f0503324edd",
+          "date": "2026-11-21T04:15:47Z",
+          "trigger": "push",
+          "url": "https://github.com/slovx2/litch/actions/runs/44865225422/job/136727273774",
+          "failure": "首次 unit-claude (1) 失败，真实 OAuth 守护进程未启动；底层原因尚未确认。",
+          "evidence": {
+            "kind": "same-sha-pass",
+            "runId": 44865225422,
+            "attempt": 2,
+            "jobId": 136730907081,
+            "sha": "793a332c7172db0b35b0c7c361119f0503324edd",
+            "reference": "https://github.com/slovx2/litch/actions/runs/44865225422/job/136730907081",
+            "note": "同一 SHA 793a332c7172db0b35b0c7c361119f0503324edd，仅重跑失败 job；attempt 2 的 unit-claude (1) 日志确认本用例通过，未改测试、断言或超时。"
+          }
+        }
+      ]
+    },
+    {
       "job": "unit-claude (2)",
       "test": "命令在回合中途结束、通知随后面的请求送达：回合照常结束，不为通知多等",
       "status": "active",
