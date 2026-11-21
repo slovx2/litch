@@ -1,7 +1,7 @@
 // litch_machine 的 exec、process 和进程表：对着假机器（machine-kit.test.mts），时钟是假的。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { MACHINE_LIMITS } from '../../protocol/src/client-tools-machine.mjs'
+import { MACHINE_LIMITS, machineToolsSpec } from '../../protocol/src/client-tools-machine.mjs'
 import { createMachineExecutor } from '../src/device/machine/executor.mjs'
 import { OWNER_AWAY_MS } from '../src/device/machine/processes.mjs'
 import { fakeClock } from './helpers.mjs'
@@ -133,6 +133,86 @@ test('exec 先回、process read 长轮询拿新输出，序号接得上，退�
   assert.match(last, /exit_code: 0/)
 })
 
+test('exec 限时默认十分钟、最多一小时；未指定 yield 仍最多等 100 秒', async () => {
+  const { time, desktop, executor, context, asks } = world()
+  const tool = machineToolsSpec(null).tools.find(({ name }) => name === 'exec')
+  const schema = tool?.inputSchema as { properties: { timeout_ms: Record<string, unknown> } }
+  assert.equal(schema.properties.timeout_ms.maximum, 3_600_000)
+  assert.match(String(schema.properties.timeout_ms.description), /default 600000/)
+
+  const pending = executor.call('exec', { command: 'build' }, context)
+  await flush()
+  assert.equal(desktop.execs[0]?.timeoutMs, 600_000)
+  time.advance(100_000)
+  const yielded = textOf(await pending)
+  assert.match(yielded, /process_id: p1\nstatus: still running after 100000 ms/)
+  assert.equal(desktop.execs[0]?.done, false)
+
+  const refused = await executor.call('exec', { command: 'build', timeout_ms: 3_600_001 }, context)
+  assert.equal(refused.success, false)
+  assert.match(
+    textOf(refused),
+    /\[litch:invalid\] timeout_ms must be an integer from 1000 to 3600000/,
+  )
+  assert.equal(asks.length, 1, '超过上限时不发审批')
+  assert.equal(desktop.execs.length, 1)
+  executor.dispose()
+})
+
+for (const machine of ['desktop', 'session'] as const) {
+  test(`一小时长命令：${machine} 先返回进程号，续读有上限，到期才结束`, async () => {
+    const time = fakeClock()
+    const desktop = new FakeMachine('desktop', 'desktop')
+    const session = new FakeMachine('session', 'session', { system: 'Linux' })
+    const target = machine === 'desktop' ? desktop : session
+    const executor = createMachineExecutor({ clock: time.clock })
+    const { context } = fakeContext([desktop, session])
+    target.onExec = (proc) => {
+      if (proc.timeoutMs !== null) time.clock.setTimer(() => proc.exit(124), proc.timeoutMs)
+    }
+    const pending = executor.call(
+      'exec',
+      { command: 'build', machine, timeout_ms: 3_600_000, yield_ms: 1_000 },
+      context,
+    )
+    await flush()
+    const [proc] = target.execs
+    assert.ok(proc)
+    assert.equal(proc.timeoutMs, 3_600_000)
+    assert.equal(executor.processes()[0]?.targetId, machine)
+    time.advance(1_000)
+    assert.match(textOf(await pending), /process_id: p1/)
+
+    const offlineMs = machine === 'desktop' ? 5 * 60_000 : 0
+    if (offlineMs > 0) {
+      // 来源 SSH 断开，桌面端与本机设备的执行连接仍在线。
+      executor.ownerPresence('dev-a', false)
+      time.advance(offlineMs)
+      executor.ownerPresence('dev-a', true)
+    }
+    const next = fakeContext([desktop, session]).context
+    const block = 'x'.repeat(64 * 1024)
+    for (let i = 0; i < 40; i++) proc.emit('stdout', block)
+    time.advance(3_600_000 - 1_000 - offlineMs - 1)
+    const output = textOf(
+      await executor.call('process', { process_id: 'p1', action: 'read', after_seq: 0 }, next),
+    )
+    assert.match(output, /status: running/)
+    assert.match(output, /seq: 2621440/)
+    assert.match(output, /1572864 bytes of earlier output are no longer kept/)
+    assert.ok(output.length < 32 * 1024 + 500)
+
+    proc.emit('stdout', 'last line\n')
+    time.advance(1)
+    await flush()
+    const last = textOf(await executor.call('process', { process_id: 'p1', action: 'read' }, next))
+    assert.match(last, /timed out after 3600000 ms and was killed \(exit code 124\)/)
+    assert.match(last, /output:\nlast line\n$/)
+    assert.deepEqual(executor.processes(), [])
+    executor.dispose()
+  })
+}
+
 test('exec 的 stdin 写完关掉；process write 要先审批，写进标准输入', async () => {
   const { time, desktop, executor, context, asks } = world()
   const first = executor.call('exec', { command: 'cat', stdin: 'abc' }, context)
@@ -239,7 +319,7 @@ test('exec 的命令里提到禁止位置时填 flagged：原样、展开、$HOM
   assert.equal(logs.at(-2)?.flagged, false)
 })
 
-test('进程归属：别的设备看不到；会话所在设备断开 10 分钟后结束，回来了就不结束', async () => {
+test('进程归属：别的设备看不到；会话所在设备断开 10 分钟后结束', async () => {
   const time = fakeClock()
   const desktop = new FakeMachine('desktop', 'desktop')
   const executor = createMachineExecutor({ clock: time.clock })
@@ -248,7 +328,7 @@ test('进程归属：别的设备看不到；会话所在设备断开 10 分钟�
   const start = async (context: typeof a.context) => {
     const pending = executor.call(
       'exec',
-      { command: 'sleep 1000', yield_ms: 0, timeout_ms: 600_000 },
+      { command: 'sleep 1000', yield_ms: 0, timeout_ms: 3_600_000 },
       context,
     )
     await flush()
@@ -375,7 +455,7 @@ test('会话所在的设备断开又回来：取消计时，进程留着', async
   const { context } = fakeContext([desktop], { deviceId: 'dev-a' })
   const pending = executor.call(
     'exec',
-    { command: 'sleep 1000', yield_ms: 0, timeout_ms: 600_000 },
+    { command: 'sleep 1000', yield_ms: 0, timeout_ms: 3_600_000 },
     context,
   )
   await flush()

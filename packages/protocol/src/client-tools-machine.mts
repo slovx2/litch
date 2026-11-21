@@ -30,9 +30,9 @@ export const MACHINE_LIMITS = {
   /** 命名空间说明的上限（原生 codex） */
   namespaceDescription: 1024,
   /** exec 缺省等多久 */
-  execTimeoutDefaultMs: 30_000,
+  execTimeoutDefaultMs: 600_000,
   /** exec 最多等多久（timeout_ms 的上限） */
-  execTimeoutMaxMs: 600_000,
+  execTimeoutMaxMs: 3_600_000,
   /** yield_ms 的上限：核心的单次调用上限是 120 秒，要留余量 */
   yieldMaxMs: 100_000,
   /** process 的 wait_ms 上限，理由同上 */
@@ -183,13 +183,13 @@ export function machineToolsSpec(context: MachineSpecContext | null): ClientTool
               type: 'integer',
               minimum: 1000,
               maximum: MACHINE_LIMITS.execTimeoutMaxMs,
-              description: `Kill it after this long. Default ${MACHINE_LIMITS.execTimeoutDefaultMs}.`,
+              description: `Command lifetime in milliseconds (default ${MACHINE_LIMITS.execTimeoutDefaultMs}, maximum ${MACHINE_LIMITS.execTimeoutMaxMs}). Kill the process when it expires.`,
             },
             yield_ms: {
               type: 'integer',
               minimum: 0,
               maximum: MACHINE_LIMITS.yieldMaxMs,
-              description: 'Return early with process_id if still running after this long.',
+              description: `Return early with process_id if still running. A single call waits at most ${MACHINE_LIMITS.yieldMaxMs} ms even if omitted; use process to continue reading.`,
             },
             stdin: { type: 'string', description: 'Written to stdin, then stdin is closed.' },
           },

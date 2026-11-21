@@ -80,6 +80,24 @@ reported, even when the destination root itself is allowed.
   original error and Windows Security's Protection history or your organization's policy. Litch does
   not bypass those controls; only approve the program or folder if you recognize and trust it.
 
+## Long commands / 长命令
+
+- `litch_machine.exec` 的 `timeout_ms`（命令行 `litch-machine exec --timeout-ms`）默认 10 分钟
+  （600000 毫秒），最多 60 分钟（3600000 毫秒）。到期时执行设备结束进程。
+- 单次调用最多等待 100 秒；设 `yield_ms`（命令行 `--yield-ms`）可提前拿到进程号，再用
+  `litch_machine.process`（命令行 `litch-machine ps`）按序号读取。输出只保留最近一段，
+  单次返回最多 32 KiB。回合结束不影响已返回进程号的命令；来源设备持续断线 10 分钟会结束其命令，
+  在此之前重连可继续读取。桌面与实际执行命令的设备断开时，该连接上的进程会结束。
+- `exec` gives the command 10 minutes by default (600000 ms), with a maximum of 60 minutes
+  (3600000 ms). A single call waits at most 100 seconds. Set `yield_ms` (`--yield-ms` in the CLI)
+  to get a process ID sooner, then read new output with `process` (`litch-machine ps`). Only recent
+  output is retained, and each response returns up to 32 KiB. Yielded commands can outlive the
+  model's turn. A continuous 10-minute disconnect from the source device stops its commands; if it
+  reconnects sooner, you can continue reading. If the desktop loses its connection to the
+  execution device itself, processes on that connection end.
+- 如果已有会话仍显示旧的工具时限，开始新会话以获取更新后的工具说明。
+  If an existing session still shows the old tool limit, start a new session to get the updated tool definition.
+
 ## Watching and stopping
 
 - The title bar shows a marker while a remote device runs commands here or waits for approval; its
