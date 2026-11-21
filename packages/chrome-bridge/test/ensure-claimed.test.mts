@@ -316,8 +316,12 @@ test('受限当前页列出准确原因，认领前拒绝，不发 claim 或审�
     const listed = await f.call('tabs', { action: 'list', targetId: 'chrome:fixture' })
     const text = listed.contentItems[0]
     assert.equal(text?.type, 'inputText')
-    const tab = JSON.parse(text.text).tabs[0]
+    const body = JSON.parse(text.text)
+    assert.deepEqual(body.tabs, [])
+    const tab = body.unavailableTabs[0]
     assert.equal(tab.unavailableReason, f.tab.unavailableReason)
+    assert.equal(tab.current, true)
+    assert.equal('claimToken' in tab, false)
     const result = await f.call('ensure_claimed', { targetId: 'chrome:fixture' })
     assert.equal(result.success, false)
     assert.match(JSON.stringify(result), /Chrome Web Store/)

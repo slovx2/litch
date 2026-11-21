@@ -217,11 +217,18 @@ export class ChromeExecutor implements BrowserExecutor {
     instanceId: string,
     signal: AbortSignal,
     tabId?: number,
+    includeUnavailable = false,
   ): Promise<ListedTab[]> {
     const list = () =>
       this.options.bridge.call<ListedTab[]>(
         instanceId,
-        { op: 'list', args: tabId === undefined ? {} : { tabId } },
+        {
+          op: 'list',
+          args: {
+            ...(tabId === undefined ? {} : { tabId }),
+            ...(includeUnavailable ? { includeUnavailable: true } : {}),
+          },
+        },
         signal,
       )
     try {
@@ -442,7 +449,7 @@ export class ChromeExecutor implements BrowserExecutor {
         if (context.signal.aborted)
           throw new ChromeBridgeError('cancelled', 'The call was cancelled.')
         this.instance(target)
-        const tabs = await this.listTabs(instanceId, context.signal)
+        const tabs = await this.listTabs(instanceId, context.signal, undefined, true)
         const matches = tabs.filter((tab) =>
           old
             ? tab.id === old.grant.tabId
@@ -456,6 +463,8 @@ export class ChromeExecutor implements BrowserExecutor {
             'invalid',
             'No unique matching tab. Use tabs(list) and claim a specific token; do not guess another tab.',
           )
+        if (tab.unavailableReason)
+          throw new ChromeBridgeError('targetUnavailable', tab.unavailableReason)
         if (
           old &&
           (old.targetId
@@ -717,10 +726,20 @@ export class ChromeExecutor implements BrowserExecutor {
         )
       if (invocation.tool === 'tabs' && args.action === 'list') {
         const instanceId = this.instance(args.targetId)
-        const tabs = await this.listTabs(instanceId, context.signal)
+        const tabs = await this.listTabs(instanceId, context.signal, undefined, true)
+        // 不可接管页只返回诊断，不能签发认领令牌或冒充可接管的 current。
+        const unavailableTabs = tabs
+          .filter((tab) => tab.unavailableReason)
+          .map((tab) => ({
+            title: tab.title,
+            url: tab.url,
+            unavailableReason: tab.unavailableReason,
+            current: tab.active === true && tab.lastFocusedWindow === true,
+          }))
         const list = tabs
           .filter(
             (tab) =>
+              !tab.unavailableReason &&
               ![...this.pages.values()].some(
                 (page) =>
                   page.instanceId === instanceId && page.grant.tabId === tab.id && page.paused,
@@ -747,7 +766,9 @@ export class ChromeExecutor implements BrowserExecutor {
               current: tab.active === true && tab.lastFocusedWindow === true,
             }
           })
-        return ok(JSON.stringify({ tabs: list }))
+        return ok(
+          JSON.stringify({ tabs: list, ...(unavailableTabs.length ? { unavailableTabs } : {}) }),
+        )
       }
       if (invocation.tool === 'claim') {
         const token = typeof args.claimToken === 'string' ? this.tokens.get(args.claimToken) : null
