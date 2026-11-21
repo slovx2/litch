@@ -679,6 +679,37 @@
   },
   "localObservations": [
     {
+      "id": "2026-11-21-device-manager-ending-binding",
+      "source": "local",
+      "suite": "node scripts/ci/test-shard.mjs device, 197 files",
+      "test": "结束流程重启恢复：finished-offline，不重复开收尾回合",
+      "sha": "b70e18a004ac613e9dce9a9cae6b326748015c02",
+      "observedAt": "2026-11-21T19:24:00Z",
+      "environment": {
+        "platform": "darwin-arm64",
+        "node": "24.19.0"
+      },
+      "failure": "完整 device 分片 1212/1213 通过，仅该用例等待收尾绑定 3000ms 超时。是否由并发调度导致尚未确证。",
+      "failureLog": {
+        "name": "device-shard.log",
+        "sha256": "fb314a5a9b907fe15b29a00b59e6eecb5f534d34a81f0352a24110d6ae82ed4f"
+      },
+      "evidence": {
+        "kind": "same-sha-local-rerun",
+        "result": "产品源码及构建产物未改，单跑 manager-lifecycle.test.mjs 为 11/11 通过，该用例耗时 2101ms；没有放宽断言、时限或加入重试。",
+        "log": "lifecycle-diagnostic.log",
+        "sha256": "2e0d60d6936cca0747f5d217b0f6c05b0b28104b6cd886a8b46592c568dd5462",
+        "fullRerun": {
+          "command": "node scripts/ci/test-shard.mjs device",
+          "result": "相同产品源码和构建产物，197 个文件、1213/1213 通过；本用例耗时 2162ms。",
+          "log": "device-shard-confirm.log",
+          "sha256": "8b2d964230bebd9d411a946d4da053ebfad3a88475884c7830f8dc82b4e954d7"
+        }
+      },
+      "countedInCiThreshold": false,
+      "note": "仅本地观察，无新 CI run/job，不增加 CI 偶发次数。工作区仅更新路由测试的扩展预期和检查约定，收尾实现与该用例未改。"
+    },
+    {
       "id": "2026-11-21-i343-browser-forward-restart",
       "source": "local",
       "suite": "desktop browser full",
