@@ -26,6 +26,28 @@
       ]
     },
     {
+      "job": "client / checks",
+      "test": "smoke",
+      "status": "active",
+      "events": [
+        {
+          "runId": 44781777389,
+          "attempt": 1,
+          "jobId": 136446052395,
+          "sha": "b5f99aa9bb552b297c2a50396903bc7b111f973c",
+          "date": "2026-11-20T17:17:03Z",
+          "trigger": "push",
+          "url": "https://github.com/slovx2/litch/actions/runs/44781777389/job/136446052395",
+          "failure": "结构化检查证明 smoke code=1、signal=null；LITCH_SMOKE grew=false、painted=0。完整 job 日志与 checks.json 已核对，详情见 docs/ci/smoke-44781777389.md。",
+          "evidence": {
+            "kind": "local-rerun",
+            "reference": "docs/ci/smoke-44781777389.md",
+            "note": "2026-11-21 UTC，实际 checkout b5f99aa9bb552b297c2a50396903bc7b111f973c，工作区干净无源码改动；macOS arm64、Node 24.19.0 原样执行 node apps/desktop/scripts/smoke.mjs，退出 0，流式增量及代码上色通过；日志摘要与 SHA-256 见引用报告。只重跑源 client / checks job，不放宽断言。"
+          }
+        }
+      ]
+    },
+    {
       "job": "client",
       "test": "client:remote:service",
       "status": "active",
