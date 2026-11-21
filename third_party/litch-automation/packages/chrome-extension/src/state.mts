@@ -3,7 +3,7 @@ import type {
   ChromeGrant,
   ChromeTabState,
 } from '../../automation-contracts/src/litch/chrome-browser.mjs'
-import { attachFailure, chromeText, restrictedPage } from './attach-error.mjs'
+import { attachFailure, chromeText, restrictedPage, safeAttachError } from './attach-error.mjs'
 import { chromeOrigin } from './origin.mjs'
 import type { TabPresentation } from './presentation.mjs'
 
@@ -198,8 +198,8 @@ export async function attach(
       error && typeof error === 'object' && 'message' in error
         ? String(error.message)
         : String(error)
-    // 不记录页面 URL、正文或凭据；保留 Chrome 原始异常供扩展 worker 排障。
-    console.error('Chrome debugger attach failed', { tabId, error: raw })
+    // 原始 cause 只留在内存；扩展日志不写 URL、凭据或原异常对象。
+    console.error('Chrome debugger attach failed', { tabId, error: safeAttachError(raw) })
     const failure = attachFailure(raw, tab.url, chromeText(state.chrome))
     throw new ChromeFault(failure.code, failure.message, { cause: error })
   }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { attachFailure, chromeText, restrictedPage } from '../src/attach-error.mjs'
+import { attachFailure, chromeText, restrictedPage, safeAttachError } from '../src/attach-error.mjs'
 import { execute } from '../src/requests.mjs'
 import { attach, ChromeFault, type ExtensionState, inspectOrigins } from '../src/state.mjs'
 
@@ -68,6 +68,16 @@ for (const [raw, code, hint] of [
   ],
   ['No tab with given id 1.', 'staleDocument', 'closed or changed'],
   ['Unexpected internal failure', 'targetUnavailable', 'Follow the original error'],
+  [
+    'Cannot access contents of url "https://fixture-user:fixture-pass@example.test/private?token=fixture-query#fixture-fragment".',
+    'targetUnavailable',
+    'denied debugging',
+  ],
+  [
+    'Host access is restricted by policy. Authorization: Bearer fixture-bearer',
+    'targetUnavailable',
+    'management policy',
+  ],
 ] as const) {
   test(`attach 原始错误保留并分类：${raw}`, async (t) => {
     const log = t.mock.method(console, 'error', () => {})
@@ -92,18 +102,41 @@ for (const [raw, code, hint] of [
       assert.ok(error instanceof ChromeFault)
       assert.equal(error.code, code)
       assert.equal(error.cause, original)
-      assert.ok(error.message.includes(raw))
+      assert.ok(error.message.includes(safeAttachError(raw)))
       assert.ok(error.message.includes(hint))
+      assert.doesNotMatch(error.message, /fixture-(?:user|pass|query|fragment|bearer)/)
       return true
     })
     assert.equal(detached, false)
     assert.deepEqual(log.mock.calls[0]?.arguments, [
       'Chrome debugger attach failed',
-      { tabId: 1, error: raw },
+      { tabId: 1, error: safeAttachError(raw) },
     ])
-    assert.ok(attachFailure(raw, '', chinese).message.includes(`Chrome 原始错误： ${raw}`))
+    assert.ok(
+      attachFailure(raw, '', chinese).message.includes(`Chrome 原始错误： ${safeAttachError(raw)}`),
+    )
   })
 }
+
+test('诊断脱敏去掉 URL、认证头和显式秘密，保留普通错误且限制日志长度', () => {
+  assert.equal(
+    safeAttachError('Cannot access contents of url "https://user:pass@example.test/?token=value".'),
+    'Cannot access contents of url "[redacted URL]".',
+  )
+  for (const header of ['Authorization', 'Proxy-Authorization', 'Cookie', 'Set-Cookie'])
+    assert.equal(safeAttachError(`${header}: session=fixture-secret`), `${header}: [redacted]`)
+  for (const key of [
+    'token',
+    'access_token',
+    'refreshToken',
+    'password',
+    'apiKey',
+    'client_secret',
+  ])
+    assert.equal(safeAttachError(`${key}="fixture secret"`), `${key}=[redacted]`)
+  assert.equal(safeAttachError('Unexpected internal failure'), 'Unexpected internal failure')
+  assert.equal(safeAttachError('x'.repeat(3000)).length, 2048)
+})
 
 test('标签列表保留受限当前页及原因，读取不到正文或框架', async () => {
   const url = 'chrome://settings/'

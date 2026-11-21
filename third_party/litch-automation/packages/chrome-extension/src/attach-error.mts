@@ -7,6 +7,22 @@ export function chromeText(chrome: any): Text {
   return (chinese, english) => (zh ? chinese : english)
 }
 
+/** 原始诊断可能包含带凭据的 URL 或请求头；日志和工具返回只保留脱敏文本。 */
+export function safeAttachError(raw: string): string {
+  return raw
+    .replace(/\b[a-z][a-z\d+.-]*:\/\/[^\s<>"'`]+/gi, '[redacted URL]')
+    .replace(/\b(?:Bearer|Basic)\s+[a-z\d._~+/-]+=*/gi, '[redacted authorization]')
+    .replace(
+      /\b((?:proxy-)?authorization|(?:set-)?cookie)\s*["']?\s*[:=][^\r\n]+/gi,
+      '$1: [redacted]',
+    )
+    .replace(
+      /\b((?:access[_-]?|refresh[_-]?)?token|password|passwd|pwd|client[_-]?secret|api[_-]?key|secret)\s*["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
+      '$1=[redacted]',
+    )
+    .slice(0, 2048)
+}
+
 /** 只依据明确的 URL 边界预检；普通站点的运行时限制由 Chrome 原始错误说明。 */
 export function restrictedPage(url: string, tr: Text): string | null {
   let parsed: URL
@@ -74,5 +90,8 @@ export function attachFailure(
             'Chrome cannot attach to this tab. Follow the original error, or open a new regular HTTP(S) tab.',
           ))
   }
-  return { code, message: `${reason} ${tr('Chrome 原始错误：', 'Original Chrome error:')} ${raw}` }
+  return {
+    code,
+    message: `${reason} ${tr('Chrome 原始错误：', 'Original Chrome error:')} ${safeAttachError(raw)}`,
+  }
 }
