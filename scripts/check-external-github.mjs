@@ -31,8 +31,8 @@ const coreExtensions = [
 const extensions = [...coreExtensions, EXTERNAL_SOURCES_EXTENSION]
 const main = 'litch_manager'
 
-test('设备 GitHub：授权、只读连接、待分拣、真实提醒、对账、X-n、凭据继承与 CI', {
-  timeout: 30_000,
+test('设备 GitHub：授权、待分拣、反馈后接单、对账、X-n、凭据继承与 CI', {
+  timeout: 45_000,
 }, async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'lg-'))
   const state = join(dir, 'state')
@@ -297,7 +297,8 @@ else if (args[0] === 'api' || args[0] === 'pr') {
     '初始仓库轮询',
   )
   clock.now += 10
-  mock.request(8)
+  const originalIssue = mock.request(8)
+  const issueBody = originalIssue.body
   mock.request(9, 'outsider')
   clock.now += 10
   const preview = await admin.call(E.sourcePreview, { source })
@@ -351,6 +352,8 @@ else if (args[0] === 'api' || args[0] === 'pr') {
   await until(() => mock.states.updated === 1, '查证并更新原状态评论', 6500)
   assert.equal(mock.states.created, 1)
   assert.match([...mock.sent.values()][0].body, /I'm on it/i)
+  assert.ok(originalIssue.updated_at > originalIssue.created_at, '回写已推进 issue 更新时间')
+  assert.equal(originalIssue.body, issueBody, '原始 @ 正文没有编辑')
 
   const current = (await reconnect.call(E.inboxGet, { intakeId: intake.intakeId })).intake
   const accept = {
@@ -479,4 +482,51 @@ else if (args[0] === 'api' || args[0] === 'pr') {
     'confirmed',
   )
   assert.equal(pi.sent('turn/start').length, turns, '计划重启不能重放外部回合')
+
+  // 第二条请求来自评论。夹具模拟 👀 推进原评论和议题的更新时间。
+  if (pi.running(tid)) pi.end(tid, 'completed', 'Finished mock CI review')
+  await until(() => !device.sessionTree.activeTurn(tid), 'CI 回合结束')
+  clock.now += 10
+  mock.request(12, 'owner', 'Request is in a comment')
+  const comment = mock.comment(12, '401')
+  const commentBody = comment.body
+  clock.now += 131
+  await until(
+    () => mock.states.reactions === 1 && mock.states.created === 2,
+    '原评论收到 👀，同议题的状态评论已创建',
+    6500,
+  )
+  clock.now += 35 // 推过待分拣提醒的 30 秒合并窗口。
+  let commentIntake
+  await until(
+    async () => {
+      const { entries } = await final.call(E.inboxList, {})
+      commentIntake = entries.find(
+        ({ kind, subject, status, delivery }) =>
+          kind === 'comment' &&
+          subject.number === '12' &&
+          status === 'pending_triage' &&
+          delivery?.state === 'confirmed',
+      )
+      return !!commentIntake && mock.states.updated === 2
+    },
+    '原评论提醒已送达，同议题的状态评论已更新',
+    6500,
+  )
+  assert.ok(comment.updated_at > comment.created_at, '反应已推进原评论更新时间')
+  assert.equal(comment.body, commentBody)
+  const commentRequest = (await final.call(E.inboxGet, { intakeId: commentIntake.intakeId })).intake
+  const tookComment = resultOf(
+    (
+      await pi.callTool(tid, main, 'external_accept', {
+        intakeId: commentRequest.intakeId,
+        expectedRevision: commentRequest.revision,
+        idempotencyKey: 'take-comment-12',
+        title: 'Fixture comment',
+        body: 'Handle the original comment.',
+      })
+    )?.answer,
+  )
+  assert.equal(tookComment.outcome, 'applied', JSON.stringify(tookComment))
+  assert.equal(tookComment.mandate.issueId, 'X-2')
 })

@@ -80,6 +80,39 @@ test('触发已删除、已撤销或规则改变时，必须有同候选的独�
     assert.deepEqual(result.mandate?.eventKeys, [newEvent!.eventKey])
 })
 
+test('原文仍有效也不能用已改派路线或已撤销身份接单', async (t) => {
+  const f = externalFixture(t)
+  const [row] = await f.collect(
+    f.event('issue', {
+      target: { publication: 'published', mentionsBot: true, mentionedBotId: '200' },
+      contentVersion: 'original-body',
+    }),
+  )
+  assert.ok(row?.intakeId)
+  const request = {
+    action: 'accept' as const,
+    intakeId: row.intakeId,
+    expectedRevision: f.store.intake(row.intakeId)!.revision,
+    idempotencyKey: 'take',
+    title: '内部',
+    body: '',
+  }
+  const { assignments } = f.configuration()
+  f.changeConfiguration({ assignments: assignments.map((one) => ({ ...one, managerId: 'm2' })) })
+  await assert.rejects(f.mandates.decide(f.context, request), /No original trigger/)
+  f.changeConfiguration({ assignments })
+  const credential = f.store.config.credential(f.draft.credentialRef)
+  assert.ok(credential)
+  const revoked = f.store.config.saveCredential(
+    { ...credential, state: 'revoked', generation: credential.generation + 1 },
+    credential.generation,
+    'revoke',
+  )
+  assert.equal(revoked.outcome, 'applied')
+  await assert.rejects(f.mandates.decide(f.context, request), /scope is unavailable/)
+  assert.equal(f.manager.issues('m1').length, 0)
+})
+
 test('并入重验议题版本和范围，暂停/换线程拒绝旧处置，写开关关闭仍可忽略', async (t) => {
   const f = externalFixture(t)
   const [row] = await f.collect(f.event('assigned', { target: { assigneeUserId: '200' } }))

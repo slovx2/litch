@@ -180,11 +180,10 @@ export function createGithubExternalVerification(
       return null
     const body = githubBody(raw)
     const { updated, created } = githubContentTimes(raw, kind)
-    const version = githubContentVersion(updated, githubContentHash(body))
-    if (
-      version !== event.contentVersion ||
-      (event.targetEvidence.publication === 'published' && created !== updated)
-    )
+    // 采集时只有创建与更新时间相同才记为原文，版本已绑定创建时间和正文摘要。
+    // 复查用同一份证明；评论、反应等活动推进更新时间，不表示原文有变。
+    const versionTime = event.targetEvidence.publication === 'published' ? created : updated
+    if (githubContentVersion(versionTime, githubContentHash(body)) !== event.contentVersion)
       return null
     await verifyGithubBot(api, source.botUserId)
     return {

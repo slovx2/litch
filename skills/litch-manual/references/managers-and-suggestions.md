@@ -838,4 +838,8 @@ The desktop manager console gains a **GitHub** segment (to triage, handled, bloc
 
 外部收件箱保存设备采集并核验的 GitHub 事件。提醒送达经理后，候选仍待分拣，直到有人处置。合规收件项可以接为新的 X-n、并入已有议题、忽略或改派给同设备的经理。新评论和 PR 可能因轮询覆盖缺口或配额而延迟。
 
+接单时会复查先前登记的原始提及。如果机器人回复或添加表情反应只是改变了帖子的更新时间，仍可接单。复查时正文不一致，该条提及不能继续作为接单依据。
+
+At acceptance, Litch rechecks the original mention it recorded. A bot reply or reaction that only changes the post's update time does not prevent acceptance. If the body differs from the one originally recorded, that mention can no longer authorize the request.
+
 外部议题保留 GitHub 原帖、接单依据和回写回执；来自 GitHub 评论的决策答复保留原评论引用。回写待对账时，应先核对 GitHub 原帖和设备记录。

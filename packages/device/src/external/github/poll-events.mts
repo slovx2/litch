@@ -146,7 +146,8 @@ export function githubContentChange(
     mentioned,
   }
   if (previous && previous.hash === hash && previous.mentioned === mentioned) return { observation }
-  // 更新时间晚于创建时间时，REST 不能证明目前的正文是作者提交的原文。
+  // 首次看到的更新时间晚于创建时间时，不能证明目前的正文是作者提交的原文。
+  // 已登记的原文证明由复核用创建时间和摘要比对；此处不把晚发现的提及补记为原文。
   const publication = !previous && candidate.createdAt === updatedAt ? 'published' : 'edited'
   // 无编辑时间的 review，只能用首次发现新摘要的时间记录编辑，绝不再次当作提交。
   const at =
