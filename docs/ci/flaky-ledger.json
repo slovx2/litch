@@ -22,6 +22,25 @@
             "reference": "docs/ci/browser-forward-restart-observation.md",
             "note": "0e6e66bb 源码未改，本地 macOS arm64 / Node 24.19.0 执行 npm run test:browser --prefix apps/desktop 退出 0，主测试196/196（含该用例），读取器32通过1跳过。日志哈希与时间见报告；测试35个打包输入与C线19个改动文件交集为空。仅补跑失败job，未改产品或用例。"
           }
+        },
+        {
+          "runId": 44891788657,
+          "attempt": 1,
+          "jobId": 136809045798,
+          "sha": "375d6d0748658e9f54f64ad1a41b91d1cfa6d492",
+          "date": "2026-11-21T09:54:53Z",
+          "trigger": "push",
+          "url": "https://github.com/slovx2/litch/actions/runs/44891788657/job/136809045798",
+          "failure": "remote-local.test.mts 的假 SSH 重建用例 fetch failed，ECONNREFUSED 127.0.0.1:49280；与首次 run 44751256716 的失败端口相同，端口固定，可能不是随机撞端口，更像是写死的端口或时序问题，尚未确证。",
+          "evidence": {
+            "kind": "same-sha-pass",
+            "runId": 44891788657,
+            "attempt": 2,
+            "jobId": 136812420208,
+            "sha": "375d6d0748658e9f54f64ad1a41b91d1cfa6d492",
+            "reference": "https://github.com/slovx2/litch/actions/runs/44891788657/job/136812420208",
+            "note": "首轮 browser / checks job 136809045798 失败；只重跑该失败作业后，同一实际 checkout SHA 375d6d0748658e9f54f64ad1a41b91d1cfa6d492 在 attempt 2 / job 136812420208 的日志确认本用例通过，作业结论 success；未修改、移出或跳过用例。"
+          }
         }
       ]
     },
