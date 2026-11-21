@@ -26,6 +26,7 @@ import type {
 import { assertStoreFormat, initializeStoreFormat } from '../../shared/src/store-format.mjs'
 import { ensureParent } from '../../shared/src/util.mjs'
 import { EXTERNAL_STORE_MIGRATION } from './external-store-schema.mjs'
+import { MANAGER_BOARD_TRANSFER_MIGRATION } from './manager-board-transfer.mjs'
 
 const MIGRATIONS = [
   `CREATE TABLE managers(id TEXT PRIMARY KEY, thread_id TEXT NOT NULL UNIQUE, body TEXT NOT NULL);
@@ -57,6 +58,7 @@ const MIGRATIONS = [
   `CREATE TABLE manager_reset_requests(manager_id TEXT NOT NULL, request_id TEXT NOT NULL, body TEXT NOT NULL,
    PRIMARY KEY(manager_id,request_id));`,
   EXTERNAL_STORE_MIGRATION,
+  MANAGER_BOARD_TRANSFER_MIGRATION,
 ] as const
 export const MANAGER_SCHEMA_VERSION = MIGRATIONS.length
 export const managerNow = () => Math.floor(Date.now() / 1000)

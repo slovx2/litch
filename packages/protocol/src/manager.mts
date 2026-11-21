@@ -28,6 +28,13 @@ export const MANAGER_NOTIFICATION = {
 
 export type ManagerTemplate = 'release' | 'investigation' | 'research' | 'blank'
 export type ManagerStatus = 'active' | 'ending' | 'ended'
+/** 私有设备管理口的看板迁移；不经过桌面工具执行器。 */
+export const MANAGER_BOARD_TRANSFER_EXTENSION = 'litchManagerBoardTransfer'
+export const MANAGER_BOARD_TRANSFER_METHOD = {
+  export: 'litch/manager/board/export',
+  import: 'litch/manager/board/import',
+} as const
+
 export type ManagerDecisionId = `D-${number}`
 export type ManagerItemId = `I-${number}`
 export type ManagerRequestId = `R-${number}`

@@ -36,6 +36,7 @@ import {
 } from '../../protocol/src/file-attachments.mjs'
 import type { HarnessConfigChangedNotification } from '../../protocol/src/harness-config.mjs'
 import { PROJECT_PERMISSION } from '../../protocol/src/harness-project-permissions.mjs'
+import { MANAGER_BOARD_TRANSFER_METHOD } from '../../protocol/src/manager.mjs'
 import { supportsNativeBackground } from '../../protocol/src/native-background-wake.mjs'
 import {
   REMOTE_CHROME_CONFIGURE,
@@ -793,6 +794,23 @@ export class ClientSession implements ClientToolPeer {
         }
         if (method.startsWith(MANAGEMENT_PREFIX))
           return this.host.management.call(method, frame.params)
+        if (
+          method === MANAGER_BOARD_TRANSFER_METHOD.export ||
+          method === MANAGER_BOARD_TRANSFER_METHOD.import
+        ) {
+          if (!this.declared.has(EXTENSION.managerBoardTransfer))
+            throw new DeviceError(
+              'extensionRequired',
+              'Declare litchManagerBoardTransfer to transfer a manager board.',
+            )
+          if (!this.deviceAdmin)
+            throw new DeviceError(
+              'deviceAdminRequired',
+              'Board transfer requires a device administrator.',
+            )
+          if (!this.host.managers) throw new DeviceError('unsupported', 'Managers are unavailable.')
+          return this.host.managers.boardTransfer(method, frame.params)
+        }
         if (method.startsWith('litch/manager/'))
           return this.host.managers
             ?.call(
