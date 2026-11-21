@@ -138,7 +138,7 @@ test('诊断脱敏去掉 URL、认证头和显式秘密，保留普通错误且�
   assert.equal(safeAttachError('x'.repeat(3000)).length, 2048)
 })
 
-test('标签列表保留受限当前页及原因，读取不到正文或框架', async () => {
+test('可接管列表排除受限当前页，显式诊断才返回原因且不读取正文或框架', async () => {
   const url = 'chrome://settings/'
   const state = {
     epoch: 'epoch',
@@ -154,12 +154,17 @@ test('标签列表保留受限当前页及原因，读取不到正文或框架',
       debugger: { getTargets: async () => [{ tabId: 1, id: 'a'.repeat(32) }] },
     },
   } as unknown as ExtensionState
-  const result = (await execute(state, {
+  const request = {
     kind: 'request',
     id: 'list',
     epoch: 'epoch',
     op: 'list',
     args: {},
+  } as const
+  assert.deepEqual(await execute(state, request), [])
+  const result = (await execute(state, {
+    ...request,
+    args: { includeUnavailable: true },
   })) as any[]
   assert.equal(result.length, 1)
   assert.match(result[0].unavailableReason, /internal Chrome/)

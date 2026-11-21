@@ -35,7 +35,7 @@ AI 工具定义与宿主侧执行器在 `@litch/chrome-bridge`，不是通过网
 
 测试：`npm run test --prefix packages/chrome-extension`；完整隔离 Chrome 链路见 `scripts/chrome-e2e/README.md`。正式 Chrome 商店签名安装、其他宿主产品打包和真实用户 profile 不在这些测试内。Chrome 实际允许多个扩展 attach 同一标签；库先用 getTargets 拒绝已附着的目标，attach 后验证目标仍存在并附着。没有其他调试器时，单个 Litch 的正常认领不受影响。
 
-标签列表保留 Chrome 内部页、扩展页面、Chrome 网上应用店和错误页，并用 `unavailableReason` 说明无法认领的原因；URL 已知受限时，在读取框架和 attach 前拒绝。提示按 Chrome 界面语言提供中文或英文，建议新开普通 HTTP(S) 标签。attach 的其他失败保留 Chrome 原始错误及异常 cause，分别说明策略限制、调试器占用、目标消失与未知错误。扩展 service worker 日志和工具提示中的 URL、认证头及显式秘密先脱敏，并限制诊断长度；原始 cause 只在内存中保留，不记录原异常对象。不会把未知错误推断成 DevTools 占用。
+可接管标签列表排除 Chrome 内部页、扩展页面、Chrome 网上应用店和错误页；工具将这些页面单独放在 `unavailableTabs` 诊断区，用 `unavailableReason` 说明原因，不签发 claimToken。URL 已知受限时，在读取框架和 attach 前拒绝。提示按 Chrome 界面语言提供中文或英文，建议新开普通 HTTP(S) 标签。attach 的其他失败保留 Chrome 原始错误及异常 cause，分别说明策略限制、调试器占用、目标消失与未知错误。扩展 service worker 日志和工具提示中的 URL、认证头及显式秘密先脱敏，并限制诊断长度；原始 cause 只在内存中保留，不记录原异常对象。不会把未知错误推断成 DevTools 占用。
 
 Litch 设备路由签发的 `chrome:litch-…` 句柄属于产生它的回合。回合结束、中断或重启后须重新调用 `targets`；迟到结果仍属于旧回合。普通网页导航改变文档 refs，不改变 Chrome 实例的 targetId；桥重连会撤租约，同回合可用 `ensure_claimed(tabId)` 重新验证原标签。
 

@@ -68,8 +68,10 @@ export async function execute(state: ExtensionState, request: ChromeRequest): Pr
         )
         .filter((tab: any) => {
           const url = tab.pendingUrl || tab.url || ''
+          const restricted = restrictedPage(url, chromeText(state.chrome))
           return (
-            !tab.incognito && (chromeOrigin(url) || restrictedPage(url, chromeText(state.chrome)))
+            !tab.incognito &&
+            (restricted ? args.includeUnavailable === true : Boolean(chromeOrigin(url)))
           )
         })
         .map(async (tab: any) => {
