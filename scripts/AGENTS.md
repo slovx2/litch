@@ -114,6 +114,10 @@ plain `.mjs` / shell.
 
 `node third_party/litch-automation/packages/browser/scripts/check-user-tabs.mjs` 用隐藏 Electron 窗口、隔离 HOME 和回环站点验证用户标签认领、租约冲突、输入接管、下载、登录交接失败保留及回合交还。相关定向单测在通用包 `packages/browser/test/user-tabs.test.mts`；产品原浏览器冒烟 `node apps/desktop/scripts/check-browser.mjs` 同时保留。
 
+## 设备 Chrome 设置验收
+
+先 `npm run client:build`，再运行 `node scripts/check-device-chrome-settings.mjs [截图目录]`。正式桌面设备详情接模拟核心，不连真实设备；覆盖连接后收起、编号步骤、复制全文及停用命令，并用隔离浏览器输出三种皮肤的状态截图。
+
 ## 手机经理控制台验收
 
 `npm run client:check:manager-mobile` 先生成手机 WebView 资源，再自动分配空闲端口，启动本工作树的隔离 Expo 预览并运行正式页面验收，结束或中断时清理自有进程。需要先安装 `apps/mobile` 依赖和隔离 Chrome for Testing（可用 `LITCH_CHROME_BINARY` 指定）。入口是 `check-manager-mobile-run.mjs`，生命周期实现与单测在 `manager-mobile-runner*`；不设置 `CI=1`，不改现有服务器或工作树配置。

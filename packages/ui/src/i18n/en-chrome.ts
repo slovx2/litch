@@ -1,17 +1,27 @@
 export const enChrome = {
   'chrome.device.title': 'Device Chrome',
-  'chrome.device.status': '{host} · {status}',
   'chrome.device.enabled': 'Available to conversations on this device.',
-  'chrome.device.disabled': 'Access for conversations on this device is off.',
+  'chrome.device.disabled': 'Access disabled',
+  'chrome.device.setup': 'Setup steps',
+  'chrome.device.prepareStep': 'Prepare the connection',
   'chrome.device.prepareNote':
-    'On the Linux device, run this command as the Chrome user. Use a dedicated Chrome profile.',
-  'chrome.device.installNote':
-    'On the Linux device, open the store address in Chrome and install Litch Browser. Use the command below to change access.',
-  'chrome.device.conflict': 'Another owner has already registered the Chrome host.',
-  'chrome.device.incompatible': 'Update Litch or the Chrome extension to connect.',
-  'chrome.device.error':
-    'Device Chrome could not start. Run the prepare command on the Linux device to check its registration.',
-  'chrome.device.copy': 'Copy prepare command',
+    'Run this on the Linux device as the Chrome user. A dedicated Chrome profile is recommended.',
+  'chrome.device.installStep': 'Install Litch Browser',
+  'chrome.device.installNote': 'Install the extension in Chrome on {host}.',
+  'chrome.device.accessStep': 'Allow access',
+  'chrome.device.enableNote':
+    'After preparing the connection and installing the extension, run this command to grant access.',
+  'chrome.device.accessOn': 'Conversations on this device have access.',
+  'chrome.device.disableCommand': 'Show disable command',
+  'chrome.device.disableNote':
+    'Run this command on {host} to turn off Chrome access for conversations on that device.',
+  'chrome.device.conflict': 'Host already registered',
+  'chrome.device.incompatible': 'Version mismatch',
+  'chrome.device.updateNote': 'Update Litch or the Chrome extension to reconnect.',
+  'chrome.device.stopped': 'Control stopped',
+  'chrome.device.error': 'Could not start',
+  'chrome.device.errorNote': 'Run the prepare command on the Linux device to check registration.',
+  'chrome.device.copy': 'Copy command',
   'chrome.device.copied': 'Copied',
   'chrome.device.copyError': 'Clipboard unavailable. Select and copy the command.',
   'chrome.device.approval': 'Chrome · {host}',

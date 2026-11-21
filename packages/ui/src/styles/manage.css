@@ -68,6 +68,55 @@
   line-height: 18px;
   color: var(--ink-3);
 }
+/* 设备 Chrome 沿用设备状态徽标、折叠按钮和命令框。 */
+.device-chrome-summary,
+.device-chrome-identity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.device-chrome-summary {
+  flex-wrap: wrap;
+  column-gap: 12px;
+}
+.device-chrome-identity {
+  max-width: 100%;
+}
+.device-chrome-actions {
+  align-items: center;
+}
+.device-chrome-actions .fold {
+  padding: 2px 4px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.device-chrome-steps {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding-inline-start: 22px;
+  min-width: 0;
+  font-size: 12px;
+}
+.device-chrome-steps li {
+  min-width: 0;
+}
+.device-chrome-steps li::marker {
+  color: var(--ink-3);
+}
+.device-chrome-steps .mng-sec-body {
+  gap: 4px;
+}
+.device-chrome-command code {
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-wrap: normal;
+  scrollbar-width: thin;
+}
+.device-chrome-command .mini[data-copied="true"] {
+  color: var(--ok);
+}
 /* 电源组的状态行（devices/manage/PowerSettings.tsx） */
 .power-state {
   color: var(--ink-2);
