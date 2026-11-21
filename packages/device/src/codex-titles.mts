@@ -4,8 +4,9 @@
 //     声明了我们扩展的客户端）。官方桌面端、命令行直接连 codex 建的不管；临时会话不管；设备进程自己建的（会话树的子会话、定时任务的会话）本来就带名字，
 //     也不经那里；codex 自己派的子代理线程不走 thread/start，也来不了。
 //   - 首条有文字的消息成功提交后独立起名，不等主回合结束；主回合中断、编辑重发不取消或重复起名。
-//     提交失败不消耗机会；起名请求本身出错、超时仍只试一次。
-//   - 模型只用 model/list 里的 luna 系小模型（有几个就挑版本最新的），强度 low；没有就不起名，不退回会话自己的模型。
+//     提交失败不消耗机会；命名回合只发一次。若读会话时历史文件尚为空，只重试读取。
+//   - 只用 GPT Luna 命名。型号取自 Codex 模型清单，提供商取自当前生效的配置（含项目层），与主回合的型号无关。
+//     Codex 0.166+ 拒绝非当前提供商的回合。找不到 Luna、请求失败或超时，用首条文字的开头兜底。
 //   - 临时会话：ephemeral、只读、审批 never、关掉工具和功能、MCP 全停，threadSource 记 thread_title。
 //     开在设备进程自己的一条引擎连接上（不接会话树、定时任务的回合钩子），用完退订。codex 把它的 thread/started
 //     广播给每条连接，客户端认得 ephemeral、不放进侧栏（core 的 device.mts），线程列表也不列临时会话。
@@ -13,14 +14,19 @@
 //     经各条客户端连接照常转过去，协议不用加东西。
 //   - 开关是 harness 详情设置里的“自动起名”（codex-settings.mts 的 AUTO_TITLE_KEY），存在 sessions.sqlite 的
 //     harness_options，默认开；关掉之后新建的会话不再起名。
+import { setTimeout as delay } from 'node:timers/promises'
+import { activeProvider } from './codex-providers.mjs'
 import { type EngineLink, runTurn } from './engine-link.mjs'
-import { isObject } from './wire.mjs'
+import { isObject, UpstreamRpcError } from './wire.mjs'
 
 /** harness_options 里开关的键 */
 const OPTION = 'autoTitle'
 
-/** 起一次名最多等多久（毫秒）：读会话、挑模型、开临时会话、跑回合、写回，合起来 */
+/** 生成标题的预算（毫秒）；复查手动名称和写回各有独立的短超时 */
 const TITLE_TIMEOUT_MS = 30_000
+
+// 首回合已应答，但 Codex 可能还没把会话元数据写入刚建的历史文件。
+const EMPTY_ROLLOUT_RETRY_MS = [50, 150, 400, 900]
 
 /** 标题最长多少个字（按码点算），模型给长了截掉 */
 export const TITLE_MAX_CHARS = 40
@@ -112,7 +118,7 @@ export class CodexTitles {
     this.pending.delete(threadId)
     const job: Promise<void> = this.title(harness, threadId, request)
       .catch((error: unknown) =>
-        this.host.log(`给会话 ${threadId}（${harness}）起名没成：${describe(error)}`),
+        this.host.log(`没有写入会话 ${threadId}（${harness}）的标题：${errorKind(error)}`),
       )
       .finally(() => this.running.delete(job))
     this.running.add(job)
@@ -157,22 +163,62 @@ export class CodexTitles {
     const deadline = Date.now() + (this.host.timeoutMs ?? TITLE_TIMEOUT_MS)
     const left = () => Math.max(1, deadline - Date.now())
     const link = await this.link(harness)
-    const thread = await readThread(link, threadId, false, left())
+    const thread = await readThread(link, threadId, left())
     // 会话树的子会话建出来就带名字，这里再看一眼，免得哪条路漏了
-    if (!thread || hasName(thread) || thread.ephemeral === true || thread.parentThreadId) return
-    if (this.host.store.parentOf(threadId)) return
-    const model = pickTitleModel(await listModels(link, left()))
-    if (!model) {
-      this.host.log(`${harness} 的模型清单里没有 luna 系小模型，会话 ${threadId} 不起名`)
+    if (
+      this.closed ||
+      !thread ||
+      hasName(thread) ||
+      thread.ephemeral === true ||
+      thread.parentThreadId
+    )
       return
-    }
-    const temporary = await startTemporary(link, model.model, cwdOf(thread), left())
-    let title: string | null = null
+    if (this.host.store.parentOf(threadId)) return
+    const { title, failure } = await generateTitle(link, cwdOf(thread), request, left)
+    if (failure)
+      this.host.log(
+        `会话 ${threadId}（${harness}）GPT Luna 命名失败：${failure}；尝试使用首条消息作为标题`,
+      )
+    if (this.closed) return
+    // 模型超时也要留出写回的时间；重新读取，保留用户在此期间设置的名称。
+    const writeLink = await this.link(harness)
+    const now = await readThread(writeLink, threadId, 5000)
+    if (this.closed || !now || hasName(now)) return
+    await writeLink.request(
+      'thread/name/set',
+      { threadId, name: title ?? fallbackTitle(request) },
+      { timeoutMs: 5000 },
+    )
+    if (title) this.host.log(`给会话 ${threadId}（${harness}）起了名字，用的是 GPT Luna`)
+  }
+}
+
+async function generateTitle(
+  link: EngineLink,
+  cwd: string | null,
+  request: string,
+  left: () => number,
+): Promise<{ title: string; failure?: never } | { title?: never; failure: string }> {
+  let phase = '读取当前提供商配置'
+  try {
+    const read = await link.request('config/read', cwd ? { cwd } : {}, { timeoutMs: left() })
+    if (!isObject(read) || !isObject(read.config)) return { failure: 'Codex 未返回生效配置' }
+    const config = read.config
+    const provider = activeProvider({ config })
+    phase = '查询模型清单'
+    const model = pickTitleModel(await listModels(link, left))
+    if (!model) return { failure: '模型清单中没有 GPT Luna' }
+    phase = '创建临时会话'
+    const servers = isObject(config.mcp_servers) ? Object.keys(config.mcp_servers) : []
+    const temporary = await startTemporary(link, model.model, provider, cwd, servers, left)
     try {
+      if (temporary.provider !== provider || temporary.model !== model.model)
+        return { failure: 'Codex 返回的临时会话未使用指定提供商和模型' }
+      phase = '请求命名回合'
       const result = await runTurn(
         link,
         {
-          threadId: temporary,
+          threadId: temporary.id,
           input: [{ type: 'text', text: titlePrompt(request), text_elements: [] }],
           overrides: {
             outputSchema: OUTPUT_SCHEMA,
@@ -181,27 +227,37 @@ export class CodexTitles {
         },
         { timeoutMs: left(), interruptGraceMs: 2000 },
       )
-      if (result.status !== 'completed')
-        throw new Error(
-          `临时会话的回合没有正常结束（${result.status}${result.error ? `：${result.error}` : ''}）`,
-        )
-      title = parseTitle(result.lastMessage)
-      if (!title) throw new Error('模型没有给出能用的标题')
+      if (result.status !== 'completed') {
+        const http = httpStatus(result.error)
+        return { failure: `命名回合未完成（${result.status}${http ? `，${http}` : ''}）` }
+      }
+      const title = parseTitle(result.lastMessage)
+      return title ? { title } : { failure: '模型未返回可用标题' }
     } finally {
       void link
-        .request('thread/unsubscribe', { threadId: temporary }, { timeoutMs: 5000 })
+        .request('thread/unsubscribe', { threadId: temporary.id }, { timeoutMs: 5000 })
         .catch(() => {})
     }
-    // 跑的这一会儿用户可能已经手动起了名：那就不覆盖
-    const now = await readThread(link, threadId, false, left())
-    if (!now || hasName(now)) return
-    await link.request('thread/name/set', { threadId, name: title }, { timeoutMs: left() })
-    this.host.log(`给会话 ${threadId}（${harness}）起了名字，用的模型是 ${model.model}`)
+  } catch (error: unknown) {
+    return { failure: `${phase}：${errorKind(error)}` }
   }
 }
 
-const describe = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
+// 上游错误可能含 URL、响应体或个人配置，只记录已知类型和状态码。
+function httpStatus(value: string | null): string | null {
+  const status = value?.match(/\b(?:unexpected status|HTTP) ([45]\d{2})\b/i)?.[1]
+  return status ? `HTTP ${status}` : null
+}
+
+function errorKind(error: unknown): string {
+  if (error instanceof UpstreamRpcError) {
+    if (isEmptyRolloutRead(error)) return '会话历史文件尚为空（RPC -32603）'
+    if (isObject(error.data) && error.data.type === 'modelProviderMismatch')
+      return '当前 Codex 不允许向非当前提供商启动回合'
+    return httpStatus(error.message) ?? `RPC ${error.code}`
+  }
+  return '设备连接或请求失败'
+}
 
 const hasName = (thread: Record<string, unknown>): boolean =>
   typeof thread.name === 'string' && thread.name.trim() !== ''
@@ -215,14 +271,37 @@ const clip = (value: string, limit: number): string => {
   return chars.length <= limit ? value : `${chars.slice(0, limit).join('')}…`
 }
 
+function isEmptyRolloutRead(error: unknown): boolean {
+  return (
+    error instanceof UpstreamRpcError &&
+    error.code === -32603 &&
+    /^failed to read thread: thread-store internal error: failed to read session metadata (.+): rollout at \1 is empty$/u.test(
+      error.message,
+    )
+  )
+}
+
 async function readThread(
   link: EngineLink,
   threadId: string,
-  includeTurns: boolean,
   timeoutMs: number,
 ): Promise<Record<string, unknown> | null> {
-  const result = await link.request('thread/read', { threadId, includeTurns }, { timeoutMs })
-  return isObject(result) && isObject(result.thread) ? result.thread : null
+  const deadline = Date.now() + timeoutMs
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const result = await link.request(
+        'thread/read',
+        { threadId, includeTurns: false },
+        { timeoutMs: Math.max(1, deadline - Date.now()) },
+      )
+      return isObject(result) && isObject(result.thread) ? result.thread : null
+    } catch (error: unknown) {
+      const wait = EMPTY_ROLLOUT_RETRY_MS[attempt]
+      if (!isEmptyRolloutRead(error) || wait === undefined || Date.now() + wait >= deadline)
+        throw error
+      await delay(wait)
+    }
+  }
 }
 
 /** 只取本次提交的文字，不把图片、文件地址或设备层追加的消息当命名材料。 */
@@ -236,15 +315,23 @@ export function titleRequest(input: unknown): string | null {
   return request ? clip(request, REQUEST_CHARS) : null
 }
 
+function fallbackTitle(request: string): string {
+  const text = request.replace(/\s+/gu, ' ').trim()
+  return Array.from(text).length <= TITLE_MAX_CHARS ? text : clip(text, TITLE_MAX_CHARS - 1)
+}
+
 /** model/list 的全部条目（含隐藏的），最多翻几页 */
-async function listModels(link: EngineLink, timeoutMs: number): Promise<Record<string, unknown>[]> {
+async function listModels(
+  link: EngineLink,
+  left: () => number,
+): Promise<Record<string, unknown>[]> {
   const models: Record<string, unknown>[] = []
   let cursor: string | null = null
   for (let page = 0; page < 5; page++) {
     const result = await link.request(
       'model/list',
       { includeHidden: true, ...(cursor ? { cursor } : {}) },
-      { timeoutMs },
+      { timeoutMs: left() },
     )
     if (!isObject(result) || !Array.isArray(result.data)) break
     models.push(...result.data.filter(isObject))
@@ -271,7 +358,7 @@ function newer(a: number[], b: number[]): boolean {
 }
 
 /**
- * 起名用的模型：名字里带 luna 的，几个都有挑版本号最大的（一样大的取清单里靠前的）。
+ * 起名只选 GPT Luna；有多个正式版本时选择版本号最大的。
  * low：它报的强度里有 low（没报强度清单的当作有）。没有 luna 是 null
  */
 export function pickTitleModel(
@@ -280,7 +367,7 @@ export function pickTitleModel(
   let best: { entry: Record<string, unknown>; name: string } | null = null
   for (const entry of models) {
     const name = modelName(entry)
-    if (!name || !/luna/i.test(name)) continue
+    if (!name || !/^gpt-\d+(?:\.\d+)*-luna(?:-\d{4}-\d{2}-\d{2})?$/i.test(name)) continue
     if (!best || newer(versionOf(name), versionOf(best.name))) best = { entry, name }
   }
   if (!best) return null
@@ -295,16 +382,16 @@ export function pickTitleModel(
 async function startTemporary(
   link: EngineLink,
   model: string,
+  modelProvider: string,
   cwd: string | null,
-  timeoutMs: number,
-): Promise<string> {
-  const read = await link.request('config/read', cwd ? { cwd } : {}, { timeoutMs })
-  const config = isObject(read) && isObject(read.config) ? read.config : null
-  const servers = isObject(config?.mcp_servers) ? Object.keys(config.mcp_servers) : []
+  servers: string[],
+  left: () => number,
+): Promise<{ id: string; provider: unknown; model: unknown }> {
   const started = await link.request(
     'thread/start',
     {
       model,
+      modelProvider,
       ...(cwd ? { cwd } : {}),
       sandbox: 'read-only',
       approvalPolicy: 'never',
@@ -316,11 +403,11 @@ async function startTemporary(
         mcp_servers: Object.fromEntries(servers.map((name) => [name, { enabled: false }])),
       },
     },
-    { timeoutMs },
+    { timeoutMs: left() },
   )
   const thread = isObject(started) && isObject(started.thread) ? started.thread : null
   if (typeof thread?.id !== 'string') throw new Error('临时会话没有建出来')
-  return thread.id
+  return { id: thread.id, provider: started.modelProvider, model: started.model }
 }
 
 /** 给小模型的话。会话内容当材料，不当指令 */

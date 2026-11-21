@@ -210,7 +210,13 @@ export async function startResponsesModel(decide) {
     if (request.method !== 'POST' || !(request.url ?? '').endsWith('/responses'))
       return notFound(response)
     const serial = ++count
-    await sendResponse(response, decide(parse(Buffer.concat(chunks)), serial), serial)
+    const reply = decide(parse(Buffer.concat(chunks)), serial)
+    if (reply.status) {
+      response.writeHead(reply.status, { 'content-type': 'application/json' })
+      response.end('{"error":{"message":"fixture rejected the request"}}')
+      return
+    }
+    await sendResponse(response, reply, serial)
   })
   await new Promise((done) => server.listen(0, '127.0.0.1', done))
   return {
