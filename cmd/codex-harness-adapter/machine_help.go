@@ -13,8 +13,8 @@ const machineHelpZH = `%[4]s：经 Litch 在用户的桌面电脑上执行命令
   machines                      列出能操作的机器
   exec [选项] [--] 命令…         在 Windows 用 PowerShell、macOS/Linux 用登录 shell（-lc）执行一行命令（选项写在命令前面）；输出打到标准输出，退出码就是命令的退出码
       --cwd 目录                工作目录，缺省是主目录
-      --timeout-ms N            到点还没结束就结束它（缺省 30000，上限 600000）
-      --yield-ms N              到点还没结束就先返回进程号和已有输出（上限 100000），进程留着，用 ps 接着读
+      --timeout-ms N            到点还没结束就结束它（默认 600000，最多 3600000 毫秒）
+      --yield-ms N              单次最多等 100000 毫秒；还在运行时返回进程号，用 ps 继续读
       --stdin 文字              写进标准输入后关掉；--stdin - 读本命令的标准输入
   ps 进程号 [read|write|signal|kill]   对 exec 留下的进程：读新输出（缺省）、写标准输入、发信号、结束
       --wait-ms N --after-seq N --input 文字（- 读标准输入）--signal INT|TERM|KILL|HUP
@@ -45,8 +45,8 @@ Usage: %[4]s <action> [options] [arguments] (same as codex-harness-adapter machi
   machines                      list the machines you can operate
   exec [options] [--] command...   run a PowerShell command on Windows, or a login-shell command (-lc) on macOS/Linux (options go before the command); output goes to stdout, the exit code is the command's
       --cwd DIR                 working directory, default home
-      --timeout-ms N            kill it after this long (default 30000, at most 600000)
-      --yield-ms N              if still running after this long, return the process id and output so far (at most 100000); keep reading with ps
+      --timeout-ms N            kill it after this long (default 600000, at most 3600000 ms)
+      --yield-ms N              wait at most 100000 ms; returns a process ID if still running, use ps to read more
       --stdin TEXT              written to stdin, which is then closed; --stdin - passes this command's stdin
   ps PROCESS_ID [read|write|signal|kill]   for a process left by exec: read new output (default), write stdin, signal, kill
       --wait-ms N --after-seq N --input TEXT (- reads stdin) --signal INT|TERM|KILL|HUP
