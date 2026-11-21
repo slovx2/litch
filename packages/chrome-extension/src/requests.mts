@@ -5,6 +5,7 @@ import type {
 } from '../../automation-contracts/src/litch/chrome-browser.mjs'
 import { isAllowedCdp } from '../../browser/src/browser/cdp-allow.mjs'
 import { isInputCommand } from '../../browser/src/browser/input-command.mjs'
+import { chromeText, restrictedPage } from './attach-error.mjs'
 import { createBackgroundTab } from './background-tab.mjs'
 import { chromeOrigin } from './origin.mjs'
 import {
@@ -65,18 +66,30 @@ export async function execute(state: ExtensionState, request: ChromeRequest): Pr
         .filter((tab: any) =>
           targets.some((target) => target.tabId === tab.id && /^[a-fA-F0-9]{32}$/.test(target.id)),
         )
-        .filter((tab: any) => !tab.incognito && chromeOrigin(tab.pendingUrl || tab.url || ''))
-        .map(async (tab: any) => ({
-          ...(await tabState(state, tab.id)),
-          targetId: targets.find((target) => target.tabId === tab.id)?.id,
-          origins: await inspectOrigins(state, tab.id).catch(() => []),
-          busy: [...state.grants.values()].some((grant) => grant.tabId === tab.id),
-          active: tab.active === true,
-          lastFocusedWindow:
-            typeof lastFocused?.id === 'number' &&
-            lastFocused.id >= 0 &&
-            tab.windowId === lastFocused.id,
-        })),
+        .filter((tab: any) => {
+          const url = tab.pendingUrl || tab.url || ''
+          return (
+            !tab.incognito && (chromeOrigin(url) || restrictedPage(url, chromeText(state.chrome)))
+          )
+        })
+        .map(async (tab: any) => {
+          const unavailableReason = restrictedPage(
+            tab.pendingUrl || tab.url || '',
+            chromeText(state.chrome),
+          )
+          return {
+            ...(await tabState(state, tab.id)),
+            targetId: targets.find((target) => target.tabId === tab.id)?.id,
+            origins: await inspectOrigins(state, tab.id).catch(() => []),
+            ...(unavailableReason ? { unavailableReason } : {}),
+            busy: [...state.grants.values()].some((grant) => grant.tabId === tab.id),
+            active: tab.active === true,
+            lastFocusedWindow:
+              typeof lastFocused?.id === 'number' &&
+              lastFocused.id >= 0 &&
+              tab.windowId === lastFocused.id,
+          }
+        }),
     )
     if (state.paused.size)
       throw new ChromeFault('signingIn', 'Chrome was paused while listing tabs.')

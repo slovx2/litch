@@ -7,6 +7,7 @@ import { ChromeExecutor, type ChromeExecutorOptions } from '../src/executor.mjs'
 
 function fixture(options: Partial<ChromeExecutorOptions> = {}) {
   const tab = {
+    unavailableReason: undefined as string | undefined,
     id: 1,
     targetId: 'fixture-target',
     generation: 1,
@@ -305,4 +306,23 @@ test('Chrome 重启重用数字 tabId 时不接管新标签', async (t) => {
   assert.equal(result.success, false)
   assert.match(text(result), /original Chrome target cannot be verified/)
   assert.equal(f.calls.filter((op) => op === 'claim').length, 1)
+})
+
+test('受限当前页列出准确原因，认领前拒绝，不发 claim 或审批来源', async () => {
+  const f = fixture()
+  try {
+    f.tab.unavailableReason =
+      'Chrome Web Store is a restricted page. Open a new regular HTTP(S) tab.'
+    const listed = await f.call('tabs', { action: 'list', targetId: 'chrome:fixture' })
+    const text = listed.contentItems[0]
+    assert.equal(text?.type, 'inputText')
+    const tab = JSON.parse(text.text).tabs[0]
+    assert.equal(tab.unavailableReason, f.tab.unavailableReason)
+    const result = await f.call('ensure_claimed', { targetId: 'chrome:fixture' })
+    assert.equal(result.success, false)
+    assert.match(JSON.stringify(result), /Chrome Web Store/)
+    assert.equal(f.calls.includes('claim'), false)
+  } finally {
+    f.executor.dispose()
+  }
 })

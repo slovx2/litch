@@ -336,6 +336,8 @@ export class ChromeExecutor implements BrowserExecutor {
   ): Promise<ChromePage> {
     if (token.session !== session(invocation) || token.expires < Date.now())
       throw new ChromeBridgeError('staleDocument', 'The tab listing expired. List tabs again.')
+    if (token.tab.unavailableReason)
+      throw new ChromeBridgeError('targetUnavailable', token.tab.unavailableReason)
     for (const old of this.pages.values()) {
       if (!old.valid || old.instanceId !== token.instanceId || old.grant.tabId !== token.tab.id)
         continue
@@ -741,6 +743,7 @@ export class ChromeExecutor implements BrowserExecutor {
               claimToken,
               busy: tab.busy,
               origins: tab.origins,
+              ...(tab.unavailableReason ? { unavailableReason: tab.unavailableReason } : {}),
               current: tab.active === true && tab.lastFocusedWindow === true,
             }
           })
