@@ -4,6 +4,7 @@ import {
   externalSubjectKey,
 } from '../../../protocol/src/external-sources.mjs'
 import type { ExternalStore } from '../external-store.mjs'
+import type { ManagedGithubCli } from './github/gh-install.mjs'
 import {
   digest,
   GithubWriteFault,
@@ -38,7 +39,8 @@ export class ExternalGithubRead {
   private readonly options: {
     store: ExternalStore
     secrets: ExternalGithubSecrets
-    ghPath: string
+    ghPath: string | ManagedGithubCli
+    checkTurn?: () => void
     isWorklineCurrent: (actor: Extract<ExternalToolActor, { kind: 'workline' }>) => boolean
   }
   constructor(options: ExternalGithubRead['options']) {
@@ -108,6 +110,7 @@ export class ExternalGithubRead {
     if (credential.metadata.botUserId !== source.botUserId)
       throw new GithubWriteFault('github_bot_identity_changed')
     const beforeRead = (): void => {
+      this.options.checkTurn?.()
       const fresh = resolve()
       if (
         fresh.source.revision !== source.revision ||
@@ -124,7 +127,7 @@ export class ExternalGithubRead {
     const verifiedOwner = credential.repos.find(
       (allowed) => allowed.repoId === repo.repoId,
     )?.resourceOwnerId
-    return withIsolatedGithubGh({ ghPath, token: credential.token, beforeRead }, async (get) => {
+    const read = async (get: (path: string) => Promise<Record<string, unknown>>) => {
       const actual = await get(path)
       if (
         numericId(actual.id) !== repo.repoId ||
@@ -205,7 +208,10 @@ export class ExternalGithubRead {
           truncated: end !== buffer.length,
         },
       }
-    })
+    }
+    const run = (binary: string) =>
+      withIsolatedGithubGh({ ghPath: binary, token: credential.token, beforeRead }, read)
+    return typeof ghPath === 'string' ? run(ghPath) : ghPath.use(run)
   }
 }
 

@@ -403,6 +403,15 @@ test('所有 RPC 样本都通过定义和入站校验；公开结果不接收凭
     assert.equal(isExternalMethodParams(method, params[method]), true)
     assert.equal(isExternalMethodParams(method, { ...params[method], unexpected: true }), false)
   }
+  for (const phase of ['download', 'device_code'] as const) {
+    assertWire(external, RPC.identityAdd, 'result', {
+      loginId: 'login',
+      revision: 1,
+      expiresAt: 100,
+      state: 'preparing',
+      phase,
+    })
+  }
   const notices = {
     [EXTERNAL_NOTIFICATION.accessChanged]: {},
     [EXTERNAL_NOTIFICATION.identityLoginChanged]: { loginId: 'login', revision: 1 },

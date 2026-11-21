@@ -265,6 +265,7 @@ export type ExternalIdentityLogin = {
   revision: number
   expiresAt: number
 } & (
+  | { state: 'preparing'; phase: 'download' | 'device_code' }
   | {
       state: 'waiting'
       userCode: string
@@ -274,6 +275,10 @@ export type ExternalIdentityLogin = {
   | { state: 'canceled' | 'timed_out' | 'expired' }
   | { state: 'error'; code: string }
 )
+
+export function isGithubCliSetupFailure(code: string): boolean {
+  return /^github_gh_(?:download_|install_|version_|platform_unsupported)/.test(code)
+}
 export interface ExternalIdentityRepository extends ExternalResolvedRepo {
   grants: {
     identityId: string

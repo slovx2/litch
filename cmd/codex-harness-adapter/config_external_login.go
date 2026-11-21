@@ -19,6 +19,7 @@ var externalUserCode = regexp.MustCompile("^[A-Z0-9]{4}-[A-Z0-9]{4}$")
 type configLoginStatus struct {
 	LoginID           string `json:"loginId"`
 	State             string `json:"state"`
+	Phase             string `json:"phase,omitempty"`
 	UserCode          string `json:"userCode,omitempty"`
 	VerificationURL   string `json:"verificationUrl,omitempty"`
 	NeedsConfirmation bool   `json:"needsConfirmation,omitempty"`
@@ -119,35 +120,45 @@ func configExternalLogin(ctx context.Context, argv []string, asJSON bool, stream
 		_ = run(cleanup, login("cancel"), false)
 	}
 
-	if state.State == "waiting" {
-		if !externalUserCode.MatchString(state.UserCode) || state.VerificationURL != externalVerificationURL {
-			cancel()
-			fmt.Fprintln(streams.stderr, tr("设备没有返回有效的 GitHub 授权码。", "The device did not return a valid GitHub device code."))
-			return machineExitFailed
+	to := streams.stdout
+	if asJSON {
+		to = streams.stderr
+	}
+	tick := time.NewTicker(2 * time.Second)
+	defer tick.Stop()
+	var lastPhase, lastCode string
+	for state.State == "preparing" || state.State == "waiting" {
+		if state.State == "preparing" && state.Phase != lastPhase {
+			lastPhase = state.Phase
+			if state.Phase == "download" {
+				fmt.Fprintln(to, tr("正在下载 GitHub CLI。", "Downloading GitHub CLI."))
+			} else if state.Phase == "device_code" {
+				fmt.Fprintln(to, tr("正在获取 GitHub 授权码。", "Requesting a GitHub device code."))
+			}
 		}
-		to := streams.stdout
-		if asJSON {
-			to = streams.stderr
-		}
-		fmt.Fprintf(to, tr("请用机器人账号打开 %s，输入一次性码 %s。授权页显示 GitHub CLI。\n",
-			"Open %s with the bot account and enter code %s. The authorization page shows GitHub CLI.\n"),
-			externalVerificationURL, state.UserCode)
-		tick := time.NewTicker(2 * time.Second)
-		defer tick.Stop()
-		for state.State == "waiting" {
-			select {
-			case <-ctx.Done():
+		if state.State == "waiting" && (lastCode == "" || state.UserCode != lastCode || state.VerificationURL != externalVerificationURL) {
+			if !externalUserCode.MatchString(state.UserCode) || state.VerificationURL != externalVerificationURL {
 				cancel()
-				return 130
-			case <-tick.C:
-				if code := run(ctx, login("status"), true); code != 0 {
-					if ctx.Err() != nil {
-						cancel()
-						return 130
-					}
-					fmt.Fprintf(streams.stderr, tr("可继续查询授权状态，登录 ID：%s。\n", "To check the authorization again, use login ID %s.\n"), loginID)
-					return code
+				fmt.Fprintln(streams.stderr, tr("设备没有返回有效的 GitHub 授权码。", "The device did not return a valid GitHub device code."))
+				return machineExitFailed
+			}
+			lastCode = state.UserCode
+			fmt.Fprintf(to, tr("请用机器人账号打开 %s，输入一次性码 %s。授权页显示 GitHub CLI。\n",
+				"Open %s with the bot account and enter code %s. The authorization page shows GitHub CLI.\n"),
+				externalVerificationURL, state.UserCode)
+		}
+		select {
+		case <-ctx.Done():
+			cancel()
+			return 130
+		case <-tick.C:
+			if code := run(ctx, login("status"), true); code != 0 {
+				if ctx.Err() != nil {
+					cancel()
+					return 130
 				}
+				fmt.Fprintf(streams.stderr, tr("可继续查询授权状态，登录 ID：%s。\n", "To check the authorization again, use login ID %s.\n"), loginID)
+				return code
 			}
 		}
 	}

@@ -27,6 +27,9 @@ interface RunOptions {
 
 function privateGhEnvironment(directory: string, useHostKeyring: boolean): NodeJS.ProcessEnv {
   return {
+    ...Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => /^(?:https?_proxy|no_proxy)$/i.test(key)),
+    ),
     GH_CONFIG_DIR: directory,
     GH_HOST: 'github.com',
     GH_PROMPT_DISABLED: '1',

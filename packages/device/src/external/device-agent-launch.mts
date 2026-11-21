@@ -13,7 +13,7 @@ import { isObject } from '../wire.mjs'
 import { executableOnPath } from './device-agent-command.mjs'
 import type { ExternalDeviceConfiguration } from './device-configuration.mjs'
 import { probeAgentGithubIdentity } from './execution-boundary.mjs'
-import { resolveBundledGithubCli } from './github/gh-version.mjs'
+import type { ManagedGithubCli } from './github/gh-install.mjs'
 import type { ExternalGithubSecrets } from './secrets.mjs'
 import { shellQuoteGithubHelper } from './secrets-agent-helper.mjs'
 import { type GithubAgentActor, GithubAgentLoginService } from './secrets-agent-login.mjs'
@@ -29,7 +29,7 @@ export class DeviceAgentLaunch {
   private readonly options: {
     deviceSocket: string
     stateDirectory: string
-    runtimeRoot: string
+    managedCli: ManagedGithubCli
     managers: DeviceManagers
     store: ExternalStore
     secrets: ExternalGithubSecrets
@@ -38,6 +38,8 @@ export class DeviceAgentLaunch {
   private login: GithubAgentLoginService | null = null
   private starting: Promise<GithubAgentLoginService | null> | null = null
   private closed = false
+  private unknownUsers = false
+  private probes = 0
 
   constructor(options: DeviceAgentLaunch['options']) {
     this.options = options
@@ -85,12 +87,11 @@ export class DeviceAgentLaunch {
     if (this.closed) return Promise.resolve(null)
     if (this.login) return Promise.resolve(this.login)
     if (this.starting) return this.starting
-    const { configuration, deviceSocket, runtimeRoot, managers, ...options } = this.options
+    const { configuration, deviceSocket, managedCli, managers, ...options } = this.options
     const callbackPath = windows
       ? `${deviceGithubEnvironmentSocket(deviceSocket)}-callback`
       : join(options.stateDirectory, 'gc.sock')
     this.starting = (async () => {
-      const ghPath = await resolveBundledGithubCli(runtimeRoot)
       const gitPath = executableOnPath('git', process.env)
       const hostGhPath = executableOnPath('gh', process.env)
       if (!gitPath || this.closed) return null
@@ -98,7 +99,8 @@ export class DeviceAgentLaunch {
       this.login = await GithubAgentLoginService.start({
         ...options,
         callbackPath,
-        ghPath,
+        ghPath: managedCli.path,
+        prepareGh: () => managedCli.ensure(),
         gitPath,
         ...(hostGhPath ? { hostGhPath } : {}),
         assignmentForManager: configuration.assignmentForManager,
@@ -140,6 +142,7 @@ export class DeviceAgentLaunch {
   private async request(raw: unknown): Promise<unknown> {
     if (!isObject(raw) || this.closed) return {}
     if (raw.action === 'release' && typeof raw.lease === 'string') {
+      if (raw.uncertain === true && this.leases.has(raw.lease)) this.unknownUsers = true
       this.release(raw.lease)
       return {}
     }
@@ -181,7 +184,11 @@ export class DeviceAgentLaunch {
   }
 
   sweep(): void {
-    for (const [id, lease] of this.leases) if (Date.now() - lease.at > 3600_000) this.release(id)
+    for (const [id, lease] of this.leases)
+      if (Date.now() - lease.at > 3600_000) {
+        this.unknownUsers = true
+        this.release(id)
+      }
   }
 
   private serve(socket: Socket): void {
@@ -221,27 +228,36 @@ export class DeviceAgentLaunch {
       return await probeAgentGithubIdentity({
         ghPath,
         ownerUserId,
-        launch: async ({ executable, args, signal }) =>
-          (
-            await execute(
-              scope?.ghArgs ? process.execPath : executable,
-              scope?.ghArgs ? [...scope.ghArgs, ...args] : args,
-              { cwd, signal, env: scope?.env ?? process.env, maxBuffer: 128 * 1024 },
-            )
-          ).stdout,
+        launch: async ({ executable, args, signal }) => {
+          this.probes++
+          try {
+            return (
+              await execute(
+                scope?.ghArgs ? process.execPath : executable,
+                scope?.ghArgs ? [...scope.ghArgs, ...args] : args,
+                { cwd, signal, env: scope?.env ?? process.env, maxBuffer: 128 * 1024 },
+              )
+            ).stdout
+          } finally {
+            if (signal.aborted) this.unknownUsers = true
+            this.probes--
+          }
+        },
       })
     } finally {
       scope?.dispose()
     }
   }
 
-  async close(): Promise<void> {
+  async close(): Promise<boolean> {
     this.closed = true
+    const safeToRetire = !this.unknownUsers && this.leases.size === 0 && this.probes === 0
     for (const socket of this.sockets) socket.destroy()
     if (this.server.listening)
       await new Promise<void>((resolve) => this.server.close(() => resolve()))
     for (const id of this.leases.keys()) this.release(id)
     await this.starting
     await this.login?.close()
+    return safeToRetire
   }
 }

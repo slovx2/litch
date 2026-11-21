@@ -66,6 +66,7 @@ export {
   EXTERNAL_IDENTITY_OPTIONAL_SCOPES,
   EXTERNAL_IDENTITY_REQUIRED_SCOPES,
   EXTERNAL_IDENTITY_VERIFICATION_URL,
+  isGithubCliSetupFailure,
 } from '../../protocol/src/external-sources.mjs'
 export type { AttachmentState } from '../../protocol/src/file-attachments.mjs'
 export { attachmentDetail, MAX_ATTACHMENT_BYTES } from '../../protocol/src/file-attachments.mjs'

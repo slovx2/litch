@@ -4,6 +4,7 @@ import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { checkIdentityRepositoryWrites } from '../src/external/execution-boundary.mjs'
+import { GithubWriteFault } from '../src/external/github/write-api.mjs'
 
 import { GithubAgentLoginService } from '../src/external/secrets-agent-login.mjs'
 import {
@@ -65,11 +66,19 @@ else process.stdout.write(fs.readFileSync(require('node:path').join(cfg, 'hosts.
   )
   let turnedOff = false
   let lineIsCurrent = true
+  let prepares = 0
+  let downloadFails = true
   const service = await GithubAgentLoginService.start({
     store: f.store,
     secrets: f.secrets,
     callbackPath: join(f.dir, 'gh.sock'),
     ghPath: fixtureGh,
+    hostGhPath: fixtureGh,
+    prepareGh: async () => {
+      prepares++
+      if (downloadFails) throw new GithubWriteFault('github_gh_download_unavailable')
+      return fixtureGh
+    },
     gitPath: git,
     stateDirectory: f.dir,
     assignmentForManager: () => ({
@@ -104,11 +113,20 @@ else process.stdout.write(fs.readFileSync(require('node:path').join(cfg, 'hosts.
       `protocol=https\nhost=${host}\npath=example/demo.git\n\n`,
     )
   const gh = () => call(ghPath, ['api', '/user'], manager.env, f.dir)
-  assert.match(await gh(), new RegExp(token()))
-  assert.equal(statSync(hosts).mode & 0o777, 0o600)
   assert.match(await credential(), new RegExp(token()))
   assert.match(await credential('different.invalid'), /password=host-fixture/)
   assert.match(await credential('github.com', line.env), new RegExp(token()))
+  assert.equal(
+    await call(ghPath, ['api', '/user'], { ...manager.env, GH_REPO: 'example/other' }, f.dir),
+    `host:${fixtureHost}`,
+  )
+  assert.equal(prepares, 0, 'Git 和未分派仓库不需要下载受管 gh')
+  await assert.rejects(gh(), /夹具命令失败: 1/, '下载失败不可执行宿主 gh')
+  assert.equal(existsSync(hosts), false)
+  downloadFails = false
+  assert.match(await gh(), new RegExp(token()))
+  assert.equal(prepares, 2)
+  assert.equal(statSync(hosts).mode & 0o777, 0o600)
 
   const rotate = await f.secrets.rotate({
     operationId: 'agent-rotate',

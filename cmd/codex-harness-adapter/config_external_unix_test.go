@@ -58,6 +58,7 @@ func TestConfigExternalStdinUsesPrivateDeviceConnection(t *testing.T) {
 
 func TestConfigExternalOAuthPrintsCodeAndWaitsForRemoteDevice(t *testing.T) {
 	device := startFakeDevice(t)
+	polls := 0
 	device.answer = func(method string, params map[string]any) (any, *deviceRPCError) {
 		if method != clientToolInvokeMethod {
 			t.Error("远程 CLI 登录应通过配置桥")
@@ -65,10 +66,14 @@ func TestConfigExternalOAuthPrintsCodeAndWaitsForRemoteDevice(t *testing.T) {
 		}
 		args := params["arguments"].(map[string]any)["argv"].([]any)
 		if args[1] == "add" {
-			return textResult(true, `{"ok":true,"op":"device-identity add","data":{"loginId":"login-1","state":"waiting","userCode":"ABCD-1234","verificationUrl":"https://github.com/login/device"},"text":""}`), nil
+			return textResult(true, `{"ok":true,"op":"device-identity add","data":{"loginId":"login-1","state":"preparing","phase":"download"},"text":""}`), nil
 		}
 		if args[1] != "login" || args[2] != "status" || args[3] != "login-1" || args[5] != "build" {
 			t.Errorf("登录查询未保留目标设备或登录 ID: %v", args)
+		}
+		polls++
+		if polls == 1 {
+			return textResult(true, `{"ok":true,"op":"device-identity login","data":{"loginId":"login-1","state":"waiting","userCode":"ABCD-1234","verificationUrl":"https://github.com/login/device"},"text":""}`), nil
 		}
 		return textResult(true, `{"ok":true,"op":"device-identity login","data":{"loginId":"login-1","state":"succeeded","needsConfirmation":false},"text":"@bot · 123"}`), nil
 	}
@@ -78,6 +83,7 @@ func TestConfigExternalOAuthPrintsCodeAndWaitsForRemoteDevice(t *testing.T) {
 	}, machineIO{stdin: strings.NewReader(""), stdout: &stdout, stderr: &stderr,
 		env: envOf(map[string]string{deviceSocketEnvironment: device.socket})})
 	if code != 0 || !strings.Contains(stderr.String(), "ABCD-1234") ||
+		(!strings.Contains(stderr.String(), "Downloading GitHub CLI") && !strings.Contains(stderr.String(), "正在下载 GitHub CLI")) ||
 		strings.Contains(stdout.String(), "ABCD-1234") ||
 		!strings.Contains(stdout.String(), `"state":"succeeded"`) {
 		t.Fatalf("未先输出码并等到成功：%d, stdout=%q stderr=%q", code, stdout.String(), stderr.String())

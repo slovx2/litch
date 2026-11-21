@@ -115,7 +115,7 @@ export type DeviceTrace = (
 ) => void
 
 export interface DeviceOptions {
-  external?: Pick<DeviceExternalOptions, 'runtimeRoot' | 'deviceSocket' | 'fixture'>
+  external?: Pick<DeviceExternalOptions, 'deviceSocket' | 'fixture'>
   /** 隔离验收的附件主目录；生产取系统 home。 */
   attachmentHome?: string
 

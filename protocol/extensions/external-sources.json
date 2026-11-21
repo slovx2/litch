@@ -1060,14 +1060,29 @@
         "loginId": { "$ref": "#/definitions/LogicalId" },
         "revision": { "$ref": "#/definitions/ConfigurationRevision" },
         "expiresAt": { "$ref": "#/definitions/ConfigurationRevision" },
-        "state": { "enum": ["waiting", "succeeded", "canceled", "timed_out", "expired", "error"] },
+        "state": { "enum": ["preparing", "waiting", "succeeded", "canceled", "timed_out", "expired", "error"] },
+        "phase": { "enum": ["download", "device_code"] },
         "userCode": { "type": "string", "pattern": "^[A-Z0-9]{4}-[A-Z0-9]{4}$" },
         "verificationUrl": { "const": "https://github.com/login/device" },
         "result": { "$ref": "#/definitions/IdentityAuthorization" },
         "needsConfirmation": { "type": "boolean" },
         "code": { "$ref": "#/definitions/LogicalId" }
       },
+      "dependencies": { "phase": { "properties": { "state": { "const": "preparing" } } } },
       "oneOf": [
+        {
+          "properties": { "state": { "const": "preparing" } },
+          "required": ["phase"],
+          "not": {
+            "anyOf": [
+              { "required": ["userCode"] },
+              { "required": ["verificationUrl"] },
+              { "required": ["result"] },
+              { "required": ["needsConfirmation"] },
+              { "required": ["code"] }
+            ]
+          }
+        },
         {
           "properties": { "state": { "const": "waiting" } },
           "required": ["userCode", "verificationUrl"],

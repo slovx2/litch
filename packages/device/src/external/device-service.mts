@@ -18,7 +18,7 @@ import { callExternalGithubTool } from './device-manager-tools.mjs'
 import { DeviceGithubPoll } from './device-poll.mjs'
 import { ExternalDispatch, type ExternalSendResult } from './dispatch.mjs'
 import { ExternalFeedback } from './feedback.mjs'
-import { resolveBundledGithubCli } from './github/gh-version.mjs'
+import { ManagedGithubCli } from './github/gh-install.mjs'
 import { type GithubSender, githubWriterForLoopbackTest } from './github/write-api.mjs'
 import { ExternalIntakeService } from './intake.mjs'
 import { ExternalManagerTools, isExternalManagerCall } from './manager-tools.mjs'
@@ -35,7 +35,6 @@ import { GithubGhAuthorizationService } from './secrets-gh-authorization.mjs'
 
 export interface DeviceExternalOptions {
   stateDirectory: string
-  runtimeRoot: string
   deviceSocket?: string
   managers: DeviceManagers
   announce<K extends keyof ExternalNotifications>(method: K, params: ExternalNotifications[K]): void
@@ -61,6 +60,7 @@ export class DeviceExternalService {
   private readonly adminMandates: ExternalMandateService
   private readonly tools: ExternalManagerTools
   private readonly links: ExternalLinkService
+  private readonly managedCli: ManagedGithubCli
   private readonly admin = new Map<string, ExternalManagerTurn>()
   private readonly running = new Map<string, Promise<unknown>>()
   private readonly stopSecrets: () => void
@@ -75,7 +75,8 @@ export class DeviceExternalService {
   readonly options: DeviceExternalOptions
   constructor(options: DeviceExternalOptions) {
     this.options = options
-    const { managers, stateDirectory, runtimeRoot, fixture, announce } = options
+    const { managers, stateDirectory, fixture, announce } = options
+    this.managedCli = new ManagedGithubCli(stateDirectory, options.log)
     this.now = fixture?.now ?? managerNow
     this.store = new ExternalStore(managers.store)
     this.sendFixture = fixture && githubWriterForLoopbackTest(fixture.github)
@@ -87,7 +88,7 @@ export class DeviceExternalService {
       ? new DeviceAgentLaunch({
           deviceSocket: options.deviceSocket,
           stateDirectory,
-          runtimeRoot,
+          managedCli: this.managedCli,
           managers,
           store: this.store,
           secrets: this.secrets,
@@ -98,7 +99,7 @@ export class DeviceExternalService {
     this.authorization = GithubGhAuthorizationService.create({
       secrets: this.secrets,
       stateDirectory,
-      runtimeRoot,
+      managedCli: this.managedCli,
       now: this.now,
       changed: (params) => announce(EXTERNAL_NOTIFICATION.identityLoginChanged, params),
     })
@@ -317,14 +318,12 @@ export class DeviceExternalService {
     this.mandates.requireManager(turn)
     if (tool !== 'external_read' && tool !== 'external_write')
       return this.tools.call(turn, tool, input)
-    const ghPath =
-      tool === 'external_read' ? await resolveBundledGithubCli(this.options.runtimeRoot) : ''
-    this.mandates.requireManager(turn)
     const result = await callExternalGithubTool(
       new ExternalGithubRead({
         store: this.store,
         secrets: this.secrets,
-        ghPath,
+        ghPath: this.managedCli,
+        checkTurn: () => this.mandates.requireManager(turn),
         isWorklineCurrent: () => false,
       }),
       this.outbox,
@@ -449,11 +448,13 @@ export class DeviceExternalService {
 
   async close(): Promise<void> {
     this.closed = true
+    this.managedCli.abort()
     this.poll.close()
     clearInterval(this.timer)
     this.stopSecrets()
-    await this.agent?.close()
+    const noAgentUsers = (await this.agent?.close()) ?? true
     await this.authorization.close()
     await Promise.allSettled([...this.running.values()])
+    await this.managedCli.retire(noAgentUsers)
   }
 }

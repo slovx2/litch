@@ -140,7 +140,7 @@ async function main(): Promise<void> {
     ...(args.wrapUp === undefined ? {} : { wrapUp: args.wrapUp }),
     ...(args.wrapUpReminder === undefined ? {} : { wrapUpReminder: args.wrapUpReminder }),
     ...(control ? { control } : {}),
-    ...(runtimeRoot ? { external: { runtimeRoot, deviceSocket: args.listen } } : {}),
+    ...(runtimeRoot ? { external: { deviceSocket: args.listen } } : {}),
     pairing: pairingConfig(args.stateDir),
     dial: (socket) => unixConnector(parseSocketUrl(socket, '运行时的套接字')),
     upstreams: args.upstreams.map((upstream) => ({

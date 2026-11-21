@@ -167,12 +167,22 @@ try {
   )
   assert.match(await read(readinessText), /工作目录的 origin 与此 GitHub 仓库不匹配/)
   assert.equal(await read('!!document.querySelector("[data-agent-owner]")'), true)
+  await click('[data-act=identity-add]')
+  await wait('!!document.querySelector("[data-act=identity-start]")')
+  await click('[data-act=identity-start]')
+  await wait(
+    '/正在下载 GitHub CLI/.test(document.querySelector("[data-ext-login=download]")?.textContent)',
+  )
+  await read('failGithubCliDownload()')
+  await wait('/粘贴令牌/.test(document.querySelector("[data-ext-login=error]")?.textContent)')
+  await click('[data-act=identity-use-token]')
+  await wait('!!document.querySelector("dialog[open] input[type=password]")')
   await read('setAccess(undefined)')
   await wait('document.querySelector("[data-act=identity-add]").disabled')
   assert.equal(await read('!!document.querySelector("[data-agent-owner]")'), false)
   assert.equal(await read('accessCalls.includes("external.inbox.triage")'), false)
   console.log(
-    '通过：缺 access 只读、有权限可编辑、撤权关闭配置向导且桌面/手机已开表单立即只读、配置与自启独立',
+    '通过：配置权限与撤权、桌面/手机已开表单立即只读、配置与自启独立、GitHub CLI 下载提示及令牌替代入口',
   )
 } finally {
   cdp?.close()

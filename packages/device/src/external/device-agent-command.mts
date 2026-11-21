@@ -65,8 +65,8 @@ async function run(): Promise<void> {
     scope?.release()
     process.exitCode = 1
   })
-  child.once('exit', (code) => {
-    scope?.release()
+  child.once('exit', (code, signal) => {
+    scope?.release(signal !== null)
     process.exitCode = code ?? 1
   })
 }

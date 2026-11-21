@@ -8,16 +8,20 @@ function callback(request) {
   return new Promise((resolve) => {
     const conn = connect(socket)
     let body = ''
+    const unavailable = request.mode === 'gh' ? {error: 'github_gh_unavailable'} : null
     conn.setEncoding('utf8')
-    conn.setTimeout(2000, () => { conn.destroy(); resolve(null) })
-    conn.on('error', () => resolve(null))
+    conn.setTimeout(request.mode === 'gh' ? 120000 : 2000, () => {
+      conn.destroy()
+      resolve(unavailable)
+    })
+    conn.on('error', () => resolve(unavailable))
     conn.on('connect', () => conn.write(JSON.stringify({ key, ...request }) + '\n'))
     conn.on('data', (part) => {
       body += part
-      if (body.length > 2048) { conn.destroy(); resolve(null) }
+      if (body.length > 2048) { conn.destroy(); resolve(unavailable) }
     })
     conn.on('end', () => {
-      try { resolve(JSON.parse(body)) } catch { resolve(null) }
+      try { resolve(JSON.parse(body)) } catch { resolve(unavailable) }
     })
   })
 }
@@ -66,7 +70,13 @@ async function main() {
   if (mode === 'gh') {
     const env = {...process.env}
     const repo = ghRepository()
-    const config = repo ? (await callback({ mode: 'gh', repository: repo }))?.config : undefined
+    const result = repo ? await callback({ mode: 'gh', repository: repo }) : null
+    if (typeof result?.error === 'string' && /^github_gh_[a-z_]+$/.test(result.error)) {
+      process.stderr.write('gh: ' + result.error + '\n')
+      process.exitCode = 1
+      return
+    }
+    const config = result?.config
     if (typeof config === 'string') {
       for (const name of Object.keys(env)) {
         if (/^(?:GH_TOKEN|GITHUB_TOKEN)$/i.test(name)) delete env[name]
@@ -74,7 +84,13 @@ async function main() {
       env.GH_CONFIG_DIR = config
       env.GH_HOST = 'github.com'
     }
-    const child = spawn(typeof config === 'string' ? gh : hostGh, args, {env, stdio: 'inherit', windowsHide: true})
+    const binary = typeof config === 'string' ? gh : hostGh
+    if (!binary) {
+      process.stderr.write('gh: executable not found\n')
+      process.exitCode = 127
+      return
+    }
+    const child = spawn(binary, args, {env, stdio: 'inherit', windowsHide: true})
     child.on('error', () => { process.exitCode = 1 })
     child.on('exit', (code) => { process.exitCode = code ?? 1 })
     return

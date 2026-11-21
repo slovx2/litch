@@ -39,7 +39,12 @@ export async function deviceGithubEnvironment(
   harness: string,
   threadId: string,
   env: NodeJS.ProcessEnv,
-): Promise<{ env: NodeJS.ProcessEnv; ghPath?: string; ghArgs?: string[]; release(): void }> {
+): Promise<{
+  env: NodeJS.ProcessEnv
+  ghPath?: string
+  ghArgs?: string[]
+  release(uncertain?: boolean): void
+}> {
   const deviceSocket = env.LITCH_DEVICE_SOCKET
   if (!deviceSocket || !threadId) return { env, release() {} }
   const path = deviceGithubEnvironmentSocket(deviceSocket)
@@ -57,8 +62,12 @@ export async function deviceGithubEnvironment(
     env: { ...env, ...value.env },
     ...(value.ghPath ? { ghPath: value.ghPath } : {}),
     ...(value.ghArgs ? { ghArgs: value.ghArgs } : {}),
-    release: () => {
-      void request(path, { action: 'release', lease: value.lease })
+    release: (uncertain) => {
+      void request(path, {
+        action: 'release',
+        lease: value.lease,
+        ...(uncertain ? { uncertain } : {}),
+      })
     },
   }
 }
