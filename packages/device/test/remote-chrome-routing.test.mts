@@ -21,6 +21,67 @@ const body = (reply: ClientToolCallResponse) => {
   return JSON.parse(first.text.split('\n')[0] ?? '')
 }
 
+test('中断前 targets 的迟到结果仍属旧回合；下一回合重新列举恢复', async () => {
+  let release: (reply: ClientToolCallResponse) => void = () => {}
+  let calls = 0
+  const pending = new Promise<ClientToolCallResponse>((resolve) => {
+    release = resolve
+  })
+  const target = ok({
+    targets: [{ targetId: 'chrome:instance', epoch: 'same-epoch', protocol: 1 }],
+  })
+  const controller: ChromeController = {
+    id: 'controller',
+    hostLabel: 'fixture',
+    ready: () => true,
+    async call(params) {
+      calls++
+      if (params.tool === 'targets') return calls === 1 ? pending : target
+      return ok({ tabs: [] })
+    },
+  }
+  const runtime = {
+    status: { enabled: true, hostLabel: 'device', condition: 'waiting' },
+    instances: [],
+    endTurn() {},
+  } as unknown as DeviceChromeRuntime
+  const router = new RemoteChromeRouter(runtime)
+  const context = {
+    negotiated: true,
+    controller,
+    signal: new AbortController().signal,
+    ask: async () => 'once' as const,
+    fullAccess: async () => false,
+  }
+  const invoke = async (turnId: string, tool: string, args = {}) => {
+    const scope = { harness: 'claude-code', threadId: 'thread', turnId }
+    const result = router.route(
+      scope,
+      {
+        ...scope,
+        namespace: 'litch_browser',
+        tool,
+        arguments: args,
+        callId: `${turnId}-${tool}`,
+      },
+      context,
+    )
+    assert.ok(result)
+    return result
+  }
+  const late = invoke('interrupted', 'targets')
+  router.endTurn('claude-code', 'interrupted')
+  release(target)
+  const old = body(await late).targets[0].targetId
+  const failed = await invoke('next', 'tabs', { action: 'list', targetId: old })
+  assert.equal(failed.success, false)
+  assert.match(JSON.stringify(failed), /invalid or expired/)
+  assert.equal(calls, 1, '旧句柄在路由本地拒绝，不触及 Chrome')
+  const fresh = body(await invoke('next', 'targets')).targets[0].targetId
+  assert.notEqual(fresh, old)
+  assert.equal((await invoke('next', 'tabs', { action: 'list', targetId: fresh })).success, true)
+})
+
 test('双端模式的快照标题只显示可再次调用的设备句柄，保留网页正文', async () => {
   const raw = 'chrome:physical-tab'
   const wait = `Found.\nTab ${raw}: "Fixture" https://fixture.invalid`

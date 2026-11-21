@@ -11,6 +11,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { buildChromeExtension } from '../../apps/desktop/scripts/build-chrome.mjs'
 import { Cdp, until } from '../chrome-m0/cdp.mjs'
+import { chromeAttachErrors } from './attach-errors.mjs'
 import { concurrentClaim } from './concurrent-claim.mjs'
 import { dynamicOriginChecks } from './dynamic-origins.mjs'
 import { fixtures } from './fixtures.mjs'
@@ -201,7 +202,7 @@ try {
       '--disable-sync',
       '--no-proxy-server',
       '--site-per-process',
-      '--host-resolver-rules=MAP a.test 127.0.0.1,MAP b.test 127.0.0.1',
+      '--host-resolver-rules=MAP a.test 127.0.0.1,MAP b.test 127.0.0.1,MAP chromewebstore.google.com ~NOTFOUND,MAP chrome.google.com ~NOTFOUND',
       '--window-size=1000,800',
       'about:blank',
     ]),
@@ -298,7 +299,19 @@ try {
   const dynamicOnly = process.argv.includes('--dynamic-origins-only')
   const measurePresentation = process.argv.includes('--measure-presentation')
   const presentationOnly = process.argv.includes('--presentation-only') || measurePresentation
-  if (presentationOnly)
+  const attachOnly = process.argv.includes('--attach-errors-only')
+  if (attachOnly)
+    report.attachErrors = await chromeAttachErrors({
+      cdp,
+      identity,
+      call,
+      text,
+      targetId,
+      site,
+      check,
+      until,
+    })
+  else if (presentationOnly)
     report.presentation = await chromePresentation({
       cdp,
       identity,
@@ -321,7 +334,7 @@ try {
       cdp,
       identity,
     })
-  if (presentationOnly || dynamicOnly || process.argv.includes('--handoff-only')) {
+  if (attachOnly || presentationOnly || dynamicOnly || process.argv.includes('--handoff-only')) {
     report.success = true
     await cleanup()
     report.elapsedMs = Date.now() - started
