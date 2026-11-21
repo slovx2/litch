@@ -110,7 +110,16 @@ export const TRIAGE_REASONS = [
   'route_conflict',
   'manual',
 ] as const
-export const KNOWN_REASONS = [...TRIAGE_REASONS, 'external_closed', 'external_merged'] as const
+export const KNOWN_REASONS = [
+  ...TRIAGE_REASONS,
+  'external_closed',
+  'external_merged',
+  'manager_tools_outdated',
+  'manager_inactive',
+  'manager_unassigned',
+  'identity_unavailable',
+  'auto_notify_disabled',
+] as const
 export type KnownReason = (typeof KNOWN_REASONS)[number]
 export function knownReason(reason: string | undefined): KnownReason | null {
   return reason && (KNOWN_REASONS as readonly string[]).includes(reason)

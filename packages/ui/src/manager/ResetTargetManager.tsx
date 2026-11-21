@@ -20,9 +20,11 @@ type Plan = Pick<ManagerResetOperation, 'requestId' | 'target' | 'expectedSettin
 export function ResetTargetManager({
   manager,
   disabled,
+  autoOpenFailure = true,
 }: {
   manager: ManagerView
   disabled: boolean
+  autoOpenFailure?: boolean
 }) {
   const t = useT()
   const { channel } = useServices()
@@ -47,12 +49,13 @@ export function ResetTargetManager({
   const requestRevision = useRef(0)
   useEffect(() => {
     if (
+      autoOpenFailure &&
       previousPhase.current !== state?.phase &&
       (summaryFailed || state?.phase === 'failed' || handoverFailed)
     )
       setOpen(true)
     previousPhase.current = state?.phase
-  }, [state?.phase, summaryFailed, handoverFailed])
+  }, [autoOpenFailure, state?.phase, summaryFailed, handoverFailed])
   useEffect(() => {
     if (open && !dialog.current?.open) dialog.current?.showModal()
   }, [open])

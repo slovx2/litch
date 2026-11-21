@@ -9,7 +9,9 @@ import { useKey, useServices } from '../app/services.tsx'
 
 import { ResetTargetManager } from './ResetTargetManager.tsx'
 
-export function ResetManager(props: { manager: ManagerView; disabled: boolean }) {
+type ResetProps = { manager: ManagerView; disabled: boolean; autoOpenFailure?: boolean }
+
+export function ResetManager(props: ResetProps) {
   const { manager } = props
   const board = useKey<ManagerBoardTopicView>(keys.managerBoard(manager.deviceId, manager.id))
   return board?.features.resetTarget ? (
@@ -19,7 +21,7 @@ export function ResetManager(props: { manager: ManagerView; disabled: boolean })
   )
 }
 
-function LegacyResetManager({ manager, disabled }: { manager: ManagerView; disabled: boolean }) {
+function LegacyResetManager({ manager, disabled, autoOpenFailure = true }: ResetProps) {
   const t = useT()
   const { channel } = useServices()
   const [open, setOpen] = useState(false)
@@ -29,12 +31,13 @@ function LegacyResetManager({ manager, disabled }: { manager: ManagerView; disab
   const previousPhase = useRef(state?.phase)
   useEffect(() => {
     if (
+      autoOpenFailure &&
       previousPhase.current !== state?.phase &&
       ['failed', 'summaryFailed'].includes(state?.phase ?? '')
     )
       setOpen(true)
     previousPhase.current = state?.phase
-  }, [state?.phase])
+  }, [autoOpenFailure, state?.phase])
   const busy = sending || ['waiting', 'summarizing', 'applying'].includes(state?.phase ?? '')
   const summaryFailed = state?.phase === 'summaryFailed'
   const replace = state ? state.mode === 'replace' : manager.harness !== 'claude-code'

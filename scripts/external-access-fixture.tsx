@@ -14,6 +14,7 @@ import { InboxTriage } from '../packages/ui/src/external/InboxTriage.tsx'
 import { UnattendedPage } from '../packages/ui/src/external/UnattendedPage.tsx'
 
 const intake = { intakeId: 'one', revision: 1, status: 'pending_triage', managerId: 'm1' }
+const recovery = { managerId: 'm1', threadId: 'manager-thread', action: 'refresh' } as const
 const head = {
   eventKey: 'event',
   intakeId: 'one',
@@ -21,6 +22,7 @@ const head = {
   status: 'pending_triage',
   subject: { number: '8', url: 'https://github.com/example/demo/issues/8' },
   occurredAt: 1,
+  delivery: { state: 'queued', reason: 'manager_tools_outdated', recovery },
 }
 const device = {
   id: 'remote',
@@ -29,7 +31,14 @@ const device = {
   externalSources: true,
   name: 'SSH fixture',
 }
-const manager = { id: 'm1', deviceId: device.id, status: 'active', name: 'Remote fixture manager' }
+const manager = {
+  id: 'm1',
+  deviceId: device.id,
+  status: 'active',
+  name: 'Remote fixture manager',
+  threadId: recovery.threadId,
+  harness: 'claude-code',
+}
 const identity = {
   identityId: 'fixture',
   botUserId: '99',
@@ -84,7 +93,12 @@ const sourceStatus: ExternalSourceStatus = {
       state: 'ok',
       diagnostics: [{ check: 'repository', state: 'ok', code: 'github_collection_available' }],
     },
-    notify: { state: 'ok', diagnostics: [] },
+    notify: {
+      state: 'blocked',
+      diagnostics: [
+        { check: 'managerTools', code: 'manager_tools_outdated', state: 'blocked', recovery },
+      ],
+    },
     dispatch: { state: 'unverified', diagnostics: [] },
     write: { state: 'unverified', diagnostics: [] },
   },

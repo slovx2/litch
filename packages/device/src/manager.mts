@@ -244,6 +244,7 @@ export class DeviceManagers {
     if (this.closed) return
     this.issues?.specialChanged(id)
     this.questions.releaseClosed(id)
+    this.external?.managerChanged(id)
     this.tree.host.announce(
       MANAGER_NOTIFICATION.changed,
       { manager: this.manager(id) },
@@ -726,6 +727,7 @@ export class DeviceManagers {
       manager,
       record && { threadId: record.committed?.manager.threadId ?? record.oldThreadId, fingerprint },
       this.bundle(manager),
+      this.tree.store.tools(manager.threadId),
     )
   }
 

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import type { ClientToolNamespaceSpec } from '../../protocol/src/client-tools.mjs'
 import { ATTACHMENT_WATCH_METHOD } from '../../protocol/src/file-attachments.mjs'
 import {
   MANAGER_DEFAULT_CONTACT,
@@ -227,7 +228,7 @@ for (const harness of ['claude-code', 'pi']) {
   }
 }
 
-test('能力指纹稳定，创建已安装；设置和工具变化均显示落后', async () => {
+test('能力指纹稳定：文字规则不显示落后，工具缺失和固定指令变化仍显示落后', async () => {
   const env = await setup()
   try {
     const managers = env.device.managers
@@ -239,7 +240,26 @@ test('能力指纹稳定，创建已安装；设置和工具变化均显示落�
       managerFingerprint(managerBundle(elsewhere, false)),
     )
     await env.client.call(MANAGER_METHOD.update, { managerId: first.id, rules: '新规矩' })
+    assert.equal(managers.manager(first.id).reset?.outdated, false)
+    const tree = env.device.sessionTree
+    const installed = tree.store.tools(first.threadId) as ClientToolNamespaceSpec[] | null
+    assert.ok(installed)
+    tree.store.setTools(
+      first.threadId,
+      installed.filter((spec) => spec.name !== 'litch_manager'),
+    )
     assert.equal(managers.manager(first.id).reset?.outdated, true)
+    tree.store.setTools(
+      first.threadId,
+      installed.map((spec) =>
+        spec.name === 'litch_manager'
+          ? { ...spec, instructions: `Changed fixed instruction\n${spec.instructions}` }
+          : spec,
+      ),
+    )
+    assert.equal(managers.manager(first.id).reset?.outdated, true)
+    tree.store.setTools(first.threadId, installed)
+    assert.equal(managers.manager(first.id).reset?.outdated, false)
   } finally {
     await env.close()
   }

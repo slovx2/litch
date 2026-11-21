@@ -7,7 +7,14 @@ import type { ExternalDeliveryGroup, ExternalStore } from '../external-store.mjs
 import type { ReminderCategory } from './intake.mjs'
 import { type ExternalRoutingPolicy, managerIdentity, repositoryRouting } from './routing.mjs'
 
-export type FeedbackWaitReason = 'queued' | 'manager_busy' | 'paused' | 'rate_limited'
+export type FeedbackWaitReason =
+  | 'queued'
+  | 'manager_busy'
+  | 'paused'
+  | 'rate_limited'
+  | 'manager_tools_outdated'
+  | 'manager_inactive'
+  | 'identity_unavailable'
 type FeedbackComment = { kind: 'comment' | 'review_comment'; id: string }
 type Scope = { sourceId: string; repoId: string }
 type FeedbackTarget = {
@@ -36,6 +43,26 @@ const stream = 'github:feedback'
 const ackKey = (id: string) => `ack:create:${id}`
 
 function copy(language: 'zh-CN' | 'en', reason: FeedbackWaitReason): string {
+  const blocked = {
+    manager_tools_outdated: [
+      '已收到。经理的 GitHub 工具更新后将继续投递。',
+      'Request received. Delivery will resume after the manager’s GitHub tools are updated.',
+    ],
+    manager_inactive: [
+      '已收到。当前没有可接收请求的经理。',
+      'Request received. No active manager is available.',
+    ],
+    identity_unavailable: [
+      '已收到。仓库的采集凭据不可用。',
+      'Request received. The repository’s collection credentials are unavailable.',
+    ],
+  } as const
+  if (
+    reason === 'manager_tools_outdated' ||
+    reason === 'manager_inactive' ||
+    reason === 'identity_unavailable'
+  )
+    return blocked[reason][language === 'zh-CN' ? 0 : 1]
   const queue = {
     queued: '',
     manager_busy: ' (I’m finishing something else.)',

@@ -38,6 +38,19 @@ test('收件阶段每候选一条第一人称状态评论，@ 的原评论单独
   assert.equal(f.feedbackWrites.length, 4)
 })
 
+for (const lang of ['zh-CN', 'en'] as const)
+  test(`${lang}：工具未更新的状态评论说清阻塞原因`, async (t) => {
+    const f = externalFixture(t)
+    f.feedbackHost.language = () => lang
+    f.dispatchHost.feedbackWaitReason = () => 'manager_tools_outdated'
+    await f.collect(f.event('assigned', { target: { assigneeUserId: '200' } }))
+    await f.feedback.flush(f.scope)
+    const [ack] = f.feedbackWrites
+    assert.ok(ack?.action === 'ack_comment_create')
+    assert.match(ack.text, lang === 'en' ? /GitHub tools are updated/ : /经理的 GitHub 工具更新后/)
+    assert.doesNotMatch(ack.text, /busy|finishing something else|手头还有别的事/)
+  })
+
 test('已绑定评论只加 👀 / 🚀；发送未知不提前反馈，对账确认后只加一次', async (t) => {
   const f = externalFixture(t)
   const bound = f.event('comment')

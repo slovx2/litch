@@ -43,7 +43,7 @@ import { usePane } from '../../nav/pane'
 import type { ManagerTab, RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Empty } from '../../ui/kit/controls'
+import { Button, Empty } from '../../ui/kit/controls'
 import { Icon } from '../../ui/kit/Icon'
 import { KeyboardArea } from '../../ui/kit/KeyboardForm'
 import { Sheet } from '../../ui/kit/overlays'
@@ -52,7 +52,8 @@ import { useTheme } from '../../ui/theme'
 import { rememberBoardScroll } from './board-return'
 import { BoardActionScrollView } from './CardActions'
 import { DraftSubmitBar } from './DraftSubmitBar'
-import { ExternalInbox, useGithubPending } from './external/ExternalInbox'
+import { ExternalInbox, useGithubSummary } from './external/ExternalInbox'
+import { reasonLabel } from './external/labels'
 import { Issue } from './Issue'
 import { IssueContext } from './IssueRelations'
 import { IssueSheet } from './IssueSheet'
@@ -120,7 +121,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const tab: ManagerTab = asked === 'github' && !github ? 'console' : asked
   /** 对话和 GitHub 页签不显示看板滚动区 */
   const offBoard = tab === 'chat' || tab === 'github'
-  const githubPending = useGithubPending(manager, github)
+  const { pending: githubPending, blocked: githubBlocked } = useGithubSummary(manager, github)
   const t = useT()
   const theme = useTheme()
   const { c, radius, font, hit } = theme
@@ -653,6 +654,17 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
                   .join(t('manager.feature.join')),
               })}
             </Text>
+          ) : null}
+          {githubBlocked?.recovery && reset.menu[0] ? (
+            <View style={styles.note} testID="external-delivery-blocked">
+              <Text style={{ color: c.ink2 }}>{reasonLabel(t, githubBlocked.reason)}</Text>
+              <Button
+                kind="plain"
+                label={t('mgh.recoverManager')}
+                disabled={Boolean(reset.menu[0].disabled)}
+                onPress={reset.menu[0].onPress}
+              />
+            </View>
           ) : null}
           {tab === 'github' ? (
             <ExternalInbox

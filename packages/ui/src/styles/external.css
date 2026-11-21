@@ -461,3 +461,8 @@
   flex: none;
   white-space: nowrap;
 }
+
+.ext-delivery-note {
+  padding: 0 12px;
+  color: var(--wait);
+}

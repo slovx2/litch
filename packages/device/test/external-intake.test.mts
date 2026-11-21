@@ -246,19 +246,32 @@ test('未核验工具时提示刷新或更换线程，旧经理讨论规则保�
   const old = managerBundle(manager, true)
   const next = managerBundle(manager, true, true, [])
   const applied = { threadId: manager.threadId, fingerprint: managerFingerprint(old) }
-  assert.deepEqual(externalManagerUpgrade(manager, applied, next), {
+  assert.deepEqual(externalManagerUpgrade(manager, applied, next, old), {
     ready: false,
     reason: 'manager_tools_outdated',
     action: 'replace',
   })
   assert.deepEqual(
-    externalManagerUpgrade(manager, { ...applied, fingerprint: managerFingerprint(next) }, next),
+    externalManagerUpgrade(
+      manager,
+      { ...applied, fingerprint: managerFingerprint(next) },
+      next,
+      next,
+    ),
     { ready: true },
   )
   assert.equal(
-    externalManagerUpgrade({ ...manager, threadId: 'replaced' }, applied, next).ready,
+    externalManagerUpgrade({ ...manager, threadId: 'replaced' }, applied, next, next).ready,
     false,
   )
+  for (const field of ['description', 'instructions'] as const) {
+    const changed = next.map((namespace) =>
+      namespace.name === 'litch_manager'
+        ? { ...namespace, [field]: `尚未更新的能力说明 ${namespace[field]}` }
+        : namespace,
+    )
+    assert.equal(externalManagerUpgrade(manager, applied, next, changed).ready, false, field)
+  }
   const legacy = old.find((namespace) => namespace.name === 'litch_manager')?.instructions ?? ''
   assert.equal(refreshManagerRules('litch_manager', legacy), legacy)
   assert.doesNotMatch(legacy, /external_inbox/)

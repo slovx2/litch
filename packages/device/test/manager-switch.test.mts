@@ -2,24 +2,41 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { TaskTarget } from '../../protocol/src/device-tasks.mjs'
 import {
+  EXTERNAL_METHOD,
+  EXTERNAL_SOURCES_EXTENSION,
+  type ExternalSourceDraft,
+} from '../../protocol/src/external-sources.mjs'
+import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
   MANAGER_METHOD,
   type ManagerResetPreview,
 } from '../../protocol/src/manager.mjs'
+import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
+import type { DeviceOptions } from '../src/device.mjs'
+import { DeviceExternalRpc } from '../src/external/device-rpc.mjs'
 import { ManagerResets } from '../src/manager-reset.mjs'
-import { managerHandoverIndex } from '../src/manager-rules.mjs'
+import { managerHandoverIndex, ruleSettings } from '../src/manager-rules.mjs'
 import { startChild } from '../src/session-start.mjs'
 import { openTaskDatabase, type TaskRow, TaskStore } from '../src/task-store.mjs'
 import { codexThread, FakeCodex } from './fake-codex.mjs'
 import { FakeControl, managed } from './fake-control.mjs'
 import type { FakeTurn } from './fake-engine.mjs'
 import { FakeEngine } from './fake-engine.mjs'
+import {
+  bot,
+  githubMock,
+  owner,
+  repoPath,
+  respond,
+  subject,
+  token,
+} from './fixtures/external-d.mjs'
 import { rig } from './helpers.mjs'
 import { until } from './tree-kit.mjs'
 
 /** 两个协议假引擎；HOME/凭据由 helpers 的隔离夹具接管，不调用个人 CLI 或模型入口。 */
-async function setup(source = 'claude-code') {
+async function setup(source = 'claude-code', external?: DeviceOptions['external']) {
   const claude = new FakeEngine('claude-code')
   const pi = new FakeEngine('pi')
   claude.declaration.features = {
@@ -127,12 +144,19 @@ async function setup(source = 'claude-code') {
     {},
     {
       control,
+      ...(external ? { external } : {}),
       dial: (socket) => fakes[socket.slice('fake://'.length) as keyof typeof fakes].connector,
       log: (line) => logs.push(line),
     },
   )
   const client = env.connect()
-  await client.initialize(['harness', 'litchManager', 'litchManagerResetTarget', 'sessionTree'])
+  await client.initialize([
+    'harness',
+    'litchManager',
+    'litchManagerResetTarget',
+    'sessionTree',
+    EXTERNAL_SOURCES_EXTENSION,
+  ])
   const created = await client.call(MANAGER_METHOD.create, {
     cwd: env.stateDir,
     harness: source,
@@ -946,3 +970,269 @@ test('回报读取卡在 await 时跨引擎提交，读取完成后只投当前�
     await env.close()
   }
 })
+
+test('Claude 刷新被引擎接受但工具未安装时，保留已应用指纹', async () => {
+  const env = await setup()
+  try {
+    const { id } = env.manager
+    const oldTools = env.tree.store.tools(env.oldId)
+    const applied = env.device.managers.store.reset(id)?.applied
+    assert.ok(oldTools && applied)
+    await env.client.call(MANAGER_METHOD.update, { managerId: id, rules: '更新规则' })
+    await until(() => env.running('claude-code', env.oldId), '规则回合')
+    env.end('claude-code', env.oldId)
+    await until(() => !env.tree.isActive(env.oldId), '等待回合结束')
+
+    // 让恢复接口成功返回，但不安装带新规则的清单。
+    const original = env.claude.handlers['thread/resume']
+    assert.ok(original)
+    env.claude.handlers['thread/resume'] = (params, connection) => {
+      const { dynamicTools, ...rest } = params
+      return original(
+        (JSON.stringify(dynamicTools) ?? '').includes('更新规则') ? rest : params,
+        connection,
+      )
+    }
+    await env.client.call(MANAGER_METHOD.reset, env.input(await env.preview('claude-code')))
+    await until(() => env.current().reset?.phase === 'failed', '未实际应用，刷新报错')
+    assert.equal(env.device.managers.store.reset(id)?.applied, applied)
+    assert.deepEqual(env.tree.store.tools(env.oldId), oldTools)
+    assert.equal(env.current().threadId, env.oldId)
+  } finally {
+    await env.close()
+  }
+})
+
+for (const [harness, rulesFirst] of [
+  ['claude-code', true],
+  ['claude-code', false],
+  ['codex', true],
+  ['codex', false],
+] as const)
+  test(`${harness}：${rulesFirst ? '改规则再重置' : '重置再改规则'}后 GitHub 请求仍送达`, {
+    timeout: 20_000,
+  }, async (t) => {
+    let now = Math.floor(Date.now() / 1000)
+    const iso = () => new Date(now * 1000).toISOString()
+    const actor = { id: owner, type: 'User', login: 'owner' }
+    let request: { [key: string]: unknown } | undefined
+    const github = await githubMock(t, (_req, res, url) => {
+      res.setHeader('date', iso())
+      if (url.pathname === repoPath + '/issues') respond(res, request ? [request] : [])
+      else if (url.pathname === repoPath + '/issues/8' && request) respond(res, request)
+      else if (url.pathname === '/users/owner' || url.pathname === `/user/${owner}`)
+        respond(res, actor)
+      else if (
+        [
+          repoPath + '/issues/events',
+          repoPath + '/issues/comments',
+          repoPath + '/pulls/comments',
+        ].includes(url.pathname)
+      )
+        respond(res, [])
+      else return false
+      return true
+    })
+    const env = await setup(harness, { fixture: { github: github.origin, now: () => now } })
+    try {
+      const external = env.device.external
+      assert.ok(external)
+      const { id } = env.manager
+      let threadId = env.oldId
+      external.store.config.setOwner(
+        {
+          provider: 'github',
+          userId: owner,
+          method: 'userId',
+          loginCache: 'owner',
+          profileUrl: 'https://github.com/owner',
+        },
+        'test',
+        0,
+        'owner',
+      )
+      const auth = await external.secrets.configure({
+        token: token('dispatch'),
+        operationId: 'broker',
+        repoIds: [subject.repoId],
+      })
+      assert.equal(auth.outcome, 'applied')
+      assert.ok(auth.record)
+      const draft: ExternalSourceDraft = {
+        sourceId: 'dispatch-fixture',
+        provider: 'github',
+        enabled: true,
+        credentialRef: auth.record.credentialRef,
+        botUserId: bot,
+        triggers: {
+          mention: true,
+          assignment: true,
+          reviewRequest: true,
+          label: false,
+          labelIds: [],
+        },
+        minRole: 'triage',
+        interval: 60,
+        repos: [
+          {
+            repoId: subject.repoId,
+            owner: 'example',
+            name: 'demo',
+            url: 'https://github.com/example/demo',
+            localRoot: env.stateDir,
+            allowedBase: ['main'],
+            headNamespace: 'litch/',
+            pollIdentity: bot,
+            immediateFeedback: false,
+          },
+        ],
+        routes: [],
+        writePolicy: { comment: false, draftPr: false, status: false, managedPush: false },
+        unattended: { autoNotify: true },
+      }
+      const saved = external.store.config.saveSource(draft, 0, 'source', 'test', now)
+      assert.equal(saved.outcome, 'applied')
+      external.store.config.saveAssignment(
+        { managerId: id, identityId: bot, repoIds: [subject.repoId] },
+        0,
+        'assign',
+        () => {},
+      )
+      const source = external.store.config.source(draft.sourceId)
+      assert.ok(source)
+      await until(() => !!external.poll.status(source).lastSuccessAt, '空仓库的初始轮询', 5000)
+
+      const editRules = async () => {
+        await env.client.call(MANAGER_METHOD.update, {
+          managerId: id,
+          rules: '新文字规则，只在下一回合生效',
+          name: '改名后的经理',
+          scope: '新范围',
+          contact: { desktopNotification: true, unanswered: 'wait' },
+        })
+        await until(() => env.running(harness, threadId), '现有规则更新回合')
+        env.end(harness, threadId)
+        await until(() => !env.tree.isActive(threadId), '规则回合结束')
+      }
+      if (rulesFirst) await editRules()
+      const plan = await env.preview(harness)
+      assert.equal(plan.mode, harness === 'claude-code' ? 'refresh' : 'replace')
+      await env.client.call(MANAGER_METHOD.reset, env.input(plan))
+      if (harness === 'codex') {
+        await until(() => env.running(harness, threadId), '旧线程生成交接摘要')
+        env.end(harness, threadId)
+        await until(() => env.current().threadId !== threadId, '新线程已提交')
+        threadId = env.current().threadId
+        await until(() => env.running(harness, threadId), '新线程接班')
+        env.end(harness, threadId)
+        await until(() => !env.tree.isActive(threadId), '接班结束')
+      }
+      await until(() => env.current().reset?.phase === 'ready', '重置完成')
+      const installed = (
+        env.tree.store.tools(threadId) as { name: string; instructions?: string }[]
+      ).find(({ name }) => name === 'litch_manager')
+      assert.ok(installed?.instructions)
+      assert.match(
+        ruleSettings(installed.instructions)?.rules ?? '',
+        rulesFirst ? /新文字规则/ : /保持约束/,
+      )
+      if (!rulesFirst) await editRules()
+      const missingTools = harness === 'claude-code' && !rulesFirst
+      assert.deepEqual(env.device.managers.externalReady(env.current()), { ready: true })
+      assert.equal(env.current().reset?.outdated, false)
+      if (harness === 'codex') {
+        const latest = env.codex.seen
+          .filter(({ method }) => method === 'thread/resume')
+          .map(({ params }) => params)
+          .findLast(({ developerInstructions }) => typeof developerInstructions === 'string')
+        assert.match(String(latest?.developerInstructions), /新文字规则/)
+      }
+
+      // Claude 模拟工具确实少装一个；原来的文字规则不动，必须等待原地刷新。
+      if (missingTools) {
+        const old = env.tree.store.tools(threadId)
+        assert.ok(old)
+        const withoutTool = structuredClone(old) as { name: string; tools?: { name: string }[] }[]
+        const bundle = withoutTool.find((row) => row.name === 'litch_manager')
+        assert.ok(bundle?.tools)
+        bundle.tools = bundle.tools.filter(({ name }) => name !== 'external_read')
+        env.tree.store.setTools(threadId, withoutTool)
+        const thread = env.claude.threads.find(({ id }) => id === threadId)
+        assert.ok(thread)
+        thread.dynamicTools = withoutTool
+        assert.deepEqual(new DeviceExternalRpc(external).status(draft.sourceId).readiness.notify, {
+          state: 'blocked',
+          diagnostics: [
+            {
+              check: 'managerTools',
+              state: 'blocked',
+              code: 'manager_tools_outdated',
+              recovery: { managerId: id, threadId, action: 'refresh' },
+            },
+          ],
+        })
+      }
+
+      now += 8
+      request = {
+        id: '1008',
+        number: 8,
+        state: 'open',
+        title: '新请求',
+        body: '@litch-device please check this',
+        user: actor,
+        created_at: iso(),
+        updated_at: iso(),
+        url: `https://api.github.com${repoPath}/issues/8`,
+        html_url: subject.url,
+        labels: [],
+        assignees: [],
+      }
+      now += 60
+      const inbox = async () => {
+        const { entries } = await env.client.call(EXTERNAL_METHOD.inboxList, { managerId: id })
+        return entries.find((row: { subject: { number: string } }) => row.subject.number === '8')
+      }
+      try {
+        await until(async () => !!(await inbox()), '回环 GitHub 请求入箱', 6000)
+      } catch (error) {
+        t.diagnostic(
+          JSON.stringify({
+            runtime: external.poll.status(source),
+            requests: github.requests.map(({ path }) => path),
+            inbox: external.store
+              .inbox({})
+              .entries.map(({ status, reason }) => ({ status, reason })),
+          }),
+        )
+        throw error
+      }
+      if (missingTools) {
+        const { delivery } = await inbox()
+        assert.equal(delivery.state, 'queued')
+        assert.equal(delivery.reason, 'manager_tools_outdated')
+        assert.equal(delivery.recovery.action, 'refresh')
+        assert.equal(env.running(harness, threadId), false)
+      }
+      now += 31
+      await until(
+        async () => (await inbox())?.delivery?.state === 'confirmed',
+        '自动恢复并寄达经理回合',
+        6000,
+      )
+      assert.equal(env.current().threadId, threadId)
+      const engine = harness === 'claude-code' ? env.claude : env.codex
+      assert.ok(
+        engine.seen
+          .filter(({ method }) => method === 'turn/start')
+          .map(({ params }) => params)
+          .some(
+            ({ input }) =>
+              parseSessionEvent(input[0].text).event?.kind === 'manager-external-triage',
+          ),
+      )
+      assert.equal(env.current().reset?.phase, 'ready')
+    } finally {
+      await env.close()
+    }
+  })
