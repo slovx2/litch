@@ -19,6 +19,13 @@ import { ManagerRecovery } from '../managers/external/ManagerRecovery'
 import { useExternalDevice } from '../managers/external/use-external'
 import { InfoLine } from './parts'
 
+const notificationProblems = new Set([
+  'github_notifications_scope_required',
+  'github_notifications_access_denied',
+  'github_notifications_unavailable',
+  'github_notifications_rate_limited',
+])
+
 export function UnattendedSection({ device }: { device: DeviceView }) {
   const t = useT()
   const { c, font } = useTheme()
@@ -65,6 +72,9 @@ export function UnattendedSection({ device }: { device: DeviceView }) {
         const state = sourceState(status)
         const paused = state === 'paused'
         const pending = status.runtime?.backlog.pending ?? 0
+        const notification = status.readiness?.collect.diagnostics.find((item) =>
+          notificationProblems.has(item.code),
+        )
         const can = online && allowed(view.access, paused ? 'resumeSource' : 'pauseSource')
         return (
           <View
@@ -76,6 +86,11 @@ export function UnattendedSection({ device }: { device: DeviceView }) {
               <Text numberOfLines={1} style={{ color: c.ink, fontSize: font.size.body }}>
                 {repo ? repoLabel(repo) : status.source.sourceId}
               </Text>
+              {notification ? (
+                <Text style={{ color: c.err, fontSize: font.size.meta }}>
+                  {t(`mgh.source.${notification.code}` as Key)}
+                </Text>
+              ) : null}
               <Text
                 style={{ color: state === 'blocked' ? c.err : c.ink3, fontSize: font.size.meta }}
               >

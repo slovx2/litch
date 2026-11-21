@@ -31,9 +31,7 @@ const coreExtensions = [
 const extensions = [...coreExtensions, EXTERNAL_SOURCES_EXTENSION]
 const main = 'litch_manager'
 
-test('设备 GitHub：授权、待分拣、反馈后接单、对账、X-n、凭据继承与 CI', {
-  timeout: 60_000,
-}, async (t) => {
+async function checkGithubFlow(t, notifications) {
   const dir = mkdtempSync(join(tmpdir(), 'lg-'))
   const state = join(dir, 'state')
   const root = join(dir, 'repo')
@@ -291,6 +289,27 @@ else if (args[0] === 'api' || args[0] === 'pr') {
     (await admin.call(E.managerAssignmentGet, { managerId: manager.id })).identityId,
     bot,
   )
+  const withoutScope = await admin.call(E.sourceGet, { sourceId: source.sourceId })
+  assert.equal(withoutScope.readiness.collect.state, 'ok')
+  assert.equal(withoutScope.source.enabled, true)
+  assert.notEqual(withoutScope.runtime.state, 'paused')
+  assert.ok(
+    withoutScope.readiness.collect.diagnostics.some(
+      ({ code }) => code === 'github_notifications_scope_required',
+    ),
+  )
+  assert.equal(mock.notificationRequests.length, 0)
+  if (notifications) {
+    mock.enableNotificationScope()
+    const addPermissions = await admin.call(E.identityAdd, {
+      operationId: 'add-notification-scope',
+      scopes: ['repo', 'read:org', 'gist', 'notifications'],
+    })
+    await until(async () => {
+      const login = await admin.call(E.identityLoginGet, { loginId: addPermissions.loginId })
+      return login.state === 'succeeded' && login.result.scopes.includes('notifications')
+    }, '原机器人新增通知权限')
+  }
   await until(
     async () =>
       (await admin.call(E.sourceGet, { sourceId: source.sourceId })).runtime.lastSuccessAt != null,
@@ -574,7 +593,7 @@ else if (args[0] === 'api' || args[0] === 'pr') {
   mock.setSubjectState(14, 'closed')
   mock.setSubjectState(15, 'closed', true)
   mock.setSubjectState(8, 'closed') // X-1 已绑定，继续遵循原有跟进策略。
-  clock.now += 131
+  clock.now += 311
   await until(
     async () => {
       const page = await final.call(E.inboxList, { status: 'processed' })
@@ -623,4 +642,138 @@ else if (args[0] === 'api' || args[0] === 'pr') {
     '重新打开后的新提及重新分拣',
     6500,
   )
-})
+  if (!notifications) {
+    const fallback = await final.call(E.sourceGet, { sourceId: source.sourceId })
+    assert.equal(fallback.readiness.collect.state, 'ok')
+    assert.ok(
+      fallback.readiness.collect.diagnostics.some(
+        ({ code }) => code === 'github_notifications_scope_required',
+      ),
+    )
+    assert.equal(
+      mock.notificationRequests.length,
+      0,
+      '缺 scope 不调用通知 API，前面的 @ 入箱、提醒与接单全部经仓库流完成',
+    )
+    return
+  }
+  // 保留仓库历史积压，但评审请求、指派和提及都在一次通知轮询返回。
+  mock.setHistory(2300)
+  mock.setDiscovery(false)
+  const configured = (await final.call(E.sourceGet, { sourceId: source.sourceId })).source
+  await final.call(E.sourceUpsert, {
+    source,
+    expectedRevision: configured.revision,
+    operationId: 'restore-feedback',
+  })
+  clock.now += 10
+  mock.request(16)
+  mock.requestPull(17, true)
+  mock.assign(18)
+  const beforeNotifications = mock.notificationRequests.length
+  clock.now += 121
+  await until(
+    async () => {
+      const { entries } = await final.call(E.inboxList, { status: 'pending_triage' })
+      return ['16', '17', '18'].every((number) =>
+        entries.some(({ subject }) => subject.number === number),
+      )
+    },
+    '提及、评审请求、指派一轮入箱',
+    6500,
+  )
+  assert.equal(mock.notificationRequests.length, beforeNotifications + 1)
+  const collected = (await final.call(E.inboxList, { status: 'pending_triage' })).entries
+  assert.deepEqual(
+    collected
+      .filter(({ subject }) => ['16', '17', '18'].includes(subject.number))
+      .map(({ kind, sourceEventId }) => [kind, sourceEventId])
+      .sort(),
+    [
+      ['assigned', '5018'],
+      ['issue', '1016'],
+      ['review_requested', '5017'],
+    ],
+  )
+  await until(
+    () => mock.states.created === writes.created + 3,
+    '三个新请求各收到一条状态评论',
+    6500,
+  )
+  mock.setDiscovery(true)
+  clock.now += 311
+  await until(
+    async () =>
+      (await final.call(E.sourceGet, { sourceId: source.sourceId })).runtime.lastSuccessAt ===
+      clock.now,
+    '仓库兜底再次核对',
+    6500,
+  )
+  const deduped = (await final.call(E.inboxList, {})).entries
+  for (const number of ['16', '17', '18'])
+    assert.equal(deduped.filter(({ subject }) => subject.number === number).length, 1)
+  assert.equal(mock.states.created, writes.created + 3, '仓库兜底和机器人通知不产生额外状态评论')
+  assert.ok(
+    mock.notificationRequests.every(
+      ({ method, since, all }) => method === 'GET' && since && all === 'true',
+    ),
+  )
+  assert.ok(
+    mock.requests.every(({ method, path }) => !path.includes('/notifications') || method === 'GET'),
+  )
+  // 非限流的通知权限拒绝不能影响同凭据的仓库读取。
+  mock.denyNotifications()
+  clock.now += 121
+  await until(
+    async () =>
+      (
+        await final.call(E.sourceGet, { sourceId: source.sourceId })
+      ).readiness.collect.diagnostics.some(
+        ({ code }) => code === 'github_notifications_access_denied',
+      ),
+    '通知入口权限降级可见',
+    6500,
+  )
+  // 通知刚由健康变成拒绝，尚未到原来的五分钟仓库核对点也要兜底。
+  clock.now += 10
+  mock.request(19)
+  clock.now += 121
+  await until(
+    async () =>
+      (await final.call(E.inboxList, { status: 'pending_triage' })).entries.some(
+        ({ subject }) => subject.number === '19',
+      ),
+    '通知降级后下一轮仓库兜底仍可收新提及',
+    6500,
+  )
+  mock.limitNotifications()
+  clock.now += 121
+  await until(
+    async () => {
+      const { readiness } = await final.call(E.sourceGet, { sourceId: source.sourceId })
+      return (
+        readiness.collect.state === 'ok' &&
+        readiness.collect.diagnostics.some(
+          ({ code }) => code === 'github_notifications_rate_limited',
+        )
+      )
+    },
+    'GitHub 通知限流在来源就绪状态中可见',
+    6500,
+  )
+  assert.equal(
+    (await final.call(E.sourceGet, { sourceId: source.sourceId })).coverage.find(({ stream }) =>
+      stream.startsWith('notifications:'),
+    ).backoffUntil,
+    clock.now + 180,
+  )
+}
+
+for (const notifications of [false, true])
+  test(
+    `设备 GitHub：${notifications ? '通知优先' : '缺通知 scope 时仓库兜底'}，授权、待分拣、反馈后接单、对账、X-n、凭据继承与 CI`,
+    {
+      timeout: 60_000,
+    },
+    (t) => checkGithubFlow(t, notifications),
+  )

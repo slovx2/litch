@@ -9,7 +9,9 @@ export type GithubStream =
   | 'issue-events'
   | 'issue-comments'
   | 'review-comments'
-  | 'pull-catalog'
+  | `notifications:${string}`
+  | `subject-comments:${number}`
+  | `subject-review-comments:${number}`
   | `reviews:${number}`
   | `pull:${number}`
   | `runs:${number}`
@@ -110,6 +112,7 @@ export interface GithubPageProof {
   next: string | null
   from: number
   before: number | null
+  latestEventAt?: number
   checkedAt: number
   rows: number
 }
@@ -142,12 +145,19 @@ export interface GithubScan {
 export interface GithubCursor {
   tag: string
   coveredThrough: number
+  startedAt?: number
   checkedAt?: number
   repairAt?: number
   nextPollAt?: number
   scan?: GithubScan
   stopped?: 'platform-limit'
   fault?: GithubPollFault
+  notifications?: {
+    seen: { id: string; updatedAt: number }[]
+    // 条件头只对应已经处理完的同一查询。
+    conditional?: { path: string; etag?: string; modified?: string }
+    pending?: { path: string; next: string; newestAt: number }
+  }
 }
 
 export interface GithubPollFault {
@@ -184,6 +194,7 @@ export interface GithubAccessGate {
 
 export interface GithubReviewSelection {
   boundNumbers?: readonly number[]
+  boundOnly?: boolean
   resume?: boolean
   tag?: string
 }

@@ -163,6 +163,19 @@ export const enExternal: Record<keyof typeof zhExternal, Entry> = {
   'ext.diag.feedbackOff': 'Instant feedback unavailable: the manager identity cannot comment',
   'ext.diag.unknown': 'Unrecognized check result. Run the check again.',
   'ext.code.github_collection_available': 'GitHub event collection is available',
+  'ext.code.github_notifications_unverified': 'GitHub notifications have not been checked yet.',
+  'ext.code.github_notifications_ready': 'GitHub notifications are available for this bot account.',
+  'ext.code.github_notifications_scope_required':
+    'Notifications permission is missing. Choose Add permissions under GitHub identities.',
+  'ext.code.github_notifications_access_denied':
+    'GitHub denied access to notifications. Reauthorize the bot and check organization approval.',
+  'ext.code.github_notifications_unavailable':
+    'GitHub notifications are unavailable. Litch will retry and continue checking repository events.',
+  'ext.code.github_notifications_rate_limited':
+    'GitHub notifications are rate limited. Litch will retry after the limit resets.',
+  'ext.identity.addPermissions': 'Add permissions',
+  'ext.identity.notificationsAccount':
+    'Sign in to GitHub as @{login} and grant the notifications permission.',
   'ext.code.github_collection_blocked':
     'Cannot collect events. Check the repository and GitHub credentials.',
   'ext.code.source_paused': 'Repository collection is paused',

@@ -17,7 +17,14 @@ import type {
   GithubScan,
   GithubStreamKey,
 } from './poll-state.mjs'
-import { type GithubApi, GithubFault, type GithubRepository, githubRepoPath } from './read-api.mjs'
+import {
+  type GithubApi,
+  GithubFault,
+  type GithubRepository,
+  githubObject,
+  githubRepoPath,
+  githubTime,
+} from './read-api.mjs'
 
 export const githubDay = 24 * 60 * 60_000
 const overlap = 10 * 60_000
@@ -31,6 +38,7 @@ export interface GithubScanContext {
   repo: GithubRepository
   bot: GithubActorEvidence
   enabledAt: number
+  newStreamAt?: number
   scanTo: number
   budget: number
   issuesDisabled: boolean
@@ -98,10 +106,12 @@ function startPath(ctx: GithubScanContext, from: number): string {
       return githubListPath(`${base}/issues/comments`, { sort: 'updated', direction: 'asc', since })
     case 'review-comments':
       return githubListPath(`${base}/pulls/comments`, { sort: 'updated', direction: 'asc', since })
-    case 'pull-catalog':
-      return githubListPath(`${base}/pulls`, { state: 'all', sort: 'updated', direction: 'desc' })
     default:
       if (ctx.key.stream.startsWith('pull:')) return `${base}/pulls/${ctx.number}`
+      if (ctx.key.stream.startsWith('subject-comments:'))
+        return githubListPath(`${base}/issues/${ctx.number}/comments`, { since })
+      if (ctx.key.stream.startsWith('subject-review-comments:'))
+        return githubListPath(`${base}/pulls/${ctx.number}/comments`, { since })
       if (ctx.key.stream.startsWith('reviews:'))
         return githubListPath(`${base}/pulls/${ctx.number}/reviews`)
       if (ctx.bound) return githubListPath(`${base}/actions/runs`, { head_sha: ctx.bound.headSha })
@@ -138,9 +148,6 @@ function finishPage(ctx: GithubScanContext, cursor: GithubCursor, scan: GithubSc
     }
   }
   const finished = completedCursor(cursor, scan, at)
-  if (ctx.key.stream === 'pull-catalog') {
-    finished.nextPollAt = Math.max(finished.nextPollAt ?? 0, at + githubDay)
-  }
   const gaps: GithubGap[] = []
   if (scan.pendingGap) gaps.push(scanGap(scan, 'page-budget', 'resolved'))
   if (scan.expiredRange)
@@ -194,7 +201,11 @@ export async function scanGithubStream(ctx: GithubScanContext): Promise<GithubSt
     stopped: _stopped,
     nextPollAt: _nextPollAt,
     ...cleared
-  } = previous ?? { tag, coveredThrough: ctx.enabledAt }
+  } = previous ?? {
+    tag,
+    coveredThrough: ctx.newStreamAt ?? ctx.enabledAt,
+    startedAt: ctx.newStreamAt ?? ctx.enabledAt,
+  }
   let cursor: GithubCursor = previous ?? cleared
   if (cursor.tag !== tag) {
     // 凭据/登录名变化需重新取页，但保留完整水位。head 变化按当前头重新建独立窗口。
@@ -202,6 +213,7 @@ export async function scanGithubStream(ctx: GithubScanContext): Promise<GithubSt
     cursor = {
       tag,
       coveredThrough: cursor.coveredThrough,
+      ...(cursor.startedAt === undefined ? {} : { startedAt: cursor.startedAt }),
       ...(headChanged ? { repairAt: at - githubDay } : {}),
     }
   } else if (ctx.resume) cursor = cleared
@@ -234,18 +246,14 @@ export async function scanGithubStream(ctx: GithubScanContext): Promise<GithubSt
     const repaired = cursor.repairAt ?? at
     const floor = Math.max(cursor.coveredThrough, cutoff)
     const repair =
-      ctx.key.stream !== 'pull-catalog' &&
-      ctx.scanTo - floor < githubDay &&
-      (scan ? scan.kind === 'repair' : at - repaired >= githubDay)
+      ctx.scanTo - floor < githubDay && (scan ? scan.kind === 'repair' : at - repaired >= githubDay)
+    const minimum = cursor.startedAt ?? ctx.enabledAt
     const from = repair
-      ? Math.max(cutoff, ctx.scanTo - githubDay)
-      : Math.max(cutoff, floor - overlap)
-    const to =
-      ctx.key.stream === 'pull-catalog'
-        ? ctx.scanTo
-        : repair
-          ? Math.min(ctx.scanTo, cursor.coveredThrough)
-          : Math.min(ctx.scanTo, floor + githubDay)
+      ? Math.max(minimum, cutoff, ctx.scanTo - githubDay)
+      : Math.max(minimum, cutoff, floor - overlap)
+    const to = repair
+      ? Math.min(ctx.scanTo, cursor.coveredThrough)
+      : Math.min(ctx.scanTo, floor + githubDay)
     scan = {
       kind: repair ? 'repair' : 'forward',
       from,
@@ -294,7 +302,17 @@ export async function scanGithubStream(ctx: GithubScanContext): Promise<GithubSt
         })
       } else if (scan.next) {
         const path: string = scan.next
-        const { response, reused, next } = await getGithubPage(ctx, cursor, scan, path)
+        const { response, reused, next: linked } = await getGithubPage(ctx, cursor, scan, path)
+        // 仓库 Issue Events 从最新往回翻且没有 since。整页早于本次窗口时结束，
+        // 正在续扫的页码仍由事务内的 next 保留。
+        const observedTimes =
+          ctx.key.stream === 'issue-events' &&
+          Array.isArray(response.body) &&
+          response.body.length > 0 &&
+          response.body.map((row) => githubTime(githubObject(row).created_at) ?? Infinity)
+        const latestEventAt =
+          reused?.latestEventAt ?? (observedTimes ? Math.max(...observedTimes) : Infinity)
+        const next: string | null = latestEventAt < scan.from ? null : linked
         const result: Awaited<ReturnType<typeof processGithubPage>> | undefined = reused
           ? undefined
           : await processGithubPage(processContext, response.body)
@@ -308,8 +326,9 @@ export async function scanGithubStream(ctx: GithubScanContext): Promise<GithubSt
                 etag,
                 from: scan.from,
                 before: result?.before ?? null,
+                ...(Number.isFinite(latestEventAt) ? { latestEventAt } : {}),
                 tag: cursor.tag,
-                next,
+                next: linked,
                 checkedAt: at,
                 rows,
               }

@@ -61,6 +61,27 @@ test('就绪四项按固定顺序，设备没报的项是未验证', () => {
   )
 })
 
+test('通知 scope 的单项降级诊断不把仓库采集或来源显示成停用', () => {
+  const source = {
+    ...status(true, 'collecting'),
+    readiness: {
+      collect: {
+        state: 'ok',
+        diagnostics: [
+          {
+            check: 'notifications:bot',
+            state: 'blocked',
+            code: 'github_notifications_scope_required',
+          },
+        ],
+      },
+    },
+  }
+  assert.equal(m.sourceState(source), 'collecting')
+  assert.equal(m.readinessStates(source.readiness)[0].state, 'ok')
+  assert.equal(m.sourcesSummary([source]).counts.paused, 0)
+})
+
 test('主题标签从规范链接读出 owner/name#n，读不出只给编号', () => {
   assert.equal(m.subjectLabel({ url: 'https://github.com/a/b/issues/7', number: '7' }), 'a/b#7')
   assert.equal(m.subjectLabel({ url: 'https://example.com/x', number: '7' }), '#7')

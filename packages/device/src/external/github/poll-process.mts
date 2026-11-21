@@ -247,27 +247,26 @@ export async function processGithubPage(ctx: GithubProcessContext, body: unknown
       const group = timelines.get(number) ?? { subjectKind: kind, stubs: [] }
       group.stubs.push(stub)
       timelines.set(number, group)
-    } else if (stream === 'issue-comments' || stream === 'review-comments') {
+    } else if (
+      stream === 'issue-comments' ||
+      stream === 'review-comments' ||
+      stream.startsWith('subject-comments:') ||
+      stream.startsWith('subject-review-comments:')
+    ) {
       if (!recent(requiredTime(raw.updated_at))) continue
-      const kind = stream === 'issue-comments' ? 'issue-comment' : 'review-comment'
+      const kind =
+        stream === 'issue-comments' || stream.startsWith('subject-comments:')
+          ? 'issue-comment'
+          : 'review-comment'
       const number = githubCommentNumber(raw, ctx.repo, kind)
+      if (ctx.number !== undefined && ctx.number !== number)
+        throw new GithubFault('invalid-response')
       const candidate = githubContentCandidate(raw, kind, number, ctx.bot)
       const parent =
         kind === 'review-comment' ? 'pull' : githubCommentParent(candidate, raw, ctx.repo)
       if (parent === 'pull') changes.candidates.push({ number, discoveredAt: candidate.updatedAt })
       if (parent) await content(ctx, candidate, parent, changes)
       else tasks.push({ kind: 'parent', candidate })
-    } else if (stream === 'pull-catalog') {
-      const pull = githubPullCandidate(raw, ctx.scan.to)
-      // 开着的老 PR 也必须进入轮扫；关闭项按近期更新时间或关闭时间筛选。
-      const cutoff = ctx.scan.to - 30 * 24 * 60 * 60_000
-      if (
-        pull.state === 'open' ||
-        (pull.updatedAt ?? 0) >= cutoff ||
-        (pull.closedAt ?? 0) >= cutoff
-      ) {
-        changes.candidates.push(pull)
-      }
     } else if (stream.startsWith('reviews:')) {
       if (raw.state === 'PENDING' || raw.submitted_at == null) continue
       const number = requiredNumber(ctx.number)

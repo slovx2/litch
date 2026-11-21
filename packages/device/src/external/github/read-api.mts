@@ -122,7 +122,7 @@ export interface GithubResponse {
 export interface GithubApi {
   generation: string
   now(): number
-  get(path: string, etag?: string): Promise<GithubResponse>
+  get(path: string, etag?: string, modifiedSince?: string): Promise<GithubResponse>
 }
 
 interface GithubApiOptions {
@@ -185,7 +185,11 @@ function githubApiAt(origin: string, options: GithubApiOptions): GithubApi {
   let lastSecondary = Number.NEGATIVE_INFINITY
   // 二级限额也约束同一凭据的并发；只读调用不并行打出。
   let tail: Promise<unknown> = Promise.resolve()
-  async function request(path: string, etag?: string): Promise<GithubResponse> {
+  async function request(
+    path: string,
+    etag?: string,
+    modifiedSince?: string,
+  ): Promise<GithubResponse> {
     if (!path.startsWith('/') || path.startsWith('//') || /[\\#\r\n]/.test(path))
       throw new TypeError('Invalid GitHub API path')
     const url = new URL(path, origin)
@@ -198,6 +202,7 @@ function githubApiAt(origin: string, options: GithubApiOptions): GithubApi {
           authorization: `Bearer ${token}`,
           'x-github-api-version': GITHUB_API_VERSION,
           ...(etag ? { 'if-none-match': etag } : {}),
+          ...(modifiedSince ? { 'if-modified-since': modifiedSince } : {}),
         },
         redirect: 'manual',
         signal: options.signal
@@ -268,8 +273,8 @@ function githubApiAt(origin: string, options: GithubApiOptions): GithubApi {
   return {
     generation,
     now,
-    get(path, etag) {
-      const next = tail.then(() => request(path, etag))
+    get(path, etag, modifiedSince) {
+      const next = tail.then(() => request(path, etag, modifiedSince))
       tail = next.catch(() => undefined)
       return next
     },

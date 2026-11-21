@@ -405,6 +405,23 @@ export class DeviceExternalService {
     this.agent?.sweep()
     const sources = this.store.config.sources()
     if (sources.length === 0) return
+    // 入口独立于仓库页和旧窗口。静态凭据的 HTTP 队列仍串行遵守 GitHub 限流。
+    let runningNotifications = [...this.running.keys()].filter((key) =>
+      key.startsWith('notifications:'),
+    ).length
+    for (const source of sources) {
+      if (runningNotifications >= 8) break
+      if (
+        !this.running.has(`notifications:${source.sourceId}`) &&
+        this.poll.notificationsDue(source)
+      ) {
+        runningNotifications++
+        this.launch(`notifications:${source.sourceId}`, async () => {
+          await this.poll.collectNotifications(source)
+          this.changed(this.store.config.source(source.sourceId) ?? source)
+        })
+      }
+    }
     for (const source of sources) {
       if (!source.enabled) continue
       if (

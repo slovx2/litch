@@ -303,6 +303,7 @@ export class DeviceExternalRpc {
     const [repo] = source.repos
     const coverage = store
       .cursors(id)
+      .filter(({ stream }) => stream !== 'pull-catalog')
       .map(({ repoId, stream, coveredThrough, checkedAt, backoffUntil, gap }) => ({
         repoId,
         stream,
@@ -374,6 +375,9 @@ export class DeviceExternalRpc {
         ),
       ),
     }
+    const notifications = poll.notificationDiagnostics(source)
+    // 通知入口只是加速；缺少权限或限流不代表仓库兜底已停止采集。
+    readiness.collect.diagnostics.push(...notifications)
     if (repo)
       for (const { identityId } of assigned) {
         if (identityId)

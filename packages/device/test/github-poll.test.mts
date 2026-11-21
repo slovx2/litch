@@ -233,7 +233,7 @@ test('304 只覆盖已提交的当前页；后页仍核对，秒级 since 前移
     .at(-1)?.query
   assert.equal(
     new URLSearchParams(lastQuery).get('since'),
-    iso((previous?.coveredThrough ?? 0) - 601_000),
+    iso(Math.max(start, (previous?.coveredThrough ?? 0) - 600_000) - 1000),
   )
 })
 
@@ -307,7 +307,7 @@ test('冷启动建基线；正文更新增加提及只记录编辑，不重放�
   const store = new MemoryGithubStore()
   const options = { sourceId, repo, botUserId: '99', enabledAt: start, api: fx.api, store }
   await pollGithubRepository(options)
-  assert.equal(store.observations.size, 2)
+  assert.equal(store.observations.size, 1)
   assert.deepEqual(
     [...store.events.values()].map((row) => row.targetEvidence.subject.number),
     ['4'],

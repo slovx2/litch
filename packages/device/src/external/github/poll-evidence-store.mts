@@ -31,7 +31,12 @@ export class GithubEvidenceStore {
     this.store = store
   }
 
-  stage(scope: GithubScope, events: readonly GithubPollEvent[], observedAt: number): void {
+  stage(
+    scope: GithubScope,
+    events: readonly GithubPollEvent[],
+    observedAt: number,
+    priority = false,
+  ): void {
     if (!events.length) return
     this.store.transaction(() => {
       const unique = new Set<string>()
@@ -42,9 +47,30 @@ export class GithubEvidenceStore {
         if (!isExternalEvent(event) || event.targetEvidence.subject.repoId !== scope.repoId) {
           throw new Error('GitHub 采集证据与仓库不符')
         }
-        if (unique.has(key) || this.store.inboxEvent(key) || this.index(scope, key)) continue
+        if (unique.has(key) || this.store.inboxEvent(key)) continue
+        const indexed = this.index(scope, key)
+        let firstObservedAt = observedAt
+        if (indexed) {
+          const pending = indexed.pendingKey
+          if (
+            !priority ||
+            indexed.sourceId !== scope.sourceId ||
+            !pending ||
+            pending.startsWith('!')
+          )
+            continue
+          firstObservedAt =
+            this.store.pollCheckpoint<GithubPendingEvidence>(
+              scope.sourceId,
+              scope.repoId,
+              stream,
+              pendingBucket,
+              pending,
+            )?.observedAt ?? observedAt
+          fresh.push({ bucket: pendingBucket, key: pending, value: null })
+        }
         unique.add(key)
-        const pendingKey = `${String(observedAt).padStart(12, '0')}/${key}`
+        const pendingKey = `${priority ? '!' : ''}${String(firstObservedAt).padStart(12, '0')}/${key}`
         seen.push({
           bucket: seenBucket,
           key,
@@ -53,7 +79,7 @@ export class GithubEvidenceStore {
         fresh.push({
           bucket: pendingBucket,
           key: pendingKey,
-          value: { event, observedAt } satisfies GithubPendingEvidence,
+          value: { event, observedAt: firstObservedAt } satisfies GithubPendingEvidence,
         })
       }
       this.store.writePollCheckpoints({ ...scope, stream }, fresh)

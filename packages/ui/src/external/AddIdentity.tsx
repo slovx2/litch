@@ -68,12 +68,24 @@ function Waiting({ login }: { login: Extract<ExternalIdentityLogin, { state: 'wa
   )
 }
 
-export function AddIdentity({ deviceId, onClose }: { deviceId: string; onClose(): void }) {
+export function AddIdentity({
+  deviceId,
+  onClose,
+  reauthorize,
+}: {
+  deviceId: string
+  onClose(): void
+  reauthorize?: { login: string; scopes: readonly string[] }
+}) {
   const t = useT()
   const { channel } = useServices()
   const dialog = useRef<HTMLDialogElement>(null)
   const [way, setWay] = useState<Way>('device')
-  const [extra, setExtra] = useState<ExternalIdentityScope[]>([])
+  const [extra, setExtra] = useState<ExternalIdentityScope[]>(() =>
+    EXTERNAL_IDENTITY_OPTIONAL_SCOPES.filter(
+      (scope) => scope === 'notifications' || reauthorize?.scopes.includes(scope),
+    ),
+  )
   const [token, setToken] = useState('')
   const [loginId, setLoginId] = useState<string | null>(null)
   const [first, setFirst] = useState<ExternalIdentityLogin | null>(null)
@@ -149,6 +161,11 @@ export function AddIdentity({ deviceId, onClose }: { deviceId: string; onClose()
   if (!login) {
     body = (
       <>
+        {reauthorize ? (
+          <p className="dim">
+            {t('ext.identity.notificationsAccount', { login: reauthorize.login })}
+          </p>
+        ) : null}
         <div className="seg">
           {(['device', 'import', 'paste'] as const).map((one) => (
             <button
