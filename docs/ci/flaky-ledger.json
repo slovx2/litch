@@ -687,6 +687,33 @@
   },
   "localObservations": [
     {
+      "id": "2026-11-22-idle-compact-manager-switch",
+      "source": "local",
+      "suite": "node scripts/ci/test-shard.mjs device, 198 files",
+      "test": "claude-code 跨引擎换绑：源摘要、目标配置、工作线与历史不丢，重复请求不重建",
+      "sha": "9cca4c00ac85b51129b7e258d0f3768f12a0e310",
+      "environment": { "platform": "darwin-arm64", "node": "24.19.0" },
+      "failure": "待合入 acecd45b 时，完整 device 首轮 1230/1231，仅此用例等待跨引擎提交超过原 5000 毫秒。夹具未配置外部来源，自动压缩不会启动；并发负载可能影响调度，根因尚未确证。",
+      "failureLog": {
+        "name": "release-0.47.0-integration/device.log",
+        "sha256": "73b1f4020e190773c72e883837edbd0a0340978f8999f90aff1fffead42f7199"
+      },
+      "evidence": {
+        "kind": "same-sha-local-rerun",
+        "result": "相同源码与构建产物，原样单跑失败用例 1/1 通过（698 毫秒）。未修改产品实现、用例、断言或时限。",
+        "log": "release-0.47.0-integration/switch-isolated.log",
+        "sha256": "7a63a4b432bf88e6a16541c0087ea9180e9aadde11923237e60a5a6caad252c3",
+        "fullRerun": {
+          "command": "node scripts/ci/test-shard.mjs device",
+          "result": "同一产品源码和构建产物，完整 198 文件、1231/1231 通过，未修改断言或时限。",
+          "log": "release-0.47.0-integration/device-rerun.log",
+          "sha256": "a93ab94b464ecd22eb25a428fed7577260edc40310a9b62c2f5337fbf80723f3"
+        }
+      },
+      "countedInCiThreshold": false,
+      "note": "仅本地观察，无 GitHub run/job，不增加 CI 偶发次数；首败证据保留，完整分片复核另记。"
+    },
+    {
       "id": "2026-11-22-legacy-blocked-workspace-notification",
       "source": "local",
       "suite": "node scripts/ci/test-shard.mjs device, 197 files",

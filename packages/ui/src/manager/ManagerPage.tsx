@@ -47,6 +47,8 @@ import { Decisions } from './Decisions.tsx'
 import { DiscussionPane } from './DiscussionPane.tsx'
 import { ManagerFeaturesContext, useManagerBoard } from './data.ts'
 import { DiscussionPaneContext } from './discussion-pane.ts'
+import { IdleCompactSettings } from './IdleCompactSettings.tsx'
+import { idleCompactLabel } from './idle-compact-label.ts'
 import { IssueOrderSelect } from './issue-order.tsx'
 import { useIssueCounts, useManagerIssues } from './issues/data.ts'
 import { IssueConsole, type IssuePreset } from './issues/IssueConsole.tsx'
@@ -481,6 +483,14 @@ export function ManagerPage({
             onCancel={() => setSettings(false)}
             onCreated={() => setSettings(false)}
           />
+          {manager.idleCompact ? (
+            <IdleCompactSettings
+              key={manager.id}
+              manager={manager}
+              saved={manager.idleCompact}
+              disabled={disabled}
+            />
+          ) : null}
         </div>
       </section>
     )
@@ -629,6 +639,11 @@ export function ManagerPage({
             ))}
           </div>
         </div>
+        {tab === 'overview' && manager.idleCompactLast ? (
+          <div className="ext-row ext-delivery-note dim" data-manager-last-compact>
+            {idleCompactLabel(manager.idleCompactLast, t)}
+          </div>
+        ) : null}
         {consoleTab ? (
           <div className="mg-inbox-bar">
             <div className="mg-inbox-tabs seg" ref={inboxTabs}>

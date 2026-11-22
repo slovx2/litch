@@ -1,3 +1,4 @@
+import { MANAGER_IDLE_COMPACT_EXTENSION } from '../../protocol/src/manager-idle-compact.mjs'
 import { sessionTurn } from './session-history.mjs'
 
 // 设备进程自有的引擎连接（定时任务的运行、会话树的编排都用它）：不对应任何客户端连接，没有客户端在中间，
@@ -335,6 +336,7 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
               EXTENSION.threadCapabilities,
               EXTENSION.acpControls,
               EXTENSION.peerMessages,
+              ...(harness === 'claude-code' ? [MANAGER_IDLE_COMPACT_EXTENSION] : []),
               ...(options.clientTools ? [EXTENSION.clientTools] : []),
             ],
             // 仅对订阅会话转交客户端工具；anyThread 仍只有设备工具，最终桌面必须逐项声明能力。

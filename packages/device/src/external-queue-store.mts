@@ -82,6 +82,14 @@ export class ExternalQueueStore {
       .map((row) => decode<ExternalDeliveryGroup>(row))
   }
 
+  hasPendingDelivery(managerId: string): boolean {
+    return !!this.db
+      .prepare(
+        "SELECT 1 FROM external_deliveries WHERE manager_id=? AND state IN ('queued','sending','unknown') LIMIT 1",
+      )
+      .get(managerId)
+  }
+
   queueDeliveryGroup(
     group: Omit<ExternalDeliveryGroup, 'state' | 'deliveryId' | 'turnId'>,
   ): ExternalDeliveryGroup {

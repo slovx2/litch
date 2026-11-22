@@ -1,4 +1,5 @@
 // 聚合面上的一条客户端连接：握手、路由、它专属的那一组上游连接。
+
 import { randomUUID } from 'node:crypto'
 import { BACKGROUND_TASKS_NOTIFICATION } from '../../protocol/src/background-tasks.mjs'
 import { APPROVAL_PREFIX } from '../../protocol/src/client-approvals.mjs'
@@ -37,6 +38,7 @@ import {
 import type { HarnessConfigChangedNotification } from '../../protocol/src/harness-config.mjs'
 import { PROJECT_PERMISSION } from '../../protocol/src/harness-project-permissions.mjs'
 import { MANAGER_BOARD_TRANSFER_METHOD } from '../../protocol/src/manager.mjs'
+import { managerInputMethod } from '../../protocol/src/manager-idle-compact.mjs'
 import { supportsNativeBackground } from '../../protocol/src/native-background-wake.mjs'
 import {
   REMOTE_CHROME_CONFIGURE,
@@ -974,6 +976,13 @@ export class ClientSession implements ClientToolPeer {
     keepHarness = false,
   ): typeof HANDLED | Promise<typeof HANDLED> {
     const threadId = isObject(frame.params) ? frame.params.threadId : null
+    if (typeof threadId === 'string') {
+      if (managerInputMethod(method) || method === 'thread/compact/start') {
+        const wait = this.host.sessionTree.idleCompactWait(threadId)
+        if (wait)
+          return wait.then(() => this.forwardReady(link, id, method, frame, raw, keepHarness))
+      }
+    }
     if (method === 'thread/archive' && typeof threadId === 'string')
       return this.host.archives
         .assertChildrenStopped(threadId)

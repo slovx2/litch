@@ -340,6 +340,17 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await click('[data-manager-id="m1"] .mg-pick')
   await click('[data-act="manager-settings"]')
   await until('经理设置页', () => one('[data-manager="settings"]'))
+  const compact = '[data-manager-idle-compact]'
+  const minutes = await until('无人值守空闲压缩设置', () =>
+    one<HTMLInputElement>(`${compact} input[inputmode="numeric"]`),
+  )
+  if (minutes.value !== '50') throw new Error('空闲压缩默认时间不正确')
+  fill(minutes, '56')
+  await until('拒绝超过缓存时间上限', () => minutes.getAttribute('aria-invalid') === 'true')
+  fill(minutes, '54')
+  await until('可保存空闲压缩设置', () => !one<HTMLButtonElement>(`${compact} button`)?.disabled)
+  await click(`${compact} button`)
+  await until('空闲压缩设置已保存', () => one(`${compact} [role="status"]`))
   await click('[data-sidebar-mode="chat"]')
   await until('切对话树仍显示经理设置页', () => one('[data-manager="settings"]'))
   await click('[data-sidebar-mode="manager"]')
@@ -348,6 +359,9 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   )
   await click('[data-manager="settings"] .arch-head button')
   await click('[data-board-tab="overview"]')
+  await until('概览显示压缩前后占用', () =>
+    one('[data-manager-last-compact]')?.textContent?.includes('76% → 24%'),
+  )
   // 窄窗口中先切到看板；宽窗口同一组按钮不显示，不需要点。
   const narrow = one<HTMLButtonElement>('.mg-narrow button:last-child')
   if (narrow && narrow.getBoundingClientRect().height > 0) narrow.click()

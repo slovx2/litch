@@ -1,7 +1,7 @@
-// 手机经理工作台（35-manager 第十七节）：标题栏是经理名和状态，下面一排页签“控制台 · 对话 · 工作线 · 概览”。
+// 手机经理工作台：标题栏是经理名和状态，下面一排页签“对话 · 控制台 · 工作线 · 概览”。
 // 对话就是经理会话本身（与会话页同一套组件，detail/session-page.tsx），切到别的页签时不卸载、只是不显示，
 // 设备支持外部来源时控制台后多一个“GitHub”页签（收件箱，external/ExternalInbox.tsx）。
-// 回来时滚动位置和草稿都在；只有对话页签显示着才标已读。默认落在控制台；带 issue 的入口（经理事件、#D-n、受阻事项、
+// 回来时滚动位置和草稿都在；只有对话页签显示着才标已读。默认落在对话；带 issue 的入口（经理事件、#D-n、受阻事项、
 // 工作线回经理）落到控制台（经理事项落到概览）并定位。当前页签存在路由参数里，回经理时可以直接改。
 // 议题卡在 Issue.tsx，对话里点编号拉起的半屏议题卡在 IssueSheet.tsx，工作线列表在 ManagerLines.tsx。
 import {
@@ -37,6 +37,7 @@ import {
 import { pagedDraftBoard } from '../../../../../packages/core/src/projection/manager-drafts.mts'
 import { MANAGER_ISSUE_SUMMARY_FILTERS } from '../../../../../packages/core/src/projection/manager-issue-list.mts'
 import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
+import { idleCompactLabel } from '../../../../../packages/ui/src/manager/idle-compact-label.ts'
 import { sessionMark } from '../../../../../packages/ui/src/sidebar/session-mark.ts'
 import { useSessionPage } from '../../detail/session-page'
 import { usePane } from '../../nav/pane'
@@ -54,6 +55,7 @@ import { BoardActionScrollView } from './CardActions'
 import { DraftSubmitBar } from './DraftSubmitBar'
 import { ExternalInbox, useGithubSummary } from './external/ExternalInbox'
 import { reasonLabel } from './external/labels'
+import { IdleCompactSettings } from './IdleCompactSettings'
 import { Issue } from './Issue'
 import { IssueContext } from './IssueRelations'
 import { IssueSheet } from './IssueSheet'
@@ -74,8 +76,8 @@ import { useManagerReset } from './use-reset'
 type Props = NativeStackScreenProps<RootStackParamList, 'ManagerConsole'>
 type Category = ManagerPost['kind']
 
-const TABS: readonly ManagerTab[] = ['console', 'chat', 'lines', 'overview']
-const GITHUB_TABS: readonly ManagerTab[] = ['console', 'github', 'chat', 'lines', 'overview']
+const TABS: readonly ManagerTab[] = ['chat', 'console', 'lines', 'overview']
+const GITHUB_TABS: readonly ManagerTab[] = ['chat', 'console', 'github', 'lines', 'overview']
 const TAB_LABEL = {
   chat: 'mgr.tab.chat',
   console: 'manager.inbox',
@@ -114,10 +116,17 @@ export function ManagerConsoleScreen({ route, navigation }: Props) {
 
 function Workbench({ manager, route, navigation }: Props & { manager: ManagerView }) {
   const channel = useChannel()
+  const [idleSettings, setIdleSettings] = useState(false)
   const { deviceId, id: managerId } = manager
   const device = useKey<DeviceView>(keys.device(deviceId))
   const github = device?.externalSources === true
-  const asked: ManagerTab = route.params.tab ?? 'console'
+  const routeIssue = route.params.issue
+  // 议题链接从首帧就在目标页签，等看板加载后再定位到具体条目。
+  const asked: ManagerTab = routeIssue
+    ? routeIssue.startsWith('I-')
+      ? 'overview'
+      : 'console'
+    : (route.params.tab ?? 'chat')
   const tab: ManagerTab = asked === 'github' && !github ? 'console' : asked
   /** 对话和 GitHub 页签不显示看板滚动区 */
   const offBoard = tab === 'chat' || tab === 'github'
@@ -281,7 +290,6 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
     [setTab, setKind],
   )
   // 路由带来的议题（经理事件、工作线回经理、链接）：定位后清掉，免得返回时又跳一次
-  const routeIssue = route.params.issue
   useEffect(() => {
     if (routeIssue && board) openIssue(routeIssue)
   }, [routeIssue, board, openIssue])
@@ -463,6 +471,16 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
       wire={page.wire}
       actions={[
         ...reset.cancelActions,
+        ...(manager.idleCompact && manager.status === 'active'
+          ? [
+              {
+                label: t('manager.settings'),
+                icon: 'gear' as const,
+                testID: 'manager-idle-settings',
+                onPress: () => setIdleSettings(true),
+              },
+            ]
+          : []),
         ...page.actions.map((action) =>
           action.testID === 'detail:menu'
             ? {
@@ -655,6 +673,11 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
               })}
             </Text>
           ) : null}
+          {tab === 'overview' && manager.idleCompactLast ? (
+            <Text testID="manager-last-compact" style={[styles.note, { color: c.ink2 }]}>
+              {idleCompactLabel(manager.idleCompactLast, t)}
+            </Text>
+          ) : null}
           {githubBlocked?.recovery && reset.menu[0] ? (
             <View style={styles.note} testID="external-delivery-blocked">
               <Text style={{ color: c.ink2 }}>{reasonLabel(t, githubBlocked.reason)}</Text>
@@ -832,6 +855,14 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
         </KeyboardArea>
       </View>
       {page.overlays}
+      {idleSettings && manager.idleCompact ? (
+        <IdleCompactSettings
+          manager={manager}
+          saved={manager.idleCompact}
+          disabled={device?.connection !== 'online' || manager.status !== 'active'}
+          onClose={() => setIdleSettings(false)}
+        />
+      ) : null}
       {issueUI.overlays}
       {sheet && view?.paging && !board?.posts?.some((post) => post.id === sheet) ? (
         <Sheet

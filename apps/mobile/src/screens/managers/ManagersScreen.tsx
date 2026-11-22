@@ -1,4 +1,4 @@
-// 手机经理目录：按设备分组，每组先进行中、后已结束；新建、设置和调度仍在桌面。
+// 手机经理目录：进行中的经理按设备分组；已结束的经理合成一组，默认收起。
 import { type DeviceView, keys, type ManagerView, type SessionSummary } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useState } from 'react'
@@ -9,6 +9,7 @@ import type { RootStackParamList } from '../../nav/routes'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Empty, ErrorBanner, Row, SectionLabel } from '../../ui/kit/controls'
+import { Fold } from '../../ui/kit/Icon'
 import { StatusMark } from '../../ui/kit/marks'
 import { Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
@@ -89,56 +90,88 @@ function ManagerRow({
 function ManagerKey({
   deviceId,
   id,
-  status,
   navigation,
 }: {
   deviceId: string
   id: string
-  status: 'active' | 'ended'
   navigation: Props['navigation']
 }) {
   const manager = useKey<ManagerView>(keys.manager(deviceId, id))
-  if (!manager || (status === 'active') !== (manager.status !== 'ended')) return null
+  if (!manager) return null
   return <ManagerRow manager={manager} navigation={navigation} />
 }
 function DeviceManagers({
   deviceId,
+  ended,
   navigation,
 }: {
   deviceId: string
+  ended: boolean
   navigation: Props['navigation']
 }) {
   const t = useT()
   const device = useKey<DeviceView>(keys.device(deviceId))
-  const ids = useKey<string[]>(keys.managerIds(deviceId)) ?? []
+  const all = useKey<string[]>(keys.managerIds(deviceId)) ?? []
+  const endedIds = useKey<string[]>(keys.managerEndedIds(deviceId)) ?? []
+  const ids = ended ? endedIds : all.filter((id) => !endedIds.includes(id))
   if (!ids.length) return null
   return (
-    <View testID={`managers:device:${deviceId}`}>
+    <View testID={`managers:${ended ? 'ended-device' : 'device'}:${deviceId}`}>
       <SectionLabel>{device ? t.text(device.name) : deviceId}</SectionLabel>
-      {(['active', 'ended'] as const).map((status) =>
-        ids.map((id) => (
-          <ManagerKey
-            key={`${status}:${id}`}
-            deviceId={deviceId}
-            id={id}
-            status={status}
-            navigation={navigation}
-          />
-        )),
-      )}
+      {ids.map((id) => (
+        <ManagerKey key={id} deviceId={deviceId} id={id} navigation={navigation} />
+      ))}
     </View>
   )
 }
 export function ManagersScreen({ navigation }: Props) {
   const devices = useKey<string[]>(keys.devices) ?? []
-  const summary = useKey<{ total: number }>(keys.managersSummary)
+  const summary = useKey<{ total: number; ended: number }>(keys.managersSummary)
+  const [showEnded, setShowEnded] = useState(false)
   const t = useT()
+  const { c, font } = useTheme()
   return (
     <Screen title={t('manager.title')} testID="managers">
       <ScrollView>
         {devices.map((deviceId) => (
-          <DeviceManagers key={deviceId} deviceId={deviceId} navigation={navigation} />
+          <DeviceManagers
+            key={deviceId}
+            deviceId={deviceId}
+            ended={false}
+            navigation={navigation}
+          />
         ))}
+        {summary && summary.ended > 0 ? (
+          <>
+            <Fold
+              open={showEnded}
+              onToggle={() => setShowEnded((value) => !value)}
+              testID="managers:ended"
+              label={`${t('manager.ended')} · ${summary.ended}`}
+              style={[styles.ended, { borderTopColor: c.line1 }]}
+              right={
+                <Text
+                  testID="managers:ended-count"
+                  style={{ color: c.ink3, fontFamily: font.mono }}
+                >
+                  {summary.ended}
+                </Text>
+              }
+            >
+              <Text style={{ color: c.ink2, fontWeight: '600' }}>{t('manager.ended')}</Text>
+            </Fold>
+            {showEnded
+              ? devices.map((deviceId) => (
+                  <DeviceManagers
+                    key={deviceId}
+                    deviceId={deviceId}
+                    ended
+                    navigation={navigation}
+                  />
+                ))
+              : null}
+          </>
+        ) : null}
         {summary && summary.total === 0 ? (
           <Empty title={t('manager.empty')} detail={t('mgr.empty.detail')} />
         ) : null}
@@ -148,6 +181,7 @@ export function ManagersScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
+  ended: { paddingHorizontal: 16, borderTopWidth: StyleSheet.hairlineWidth },
   pill: {
     borderWidth: 1,
     minWidth: 24,

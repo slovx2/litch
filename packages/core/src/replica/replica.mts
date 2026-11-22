@@ -218,9 +218,11 @@ export const keys = {
     `permission-error:${JSON.stringify([deviceId, cwd, harness])}`,
   managersAvailable: (deviceId: string) => `managers:${deviceId}:available`,
   managerIds: (deviceId: string) => `managers:${deviceId}:ids`,
+  /** string[]：已结束经理。结束中仍在进行中分组。 */
+  managerEndedIds: (deviceId: string) => `managers:${deviceId}:endedIds`,
   manager: (deviceId: string, managerId: string) => `managers:${deviceId}:manager:${managerId}`,
   managersPending: 'managers:pending',
-  /** 所有设备上的经理数 { active, total }（手机经理入口与空状态用） */
+  /** 所有设备上的经理数 { active, ended, total }（手机经理目录用） */
   managersSummary: 'managers:summary',
   suggestions: 'suggestions:all',
   suggestionsAvailable: (deviceId: string) => `suggestions:${deviceId}:available`,
@@ -602,9 +604,17 @@ export function createReplica(
     )
     if (store.get<number>(keys.managersPending) !== total) store.set(keys.managersPending, total)
     const rows = [...managerLists.values()].flatMap((entry) => [...entry.rows.values()])
-    const summary = { active: rows.filter((m) => m.status === 'active').length, total: rows.length }
-    const before = store.get<{ active: number; total: number }>(keys.managersSummary)
-    if (before?.active !== summary.active || before.total !== summary.total)
+    const summary = {
+      active: rows.filter((m) => m.status === 'active').length,
+      ended: rows.filter((m) => m.status === 'ended').length,
+      total: rows.length,
+    }
+    const before = store.get<typeof summary>(keys.managersSummary)
+    if (
+      before?.active !== summary.active ||
+      before.ended !== summary.ended ||
+      before.total !== summary.total
+    )
       store.set(keys.managersSummary, summary)
   }
   const suggestionLists = new Map<string, { rows: SuggestionView[]; stop(): void }>()
@@ -655,6 +665,17 @@ export function createReplica(
       entry.rows.set(manager.id, manager)
       store.set(keys.manager(deviceId, manager.id), manager)
     }
+    const publishIds = () => {
+      const ids = [...entry.rows.keys()]
+      const ended = [...entry.rows.values()]
+        .filter(({ status }) => status === 'ended')
+        .map(({ id }) => id)
+      for (const [key, values] of [
+        [keys.managerIds(deviceId), ids],
+        [keys.managerEndedIds(deviceId), ended],
+      ] as const)
+        if (JSON.stringify(store.get(key)) !== JSON.stringify(values)) store.set(key, values)
+    }
     entry.stop = channel.subscribe(
       { kind: 'managers', deviceId },
       {
@@ -664,7 +685,7 @@ export function createReplica(
             entry.rows.clear()
             for (const manager of view.managers) put(manager)
             activity?.setManagers(deviceId, [...entry.rows.values()])
-            store.set(keys.managerIds(deviceId), [...entry.rows.keys()])
+            publishIds()
             store.set(keys.managersAvailable(deviceId), view.available)
             store.delete(keys.managersError(deviceId))
             pendingManagers()
@@ -678,10 +699,8 @@ export function createReplica(
                 for (const listener of [...issueListeners]) listener(op.manager, op.issue, op.event)
               else for (const listener of [...decisionListeners]) listener(op.manager, op.decision)
             }
-            const ids = [...entry.rows.keys()]
             activity?.setManagers(deviceId, [...entry.rows.values()])
-            if (JSON.stringify(store.get(keys.managerIds(deviceId))) !== JSON.stringify(ids))
-              store.set(keys.managerIds(deviceId), ids)
+            publishIds()
             pendingManagers()
           })
         },

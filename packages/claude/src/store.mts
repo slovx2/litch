@@ -583,6 +583,19 @@ export class SessionStore {
       : null
   }
 
+  /** 用最近开始或结束的普通回合；独立压缩不重置活动时钟。 */
+  lastWorkTurn(threadId: string): { id: string; activityAt: number } | null {
+    const row = this.db
+      .prepare(`
+      SELECT id, MAX(started_at, COALESCE(completed_at, started_at)) AS activity_at FROM turns
+      WHERE thread_id=?
+        AND json_extract(items_json, '$[0].type') IS NOT 'contextCompaction'
+      ORDER BY started_at DESC, rowid DESC LIMIT 1
+    `)
+      .get(threadId)
+    return row ? { id: String(row.id), activityAt: Number(row.activity_at) * 1000 } : null
+  }
+
   // 标题恰好是 name 的顶层 Claude 会话（不含子代理线程、临时会话、归档的），最多 limit 个：
   // 别的会话按名字发消息时认对方用，调用方拿个数判断是不是唯一
   claudeThreadsNamed(name: string, limit: number): string[] {

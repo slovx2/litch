@@ -34,11 +34,12 @@ export interface RegistryEntry {
 const text = (value: unknown): string | null =>
   typeof value === 'string' && value.trim() ? value.trim() : null
 
-export function readRegistry(dir: string): RegistryEntry[] {
+export function readRegistry(dir: string, strict = false): RegistryEntry[] {
   let names: string[]
   try {
     names = readdirSync(dir)
-  } catch {
+  } catch (error) {
+    if (strict && (error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     return []
   }
   const entries: RegistryEntry[] = []
@@ -47,8 +48,16 @@ export function readRegistry(dir: string): RegistryEntry[] {
     try {
       const raw = JSON.parse(readFileSync(join(dir, name), 'utf8')) as Record<string, unknown>
       const pid = raw.pid
-      if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid <= 1) continue
-      if (typeof raw.sessionId !== 'string' || !raw.sessionId) continue
+      if (
+        typeof pid !== 'number' ||
+        !Number.isSafeInteger(pid) ||
+        pid <= 1 ||
+        typeof raw.sessionId !== 'string' ||
+        !raw.sessionId
+      ) {
+        if (strict) throw new Error('Claude 会话进程登记尚不完整')
+        continue
+      }
       entries.push({
         pid,
         sessionId: raw.sessionId,
@@ -59,7 +68,8 @@ export function readRegistry(dir: string): RegistryEntry[] {
         name: text(raw.name),
         hostSessionId: text(raw.hostSessionId),
       })
-    } catch {
+    } catch (error) {
+      if (strict && (error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
       // 写到一半、格式不对的跳过：下一次再读
     }
   }
@@ -109,13 +119,14 @@ export class NativeOwners {
   }
 
   /** 登记里占着的原生会话：原生会话号 → 占用方。force 时不用上一次的结果 */
-  registered(force = false): Map<string, NativeOwner> {
+  registered(force = false, strict = false): Map<string, NativeOwner> {
     const now = Date.now()
-    if (!force && this.cached && now - this.cached.at < REGISTRY_GAP_MS) return this.cached.owners
+    if (!force && !strict && this.cached && now - this.cached.at < REGISTRY_GAP_MS)
+      return this.cached.owners
     const own = this.options.ownPids()
     const owners = new Map<string, NativeOwner>()
     const seen = new Set<number>()
-    for (const entry of readRegistry(this.options.registryDir())) {
+    for (const entry of readRegistry(this.options.registryDir(), strict)) {
       if (own.has(entry.pid) || !alive(entry.pid)) continue
       seen.add(entry.pid)
       if (!this.sameProcess(entry)) continue

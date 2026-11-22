@@ -23,6 +23,7 @@ import type {
   ManagerResetOperation,
   ManagerSituation,
 } from '../../protocol/src/manager.mjs'
+import type { ManagerIdleCompactRecord } from '../../protocol/src/manager-idle-compact.mjs'
 import { assertStoreFormat, initializeStoreFormat } from '../../shared/src/store-format.mjs'
 import { ensureParent } from '../../shared/src/util.mjs'
 import {
@@ -65,6 +66,7 @@ const MIGRATIONS = [
   MANAGER_BOARD_TRANSFER_MIGRATION,
   EXTERNAL_RESULT_REPLY_MIGRATION,
   EXTERNAL_ISSUE_STATUS_MIGRATION,
+  `CREATE TABLE manager_idle_compact(thread_id TEXT PRIMARY KEY, body TEXT NOT NULL);`,
 ] as const
 export const MANAGER_SCHEMA_VERSION = MIGRATIONS.length
 export const managerNow = () => Math.floor(Date.now() / 1000)
@@ -73,6 +75,10 @@ export interface ManagerDelivery {
   id: string
   managerId: string
   text: string
+}
+export interface ManagerIdleCompactState {
+  attempted: string | null
+  last?: ManagerIdleCompactRecord
 }
 export interface ManagerEnding {
   eventId: string
@@ -226,6 +232,20 @@ export class ManagerStore {
         'INSERT INTO managers VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body',
       )
       .run(manager.id, manager.threadId, JSON.stringify(manager))
+  }
+  idleCompact(threadId: string): ManagerIdleCompactState {
+    return (
+      body<ManagerIdleCompactState>(
+        this.db.prepare('SELECT body FROM manager_idle_compact WHERE thread_id=?').get(threadId),
+      ) ?? { attempted: null }
+    )
+  }
+  saveIdleCompact(threadId: string, state: ManagerIdleCompactState): void {
+    this.db
+      .prepare(
+        'INSERT INTO manager_idle_compact VALUES(?,?) ON CONFLICT(thread_id) DO UPDATE SET body=excluded.body',
+      )
+      .run(threadId, JSON.stringify(state))
   }
   reset(id: string): ResetRecord | null {
     return body(this.db.prepare('SELECT body FROM manager_resets WHERE manager_id=?').get(id))
@@ -662,6 +682,9 @@ export class ManagerStore {
         managerId: String(row.manager_id),
         text: String(row.text),
       }))
+  }
+  hasDelivery(managerId: string): boolean {
+    return !!this.db.prepare('SELECT 1 FROM deliveries WHERE manager_id=? LIMIT 1').get(managerId)
   }
   delivered(id: string): void {
     if (!this.db.isTransaction) {

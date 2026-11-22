@@ -81,9 +81,9 @@ export const SCENES: Scene[] = [
     id: 'manager-line-suggestions',
     group: '经理',
     name: '工作线建议',
-    note: '工作线提的建议在经理默认页显示；从看板和对话开始后都是经理的直属工作线',
+    note: '工作线提的建议在经理控制台显示；从看板和对话开始后都是经理的直属工作线',
     steps: [
-      nav('ManagerConsole', { deviceId: 'local', managerId: 'm1' }),
+      nav('ManagerConsole', { deviceId: 'local', managerId: 'm1', tab: 'console' }),
       link(
         `litch://test-send?device=local&session=manager-k1&text=${encodeURIComponent('提个子会话')}`,
       ),
@@ -114,14 +114,14 @@ export const SCENES: Scene[] = [
     id: 'managers',
     group: '经理',
     name: '经理目录',
-    note: '首页经理入口进入：按设备分组，先进行中、后已结束',
+    note: '首页经理入口进入：进行中按设备分组；已结束汇总在默认折叠的一组',
     steps: [nav('Managers', undefined)],
   },
   {
     id: 'manager-chat',
     group: '经理',
     name: '经理工作台 · 对话',
-    note: '显式打开对话；页签“控制台 · 对话 · 工作线 · 概览”，正文里的 #D-n 点了拉起半屏议题卡',
+    note: '显式打开对话；页签“对话 · 控制台 · 工作线 · 概览”，正文里的 #D-n 点了拉起半屏议题卡',
     steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1', tab: 'chat' })],
   },
   {
@@ -150,7 +150,7 @@ export const SCENES: Scene[] = [
     group: '经理',
     name: '控制台与 issue',
     note: '默认决策；胶囊行下常驻状态分组（待处理、进行中、未完成、已完成、已撤销、全部），各页签默认待处理。加载、失败和空列表都有提示；各页签记住条件，筛选按钮带生效数，底部抽屉里有类型多选、细分、只看、排序和清除筛选，另有新建、评论与讨论',
-    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1' })],
+    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1', tab: 'console' })],
   },
   {
     id: 'manager-issue-discussion',
@@ -164,14 +164,14 @@ export const SCENES: Scene[] = [
     group: '经理',
     name: 'issue · 大量',
     note: '经理“移动端体验打磨”有 120 条 issue，默认待处理集合超过一页；可切全部或其他分组、每页 30 条加载更多',
-    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm3' })],
+    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm3', tab: 'console' })],
   },
   {
     id: 'manager-issues-empty',
     group: '经理',
     name: 'issue · 空列表',
     note: '经理“支付网关稳定性”还没有 issue；右上角新建',
-    steps: [nav('ManagerConsole', { deviceId: 'build', managerId: 'm2' })],
+    steps: [nav('ManagerConsole', { deviceId: 'build', managerId: 'm2', tab: 'console' })],
   },
   {
     id: 'manager-old-device',

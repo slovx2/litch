@@ -25,6 +25,7 @@ import {
   type ManagerBoard,
   type ManagerObjectId,
 } from '../../protocol/src/manager.mjs'
+import { DEFAULT_MANAGER_IDLE_COMPACT } from '../../protocol/src/manager-idle-compact.mjs'
 import { MANAGER_ISSUE_METHOD } from '../../protocol/src/manager-issues.mjs'
 import { MANAGER_PAGING_METHOD } from '../../protocol/src/manager-paging.mjs'
 import { MANAGER_POST_METHOD, type ManagerPostId } from '../../protocol/src/manager-posts.mjs'
@@ -46,6 +47,7 @@ import {
 import { validateManagerRuntime } from './manager-create-validation.mjs'
 import { ManagerEndings } from './manager-ending.mjs'
 import { submitManagerFeedback } from './manager-feedback.mjs'
+import { ManagerIdleCompact } from './manager-idle-compact.mjs'
 import { ManagerIssues } from './manager-issues.mjs'
 import { ManagerLines } from './manager-lines.mjs'
 import { ManagerPaging } from './manager-paging.mjs'
@@ -99,6 +101,7 @@ export class DeviceManagers {
   readonly writer: ManagerBoardWriter
   readonly posts: ManagerPosts
   readonly issues: ManagerIssues
+  readonly idleCompact: ManagerIdleCompact
   readonly questions: ManagerQuestions
   readonly resets: ManagerResets
   readonly paging: ManagerPaging
@@ -115,6 +118,7 @@ export class DeviceManagers {
     tree: SessionTree,
     stateDir: string,
     born: (harness: string, thread: Record<string, unknown>) => void = () => {},
+    idleCompactClock?: () => number,
   ) {
     this.tree = tree
     this.born = born
@@ -137,6 +141,7 @@ export class DeviceManagers {
     this.resets = new ManagerResets(this)
     this.paging = new ManagerPaging(this)
     this.issues = new ManagerIssues(this)
+    this.idleCompact = new ManagerIdleCompact(this, idleCompactClock)
     this.unlisten = tree.onTurnEnded((threadId) => {
       const manager = this.lines.managerFor(threadId)
       if (manager) {
@@ -155,6 +160,7 @@ export class DeviceManagers {
           .map((manager) => manager.id),
       ]))
         this.kick(id)
+      this.idleCompact.tick()
     }, 1000)
     this.timer.unref()
     // 持久化的 waiting 不依赖客户端重订阅；构造完成即可续做。
@@ -164,11 +170,18 @@ export class DeviceManagers {
     })
   }
   manager(id: string): Manager {
-    const manager = this.store.manager(id)
-    if (!manager) throw new ManagerError('unknownManager', 'This manager does not exist.')
+    const saved = this.store.manager(id)
+    if (!saved) throw new ManagerError('unknownManager', 'This manager does not exist.')
+    const { idleCompact, ...manager } = saved
     const board = this.board(id)
+    const compact =
+      manager.harness === 'claude-code' ? this.store.idleCompact(manager.threadId).last : undefined
     return {
       ...manager,
+      ...(manager.harness === 'claude-code'
+        ? { idleCompact: idleCompact ?? DEFAULT_MANAGER_IDLE_COMPACT }
+        : {}),
+      ...(compact ? { idleCompactLast: compact } : {}),
       reset: this.resets.state(manager),
       historyThreadIds: this.store.history(id),
       pendingDecisions: board.decisions.filter((decision) => decision.status === 'open').length,
@@ -585,6 +598,12 @@ export class DeviceManagers {
             message: 'The default line harness is not configured.',
           })
         const before = this.store.manager(id) as Manager
+        if (patch.idleCompact && before.harness !== 'claude-code')
+          invalidSetting({
+            field: 'idleCompact',
+            reason: 'unavailableHarness',
+            message: 'Idle compaction is available for Claude Code managers.',
+          })
         const after = { ...before, ...patch, updatedAt: managerNow() }
         this.store.transaction(() => {
           this.store.saveManager(after)
@@ -599,8 +618,9 @@ export class DeviceManagers {
               }),
             )
         })
-        this.rememberRules(after)
+        if (Object.keys(patch).some((field) => field !== 'idleCompact')) this.rememberRules(after)
         this.kick(id)
+        if (patch.idleCompact) this.idleCompact.tick(id)
         if (patch.name !== undefined) {
           const link = await this.tree.link(after.harness)
           await link
@@ -1211,6 +1231,7 @@ export class DeviceManagers {
   }
   async close(): Promise<void> {
     this.closed = true
+    this.idleCompact.close()
     this.issues.close()
     clearInterval(this.timer)
     for (const timer of this.suggestionTimers.values()) clearTimeout(timer)
@@ -1219,6 +1240,7 @@ export class DeviceManagers {
     await this.resets.close()
     await this.questions.close()
     await Promise.allSettled(this.draining.values())
+    await this.tree.settleIdleCompacts()
     this.store.close()
   }
   async settleDeliveries(id: string): Promise<void> {

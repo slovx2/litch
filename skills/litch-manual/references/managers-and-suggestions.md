@@ -345,6 +345,28 @@ concurrency selects the dispatch tab; a failed save keeps the form. Cancel disca
 ended managers are read-only. Instruction changes leave a “Manager settings updated” event in the
 conversation. Creation, board answers and ending have their own event labels as well.
 
+### 无人值守空闲压缩 / Unattended idle compaction
+
+在桌面或手机的经理设置 → 无人值守中，可为 Claude Code 经理配置空闲压缩。默认开启；
+只有分配了外部来源，且实际占用超过 70% 时才运行。空闲默认 50 分钟，可设 5–55 分钟；
+占用阈值可设 1–99%。空闲时长应短于提示缓存有效期；例如缓存有效期为一小时，可用默认值，
+让压缩尽量在缓存失效前发起。
+
+普通回合的开始和结束都会重置计时，回合来源不限。引擎忙、被另一个进程占用、状态或用量未知、
+有输入或投递在排队时不压缩。自动压缩走 Claude 原生路径，期间到达的回报和外部提醒继续排队，
+压缩完成后投递。同一轮空闲最多尝试一次。看板概览显示最近一次成功的时间和压缩前后占用。
+
+In a manager’s Settings → Unattended on desktop or phone, configure idle compaction for Claude Code.
+It is enabled by default and runs only for managers assigned to an external source. The default is
+50 idle minutes and usage above 70%. Set 5–55 minutes and a 1–99% threshold. Set the delay below your
+prompt cache lifetime; with a one-hour cache, the default aims to compact before the cache expires.
+
+Each ordinary turn resets the clock when it starts and when it ends, regardless of its source.
+Compaction waits if the engine is busy or owned elsewhere, a turn or delivery is queued, or status
+or context usage is unavailable. Workline reports and external notices queue during native
+compaction and are delivered afterwards. Each idle period gets at most one attempt. The board
+overview shows the most recent successful compaction and context usage before and after it.
+
 ### Commands
 
 Run `scripts/litch status` first; use real device and manager ids returned by these reads:
@@ -354,6 +376,7 @@ scripts/litch managers list local
 scripts/litch managers get local <manager-id>
 scripts/litch managers set local <manager-id> --rules 'Review changes and report unverified work.'
 scripts/litch managers set local <manager-id> --notify on --max-running 4 --worktree on --merge manager
+scripts/litch managers set local <manager-id> --idle-compact on --idle-compact-minutes 50 --idle-compact-percent 70
 scripts/litch managers create local --cwd /path/to/project --harness pi --first-task 'Prepare a plan.'
 scripts/litch open managers
 ```
@@ -682,9 +705,11 @@ Follow-up inputs grow with their content up to a limit, then scroll internally. 
 经理可只编辑原帖、只回复或两者同时做；“已编辑”可展开旧版本、编辑时间与原因。
 控制台合计待定决策、待做请你做和经理已审核待开始建议；悬停也只显示这三类数量。手机采用相同口径。
 
-手机首页有“经理”入口（第二行是待处理合计），经理按设备分组、先进行中后已结束；首页「最近」里经理那一行带“经理”小标签，工作线缩进显示在经理下面，行尾小箭头可收起，开合记在手机上；点击经理或工作线均打开对话详情。经理列表的记号和文字与桌面侧栏相同（见“看板答复与待办提示”）；有待处理时行尾是等待色的计数胶囊，读屏念整行时带上“N 待处理”。
+手机首页有“经理”入口（第二行是待处理合计），进行中的经理按设备分组，已结束的经理汇总在默认收起的一组，标题显示数量；首页「最近」里经理那一行带“经理”小标签，工作线缩进显示在经理下面，行尾小箭头可收起，开合记在手机上；点击经理或工作线均打开对话详情。经理列表的记号和文字与桌面侧栏相同（见“看板答复与待办提示”）；有待处理时行尾是等待色的计数胶囊，读屏念整行时带上“N 待处理”。
 
-进入经理是一个工作台：标题是经理名，副标题是状态（运行中、N 条工作线运行中、空闲等），下面一排页签“控制台 · 对话 · 工作线 · 概览”，首次打开默认落在控制台；显式链接和当前经理页已选择的页签优先。对话就是经理会话本身，和普通会话页一样能发消息、处理审批和工作线的审批；切到别的页签再回来，滚动位置和没发的草稿都在，只有对话页签显示着才把经理的回复标为已读。页签上的记号：对话在经理回合在跑或等人时有运行记号，有新回复时有未读点；控制台是等待色的待处理数（口径同桌面）；工作线是在跑的条数，有工作线等人或出错时换成等待记号。经理在对话里写到的看板编号（D-n、R-n、P-n、I-n）可以点：经理事项到概览并展开那一项，其他议题从底部拉起半屏议题卡，就在里面作答、忽略或交付，交上去后议题卡自动关上、回到对话原处；卡上的 ↗ 或标题是“在控制台打开”，点讨论记号也会到控制台并打开那条讨论。右上角“⋯”里是经理会话的建议任务、后台任务、用量和压缩上下文。
+进入经理是一个工作台：标题是经理名，副标题是状态（运行中、N 条工作线运行中、空闲等），下面一排页签“对话 · 控制台 · 工作线 · 概览”，直接进入时默认打开对话；显式链接仍打开目标页签，从其他页面返回时保留已选页签。对话就是经理会话本身，和普通会话页一样能发消息、处理审批和工作线的审批；切到别的页签再回来，滚动位置和没发的草稿都在，只有对话页签显示着才把经理的回复标为已读。页签上的记号：对话在经理回合在跑或等人时有运行记号，有新回复时有未读点；控制台是等待色的待处理数（口径同桌面）；工作线是在跑的条数，有工作线等人或出错时换成等待记号。经理在对话里写到的看板编号（D-n、R-n、P-n、I-n）可以点：经理事项到概览并展开那一项，其他议题从底部拉起半屏议题卡，就在里面作答、忽略或交付，交上去后议题卡自动关上、回到对话原处；卡上的 ↗ 或标题是“在控制台打开”，点讨论记号也会到控制台并打开那条讨论。右上角“⋯”里是经理会话的建议任务、后台任务、用量和压缩上下文。
+
+On phones, the Managers list groups ended managers under a collapsed heading with a count. Opening a manager takes you to Chat, the first tab. Links still open their target tab.
 
 “工作线”页签列出经理开的每条线：记号和标题、最近动静的时间，第二行是状态和分支（领先几个提交、是否已合并），没有分支时写最近回报的第一句，行尾等待色的“没验 N”是回报里没验证的项数。等人、出错的排最前，然后是运行中、只剩后台任务、空闲；已合并的收在最下面“已结束 N”，默认收起。点一行进这条线的会话页；工作线会话页的副标题前半段是“↰ 经理名”，点了回到经理的工作线页签（从经理页进来时直接退回去，从链接或通知直达时新开经理页），“⋯”里也有“回到经理”和这条线的相关议题。
 

@@ -20,6 +20,9 @@ const fields: Record<string, [string, string]> = {
   'dispatch.merge': ['合并方式', 'Merge policy'],
   'dispatch.maxRunningLines': ['最大并行工作线数', 'Maximum running work lines'],
   contact: ['联系方式', 'Contact settings'],
+  idleCompact: ['无人值守空闲压缩', 'Unattended compaction'],
+  'idleCompact.idleMinutes': ['空闲分钟数', 'Idle minutes'],
+  'idleCompact.contextPercent': ['上下文占用', 'Context usage'],
   'contact.desktopNotification': ['桌面通知', 'Desktop notifications'],
   'contact.unanswered': ['未答复时的处理方式', 'Unanswered decisions'],
 }
@@ -43,6 +46,7 @@ const reasons: Record<ManagerValidationIssue['reason'], [string, string]> = {
     '请输入大于 0 的整数（不超过 9007199254740991）。',
     'Enter an integer from 1 to 9007199254740991.',
   ],
+  range: ['请输入范围内的整数。', 'Enter a whole number in the allowed range.'],
   absolutePath: [
     '请输入目标设备上的绝对目录路径或以 ~/ 开头的路径，不能使用相对路径。',
     'Enter an absolute directory path on the target device or a path starting with ~/. Relative paths are not supported.',

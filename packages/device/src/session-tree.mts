@@ -242,6 +242,10 @@ export class SessionTree {
   private readonly listeners = new Set<(threadId: string) => void>()
   /** 每个父会话的唤醒检查排成一条，免得一次结束触发两个唤醒 */
   private readonly checks = new Map<string, Promise<void>>()
+  private readonly idleCompacts = new Map<
+    string,
+    { wait: Promise<void>; turnId: string | null; inputWaiting: boolean }
+  >()
   private readonly timers = new Set<NodeJS.Timeout>()
   /** 在等用户选的 offer 卡：提案 → 等它的那次调用 */
   private readonly offers = new Map<string, OfferWait>()
@@ -758,11 +762,24 @@ export class SessionTree {
     if (this.ended.has(key)) return
     this.managers?.lines.observe(method, params)
     if (method === 'turn/started') {
+      if (
+        this.active.get(threadId) !== turn.id &&
+        this.idleCompacts.get(threadId)?.turnId !== turn.id
+      )
+        this.managers?.idleCompact.activity(harness, threadId, turn.startedAt)
       this.active.set(threadId, turn.id)
       const manager = this.managers?.lines.managerFor(threadId)
       if (manager) this.managers?.changed(manager.id)
       // 回合开始时已经排着回报的（提醒收尾的回合、定时任务回合开始后才到的）：插进去
       if (this.store.notes(threadId).length) this.check(threadId)
+      return
+    }
+    // 空闲压缩是维护，不算用户活动、截断或唤醒预算，也不产生收尾提醒。
+    if (this.idleCompacts.get(threadId)?.turnId === turn.id) {
+      if (this.ended.size >= ENDED_LIMIT) this.ended.clear()
+      this.ended.add(key)
+      if (this.active.get(threadId) === turn.id) this.active.delete(threadId)
+      this.pending.ended(threadId, turn.id)
       return
     }
     // 计划中断不是工作的终点，不产生失败回报、经理收尾或用户停止屏障。
@@ -784,6 +801,7 @@ export class SessionTree {
     if (this.ended.size >= ENDED_LIMIT) this.ended.clear()
     this.ended.add(key)
     this.turnEndedAt.set(threadId, Date.now())
+    this.managers?.idleCompact.activity(harness, threadId, turn.completedAt)
     if (this.active.get(threadId) === turn.id) this.active.delete(threadId)
     this.managers?.endings.completed(threadId, turn.id)
     this.pending.ended(threadId, turn.id)
@@ -1366,10 +1384,62 @@ export class SessionTree {
   canDeliverExternal(threadId: string): boolean {
     return (
       this.canAutoWake(threadId, true) &&
+      !this.idleCompacts.has(threadId) &&
       !this.waitingOnUser(threadId) &&
       !this.userStops.has(threadId) &&
       !this.host.continuationPending?.(threadId)
     )
+  }
+
+  idleCompactWait(threadId: string): Promise<void> | undefined {
+    const lock = this.idleCompacts.get(threadId)
+    if (lock) lock.inputWaiting = true
+    return lock?.wait
+  }
+
+  canIdleCompact(threadId: string): boolean {
+    return (
+      !this.closed &&
+      !this.host.index.archived(threadId) &&
+      !this.host.restarting?.(threadId) &&
+      !this.managers?.resets.held(threadId) &&
+      !this.managers?.resets.refusal(threadId) &&
+      !this.managers?.resets.handoverPending(threadId) &&
+      !this.idleCompacts.get(threadId)?.inputWaiting &&
+      this.pendingRequests(threadId).length === 0 &&
+      this.host.backgroundRunning(threadId) === 0 &&
+      !this.host.continuationPending?.(threadId) &&
+      !this.reminders.has(threadId) &&
+      !this.heres.has(threadId) &&
+      this.store.notes(threadId).length === 0
+    )
+  }
+
+  /** 与经理事件、工作线回报共用队列。先占位再查引擎，检查期间进来的事件仍可持久入队。 */
+  runIdleCompact(
+    threadId: string,
+    run: (started: (turnId: string) => void) => Promise<void>,
+  ): void {
+    if (this.checks.has(threadId) || this.closed) return
+    const lock = { turnId: null as string | null, wait: Promise.resolve(), inputWaiting: false }
+    lock.wait = Promise.resolve()
+      .then(() =>
+        run((turnId) => {
+          lock.turnId = turnId
+        }),
+      )
+      .catch((error) => this.host.log(`经理空闲压缩失败：${threadId}：${String(error)}`))
+      .finally(() => {
+        this.idleCompacts.delete(threadId)
+        if (this.checks.get(threadId) === lock.wait) this.checks.delete(threadId)
+        if (!this.closed && this.store.notes(threadId).length) this.check(threadId)
+      })
+    this.idleCompacts.set(threadId, lock)
+    this.checks.set(threadId, lock.wait)
+  }
+
+  async settleIdleCompacts(): Promise<void> {
+    await Promise.allSettled([...this.idleCompacts.values()].map(({ wait }) => wait))
   }
 
   isCurrentExternalTurn(threadId: string, turnId: string): boolean {
@@ -1619,6 +1689,8 @@ export class SessionTree {
   beforeDeviceTurn(threadId: string, input: unknown[]): unknown[] {
     // 冻结或历史线程先拒绝，不能先取走回报再让内部 turn/start 失败。
     this.managers?.resets.checkInternalInput('turn/start', { threadId })
+    // 设备输入稍后会等压缩完成，这里不能把持久回报预先取出。
+    if (this.idleCompacts.has(threadId)) return input
     return this.withNotes(threadId, input) ?? input
   }
 
