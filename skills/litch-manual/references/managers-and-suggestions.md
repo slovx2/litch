@@ -345,6 +345,28 @@ concurrency selects the dispatch tab; a failed save keeps the form. Cancel disca
 ended managers are read-only. Instruction changes leave a “Manager settings updated” event in the
 conversation. Creation, board answers and ending have their own event labels as well.
 
+### 无人值守空闲压缩 / Unattended idle compaction
+
+在桌面或手机的经理设置 → 无人值守中，可为 Claude Code 经理配置空闲压缩。默认开启；
+只有分配了外部来源，且实际占用超过 70% 时才运行。空闲默认 50 分钟，可设 5–55 分钟；
+占用阈值可设 1–99%。空闲时长应短于提示缓存有效期；例如缓存有效期为一小时，可用默认值，
+让压缩尽量在缓存失效前发起。
+
+普通回合的开始和结束都会重置计时，回合来源不限。引擎忙、被另一个进程占用、状态或用量未知、
+有输入或投递在排队时不压缩。自动压缩走 Claude 原生路径，期间到达的回报和外部提醒继续排队，
+压缩完成后投递。同一轮空闲最多尝试一次。看板概览显示最近一次成功的时间和压缩前后占用。
+
+In a manager’s Settings → Unattended on desktop or phone, configure idle compaction for Claude Code.
+It is enabled by default and runs only for managers assigned to an external source. The default is
+50 idle minutes and usage above 70%. Set 5–55 minutes and a 1–99% threshold. Set the delay below your
+prompt cache lifetime; with a one-hour cache, the default aims to compact before the cache expires.
+
+Each ordinary turn resets the clock when it starts and when it ends, regardless of its source.
+Compaction waits if the engine is busy or owned elsewhere, a turn or delivery is queued, or status
+or context usage is unavailable. Workline reports and external notices queue during native
+compaction and are delivered afterwards. Each idle period gets at most one attempt. The board
+overview shows the most recent successful compaction and context usage before and after it.
+
 ### Commands
 
 Run `scripts/litch status` first; use real device and manager ids returned by these reads:
@@ -354,6 +376,7 @@ scripts/litch managers list local
 scripts/litch managers get local <manager-id>
 scripts/litch managers set local <manager-id> --rules 'Review changes and report unverified work.'
 scripts/litch managers set local <manager-id> --notify on --max-running 4 --worktree on --merge manager
+scripts/litch managers set local <manager-id> --idle-compact on --idle-compact-minutes 50 --idle-compact-percent 70
 scripts/litch managers create local --cwd /path/to/project --harness pi --first-task 'Prepare a plan.'
 scripts/litch open managers
 ```

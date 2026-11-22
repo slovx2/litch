@@ -1,4 +1,9 @@
 import { type DirectoryValidationReason, deviceDirectoryPath } from './directory-validation.mjs'
+import {
+  IDLE_COMPACT_MINUTES,
+  IDLE_COMPACT_PERCENT,
+  idleCompactInteger,
+} from './manager-idle-compact.mjs'
 
 // 客户端与设备共用的纯参数校验；目录存在性、引擎可用性仍由目标设备检查。
 export type ManagerValidationReason =
@@ -9,6 +14,7 @@ export type ManagerValidationReason =
   | 'boolean'
   | 'choice'
   | 'positiveInteger'
+  | 'range'
   | DirectoryValidationReason
   | 'unavailableHarness'
   | 'unsupportedPermission'
@@ -96,7 +102,7 @@ export function managerInputIssue(
         )
       : null
   if (!object(value)) return issue('', 'object', 'Expected an object.')
-  let error = keys(value, mode === 'create' ? CREATE : PATCH)
+  let error = keys(value, mode === 'create' ? CREATE : [...PATCH, 'idleCompact'])
   if (error) return error
   for (const field of [
     'name',
@@ -156,6 +162,26 @@ export function managerInputIssue(
       )
     if (contact.unanswered !== 'wait')
       return issue('contact.unanswered', 'choice', 'contact.unanswered must be wait.')
+  }
+  if ('idleCompact' in value) {
+    const settings = value.idleCompact
+    if (!object(settings))
+      return issue('idleCompact', 'object', 'Expected automatic compaction settings.')
+    error = keys(settings, ['enabled', 'idleMinutes', 'contextPercent'], 'idleCompact.')
+    if (error) return error
+    if (typeof settings.enabled !== 'boolean')
+      return issue('idleCompact.enabled', 'boolean', 'idleCompact.enabled must be boolean.')
+    for (const [field, range] of [
+      ['idleMinutes', IDLE_COMPACT_MINUTES],
+      ['contextPercent', IDLE_COMPACT_PERCENT],
+    ] as const) {
+      if (!idleCompactInteger(settings[field], range))
+        return issue(
+          `idleCompact.${field}`,
+          'range',
+          `${field} must be an integer from ${range.min} to ${range.max}.`,
+        )
+    }
   }
   return null
 }

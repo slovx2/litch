@@ -3,6 +3,7 @@ import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
 } from '../../../protocol/src/manager.mjs'
+import { DEFAULT_MANAGER_IDLE_COMPACT } from '../../../protocol/src/manager-idle-compact.mjs'
 import { formatSessionEvent } from '../../../protocol/src/session-tree.mjs'
 import type { SessionView } from '../model.mjs'
 import type { ManagerBoardView, ManagerDecisionView, ManagerView } from '../model-manager.mjs'
@@ -229,6 +230,8 @@ export function sampleManagers(
       scope,
       cwd,
       harness: 'claude-code',
+      idleCompact: { ...DEFAULT_MANAGER_IDLE_COMPACT },
+      ...(id === 'm1' ? { idleCompactLast: { at: ago(65), before: 76, after: 24 } } : {}),
       reset: {
         mode: 'refresh',
         current: 'mock-current',

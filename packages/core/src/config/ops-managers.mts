@@ -3,6 +3,11 @@ import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
 } from '../../../protocol/src/manager.mjs'
+import {
+  IDLE_COMPACT_MINUTES,
+  IDLE_COMPACT_PERCENT,
+  idleCompactInteger,
+} from '../../../protocol/src/manager-idle-compact.mjs'
 import type { DeviceView } from '../model.mjs'
 import type { ManagerDraft, ManagerEdit, ManagerView } from '../model-manager.mjs'
 import { ConfigFailure, clip, type OpContext, type OpSpec } from './context.mjs'
@@ -20,6 +25,9 @@ const OPTIONS = [
 ]
 const SUMMARY =
   '--name <name> --rules <text> --line-harness <id> --line-model <id> --line-effort <id> --worktree on|off --merge manager|user --max-running <number> --notify on|off'
+const COMPACT_FLAGS = ['idle-compact', 'idle-compact-minutes', 'idle-compact-percent']
+const COMPACT_USAGE =
+  '--idle-compact on|off --idle-compact-minutes <5-55> --idle-compact-percent <1-99>'
 const bad = (ctx: OpContext, zh: string, en: string) =>
   new ConfigFailure('invalid', ctx.say(zh, en))
 
@@ -56,6 +64,7 @@ const settingsStamp = (manager: ManagerView) =>
     rules: manager.rules,
     dispatch: manager.dispatch,
     contact: manager.contact,
+    idleCompact: manager.idleCompact,
     status: manager.status,
   })
 
@@ -149,6 +158,30 @@ function patch(ctx: OpContext, current: Pick<ManagerDraft, 'dispatch' | 'contact
   return edit
 }
 
+function compactPatch(ctx: OpContext, manager: ManagerView): ManagerEdit['idleCompact'] {
+  if (!COMPACT_FLAGS.some((flag) => ctx.cmd.options.has(flag))) return undefined
+  if (!manager.idleCompact)
+    throw bad(ctx, '此经理不支持空闲压缩', 'Idle compaction is unavailable for this manager')
+  const settings = { ...manager.idleCompact }
+  settings.enabled = ctx.switchOf('idle-compact') ?? settings.enabled
+  for (const [flag, field, range] of [
+    ['idle-compact-minutes', 'idleMinutes', IDLE_COMPACT_MINUTES],
+    ['idle-compact-percent', 'contextPercent', IDLE_COMPACT_PERCENT],
+  ] as const) {
+    const value = ctx.cmd.options.get(flag)
+    if (value === undefined) continue
+    const number = Number(value)
+    if (!idleCompactInteger(number, range))
+      throw bad(
+        ctx,
+        `--${flag} 须为 ${range.min} 至 ${range.max} 的整数`,
+        `--${flag} must be an integer from ${range.min} to ${range.max}`,
+      )
+    settings[field] = number
+  }
+  return settings
+}
+
 export const MANAGER_OPS: Record<string, OpSpec> = {
   'managers list': {
     args: [1, 1],
@@ -171,8 +204,8 @@ export const MANAGER_OPS: Record<string, OpSpec> = {
   },
   'managers set': {
     args: [2, 2],
-    options: OPTIONS,
-    usage: `managers set <device> <manager> [${SUMMARY}]`,
+    options: [...OPTIONS, ...COMPACT_FLAGS],
+    usage: `managers set <device> <manager> [${SUMMARY} ${COMPACT_USAGE}]`,
     summary: {
       zh: '修改经理设置；扩大派活能力需桌面确认，不改变已有工作线',
       en: 'Change manager settings; expanding dispatch needs desktop confirmation; existing worklines stay unchanged',
@@ -183,6 +216,8 @@ export const MANAGER_OPS: Record<string, OpSpec> = {
       if (manager.status !== 'active')
         throw bad(ctx, '结束中或已结束的经理不可修改', 'Ending or ended managers are read-only')
       const edit = patch(ctx, manager)
+      const idleCompact = compactPatch(ctx, manager)
+      if (idleCompact) edit.idleCompact = idleCompact
       if (Object.keys(edit).length === 0)
         throw bad(ctx, '至少给一项设置', 'Pass at least one setting')
       if (expands(manager, edit)) {

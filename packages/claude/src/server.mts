@@ -16,6 +16,11 @@ import {
 } from '../../protocol/src/background-tasks.mjs'
 import { isClaudeRefusalError } from '../../protocol/src/claude-refusal.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
+import {
+  IDLE_COMPACT_READ,
+  type IdleCompactSnapshot,
+  MANAGER_IDLE_COMPACT_EXTENSION,
+} from '../../protocol/src/manager-idle-compact.mjs'
 import { NATIVE_OWNER_NOTIFICATION, type NativeOwner } from '../../protocol/src/native-owner.mjs'
 import type { LitchPeer } from '../../protocol/src/peer-messages.mjs'
 import { RESUME_TOOLS_CHANGED, RESUME_TOOLS_READ } from '../../protocol/src/resume-tools.mjs'
@@ -1170,6 +1175,9 @@ export class CodexClaudeAppServer {
         return {}
       case 'thread/unarchive':
         return this.threadArchive(peer, asRecord(params), false)
+      case IDLE_COMPACT_READ:
+        this.requireIdleCompact(peer)
+        return this.idleCompactSnapshot(requiredString(asRecord(params).threadId, 'threadId'))
       case 'thread/compact/start':
         return this.threadCompactStart(peer, asRecord(params))
       case 'thread/shellCommand':
@@ -3792,12 +3800,63 @@ export class CodexClaudeAppServer {
     })
   }
 
+  private requireIdleCompact(peer: RpcPeer): void {
+    if (!this.peerFeatures.get(peer)?.extensions.has(MANAGER_IDLE_COMPACT_EXTENSION))
+      throw new ProtocolError(-32601, '未声明经理空闲压缩能力')
+  }
+
+  private idleCompactSnapshot(threadId: string): IdleCompactSnapshot {
+    const thread = this.store.getThread(threadId)
+    if (!thread) throw new ThreadNotFound(threadId)
+    const local = this.store.lastWorkTurn(threadId)
+    const usage = this.store.threadUsage(threadId)
+    const idle =
+      !thread.archived &&
+      thread.runtimeBackend === 'claude' &&
+      claudeBackendMode() !== 'tui' &&
+      thread.status.type === 'idle' &&
+      !this.activeTurnByThread.has(threadId) &&
+      !this.interruptingByThread.has(threadId) &&
+      !this.nativeMutations.has(threadId) &&
+      !this.scheduledGoals.has(threadId) &&
+      !this.store.hasInProgressTurn(threadId) &&
+      !this.store.pendingContextInjection(threadId) &&
+      this.store.queue.list(threadId).length === 0
+    // Litch 创建的经理可能被终端按 Claude 原生会话号打开。不能只看“导入会话”的占用。
+    let unowned = false
+    if (idle && thread.claudeSessionId) {
+      try {
+        unowned =
+          !this.nativeOwners.registered(true, true).has(thread.claudeSessionId) &&
+          !(this.native?.owners([threadId], true, true).has(threadId) ?? false)
+      } catch {
+        // 读不到完整进程登记时，不能断言无人占用。
+      }
+    }
+    return {
+      idle: idle && unowned,
+      lastTurnId: local?.id ?? null,
+      lastTurnActivityAt: local?.activityAt ?? null,
+      usageTurnId: usage?.turnId ?? null,
+      usedTokens: usage?.tokenUsage.last.totalTokens ?? null,
+      windowTokens: usage?.tokenUsage.modelContextWindow ?? null,
+    }
+  }
+
   private threadCompactStart(peer: RpcPeer, params: Record<string, unknown>): unknown {
     const threadId = stringOr(params.threadId, '')
     const thread = this.store.getThread(threadId)
     if (!thread) throw new Error(`unknown thread: ${threadId}`)
     if (this.activeTurnByThread.has(threadId)) throw new ProtocolError(-32009, '活动会话不能压缩')
     this.assertNotOwned(threadId)
+    const unattended = params.litchIdleCompact !== undefined
+    if (unattended) {
+      this.requireIdleCompact(peer)
+      const current = this.idleCompactSnapshot(threadId)
+      // 与占用同一引擎事件循环：检查后立即标活动，用户或队列的回合不能从中间插进来。
+      if (!current.idle || !isDeepStrictEqual(current, params.litchIdleCompact))
+        throw new ProtocolError(-32009, '自动压缩之前会话状态已改变')
+    }
     const turnId = newId()
     const compactItem: ThreadItem = { type: 'contextCompaction', id: newId() }
     const turn: TurnRecord = {
@@ -3868,9 +3927,10 @@ export class CodexClaudeAppServer {
           })
           if (!failure)
             this.notify(peer, { method: 'thread/compacted', params: { threadId, turnId } })
+          this.scheduleQueue(threadId)
         })
     })
-    return {}
+    return unattended ? { turnId } : {}
   }
 
   // Calls into the runtime with a structured "give me a 1-paragraph summary"

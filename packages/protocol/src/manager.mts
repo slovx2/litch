@@ -3,6 +3,10 @@ import { MANAGER_POST_METHOD } from './manager-posts.mjs'
 // 经理（litchManager）：设备持久化看板，客户端只经协议读写。定义见 protocol/extensions/manager.json。
 // 本文件自包含，不引用 codex.mts。时间一律为 Unix 秒；id 在一块看板内唯一，经理 id 在设备内唯一。
 
+import type {
+  ManagerIdleCompactRecord,
+  ManagerIdleCompactSettings,
+} from './manager-idle-compact.mjs'
 export const MANAGER_METHOD = {
   list: 'litch/manager/list',
   create: 'litch/manager/create',
@@ -247,6 +251,9 @@ export interface ManagerActivity {
 }
 
 export interface Manager {
+  /** Claude Code 经理的无人值守压缩设置；其它经理不带。 */
+  idleCompact?: ManagerIdleCompactSettings
+  idleCompactLast?: ManagerIdleCompactRecord
   /** 设备生成的能力指纹；旧快照未核验时 applied 为 null。 */
   reset?: ManagerResetState
   historyThreadIds?: string[]
@@ -448,6 +455,7 @@ export interface ManagerIdParams {
   managerId: string
 }
 export interface ManagerPatch {
+  idleCompact?: ManagerIdleCompactSettings
   name?: string
   scope?: string
   rules?: string

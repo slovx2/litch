@@ -84,6 +84,14 @@ export {
   permissionRank,
 } from '../../protocol/src/harness-project-permissions.mjs'
 export { managerRequestStatus } from '../../protocol/src/manager.mjs'
+export {
+  DEFAULT_MANAGER_IDLE_COMPACT,
+  IDLE_COMPACT_MINUTES,
+  IDLE_COMPACT_PERCENT,
+  idleCompactInteger,
+  type ManagerIdleCompactRecord,
+  type ManagerIdleCompactSettings,
+} from '../../protocol/src/manager-idle-compact.mjs'
 // 输入框里 @ 的会话：正文里的写法、对上、切段（协议包里的同一份，设备进程也用）
 export {
   type MentionSegment,

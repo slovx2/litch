@@ -37,6 +37,7 @@ import {
 import { pagedDraftBoard } from '../../../../../packages/core/src/projection/manager-drafts.mts'
 import { MANAGER_ISSUE_SUMMARY_FILTERS } from '../../../../../packages/core/src/projection/manager-issue-list.mts'
 import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
+import { idleCompactLabel } from '../../../../../packages/ui/src/manager/idle-compact-label.ts'
 import { sessionMark } from '../../../../../packages/ui/src/sidebar/session-mark.ts'
 import { useSessionPage } from '../../detail/session-page'
 import { usePane } from '../../nav/pane'
@@ -54,6 +55,7 @@ import { BoardActionScrollView } from './CardActions'
 import { DraftSubmitBar } from './DraftSubmitBar'
 import { ExternalInbox, useGithubSummary } from './external/ExternalInbox'
 import { reasonLabel } from './external/labels'
+import { IdleCompactSettings } from './IdleCompactSettings'
 import { Issue } from './Issue'
 import { IssueContext } from './IssueRelations'
 import { IssueSheet } from './IssueSheet'
@@ -114,6 +116,7 @@ export function ManagerConsoleScreen({ route, navigation }: Props) {
 
 function Workbench({ manager, route, navigation }: Props & { manager: ManagerView }) {
   const channel = useChannel()
+  const [idleSettings, setIdleSettings] = useState(false)
   const { deviceId, id: managerId } = manager
   const device = useKey<DeviceView>(keys.device(deviceId))
   const github = device?.externalSources === true
@@ -463,6 +466,16 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
       wire={page.wire}
       actions={[
         ...reset.cancelActions,
+        ...(manager.idleCompact && manager.status === 'active'
+          ? [
+              {
+                label: t('manager.settings'),
+                icon: 'gear' as const,
+                testID: 'manager-idle-settings',
+                onPress: () => setIdleSettings(true),
+              },
+            ]
+          : []),
         ...page.actions.map((action) =>
           action.testID === 'detail:menu'
             ? {
@@ -655,6 +668,11 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
               })}
             </Text>
           ) : null}
+          {tab === 'overview' && manager.idleCompactLast ? (
+            <Text testID="manager-last-compact" style={[styles.note, { color: c.ink2 }]}>
+              {idleCompactLabel(manager.idleCompactLast, t)}
+            </Text>
+          ) : null}
           {githubBlocked?.recovery && reset.menu[0] ? (
             <View style={styles.note} testID="external-delivery-blocked">
               <Text style={{ color: c.ink2 }}>{reasonLabel(t, githubBlocked.reason)}</Text>
@@ -832,6 +850,14 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
         </KeyboardArea>
       </View>
       {page.overlays}
+      {idleSettings && manager.idleCompact ? (
+        <IdleCompactSettings
+          manager={manager}
+          saved={manager.idleCompact}
+          disabled={device?.connection !== 'online' || manager.status !== 'active'}
+          onClose={() => setIdleSettings(false)}
+        />
+      ) : null}
       {issueUI.overlays}
       {sheet && view?.paging && !board?.posts?.some((post) => post.id === sheet) ? (
         <Sheet

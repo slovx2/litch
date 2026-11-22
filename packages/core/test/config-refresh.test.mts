@@ -55,6 +55,31 @@ const flush = async () => {
   for (let i = 0; i < 8; i++) await settle()
 }
 
+test('经理空闲压缩参数局部更新、可关闭，并验证缓存时间上限和百分比', async () => {
+  const { run } = fixture()
+  const changed = await run(['managers', 'set', 'local', 'm1', '--idle-compact-minutes', '52'])
+  assert.equal(changed.ok, true, changed.error ?? '')
+  assert.deepEqual(changed.data.idleCompact, { enabled: true, idleMinutes: 52, contextPercent: 70 })
+  for (const args of [
+    ['--idle-compact-minutes', '56'],
+    ['--idle-compact-percent', '100'],
+  ])
+    assert.equal((await run(['managers', 'set', 'local', 'm1', ...args])).ok, false)
+  const off = await run([
+    'managers',
+    'set',
+    'local',
+    'm1',
+    '--idle-compact',
+    'off',
+    '--idle-compact-percent',
+    '74',
+  ])
+  assert.equal(off.ok, true, off.error ?? '')
+  const saved = await run(['managers', 'get', 'local', 'm1'])
+  assert.deepEqual(saved.data.idleCompact, { enabled: false, idleMinutes: 52, contextPercent: 74 })
+})
+
 test('桌面偏好：只读查询、发送方式和手册开关交给窗口，拒绝非法值', async () => {
   const f = fixture()
   const box: { view: ConfigTopicView | null } = { view: null }

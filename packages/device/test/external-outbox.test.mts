@@ -6,7 +6,7 @@ import {
   externalDraftHead,
 } from '../src/external/outbox.mjs'
 import { ExternalStore } from '../src/external-store.mjs'
-import { MANAGER_SCHEMA_VERSION, ManagerStore, openManagerDatabase } from '../src/manager-store.mjs'
+import { ManagerStore, openManagerDatabase } from '../src/manager-store.mjs'
 import {
   actor,
   bot,
@@ -100,7 +100,7 @@ for (const replied of [false, true])
     const raw = f.store.manager.issue(actor.managerId, f.request.issueId) as Record<string, unknown>
     f.store.manager.saveIssue(actor.managerId, f.request.issueId, { ...raw, status: 'resolved' })
     f.store.manager.db.exec(
-      `DROP TABLE external_result_replies; PRAGMA user_version=${MANAGER_SCHEMA_VERSION - 2}`,
+      'DROP TABLE manager_idle_compact; DROP TABLE external_result_replies; PRAGMA user_version=11',
     )
     const reopened = new ManagerStore(openManagerDatabase(f.dir))
     try {

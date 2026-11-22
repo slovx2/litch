@@ -34,6 +34,7 @@ import { DEVICE_POWER_CHANGED } from '../../protocol/src/device-power.mjs'
 import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.mjs'
 import { EXTERNAL_SOURCES_EXTENSION } from '../../protocol/src/external-sources.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
+import { managerInputMethod } from '../../protocol/src/manager-idle-compact.mjs'
 import {
   NATIVE_BACKGROUND_NAMESPACE,
   supportsNativeBackground,
@@ -117,6 +118,7 @@ export type DeviceTrace = (
 
 export interface DeviceOptions {
   external?: Pick<DeviceExternalOptions, 'deviceSocket' | 'fixture'>
+  managerIdleCompactClock?: () => number
   /** 隔离验收的附件主目录；生产取系统 home。 */
   attachmentHome?: string
   /** 隔离测试可开启暂时隐藏的模型等级排序。 */
@@ -673,9 +675,14 @@ export class DeviceServer {
     this.sessionTree.onTurnEnded((id) => this.nativeBackground.schedule(id))
     info.extensions.push(EXTENSION.nativeBackgroundWake)
     this.modelRanking = new DeviceModelRanking(this.sessionTree, this.control)
-    this.managers = new DeviceManagers(this.sessionTree, options.stateDir, (harness, thread) => {
-      this.titles?.born(harness, thread)
-    })
+    this.managers = new DeviceManagers(
+      this.sessionTree,
+      options.stateDir,
+      (harness, thread) => {
+        this.titles?.born(harness, thread)
+      },
+      options.managerIdleCompactClock,
+    )
     this.sessionTree.managers = this.managers
     this.external = options.external
       ? new DeviceExternalService({
@@ -1365,6 +1372,11 @@ export class DeviceServer {
         throw new Error('设备正在准备重启，暂不启动工作')
       const threadId =
         isObject(params) && typeof params.threadId === 'string' ? params.threadId : null
+      if (threadId && managerInputMethod(method)) {
+        const wait = this.sessionTree.idleCompactWait(threadId)
+        if (wait) await wait
+        this.managers.resets.checkInternalInput(method, params)
+      }
       if (!restarting && threadId && method === 'turn/interrupt') this.restart?.cancel(threadId)
       const token =
         !restarting && threadId && method === 'turn/start' && options?.restartable

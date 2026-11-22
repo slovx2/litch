@@ -14,6 +14,7 @@
   "targetResetExtension": "litchManagerResetTarget：目标预览、新参数与 reset.operation 仅按接收连接声明提供，定义见 manager-reset-target.json；旧 reset 保持原语义。",
   "undeclared": "litch/manager/ 方法返回 extensionRequired，data.required=[\"litchManager\"]；会话对象不带 litchManager，不发送两个经理通知。标准会话、回合及通知照常可见，未修改的官方客户端可以使用这些普通会话。",
   "rules": [
+    "Claude Code 经理可带 idleCompact（每经理的无人值守空闲压缩设置）和 idleCompactLast（最近一次成功的记录，at 为 Unix 毫秒）。设备内部 Claude 连接声明 litchManagerIdleCompact，使用 litch/thread/idleCompact/read 读取最近普通回合和既有上下文用量；仅声明的连接可在 thread/compact/start 带 litchIdleCompact 快照并取得 turnId。快照变化或输入队列非空时拒绝启动；标准手动压缩保持原协议。",
     "重置 waiting 阶段允许 thread/resume、历史读取、目标读取和附件监听；turn/start、turn/steer、thread/queue/add、thread/queue/start 自动取消等待并正常处理。新增 reset/cancel 只取消 waiting，回到 idle 且保留已安装指纹；无进行中重置时幂等。summarizing/applying 阶段不允许取消或新增写入，返回 data.litch=managerResetBusy；刷新仅等待当前回合，换会话仍等待后台任务、临时追问与其他交接约束。",
     "litchManagerPaging：设备在 runtime/info.device.extensions 宣告，客户端须另行声明才可调用 catalog/read、board/summary、objects/list、object/read、object/history、lines/read。旧 board/read 的形状和语义不变。新方法不新增主动通知，继续使用仅向声明 litchManager 的连接投递的 changed/boardChanged 失效通知。新客户端未发现分页能力时使用原完整看板接口。",
     "分页默认30条、最大100条；游标绑定经理、种类、状态、排序及创建上界。对象按创建时间与稳定标识排序，状态变化后重新对账当前已加载页；历史按 seq 倒序及读取时上界分页。未知或查询不匹配的游标明确拒绝。摘要不含正文、选项、依据、讨论或审计正文；详情与历史分别读取。工作线快照 checkedAt=null 表示尚未核对，刷新失败保留上次快照并报告 failed。没有新增修订序列或对象增量订阅。",
@@ -1021,6 +1022,17 @@
         "endedAt"
       ],
       "properties": {
+        "idleCompact": { "$ref": "#/definitions/IdleCompactSettings" },
+        "idleCompactLast": {
+          "type": "object",
+          "required": ["at", "before", "after"],
+          "properties": {
+            "at": { "type": "number" },
+            "before": { "type": "number" },
+            "after": { "type": ["number", "null"] }
+          },
+          "additionalProperties": false
+        },
         "reset": { "$ref": "#/definitions/ResetState" },
         "historyThreadIds": { "type": "array", "items": { "type": "string" } },
         "permission": { "enum": [":read-only", ":workspace", ":danger-full-access", null] },
@@ -1105,6 +1117,16 @@
       },
       "additionalProperties": false
     },
+    "IdleCompactSettings": {
+      "type": "object",
+      "required": ["enabled", "idleMinutes", "contextPercent"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "idleMinutes": { "type": "integer", "minimum": 5, "maximum": 55 },
+        "contextPercent": { "type": "integer", "minimum": 1, "maximum": 99 }
+      },
+      "additionalProperties": false
+    },
     "UpdateParams": {
       "type": "object",
       "required": ["managerId"],
@@ -1114,7 +1136,8 @@
         "scope": { "type": "string" },
         "rules": { "type": "string" },
         "dispatch": { "$ref": "#/definitions/Dispatch" },
-        "contact": { "$ref": "#/definitions/Contact" }
+        "contact": { "$ref": "#/definitions/Contact" },
+        "idleCompact": { "$ref": "#/definitions/IdleCompactSettings" }
       },
       "additionalProperties": false
     },
