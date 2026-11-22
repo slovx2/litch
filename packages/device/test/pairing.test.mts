@@ -458,7 +458,7 @@ test('key 方式也回 mode 和 tailscaleSsh；开没开 Tailscale SSH 记 30 �
 
 test('start 带这台机器在 tailnet 里的名字和地址（有才带），和 tailscaleSsh 一样记 30 秒', async () => {
   let asked = 0
-  let self: { name: string; addresses: string[] } | null = {
+  let self: { name?: string; addresses: string[] } | null = {
     name: 'box.tail1.ts.net',
     addresses: ['100.101.102.103', 'fd7a:115c:a1e0::1'],
   }
@@ -474,11 +474,13 @@ test('start 带这台机器在 tailnet 里的名字和地址（有才带），�
       name: 'box.tail1.ts.net',
       addresses: ['100.101.102.103', 'fd7a:115c:a1e0::1'],
     })
-    self = null
+    self = { addresses: ['100.101.102.103'] }
     assert.ok((await r.call('litch/pair/start', { mode: 'tailscale' })).tailnet)
     assert.equal(asked, 1)
     r.clock.advance(30_000)
-    assert.equal('tailnet' in (await r.call('litch/pair/start', { mode: 'key' })), false)
+    const ipOnly = await r.call('litch/pair/start', { mode: 'key' })
+    assert.equal('tailnet' in ipOnly, false)
+    assert.deepEqual(ipOnly.tailnetAddresses, ['100.101.102.103'])
     assert.equal(asked, 2)
   } finally {
     r.close()
@@ -486,9 +488,28 @@ test('start 带这台机器在 tailnet 里的名字和地址（有才带），�
   // 配置里没给（老的写法）：不带
   const bare = rig()
   try {
-    assert.equal('tailnet' in (await bare.call('litch/pair/start', { mode: 'key' })), false)
+    const start = await bare.call('litch/pair/start', { mode: 'key' })
+    assert.equal(start.tailnet, undefined)
+    assert.equal(start.tailnetAddresses, undefined)
   } finally {
     bare.close()
+  }
+})
+
+test('读取 Tailscale 状态失败不影响出码，不带地址候选', async () => {
+  const r = rig({
+    tailnet: async () => {
+      throw new Error('隔离夹具模拟读取失败')
+    },
+  })
+  try {
+    const started = await r.call('litch/pair/start')
+    assert.equal(typeof started.pairId, 'string')
+    assert.equal(typeof started.seed, 'string')
+    assert.equal('tailnet' in started, false)
+    assert.equal('tailnetAddresses' in started, false)
+  } finally {
+    r.close()
   }
 })
 
@@ -543,9 +564,13 @@ test('detectTailscaleSsh：认 tailscale debug prefs 的 RunSSH，命令不在�
   }
 })
 
-test('parseTailnetStatus：取 Self 的 MagicDNS 名（去掉末尾的点）和地址；没开 MagicDNS、看不懂是 null', () => {
-  const status = (magic: unknown, self: unknown) =>
-    JSON.stringify({ Self: self, CurrentTailnet: { Name: 'x', MagicDNSEnabled: magic } })
+test('parseTailnetStatus：取在线节点本机 IP；启用 MagicDNS 才报告名字', () => {
+  const status = (magic: unknown, self: unknown, state = 'Running') =>
+    JSON.stringify({
+      BackendState: state,
+      Self: self,
+      CurrentTailnet: { Name: 'x', MagicDNSEnabled: magic },
+    })
   const self = {
     HostName: 'linux-test',
     DNSName: 'linux-test.tail-example.ts.net.',
@@ -555,9 +580,16 @@ test('parseTailnetStatus：取 Self 的 MagicDNS 名（去掉末尾的点）和�
     name: 'linux-test.tail-example.ts.net',
     addresses: ['100.64.0.42', 'fd7a:115c:a1e0::42'],
   })
-  assert.equal(parseTailnetStatus(status(false, self)), null)
-  assert.equal(parseTailnetStatus(status(true, { ...self, DNSName: '' })), null)
+  assert.deepEqual(parseTailnetStatus(status(false, self)), { addresses: self.TailscaleIPs })
+  assert.deepEqual(parseTailnetStatus(status(true, { ...self, DNSName: '' })), {
+    addresses: self.TailscaleIPs,
+  })
+  assert.equal(parseTailnetStatus(status(true, self, 'Stopped')), null)
   assert.equal(parseTailnetStatus(status(true, null)), null)
+  assert.equal(
+    parseTailnetStatus(status(false, { TailscaleIPs: ['192.168.1.1', 'bad.ts.net'] })),
+    null,
+  )
   assert.deepEqual(parseTailnetStatus(status(true, { DNSName: 'a.b.ts.net' })), {
     name: 'a.b.ts.net',
     addresses: [],
@@ -577,7 +609,7 @@ test('detectTailnet：跑 tailscale status --peers=false --json，命令不在�
       return file
     }
     const json =
-      '{"Self":{"DNSName":"h.t.ts.net.","TailscaleIPs":["100.64.0.9"]},"CurrentTailnet":{"MagicDNSEnabled":true}}'
+      '{"BackendState":"Running","Self":{"DNSName":"h.t.ts.net.","TailscaleIPs":["100.64.0.9"]},"CurrentTailnet":{"MagicDNSEnabled":true}}'
     const good = cli(
       'ts-status',
       `[ "$*" = "status --peers=false --json" ] || exit 2\necho '${json}'`,

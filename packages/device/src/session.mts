@@ -605,7 +605,16 @@ export class ClientSession implements ClientToolPeer {
     if (method.startsWith(PAIR_PREFIX) && this.state !== 'closed') {
       if (!this.host.pairing)
         throw new PairingError(DEVICE_PAIR_ERROR.unsupported, '这台设备不支持扫码绑定手机')
-      return this.host.pairing.call(method, frame.params)
+      const result = this.host.pairing.call(method, frame.params)
+      if (method !== `${PAIR_PREFIX}start` || this.declared.has(EXTENSION.devicePairing))
+        return result
+      return Promise.resolve(result).then((value) => {
+        if (!isObject(value)) return value
+        // 方法仍允许旧 CLI 免握手调用；新增 IP 候选只交给声明过扩展的连接。
+        const projected = { ...value }
+        delete projected.tailnetAddresses
+        return projected
+      })
     }
     if (this.state !== 'ready') throw new ProtocolError(-32600, 'Not initialized')
     if (method === THREAD_READ_STATE.list || method === THREAD_READ_STATE.mark) {

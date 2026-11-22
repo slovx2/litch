@@ -4,10 +4,11 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { isIP } from 'node:net'
 import { homedir, networkInterfaces } from 'node:os'
 import { join, win32 } from 'node:path'
-import type {
-  PairHostKey,
-  PairSshEndpoint,
-  PairTailnet,
+import {
+  isTailnetHost,
+  type PairHostKey,
+  type PairSshEndpoint,
+  type PairTailnet,
 } from '../../protocol/src/device-pairing.mjs'
 import { fingerprintOf } from './pair-keys.mjs'
 
@@ -195,9 +196,11 @@ export function detectTailscaleSsh(env: NodeJS.ProcessEnv = process.env): Promis
 
 /**
  * 这台机器在 tailnet 里的 MagicDNS 名字和地址：tailscale status --peers=false --json 的 Self。
- * 出码的一方拿它把预填地址里的 tailnet IP 换成名字。命令不在、跑不通、看不懂、tailnet 没开 MagicDNS 都是 null
+ * 没有 MagicDNS 时仍可报告 IP。命令不在、跑不通或看不懂都返回 null。
  */
-export function detectTailnet(env: NodeJS.ProcessEnv = process.env): Promise<PairTailnet | null> {
+export function detectTailnet(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<PairTailnetSelf | null> {
   return new Promise((resolve) => {
     execFile(
       env[TAILSCALE_CLI_ENV] || 'tailscale',
@@ -208,9 +211,12 @@ export function detectTailnet(env: NodeJS.ProcessEnv = process.env): Promise<Pai
   })
 }
 
-/** tailscale status --json 的输出里取 Self 的名字和地址。没开 MagicDNS（名字解析不了）是 null */
-export function parseTailnetStatus(text: string): PairTailnet | null {
+export type PairTailnetSelf = Omit<PairTailnet, 'name'> & { name?: string }
+
+/** 只取已连接节点的本机地址，MagicDNS 开启时才带可解析的名字。 */
+export function parseTailnetStatus(text: string): PairTailnetSelf | null {
   let status: {
+    BackendState?: unknown
     Self?: { DNSName?: unknown; TailscaleIPs?: unknown } | null
     CurrentTailnet?: { MagicDNSEnabled?: unknown } | null
   } | null
@@ -219,14 +225,19 @@ export function parseTailnetStatus(text: string): PairTailnet | null {
   } catch {
     return null
   }
-  if (status?.CurrentTailnet?.MagicDNSEnabled !== true) return null
-  const name = status.Self?.DNSName
-  if (typeof name !== 'string' || !name.replace(/\.$/, '')) return null
+  if (status?.BackendState !== 'Running') return null
+  const dns = status.Self?.DNSName
+  const name =
+    status.CurrentTailnet?.MagicDNSEnabled === true && typeof dns === 'string'
+      ? dns.trim().replace(/\.$/, '')
+      : ''
   const ips = status.Self?.TailscaleIPs
-  return {
-    name: name.replace(/\.$/, ''),
-    addresses: Array.isArray(ips) ? ips.filter((ip): ip is string => typeof ip === 'string') : [],
-  }
+  const addresses = Array.isArray(ips)
+    ? ips.filter(
+        (ip): ip is string => typeof ip === 'string' && isIP(ip) !== 0 && isTailnetHost(ip),
+      )
+    : []
+  return name || addresses.length ? { ...(name ? { name } : {}), addresses } : null
 }
 
 /** 跑一下，标准输出和标准错误合在一起返回，失败（包括退出码不为 0）也返回已有的输出 */

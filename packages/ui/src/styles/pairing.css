@@ -89,7 +89,7 @@
   font-size: 12px;
   color: var(--ink-2);
 }
-/* 输入框占满右边一列；主机那一栏后面还有 tailnet 写法的下拉，下拉只占它要的宽度 */
+/* 主机地址旁的候选入口只留一个图标。 */
 .pair-input {
   display: flex;
   gap: 6px;
@@ -99,11 +99,32 @@
   flex: 1 1 auto;
   min-width: 0;
 }
-.pair-input > select {
-  flex: 0 1 auto;
-  width: 9em;
-  text-overflow: ellipsis;
+.pair-input .pair-host-picker {
+  position: relative;
+  justify-content: center;
+  flex: none;
+  width: 30px;
   min-width: 0;
+  padding: 0;
+}
+.pair-host-picker > select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.pair-host-picker:focus-within {
+  outline: 1px solid var(--accent);
+}
+.pair-host-hint {
+  grid-column: 2 / -1;
+  display: grid;
+  gap: 2px;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 .pair-field .req-input[aria-invalid="true"] {
   box-shadow: 0 0 0 1px var(--err);

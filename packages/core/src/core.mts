@@ -1640,6 +1640,8 @@ export function createCore(options: CoreOptions): Core {
             address: at ? { ...started.original, ...at } : { ...started.original },
             original: started.original,
             hosts: started.hosts,
+            ...(started.ssh ? { ssh: started.ssh } : {}),
+            ...(started.localAlias ? { localAlias: started.localAlias } : {}),
             approvals: started.approvals,
           }
           return { pairing }
