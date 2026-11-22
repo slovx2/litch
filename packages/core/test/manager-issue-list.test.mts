@@ -5,6 +5,7 @@ import { sampleManagerIssues } from '../src/mock/sample-manager-issues.mjs'
 import { managerIssueQueryKey } from '../src/model-manager-issues.mjs'
 import {
   DEFAULT_MANAGER_ISSUE_FILTER,
+  MANAGER_ISSUE_ATTENTION_FILTERS,
   MANAGER_ISSUE_SUMMARY_FILTERS,
   managerIssueFilterKey,
   managerIssueHead,
@@ -41,9 +42,9 @@ test('编号定位按真实类型与状态查询，清除隐藏目标的过滤�
   }
 })
 
-test('类别首次默认只看开放、待开始或未读，全部最后；通用全量查询底子不变', () => {
+test('类别首次默认看待处理（普通议题含受阻），全部最后；通用全量查询底子不变', () => {
   for (const [kind, statuses] of Object.entries({
-    ordinary: ['open'],
+    ordinary: ['open', 'blocked'],
     decision: ['open'],
     suggestion: ['endorsed'],
     request: ['open'],
@@ -51,11 +52,16 @@ test('类别首次默认只看开放、待开始或未读，全部最后；通�
   }) as [ManagerIssue['kind'], ManagerIssue['status'][]][]) {
     const filter = managerIssueKindFilter(kind)
     assert.deepEqual(managerIssueQuery('m1', filter).statuses, statuses)
-    assert.deepEqual(managerIssueStatusFilters(kind, [kind])[0]?.statuses, statuses)
+    assert.deepEqual(managerIssueStatusFilters(kind, [kind])[0]?.statuses, statuses.slice(0, 1))
     assert.equal(managerIssueStatusFilters(kind, [kind]).at(-1)?.key, 'all')
     filter.statuses.push('closed')
     assert.deepEqual(managerIssueKindFilter(kind).statuses, statuses, '类别之间不共享可变数组')
   }
+  assert.deepEqual(
+    MANAGER_ISSUE_ATTENTION_FILTERS.ordinary,
+    managerIssueKindFilter('ordinary'),
+    '未选中时的普通议题角标查询与默认列表范围一致',
+  )
   assert.deepEqual(DEFAULT_MANAGER_ISSUE_FILTER.statuses, [])
   assert.deepEqual(MANAGER_ISSUE_SUMMARY_FILTERS.unread.statuses, [])
 })
@@ -166,7 +172,8 @@ test('完整 issue 收成列表行：预览取第一段非空文字', () => {
     kind: 'ordinary',
     title: '标题',
     body: '\n\n第一段\n  接着\n\n第二段',
-    status: 'open',
+    status: 'blocked',
+    blockedReason: '等作者补测试，周三复查',
     stateGroup: 'open',
     author: { kind: 'user' },
     revision: 2,
@@ -181,6 +188,7 @@ test('完整 issue 收成列表行：预览取第一段非空文字', () => {
   } satisfies ManagerIssue
   const head = managerIssueHead(issue)
   assert.equal(head.preview, '第一段 接着')
+  assert.equal(head.blockedReason, issue.blockedReason)
   assert.equal(head.author, 'user')
   assert.equal(head.followUp, 'off')
 })

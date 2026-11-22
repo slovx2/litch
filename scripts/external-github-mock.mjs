@@ -244,6 +244,9 @@ export async function scenario(t, clock) {
     setDiscovery(visible) {
       discovery = visible
     },
+    linkedPull(number) {
+      return openPull(number)
+    },
     requestPull(number, isReviewRequest = false) {
       const pull = openPull(number)
       pull.user = ownerAccount

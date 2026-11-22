@@ -22,7 +22,10 @@ import type {
   ManagerRequestId,
   ManagerView,
 } from '../../../core/src/model-manager.mts'
-import { MANAGER_ISSUE_SUMMARY_FILTERS } from '../../../core/src/projection/manager-issue-list.mts'
+import {
+  MANAGER_ISSUE_ATTENTION_FILTERS,
+  MANAGER_ISSUE_SUMMARY_FILTERS,
+} from '../../../core/src/projection/manager-issue-list.mts'
 import type { ManagerIssueKind } from '../../../protocol/src/manager-issues.mts'
 import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
@@ -102,6 +105,12 @@ const CATEGORY_KIND = {
   reports: 'report',
 } as const
 
+// 概览的未读数独立保留；类别角标未选中时表示打开该类别前的默认范围。
+const ISSUE_COUNTS = {
+  ...MANAGER_ISSUE_SUMMARY_FILTERS,
+  todo: MANAGER_ISSUE_ATTENTION_FILTERS.ordinary,
+}
+
 export function ManagerPage({
   manager,
   onOpen,
@@ -173,7 +182,8 @@ export function ManagerPage({
   const [, renderCategory] = useState(0)
   // issue 控制台（设备支持 litchManagerIssues 时）：编号跳转与概览摘要的过滤都交给它
   const issues = useManagerIssues(view)
-  const issueCounts = useIssueCounts(manager, issues, MANAGER_ISSUE_SUMMARY_FILTERS)
+  const issueCounts = useIssueCounts(manager, issues, ISSUE_COUNTS)
+  const [ordinaryTotal, setOrdinaryTotal] = useState<number | null>(null)
   const issueMode = issues.supported === true
   const [issueTarget, setIssueTarget] = useState<string | null>(null)
   const issueLocated = useCallback(() => setIssueTarget(null), [])
@@ -275,6 +285,7 @@ export function ManagerPage({
   // 类别分段放不下时横向滚动：选中的类别滚进可见区
   const inboxTabs = useRef<HTMLDivElement>(null)
   const pickedTab = issueMode ? issueKind : activeTab
+  const issueBadge = issueKind === 'ordinary' && !github ? ordinaryTotal : issueCounts?.todo
   // biome-ignore lint/correctness/useExhaustiveDependencies: 选中项变化时重新对齐
   useEffect(() => {
     inboxTabs.current
@@ -645,9 +656,7 @@ export function ManagerPage({
                   onClick={() => pickIssueKind('ordinary')}
                 >
                   {t('issue.tab')}
-                  {issueCounts?.unread ? (
-                    <span className="pill wait">{issueCounts.unread}</span>
-                  ) : null}
+                  {issueBadge ? <span className="pill wait">{issueBadge}</span> : null}
                 </button>
               ) : null}
               {external ? (
@@ -796,6 +805,7 @@ export function ManagerPage({
                         preset={issuePreset}
                         actionSlot={issueAction}
                         onLocated={issueLocated}
+                        onOrdinaryTotal={setOrdinaryTotal}
                         onOpenItem={openReference}
                         onSuggestionSource={onSuggestionSource}
                       />

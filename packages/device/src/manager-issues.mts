@@ -383,6 +383,7 @@ export class ManagerIssues {
         title: i.title,
         preview: i.body.slice(0, 300),
         status: i.status,
+        ...(i.blockedReason ? { blockedReason: i.blockedReason } : {}),
         stateGroup: i.stateGroup,
         author: i.author.kind,
         followUp: i.followUp.state,
@@ -756,12 +757,24 @@ export class ManagerIssues {
             }
           if (before.kind === 'ordinary') {
             const raw = this.store.issue(managerId, before.id) as ManagerIssue
+            const { blockedReason, ...rest } = raw
+            const wait =
+              after.status === 'blocked'
+                ? patch.status === 'blocked' && actor === 'manager'
+                  ? Array.from(why.trim()).slice(0, 500).join('')
+                  : blockedReason
+                : undefined
+            if (wait) after.blockedReason = wait
+            else delete after.blockedReason
             this.store.saveIssue(managerId, before.id, {
-              ...raw,
+              ...rest,
               title: after.title,
               body: after.body,
               status: after.status,
+              ...(wait ? { blockedReason: wait } : {}),
             })
+            if (after.status !== before.status)
+              this.owner.external?.store.resultReplies.issueStatusChanged(managerId, before.id)
           }
           this.store.saveIssueMeta(managerId, before.id, {
             ...meta,

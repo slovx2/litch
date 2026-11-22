@@ -25,6 +25,7 @@ interface OrdinaryInput {
   body: string
   author: 'user' | 'manager'
   status?: ManagerOrdinaryStatus
+  blockedReason?: string
   followUp?: ManagerIssueFollowUp
   at: number
   comments?: { author: 'user' | 'manager'; body: string; at: number }[]
@@ -58,6 +59,7 @@ function ordinary(n: number, input: OrdinaryInput): ManagerIssue {
     title: input.title,
     body: input.body,
     status,
+    ...(input.blockedReason && status === 'blocked' ? { blockedReason: input.blockedReason } : {}),
     stateGroup: 'open',
     author: { kind: input.author },
     revision: 1,
@@ -196,7 +198,11 @@ function richIssues(now: number, t: (zh: string, en: string) => string): Manager
     },
     {
       title: t('CI 夜间偶发失败', 'Nightly CI flakes'),
-      body: t('等上游修复。', 'Waiting on an upstream fix.'),
+      body: t('夜间失败已定位。', 'The nightly failure has been diagnosed.'),
+      blockedReason: t(
+        '等上游修复合并，周三复查。',
+        'Waiting for the upstream fix to merge; check Wednesday.',
+      ),
       author: 'manager',
       status: 'blocked',
       at: now - 10 * HOUR,

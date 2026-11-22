@@ -221,7 +221,7 @@ export function useIssueConsole({
   }, [ordinary])
   const capsule = (one: ManagerIssueKind) => {
     const on = one === kind
-    const count = attention?.[one] ?? 0
+    const count = (one === 'ordinary' && on ? page?.total : attention?.[one]) ?? 0
     const label = t(one === 'ordinary' ? 'issue.tab' : `issue.kind.${one}`)
     return (
       <Pressable
@@ -364,7 +364,10 @@ export function useIssueConsole({
     ) : visible.length ? (
       <View style={styles.list} testID="issue-list">
         {visible.map(card)}
-        <Text style={{ color: c.ink3, fontSize: font.size.meta, textAlign: 'center' }}>
+        <Text
+          testID="issue-total"
+          style={{ color: c.ink3, fontSize: font.size.meta, textAlign: 'center' }}
+        >
           {t('issue.loaded', { n: visible.length, total: page?.total ?? visible.length })}
         </Text>
         {page?.nextCursor ? (

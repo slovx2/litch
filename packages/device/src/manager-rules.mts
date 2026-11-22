@@ -16,6 +16,7 @@ import {
 import { PRESENTATION_SPEC } from '../../protocol/src/client-tools-presentation.mjs'
 import { REPOSITORY_TOOLS } from '../../protocol/src/client-tools-repository.mjs'
 import { SESSION_TOOL, sessionTools } from '../../protocol/src/client-tools-sessions.mjs'
+import { EXTERNAL_ISSUE_STATUS_RULES } from '../../protocol/src/external-sources.mjs'
 import type { Manager } from '../../protocol/src/manager.mjs'
 import { EXTERNAL_ANSWER_FIELDS, MANAGER_EXTERNAL_TOOLS } from './external/manager-tools.mjs'
 
@@ -179,6 +180,7 @@ export function managerInstructions(manager: RuleSettings, external = false): st
       manager.rules,
       external ? EXTERNAL_RULES : '',
       external ? EXTERNAL_RESULT_RULES : '',
+      external ? EXTERNAL_ISSUE_STATUS_RULES : '',
     ]
       .filter(Boolean)
       .join('\n\n'),
@@ -218,6 +220,9 @@ function toolInstructions(name: string, instructions: string): string {
   if (!settings) return instructions
   let text = instructions.slice(0, instructions.lastIndexOf(MARK))
   if (name === MANAGER_TOOLS.name) {
+    // 这段是工作流程提示，外部投递也会带上，不要求已有经理换线程来更新工具。
+    const workflow = `\n\n${EXTERNAL_ISSUE_STATUS_RULES}`
+    if (settings.externalTools && text.endsWith(workflow)) text = text.slice(0, -workflow.length)
     const suffix = [managerSettingsRules(settings.dispatch, settings.contact), settings.rules]
       .filter(Boolean)
       .join('\n\n')

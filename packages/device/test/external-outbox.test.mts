@@ -100,7 +100,7 @@ for (const replied of [false, true])
     const raw = f.store.manager.issue(actor.managerId, f.request.issueId) as Record<string, unknown>
     f.store.manager.saveIssue(actor.managerId, f.request.issueId, { ...raw, status: 'resolved' })
     f.store.manager.db.exec(
-      `DROP TABLE external_result_replies; PRAGMA user_version=${MANAGER_SCHEMA_VERSION - 1}`,
+      `DROP TABLE external_result_replies; PRAGMA user_version=${MANAGER_SCHEMA_VERSION - 2}`,
     )
     const reopened = new ManagerStore(openManagerDatabase(f.dir))
     try {
@@ -121,6 +121,94 @@ for (const replied of [false, true])
       reopened.close()
     }
   })
+
+test('已回帖的开放议题只按 GitHub 收尾证据排一次状态提醒，状态改变时撤销待投递', async (t) => {
+  const f = await externalFixture(t, (req, res, url, data) => {
+    if (req.method !== 'POST' || url.pathname !== commentsPath) return false
+    respond(res, commentResponse(data.body), 201)
+    return true
+  })
+  const { managerId } = actor
+  const { issueId, sourceId } = f.request
+  const replies = f.store.resultReplies
+  const raw = f.store.manager.issue(managerId, issueId) as Record<string, unknown>
+  const result = f.outbox.enqueue(actor, {
+    ...f.request,
+    idempotencyKey: 'result-before-close',
+    intent: { ...comment, purpose: 'result' },
+  })
+  await f.outbox.tick()
+  assert.equal(f.store.queue.outboxRecord(result.operationId)?.state, 'confirmed')
+  replies.finish(managerId, issueId) // 看板本地收尾不能冒充 GitHub 关闭。
+  replies.queueReminders()
+  assert.deepEqual(replies.pendingManagerIds(), [])
+  f.store.observeSubject(sourceId, { subject, state: 'closed', updatedAt: 998 }, 1000)
+  replies.queueReminders()
+  assert.deepEqual(replies.pendingManagerIds(), [], '接单前的关闭信息不能触发')
+  f.store.observeSubject(sourceId, { subject, state: 'closed', updatedAt: 1001 }, 1001)
+  replies.queueReminders()
+  replies.queueReminders()
+  const pending = f.store.manager
+    .deliveries(managerId)
+    .find(({ text }) => text.includes('externalIssueStatusCheck'))
+  assert.ok(pending)
+  assert.equal(replies.reminderCurrent(managerId, issueId, pending.id, 'status'), true)
+  assert.deepEqual(replies.pendingManagerIds(), [managerId])
+  const reopened = new ManagerStore(openManagerDatabase(f.dir))
+  try {
+    const restored = new ExternalStore(reopened).resultReplies
+    restored.queueReminders()
+    assert.equal(
+      reopened.deliveries(managerId).filter(({ text }) => text.includes('externalIssueStatusCheck'))
+        .length,
+      1,
+      '重启不重复排队',
+    )
+    assert.equal(restored.reminderCurrent(managerId, issueId, pending.id, 'status'), true)
+    reopened.transaction(() => {
+      reopened.saveIssue(managerId, issueId, { ...raw, status: 'blocked' })
+      restored.issueStatusChanged(managerId, issueId)
+    })
+    reopened.saveIssue(managerId, issueId, { ...raw, status: 'open' })
+    restored.queueReminders()
+    assert.equal(restored.reminderCurrent(managerId, issueId, pending.id, 'status'), false)
+    assert.deepEqual(restored.pendingManagerIds(), [])
+  } finally {
+    reopened.close()
+  }
+})
+
+test('关联 PR 未合并即关闭：已回帖后只提示复核看板，不产生未回帖标记', async (t) => {
+  const f = await externalFixture(t, (req, res, url, data) => {
+    if (req.method !== 'POST' || url.pathname !== commentsPath) return false
+    respond(res, commentResponse(data.body), 201)
+    return true
+  })
+  const { managerId } = actor
+  const { issueId, sourceId } = f.request
+  const pr = {
+    ...subject,
+    kind: 'pull_request' as const,
+    number: '19',
+    url: 'https://github.com/example/demo/pull/19',
+  }
+  f.store.bindRef({ ...pr, managerId, issueId, origin: 'write_receipt', createdAt: f.now() })
+  f.store.observeSubject(sourceId, { subject: pr, state: 'closed', updatedAt: f.now() }, f.now())
+  const replies = f.store.resultReplies
+  replies.queueReminders()
+  assert.equal(replies.missing(managerId, issueId), null)
+  assert.deepEqual(replies.pendingManagerIds(), [])
+  const result = f.outbox.enqueue(actor, {
+    ...f.request,
+    idempotencyKey: 'closed-pr-result',
+    intent: { ...comment, purpose: 'result' },
+  })
+  await f.outbox.tick()
+  assert.equal(f.store.queue.outboxRecord(result.operationId)?.state, 'confirmed')
+  replies.queueReminders()
+  const [event] = f.store.manager.deliveries(managerId)
+  assert.match(event?.text ?? '', /externalIssueStatusCheck/)
+})
 
 test('工作线自行推送后，设备仅对原仓库和批准 base 创建草稿、回执与原 X-n 同时提交', async (t) => {
   let workHead = ''

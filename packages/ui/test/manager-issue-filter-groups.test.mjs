@@ -42,8 +42,8 @@ test('每个具体状态恰好归一个基本分组，映射与设计一致', ()
       ]),
     ),
     {
-      todo: ['endorsed', 'open', 'unread'],
-      doing: ['blocked', 'in_progress', 'pending'],
+      todo: ['blocked', 'endorsed', 'open', 'unread'],
+      doing: ['in_progress', 'pending'],
       done: ['answered', 'closed', 'delivered', 'read', 'replied', 'resolved', 'started'],
       dropped: ['cancelled', 'dismissed', 'expired', 'ignored', 'withdrawn'],
     },
@@ -65,7 +65,7 @@ test('分组展开成所选类型的状态；各页签默认就是待处理分�
   ])
   assert.deepEqual(g.issueGroupStatuses('all', ['ordinary']), [])
   // kinds 为空表示全部类型
-  assert.deepEqual(g.issueGroupStatuses('todo', []), ['open', 'endorsed', 'unread'])
+  assert.deepEqual(g.issueGroupStatuses('todo', []), ['open', 'blocked', 'endorsed', 'unread'])
 })
 
 test('选项不随类型数量膨胀：空组、与待处理相同的未完成都不出', () => {
@@ -85,8 +85,8 @@ test('选项不随类型数量膨胀：空组、与待处理相同的未完成�
 
 test('读回：整组、细分、全部；读不出返回 null', () => {
   assert.deepEqual(g.readIssueStatus([], ['ordinary']), { group: 'all', detail: null })
-  assert.deepEqual(g.readIssueStatus(['blocked', 'in_progress'], ['ordinary']), {
-    group: 'doing',
+  assert.deepEqual(g.readIssueStatus(['blocked', 'open'], ['ordinary']), {
+    group: 'todo',
     detail: null,
   })
   // 概览“还开着的”预设
@@ -106,17 +106,14 @@ test('读回：整组、细分、全部；读不出返回 null', () => {
 })
 
 test('细分只在单一类型、组内多于一个状态时出现；未完成和全部没有细分', () => {
-  assert.deepEqual(g.issueStatusDetails('doing', ['ordinary']), ['in_progress', 'blocked'])
-  assert.deepEqual(g.issueStatusDetails('todo', ['ordinary']), [])
+  assert.deepEqual(g.issueStatusDetails('doing', ['ordinary']), [])
+  assert.deepEqual(g.issueStatusDetails('todo', ['ordinary']), ['open', 'blocked'])
   assert.deepEqual(g.issueStatusDetails('unfinished', ['ordinary']), [])
   assert.deepEqual(g.issueStatusDetails('all', ['ordinary']), [])
   assert.deepEqual(g.issueStatusDetails('doing', ['ordinary', 'suggestion']), [])
-  const filter = g.withIssueStatusDetail(base('ordinary'), 'doing', 'blocked')
+  const filter = g.withIssueStatusDetail(base('ordinary'), 'todo', 'blocked')
   assert.deepEqual(filter.statuses, ['blocked'])
-  assert.deepEqual(g.withIssueStatusDetail(filter, 'doing', null).statuses, [
-    'in_progress',
-    'blocked',
-  ])
+  assert.deepEqual(g.withIssueStatusDetail(filter, 'todo', null).statuses, ['open', 'blocked'])
 })
 
 test('多选类型：勾选保持分组重新展开、至少留一种、全勾等于全部', () => {
@@ -135,11 +132,11 @@ test('多选类型：勾选保持分组重新展开、至少留一种、全勾�
   const doing = g.withIssueStatusGroup(base('ordinary'), 'doing')
   assert.deepEqual(g.withIssueKinds(doing, ['decision']).statuses, ['open'])
   // 细分在多选时收回整组
-  const blocked = g.withIssueStatusDetail(base('ordinary'), 'doing', 'blocked')
+  const blocked = g.withIssueStatusDetail(base('ordinary'), 'todo', 'blocked')
   assert.deepEqual(g.withIssueKinds(blocked, ['ordinary', 'suggestion']).statuses, [
-    'in_progress',
+    'open',
     'blocked',
-    'pending',
+    'endorsed',
   ])
 })
 
@@ -169,5 +166,10 @@ test('旧值回退：读得出原样返回，读不出回到待处理分组', ()
   const legacy = { ...base('decision'), statuses: ['open', 'answered', 'expired'] }
   assert.deepEqual(g.normalizeIssueFilter(legacy).statuses, ['open'])
   const mixed = { ...base('ordinary'), kinds: [], statuses: ['blocked', 'answered'] }
-  assert.deepEqual(g.normalizeIssueFilter(mixed).statuses, ['open', 'endorsed', 'unread'])
+  assert.deepEqual(g.normalizeIssueFilter(mixed).statuses, [
+    'open',
+    'blocked',
+    'endorsed',
+    'unread',
+  ])
 })

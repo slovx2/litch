@@ -3,6 +3,7 @@ import test from 'node:test'
 import type { ClientToolNamespaceSpec } from '../../protocol/src/client-tools.mjs'
 import type { TaskTarget } from '../../protocol/src/device-tasks.mjs'
 import {
+  EXTERNAL_ISSUE_STATUS_RULES,
   EXTERNAL_METHOD,
   EXTERNAL_SOURCES_EXTENSION,
   type ExternalSourceDraft,
@@ -18,7 +19,7 @@ import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
 import type { DeviceOptions } from '../src/device.mjs'
 import { DeviceExternalRpc } from '../src/external/device-rpc.mjs'
 import { ManagerResets } from '../src/manager-reset.mjs'
-import { managerHandoverIndex, ruleSettings } from '../src/manager-rules.mjs'
+import { managerCapabilities, managerHandoverIndex, ruleSettings } from '../src/manager-rules.mjs'
 import { startChild } from '../src/session-start.mjs'
 import { openTaskDatabase, type TaskRow, TaskStore } from '../src/task-store.mjs'
 import { codexThread, FakeCodex } from './fake-codex.mjs'
@@ -1138,6 +1139,19 @@ for (const [harness, rulesFirst] of [
         ruleSettings(installed.instructions)?.rules ?? '',
         rulesFirst ? /新文字规则/ : /保持约束/,
       )
+      assert.ok(installed.instructions.includes(EXTERNAL_ISSUE_STATUS_RULES))
+      const tools = env.tree.store.tools(threadId) as ClientToolNamespaceSpec[]
+      const previousInstructions = tools.map((entry) =>
+        entry.name === 'litch_manager'
+          ? {
+              ...entry,
+              instructions:
+                entry.instructions?.replace('\n\n' + EXTERNAL_ISSUE_STATUS_RULES, '') ?? '',
+            }
+          : entry,
+      )
+      const capabilities = managerCapabilities(tools, previousInstructions, null)
+      assert.equal(capabilities.applied, capabilities.current, '流程文字不能挡住已安装的外部工具')
       if (!rulesFirst) await editRules()
       const missingTools = harness === 'claude-code' && !rulesFirst
       assert.deepEqual(env.device.managers.externalReady(env.current()), { ready: true })
@@ -1230,7 +1244,8 @@ for (const [harness, rulesFirst] of [
           .map(({ params }) => params)
           .some(
             ({ input }) =>
-              parseSessionEvent(input[0].text).event?.kind === 'manager-external-triage',
+              parseSessionEvent(input[0].text).event?.kind === 'manager-external-triage' &&
+              input[0].text.includes(EXTERNAL_ISSUE_STATUS_RULES),
           ),
       )
       assert.equal(env.current().reset?.phase, 'ready')

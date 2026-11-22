@@ -50,6 +50,24 @@ OR EXISTS(SELECT 1 FROM external_refs r JOIN external_poll_checkpoints p
   AND json_extract(p.body,'$.updatedAt')>=d.accepted_at);
 `
 
+/** GitHub 收尾证据与看板自身结束分开记，重启后不能把后者误当成前者。 */
+export const EXTERNAL_ISSUE_STATUS_MIGRATION = `
+ALTER TABLE external_result_replies ADD COLUMN github_terminal INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE external_result_replies ADD COLUMN status_reminder_id TEXT;
+ALTER TABLE external_result_replies ADD COLUMN status_reminder_thread_id TEXT;
+UPDATE external_result_replies AS d SET github_terminal=1
+WHERE EXISTS(SELECT 1 FROM external_refs r JOIN external_poll_checkpoints p
+  ON p.repo_id=r.repo_id AND p.checkpoint_key='github/' || r.repo_id || '/' || r.number
+  WHERE r.manager_id=d.manager_id AND r.issue_id=d.issue_id
+  AND p.source_id=d.source_id AND p.stream='github:subject-state' AND p.bucket='subject'
+  AND json_extract(p.body,'$.subject.kind')=json_extract(r.body,'$.kind')
+  AND json_extract(p.body,'$.state') IN ('closed','merged')
+  AND json_extract(p.body,'$.updatedAt')>=d.accepted_at);
+`
+
+export type ExternalReminderKind = 'reply' | 'status'
+const statusNeedsReview = (status: unknown) => status === 'open' || status === 'in_progress'
+
 interface ReplyRow {
   manager_id: string
   issue_id: ExternalIssueId
@@ -61,6 +79,9 @@ interface ReplyRow {
   terminal: number
   reminder_id: string | null
   reminder_thread_id: string | null
+  github_terminal: number
+  status_reminder_id: string | null
+  status_reminder_thread_id: string | null
 }
 export class ExternalResultReplies {
   private readonly manager: ManagerStore
@@ -142,8 +163,23 @@ export class ExternalResultReplies {
       .run(managerId, issueId)
     return !row.receipt_id
   }
-  finishSubject(ref: ExternalRef, observedAt: number): void {
-    this.finish(ref.managerId, ref.issueId, observedAt)
+  finishSubject(sourceId: string, ref: ExternalRef, observedAt: number, merged: boolean): void {
+    // 关闭但未合并的 PR 可以提醒核对看板，不触发原有的「未回原帖」检查。
+    if (ref.kind === 'issue' || merged) this.finish(ref.managerId, ref.issueId, observedAt)
+    this.db
+      .prepare(`UPDATE external_result_replies SET github_terminal=1
+      WHERE manager_id=? AND issue_id=? AND source_id=? AND accepted_at<=? AND github_terminal=0`)
+      .run(ref.managerId, ref.issueId, sourceId, observedAt)
+  }
+  issueStatusChanged(managerId: string, issueId: string): void {
+    const id = this.row(managerId, issueId)?.status_reminder_id
+    if (!id) return
+    this.db
+      .prepare(
+        "UPDATE external_result_replies SET status_reminder_id='' WHERE manager_id=? AND issue_id=?",
+      )
+      .run(managerId, issueId)
+    this.manager.delivered(id)
   }
   missing(managerId: string, issueId: string): ExternalMissingResultReply | null {
     const row = this.row(managerId, issueId)
@@ -202,26 +238,68 @@ export class ExternalResultReplies {
         )
         update.run(id, row.manager_id, row.issue_id)
       }
+      const statusRows = this.db
+        .prepare(`SELECT d.* FROM external_result_replies d JOIN managers m ON m.id=d.manager_id
+        JOIN issues i ON i.manager_id=d.manager_id AND i.id=d.issue_id
+        WHERE d.github_terminal=1 AND d.receipt_id IS NOT NULL AND d.status_reminder_id IS NULL
+        AND json_extract(m.body,'$.status')='active'
+        AND json_extract(i.body,'$.status') IN ('open','in_progress') LIMIT 100`)
+        .all() as unknown as ReplyRow[]
+      const mark = this.db.prepare(
+        'UPDATE external_result_replies SET status_reminder_id=? WHERE manager_id=? AND issue_id=?',
+      )
+      for (const row of statusRows) {
+        const ref = this.view(row)
+        if (!ref) continue
+        const id = this.manager.enqueue(
+          row.manager_id,
+          formatSessionEvent({
+            kind: 'manager-issue',
+            notes: [],
+            manager: {
+              managerId: row.manager_id,
+              text: `${row.issue_id} (${ref.subject.url}) has a confirmed result reply on its original GitHub topic, and Litch observed a linked GitHub issue or PR closed or merged. Read issue_get and use issue_update to bring the board status up to date: resolve delivered work, close duplicates or superseded requests, or record what's still blocking it. This is only a board check; do not change GitHub state or post the result again for this reminder.`,
+            },
+            externalIssueStatusCheck: { issueId: row.issue_id },
+          }),
+        )
+        mark.run(id, row.manager_id, row.issue_id)
+      }
     })
   }
   pendingManagerIds(): string[] {
     return this.db
       .prepare(`SELECT DISTINCT r.manager_id FROM external_result_replies r
-      JOIN deliveries d ON d.id=r.reminder_id WHERE r.receipt_id IS NULL`)
+      JOIN deliveries d ON d.id=r.reminder_id OR d.id=r.status_reminder_id`)
       .all()
       .map(({ manager_id }) => String(manager_id))
   }
-  reminderTarget(managerId: string, issueId: string): string | null {
-    return this.row(managerId, issueId)?.reminder_thread_id ?? null
+  reminderTarget(managerId: string, issueId: string, kind: ExternalReminderKind): string | null {
+    const row = this.row(managerId, issueId)
+    return (kind === 'status' ? row?.status_reminder_thread_id : row?.reminder_thread_id) ?? null
   }
-  attemptingReminder(managerId: string, issueId: string, threadId: string): void {
+  attemptingReminder(
+    managerId: string,
+    issueId: string,
+    threadId: string,
+    kind: ExternalReminderKind,
+  ): void {
+    const field = kind === 'status' ? 'status_reminder_thread_id' : 'reminder_thread_id'
     this.db
-      .prepare(`UPDATE external_result_replies SET reminder_thread_id=?
-      WHERE manager_id=? AND issue_id=?`)
+      .prepare(`UPDATE external_result_replies SET ${field}=? WHERE manager_id=? AND issue_id=?`)
       .run(threadId, managerId, issueId)
   }
-  reminderCurrent(managerId: string, issueId: string, deliveryId: string): boolean {
+  reminderCurrent(
+    managerId: string,
+    issueId: string,
+    deliveryId: string,
+    kind: ExternalReminderKind,
+  ): boolean {
     const row = this.row(managerId, issueId)
-    return row?.reminder_id === deliveryId && !row.receipt_id
+    if (kind === 'reply') return row?.reminder_id === deliveryId && !row.receipt_id
+    if (row?.status_reminder_id !== deliveryId || !row.receipt_id || !row.github_terminal)
+      return false
+    const issue = this.manager.issue(managerId, issueId) as { status?: unknown } | null
+    return statusNeedsReview(issue?.status)
   }
 }

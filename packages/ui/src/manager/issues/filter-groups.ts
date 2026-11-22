@@ -21,8 +21,8 @@ export type IssueStatusGroup = IssueStatusBase | 'unfinished' | 'all'
 
 /**
  * 具体状态归到哪一组：
- * - 待处理 todo：等人动手的。普通 issue 开放、决策待答复、请你做待办、建议待开始、报告未读。
- * - 进行中 doing：已经有人在处理。普通 issue 进行中、受阻；建议待审核（经理在审，用户暂时不用管，
+ * - 待处理 todo：普通 issue 开放或等待外部条件、决策待答复、请你做待办、建议待开始、报告未读。
+ * - 进行中 doing：已经有人在处理。普通 issue 进行中；建议待审核（经理在审，用户暂时不用管，
  *   建议页默认只列待开始也是这个缘故）。
  * - 已完成 done：普通 issue 已解决、已关闭；决策已答复；请你做已交付、已回复；建议已开始；报告已读。
  * - 已撤销 dropped：已过期、已撤回、已忽略、已驳回、已取消。
@@ -32,7 +32,7 @@ export const ISSUE_STATUS_GROUP: Record<ManagerIssueStatus, IssueStatusBase> = {
   endorsed: 'todo',
   unread: 'todo',
   in_progress: 'doing',
-  blocked: 'doing',
+  blocked: 'todo',
   pending: 'doing',
   resolved: 'done',
   closed: 'done',

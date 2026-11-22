@@ -73,6 +73,7 @@ export function IssueConsole({
   preset,
   actionSlot = null,
   onLocated,
+  onOrdinaryTotal,
   onKind,
   onOpenItem,
   onSuggestionSource,
@@ -90,6 +91,7 @@ export function IssueConsole({
   /** 类别分段右端留给新建按钮的位置；没有时放在筛选栏右上角 */
   actionSlot?: HTMLElement | null
   onLocated(): void
+  onOrdinaryTotal?(total: number | null): void
   /** 跳到别的类型（编号跳转、新建后） */
   onKind(kind: ManagerIssueKind): void
   onOpenItem(id: string): void
@@ -153,6 +155,12 @@ export function IssueConsole({
     [saved],
   )
   const page = issues.pages[managerIssuePageKey(manager.id, filter)]
+  const total = page?.total ?? null
+  useEffect(() => {
+    if (kind !== 'ordinary' || !onOrdinaryTotal) return
+    onOrdinaryTotal(total)
+    return () => onOrdinaryTotal(null)
+  }, [total, kind, onOrdinaryTotal])
   const invoke = useCallback(
     (request: Promise<unknown>) => {
       void request.then(
