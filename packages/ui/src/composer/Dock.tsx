@@ -15,6 +15,7 @@ import { useEffect, useRef } from 'react'
 import { useT } from '../app/appearance.ts'
 import { downHarness, downText, wireStyle } from '../app/device.ts'
 import { useKey, useServices } from '../app/services.tsx'
+import { ArchiveBar } from '../archived/ArchiveBar.tsx'
 import { BackgroundBar } from '../background/BackgroundBar.tsx'
 import { GoalBar } from '../goal/GoalBar.tsx'
 import { QueuedNotesChip } from '../tree/EventBar.tsx'
@@ -46,6 +47,10 @@ export function Dock({ deviceId, sessionId }: DockProps) {
       <div className="cmp off">
         <div className="cmp-text" />
       </div>
+    )
+  } else if (typeof meta.note === 'object' && meta.note?.key === 'session.archived') {
+    body = (
+      <ArchiveBar key={sessionId} deviceId={deviceId} sessionId={sessionId} disabled={!!blocked} />
     )
   } else if (!meta.live && !meta.stale) {
     body = (

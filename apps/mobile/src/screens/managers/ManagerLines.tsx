@@ -129,7 +129,7 @@ export function ManagerLines({
     () => managerLineRows(board.lines, summaryOf),
     [board.lines, summaryOf],
   )
-  if (!board.lines.length) return <Empty title={t('mgr.lines.none')} />
+  if (!active.length && !ended.length) return <Empty title={t('mgr.lines.none')} />
   const row = (each: ManagerLineRow) => (
     <LineRow
       key={each.line.threadId}

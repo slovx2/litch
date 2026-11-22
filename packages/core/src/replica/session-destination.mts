@@ -13,6 +13,13 @@ export function sessionDestination(
   deviceId: string,
   sessionId: string,
 ): SessionDestination {
+  if (
+    store.get<boolean>(keys.shelved(deviceId, sessionId)) ||
+    store
+      .get<SessionSummary[]>(keys.archived(deviceId))
+      ?.some((summary) => summary.id === sessionId)
+  )
+    return null
   const ids = store.get<string[]>(keys.managerIds(deviceId)) ?? []
   for (const id of ids) {
     const manager = store.get<ManagerView>(keys.manager(deviceId, id))
@@ -48,6 +55,8 @@ export function subscribeSessionDestination(
   const stops = [
     store.subscribe(keys.device(deviceId), changed),
     store.subscribe(keys.summary(deviceId, sessionId), changed),
+    store.subscribe(keys.shelved(deviceId, sessionId), changed),
+    store.subscribe(keys.archived(deviceId), changed),
     store.subscribe(keys.managersAvailable(deviceId), changed),
     store.subscribe(keys.managerIds(deviceId), () => {
       bindManagers()

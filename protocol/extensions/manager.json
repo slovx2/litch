@@ -427,6 +427,7 @@
         "ahead": { "type": ["integer", "null"] },
         "merged": { "type": ["boolean", "null"] },
         "worktreeExists": { "type": ["boolean", "null"] },
+        "archived": { "const": true },
         "reportPreview": { "type": ["string", "null"], "maxLength": 240 },
         "unverifiedCount": { "type": "integer", "minimum": 0 },
         "checkedAt": { "type": ["number", "null"] }
@@ -932,6 +933,7 @@
         "ahead": { "type": ["integer", "null"] },
         "merged": { "type": ["boolean", "null"] },
         "worktreeExists": { "type": ["boolean", "null"] },
+        "archived": { "const": true },
         "report": { "anyOf": [{ "$ref": "#/definitions/Situation" }, { "type": "null" }] },
         "unverified": { "type": "array", "items": { "type": "string" } }
       },

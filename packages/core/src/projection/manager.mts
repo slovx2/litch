@@ -264,20 +264,22 @@ export function managerLineRows(
     threadId: string,
   ) => Pick<SessionSummary, 'status' | 'background' | 'updatedAt'> | undefined,
 ): { active: ManagerLineRow[]; ended: ManagerLineRow[] } {
-  const rows = lines.map((line): ManagerLineRow => {
-    const summary = summaryOf(line.threadId)
-    const state: ManagerLineState = summary
-      ? summary.status !== 'idle'
-        ? summary.status
-        : (summary.background?.running ?? 0) > 0
-          ? 'background'
-          : 'idle'
-      : line.status
-    const times = [line.report?.at, summary?.updatedAt, line.startedAt].filter(
-      (value): value is number => typeof value === 'number',
-    )
-    return { line, state, at: times.length ? Math.max(...times) : null }
-  })
+  const rows = lines
+    .filter((line) => !line.archived)
+    .map((line): ManagerLineRow => {
+      const summary = summaryOf(line.threadId)
+      const state: ManagerLineState = summary
+        ? summary.status !== 'idle'
+          ? summary.status
+          : (summary.background?.running ?? 0) > 0
+            ? 'background'
+            : 'idle'
+        : line.status
+      const times = [line.report?.at, summary?.updatedAt, line.startedAt].filter(
+        (value): value is number => typeof value === 'number',
+      )
+      return { line, state, at: times.length ? Math.max(...times) : null }
+    })
   const recent = (a: ManagerLineRow, b: ManagerLineRow) => (b.at ?? 0) - (a.at ?? 0)
   return {
     active: rows

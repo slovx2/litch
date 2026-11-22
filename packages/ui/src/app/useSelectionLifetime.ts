@@ -4,7 +4,7 @@ import type { ManagerView } from '../../../core/src/model-manager.mts'
 import type { Selection } from './App.tsx'
 import { useKey } from './services.tsx'
 
-/** 归档、删除后立即忘记当前会话；首次摘要尚未到达时不误清。 */
+/** 删除后立即忘记当前会话；归档可继续只读查看，首次摘要未到也不误清。 */
 export function useSelectionLifetime(
   selection: Selection | null,
   managers: ManagerView[],
@@ -13,10 +13,13 @@ export function useSelectionLifetime(
   const summary = useKey<SessionSummary>(
     keys.summary(selection?.deviceId ?? '', selection?.sessionId ?? ''),
   )
+  const shelved = useKey<boolean>(
+    keys.shelved(selection?.deviceId ?? '', selection?.sessionId ?? ''),
+  )
   const seen = useRef<Selection | null>(null)
   const seenManager = useRef<Selection | null>(null)
   useEffect(() => {
-    if (!selection) return
+    if (!selection || shelved) return
     const mark = summary ? managerMark(summary) : null
     const manager = managers.find(
       (entry) =>
@@ -31,5 +34,5 @@ export function useSelectionLifetime(
     }
     if (manager) seenManager.current = selection
     else if (seenManager.current === selection) onMissing(selection)
-  }, [selection, summary, managers, onMissing])
+  }, [selection, summary, shelved, managers, onMissing])
 }

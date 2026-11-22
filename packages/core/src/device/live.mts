@@ -84,6 +84,7 @@ import {
   isHarnessDown,
   isHeldElsewhere,
   isManagerResetWaiting,
+  isSessionArchived,
   isSessionRecovering,
   lacksMethod,
 } from './faults.mjs'
@@ -120,6 +121,7 @@ export interface LiveHost {
   terms(harness: HarnessId, sessionId?: string): HarnessTerms | null
   /** 这个会话是不是归档着的。归档着的只取历史来看，不订阅 */
   shelved(sessionId: string): boolean
+  archiveFound?(sessionId: string): void
   request<M extends keyof ClientRequests>(
     method: M,
     params: ClientRequests[M]['params'],
@@ -188,6 +190,8 @@ export interface LiveSessions {
    * erased 为真是删掉了：为它记着的东西（待办进度）也不留
    */
   forget(sessionId: string, erased?: boolean): void
+  /** 已打开的归档会话保留订阅者，转换成历史视图。 */
+  archived(sessionId: string): void
   /** 这个会话从归档里放回来了：正只读地开着的话，重新载入成能发消息的 */
   restored(sessionId: string): void
   /** 返回 false 表示这条通知不归会话管 */
@@ -290,6 +294,7 @@ interface Live {
   /** null：还没载入成功 */
   view: SessionView | null
   loading: Cancel | null
+  loadingArchived: boolean
   historyCursor: string | null
   paging: Cancel | null
   pageJob: Promise<void> | null
@@ -549,7 +554,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     if (!view || given.length === 0) return
     // 添加条目的那几条记上看到它开始、结束的时刻（步骤组的时长用），再落到视图上
     const now = host.clock.now()
-    const readonlyNote = managerNote(live.id)
+    const readonlyNote = host.shelved(live.id) ? phrase('session.archived') : managerNote(live.id)
     const ops = given.map((op) => {
       const guarded =
         readonlyNote && op.op === 'session.state' ? { ...op, live: false, note: readonlyNote } : op
@@ -1332,7 +1337,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         return projectThread(thread, scope(thread))
       }
     }
-    if (host.shelved(live.id)) {
+    if (live.loadingArchived) {
       // 归档着的会话：只取历史来看，不恢复、不订阅。要接着聊得先把它放回来
       return {
         ...(await readOnly()),
@@ -1352,7 +1357,12 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
             )
           } catch (error) {
             // 重置拒绝不是分页参数不支持；保留事件驱动恢复，不立刻再撞一次相同拒绝。
-            if (isManagerResetWaiting(error) || !lacksPaging(error)) throw error
+            if (
+              isManagerResetWaiting(error) ||
+              isSessionArchived(error, live.id) ||
+              !lacksPaging(error)
+            )
+              throw error
             paging = false
             return withSpeed('thread/resume', { threadId: live.id }, options)
           }
@@ -1396,6 +1406,13 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       // 恢复重试耗尽也应报载入失败，让界面可重试，不能生成永久只读视图。
       if (!(error instanceof RpcError) || isHarnessDown(error) || isSessionRecovering(error))
         throw error
+      if (isSessionArchived(error, live.id)) {
+        if (!cancel.signal.aborted) {
+          live.loadingArchived = true
+          host.archiveFound?.(live.id)
+        }
+        return { ...(await readOnly()), live: false, note: phrase('session.archived') }
+      }
       host.log(`订阅会话 ${live.id} 失败，改为只读载入：${error.message}`)
       return {
         ...(await readOnly()),
@@ -1467,6 +1484,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     live.loading?.abort()
     const cancel = createCancel()
     live.loading = cancel
+    live.loadingArchived = host.shelved(live.id)
     live.held = []
     return fetchView(live, cancel).then(
       (view) => {
@@ -1479,9 +1497,10 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         live.summarized.clear()
         live.starting = null
         live.stale = false
+        const note = live.loadingArchived ? null : managerNote(live.id)
         live.view = {
           ...view,
-          ...(managerNote(live.id) ? { live: false, note: managerNote(live.id) } : {}),
+          ...(note ? { live: false, note } : {}),
           queued: live.queued,
           settings: { ...view.settings, ...live.pending },
           // 重新载入时对面不一定再报一遍，先留着上一次的
@@ -2036,6 +2055,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     sinks: new Set(),
     view: null,
     loading: null,
+    loadingArchived: false,
     held: [],
     alias: new Map(),
     starting: null,
@@ -2340,6 +2360,22 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       sessions.delete(sessionId)
     },
 
+    archived(sessionId) {
+      const live = sessions.get(sessionId)
+      if (!live || live.sinks.size === 0) {
+        this.forget(sessionId)
+        return
+      }
+      live.queued = []
+      live.steered.clear()
+      settleRequests(live, () => true)
+      emit(live, [
+        { op: 'session.state', live: false, note: phrase('session.archived') },
+        { op: 'queue.set', queued: [] },
+      ])
+      if (reachable(live)) load(live)
+    },
+
     restored(sessionId) {
       const live = sessions.get(sessionId)
       if (!live) return
@@ -2350,9 +2386,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         sessions.delete(sessionId)
         return
       }
-      // 恢复的应答和对面的 thread/unarchived 都会叫到这里：已经在载入、已经是能发消息的那一份就不再载入一遍，
-      // 免得刚换上的对话区又整份重来（期间发的话也被这一遍盖住）
-      if (live.loading || live.view?.live) return
+      // 恢复通知和应答都会到这里。只替换在途的只读加载，不重复载入正常订阅。
+      if (live.loading ? !live.loadingArchived : live.view?.live) return
       if (reachable(live)) load(live)
     },
 

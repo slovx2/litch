@@ -72,6 +72,7 @@ export class ManagerLines {
         const startedAt = running ? (this.began.get(child.threadId) ?? null) : null
         return {
           threadId: child.threadId,
+          ...(this.tree.host.index.archived(child.threadId) ? { archived: true as const } : {}),
           parentThreadId: child.parentThreadId,
           title: typeof thread?.name === 'string' && thread.name ? thread.name : child.title,
           harness: child.harness,

@@ -289,3 +289,40 @@ test('SESSION-ARCHIVE-005：模型归档在自己工作树里的子会话：干�
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('归档应答没有引擎通知时广播给其他连接，恢复后清除归档标记', async () => {
+  const env = treeRig()
+  try {
+    const first = await litch(env)
+    const other = await litch(env)
+    const plain = env.connect()
+    await plain.initialize(['harness'])
+    const { threadId } = await parent(first, false)
+    env.pi.handlers['thread/archive'] = (params) => {
+      env.pi.thread(params.threadId).archived = true
+      return {}
+    }
+    await first.call('thread/archive', { threadId })
+    await until(
+      () => got(other, 'thread/archived').some((p) => p.threadId === threadId),
+      '第二个连接收到归档',
+    )
+    // 同一事实后来又由引擎通知，不给每条客户端连接重复广播。
+    env.pi.notify('thread/archived', { threadId })
+    const fetch = { threadId, includeTurns: false }
+    assert.equal((await other.call('thread/read', fetch)).thread.litchArchived, true)
+    assert.equal((await plain.call('thread/read', fetch)).thread.litchArchived, undefined)
+    assert.equal((await other.fails('thread/resume', { threadId })).data.litch, 'sessionArchived')
+    assert.equal(got(other, 'thread/archived').filter((p) => p.threadId === threadId).length, 1)
+
+    const restored = await first.call('thread/unarchive', { threadId })
+    assert.equal(restored.thread.litchArchived, undefined)
+    await until(
+      () => got(other, 'thread/unarchived').some((p) => p.threadId === threadId),
+      '第二个连接收到恢复',
+    )
+    assert.equal((await other.call('thread/read', fetch)).thread.litchArchived, undefined)
+  } finally {
+    await env.close()
+  }
+})

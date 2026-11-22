@@ -728,6 +728,7 @@ export class DeviceServer {
       pinned: (threadId) =>
         this.workspaces.sections.placement(threadId)?.section.id === PINNED_SECTION_ID,
       shelved: (threadId, archived) => {
+        this.managers.observe(archived ? 'thread/archived' : 'thread/unarchived', { threadId })
         for (const session of this.sessions) session.threadShelved(threadId, archived)
       },
       log,
@@ -1294,6 +1295,11 @@ export class DeviceServer {
     link.onNotification((method, params) => {
       if (this.closed) return
       if (!params || typeof params !== 'object') return
+      if (
+        (method === 'thread/archived' || method === 'thread/unarchived') &&
+        typeof params.threadId === 'string'
+      )
+        this.archives.observe(link.harness, params.threadId, method === 'thread/archived')
       if (method === 'item/completed' && this.layer.toolImages?.enabled()) {
         // 无界面连接的定时任务、子会话也保存当时的图；不能改写交给编排器的原始帧。
         void this.layer.toolImages

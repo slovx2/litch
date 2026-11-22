@@ -10,6 +10,15 @@ import { isModelLimitFailure, modelLimitView } from '../model-limit.mjs'
 import { phrase } from '../phrase.mjs'
 import { bilingual } from '../projection/manage.mjs'
 
+/** 明确的归档拒绝；不把引用了原话的其他错误当成归档依据。 */
+export const isSessionArchived = (error: unknown, threadId: string): boolean =>
+  error instanceof RpcError &&
+  error.code === RPC_ERROR.invalidRequest &&
+  (deviceFault(error)?.litch === 'sessionArchived' ||
+    error.message === '会话已归档' ||
+    error.message ===
+      `session ${threadId} is archived. Run \`codex unarchive ${threadId}\` to unarchive it first.`)
+
 /** 这个错误是不是聚合面自己回的。是的话给出它带的原因；别的错误都是 null */
 export function deviceFault(error: unknown): DeviceErrorData | null {
   if (!(error instanceof RpcError)) return null

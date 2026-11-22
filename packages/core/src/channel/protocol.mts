@@ -304,7 +304,7 @@ export type SidebarOp =
   | { op: 'workspace.upsert'; workspace: WorkspaceView }
   | { op: 'workspace.remove'; workspaceId: string }
   | { op: 'session.upsert'; session: SessionSummary }
-  | { op: 'session.remove'; sessionId: string }
+  | { op: 'session.remove'; sessionId: string; archived?: true }
   /** 已归档的会话整张表换掉：这张表不长，变得也少 */
   | { op: 'archived.set'; sessions: SessionSummary[] | null }
 

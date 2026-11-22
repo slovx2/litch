@@ -155,6 +155,11 @@
           "description": "任意层级后代仍在运行、等待用户或有后台任务，归档尚未执行。data.blockingSessions 列出 threadId 与 title；先停止这些子会话再归档。"
         },
         {
+          "litch": "sessionArchived",
+          "code": -32600,
+          "description": "已归档的会话不能订阅；声明 sessionTree 的客户端可以读取历史，再由用户明确恢复。"
+        },
+        {
           "litch": "sessionRecovering",
           "code": -32051,
           "description": "设备正在重启或恢复此会话，暂时不能执行 thread/resume 或 turn/steer。data 带 method、harness 和已知的 threadId。客户端可对订阅请求做有限次退避重试，不应将会话降级为永久只读；不得因此自动重发写操作。"
@@ -183,6 +188,7 @@
               "harnessUnavailable",
               "sessionRecovering",
               "archiveBlocked",
+              "sessionArchived",
               "deviceAdminRequired",
               "archivedSourceModel"
             ]

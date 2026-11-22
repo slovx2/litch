@@ -323,6 +323,7 @@ export class ClientSession implements ClientToolPeer {
       optedOut: (method) => this.optOut.has(method),
       declares: (extension) => this.declared.has(extension),
       index: host.index,
+      shelf: (harness, threadId, archived) => host.archives.observe(harness, threadId, archived),
       workspaces: host.workspaces,
       startedHoldMs: host.timing.startedHoldMs,
       log: (line) => host.log(`${this.tag} ${line}`),
@@ -981,6 +982,13 @@ export class ClientSession implements ClientToolPeer {
     keepHarness: boolean,
   ): typeof HANDLED | Promise<typeof HANDLED> {
     const fields = isObject(frame.params) ? frame.params : null
+    if (
+      method === 'thread/resume' &&
+      this.declared.has(EXTENSION.sessionTree) &&
+      typeof fields?.threadId === 'string' &&
+      this.host.index.archived(fields.threadId)
+    )
+      throw new DeviceError('sessionArchived', '会话已归档', { threadId: fields.threadId })
     if (fields && link.dialect.clientToolsByDevice)
       this.host.nativeBackground?.input(method, fields, true)
     // 新建会话带的工作区是设备层的，先摘下来，应答回来时再记
