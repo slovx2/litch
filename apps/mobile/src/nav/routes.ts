@@ -5,7 +5,7 @@ export type RootStackParamList = {
   /** 经理目录：按设备分组，先进行中、后已结束 */
   Managers: undefined
   /**
-   * 一位经理的工作台：对话、控制台、工作线、概览四格；tab 不给时进控制台。
+   * 一位经理的工作台：对话、控制台、工作线、概览四格；未指定 tab 或 issue 时进对话。
    * issue 给了就落到控制台（经理事项落到概览）并定位到那一项（#D-n 等编号、受阻事项、经理事件）
    */
   ManagerConsole: {

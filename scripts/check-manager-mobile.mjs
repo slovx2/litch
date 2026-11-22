@@ -109,7 +109,7 @@ try {
       'document.querySelector(\'[data-testid="manager-tab:console"]\').getAttribute("aria-selected")',
     ),
     'true',
-    '未指定页签时默认控制台',
+    '显式指定控制台时直达控制台',
   )
   assert.deepEqual(
     await read(`[...document.querySelectorAll('[data-testid^="manager-tab:"]')]
@@ -117,7 +117,6 @@ try {
     ['chat', 'console', 'lines', 'overview'],
     '手机经理页签把对话放在最前',
   )
-  await shot('mobile-manager-tabs')
   const press = async (text) => {
     await until(
       () =>
@@ -965,8 +964,17 @@ try {
   await tapId('managers:ended')
   assert.equal(await endedExpanded(), 'false')
   assert.deepEqual(await endedRows(), [])
+  await tapId('manager:m1')
+  await wait('[data-testid="manager-chat"] textarea')
+  assert.ok(
+    await read(
+      'document.querySelector(\'[data-testid="manager-tab:chat"][aria-selected=true]\') && document.querySelector(\'[data-testid="manager-chat"]\').getBoundingClientRect().height > 0',
+    ),
+    '从经理目录直接进入时默认显示对话',
+  )
+  await shot('mobile-manager-tabs')
   console.log(
-    '手机经理：工作台四格、编号半屏议题卡、工作线与回经理、目录、概览、排序、已答决策分块、三皮肤报告、关联定位、已阅、评论增高与交付、设备服务较旧通过',
+    '手机经理：目录默认打开对话、指定页签和编号链接、半屏议题卡、工作线与回经理、概览、排序、已答决策分块、三皮肤报告、已阅、评论增高与交付、设备服务较旧通过',
   )
 } catch (error) {
   await failureEvidence?.().catch((e) => console.error('失败证据采集失败', e))
