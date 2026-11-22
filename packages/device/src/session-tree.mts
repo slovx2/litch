@@ -1660,6 +1660,8 @@ export class SessionTree {
    */
   decorate(thread: Record<string, unknown>, remoteChrome = false): void {
     if (typeof thread.id !== 'string') return
+    delete thread.litchArchived
+    if (this.host.index.archived(thread.id)) thread.litchArchived = true
     thread.litchIgnoredQuestions = this.store.ignoredQuestions(thread.id)
     thread.litchQuestionSettlements = this.store.questionSettlements(thread.id)
     thread.litchPendingRequests = this.pendingRequests(thread.id).filter(

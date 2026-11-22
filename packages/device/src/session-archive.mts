@@ -47,6 +47,8 @@ export class SessionArchives {
   private readonly host: SessionArchiveHost
   /** 模型要在这个回合结束时归档的会话自己（litch_sessions.archive 的 self） */
   private readonly afterTurn = new Set<string>()
+  /** 索引也可能已被并发的列表读取更新。应答和通知去重，以实际发过的状态为准。 */
+  private readonly published = new Map<string, boolean>()
 
   constructor(host: SessionArchiveHost) {
     this.host = host
@@ -110,6 +112,19 @@ export class SessionArchives {
 
   pinned(threadId: string): boolean {
     return this.host.pinned(threadId)
+  }
+
+  /** 请求确认与各连接的引擎通知使用同一个设备状态，且只广播一次。 */
+  observe(harness: string, threadId: string, archived: boolean): void {
+    const { index } = this.tree.host
+    const known = index.lookup(threadId)
+    if (known && known !== harness) return
+    const changed = index.archived(threadId) !== archived
+    if (known) index.setArchived(threadId, archived)
+    else index.see({ id: threadId }, harness, archived)
+    if (!changed && this.published.get(threadId) === archived) return
+    this.published.set(threadId, archived)
+    this.host.shelved(threadId, archived)
   }
 
   /** 客户端发来 thread/archive：用户归档。先告诉会话树，归档打断的回合结束时认得出是用户停的 */
@@ -185,8 +200,7 @@ export class SessionArchives {
       throw error
     }
     if (by === 'user') tree.archived(threadId)
-    tree.host.index.setArchived(threadId, true)
-    this.host.shelved(threadId, true)
+    this.observe(harness, threadId, true)
     return this.archived(threadId, by)
   }
 
@@ -211,8 +225,7 @@ export class SessionArchives {
     const link = await tree.link(harness)
     await link.request('thread/unarchive', { threadId })
     tree.modelArchived.delete(threadId)
-    tree.host.index.setArchived(threadId, false)
-    this.host.shelved(threadId, false)
+    this.observe(harness, threadId, false)
     await this.host.worktreeLife()?.reopen(threadId)
   }
 }

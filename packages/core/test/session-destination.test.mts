@@ -144,3 +144,20 @@ test('离线缓存的普通对话可直接打开；缓存经理仍按会话标�
   assert.equal(sessionDestination(store, 'local', 'ordinary'), null)
   assert.equal(sessionDestination(store, 'local', manager.threadId), manager.id)
 })
+
+test('已归档的会话仍能打开：归档列表未加载时依靠通知，从归档列表打开时依靠列表', () => {
+  const store = new KeyedStore()
+  const id = 'archived-line'
+  const changes: (string | null | undefined)[] = []
+  const stop = subscribeSessionDestination(store, 'local', id, () =>
+    changes.push(sessionDestination(store, 'local', id)),
+  )
+  assert.equal(sessionDestination(store, 'local', id), undefined)
+  store.set(keys.shelved('local', id), true)
+  assert.equal(changes.at(-1), null)
+  store.delete(keys.shelved('local', id))
+  assert.equal(changes.at(-1), undefined)
+  store.set(keys.archived('local'), [{ ...plain, id }])
+  assert.equal(changes.at(-1), null)
+  stop()
+})

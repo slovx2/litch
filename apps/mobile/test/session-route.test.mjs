@@ -69,3 +69,13 @@ test('身份未到不呈现普通详情，也不开始最近查看计时；普�
     assert.deepEqual(resolvedSessionRoute(input, null), ['Detail', input])
   }
 })
+
+test('从已归档列表打开的工作线进入可读历史，不等待活动摘要', () => {
+  const input = { deviceId: 'local', sessionId: 'archived-line', title: '已完成的工作线' }
+  store.set(keys.archived('local'), [{ id: input.sessionId, title: input.title }])
+  try {
+    assert.deepEqual(resolve(input), ['Detail', input])
+  } finally {
+    store.delete(keys.archived('local'))
+  }
+})

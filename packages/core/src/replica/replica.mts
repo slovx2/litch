@@ -128,6 +128,8 @@ export const keys = {
   summary: (deviceId: string, sessionId: string) => `summary:${deviceId}:${sessionId}`,
   /** SessionSummary[] | null：已归档的会话，最近动过的在前。null 或者没有这个键：还没取过 */
   archived: (deviceId: string) => `sidebar:${deviceId}:archived`,
+  /** 及时记录移出活动树的原因，即使「已归档」目录还未加载。 */
+  shelved: (deviceId: string, sessionId: string) => `sidebar:${deviceId}:shelved:${sessionId}`,
   /** SessionMeta：有这个键说明会话的快照已经到了 */
   session: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:meta`,
   /** ChannelErrorShape：会话内容没取到。有这个键时界面显示原因和“重试” */
@@ -1023,6 +1025,7 @@ export function createReplica(
       case 'session.upsert': {
         const before = sessions.get(op.session.id)
         sessions.set(op.session.id, op.session)
+        store.delete(keys.shelved(deviceId, op.session.id))
         store.set(keys.summary(deviceId, op.session.id), op.session)
         for (const listener of [...sessionListeners]) listener(deviceId, before, op.session)
         return
@@ -1030,6 +1033,8 @@ export function createReplica(
       case 'session.remove':
         sessions.delete(op.sessionId)
         store.delete(keys.summary(deviceId, op.sessionId))
+        if (op.archived) store.set(keys.shelved(deviceId, op.sessionId), true)
+        else store.delete(keys.shelved(deviceId, op.sessionId))
         return
       case 'archived.set':
         store.set(keys.archived(deviceId), op.sessions)
@@ -1069,6 +1074,7 @@ export function createReplica(
             store.set(keys.archived(deviceId), view.archived)
             for (const session of view.sessions) {
               sessions.set(session.id, session)
+              store.delete(keys.shelved(deviceId, session.id))
               store.set(keys.summary(deviceId, session.id), session)
             }
             refreshGroups(deviceId, sessions, listed)

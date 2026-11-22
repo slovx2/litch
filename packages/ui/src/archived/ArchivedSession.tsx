@@ -6,6 +6,7 @@ import { wireStyle } from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { Transcript } from '../transcript/Transcript.tsx'
+import { ArchiveBar } from './ArchiveBar.tsx'
 
 interface ArchivedSessionProps extends Selection {
   /** 回到打开它的列表（已归档对话、全局建议或经理看板） */
@@ -23,10 +24,8 @@ export function ArchivedSession({ deviceId, sessionId, onBack, onRestored }: Arc
   const device = useKey<DeviceView>(keys.device(deviceId))
   const shelved = useKey<SessionSummary[] | null>(keys.archived(deviceId))
   const t = useT()
-  const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
-  const bar = useRef<HTMLDivElement>(null)
   const online = device?.connection === 'online'
   /** 正在恢复：这时它从已归档的表里消失是我们自己做的，不算“在别处没了” */
   const restoring = useRef(false)
@@ -45,11 +44,6 @@ export function ArchivedSession({ deviceId, sessionId, onBack, onRestored }: Arc
     )
     return () => controller.abort()
   }, [channel, deviceId, online, t])
-
-  // 一打开焦点就落在这条栏上：按 Esc 回列表，Tab 一下就是“恢复”
-  useEffect(() => {
-    bar.current?.focus({ preventScroll: true })
-  }, [])
 
   // 正看着的时候它在别处被恢复或者删掉了：这一页没有着落了，回到列表
   const gone =
@@ -71,21 +65,6 @@ export function ArchivedSession({ deviceId, sessionId, onBack, onRestored }: Arc
     return () => document.removeEventListener('keydown', onKey)
   }, [onBack])
 
-  const restore = () => {
-    if (busy) return
-    setBusy(true)
-    setFailure(null)
-    restoring.current = true
-    channel.command('session.unarchive', { deviceId, sessionId }).then(
-      () => onRestored({ deviceId, sessionId }),
-      (error: unknown) => {
-        restoring.current = false
-        setBusy(false)
-        setFailure(t('session.failed', { reason: reasonOf(error, t) }))
-      },
-    )
-  }
-
   return (
     <Transcript
       deviceId={deviceId}
@@ -93,21 +72,17 @@ export function ArchivedSession({ deviceId, sessionId, onBack, onRestored }: Arc
       footer={
         <div className="dock" style={wireStyle(device?.wire)}>
           <div className="dock-in">
-            <div className="cmp off arch-bar" ref={bar} tabIndex={-1}>
-              <span className="pill mute">{t('archived.badge')}</span>
-              <span className="grow">{t('archived.readOnly')}</span>
-              <button type="button" className="btn ghost" onClick={onBack}>
-                {t('archived.back')}
-              </button>
-              <button
-                type="button"
-                className="btn primary"
-                disabled={!online || busy}
-                onClick={restore}
-              >
-                {t('archived.restore')}
-              </button>
-            </div>
+            <ArchiveBar
+              key={sessionId}
+              deviceId={deviceId}
+              sessionId={sessionId}
+              disabled={!online}
+              onBack={onBack}
+              onRestoring={(value) => {
+                restoring.current = value
+              }}
+              onRestored={() => onRestored({ deviceId, sessionId })}
+            />
             {failure ? <div className="cmp-hint err">{failure}</div> : null}
           </div>
         </div>

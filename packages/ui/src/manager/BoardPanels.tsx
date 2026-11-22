@@ -112,9 +112,10 @@ export function BoardPanels({
         {!pages.overview.stats.totalItems ? <p>{t('manager.none')}</p> : null}
       </div>
     )
+  const lines = pages.lines.filter((line) => !line.archived)
   return (
     <div className="mg-stack">
-      {pages.lines.map((line) => (
+      {lines.map((line) => (
         <article className="mg-card" key={line.threadId}>
           <header>
             <span className="pill mute">
@@ -165,7 +166,7 @@ export function BoardPanels({
           ))}
         </article>
       ))}
-      {!pages.lines.length ? <p>{t('manager.none')}</p> : null}
+      {!lines.length ? <p>{t('manager.none')}</p> : null}
     </div>
   )
 }

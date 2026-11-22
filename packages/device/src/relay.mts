@@ -28,6 +28,7 @@ export interface RelayHost {
   optedOut(method: string): boolean
   /** 客户端握手时声明认识这个扩展 */
   declares(extension: string): boolean
+  shelf(harness: string, threadId: string, archived: boolean): void
   index: ThreadIndex
   workspaces: Workspaces
   /** 会话开始的通知最多扣多久（毫秒），见 SessionTiming.startedHoldMs */
@@ -302,7 +303,7 @@ export class Relay {
       index.forget(tracked.threadId)
       this.host.sessions.deleted(tracked.threadId)
     } else if (tracked.kind === 'shelved') {
-      index.setArchived(tracked.threadId, tracked.archived)
+      this.host.shelf(link.harness, tracked.threadId, tracked.archived)
       if (tracked.archived) this.host.clientTools.threadClosed(link.harness, tracked.threadId)
     } else {
       const thread = isObject(result) ? result.thread : null
@@ -352,6 +353,10 @@ export class Relay {
     const fields = isObject(frame.params) ? frame.params : null
     const threadId = typeof fields?.threadId === 'string' ? fields.threadId : null
     if (fields) this.host.clientTools.threadEvent(link.harness, method, fields)
+    if (method === 'thread/archived' || method === 'thread/unarchived') {
+      if (threadId) this.host.shelf(link.harness, threadId, method === 'thread/archived')
+      return
+    }
     let changed = false
     if (method === 'thread/started') {
       const thread = fields?.thread
@@ -372,10 +377,7 @@ export class Relay {
       this.host.workspaces.forget(threadId)
       this.host.index.forget(threadId)
       this.host.sessions.deleted(threadId)
-    } else if (method === 'thread/archived' && threadId) this.host.index.setArchived(threadId, true)
-    else if (method === 'thread/unarchived' && threadId)
-      this.host.index.setArchived(threadId, false)
-    else if (
+    } else if (
       method === 'serverRequest/resolved' &&
       fields &&
       fields.requestId != null &&

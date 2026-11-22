@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { build } from '../../../node_modules/esbuild/lib/main.js'
 
-test('记忆位置等摘要首次到达，之后归档、删除或移除所属经理才清理', async () => {
+test('记忆位置等摘要首次到达，归档保留，删除或移除所属经理才清理', async () => {
   // 只替换 React 的调度与副本读取；归属解析和待测钩子使用正式实现。
-  const state = { refs: [], at: 0, effects: [], summary: undefined }
+  const state = { refs: [], at: 0, effects: [], summary: undefined, shelved: false }
   globalThis.__selectionLifetimeTest = state
   const result = await build({
     entryPoints: [new URL('../src/app/useSelectionLifetime.ts', import.meta.url).pathname],
@@ -27,7 +27,10 @@ test('记忆位置等摘要首次到达，之后归档、删除或移除所属�
                 ? `const s=globalThis.__selectionLifetimeTest;
                export const useRef=value=>s.refs[s.at++]??=( {current:value} );
                export const useEffect=fn=>s.effects.push(fn);`
-                : 'export const useKey=()=>globalThis.__selectionLifetimeTest.summary;',
+                : `export const useKey=key=>{
+                    const s=globalThis.__selectionLifetimeTest;
+                    return key.startsWith('summary:')?s.summary:key.includes(':shelved:')?s.shelved:undefined;
+                  };`,
           }))
         },
       },
@@ -39,9 +42,10 @@ test('记忆位置等摘要首次到达，之后归档、删除或移除所属�
     )
     const missing = []
     const onMissing = (selection) => missing.push(selection)
-    const render = (selection, summary, managers = []) => {
+    const render = (selection, summary, managers = [], shelved = false) => {
       state.at = 0
       state.summary = summary
+      state.shelved = shelved
       state.effects = []
       // biome-ignore lint/correctness/useHookAtTopLevel: 测试调度器按同样顺序重放钩子，保留 ref 并逐次执行效果。
       useSelectionLifetime(selection, managers, onMissing)
@@ -51,8 +55,10 @@ test('记忆位置等摘要首次到达，之后归档、删除或移除所属�
     render(chat, undefined)
     assert.deepEqual(missing, [], '刚创建时摘要尚未到达，不能误清')
     render(chat, {})
+    render(chat, undefined, [], true)
+    assert.deepEqual(missing, [], '归档后仍保留当前历史页')
     render(chat, undefined)
-    assert.deepEqual(missing, [chat], '见过摘要后消失，归档或删除时清理')
+    assert.deepEqual(missing, [chat], '确认删除后清理')
 
     const selectedManager = { deviceId: 'local', sessionId: 'manager-thread' }
     render(selectedManager, undefined)

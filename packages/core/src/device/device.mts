@@ -1054,6 +1054,17 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let archiveMissing: string[] = []
   /** 已归档的会话。null：界面还没要过，不去取 */
   let archived: Map<string, Thread> | null = null
+  // 归档状态不能依赖用户是否打开过「已归档」列表。
+  let shelfRevision = 0
+  const shelfStates = new Map<string, { archived: boolean; revision: number }>()
+  const isArchived = (threadId: string) => shelfStates.get(threadId)?.archived === true
+  const recordShelf = (threadId: string, archived: boolean) => {
+    shelfStates.set(threadId, { archived, revision: ++shelfRevision })
+  }
+  const shelfChangedSince = (threadId: string, revision: number) =>
+    (shelfStates.get(threadId)?.revision ?? 0) > revision
+  const archivedSnapshot = (thread: Thread) =>
+    (thread as Thread & SessionTreeThreadFields).litchArchived === true
   const archivedList = (): SessionSummary[] | null =>
     archived && [...archived.values()].map(summaryOf).sort((a, b) => b.updatedAt - a.updatedAt)
   const emitArchived = () => hooks.sidebarOps([{ op: 'archived.set', sessions: archivedList() }])
@@ -1288,6 +1299,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   }
 
   const upsertThread = (thread: Thread) => {
+    if (archivedSnapshot(thread)) {
+      shelve(thread.id, thread)
+      return
+    }
+    if (isArchived(thread.id)) return
     rememberCapabilities(thread)
     if (thread.ephemeral) {
       transient.add(thread.id)
@@ -1318,6 +1334,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
    * 目录里还没有、又还没说过话的不放，见 unspoken
    */
   const adopt = (thread: Thread) => {
+    if (archivedSnapshot(thread)) {
+      shelve(thread.id, thread)
+      return
+    }
+    if (isArchived(thread.id)) return
     if (
       !thread.ephemeral &&
       !isAgentThread(thread) &&
@@ -1330,34 +1351,43 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     upsertThread(thread)
   }
 
-  const removeThread = (threadId: string) => {
+  const removeThread = (threadId: string, keepView = false) => {
     sessionCapabilities.delete(threadId)
     peeks.forget(threadId)
     agentThreads.forget(threadId)
     unread.delete(threadId)
     readStates.delete(threadId)
     unspoken.delete(threadId)
-    live.forget(threadId)
+    if (!keepView) live.forget(threadId)
     noteBackgroundDrop(threadId, threads.get(threadId), undefined, `remove:${changeCause}`)
-    if (threads.delete(threadId)) hooks.sidebarOps([{ op: 'session.remove', sessionId: threadId }])
+    const wasListed = threads.delete(threadId)
+    if (wasListed || isArchived(threadId))
+      hooks.sidebarOps([
+        { op: 'session.remove', sessionId: threadId, ...(keepView ? { archived: true } : {}) },
+      ])
     saveSoon()
   }
 
   /** 归档了：从列表里拿掉。已归档的那张表界面要过的话，放进去 */
-  const shelve = (threadId: string) => {
-    const thread = threads.get(threadId)
-    removeThread(threadId)
+  const shelve = (threadId: string, snapshot?: Thread, updateView = true) => {
+    const known = isArchived(threadId)
+    const thread = snapshot ?? threads.get(threadId)
+    if (!known) recordShelf(threadId, true)
+    if (!known || threads.has(threadId)) removeThread(threadId, true)
+    if (thread) rememberCapabilities(thread)
+    if (!known && updateView) live.archived(threadId)
     if (!archived || archived.has(threadId)) return
     if (thread) {
-      archived.set(threadId, thread)
+      archived.set(threadId, { ...thread, turns: [] })
       emitArchived()
-    } else {
+    } else if (!known) {
       // 不在我们列表里的会话被归档了（别处建的、还没同步过来的）：重新取一遍
       void loadArchived().catch((error: unknown) => log(`取已归档的会话失败：${String(error)}`))
     }
   }
 
   const unshelve = (threadId: string) => {
+    recordShelf(threadId, false)
     if (archived?.delete(threadId)) emitArchived()
   }
 
@@ -1365,10 +1395,12 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
    * 目录里没有的会话：向对面要它的元数据。spoken：已经知道它开始了回合，第一句话读不到也放进侧栏
    */
   const fetchThread = async (threadId: string, spoken = false) => {
+    if (isArchived(threadId)) return
     const mine = session
+    const revision = shelfRevision
     try {
       const { thread } = await link.request('thread/read', { threadId, includeTurns: false })
-      if (mine !== session) return
+      if (mine !== session || shelfChangedSince(threadId, revision)) return
       causedBy('thread/read', () => (spoken ? upsertThread(thread) : adopt(thread)))
     } catch (error) {
       log(`取会话 ${threadId} 的信息失败：${String(error)}`)
@@ -1414,7 +1446,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       // 归档了的会话变了（改名之类）：改在那张表里，不把它放回列表
       archived?.set(threadId, { ...shelved, ...patch })
       emitArchived()
-    } else if (!unspoken.has(threadId) || patch.name) void fetchThread(threadId)
+    } else if (!isArchived(threadId) && (!unspoken.has(threadId) || patch.name))
+      void fetchThread(threadId)
   }
 
   const loadProjects = async (): Promise<Project[]> => {
@@ -1476,8 +1509,13 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
    * 翻页取完一份会话列表。shelved：取已归档的那些。
    * only 只在完整模式下给：只取这一个 harness 的（它恢复可用之后补它那一份用）；聚合面之外没有这个参数
    */
-  const loadThreads = (shelved = false, only: HarnessId | null = null): Promise<Listing> =>
-    collectThreads((cursor) =>
+  type ShelfListing = Listing & { shelfRevision: number }
+  const loadThreads = async (
+    shelved = false,
+    only: HarnessId | null = null,
+  ): Promise<ShelfListing> => {
+    const revision = shelfRevision
+    const listing = await collectThreads((cursor) =>
       link.request('thread/list', {
         limit: PAGE,
         // 不按模型供应商筛。原生 codex 在不带这一项时只列“当前供应商”的会话，
@@ -1488,6 +1526,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         ...(only === null ? {} : { harness: only }),
       }),
     )
+    return { ...listing, shelfRevision: revision }
+  }
 
   /** 设备服务现在声明为不可用的 harness：取到的列表里没有它们，它们原来的会话要留着 */
   const downHarnesses = (): HarnessId[] =>
@@ -1496,12 +1536,27 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       : []
 
   /** 新取到的已归档列表并进那张表。没包含进来的 harness，它原来在表里的留着 */
-  const setArchived = (listing: Listing, only: HarnessId | null = null) => {
+  const setArchived = (listing: ShelfListing, only: HarnessId | null = null) => {
     if (only === null) {
       archiveComplete = !listing.incomplete && listing.skipped.length === 0
       archiveMissing = listing.skipped.map((each) => each.harness)
     }
-    archived = mergeListing(archived?.values() ?? [], listing, harnessOf, only, downHarnesses())
+    const before = archived ?? new Map<string, Thread>()
+    archived = mergeListing(before.values(), listing, harnessOf, only, downHarnesses())
+    for (const thread of listing.threads) {
+      if (shelfChangedSince(thread.id, listing.shelfRevision) && !isArchived(thread.id)) {
+        archived.delete(thread.id)
+        continue
+      }
+      if (threads.has(thread.id) || live.watched(thread.id)) shelve(thread.id, thread)
+      else {
+        if (!isArchived(thread.id)) recordShelf(thread.id, true)
+        rememberCapabilities(thread)
+      }
+    }
+    for (const [id, thread] of before)
+      if (isArchived(id) && shelfChangedSince(id, listing.shelfRevision) && !archived.has(id))
+        archived.set(id, thread)
   }
 
   async function loadArchived(): Promise<void> {
@@ -1513,20 +1568,29 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   }
 
   /** 新取到的列表并进会话目录，记下这一次哪些 harness 没有包含进来 */
-  const setThreads = (listing: Listing, only: HarnessId | null = null) => {
+  const setThreads = (listing: ShelfListing, only: HarnessId | null = null) => {
     if (only === null) {
       catalogLoaded = true
       catalogTruncated = listing.incomplete === true
     }
+    // 正常目录的实读结果也能补上断线期间错过的恢复；晚到的单条读取不能清除归档状态。
+    const current = listing.threads.filter(
+      (thread) => !shelfChangedSince(thread.id, listing.shelfRevision),
+    )
+    const restored = current.filter((thread) => isArchived(thread.id) && !archivedSnapshot(thread))
+    for (const thread of restored) unshelve(thread.id)
+    for (const thread of current) if (archivedSnapshot(thread)) shelve(thread.id, thread)
     const next = mergeListing(threads.values(), listing, harnessOf, only, downHarnesses())
     const before = trace ? new Map(threads) : null
     threads.clear()
     for (const [id, thread] of next) {
+      if (isArchived(id)) continue
       rememberCapabilities(thread)
       // 列表里混进来的子代理线程（不按上游的默认排除它们的入口）也不进侧栏
       if (isAgentThread(thread)) agentThreads.put(thread)
       else threads.set(id, thread)
     }
+    for (const thread of restored) live.restored(thread.id)
     for (const [id, was] of before ?? [])
       noteBackgroundDrop(id, was, threads.get(id), 'thread/list')
     // 设备上已经没有了的会话，未读也不留
@@ -1670,7 +1734,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (
         state.completedSequence > state.readSequence &&
         !threads.has(state.threadId) &&
-        !archived?.has(state.threadId)
+        !isArchived(state.threadId)
       )
         void fetchThread(state.threadId)
     },
@@ -1698,7 +1762,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       }
       const known = threads.get(threadId)
       if (!known) {
-        if (status.type === 'active' && !transient.has(threadId) && !archived?.has(threadId)) {
+        if (status.type === 'active' && !transient.has(threadId) && !isArchived(threadId)) {
           // 目录里没有的会话开始了一个回合（多半是别处建的、刚说了第一句）：去要来放进侧栏。第一句话这时
           // 一般已经记下了；一时读不到也放进来，它在跑就是一段真的对话，回合结束时会再去要
           unspoken.delete(threadId)
@@ -2420,7 +2484,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       const caps = capabilitiesFor(sessionId)
       return caps ? termsOf(caps) : (terms.get(id) ?? null)
     },
-    shelved: (sessionId) => archived?.has(sessionId) ?? false,
+    shelved: isArchived,
+    archiveFound: (sessionId) => shelve(sessionId, undefined, false),
     agentsOf: (sessionId) => agentThreads.list(sessionId),
     agentParent: (sessionId) => agentThreads.parent(sessionId),
     async request(method, params, requestOptions) {

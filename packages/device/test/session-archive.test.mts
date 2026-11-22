@@ -5,6 +5,7 @@ import assert from 'node:assert/strict'
 import { existsSync, realpathSync, rmSync } from 'node:fs'
 import test from 'node:test'
 import { failureOf, resultOf } from './fake-engine.mjs'
+import { RpcFailure } from './fake-upstream.mjs'
 import { settle, tempDir } from './helpers.mjs'
 import {
   brief,
@@ -287,5 +288,59 @@ test('SESSION-ARCHIVE-005：模型归档在自己工作树里的子会话：干�
   } finally {
     await env.close()
     rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('归档应答没有引擎通知时广播给其他连接，恢复后清除归档标记', async () => {
+  const env = treeRig()
+  try {
+    const first = await litch(env)
+    const other = await litch(env)
+    const plain = env.connect()
+    await plain.initialize(['harness'])
+    const { threadId } = await parent(first, false)
+    env.pi.handlers['thread/archive'] = (params) => {
+      env.pi.thread(params.threadId).archived = true
+      return {}
+    }
+    await first.call('thread/archive', { threadId })
+    await until(
+      () => got(other, 'thread/archived').some((p) => p.threadId === threadId),
+      '第二个连接收到归档',
+    )
+    // 同一事实后来又由引擎通知，不给每条客户端连接重复广播。
+    env.pi.notify('thread/archived', { threadId })
+    const fetch = { threadId, includeTurns: false }
+    assert.equal((await other.call('thread/read', fetch)).thread.litchArchived, true)
+    assert.equal((await plain.call('thread/read', fetch)).thread.litchArchived, undefined)
+    const originalResume = env.pi.handlers['thread/resume']
+    assert.ok(originalResume)
+    env.pi.handlers['thread/resume'] = () => {
+      throw new RpcFailure(-32600, 'upstream archive rejection')
+    }
+    const beforeResume = env.pi.sent('thread/resume').length
+    assert.equal((await other.fails('thread/resume', { threadId })).data.litch, 'sessionArchived')
+    assert.equal(env.pi.sent('thread/resume').length, beforeResume)
+    const upstream = await plain.fails('thread/resume', { threadId })
+    assert.equal(upstream.code, -32600)
+    assert.equal(upstream.message, 'upstream archive rejection')
+    assert.equal(upstream.data?.litch, undefined)
+    assert.equal(env.pi.sent('thread/resume').length, beforeResume + 1)
+    env.pi.handlers['thread/resume'] = originalResume
+    assert.equal(got(other, 'thread/archived').filter((p) => p.threadId === threadId).length, 1)
+    assert.equal(got(plain, 'thread/archived').filter((p) => p.threadId === threadId).length, 1)
+
+    const restored = await first.call('thread/unarchive', { threadId })
+    assert.equal(restored.thread.litchArchived, undefined)
+    await until(
+      () => got(other, 'thread/unarchived').some((p) => p.threadId === threadId),
+      '第二个连接收到恢复',
+    )
+    assert.equal((await other.call('thread/read', fetch)).thread.litchArchived, undefined)
+    await other.call('thread/resume', { threadId })
+    await other.call('turn/start', { threadId, input: text('恢复后继续') })
+    assert.equal(env.pi.running(threadId), true)
+  } finally {
+    await env.close()
   }
 })

@@ -139,7 +139,7 @@ export function App() {
   const place = useNewPlace(wish)
   /** 设置页上正看着哪一组。记在这里：应用菜单的“关于”要能直接开到那一组 */
   const [settingsAt, setSettingsAt] = useState<SettingsSection>('look')
-  // 选中的会话被归档或删掉了：回到新建对话页。
+  // 选中的会话被删掉了：回到新建对话页；归档仍可查看。
   // “没有摘要”不等于“没了”：刚建的会话，摘要可能比建好的应答晚一帧到，所以要见过之后又没了才算
   const pickedSummary = useKey<SessionSummary>(
     keys.summary(picked?.deviceId ?? '', picked?.sessionId ?? ''),

@@ -23,6 +23,7 @@ const line = (threadId: string, patch: Partial<ManagerLineView> = {}): ManagerLi
 
 test('工作线：等人与出错在前，运行中、后台、空闲依次，同组最近动静新的在前；已合并另成一组', () => {
   const lines = [
+    line('archived', { archived: true, merged: true }),
     line('idle-new', { startedAt: 9000 }),
     line('run-old', { status: 'running', startedAt: 2000 }),
     line('merged', { merged: true, report: { text: '好了', at: 8000 } }),

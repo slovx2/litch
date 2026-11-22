@@ -936,3 +936,142 @@ test('分叉、回退、压缩：模拟核心都支持；没有声明的不会�
     },
   )
 })
+
+for (const kind of ['local', 'ssh'] as const) {
+  test(`${kind}：归档后晚到的状态和目录请求不会把工作线放回会话树`, async () => {
+    const child = {
+      ...thread({ id: 'b', name: '已完成的工作线', turns: [turn('t1', [userText('u', '评审')])] }),
+      litchLineage: { parentThreadId: 'a', origin: 'model', reportParent: true },
+    }
+    const home = thread({ id: 'a' })
+    let reply: ((page: unknown) => void) | undefined
+    const { core, peer, world, sidebar, command } = setup(
+      [home, child],
+      {
+        'thread/list': () =>
+          new Promise((resolve) => {
+            reply = resolve
+          }),
+      },
+      undefined,
+      kind,
+    )
+    core.start()
+    await settle()
+    const page = { data: [home, child], nextCursor: null, backwardsCursor: null }
+    reply?.(page)
+    await settle()
+    assert.ok(sidebar.view?.sessions.some((session) => session.id === 'b'))
+    const open = watch(core, 'b')
+    await settle()
+    const refresh = command('device.refresh', { deviceId: 'local' })
+    await settle()
+    world.threads = [home]
+    world.archived.push(child)
+    const server = peer.last()
+    server.notify('thread/archived', { threadId: 'b' })
+    server.notify('thread/status/changed', { threadId: 'b', status: { type: 'notLoaded' } })
+    reply?.(page)
+    await refresh
+    await settle()
+    const last = sidebar.ops
+      .filter(
+        (op) =>
+          (op.op === 'session.remove' && op.sessionId === 'b') ||
+          (op.op === 'session.upsert' && op.session.id === 'b'),
+      )
+      .at(-1)
+    assert.equal(last?.op, 'session.remove')
+    assert.equal(open.seen.view?.live, false)
+    assert.deepEqual(open.seen.view?.note, { key: 'session.archived' })
+    assert.deepEqual(open.texts(), [['评审']])
+    await command('session.unarchive', { deviceId: 'local', sessionId: 'b' })
+    await settle()
+    assert.equal(open.seen.view?.live, true)
+  })
+}
+
+for (const [engine, error] of [
+  [
+    'Codex 0.170',
+    new RpcFailure(-32600, 'session b is archived. Run `codex unarchive b` to unarchive it first.'),
+  ],
+  ['Claude Code', new RpcFailure(-32600, '会话已归档')],
+  ['设备', new RpcFailure(-32600, 'Archived', { litch: 'sessionArchived' })],
+] as const) {
+  test(`${engine}：未加载归档目录时本地化归档错误，仍可查看历史和恢复`, async () => {
+    const child = thread({
+      id: 'b',
+      name: '归档的会话',
+      turns: [turn('t1', [userText('u', '已存历史')])],
+    })
+    let resumed = false
+    let reply: ((result: unknown) => void) | undefined
+    const { core, world, command, sent } = setup([child], {
+      'thread/resume': () => {
+        if (!resumed) throw error
+        return { thread: child }
+      },
+      'thread/read': () =>
+        new Promise((resolve) => {
+          reply = resolve
+        }),
+    })
+    core.start()
+    await settle()
+    // 安装了旧设备的一端错过通知，仍以为这是一条普通会话。
+    world.threads = []
+    world.archived = [child]
+    const first = watch(core, 'b')
+    await settle()
+    assert.equal(sent('thread/resume').length, 1)
+    reply?.({ thread: child })
+    await settle()
+    assert.deepEqual(first.seen.view?.note, { key: 'session.archived' })
+    assert.deepEqual(first.texts(), [['已存历史']])
+
+    resumed = true
+    await command('session.unarchive', { deviceId: 'local', sessionId: 'b' })
+    await settle()
+    assert.equal(first.seen.view?.live, true)
+    assert.deepEqual(first.texts(), [['已存历史']])
+    await command('session.send', { deviceId: 'local', sessionId: 'b', text: '恢复后的消息' })
+    assert.equal(sent('turn/start').length, 1)
+  })
+}
+
+test('已打开的会话在归档历史读完前被恢复：立即重新订阅，迟到的历史不能盖住活跃视图', async () => {
+  const child = thread({
+    id: 'b',
+    name: '归档的会话',
+    turns: [turn('t1', [userText('u', '仍在')])],
+  })
+  let history: ((result: unknown) => void) | undefined
+  const { core, peer, world, sent } = setup([child], {
+    'thread/read': () =>
+      new Promise((resolve) => {
+        history = resolve
+      }),
+  })
+  core.start()
+  await settle()
+  const open = watch(core, 'b')
+  await settle()
+  world.threads = []
+  world.archived = [child]
+  peer.last().notify('thread/archived', { threadId: 'b' })
+  await settle()
+  assert.ok(history, '归档历史尚未返回')
+  assert.deepEqual(open.seen.view?.note, { key: 'session.archived' })
+
+  world.threads = [child]
+  world.archived = []
+  peer.last().notify('thread/unarchived', { threadId: 'b' })
+  await settle()
+  assert.equal(sent('thread/resume').length, 2)
+  assert.equal(open.seen.view?.live, true)
+  history({ thread: child })
+  await settle()
+  assert.equal(open.seen.view?.live, true)
+  assert.deepEqual(open.texts(), [['仍在']])
+})

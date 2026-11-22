@@ -18,13 +18,15 @@ import {
   type SessionSummary,
 } from '@litch/core'
 import { type RefObject, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { StyleSheet, type TextInput, View } from 'react-native'
+import { StyleSheet, Text, type TextInput, View } from 'react-native'
 import { whyNot } from '../../../../packages/ui/src/app/errors.ts'
 import { useInterrupt } from '../../../../packages/ui/src/composer/useInterrupt'
 import { useProviderSwitch } from '../../../../packages/ui/src/composer/useProviderSwitch'
 import type { SessionStore } from '../core/session-store'
 import { useKey, useServices } from '../shell/services'
 import { useT } from '../ui/i18n'
+import { Button } from '../ui/kit/controls'
+import { useTheme } from '../ui/theme'
 import { BackgroundBar } from './background/BackgroundBar'
 import { downHarness, harnessNotice } from './composer/availability'
 import { ComposeBox, useDraft } from './composer/ComposeBox'
@@ -49,6 +51,52 @@ import { useGoalSend } from './goal/useGoalSend'
 import { QueuedNotesChip, QueuedNotesPanel } from './proposals/EventCell'
 import { onRefill } from './refill'
 import { TodoChip, TodoPanel } from './todo/TodoViews'
+
+function RestoreComposer({
+  deviceId,
+  sessionId,
+  disabled,
+}: {
+  deviceId: string
+  sessionId: string
+  disabled: boolean
+}) {
+  const { channel } = useServices()
+  const t = useT()
+  const { c, font } = useTheme()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const restore = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await channel.command('session.unarchive', { deviceId, sessionId })
+    } catch (error) {
+      setError(t('session.failed', { reason: whyNot(error, t) }))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <View style={{ paddingHorizontal: 12, paddingVertical: 8, gap: 4 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Text style={{ flex: 1, color: c.ink2, fontFamily: font.ui }}>{t('session.archived')}</Text>
+        <Button
+          label={t('archived.restore')}
+          onPress={restore}
+          disabled={disabled}
+          busy={busy}
+          testID="composer:restore"
+        />
+      </View>
+      {error ? (
+        <Text accessibilityRole="alert" style={{ color: c.err }}>
+          {error}
+        </Text>
+      ) : null}
+    </View>
+  )
+}
 
 export function Composer({
   store,
@@ -199,6 +247,15 @@ export function Composer({
       )
   }
 
+  if (typeof meta?.note === 'object' && meta.note?.key === 'session.archived')
+    return (
+      <RestoreComposer
+        key={sessionId}
+        deviceId={deviceId}
+        sessionId={sessionId}
+        disabled={device?.connection !== 'online' || !!down}
+      />
+    )
   return (
     <>
       {switching.pending ? (

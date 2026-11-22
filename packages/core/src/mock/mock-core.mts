@@ -595,10 +595,17 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     if (!sidebar) return
     sidebar.sessions = sidebar.sessions.filter((entry) => entry !== summary)
     replies.get(`session:${deviceId}:${summary.id}`)?.()
-    const ops: SidebarOp[] = [{ op: 'session.remove', sessionId: summary.id }]
+    const ops: SidebarOp[] = [{ op: 'session.remove', sessionId: summary.id, archived: true }]
     emit(`sidebar:${deviceId}`, ops)
     const list = shelved.get(deviceId) ?? []
     shelved.set(deviceId, [...list, { ...summary, status: 'idle', waitingFor: null }])
+    const opened = sessions.get(`session:${deviceId}:${summary.id}`)
+    if (opened) {
+      applySessionOps(opened, [
+        { op: 'session.state', live: false, note: phrase('session.archived') },
+        { op: 'queue.set', queued: [] },
+      ])
+    }
     archivedChanged(deviceId)
     const kidsOf = (id: string) =>
       sidebar.sessions.filter((entry) => entry.lineage?.parentId === id)

@@ -46,6 +46,8 @@ export interface SessionLineage {
 
 /** 会话对象上我们加的字段 */
 export interface SessionTreeThreadFields extends SessionPendingFields {
+  /** 设备已确认归档；列表、读取与实时元数据使用同一个状态。 */
+  litchArchived?: true
   litchLineage?: SessionLineage
   /**
    * 会话建的时候带了哪些 `litch_` 命名空间的动态工具（设备进程记下的 thread/start.dynamicTools）。

@@ -226,6 +226,8 @@ export interface ManagerLine {
   ahead: number | null
   merged: boolean | null
   worktreeExists: boolean | null
+  /** 工作线的历史关联保留，但不列在活动工作线中。 */
+  archived?: true
   report: { text: string; at: number } | null
   /** 从最近 wrap_up 回报中逐行取“没验：”开头的内容，保留前缀。 */
   unverified: string[]
