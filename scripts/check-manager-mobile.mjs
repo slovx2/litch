@@ -232,15 +232,16 @@ try {
   await until(
     () =>
       read(String.raw`(() => {
-    const card = document.querySelector('[data-testid="issue-card:X-5"]');
-    const noReason = document.querySelector('[data-testid="issue-card:X-9"]');
+    const meta = document.querySelector('[data-testid="issue-meta:X-5"]')?.innerText ?? '';
+    const wait = document.querySelector('[data-testid="issue-wait:X-5"]')?.innerText ?? '';
+    const noReason = document.querySelector('[data-testid="issue-wait:X-9"]')?.innerText ?? '';
     const count = document.querySelector('[data-testid="issue-capsule:ordinary"]')?.textContent?.match(/\d+/)?.[0];
     const total = document.querySelector('[data-testid="issue-total"]')?.textContent?.match(/\d+\s*\/\s*(\d+)/)?.[1];
-    return card?.innerText.includes('等待：等上游修复合并，周三复查。') &&
-      !card.innerText.includes('未记录原因') && noReason?.innerText.includes('等待：未记录原因') &&
-      !!count && count === total;
+    return meta.startsWith('受阻') && !meta.includes('等谁') &&
+      wait.startsWith('等待') && wait.includes('等谁：上游维护者') && !wait.includes('**') &&
+      noReason.includes('未记录原因') && !!count && count === total;
   })()`),
-    '普通议题的待处理项显示等待原因，角标与列表一致',
+    '受阻卡片元信息行只写状态，等待原因单独一行且不露 Markdown，角标与列表一致',
   )
   await tapId('issue-capsule:decision')
   const decisionOrder = () =>

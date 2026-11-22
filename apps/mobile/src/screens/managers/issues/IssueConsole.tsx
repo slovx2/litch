@@ -59,7 +59,7 @@ import {
   useIssueCounts,
 } from './data'
 import { IssueFilterDrawer, IssueStatusRow } from './IssueFilters'
-import { IssueComposer, IssueMetaLine, IssueThread } from './IssueThread'
+import { IssueComposer, IssueMetaLine, IssueThread, IssueWaitLine } from './IssueThread'
 
 /** 页签次序：四类特殊 issue 在前（日常处理的都在这里），普通 issue 在末尾 */
 const TABS: readonly ManagerIssueKind[] = [
@@ -331,6 +331,7 @@ export function useIssueConsole({
           ) : null}
         </View>
         <IssueMetaLine head={head} comments={issue?.discussion.comments.length ?? 0} />
+        <IssueWaitLine head={head} />
         {head.preview ? (
           <Text numberOfLines={2} style={{ color: c.ink2, fontSize: font.size.body - 1 }}>
             {head.preview}
@@ -574,16 +575,19 @@ export function IssueSheetDrawer({
     >
       <View style={{ gap: 10 }}>
         {!talking ? (
-          <IssueMetaLine
-            withKind
-            head={{
-              ...issue,
-              author: issue.author.kind,
-              followUp: issue.followUp.state,
-              preview: '',
-            }}
-            comments={issue.discussion.comments.length}
-          />
+          <>
+            <IssueMetaLine
+              withKind
+              head={{
+                ...issue,
+                author: issue.author.kind,
+                followUp: issue.followUp.state,
+                preview: '',
+              }}
+              comments={issue.discussion.comments.length}
+            />
+            <IssueWaitLine full head={issue} />
+          </>
         ) : null}
         {special && !talking ? (
           (quick ?? (

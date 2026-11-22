@@ -8,7 +8,7 @@ import { useT } from '../../app/appearance.ts'
 import { Icon } from '../../app/icons.tsx'
 import { CardActionScope, CardActions } from '../CardActions.tsx'
 import type { IssueCommands } from './data.ts'
-import { IssueMeta } from './IssueMeta.tsx'
+import { IssueMeta, IssueWaitReason } from './IssueMeta.tsx'
 import { IssueThread } from './IssueThread.tsx'
 
 export function IssueCard({
@@ -105,6 +105,7 @@ export function IssueCard({
             ) : null}
           </button>
           <IssueMeta head={head} comments={comments} />
+          <IssueWaitReason head={head} full={open} />
           {!open ? (
             head.preview ? (
               <p className="mg-paging-preview">{head.preview}</p>

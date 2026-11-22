@@ -142,8 +142,13 @@ export async function managerIssuesProbe() {
   passed.push('五类默认待处理分组在前，全部在后')
   const issueCount = () => one('[data-inbox-tab="issues"] .pill')?.textContent?.trim()
   const waitReason = () => one('[data-issue="X-5"] [data-issue-wait-reason]')?.textContent
-  await until('受阻等待原因在默认待处理卡上', () =>
-    /等上游修复合并|upstream fix to merge/.test(waitReason() ?? ''),
+  const blockedMeta = () => one('[data-issue="X-5"] [data-issue-status]')?.textContent
+  await until(
+    '受阻卡元信息行只写状态，等待原因单独一行且不露 Markdown',
+    () =>
+      /^(受阻|Blocked)$/.test(blockedMeta() ?? '') &&
+      /等谁：上游维护者|Blocked on: upstream maintainers/.test(waitReason() ?? '') &&
+      !(waitReason() ?? '').includes('**'),
   )
   const noReason = () => one('[data-issue="X-9"] [data-issue-wait-reason]')?.textContent
   await until(

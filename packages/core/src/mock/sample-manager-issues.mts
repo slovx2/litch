@@ -199,9 +199,10 @@ function richIssues(now: number, t: (zh: string, en: string) => string): Manager
     {
       title: t('CI 夜间偶发失败', 'Nightly CI flakes'),
       body: t('夜间失败已定位。', 'The nightly failure has been diagnosed.'),
+      // 长且带 Markdown 记号：列表里只显示两行纯文字，展开看全文。
       blockedReason: t(
-        '等上游修复合并，周三复查。',
-        'Waiting for the upstream fix to merge; check Wednesday.',
+        '**等谁**：上游维护者合并签名校验修复（#482）。**为什么**：网关校验依赖这个修复，绕过会误拒旧版客户端的请求。**下一步**：周三复查合并状态，合并后升级依赖并重跑支付回归。',
+        '**Blocked on**: upstream maintainers merging the signature-check fix (#482). **Why**: the gateway depends on it; working around it would reject requests from older clients. **Next**: check the merge on Wednesday, then bump the dependency and rerun the payment regression suite.',
       ),
       author: 'manager',
       status: 'blocked',
