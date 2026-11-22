@@ -26,6 +26,7 @@ import { useTheme } from '../../../ui/theme'
 import { DiscussionDrawer } from '../DiscussionDrawer'
 import { deliveryLabel, failureText, kindLabel, openGithub, reasonLabel, roleLabel } from './labels'
 import { ManagerRecovery } from './ManagerRecovery'
+import { MissingResultReply } from './MissingResultReply'
 
 type Mode = null | 'accept' | 'ignore'
 
@@ -233,6 +234,7 @@ export function InboxDetail({
             onOpen={onClose}
           />
         ) : null}
+        {head.missingResultReply ? <MissingResultReply reply={head.missingResultReply} /> : null}
         {events.length > 1 ? (
           <View style={styles.events}>
             <Text style={{ color: c.ink3, fontSize: font.size.meta }}>

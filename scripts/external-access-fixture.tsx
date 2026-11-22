@@ -12,6 +12,7 @@ import type {
 import { ServicesProvider } from '../packages/ui/src/app/services.tsx'
 import { InboxTriage } from '../packages/ui/src/external/InboxTriage.tsx'
 import { UnattendedPage } from '../packages/ui/src/external/UnattendedPage.tsx'
+import { IssueMeta } from '../packages/ui/src/manager/issues/IssueMeta.tsx'
 
 const intake = { intakeId: 'one', revision: 1, status: 'pending_triage', managerId: 'm1' }
 const recovery = { managerId: 'm1', threadId: 'manager-thread', action: 'refresh' } as const
@@ -24,6 +25,11 @@ const head = {
   occurredAt: 1,
   delivery: { state: 'queued', reason: 'manager_tools_outdated', recovery },
 }
+const missingResultReply = {
+  managerId: 'm1',
+  issueId: 'X-1',
+  subject: { ...head.subject, provider: 'github', repoId: '123', kind: 'issue' },
+} as const
 const device = {
   id: 'remote',
   kind: 'ssh',
@@ -170,7 +176,14 @@ const replica = { store: { get: (key: string) => managers.get(key), subscribe: (
 Object.assign(window, { mobileServices: { channel, replica, intake } })
 function App() {
   const [current, set] = useState<ExternalAccess>()
+  const [missing, showMissing] = useState(false)
   Object.assign(window, {
+    setResultMissing: (value: boolean) => {
+      if (value) sourceStatus.missingResultReplies = [missingResultReply]
+      else delete sourceStatus.missingResultReplies
+      showMissing(value)
+      for (const sink of sinks) sink.snapshot(snapshot())
+    },
     setAccess: (next: ExternalAccess | undefined) => {
       access = next
       set(next)
@@ -192,10 +205,25 @@ function App() {
           onDone={() => {}}
         />
       </div>
+      <div id="board">
+        <IssueMeta
+          head={
+            {
+              kind: 'ordinary',
+              id: 'X-1',
+              status: 'resolved',
+              author: 'manager',
+              followUp: 'off',
+              updatedAt: 1000,
+              ...(missing ? { missingResultReply } : {}),
+            } as never
+          }
+        />
+      </div>
       <div id="mobile">
         <InboxDetail
           manager={manager as never}
-          head={head as never}
+          head={{ ...head, ...(missing ? { missingResultReply } : {}) } as never}
           access={current}
           disabled={false}
           onClose={() => {}}

@@ -395,10 +395,12 @@ export class DeviceExternalRpc {
     const waits = pressure.flatMap((row) =>
       row.pendingGroups > 0 ? [row.oldestWaitingSeconds] : [],
     )
+    const missingResultReplies = store.resultReplies.missingForSource(id)
     return {
       source,
       coverage,
       readiness,
+      ...(missingResultReplies.length ? { missingResultReplies } : {}),
       runtime: {
         ...pollStatus,
         state: source.enabled ? pollStatus.state : 'paused',

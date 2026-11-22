@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import type { ClientToolNamespaceSpec } from '../../protocol/src/client-tools.mjs'
 import type { TaskTarget } from '../../protocol/src/device-tasks.mjs'
 import {
   EXTERNAL_METHOD,
@@ -12,6 +13,7 @@ import {
   MANAGER_METHOD,
   type ManagerResetPreview,
 } from '../../protocol/src/manager.mjs'
+import { MANAGER_ISSUE_METHOD, type ManagerIssue } from '../../protocol/src/manager-issues.mjs'
 import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
 import type { DeviceOptions } from '../src/device.mjs'
 import { DeviceExternalRpc } from '../src/external/device-rpc.mjs'
@@ -1236,3 +1238,332 @@ for (const [harness, rulesFirst] of [
       await env.close()
     }
   })
+
+for (const harness of ['claude-code', 'codex']) {
+  test(`${harness}：旧结果回帖工具先升级，收尾提醒不投给旧形状`, async (t) => {
+    const github = await githubMock(t)
+    const env = await setup(harness, { fixture: { github: github.origin } })
+    try {
+      const id = env.manager.id
+      const external = env.device.external
+      assert.ok(external)
+      const old = structuredClone(env.tree.store.tools(env.oldId)) as ClientToolNamespaceSpec[]
+      const write = old
+        .find((row) => row.name === 'litch_manager')
+        ?.tools.find((tool) => tool.name === 'external_write')
+      assert.ok(write)
+      const properties = (
+        write.inputSchema as {
+          properties: { intent: { oneOf: { properties: Record<string, unknown> }[] } }
+        }
+      ).properties.intent.oneOf[0]?.properties
+      assert.ok(properties?.purpose)
+      delete properties.purpose
+      env.tree.store.setTools(env.oldId, old)
+      const engine = harness === 'codex' ? env.codex : env.claude
+      const thread = engine.threads.find((row) => row.id === env.oldId)
+      assert.ok(thread)
+      thread.dynamicTools = old
+      assert.deepEqual(env.device.managers.externalReady(env.current()), {
+        ready: false,
+        reason: 'manager_tools_outdated',
+        action: harness === 'claude-code' ? 'refresh' : 'replace',
+      })
+      const { issue } = env.device.managers.issues.call(
+        MANAGER_ISSUE_METHOD.create,
+        { managerId: id, title: '旧工具待升级', body: '', followUp: 'off' },
+        'manager',
+      ) as { issue: ManagerIssue }
+      assert.equal(issue.id, 'X-1')
+      const at = Math.floor(Date.now() / 1000)
+      external.store.bindRef({
+        ...subject,
+        managerId: id,
+        issueId: 'X-1',
+        origin: 'intake',
+        createdAt: at,
+      })
+      external.store.resultReplies.accepted(id, 'X-1', 'fixture', subject, at)
+      external.store.resultReplies.finish(id, 'X-1')
+      external.store.resultReplies.queueReminders()
+      const reminders = () =>
+        engine.seen.filter(
+          ({ method, params }) =>
+            ['turn/start', 'turn/steer'].includes(method) &&
+            parseSessionEvent(params.input?.[0]?.text ?? '').event?.externalResultReplies?.length,
+        )
+      // 直接等这一轮持久队列投递结束，不能用短暂等待断言“没有发送”。
+      await (env.device.managers as unknown as { drain(managerId: string): Promise<void> }).drain(
+        id,
+      )
+      assert.equal(reminders().length, 0, '旧 schema 不应收到 purpose=result 的提醒')
+      assert.equal(external.store.resultReplies.pendingManagerIds().includes(id), true)
+      if (harness === 'codex') {
+        assert.equal(env.current().threadId, env.oldId, '不能自动换掉 Codex 经理')
+        const plan = await env.preview(harness)
+        assert.equal(plan.mode, 'replace')
+        await env.client.call(MANAGER_METHOD.reset, env.input(plan))
+        await until(() => env.running(harness, env.oldId), '用户确认后生成交接摘要')
+        env.end(harness, env.oldId)
+        await until(() => env.current().threadId !== env.oldId, '确认接班后才换线程')
+      }
+      await until(
+        () => env.device.managers.externalReady(env.current()).ready,
+        '实际新工具已安装',
+        5000,
+      )
+      await until(
+        () => {
+          env.device.managers.kick(id)
+          return reminders().length === 1
+        },
+        '升级后送达保留的收尾提醒',
+        5000,
+      )
+      assert.equal(reminders()[0]?.params.threadId, env.current().threadId)
+      if (harness === 'claude-code') assert.equal(env.current().threadId, env.oldId)
+    } finally {
+      await env.close()
+    }
+  })
+
+  test(`${harness}：回报提示按已绑定的工作投递，队列和去重使用实时回执`, async (t) => {
+    const github = await githubMock(t)
+    const env = await setup(harness, { fixture: { github: github.origin } })
+    try {
+      const { id } = env.manager
+      const external = env.device.external
+      assert.ok(external)
+      const store = external.store
+      const replies = store.resultReplies
+      const at = Math.floor(Date.now() / 1000)
+      const sourceId = 'fixture'
+      const seen = () => (harness === 'codex' ? env.codex : env.claude).seen
+      const parentEvents = (method: string) =>
+        seen()
+          .filter((call) => call.method === method && call.params.threadId === env.oldId)
+          .map((call) => parseSessionEvent(call.params.input[0].text).event)
+      const bind = (idNumber: number) => {
+        const { issue } = env.device.managers.issues.call(
+          MANAGER_ISSUE_METHOD.create,
+          {
+            managerId: id,
+            title: `请求 ${idNumber}`,
+            body: '测试',
+            followUp: 'off',
+          },
+          'manager',
+        ) as { issue: ManagerIssue }
+        const issueId = `X-${idNumber}` as const
+        assert.equal(issue.id, issueId)
+        const origin = {
+          ...subject,
+          number: String(idNumber),
+          url: `https://github.com/example/demo/issues/${idNumber}`,
+        }
+        store.bindRef({ ...origin, managerId: id, issueId, origin: 'intake', createdAt: at })
+        replies.accepted(id, issueId, sourceId, origin, at)
+        return { issueId, origin }
+      }
+      const relate = (
+        from: { kind: 'issue' | 'item'; target: string },
+        to: { kind: 'item' | 'thread'; target: string },
+      ) =>
+        env.device.managers.store.saveRelation(id, {
+          id: JSON.stringify([from, to]),
+          kind: 'related',
+          from,
+          to,
+          at,
+          by: 'manager',
+        })
+      const first = bind(1)
+      const answered = bind(2)
+      const queued = bind(3)
+      const acceptReceipt = (
+        result: ReturnType<typeof bind>,
+        action: 'comment' | 'ack_comment_create',
+        purpose: boolean,
+      ) =>
+        replies.confirmed({
+          seq: 1,
+          operationId: 'fixture-receipt',
+          sourceId,
+          managerId: id,
+          issueId: result.issueId,
+          targetRef: result.origin,
+          action,
+          state: 'confirmed',
+          revision: 1,
+          attempts: 1,
+          idempotencyKey: 'fixture',
+          actorThreadId: env.oldId,
+          policyRevision: 1,
+          payloadHash: 'fixture',
+          payloadRef: 'fixture',
+          receipt: {
+            objectId: '12',
+            botUserId: '22',
+            at,
+            url: result.origin.url,
+            verifiedBy: 'response',
+          },
+          ...(purpose ? { resultReply: true } : {}),
+        })
+      acceptReceipt(first, 'ack_comment_create', false)
+      acceptReceipt(answered, 'comment', true)
+      const textInput = (text: string) => [{ type: 'text', text, text_elements: [] }]
+      const startLine = () =>
+        startChild(
+          env.tree,
+          env.oldId,
+          {
+            kind: 'fresh',
+            title: 'GitHub 工作线',
+            prompt: '做测试',
+            harness: 'claude-code',
+            wakeParent: false,
+            worktree: false,
+          },
+          'model',
+        )
+      const child = await startLine()
+      for (const entry of [first, answered])
+        relate({ kind: 'issue', target: entry.issueId }, { kind: 'thread', target: child.threadId })
+      await env.client.call('turn/start', { threadId: env.oldId, input: textInput('继续核对') })
+      await until(() => env.running(harness, env.oldId), '经理正在运行')
+      await until(() => env.claude.running(child.threadId), '工作线正在运行')
+      env.end('claude-code', child.threadId, '真实工作线回报')
+      await until(
+        () =>
+          parentEvents('turn/steer').some((event) => event?.notes[0]?.excerpt === '真实工作线回报'),
+        '工作线回报实时插话',
+      )
+      const sent = parentEvents('turn/steer').find(
+        (event) => event?.notes[0]?.excerpt === '真实工作线回报',
+      )
+      assert.deepEqual(
+        sent?.externalResultReplies?.map(({ issueId }) => issueId),
+        ['X-1'],
+      )
+      assert.equal(replies.reportHint(id, first.issueId), null, '同一 X-n 的回报不再重复提醒')
+
+      env.end(harness, env.oldId)
+      await until(() => !env.tree.isActive(env.oldId), '经理回合结束')
+      const later = await startLine()
+      relate({ kind: 'item', target: 'I-1' }, { kind: 'thread', target: later.threadId })
+      env.device.managers.store.saveRelation(id, {
+        id: 'work-for-x3',
+        kind: 'derived',
+        from: { kind: 'item', target: 'I-1' },
+        to: { kind: 'issue', target: queued.issueId },
+        at,
+        by: 'manager',
+      })
+      env.tree.store.addNote(
+        env.oldId,
+        {
+          threadId: later.threadId,
+          title: 'GitHub 工作线',
+          status: 'completed',
+          turnId: 'queued-turn',
+          excerpt: '排队等待的回报',
+        },
+        false,
+      )
+      await env.client.call('turn/start', { threadId: env.oldId, input: textInput('取排队回报') })
+      const pending = parentEvents('turn/start').find(
+        (event) => event?.notes[0]?.excerpt === '排队等待的回报',
+      )
+      assert.deepEqual(
+        pending?.externalResultReplies?.map(({ issueId }) => issueId),
+        ['X-3'],
+      )
+      assert.equal(replies.reportHint(id, queued.issueId), null)
+
+      const close = (status: 'resolved' | 'closed') => {
+        const current = env.device.managers.issues.get(id, first.issueId)
+        env.device.managers.issues.call(
+          MANAGER_ISSUE_METHOD.update,
+          {
+            managerId: id,
+            id: first.issueId,
+            revision: current.revision,
+            patch: { status },
+            why: '测试收尾',
+          },
+          'manager',
+        )
+      }
+      close('resolved')
+      close('closed')
+      replies.queueReminders()
+      replies.queueReminders()
+      const reminders = () =>
+        env.device.managers.store
+          .deliveries(id)
+          .filter(({ text }) => parseSessionEvent(text).event?.externalResultReplies?.length)
+      assert.equal(reminders().length, 1)
+      assert.equal(replies.missing(id, first.issueId)?.subject.url, first.origin.url)
+      acceptReceipt(first, 'comment', true)
+      assert.equal(reminders().length, 0, '补回后移除还没送达的提醒')
+      assert.equal(replies.missing(id, first.issueId), null)
+
+      // 发出后丢应答，从引擎历史确认已收到，不能再发第二次。
+      const lost = bind(4)
+      replies.finish(id, lost.issueId)
+      replies.queueReminders()
+      const engine = harness === 'codex' ? env.codex : env.claude
+      const steer = engine.handlers['turn/steer']
+      assert.ok(steer)
+      let attempts = 0
+      engine.handlers['turn/steer'] = (params, connection) => {
+        const result = steer(params, connection)
+        if (
+          parseSessionEvent(params.input[0].text).event?.externalResultReplies?.[0]?.issueId ===
+          lost.issueId
+        ) {
+          attempts++
+          throw new Error('应答丢失，消息已提交')
+        }
+        return result
+      }
+      await until(() => {
+        env.device.managers.kick(id)
+        return attempts === 1
+      }, '第一次已发送')
+      await until(() => {
+        env.device.managers.kick(id)
+        return reminders().length === 0
+      }, '历史已确认，出队时不重发')
+      assert.equal(attempts, 1)
+      engine.handlers['turn/steer'] = steer
+
+      const waking = bind(5)
+      relate({ kind: 'issue', target: waking.issueId }, { kind: 'thread', target: later.threadId })
+      env.end(harness, env.oldId)
+      await until(() => !env.tree.isActive(env.oldId), '等待空闲，核对唤醒入口')
+      env.tree.store.addNote(
+        env.oldId,
+        {
+          threadId: later.threadId,
+          title: 'GitHub 工作线',
+          status: 'completed',
+          turnId: 'wake-turn',
+          excerpt: '通过立即处理唤醒',
+        },
+        false,
+      )
+      assert.equal(await env.tree.deliver(env.oldId), 'woken')
+      const wake = parentEvents('turn/start').find(
+        (event) => event?.kind === 'wake' && event.notes[0]?.turnId === 'wake-turn',
+      )
+      assert.deepEqual(
+        wake?.externalResultReplies?.map(({ issueId }) => issueId),
+        ['X-5'],
+      )
+    } finally {
+      await env.close()
+    }
+  })
+}

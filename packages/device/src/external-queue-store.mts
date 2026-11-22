@@ -383,6 +383,7 @@ export class ExternalQueueStore {
       if (receipt) record.receipt = receipt
       if (errorClass) record.errorClass = errorClass
       this.writeOutbox(record)
+      if (outcome === 'confirmed') this.store.resultReplies.confirmed(record)
       // 保留初次试发的未知结局；之后查证的结果另入审计和操作回执。
       if (before.state === 'sending') {
         const finished: ExternalWriteAttempt = {

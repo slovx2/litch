@@ -53,6 +53,7 @@ export type {
   ExternalLabelRoute,
   ExternalManagerAssignment,
   ExternalManagerRecovery,
+  ExternalMissingResultReply,
   ExternalOutboxSummary,
   ExternalOwnerIdentity,
   ExternalReadiness,

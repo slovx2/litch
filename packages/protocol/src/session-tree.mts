@@ -409,6 +409,11 @@ export interface SessionQueuedNote extends SessionEventNote {
 }
 
 export interface SessionEvent {
+  /** 设备根据原始接单和写入回执给经理的提示，不授予额外权限。 */
+  externalResultReplies?: (import('./external-sources.mjs').ExternalMissingResultReply & {
+    sourceId: string
+    confirmed: false
+  })[]
   questionSettlements?: import('./session-pending.mjs').SessionQuestionSettlement[]
   /** manager-* 事件必带；其他事件不带，不改变原有回报的形状。 */
   manager?: ManagerEventData
@@ -476,6 +481,10 @@ function budgetSessionNotes(notes: SessionEventNote[]): SessionEventNote[] {
  * 给模型的说明写在里面：这不是用户说的话，需要细节就用 litch_sessions.read。
  */
 export function formatSessionEvent(event: SessionEvent): string {
+  const resultReplies = (event.externalResultReplies ?? []).map(
+    ({ issueId, subject, sourceId }) =>
+      `- ${issueId} (${subject.kind} #${subject.number}, ${subject.url}): no confirmed result reply since acceptance. When the result is ready, call litch_manager.external_write with intent {"action":"comment","purpose":"result","body":"…"} on the original GitHub subject (sourceId: ${JSON.stringify(sourceId)}, repoId: ${subject.repoId}, number: ${subject.number}). Read issue_get for the current mandate. Summarize the changes, PR, verification and remaining work. If a result write is already queued, check its receipt instead of posting it again. Existing write permissions still apply.`,
+  )
   if (event.kind.startsWith('manager-')) {
     if (!validManagerEvent(event)) throw new Error('Invalid manager session event')
     const manager = event.manager as ManagerEventData
@@ -535,6 +544,7 @@ export function formatSessionEvent(event: SessionEvent): string {
           `For you ${request.requestId} ${JSON.stringify(request.title)}: delivered=${request.delivered};${request.ignored ? ' ignored=true (the user chose not to do this);' : ''} ${JSON.stringify(request.text)}`,
       ),
       manager.text,
+      ...resultReplies,
       `<!-- ${JSON.stringify(event).replace(/>/g, '\\u003e')} -->`,
       `</${SESSION_EVENT_TAG}>`,
     ].join('\n')
@@ -573,6 +583,7 @@ export function formatSessionEvent(event: SessionEvent): string {
     `<${SESSION_EVENT_TAG} kind="${event.kind}">`,
     head,
     ...lines,
+    ...resultReplies,
     ...(event.questionSettlements?.length
       ? [
           '经理处理的问题 / Questions settled by your manager (not answers typed by the user). User corrections take precedence. Do not ask these again unless new information requires a new decision.',

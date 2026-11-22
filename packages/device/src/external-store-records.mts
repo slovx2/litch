@@ -83,6 +83,7 @@ export interface ExternalOutboxRecord extends ExternalOutboxSummary {
   actorThreadId: string
   mandateId?: string
   intakeId?: string
+  resultReply?: true
   policyRevision: number
   payloadHash: string
   /** 仅指向设备内私有载荷；不进入列表、回执或审计。 */

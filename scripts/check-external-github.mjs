@@ -592,7 +592,6 @@ else if (args[0] === 'api' || args[0] === 'pr') {
   mock.setSubjectState(13, 'closed')
   mock.setSubjectState(14, 'closed')
   mock.setSubjectState(15, 'closed', true)
-  mock.setSubjectState(8, 'closed') // X-1 已绑定，继续遵循原有跟进策略。
   clock.now += 311
   await until(
     async () => {
@@ -642,6 +641,67 @@ else if (args[0] === 'api' || args[0] === 'pr') {
     '重新打开后的新提及重新分拣',
     6500,
   )
+  // 在仓库流确认绑定 PR 合并后，一次提醒和三个投影均指回请求所在的 #8。
+  if (pi.running(tid)) pi.end(tid, 'completed', 'Previous unrelated turn')
+  await until(() => !device.sessionTree.isActive(tid), '旧回合结束')
+  const beforeResultWrites = mock.sent.size
+  clock.now += 10
+  mock.setSubjectState(11, 'closed', true)
+  clock.now += 131
+  const resultReminders = () =>
+    ['turn/start', 'turn/steer']
+      .flatMap((method) => pi.sent(method))
+      .filter(
+        ({ threadId, input }) =>
+          threadId === tid && parseSessionEvent(input[0].text).event?.externalResultReplies?.length,
+      )
+  const readIssue = async () => (await final.call('litch/manager/issue/read', issue)).issue
+  const readSource = () => final.call(E.sourceGet, { sourceId: source.sourceId })
+  const readIntake = () => final.call(E.inboxGet, { intakeId: intake.intakeId })
+  await until(
+    async () => (await readIssue()).missingResultReply?.subject.number === '8',
+    'PR 合并后 X-1 标为未回原帖',
+    6500,
+  )
+  await until(() => resultReminders().length === 1, '经理收到一次回帖检查', 6500)
+  assert.equal(mock.sent.size, beforeResultWrites, '设备不代写结果')
+  assert.equal((await readSource()).missingResultReplies[0].issueId, 'X-1')
+  assert.equal((await readIntake()).events[0].missingResultReply.issueId, 'X-1')
+  const finalLegacy = await TestClient.overSocket(socket)
+  await finalLegacy.initialize(coreExtensions)
+  assert.equal(
+    (await finalLegacy.call('litch/manager/issue/read', issue)).issue.missingResultReply,
+    undefined,
+  )
+  const result = resultOf(
+    (
+      await pi.callTool(tid, main, 'external_write', {
+        sourceId: source.sourceId,
+        issueId: 'X-1',
+        mandateId: taken.mandate.mandateId,
+        idempotencyKey: 'result-after-merge',
+        target: { repoId: repo.id, number: '8' },
+        intent: {
+          action: 'comment',
+          purpose: 'result',
+          body: 'Merged #11. Regression checks passed.',
+        },
+      })
+    )?.answer,
+  )
+  assert.equal(result.state, 'queued', JSON.stringify(result))
+  await until(
+    async () =>
+      (await final.call(E.outboxGet, { operationId: result.operationId })).state === 'confirmed',
+    '补回原帖得到 GitHub 确认',
+    6500,
+  )
+  assert.equal((await readIssue()).missingResultReply, undefined)
+  assert.equal((await readSource()).missingResultReplies, undefined)
+  assert.equal((await readIntake()).events[0].missingResultReply, undefined)
+  assert.equal(resultReminders().length, 1)
+  assert.equal([...mock.sent.values()].filter(({ body }) => body.includes('Merged #11.')).length, 1)
+  if (pi.running(tid)) pi.end(tid, 'completed', 'Result posted')
   if (!notifications) {
     const fallback = await final.call(E.sourceGet, { sourceId: source.sourceId })
     assert.equal(fallback.readiness.collect.state, 'ok')
@@ -657,6 +717,7 @@ else if (args[0] === 'api' || args[0] === 'pr') {
     )
     return
   }
+  const feedbackBaseline = mock.states.created
   // 保留仓库历史积压，但评审请求、指派和提及都在一次通知轮询返回。
   mock.setHistory(2300)
   mock.setDiscovery(false)
@@ -696,7 +757,7 @@ else if (args[0] === 'api' || args[0] === 'pr') {
     ],
   )
   await until(
-    () => mock.states.created === writes.created + 3,
+    () => mock.states.created === feedbackBaseline + 3,
     '三个新请求各收到一条状态评论',
     6500,
   )
@@ -712,7 +773,7 @@ else if (args[0] === 'api' || args[0] === 'pr') {
   const deduped = (await final.call(E.inboxList, {})).entries
   for (const number of ['16', '17', '18'])
     assert.equal(deduped.filter(({ subject }) => subject.number === number).length, 1)
-  assert.equal(mock.states.created, writes.created + 3, '仓库兜底和机器人通知不产生额外状态评论')
+  assert.equal(mock.states.created, feedbackBaseline + 3, '仓库兜底和机器人通知不产生额外状态评论')
   assert.ok(
     mock.notificationRequests.every(
       ({ method, since, all }) => method === 'GET' && since && all === 'true',

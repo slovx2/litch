@@ -67,6 +67,10 @@ export class DeviceExternalService {
   private readonly stopSecrets: () => void
   private readonly sourceRevision = new Map<string, number>()
   private readonly readinessCache = new Map<string, string>()
+  private readonly missingReplies = new Map<
+    string,
+    ReturnType<ExternalStore['resultReplies']['missingForSource']>
+  >()
   private readonly refreshAttempt = new Map<string, string>()
   private readonly dirty = new Map<string, string>()
   private readonly outboxRevision = new Map<string, number>()
@@ -282,6 +286,11 @@ export class DeviceExternalService {
 
   project(event: ExternalInboxEvent): ExternalInboxEvent {
     const group = this.store.queue.deliveryGroupForEvent(event)
+    const missingResultReply =
+      event.managerId && event.issueId
+        ? this.store.resultReplies.missing(event.managerId, event.issueId)
+        : null
+    if (missingResultReply) event = { ...event, missingResultReply }
     if (!group) return event
     const manager = this.store.manager.manager(group.managerId)
     const waiting = group.state === 'queued' ? this.sourceWaitReason(group.sourceId) : null
@@ -322,20 +331,23 @@ export class DeviceExternalService {
 
   private refreshForDelivery(manager: Manager, sourceId: string): void {
     if (this.sourceWaitReason(sourceId)) return
+    this.prepareManagerTools(manager)
+  }
+
+  /** 结果回帖提醒也沿用外部投递的升级门禁，不把新工具参数交给旧经理。 */
+  prepareManagerTools(manager: Manager): boolean {
     const { managers } = this.options
     const ready = managers.externalReady(manager)
-    if (
-      ready.ready ||
-      ready.action !== 'refresh' ||
-      !managers.tree.canDeliverExternal(manager.threadId)
-    )
-      return
+    if (ready.ready) return true
+    if (ready.action !== 'refresh' || !managers.tree.canDeliverExternal(manager.threadId))
+      return false
     const saved = managers.store.reset(manager.id)
     // 同一线程的自动刷新只尝试一次；用户取消或失败后留手动入口。
-    if (saved && ['failed', 'summaryFailed'].includes(saved.phase)) return
-    if (this.refreshAttempt.get(manager.id) === manager.threadId) return
+    if (saved && ['failed', 'summaryFailed'].includes(saved.phase)) return false
+    if (this.refreshAttempt.get(manager.id) === manager.threadId) return false
     this.refreshAttempt.set(manager.id, manager.threadId)
     managers.resets.request(manager.id, false)
+    return false
   }
 
   async adminTriage(request: ExternalTriageParams) {
@@ -405,6 +417,17 @@ export class DeviceExternalService {
     this.agent?.sweep()
     const sources = this.store.config.sources()
     if (sources.length === 0) return
+    this.store.resultReplies.queueReminders()
+    for (const id of this.store.resultReplies.pendingManagerIds()) this.options.managers.kick(id)
+    for (const source of sources) {
+      const before = this.missingReplies.get(source.sourceId) ?? []
+      const current = this.store.resultReplies.missingForSource(source.sourceId)
+      if (JSON.stringify(before) === JSON.stringify(current)) continue
+      this.missingReplies.set(source.sourceId, current)
+      this.changed(source)
+      for (const id of new Set([...before, ...current].map(({ managerId }) => managerId)))
+        this.options.managers.changed(id)
+    }
     // 入口独立于仓库页和旧窗口。静态凭据的 HTTP 队列仍串行遵守 GitHub 限流。
     let runningNotifications = [...this.running.keys()].filter((key) =>
       key.startsWith('notifications:'),
