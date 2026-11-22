@@ -145,6 +145,13 @@ export async function managerIssuesProbe() {
   await until('受阻等待原因在默认待处理卡上', () =>
     /等上游修复合并|upstream fix to merge/.test(waitReason() ?? ''),
   )
+  const noReason = () => one('[data-issue="X-9"] [data-issue-wait-reason]')?.textContent
+  await until(
+    '只有缺失等待原因的卡显示占位',
+    () =>
+      /未记录原因|No reason recorded/.test(noReason() ?? '') &&
+      !/未记录原因|No reason recorded/.test(waitReason() ?? ''),
+  )
   await until(
     '默认角标等于待处理列表总数',
     () => !!issueCount() && issueCount() === total()?.split('/')[1],

@@ -214,6 +214,23 @@ export class ManagerIssues {
       },
     }
   }
+  /** 旧版把原因写在审计里。只补本次读取的投影，不更新议题版本或历史。 */
+  private fillBlockedReasons(managerId: string, issues: readonly ManagerIssue[]): void {
+    const missing = issues.filter(
+      (issue) =>
+        issue.kind === 'ordinary' && issue.status === 'blocked' && !issue.blockedReason?.trim(),
+    )
+    if (!missing.length) return
+    const reasons = this.store.issueBlockedReasons(
+      managerId,
+      missing.map(({ id }) => id),
+    )
+    for (const issue of missing) {
+      const reason = reasons.get(issue.id)
+      if (reason) issue.blockedReason = reason
+      else delete issue.blockedReason
+    }
+  }
   get(managerId: string, ref: string, detail = true): ManagerIssue {
     const id = this.resolve(managerId, ref)
     const raw = id.startsWith('X-')
@@ -239,6 +256,7 @@ export class ManagerIssues {
     issue.unread ||= this.store.issueUnread(managerId, id, 'user')
     // 列表只取头字段；不能为了分页遍历所有议题的评论和整份审计。
     if (!detail) return issue
+    this.fillBlockedReasons(managerId, [issue])
     issue.discussion.comments = this.store.issueComments(managerId, id) as ManagerIssueComment[]
     issue.relations = projectedRelations(this.store, managerId).filter(
       (r) => r.from.target === id || r.to.target === id,
@@ -373,6 +391,7 @@ export class ManagerIssues {
       invalid('Invalid issue page cursor or limit.')
     const total = issues.length
     issues = issues.slice(offset, offset + limit)
+    this.fillBlockedReasons(managerId, issues)
     return {
       query,
       total,
