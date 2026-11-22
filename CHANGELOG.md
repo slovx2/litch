@@ -7,8 +7,43 @@ versioning or publishing metadata.
 
 ## 未发布
 
-- 暂停桌面和手机的模型等级排序；派发子会话不再按等级限制，已保存的排序配置保留。
-- Paused model ranking on desktop and mobile. Model ranks no longer limit sub-sessions, and saved rankings are kept.
+## 0.47.0（2026-11-22）
+
+### 中文
+
+- GitHub 无人值守优先通过机器人通知发现 @ 提及、任务指派和评审请求，并保留仓库事件兜底；缺少通知权限时会提示降级，仍可接收请求。
+- 修复修改经理规则或重置后，GitHub 请求被“工具待更新”挡住的问题；确需更新工具时显示原因和恢复入口，等待中的请求会保留。
+- 外部请求完成或提交人工评审时，提醒经理在原 issue 或 PR 回复处理结果；收尾时核对回帖，遗漏时显示“未回原帖”，补回确认后清除。
+- 完善外部请求 X-n 的状态跟进：受阻项显示等待原因，包括升级前已记录的原因；原帖已关闭或合并且已回帖时，提醒经理更新仍未收尾的看板状态，并修正列表角标与筛选结果不一致的问题。
+- GitHub issue 或 PR 关闭、合并后，自动将尚未接单的待分拣项标为已处理，并取消未发送的提醒。
+- 支持通过命令行导出、导入经理看板，便于迁移到其他设备；重复导入不会新增重复项。
+- 无人值守的 Claude Code 经理在空闲 50 分钟且上下文超过 70% 时自动压缩，赶在提示缓存失效前减少额度消耗；默认开启，可在经理设置中关闭或调整时长与比例。
+- 手机端默认折叠已结束的经理；“对话”页签放在首位，从目录进入时默认打开。
+- 已归档会话不再重新出现在活动对话树或经理工作线列表中；可查看归档历史并恢复会话，继续发送消息。
+- 手机配对出码时提示 SSH 跳板、别名和内网地址的直连风险，并提供设备的 Tailscale 地址候选。
+- 设备 Chrome 设置更紧凑，连接成功后自动收起设置步骤，命令可完整复制。
+- Chrome 内部页、网上应用店等受限标签不再混入可接管列表；接管失败时提供更明确的原因和操作提示。
+- 修复 Codex 会话自动标题无法生成的问题，使用当前模型提供商生成标题，不覆盖手动命名。
+- 远程命令默认执行时限延长至 10 分钟，最长可设为 60 分钟。
+- 暂停桌面和手机的模型等级排序与派发等级限制，已保存的排序配置保留。
+
+### English
+
+- Unattended GitHub workflows now prioritize the bot’s notifications for mentions, assignments, and review requests, with repository events as a fallback. Missing notification permissions show a warning without stopping request collection.
+- Fixed GitHub delivery getting stuck behind a tools-update check after manager rules were edited or the manager was reset. When an update is needed, Litch shows the reason and recovery actions while keeping queued requests.
+- Managers are reminded to reply on the original issue or PR when completing an external request or handing it back for review. Closing checks flag missing result replies, and the warning clears once a reply is confirmed.
+- Improved status tracking for external requests (X-n). Blocked items show their waiting reason, including reasons recorded before upgrading. Managers are reminded to finish board items after the linked GitHub thread closes or merges and a result reply is confirmed. List badges now match the selected filter.
+- Unclaimed inbox items are automatically marked handled when their GitHub issue or PR closes or merges, and unsent reminders are canceled.
+- Export and import manager boards from the command line to move them between devices. Importing the same board again does not create duplicates.
+- Unattended Claude Code managers automatically compact their context after 50 minutes of inactivity when context usage exceeds 70%, reducing quota consumption before the prompt cache expires. This is enabled by default; turn it off or adjust the idle time and context threshold in manager settings.
+- On mobile, finished managers are collapsed by default. Chat is the first manager tab and opens by default when entering from the Managers list.
+- Archived conversations no longer reappear in the active conversation tree or manager workline list. Read their archived history or restore them to continue messaging.
+- Phone pairing now warns about SSH jump hosts, aliases, and private addresses that may not be directly reachable from the phone, and offers the device’s Tailscale addresses as alternatives.
+- Device Chrome settings are more compact, collapse setup steps after connecting, and let you copy complete commands.
+- Restricted Chrome tabs, including internal pages and the Chrome Web Store, no longer appear in the list of claimable tabs. Failed claims provide clearer reasons and guidance.
+- Fixed missing automatic Codex conversation titles. Titles use the active model provider and preserve names you set manually.
+- Remote commands now have a default execution timeout of 10 minutes, configurable up to 60 minutes.
+- Paused model ranking and model-rank limits for sub-session dispatch on desktop and mobile. Saved rankings are retained.
 
 ## 0.46.1（2026-11-21）
 
