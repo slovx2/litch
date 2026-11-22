@@ -86,6 +86,28 @@ test('已排除手机记录保留但永不计数；普通 record 不能解除排
   assert.match(summary(next), /已排除，不计数/)
 })
 
+test('修复结案保留历史计数；重复登记不重开，新失败重新进入观察', () => {
+  let data = recordEvent(ledger(), entry())
+  data = recordEvent(data, entry(event(2)))
+  const item = data.cases[0]
+  item.status = 'resolved'
+  assert.throws(() => validateLedger(data), /根因、修复提交/)
+  item.resolution = {
+    fixCommit: 'b'.repeat(40),
+    rootCause: '夹具 PID 写入早于端口监听',
+    reference: 'docs/ci/browser-forward-restart-observation.md',
+  }
+  assert.equal(counts(item).count, 2)
+  assert.match(summary(data), /2 次；待核实 0 次；已修复，保留用例及历史计数/)
+  const duplicate = recordEvent(data, entry(event(2)))
+  assert.equal(duplicate.cases[0].status, 'resolved')
+  const reopened = recordEvent(duplicate, entry(event(3)))
+  assert.equal(reopened.cases[0].status, 'active')
+  assert.equal(counts(reopened.cases[0]).count, 3)
+  assert.deepEqual(reopened.cases[0].resolution, item.resolution)
+  assert.match(summary(reopened), /需要用户审批/)
+})
+
 test('损坏账本、无依据的确认、不同 SHA 的通过证明与重复事件被拒绝', () => {
   assert.throws(() => validateLedger({ ...ledger(), version: 2 }))
   assert.throws(() =>

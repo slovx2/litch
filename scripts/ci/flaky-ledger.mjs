@@ -109,7 +109,7 @@ export function validateLedger(ledger) {
       !nonempty(item.job) ||
       !nonempty(item.test) ||
       keys.has(key) ||
-      !['active', 'excluded'].includes(item.status) ||
+      !['active', 'excluded', 'resolved'].includes(item.status) ||
       !Array.isArray(item.events)
     ) {
       throw new Error('用例键重复或格式无效')
@@ -119,6 +119,13 @@ export function validateLedger(ledger) {
       (!nonempty(item.exclusion?.reason) || !nonempty(item.exclusion?.reference))
     )
       throw new Error('已排除项必须保留用户决定的依据')
+    if (
+      item.status === 'resolved' &&
+      (!sha(item.resolution?.fixCommit) ||
+        !nonempty(item.resolution?.rootCause) ||
+        !nonempty(item.resolution?.reference))
+    )
+      throw new Error('已修复项必须记录根因、修复提交和依据')
     if (mobileE2E(item.job) && item.status !== 'excluded') {
       throw new Error('手机模拟器 E2E 已排除，不准计数')
     }
@@ -158,6 +165,8 @@ export function recordEvent(ledger, { job, test, event }) {
       previous.evidence = event.evidence
     }
   } else {
+    // 新的独立失败重新进入观察，旧结案依据及历史次数均保留。
+    if (item.status === 'resolved') item.status = 'active'
     item.events.push(event)
   }
   item.events.sort((a, b) => a.runId - b.runId || a.attempt - b.attempt || a.jobId - b.jobId)
@@ -185,11 +194,13 @@ export function summary(ledger) {
       const state =
         item.status === 'excluded'
           ? '已排除，不计数'
-          : count >= 3
-            ? '需要用户审批是否移出 Full（经理提交看板决策；批准前保留）'
-            : count === 2
-              ? '接近 3 次审批门槛'
-              : '继续观察'
+          : item.status === 'resolved'
+            ? '已修复，保留用例及历史计数'
+            : count >= 3
+              ? '需要用户审批是否移出 Full（经理提交看板决策；批准前保留）'
+              : count === 2
+                ? '接近 3 次审批门槛'
+                : '继续观察'
       return `${item.job} → ${item.test}：${count} 次；待核实 ${pending} 次；${state}`
     })
     .join('\n')

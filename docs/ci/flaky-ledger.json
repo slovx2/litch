@@ -6,7 +6,15 @@
     {
       "job": "browser / checks",
       "test": "远程借用本机用户标签按控制者改写 localhost；交还后的标签仍保活原隧道",
-      "status": "active",
+      "status": "resolved",
+      "resolution": {
+        "fixCommit": "961844f10c22a04f81dee383e7f252aadd902415",
+        "rootCause": "假 SSH 先写 PID 后开始监听；旧断言只等 PID 变化及进程存活，随即 fetch，存在 ECONNREFUSED 窗口。现在额外等待转发器确认原端口 TCP 就绪（running=true）。",
+        "reference": "docs/ci/browser-forward-restart-observation.md#修复结案",
+        "observedPorts": [49280, 49282, 49278, 65142],
+        "note": "四个端口归入同一用例和同一就绪竞态；49282、49278 由经理汇总提供，不补造缺失的 run/job。端口不是固定值。用例、时限和产品代码保持不变，历史 CI 与本地观察均保留。",
+        "reportedPressureCheck": "实施线报告修复前 40 次失败 19 次，修复后 60 次全部通过；集成验证见引用报告。"
+      },
       "events": [
         {
           "runId": 44751256716,
@@ -711,6 +719,10 @@
     },
     {
       "id": "2026-11-21-i343-browser-forward-restart",
+      "resolution": {
+        "fixCommit": "961844f10c22a04f81dee383e7f252aadd902415",
+        "reference": "docs/ci/browser-forward-restart-observation.md#修复结案"
+      },
       "source": "local",
       "suite": "desktop browser full",
       "test": "远程借用本机用户标签按控制者改写 localhost；交还后的标签仍保活原隧道",
