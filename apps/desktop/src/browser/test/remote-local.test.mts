@@ -519,7 +519,14 @@ test('远程借用本机用户标签按控制者改写 localhost；交还后的�
     await new Promise((resolve) => setTimeout(resolve, 150))
     const before = fake.pid(port)
     process.kill(before, 'SIGTERM')
-    await until('交还后仍在用的转发重建', () => fake.pid(port) !== before && alive(fake.pid(port)))
+    // 假 ssh 先写 PID 再绑定端口；等转发器确认原端口已经能连上，才发验证请求。
+    await until(
+      '交还后仍在用的转发重建并就绪',
+      () =>
+        fake.pid(port) !== before &&
+        alive(fake.pid(port)) &&
+        forwarding.forwarder.local('build', port)?.running === true,
+    )
     assert.match(await get(port), /hello/)
     assert.equal(info.owner.deviceId, 'local')
   } finally {
