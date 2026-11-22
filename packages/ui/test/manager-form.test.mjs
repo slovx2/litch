@@ -67,3 +67,60 @@ test('经理编辑页签：方向键循环，Home 与 End 定位首尾，其余�
   assert.equal(managerTabTarget('runtime', 'Tab'), null)
   assert.equal(managerTabTarget('runtime', 'Enter'), null)
 })
+
+const { checkIdleCompact, idleCompactDraft, managerEditPatch } = await tsImport(
+  '../src/manager/idle-compact-draft.ts',
+  import.meta.url,
+)
+const savedCompact = { enabled: true, idleMinutes: 50, contextPercent: 70 }
+const editable = {
+  name: '经理',
+  rules: '规则',
+  dispatch: {
+    harness: null,
+    model: null,
+    effort: null,
+    worktree: true,
+    merge: 'manager',
+    maxRunningLines: 3,
+  },
+  contact: { desktopNotification: true, unanswered: 'wait' },
+}
+
+test('空闲压缩草稿：越界或空值拦保存；关着时越界值沿用已保存的值', () => {
+  const draft = idleCompactDraft(savedCompact)
+  assert.deepEqual(checkIdleCompact(draft, savedCompact), {
+    minutesOk: true,
+    percentOk: true,
+    value: savedCompact,
+    changed: false,
+  })
+  for (const minutes of ['56', '4', '', '5.5', 'x']) {
+    const check = checkIdleCompact({ ...draft, minutes }, savedCompact)
+    assert.equal(check.minutesOk, false, minutes)
+    assert.equal(check.value, null)
+  }
+  assert.equal(checkIdleCompact({ ...draft, percent: '100' }, savedCompact).percentOk, false)
+  const off = checkIdleCompact({ enabled: false, minutes: '99', percent: '0' }, savedCompact)
+  assert.deepEqual(off, {
+    minutesOk: true,
+    percentOk: true,
+    value: { ...savedCompact, enabled: false },
+    changed: true,
+  })
+  assert.equal(checkIdleCompact({ ...draft, minutes: '45' }, savedCompact).value.idleMinutes, 45)
+})
+
+test('经理编辑保存：只改空闲压缩时只发 idleCompact，不重新提交经理规则', () => {
+  const next = { ...savedCompact, idleMinutes: 40 }
+  assert.deepEqual(managerEditPatch(editable, { ...editable }, next), { idleCompact: next })
+  const rules = managerEditPatch(editable, { ...editable, rules: '新规则' }, next)
+  assert.deepEqual(rules, { ...editable, rules: '新规则', scope: '', idleCompact: next })
+  // 压缩没改：照旧整份发送可编辑字段，不带 idleCompact
+  assert.deepEqual(managerEditPatch(editable, { ...editable }, null), { ...editable, scope: '' })
+})
+
+test('空闲压缩字段的错误定位到运行环境页签', () => {
+  for (const field of ['idleCompact', 'idleCompact.minutes', 'idleCompact.percent'])
+    assert.equal(managerFieldStep(field), 'runtime')
+})

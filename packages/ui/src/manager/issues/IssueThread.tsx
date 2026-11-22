@@ -23,7 +23,7 @@ import { useDiscussionPane } from '../discussion-pane.ts'
 import { RelationLink } from '../RelationLink.tsx'
 import type { IssueCommands } from './data.ts'
 import { IssueDiscussion } from './IssueDiscussion.tsx'
-import { IssueMeta } from './IssueMeta.tsx'
+import { IssueMeta, IssueWaitReason } from './IssueMeta.tsx'
 
 export interface IssueThreadProps {
   manager: ManagerView
@@ -327,11 +327,14 @@ export function IssueThread({
             </header>
           ) : null}
           {mode === 'page' ? (
-            <IssueMeta
-              head={managerIssueHead(issue)}
-              comments={issue.discussion.comments.length}
-              withKind
-            />
+            <>
+              <IssueMeta
+                head={managerIssueHead(issue)}
+                comments={issue.discussion.comments.length}
+                withKind
+              />
+              <IssueWaitReason head={issue} full />
+            </>
           ) : null}
           {mode !== 'pane' || bodyOpen ? (
             <div data-issue-original={issue.id}>

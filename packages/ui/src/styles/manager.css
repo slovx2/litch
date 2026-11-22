@@ -903,6 +903,43 @@
   color: var(--ink-2);
   overflow-wrap: anywhere;
 }
+/* 无人值守一节：开关一行，两个短数值并排；关着时数值仍可见但不可改。 */
+/* 数值行缩进到勾选框文字的起点：勾选框本身 20px（含默认外边距）加 .form-check 的 8px 间距。 */
+.mg-idle-values {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px 28px;
+  margin-top: 6px;
+  padding-left: 28px;
+}
+.mg-form .mg-idle-values > .form-field {
+  margin-bottom: 0;
+  max-width: 240px;
+}
+.mg-num {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.mg-num > .req-input {
+  width: calc(64px * var(--fs));
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.mg-num-unit {
+  color: var(--ink-2);
+}
+.mg-num .req-input:disabled {
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+.mg-idle-values[data-off] .mg-num-field {
+  color: var(--ink-3);
+}
+.mg-idle-values[data-off] .mg-num-unit {
+  color: var(--ink-3);
+}
 .mg-form-foot {
   grid-column: 1 / -1;
 }
@@ -1688,4 +1725,7 @@
 .mg-card-actions .mg-post-compose {
   width: 100%;
   order: 9;
+}
+.mg-idle .form-check:has(> input:disabled) {
+  color: var(--ink-3);
 }

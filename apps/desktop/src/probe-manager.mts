@@ -340,17 +340,24 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await click('[data-manager-id="m1"] .mg-pick')
   await click('[data-act="manager-settings"]')
   await until('经理设置页', () => one('[data-manager="settings"]'))
+  await click('#manager-tab-runtime')
   const compact = '[data-manager-idle-compact]'
   const minutes = await until('无人值守空闲压缩设置', () =>
     one<HTMLInputElement>(`${compact} input[inputmode="numeric"]`),
   )
   if (minutes.value !== '50') throw new Error('空闲压缩默认时间不正确')
   fill(minutes, '56')
+  await click('.mg-form button[type="submit"]')
   await until('拒绝超过缓存时间上限', () => minutes.getAttribute('aria-invalid') === 'true')
   fill(minutes, '54')
-  await until('可保存空闲压缩设置', () => !one<HTMLButtonElement>(`${compact} button`)?.disabled)
-  await click(`${compact} button`)
-  await until('空闲压缩设置已保存', () => one(`${compact} [role="status"]`))
+  await click('.mg-form button[type="submit"]')
+  await until('从运行环境保存空闲压缩后返回看板', () => one('[data-act="manager-settings"]'))
+  await click('[data-act="manager-settings"]')
+  await click('#manager-tab-runtime')
+  await until(
+    '重新打开确认空闲压缩设置已保存',
+    () => one<HTMLInputElement>(`${compact} [data-manager-idle="minutes"]`)?.value === '54',
+  )
   await click('[data-sidebar-mode="chat"]')
   await until('切对话树仍显示经理设置页', () => one('[data-manager="settings"]'))
   await click('[data-sidebar-mode="manager"]')

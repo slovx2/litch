@@ -347,7 +347,9 @@ conversation. Creation, board answers and ending have their own event labels as 
 
 ### 无人值守空闲压缩 / Unattended idle compaction
 
-在桌面或手机的经理设置 → 无人值守中，可为 Claude Code 经理配置空闲压缩。默认开启；
+桌面经理设置的“运行环境”页签下方有“无人值守”一节，和其他设置一起由页面的“保存”提交；
+手机上点经理页右上角的设置。只对 Claude Code 经理显示，设备不支持外部来源时不显示，
+还没给经理分配 GitHub 仓库时整节禁用并说明原因。默认开启；关闭后两个数值保留但不可改。
 只有分配了外部来源，且实际占用超过 70% 时才运行。空闲默认 50 分钟，可设 5–55 分钟；
 占用阈值可设 1–99%。空闲时长应短于提示缓存有效期；例如缓存有效期为一小时，可用默认值，
 让压缩尽量在缓存失效前发起。
@@ -356,8 +358,10 @@ conversation. Creation, board answers and ending have their own event labels as 
 有输入或投递在排队时不压缩。自动压缩走 Claude 原生路径，期间到达的回报和外部提醒继续排队，
 压缩完成后投递。同一轮空闲最多尝试一次。看板概览显示最近一次成功的时间和压缩前后占用。
 
-In a manager’s Settings → Unattended on desktop or phone, configure idle compaction for Claude Code.
-It is enabled by default and runs only for managers assigned to an external source. The default is
+On desktop, open a manager’s Settings → Environment; the Unattended section is saved with the page’s Save
+button. On a phone, tap the settings button on the manager page. It appears only for Claude Code
+managers on devices with external sources, and stays disabled with a reason until GitHub repositories
+are assigned to the manager. Turning it off keeps both values visible but read-only. It is enabled by default and runs only for managers assigned to an external source. The default is
 50 idle minutes and usage above 70%. Set 5–55 minutes and a 1–99% threshold. Set the delay below your
 prompt cache lifetime; with a one-hour cache, the default aims to compact before the cache expires.
 
@@ -908,9 +912,9 @@ When a manager finishes an accepted GitHub request or hands it back for review, 
 
 A workline report linked to an accepted X-n can carry the original GitHub link and a reply reminder. The manager writes the result using `external_write` on that original thread, with `intent.purpose` set to `result`. Only a confirmed write counts. Device status comments, triage acknowledgments and reactions do not count. When X-n is resolved or closed, or a linked issue closes or PR merges on GitHub, Litch checks again. If there is no receipt, it reminds the manager once and shows **Result not posted** with an original-thread link on the board, in Unattended settings and in inbox details. The label clears once the reply is confirmed. Litch never blocks closure or writes the result itself. Upgrading preserves replies supported by earlier receipts and does not wake managers about items already closed.
 
-经理用看板状态记录外部请求的进展：接单后标为进行中；等别人时标为受阻，写明等谁、条件和下次检查时间，并保持跟进；交付并确认回帖后标为已解决；误发、重复或已被接替的标为已关闭，有接替议题时加上关联。桌面和手机的“待处理”同时列出开放和受阻项，受阻项显示等待原因。旧版议题会沿用最近一次转为受阻时记在时间线里的原因。普通议题页签选中时，角标是当前筛选结果的总数。接单后核实 GitHub 主题已关闭或合并、且确认已回帖时，如果看板仍是开放或进行中，Litch 只提醒经理一次。更新看板状态不会关闭、重开或合并 GitHub 主题。
+经理用看板状态记录外部请求的进展：接单后标为进行中；等别人时标为受阻，写明等谁、条件和下次检查时间，并保持跟进；交付并确认回帖后标为已解决；误发、重复或已被接替的标为已关闭，有接替议题时加上关联。桌面和手机的“待处理”同时列出开放和受阻项。受阻卡片的小字行和其他状态一样只写“受阻 · 创建者 · 时间”，等待原因单独一行写在下面，最多两行，展开卡片或打开完整页看全文；没有记录时写“未记录原因”。旧版议题会沿用最近一次转为受阻时记在时间线里的原因。普通议题页签选中时，角标是当前筛选结果的总数。接单后核实 GitHub 主题已关闭或合并、且确认已回帖时，如果看板仍是开放或进行中，Litch 只提醒经理一次。更新看板状态不会关闭、重开或合并 GitHub 主题。
 
-Managers keep external requests current on the board. Mark accepted work In progress. When waiting on someone, mark it Blocked, record who or what can unblock it and when to check again, and keep follow-up on. Mark delivered work Resolved after the result reply is confirmed. Close mistaken, duplicate or superseded requests and link any replacement. On desktop and mobile, To do includes open and blocked items and shows why the blocked items are waiting. Older issues use the reason recorded the last time they became blocked. The selected Issues tab counts the current filtered list. If Litch verifies after acceptance that a linked GitHub issue or PR has closed or merged, and a result reply is confirmed, Litch reminds the manager once if the board still says Open or In progress. Updating the board does not close, reopen or merge anything on GitHub.
+Managers keep external requests current on the board. Mark accepted work In progress. When waiting on someone, mark it Blocked, record who or what can unblock it and when to check again, and keep follow-up on. Mark delivered work Resolved after the result reply is confirmed. Close mistaken, duplicate or superseded requests and link any replacement. On desktop and mobile, To do includes open and blocked items. A blocked card’s meta line reads “Blocked · author · time” like other states; the waiting reason sits on its own line below, up to two lines, with the full text in the expanded card or full page, or “No reason recorded” when none was given. Older issues use the reason recorded the last time they became blocked. The selected Issues tab counts the current filtered list. If Litch verifies after acceptance that a linked GitHub issue or PR has closed or merged, and a result reply is confirmed, Litch reminds the manager once if the board still says Open or In progress. Updating the board does not close, reopen or merge anything on GitHub.
 
 经理的文字规则可以随时保存，下一回合按新规则执行，GitHub 请求照常投递。旧工具确实需要更新时，收件箱和设备的「无人值守」会显示原因；有候选在等待时，经理看板也会显示恢复入口。Claude Code 会在满足投递条件时尝试原地刷新；若刷新失败，可按提示重试。需要换会话的经理走原有的接班确认。
 

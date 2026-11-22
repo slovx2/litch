@@ -13,7 +13,7 @@ export const enManagerIssues = {
   'issue.status.open': 'Open',
   'issue.status.in_progress': 'In progress',
   'issue.status.blocked': 'Blocked',
-  'issue.waitingWithReason': 'Waiting: {reason}',
+  'issue.waiting': 'Waiting',
   'issue.waiting.noReason': 'No reason recorded',
   'issue.status.resolved': 'Resolved',
   'issue.status.closed': 'Closed',

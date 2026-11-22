@@ -471,7 +471,8 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
       wire={page.wire}
       actions={[
         ...reset.cancelActions,
-        ...(manager.idleCompact && manager.status === 'active'
+        // 空闲压缩只对分配了外部来源的经理生效，设备不支持外部来源时不给入口。
+        ...(manager.idleCompact && manager.status === 'active' && device?.externalSources === true
           ? [
               {
                 label: t('manager.settings'),
@@ -858,6 +859,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
       {idleSettings && manager.idleCompact ? (
         <IdleCompactSettings
           manager={manager}
+          device={device}
           saved={manager.idleCompact}
           disabled={device?.connection !== 'online' || manager.status !== 'active'}
           onClose={() => setIdleSettings(false)}

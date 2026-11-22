@@ -30,7 +30,11 @@ export function managerStepError(
 /** 设备字段路径对应表单步骤；隐藏协议字段指向可重新填写的基本信息。 */
 export function managerFieldStep(field: string): ManagerFormStep | null {
   if (['name', 'scope', 'rules', 'firstTask', 'template'].includes(field)) return 'basic'
-  if (['cwd', 'harness', 'model', 'effort', 'permission'].includes(field)) return 'runtime'
+  if (
+    ['cwd', 'harness', 'model', 'effort', 'permission', 'idleCompact'].includes(field) ||
+    field.startsWith('idleCompact.')
+  )
+    return 'runtime'
   if (
     field === 'dispatch' ||
     field.startsWith('dispatch.') ||

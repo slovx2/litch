@@ -47,7 +47,6 @@ import { Decisions } from './Decisions.tsx'
 import { DiscussionPane } from './DiscussionPane.tsx'
 import { ManagerFeaturesContext, useManagerBoard } from './data.ts'
 import { DiscussionPaneContext } from './discussion-pane.ts'
-import { IdleCompactSettings } from './IdleCompactSettings.tsx'
 import { idleCompactLabel } from './idle-compact-label.ts'
 import { IssueOrderSelect } from './issue-order.tsx'
 import { useIssueCounts, useManagerIssues } from './issues/data.ts'
@@ -483,14 +482,6 @@ export function ManagerPage({
             onCancel={() => setSettings(false)}
             onCreated={() => setSettings(false)}
           />
-          {manager.idleCompact ? (
-            <IdleCompactSettings
-              key={manager.id}
-              manager={manager}
-              saved={manager.idleCompact}
-              disabled={disabled}
-            />
-          ) : null}
         </div>
       </section>
     )

@@ -274,12 +274,38 @@
   gap: 5px;
   color: var(--ink-2);
 }
-.mg-issue-meta [data-issue-status="blocked"] {
-  max-width: 100%;
+/* 受阻的等待原因：元信息行下面单独一行，前面是弱化的“等待”；列表里最多两行。 */
+.mg-issue-wait {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: calc(12px * var(--fs));
+  line-height: 1.5;
+  color: var(--ink-2);
 }
-.mg-issue-meta [data-issue-wait-reason] {
+.mg-issue-wait-label {
+  flex: none;
+  padding: 0 5px;
+  border-radius: var(--r1);
+  background: var(--sunken);
+  color: var(--ink-3);
+  font-size: calc(11px * var(--fs));
+}
+.mg-issue-wait-text {
   min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   overflow-wrap: anywhere;
+}
+.mg-issue-wait[data-full] .mg-issue-wait-text {
+  display: block;
+  overflow: visible;
+}
+.mg-issue-wait[data-empty] .mg-issue-wait-text {
+  color: var(--ink-3);
 }
 .mg-issue-meta [data-follow="off"] {
   color: var(--wait);

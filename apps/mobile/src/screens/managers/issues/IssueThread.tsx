@@ -17,6 +17,7 @@ import { useGrow } from '../../../detail/composer/grow'
 import { useT } from '../../../ui/i18n'
 import { Chip } from '../../../ui/kit/controls'
 import { Fold, IconButton } from '../../../ui/kit/Icon'
+import { plainPreview } from '../../../ui/plain-text'
 import { useTheme } from '../../../ui/theme'
 import { Byline } from '../Byline'
 import { IssueExternal } from '../external/IssueExternal'
@@ -59,7 +60,8 @@ export function issueStateColor(c: ReturnType<typeof useTheme>['c'], status: str
   return c.ink3
 }
 
-/** 一行小字，状态不另占一行；放不下时折行。列表按类型分页签，卡上不写类型；抽屉和完整页带上 */
+/** 一行小字，状态不另占一行；放不下时折行。列表按类型分页签，卡上不写类型；抽屉和完整页带上。
+ *  受阻的等待原因不挤进这一行，由 IssueWaitLine 单独画在下面。 */
 export function IssueMetaLine({
   head,
   comments,
@@ -82,11 +84,7 @@ export function IssueMetaLine({
       <View style={[styles.dot, { backgroundColor: issueStateColor(c, head.status) }]} />
       <Text style={{ color: c.ink3, fontSize: font.size.meta, flexShrink: 1 }}>
         <Text style={{ color: c.ink2 }}>
-          {head.kind === 'ordinary' && head.status === 'blocked'
-            ? t('issue.waitingWithReason', {
-                reason: head.blockedReason ?? t('issue.waiting.noReason'),
-              })
-            : t(`issue.status.${head.status}` as Parameters<typeof t>[0])}
+          {t(`issue.status.${head.status}` as Parameters<typeof t>[0])}
         </Text>
         {` · ${parts.join(' · ')}`}
         {head.kind === 'ordinary' && head.followUp === 'off' ? (
@@ -95,6 +93,30 @@ export function IssueMetaLine({
       </Text>
       {head.missingResultReply ? <MissingResultReply reply={head.missingResultReply} /> : null}
     </View>
+  )
+}
+
+/** 受阻普通 issue 的等待原因：弱化的“等待”加纯文字原因；列表里最多两行，抽屉和完整页看全文。 */
+export function IssueWaitLine({
+  head,
+  full = false,
+}: {
+  head: Pick<ManagerIssueHead, 'id' | 'kind' | 'status' | 'blockedReason'>
+  full?: boolean
+}) {
+  const t = useT()
+  const { c, font } = useTheme()
+  if (head.kind !== 'ordinary' || head.status !== 'blocked') return null
+  const reason = head.blockedReason ? plainPreview(head.blockedReason) : ''
+  return (
+    <Text
+      testID={`issue-wait:${head.id}`}
+      numberOfLines={full ? undefined : 2}
+      style={{ color: reason ? c.ink2 : c.ink3, fontSize: font.size.meta }}
+    >
+      <Text style={{ color: c.ink3 }}>{`${t('issue.waiting')}  `}</Text>
+      {reason || t('issue.waiting.noReason')}
+    </Text>
   )
 }
 

@@ -20,7 +20,7 @@ import { BoardActionScrollView, CardActionArea, CardActions } from '../CardActio
 import { Issue } from '../Issue'
 import { IssueContext } from '../IssueRelations'
 import { useIssueCommands, useManagerIssues } from './data'
-import { IssueComposer, IssueMetaLine, IssueThread } from './IssueThread'
+import { IssueComposer, IssueMetaLine, IssueThread, IssueWaitLine } from './IssueThread'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ManagerIssue'>
 
@@ -105,6 +105,7 @@ export function ManagerIssueScreen({ route, navigation }: Props) {
             }}
             comments={issue.discussion.comments.length}
           />
+          <IssueWaitLine full head={issue} />
           {offline ? (
             <Text testID="issue-offline" style={{ color: c.wait, fontSize: font.size.meta }}>
               {t('issue.offline')}
