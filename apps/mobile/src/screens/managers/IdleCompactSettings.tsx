@@ -1,55 +1,62 @@
+// 手机上的经理设置：无人值守 · 空闲自动压缩。开关与名称同一行，两个短数值并排；只提交 idleCompact。
 import {
+  type DeviceView,
   IDLE_COMPACT_MINUTES,
   IDLE_COMPACT_PERCENT,
-  idleCompactInteger,
   type ManagerIdleCompactSettings,
   type ManagerView,
 } from '@litch/core'
 import { useState } from 'react'
-import { Switch, Text, View } from 'react-native'
+import { StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
+import {
+  checkIdleCompact,
+  idleCompactDraft,
+} from '../../../../../packages/ui/src/manager/idle-compact-draft.ts'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Button, Field, Row, SectionLabel } from '../../ui/kit/controls'
+import { Button } from '../../ui/kit/controls'
 import { Dialog } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
+import { useExternalDevice } from './external/use-external'
 
 export function IdleCompactSettings({
   manager,
+  device,
   saved,
   disabled,
   onClose,
 }: {
   manager: ManagerView
+  device: DeviceView | undefined
   saved: ManagerIdleCompactSettings
   disabled: boolean
   onClose(): void
 }) {
   const t = useT()
   const channel = useChannel()
-  const { c } = useTheme()
-  const [enabled, setEnabled] = useState(saved.enabled)
-  const [minutes, setMinutes] = useState(String(saved.idleMinutes))
-  const [percent, setPercent] = useState(String(saved.contextPercent))
+  const theme = useTheme()
+  const { c, font } = theme
+  const [draft, setDraft] = useState(() => idleCompactDraft(saved))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const idleMinutes = Number(minutes)
-  const contextPercent = Number(percent)
-  const minutesOk = idleCompactInteger(idleMinutes, IDLE_COMPACT_MINUTES)
-  const percentOk = idleCompactInteger(contextPercent, IDLE_COMPACT_PERCENT)
-  const unchanged =
-    enabled === saved.enabled &&
-    idleMinutes === saved.idleMinutes &&
-    contextPercent === saved.contextPercent
+  const config = useExternalDevice(manager.deviceId, device?.externalSources === true)
+    ?.configuration?.value
+  // 还没给经理分配仓库时不会运行：整节禁用并说明原因（配置未读到前不提前下结论）。
+  const unavailable = Boolean(
+    config && !config.assignments.find((one) => one.managerId === manager.id)?.repoIds.length,
+  )
+  const check = checkIdleCompact(draft, saved)
+  const locked = disabled || busy || unavailable
   async function submit() {
-    if (busy || disabled || unchanged || !minutesOk || !percentOk) return
+    if (locked || !check.changed || !check.value) return
     setBusy(true)
     setError('')
     try {
       await channel.command('managers.update', {
         deviceId: manager.deviceId,
         managerId: manager.id,
-        patch: { idleCompact: { enabled, idleMinutes, contextPercent } },
+        patch: { idleCompact: check.value },
       })
       onClose()
     } catch (cause) {
@@ -58,58 +65,99 @@ export function IdleCompactSettings({
       setBusy(false)
     }
   }
+  const valuesOff = locked || !draft.enabled
+  const number = (
+    field: 'minutes' | 'percent',
+    label: string,
+    unit: string,
+    ok: boolean,
+    range: { min: number; max: number },
+  ) => (
+    <View style={styles.field}>
+      <Text style={[styles.label, { color: valuesOff ? c.ink3 : c.ink2 }]}>{label}</Text>
+      <View style={styles.inputRow}>
+        <TextInput
+          accessibilityLabel={label}
+          testID={`manager-idle-${field}`}
+          keyboardType="number-pad"
+          value={draft[field]}
+          editable={!valuesOff}
+          onChangeText={(value) => setDraft({ ...draft, [field]: value })}
+          style={[
+            styles.input,
+            {
+              color: valuesOff ? c.ink3 : c.ink,
+              backgroundColor: valuesOff ? c.panel : c.raised,
+              borderColor: ok ? c.line2 : c.err,
+              borderRadius: theme.radius.m,
+              minHeight: theme.hit,
+              fontFamily: font.mono,
+            },
+          ]}
+        />
+        <Text style={{ color: valuesOff ? c.ink3 : c.ink2 }}>{unit}</Text>
+      </View>
+      {!ok ? (
+        <Text style={[styles.note, { color: c.err }]}>{t('manager.idleCompact.range', range)}</Text>
+      ) : null}
+    </View>
+  )
   return (
     <Dialog
       visible
       onClose={onClose}
       footer={
-        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+        <View style={styles.footer}>
           <Button kind="quiet" label={t('app.cancel')} onPress={onClose} />
           <Button
             label={t('manager.save')}
             busy={busy}
             testID="manager-idle-save"
-            disabled={disabled || unchanged || !minutesOk || !percentOk}
+            disabled={locked || !check.changed || !check.value}
             onPress={() => void submit()}
           />
         </View>
       }
     >
-      <View style={{ gap: 10 }} testID="manager-idle-compact">
-        <SectionLabel>{t('manager.unattended')}</SectionLabel>
-        <Row
-          title={t('manager.idleCompact.enabled')}
-          right={
+      <View style={styles.body} testID="manager-idle-compact">
+        <Text style={{ color: c.ink, fontSize: font.size.body, fontWeight: '600' }}>
+          {t('manager.unattended')}
+        </Text>
+        <View>
+          <View style={styles.switchRow}>
+            <Text
+              style={{ flex: 1, color: unavailable ? c.ink3 : c.ink, fontSize: font.size.body }}
+            >
+              {t('manager.idleCompact.enabled')}
+            </Text>
             <Switch
-              value={enabled}
-              onValueChange={setEnabled}
-              disabled={disabled || busy}
+              value={draft.enabled}
+              onValueChange={(enabled) => setDraft({ ...draft, enabled })}
+              disabled={locked}
               accessibilityLabel={t('manager.idleCompact.enabled')}
               testID="manager-idle-enabled"
             />
-          }
-        />
-        <Text style={{ color: c.ink2 }}>{t('manager.idleCompact.hint')}</Text>
-        <Field
-          label={t('manager.idleCompact.minutes')}
-          accessibilityLabel={t('manager.idleCompact.minutes')}
-          keyboardType="number-pad"
-          testID="manager-idle-minutes"
-          value={minutes}
-          onChangeText={setMinutes}
-          editable={!disabled && !busy}
-          {...(!minutesOk ? { error: t('manager.idleCompact.range', IDLE_COMPACT_MINUTES) } : {})}
-        />
-        <Field
-          label={t('manager.idleCompact.percent')}
-          accessibilityLabel={t('manager.idleCompact.percent')}
-          keyboardType="number-pad"
-          testID="manager-idle-percent"
-          value={percent}
-          onChangeText={setPercent}
-          editable={!disabled && !busy}
-          {...(!percentOk ? { error: t('manager.idleCompact.range', IDLE_COMPACT_PERCENT) } : {})}
-        />
+          </View>
+          <Text style={[styles.note, { color: c.ink3 }]}>
+            {t(unavailable ? 'manager.idleCompact.unavailable' : 'manager.idleCompact.hint')}
+          </Text>
+        </View>
+        <View style={styles.values}>
+          {number(
+            'minutes',
+            t('manager.idleCompact.minutes'),
+            t('manager.idleCompact.minutesUnit'),
+            check.minutesOk,
+            IDLE_COMPACT_MINUTES,
+          )}
+          {number(
+            'percent',
+            t('manager.idleCompact.percent'),
+            '%',
+            check.percentOk,
+            IDLE_COMPACT_PERCENT,
+          )}
+        </View>
         {error ? (
           <Text role="alert" style={{ color: c.err }}>
             {error}
@@ -119,3 +167,15 @@ export function IdleCompactSettings({
     </Dialog>
   )
 }
+
+const styles = StyleSheet.create({
+  body: { gap: 14 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  note: { fontSize: 12, lineHeight: 17 },
+  values: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 20, rowGap: 10 },
+  field: { gap: 6, maxWidth: 150 },
+  label: { fontSize: 13, fontWeight: '500' },
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  input: { width: 72, borderWidth: 1, paddingHorizontal: 10, fontSize: 15, textAlign: 'right' },
+  footer: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
+})

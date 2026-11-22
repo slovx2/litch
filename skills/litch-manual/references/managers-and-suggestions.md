@@ -347,7 +347,9 @@ conversation. Creation, board answers and ending have their own event labels as 
 
 ### 无人值守空闲压缩 / Unattended idle compaction
 
-在桌面或手机的经理设置 → 无人值守中，可为 Claude Code 经理配置空闲压缩。默认开启；
+桌面经理设置的“运行环境”页签下方有“无人值守”一节，和其他设置一起由页面的“保存”提交；
+手机上点经理页右上角的设置。只对 Claude Code 经理显示，设备不支持外部来源时不显示，
+还没给经理分配 GitHub 仓库时整节禁用并说明原因。默认开启；关闭后两个数值保留但不可改。
 只有分配了外部来源，且实际占用超过 70% 时才运行。空闲默认 50 分钟，可设 5–55 分钟；
 占用阈值可设 1–99%。空闲时长应短于提示缓存有效期；例如缓存有效期为一小时，可用默认值，
 让压缩尽量在缓存失效前发起。
@@ -356,8 +358,10 @@ conversation. Creation, board answers and ending have their own event labels as 
 有输入或投递在排队时不压缩。自动压缩走 Claude 原生路径，期间到达的回报和外部提醒继续排队，
 压缩完成后投递。同一轮空闲最多尝试一次。看板概览显示最近一次成功的时间和压缩前后占用。
 
-In a manager’s Settings → Unattended on desktop or phone, configure idle compaction for Claude Code.
-It is enabled by default and runs only for managers assigned to an external source. The default is
+On desktop, open a manager’s Settings → Environment; the Unattended section is saved with the page’s Save
+button. On a phone, tap the settings button on the manager page. It appears only for Claude Code
+managers on devices with external sources, and stays disabled with a reason until GitHub repositories
+are assigned to the manager. Turning it off keeps both values visible but read-only. It is enabled by default and runs only for managers assigned to an external source. The default is
 50 idle minutes and usage above 70%. Set 5–55 minutes and a 1–99% threshold. Set the delay below your
 prompt cache lifetime; with a one-hour cache, the default aims to compact before the cache expires.
 

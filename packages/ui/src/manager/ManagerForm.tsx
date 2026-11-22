@@ -1,5 +1,7 @@
 import {
   type DeviceView,
+  IDLE_COMPACT_MINUTES,
+  IDLE_COMPACT_PERCENT,
   keys,
   MODEL_RANKING_ENABLED,
   projectPermissionChoice,
@@ -23,6 +25,7 @@ import { EFFORT_TEXT } from '../composer/efforts.ts'
 import { useProjectPermission } from '../composer/project-permission.ts'
 import { SettingsBar, useComposeOptions, useNewSessionDefaults } from '../composer/SettingsBar.tsx'
 import { ManagerGithub } from '../external/Assignments.tsx'
+import { useExternalDevice } from '../external/data.ts'
 import { PathPicker } from '../path-picker/PathPicker.tsx'
 import {
   MANAGER_FORM_STEPS,
@@ -32,6 +35,8 @@ import {
   managerTabTarget,
 } from './form-steps.ts'
 import { useBoardFormKeys } from './form-submit-keys.ts'
+import { IdleCompactFields } from './IdleCompactSettings.tsx'
+import { checkIdleCompact, idleCompactDraft, managerEditPatch } from './idle-compact-draft.ts'
 import { ManagerLimitHint } from './ManagerLimitHint.tsx'
 import {
   fitManagerHarness,
@@ -83,6 +88,19 @@ export function ManagerForm({
     return recallManager(device, emptyDraft())
   })
   const [step, setStep] = useState<ManagerFormStep>('basic')
+  const [compact, setCompact] = useState(() =>
+    manager?.idleCompact ? idleCompactDraft(manager.idleCompact) : null,
+  )
+  // 空闲压缩只对分配了外部来源的经理生效：设备不支持外部来源时不显示，未分配仓库时禁用。
+  const externalSources = Boolean(manager?.idleCompact) && device?.externalSources === true
+  const external = useExternalDevice(deviceId, externalSources)
+  const externalConfig = external?.configuration?.value
+  const compactUnavailable = Boolean(
+    externalConfig &&
+      !externalConfig.assignments.find((one) => one.managerId === manager?.id)?.repoIds.length,
+  )
+  const compactCheck =
+    manager?.idleCompact && compact ? checkIdleCompact(compact, manager.idleCompact) : null
   const stepIndex = MANAGER_FORM_STEPS.findIndex((entry) => entry.id === step)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -168,7 +186,16 @@ export function ManagerForm({
       )
       return
     }
-    if (step !== 'basic') {
+    if (externalSources && compactCheck && !compactCheck.value) {
+      const minutes = !compactCheck.minutesOk
+      showError(
+        t('manager.idleCompact.range', minutes ? IDLE_COMPACT_MINUTES : IDLE_COMPACT_PERCENT),
+        minutes ? 'idleCompact.minutes' : 'idleCompact.percent',
+      )
+      return
+    }
+    // 编辑时运行环境只读（该页签只能改空闲压缩），不复核经理自身的模型选择。
+    if (manager ? step === 'dispatch' : step !== 'basic') {
       const harness = step === 'runtime' ? form.harness : (form.dispatch.harness ?? form.harness)
       if (!device?.harnesses.some((entry) => entry.id === harness && entry.state === 'ready')) {
         showError(t('manager.harnessRequired'), step === 'runtime' ? 'harness' : 'dispatch.harness')
@@ -212,13 +239,13 @@ export function ManagerForm({
         await channel.command('managers.update', {
           deviceId,
           managerId: manager.id,
-          patch: {
-            name: form.name,
-            scope: '',
-            rules: form.rules,
-            dispatch: form.dispatch,
-            contact: form.contact,
-          },
+          patch: managerEditPatch(
+            manager,
+            form,
+            externalSources && !compactUnavailable && compactCheck?.changed
+              ? compactCheck.value
+              : null,
+          ),
         })
         onCreated({ deviceId, sessionId: manager.threadId, managerId: manager.id })
         return
@@ -337,7 +364,7 @@ export function ManagerForm({
           ) : null}
         </section>
         <section
-          className="mng-sec mg-form-grid mg-panel"
+          className={manager ? 'mg-panel' : 'mng-sec mg-form-grid mg-panel'}
           id="manager-panel-runtime"
           data-manager-panel="runtime"
           tabIndex={-1}
@@ -346,32 +373,47 @@ export function ManagerForm({
           aria-labelledby="manager-tab-runtime"
         >
           {manager ? (
-            (
-              [
-                ['manager.device', device ? t.text(device.name) : manager.deviceId],
-                ['manager.cwd', manager.cwd],
-                ['manager.harness', nameOf(device, manager.harness, t)],
-                ['manager.model', manager.model ?? t('manager.default')],
-                ['manager.effort', manager.effort ?? t('manager.default')],
-              ] as const
-            )
-              .map(([label, value]) => (
-                <div className="form-field" key={label}>
-                  <span>{t(label)}</span>
-                  <span className="mg-fixed">{value}</span>
-                </div>
-              ))
-              .concat(
-                device ? (
-                  <ManagerGithub
-                    key="github"
-                    device={device}
-                    manager={{ id: manager.id, name: manager.name }}
-                  />
-                ) : (
-                  []
-                ),
-              )
+            <>
+              <div className="mng-sec mg-form-grid">
+                {(
+                  [
+                    ['manager.device', device ? t.text(device.name) : manager.deviceId],
+                    ['manager.cwd', manager.cwd],
+                    ['manager.harness', nameOf(device, manager.harness, t)],
+                    ['manager.model', manager.model ?? t('manager.default')],
+                    ['manager.effort', manager.effort ?? t('manager.default')],
+                  ] as const
+                )
+                  .map(([label, value]) => (
+                    <div className="form-field" key={label}>
+                      <span>{t(label)}</span>
+                      <span className="mg-fixed">{value}</span>
+                    </div>
+                  ))
+                  .concat(
+                    device ? (
+                      <ManagerGithub
+                        key="github"
+                        device={device}
+                        manager={{ id: manager.id, name: manager.name }}
+                      />
+                    ) : (
+                      []
+                    ),
+                  )}
+              </div>
+              {externalSources && compact && compactCheck ? (
+                <IdleCompactFields
+                  draft={compact}
+                  check={compactCheck}
+                  unavailable={compactUnavailable}
+                  onChange={(next) => {
+                    setCompact(next)
+                    setError('')
+                  }}
+                />
+              ) : null}
+            </>
           ) : (
             <>
               <label className="form-field">
@@ -688,7 +730,8 @@ export function ManagerForm({
         </section>
       </fieldset>
       <footer className="tk-form-foot mg-form-foot">
-        {error ? (
+        {/* 空闲压缩的越界提示紧贴字段显示，底部不重复。 */}
+        {error && !errorField.startsWith('idleCompact.') ? (
           <p className="err" role="alert" id="manager-form-error">
             {error}
           </p>
