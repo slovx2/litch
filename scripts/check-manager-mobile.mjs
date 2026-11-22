@@ -111,6 +111,13 @@ try {
     'true',
     '未指定页签时默认控制台',
   )
+  assert.deepEqual(
+    await read(`[...document.querySelectorAll('[data-testid^="manager-tab:"]')]
+      .map((tab) => tab.dataset.testid.split(':').at(-1)).filter((key) => key !== 'github')`),
+    ['chat', 'console', 'lines', 'overview'],
+    '手机经理页签把对话放在最前',
+  )
+  await shot('mobile-manager-tabs')
   const press = async (text) => {
     await until(
       () =>
@@ -159,6 +166,39 @@ try {
       `(()=>{const input=document.querySelector(${JSON.stringify(selector)});const proto=input.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}))})()`,
     )
   }
+  await tapId('manager-idle-settings')
+  await wait('[data-testid="manager-idle-compact"]')
+  const minutesField = '[data-testid="manager-idle-minutes"]'
+  assert.equal(await read(`document.querySelector('${minutesField}').value`), '50')
+  await fill(minutesField, '56')
+  await until(
+    () => read(`document.body.innerText.includes('请输入 5 至 55 的整数')`),
+    '空闲压缩限制',
+  )
+  assert.equal(
+    await read(
+      `document.querySelector('[data-testid="manager-idle-save"]').getAttribute('aria-disabled')`,
+    ),
+    'true',
+  )
+  await fill(minutesField, '53')
+  await shot('mobile-manager-idle-setting')
+  await tapId('manager-idle-save')
+  await until(
+    () => read(`!document.querySelector('[data-testid="manager-idle-compact"]')`),
+    '保存空闲压缩设置',
+  )
+  await tapId('manager-idle-settings')
+  await wait(minutesField)
+  assert.equal(await read(`document.querySelector('${minutesField}').value`), '53')
+  await press('取消')
+  await tapId('manager-tab:overview')
+  assert.ok(
+    await read(
+      `document.querySelector('[data-testid="manager-last-compact"]')?.textContent.includes('76% → 24%')`,
+    ),
+  )
+  await tapId('manager-tab:console')
   const noteOpen = async (id) => {
     await wait(`[data-testid="manager-issue:${id}"] textarea`)
     assert.equal(
@@ -185,8 +225,8 @@ try {
     await read(
       "[...document.querySelectorAll('[role=tab][data-testid^=\"manager-tab:\"]')].map(e=>e.dataset.testid.slice(12)).join(',')",
     ),
-    'console,github,chat,lines,overview',
-    '模拟来源已启用，GitHub 在控制台之后',
+    'chat,console,github,lines,overview',
+    '对话在最前，启用外部来源时 GitHub 在控制台之后',
   )
   assert.equal(await checked('issue-capsule:decision'), 'true', '类别是单选')
   await tapId('issue-capsule:ordinary')
@@ -878,7 +918,7 @@ try {
     'true',
     '工作线回经理落在工作线页签',
   )
-  // 经理目录：按设备分组。
+  // 经理目录：进行中按设备分组，已结束汇总折叠，计数与实际展开的条数相同。
   await call('Page.navigate', { url: url.replace('scene=manager-console', 'scene=managers') })
   await wait('[data-testid="managers:device:local"]')
   assert.ok(await read('!!document.querySelector(\'[data-testid="manager:m1"]\')'), '经理目录')
@@ -904,6 +944,27 @@ try {
     '经理行记号只看经理自己，工作线在跑另写文字',
   )
   await shot('mobile-managers')
+  await wait('[data-testid="managers:ended"]')
+  const endedExpanded = () =>
+    read(`document.querySelector('[data-testid="managers:ended"]').getAttribute('aria-expanded')`)
+  const endedRows = () =>
+    read(`[...document.querySelectorAll('[data-testid^="managers:ended-device:"] [data-testid^="manager:"]')]
+      .map((row) => row.dataset.testid).filter((id) => id.split(':').length === 2)`)
+  assert.equal(await endedExpanded(), 'false')
+  assert.deepEqual(await endedRows(), [])
+  assert.equal(
+    await read(`document.querySelector('[data-testid="managers:ended-count"]').textContent`),
+    '2',
+  )
+  await shot('mobile-managers-ended-folded')
+  await tapId('managers:ended')
+  await wait('[data-testid="manager:e1"]')
+  assert.equal(await endedExpanded(), 'true')
+  assert.deepEqual(await endedRows(), ['manager:e1', 'manager:e2'])
+  await shot('mobile-managers-ended-expanded')
+  await tapId('managers:ended')
+  assert.equal(await endedExpanded(), 'false')
+  assert.deepEqual(await endedRows(), [])
   console.log(
     '手机经理：工作台四格、编号半屏议题卡、工作线与回经理、目录、概览、排序、已答决策分块、三皮肤报告、关联定位、已阅、评论增高与交付、设备服务较旧通过',
   )

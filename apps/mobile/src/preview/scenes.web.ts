@@ -114,14 +114,14 @@ export const SCENES: Scene[] = [
     id: 'managers',
     group: '经理',
     name: '经理目录',
-    note: '首页经理入口进入：按设备分组，先进行中、后已结束',
+    note: '首页经理入口进入：进行中按设备分组；已结束汇总在默认折叠的一组',
     steps: [nav('Managers', undefined)],
   },
   {
     id: 'manager-chat',
     group: '经理',
     name: '经理工作台 · 对话',
-    note: '显式打开对话；页签“控制台 · 对话 · 工作线 · 概览”，正文里的 #D-n 点了拉起半屏议题卡',
+    note: '显式打开对话；页签“对话 · 控制台 · 工作线 · 概览”，正文里的 #D-n 点了拉起半屏议题卡',
     steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1', tab: 'chat' })],
   },
   {
