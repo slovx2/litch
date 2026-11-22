@@ -82,7 +82,11 @@ export function IssueMetaLine({
       <View style={[styles.dot, { backgroundColor: issueStateColor(c, head.status) }]} />
       <Text style={{ color: c.ink3, fontSize: font.size.meta, flexShrink: 1 }}>
         <Text style={{ color: c.ink2 }}>
-          {t(`issue.status.${head.status}` as Parameters<typeof t>[0])}
+          {head.kind === 'ordinary' && head.status === 'blocked'
+            ? t('issue.waitingWithReason', {
+                reason: head.blockedReason ?? t('issue.waiting.noReason'),
+              })
+            : t(`issue.status.${head.status}` as Parameters<typeof t>[0])}
         </Text>
         {` · ${parts.join(' · ')}`}
         {head.kind === 'ordinary' && head.followUp === 'off' ? (

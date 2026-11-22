@@ -4,6 +4,9 @@ import type { ManagerAnswer } from './manager.mjs'
 import type { ManagerIssueId } from './manager-issues.mjs'
 
 export const EXTERNAL_SOURCES_EXTENSION = 'litchExternalSources'
+/** 经理命名空间和每次外部请求的投递共用。 */
+export const EXTERNAL_ISSUE_STATUS_RULES =
+  'Keep each accepted external X-n current with litch_manager.issue_update. Once you accept it, set in_progress. When waiting for someone or an external prerequisite, set blocked and put who or what you are waiting for, the condition that unblocks it, and when you will check again in the why field. Keep follow-up on and follow through at that time. After delivery and a confirmed result reply on the original topic, set resolved. Close mistaken, duplicate or superseded requests without claiming delivery; link the replacement X-n via related when one exists. Board status changes never change GitHub state and are not a reason to close, reopen, or merge anything on GitHub.'
 export const EXTERNAL_METHOD = {
   accessGet: 'litch/external/access/get',
   ownerGet: 'litch/external/owner/get',

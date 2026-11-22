@@ -701,7 +701,107 @@ else if (args[0] === 'api' || args[0] === 'pr') {
   assert.equal((await readIntake()).events[0].missingResultReply, undefined)
   assert.equal(resultReminders().length, 1)
   assert.equal([...mock.sent.values()].filter(({ body }) => body.includes('Merged #11.')).length, 1)
-  if (pi.running(tid)) pi.end(tid, 'completed', 'Result posted')
+  // 已回帖的 X-1 先结算，独立核对 X-2 的「先回帖再合并」，不干扰上面的待分拣断言。
+  const resolvedFirst = resultOf(
+    (
+      await pi.callTool(tid, main, 'issue_update', {
+        id: 'X-1',
+        revision: (await readIssue()).revision,
+        patch: { status: 'resolved' },
+        why: 'Result posted',
+      })
+    )?.answer,
+  )
+  assert.equal(resolvedFirst.issue.status, 'resolved')
+  // 先回原帖，再合并关联 PR：只提醒经理更新看板，不代改状态或再发评论。
+  const statusIssue = { managerId: manager.id, id: 'X-2' }
+  const readStatusIssue = async () =>
+    (await final.call('litch/manager/issue/read', statusIssue)).issue
+  clock.now += 10
+  mock.linkedPull(19)
+  const bindStatusPr = resultOf(
+    (
+      await pi.callTool(tid, main, 'external_link', {
+        sourceId: source.sourceId,
+        repoId: repo.id,
+        number: '19',
+        kind: 'pull_request',
+        issueId: 'X-2',
+        expectedIssueRevision: (await readStatusIssue()).revision,
+      })
+    )?.answer,
+  )
+  assert.equal(bindStatusPr.outcome, 'applied', JSON.stringify(bindStatusPr))
+  const updateStatus = async (status, why) =>
+    resultOf(
+      (
+        await pi.callTool(tid, main, 'issue_update', {
+          id: 'X-2',
+          revision: (await readStatusIssue()).revision,
+          patch: { status },
+          why,
+        })
+      )?.answer,
+    ).issue
+  const waitReason = '等作者补测试；测试通过后合并；下一轮复查'
+  assert.equal((await updateStatus('blocked', waitReason)).blockedReason, waitReason)
+  const pendingPage = await final.call('litch/manager/issues/list', {
+    managerId: manager.id,
+    kinds: ['ordinary'],
+    statuses: ['open', 'blocked'],
+    order: 'newest',
+  })
+  assert.equal(pendingPage.page.entries.find(({ id }) => id === 'X-2').blockedReason, waitReason)
+  assert.equal((await updateStatus('in_progress', '作者已补测试')).blockedReason, undefined)
+  const earlyResult = resultOf(
+    (
+      await pi.callTool(tid, main, 'external_write', {
+        sourceId: source.sourceId,
+        issueId: 'X-2',
+        mandateId: tookComment.mandate.mandateId,
+        idempotencyKey: 'result-before-merge',
+        target: { repoId: repo.id, number: '12' },
+        intent: {
+          action: 'comment',
+          purpose: 'result',
+          body: 'PR #19 is verified and ready to merge.',
+        },
+      })
+    )?.answer,
+  )
+  assert.equal(earlyResult.state, 'queued', JSON.stringify(earlyResult))
+  await until(
+    async () =>
+      (await final.call(E.outboxGet, { operationId: earlyResult.operationId })).state ===
+      'confirmed',
+    '关联 PR 合并前已有结果回执',
+    6500,
+  )
+  const statusReminders = () =>
+    ['turn/start', 'turn/steer']
+      .flatMap((method) => pi.sent(method))
+      .filter(
+        ({ threadId, input }) =>
+          threadId === tid &&
+          parseSessionEvent(input[0].text).event?.externalIssueStatusCheck?.issueId === 'X-2',
+      )
+  assert.equal(statusReminders().length, 0, '尚未合并，不触发')
+  const writesBeforeStatusCheck = mock.sent.size
+  if (pi.running(tid)) pi.end(tid, 'completed', 'Result already posted')
+  await until(() => !device.sessionTree.isActive(tid), '回帖回合结束')
+  mock.setSubjectState(19, 'closed', true)
+  clock.now += 131
+  await until(() => statusReminders().length === 1, '合并后提醒一次核对 X-2', 6500)
+  assert.equal((await readStatusIssue()).status, 'in_progress', '核对不会代改状态')
+  assert.equal((await readStatusIssue()).missingResultReply, undefined)
+  assert.equal(mock.sent.size, writesBeforeStatusCheck, '核对不会回写 GitHub')
+  assert.equal((await updateStatus('resolved', '已合并且原帖已有结果回执')).status, 'resolved')
+  device.managers.external.store.resultReplies.queueReminders()
+  assert.equal(statusReminders().length, 1)
+  assert.deepEqual(device.managers.external.store.resultReplies.pendingManagerIds(), [])
+  if (pi.running(tid)) pi.end(tid, 'completed', 'Board status reviewed')
+  await until(() => !device.sessionTree.isActive(tid), '状态提醒回合结束')
+
   if (!notifications) {
     const fallback = await final.call(E.sourceGet, { sourceId: source.sourceId })
     assert.equal(fallback.readiness.collect.state, 'ok')

@@ -87,7 +87,7 @@ export function managerIssueKindFilter(kind: ManagerIssueKind): ManagerIssueFilt
   return {
     ...DEFAULT_MANAGER_ISSUE_FILTER,
     kinds: [kind],
-    statuses: [MANAGER_ISSUE_STATUSES[kind][0]],
+    statuses: kind === 'ordinary' ? ['open', 'blocked'] : [MANAGER_ISSUE_STATUSES[kind][0]],
     ...(kind === 'ordinary' ? { discussionsOnly: true } : {}),
   }
 }
@@ -205,9 +205,9 @@ export const MANAGER_ISSUE_SUMMARY_FILTERS = {
 } satisfies Record<string, ManagerIssueFilter>
 export type ManagerIssueSummaryKey = keyof typeof MANAGER_ISSUE_SUMMARY_FILTERS
 
-/** 各类型要我处理的（类别胶囊上的数字）：普通 issue 给未读，报告给未读，其余给待处理状态。 */
+/** 各类别未选中时的角标：普通 issue 用默认待处理列表，报告给未读，其余给待处理状态。 */
 export const MANAGER_ISSUE_ATTENTION_FILTERS: Record<ManagerIssueKind, ManagerIssueFilter> = {
-  ordinary: { ...DEFAULT_MANAGER_ISSUE_FILTER, unread: true },
+  ordinary: managerIssueKindFilter('ordinary'),
   decision: { ...DEFAULT_MANAGER_ISSUE_FILTER, kinds: ['decision'], statuses: ['open'] },
   suggestion: {
     ...DEFAULT_MANAGER_ISSUE_FILTER,
@@ -231,6 +231,7 @@ export function managerIssueHead(issue: ManagerIssue): ManagerIssueHead {
     title: issue.title,
     preview: preview.length > 200 ? `${preview.slice(0, 199)}…` : preview,
     status: issue.status,
+    ...(issue.blockedReason ? { blockedReason: issue.blockedReason } : {}),
     stateGroup: issue.stateGroup,
     author: issue.author.kind,
     followUp: issue.followUp.state,

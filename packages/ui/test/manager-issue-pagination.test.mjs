@@ -530,7 +530,7 @@ for (const platform of Object.keys(sources)) {
       ['suggestion', 'todo', ['endorsed']],
       ['request', 'todo', ['open']],
       ['report', 'todo', ['unread']],
-      ['ordinary', 'todo', ['open']],
+      ['ordinary', 'todo', ['open', 'blocked']],
     ]) {
       f.pickKind(kind)
       assert.deepEqual(f.filters.at(-1).statuses, statuses)
@@ -672,7 +672,7 @@ for (const platform of Object.keys(sources)) {
     const f = fixture(platform)
     f.render()
     f.pickOrdinary()
-    f.pickStatus('doing')
+    f.pickStatus('todo')
     assert.equal(
       f.present(['data-issue-filter-detail', 'blocked'], 'issue-filter-detail:blocked'),
       false,
@@ -682,7 +682,7 @@ for (const platform of Object.keys(sources)) {
     assert.deepEqual(f.filters.at(-1).statuses, ['blocked'])
     // 选着细分时细分行一直在；选“不限”回到整组
     f.tap(['data-issue-filter-detail', 'any'], 'issue-filter-detail:any')
-    assert.deepEqual(f.filters.at(-1).statuses, ['in_progress', 'blocked'])
+    assert.deepEqual(f.filters.at(-1).statuses, ['open', 'blocked'])
     // 多选类型时没有细分
     f.toggleType('suggestion')
     assert.equal(
@@ -702,7 +702,7 @@ for (const platform of Object.keys(sources)) {
     const last = f.filters.at(-1)
     assert.deepEqual(
       { kinds: last.kinds, statuses: last.statuses, unread: last.unread, authors: last.authors },
-      { kinds: ['ordinary'], statuses: ['open'], unread: false, authors: [] },
+      { kinds: ['ordinary'], statuses: ['open', 'blocked'], unread: false, authors: [] },
     )
     assert.equal(
       f.present(['data-act', 'issue-filter-clear'], 'issue-filter-reset'),
@@ -714,7 +714,7 @@ for (const platform of Object.keys(sources)) {
     const f = fixture(platform)
     f.render()
     f.preset({ statuses: ['open', 'resolved'] })
-    assert.deepEqual(f.filters.at(-1).statuses, ['open'])
+    assert.deepEqual(f.filters.at(-1).statuses, ['open', 'blocked'])
     f.preset({ statuses: ['open', 'in_progress', 'blocked'] })
     assert.deepEqual(f.filters.at(-1).statuses, ['open', 'in_progress', 'blocked'])
     assert.equal(

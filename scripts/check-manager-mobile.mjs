@@ -185,10 +185,22 @@ try {
     await read(
       "[...document.querySelectorAll('[role=tab][data-testid^=\"manager-tab:\"]')].map(e=>e.dataset.testid.slice(12)).join(',')",
     ),
-    'console,chat,lines,overview',
-    '页签顺序',
+    'console,github,chat,lines,overview',
+    '模拟来源已启用，GitHub 在控制台之后',
   )
   assert.equal(await checked('issue-capsule:decision'), 'true', '类别是单选')
+  await tapId('issue-capsule:ordinary')
+  await until(
+    () =>
+      read(String.raw`(() => {
+    const card = document.querySelector('[data-testid="issue-card:X-5"]');
+    const count = document.querySelector('[data-testid="issue-capsule:ordinary"]')?.textContent?.match(/\d+/)?.[0];
+    const total = document.querySelector('[data-testid="issue-total"]')?.textContent?.match(/\d+\s*\/\s*(\d+)/)?.[1];
+    return card?.innerText.includes('等待：等上游修复合并，周三复查。') && !!count && count === total;
+  })()`),
+    '普通议题的待处理项显示等待原因，角标与列表一致',
+  )
+  await tapId('issue-capsule:decision')
   const decisionOrder = () =>
     read(
       "[...document.querySelectorAll('[data-testid^=\"issue-card:D-\"]')].map(e=>e.dataset.testid.slice(11)).join(',')",

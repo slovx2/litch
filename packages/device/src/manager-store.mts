@@ -25,7 +25,10 @@ import type {
 } from '../../protocol/src/manager.mjs'
 import { assertStoreFormat, initializeStoreFormat } from '../../shared/src/store-format.mjs'
 import { ensureParent } from '../../shared/src/util.mjs'
-import { EXTERNAL_RESULT_REPLY_MIGRATION } from './external-result-replies.mjs'
+import {
+  EXTERNAL_ISSUE_STATUS_MIGRATION,
+  EXTERNAL_RESULT_REPLY_MIGRATION,
+} from './external-result-replies.mjs'
 import { EXTERNAL_STORE_MIGRATION } from './external-store-schema.mjs'
 import { MANAGER_BOARD_TRANSFER_MIGRATION } from './manager-board-transfer.mjs'
 
@@ -61,6 +64,7 @@ const MIGRATIONS = [
   EXTERNAL_STORE_MIGRATION,
   MANAGER_BOARD_TRANSFER_MIGRATION,
   EXTERNAL_RESULT_REPLY_MIGRATION,
+  EXTERNAL_ISSUE_STATUS_MIGRATION,
 ] as const
 export const MANAGER_SCHEMA_VERSION = MIGRATIONS.length
 export const managerNow = () => Math.floor(Date.now() / 1000)

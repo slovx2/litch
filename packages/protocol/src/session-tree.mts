@@ -1,3 +1,4 @@
+import { EXTERNAL_ISSUE_STATUS_RULES } from './external-sources.mjs'
 import type { ManagerEventData } from './manager.mjs'
 import type { SessionPendingFields, SessionPendingRequest } from './session-pending.mjs'
 // 会话树（扩展名 sessionTree）：一个会话派出的子会话、提案、回报与唤醒。父子关系存在设备进程自己的库里，
@@ -5,7 +6,7 @@ import type { SessionPendingFields, SessionPendingRequest } from './session-pend
 // 引擎自己的子代理线程（标准协议的 parentThreadId、source.subAgent）不在这里，那是引擎的事。
 // 定义的原文在仓库根目录 protocol/extensions/session-tree.json，模型用的工具在 client-tools-sessions.mts。
 //
-// 这个文件不引用别的文件：设备进程（packages/device）和客户端核心（packages/core）都直接引用它。
+// 这里只依赖协议包内的常量与类型：设备进程（packages/device）和客户端核心（packages/core）都直接引用它。
 
 /** 子会话是怎么来的 */
 export type SessionLineageKind =
@@ -416,6 +417,8 @@ export interface SessionEvent {
     sourceId: string
     confirmed: false
   })[]
+  /** 已确认回帖的外部请求仍待维护看板状态；只由设备的收尾核对产生。 */
+  externalIssueStatusCheck?: { issueId: import('./external-sources.mjs').ExternalIssueId }
   questionSettlements?: import('./session-pending.mjs').SessionQuestionSettlement[]
   /** manager-* 事件必带；其他事件不带，不改变原有回报的形状。 */
   manager?: ManagerEventData
@@ -503,7 +506,9 @@ export function formatSessionEvent(event: SessionEvent): string {
           ? 'The user submitted these board entries.'
           : 'The user submitted these board answers.'
         : event.kind === 'manager-issue'
-          ? 'The user created or commented on a manager issue.'
+          ? event.externalIssueStatusCheck || resultReplies.length
+            ? 'Litch checked the follow-up on an external issue.'
+            : 'The user created or commented on a manager issue.'
           : event.kind === 'manager-suggestions'
             ? 'Worklines proposed these suggestions for manager review.'
             : event.kind === 'manager-ignored'
@@ -546,6 +551,7 @@ export function formatSessionEvent(event: SessionEvent): string {
           `For you ${request.requestId} ${JSON.stringify(request.title)}: delivered=${request.delivered};${request.ignored ? ' ignored=true (the user chose not to do this);' : ''} ${JSON.stringify(request.text)}`,
       ),
       manager.text,
+      ...(externalHead ? [EXTERNAL_ISSUE_STATUS_RULES] : []),
       ...resultReplies,
       `<!-- ${JSON.stringify(event).replace(/>/g, '\\u003e')} -->`,
       `</${SESSION_EVENT_TAG}>`,

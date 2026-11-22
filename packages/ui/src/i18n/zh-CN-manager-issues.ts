@@ -13,6 +13,8 @@ export const zhManagerIssues = {
   'issue.status.open': '开放',
   'issue.status.in_progress': '进行中',
   'issue.status.blocked': '受阻',
+  'issue.waitingWithReason': '等待：{reason}',
+  'issue.waiting.noReason': '未记录原因',
   'issue.status.resolved': '已解决',
   'issue.status.closed': '已关闭',
   'issue.status.answered': '已答复',

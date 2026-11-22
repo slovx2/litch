@@ -1072,12 +1072,15 @@ export class DeviceManagers {
       if (this.external?.store.queue.deliveryGroupForDelivery(event.id)) continue
       const parsed = parseSessionEvent(event.text)
       if (parsed.event?.kind === 'manager-issue' && manager.status !== 'active') continue
-      if (parsed.event?.kind === 'manager-issue' && parsed.event.externalResultReplies?.length) {
-        const reply = parsed.event.externalResultReplies[0]
+      const statusCheck = parsed.event?.externalIssueStatusCheck
+      const issueCheck = statusCheck ?? parsed.event?.externalResultReplies?.[0]
+      if (parsed.event?.kind === 'manager-issue' && issueCheck) {
+        const kind = statusCheck ? 'status' : 'reply'
+        const { issueId } = issueCheck
         const reminders = this.external?.store.resultReplies
-        if (!reply || !reminders) continue
-        const current = () => reminders.reminderCurrent(id, reply.issueId, event.id)
-        const target = reminders.reminderTarget(id, reply.issueId)
+        if (!reminders) continue
+        const current = () => reminders.reminderCurrent(id, issueId, event.id, kind)
+        const target = reminders.reminderTarget(id, issueId, kind)
         if (
           !current() ||
           (target && (await this.tree.externalDeliveryTurn(target, event.id, event.text)))
@@ -1096,7 +1099,7 @@ export class DeviceManagers {
               ? { text: event.text, eventId: event.id }
               : null
           },
-          onDispatch: () => reminders.attemptingReminder(id, reply.issueId, manager.threadId),
+          onDispatch: () => reminders.attemptingReminder(id, issueId, manager.threadId, kind),
         })
         if (sent || !current()) this.store.delivered(event.id)
         continue

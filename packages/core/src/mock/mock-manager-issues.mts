@@ -221,6 +221,7 @@ export class MockManagerIssues {
         title: i.title,
         preview: i.body.slice(0, 300),
         status: i.status,
+        ...(i.blockedReason ? { blockedReason: i.blockedReason } : {}),
         stateGroup: i.stateGroup,
         author: i.author.kind,
         followUp: i.followUp.state,
@@ -328,6 +329,7 @@ export class MockManagerIssues {
         const { followUp, discussionOpened, ...patch } = p.patch
         if (discussionOpened === true) issue.discussion.opened = true
         Object.assign(issue, patch)
+        if (issue.status !== 'blocked') delete issue.blockedReason
         if (followUp) issue.followUp = { state: followUp, changedAt: at, changedBy: 'user' }
         issue.revision++
         issue.stateGroup = managerIssuePending(issue) ? 'open' : 'closed'

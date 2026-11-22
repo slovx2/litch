@@ -772,9 +772,10 @@ export class ExternalStore {
       )
       if (previous && previous.updatedAt > updatedAt) return
       this.writePollCheckpoints(key, [{ bucket: 'subject', key: subjectKey, value: observation }])
-      if (observation.state === (subject.kind === 'pull_request' ? 'merged' : 'closed')) {
+      if (observation.state !== 'open') {
         const ref = this.ref(subject)
-        if (ref?.kind === subject.kind) this.resultReplies.finishSubject(ref, updatedAt)
+        if (ref?.kind === subject.kind)
+          this.resultReplies.finishSubject(sourceId, ref, updatedAt, observation.state === 'merged')
       }
       const pending = this.db
         .prepare(

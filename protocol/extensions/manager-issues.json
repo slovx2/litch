@@ -19,6 +19,7 @@
   "rules": [
     "issue 使用按经理独立递增的 X-n；决策 D-n、请求 R-n、报告 P-n、建议 S-提案 id 和经理事项 I-n 保持原样。不重编号，不建立别名表。",
     "所有 issue 方法和工具按经理上下文接收 X/D/R/P/S 编号；不存在或跨经理引用明确拒绝。I-n 不是 issue。",
+    "普通 issue 的详情与列表头可包含 blockedReason：经理使用 issue_update 将状态设为 blocked 时的 why（最多 500 个 Unicode 字符），离开 blocked 时清除。该字段随 litchManagerIssues 应答返回。",
     "公共 issue 类型为 ordinary、decision、suggestion、request、report。issue 状态为 open、in_progress、blocked、resolved、closed；其它类型沿用各自快速处理状态。报告属于 issue，但 unread/read 不计入待处理总数。",
     "issue 的评论与 manager question 分开保存和投影。评论不自动回答决策、交付请求、开始建议或标已阅；问题/回答保留原有只读旁问和 post_reply 安全边界。",
     "followUp=off 时评论仍持久化并广播给用户端，但不唤醒经理；恢复后不回放暂停期间旧评论。followUp=on 的用户创建/评论产生稳定 activity event，设备自动送达或唤醒经理。",

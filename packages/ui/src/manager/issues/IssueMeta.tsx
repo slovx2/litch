@@ -30,7 +30,15 @@ export function IssueMeta({
       {withKind ? <IssueKind kind={head.kind} /> : null}
       <span data-issue-status={head.status}>
         <span className="mg-issue-state" data-state={head.status} aria-hidden="true" />
-        {t(`issue.status.${head.status}` as Parameters<typeof t>[0])}
+        {head.kind === 'ordinary' && head.status === 'blocked' ? (
+          <span data-issue-wait-reason>
+            {t('issue.waitingWithReason', {
+              reason: head.blockedReason ?? t('issue.waiting.noReason'),
+            })}
+          </span>
+        ) : (
+          t(`issue.status.${head.status}` as Parameters<typeof t>[0])
+        )}
       </span>
       <span>{t(head.author === 'manager' ? 'issue.author.manager' : 'issue.author.user')}</span>
       {head.kind === 'ordinary' && head.followUp === 'off' ? (

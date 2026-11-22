@@ -128,6 +128,8 @@ export interface ManagerIssue extends ExternalIssueFields {
   title: string
   body: string
   status: ManagerIssueStatus
+  /** 经理设为受阻时给出的等待条件与跟进时间。 */
+  blockedReason?: string
   stateGroup: ManagerIssueStateGroup
   author: ManagerIssueAuthor
   revision: number
@@ -147,6 +149,8 @@ export interface ManagerIssueHead extends Pick<ExternalIssueFields, 'missingResu
   title: string
   preview: string
   status: ManagerIssueStatus
+  /** 经理设为受阻时给出的等待条件与跟进时间。 */
+  blockedReason?: string
   stateGroup: ManagerIssueStateGroup
   author: ManagerIssueAuthorKind
   followUp: ManagerIssueFollowUp

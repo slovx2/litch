@@ -107,7 +107,7 @@ export async function managerIssuesProbe() {
     ['suggestions', 'todo', ['endorsed']],
     ['requests', 'todo', ['open']],
     ['reports', 'todo', ['unread']],
-    ['issues', 'todo', ['open']],
+    ['issues', 'todo', ['open', 'blocked']],
   ] as const) {
     await click(`[data-inbox-tab="${tab}"]`)
     await until(`${tab} 首次默认待处理`, () =>
@@ -140,10 +140,21 @@ export async function managerIssuesProbe() {
     )
   }
   passed.push('五类默认待处理分组在前，全部在后')
+  const issueCount = () => one('[data-inbox-tab="issues"] .pill')?.textContent?.trim()
+  const waitReason = () => one('[data-issue="X-5"] [data-issue-wait-reason]')?.textContent
+  await until('受阻等待原因在默认待处理卡上', () =>
+    /等上游修复合并|upstream fix to merge/.test(waitReason() ?? ''),
+  )
+  await until(
+    '默认角标等于待处理列表总数',
+    () => !!issueCount() && issueCount() === total()?.split('/')[1],
+  )
+  passed.push('待处理含受阻和等待原因，角标与列表一致')
   // 完整集合的分页验收显式选全部，不能再依赖旧默认值。
   await click('[data-issue-filter-status="all"]')
   await click('[data-inbox-tab="issues"]')
   await until('X-n issue 首屏 30/38', () => total() === '30/38' && cards().length === 30)
+  await until('切换筛选后角标跟随列表总数', () => issueCount() === '38')
   assert(
     cards().every((card) => card.dataset.issueType === 'ordinary'),
     'X-n issue 标签混入特殊 issue',
