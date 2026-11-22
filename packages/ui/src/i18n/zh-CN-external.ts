@@ -3,6 +3,7 @@
 import type { Entry } from './types.ts'
 
 export const zhExternal = {
+  'ext.missingResultReply': '未回原帖',
   'ext.open': '在 GitHub 打开',
   'ext.loading': '正在读取…',
   'ext.save': '保存',

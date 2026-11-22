@@ -2,6 +2,7 @@
 import type { Entry } from '../../../../../packages/ui/src/i18n/types.ts'
 
 export const zhCN = {
+  'mgh.missingResultReply': '未回原帖',
   'mgh.tab': 'GitHub',
   'mgh.inbox.pending': '待分拣',
   'mgh.inbox.processed': '已处理',
@@ -121,6 +122,7 @@ export const zhCN = {
 }
 
 export const en: Record<keyof typeof zhCN, Entry> = {
+  'mgh.missingResultReply': 'Result not posted',
   'mgh.tab': 'GitHub',
   'mgh.inbox.pending': 'To triage',
   'mgh.inbox.processed': 'Handled',

@@ -33,7 +33,7 @@ export const DEVICE_EXTERNAL_MANAGER_TOOLS: readonly ClientToolFunctionSpec[] = 
     type: 'function',
     name: 'external_write',
     description:
-      'Queue a GitHub write authorized by an existing intake mandate. Use a stable idempotency key for the same write.',
+      'Queue a GitHub write authorized by an existing intake mandate. Use a stable idempotency key for the same write. For a result comment, set intent.purpose to result and use the original accepted subject.',
     inputSchema: shape(
       {
         sourceId: text,
@@ -43,7 +43,10 @@ export const DEVICE_EXTERNAL_MANAGER_TOOLS: readonly ClientToolFunctionSpec[] = 
         target: shape({ repoId: id, number: id }, ['repoId', 'number']),
         intent: {
           oneOf: [
-            shape({ action: { const: 'comment' }, body }, ['action', 'body']),
+            shape({ action: { const: 'comment' }, body, purpose: { const: 'result' } }, [
+              'action',
+              'body',
+            ]),
             shape(
               {
                 action: { const: 'draft_pr' },
@@ -89,7 +92,15 @@ function issue(value: unknown): ExternalIssueId {
 
 function intent(input: unknown): ExternalWriteIntent {
   if (isObject(input)) {
-    if (input.action === 'comment') return { action: 'comment', body: str(input.body, 65536) }
+    if (input.action === 'comment') {
+      if (input.purpose !== undefined && input.purpose !== 'result')
+        externalInput('external_tool_input_invalid')
+      return {
+        action: 'comment',
+        body: str(input.body, 65536),
+        ...(input.purpose ? { purpose: input.purpose } : {}),
+      }
+    }
     if (input.action === 'draft_pr')
       return {
         action: 'draft_pr',

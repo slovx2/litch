@@ -390,6 +390,13 @@ export class ManagerIssues {
         revision: i.revision,
         createdAt: i.createdAt,
         updatedAt: i.updatedAt,
+        ...(() => {
+          const missingResultReply = this.owner.external?.store.resultReplies.missing(
+            managerId,
+            i.id,
+          )
+          return missingResultReply ? { missingResultReply } : {}
+        })(),
       })),
     }
   }
@@ -772,6 +779,8 @@ export class ManagerIssues {
               patch.followUp === 'off' ? 'follow_up_off' : 'terminal_issue',
             )
           }
+          if (patch.status === 'resolved' || patch.status === 'closed')
+            this.owner.external?.store.resultReplies.finish(managerId, before.id)
           this.links(managerId, before.id, patch, actor)
           this.store.recordIssue(
             managerId,

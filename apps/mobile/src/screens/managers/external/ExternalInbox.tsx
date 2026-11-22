@@ -49,7 +49,9 @@ export function ExternalInbox({ manager, disabled }: { manager: ManagerView; dis
   const reasons = useRef(new Set<string>())
   for (const entry of view?.value?.entries ?? [])
     if (entry.status === 'pending_triage' && entry.reason) reasons.current.add(entry.reason)
-  const rows = groupInbox(view?.value?.entries ?? [])
+  const entries = view?.value?.entries ?? []
+  const rows = groupInbox(entries)
+  const detail = opened && (entries.find(({ eventKey }) => eventKey === opened.eventKey) ?? opened)
   const more = async () => {
     setLoadingMore(true)
     setError('')
@@ -185,10 +187,10 @@ export function ExternalInbox({ manager, disabled }: { manager: ManagerView; dis
         ) : null}
         {error ? <Text style={{ color: c.err }}>{error}</Text> : null}
       </ScrollView>
-      {opened ? (
+      {detail ? (
         <InboxDetail
           manager={manager}
-          head={opened}
+          head={detail}
           access={view?.access}
           disabled={disabled || !view?.online}
           onClose={() => setOpened(null)}

@@ -67,6 +67,10 @@ export class DeviceExternalService {
   private readonly stopSecrets: () => void
   private readonly sourceRevision = new Map<string, number>()
   private readonly readinessCache = new Map<string, string>()
+  private readonly missingReplies = new Map<
+    string,
+    ReturnType<ExternalStore['resultReplies']['missingForSource']>
+  >()
   private readonly refreshAttempt = new Map<string, string>()
   private readonly dirty = new Map<string, string>()
   private readonly outboxRevision = new Map<string, number>()
@@ -282,6 +286,11 @@ export class DeviceExternalService {
 
   project(event: ExternalInboxEvent): ExternalInboxEvent {
     const group = this.store.queue.deliveryGroupForEvent(event)
+    const missingResultReply =
+      event.managerId && event.issueId
+        ? this.store.resultReplies.missing(event.managerId, event.issueId)
+        : null
+    if (missingResultReply) event = { ...event, missingResultReply }
     if (!group) return event
     const manager = this.store.manager.manager(group.managerId)
     const waiting = group.state === 'queued' ? this.sourceWaitReason(group.sourceId) : null
@@ -405,6 +414,17 @@ export class DeviceExternalService {
     this.agent?.sweep()
     const sources = this.store.config.sources()
     if (sources.length === 0) return
+    this.store.resultReplies.queueReminders()
+    for (const id of this.store.resultReplies.pendingManagerIds()) this.options.managers.kick(id)
+    for (const source of sources) {
+      const before = this.missingReplies.get(source.sourceId) ?? []
+      const current = this.store.resultReplies.missingForSource(source.sourceId)
+      if (JSON.stringify(before) === JSON.stringify(current)) continue
+      this.missingReplies.set(source.sourceId, current)
+      this.changed(source)
+      for (const id of new Set([...before, ...current].map(({ managerId }) => managerId)))
+        this.options.managers.changed(id)
+    }
     // 入口独立于仓库页和旧窗口。静态凭据的 HTTP 队列仍串行遵守 GitHub 限流。
     let runningNotifications = [...this.running.keys()].filter((key) =>
       key.startsWith('notifications:'),

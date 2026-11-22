@@ -141,7 +141,7 @@ export interface ManagerIssue extends ExternalIssueFields {
   unread: boolean
 }
 
-export interface ManagerIssueHead {
+export interface ManagerIssueHead extends Pick<ExternalIssueFields, 'missingResultReply'> {
   id: ManagerIssueId
   kind: ManagerIssueKind
   title: string

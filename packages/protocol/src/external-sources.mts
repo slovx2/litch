@@ -210,7 +210,13 @@ export interface ExternalCoverage {
   backoffUntil?: number
   gap?: { from: number; to: number; reason: string }
 }
+export interface ExternalMissingResultReply {
+  managerId: string
+  issueId: ExternalIssueId
+  subject: ExternalSubject
+}
 export interface ExternalSourceStatus {
+  missingResultReplies?: ExternalMissingResultReply[]
   source: ExternalSource
   coverage: ExternalCoverage[]
   runtime?: {
@@ -376,6 +382,7 @@ export interface ExternalInboxEvent {
   reason?: string
   status: ExternalInboxStatus
   delivery?: ExternalInboxDelivery
+  missingResultReply?: ExternalMissingResultReply
   eventUrl: string
   contentVersion: string | null
   revision: number
@@ -657,6 +664,7 @@ export interface ExternalNotifications {
 }
 
 export interface ExternalIssueFields {
+  missingResultReply?: ExternalMissingResultReply
   externalRefs?: ExternalRef[]
   intakeMandates?: ExternalMandate[]
 }
@@ -668,7 +676,7 @@ export function projectExternalManagerPayload<T>(value: T, declared: ReadonlySet
   const answers = external && declared.has('litchManager')
   if (issues && answers) return value
   const hidden = new Set([
-    ...(!issues ? ['externalRefs', 'intakeMandates'] : []),
+    ...(!issues ? ['externalRefs', 'intakeMandates', 'missingResultReply'] : []),
     ...(!answers ? ['answerSource'] : []),
   ])
   const project = (input: unknown): unknown => {

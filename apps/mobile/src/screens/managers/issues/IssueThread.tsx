@@ -20,6 +20,7 @@ import { Fold, IconButton } from '../../../ui/kit/Icon'
 import { useTheme } from '../../../ui/theme'
 import { Byline } from '../Byline'
 import { IssueExternal } from '../external/IssueExternal'
+import { MissingResultReply } from '../external/MissingResultReply'
 import { Markdown } from '../IssueMarkdown'
 import type { IssueCommands } from './data'
 
@@ -88,6 +89,7 @@ export function IssueMetaLine({
           <Text style={{ color: c.wait }}>{` · ${t('issue.follow.off')}`}</Text>
         ) : null}
       </Text>
+      {head.missingResultReply ? <MissingResultReply reply={head.missingResultReply} /> : null}
     </View>
   )
 }

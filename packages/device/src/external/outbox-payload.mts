@@ -5,7 +5,7 @@ import { type GithubFeedbackAction, isGithubFeedbackAction } from './outbox-feed
 import { ExternalPrivateFiles } from './secrets-files.mjs'
 
 export type ExternalWriteIntent =
-  | { action: 'comment'; body: string }
+  | { action: 'comment'; body: string; purpose?: 'result' }
   | { action: 'draft_pr'; title: string; body: string; base: string; head: string; headSha: string }
   | { action: 'status'; state: 'pending' | 'success' | 'error'; headSha: string }
 export type ExternalWriteAuthorization = { botUserId: string; credentialRef: string }
@@ -101,7 +101,11 @@ export const validSha = (sha: unknown): sha is string =>
 export function normalizedIntent(intent: ExternalWriteIntent): ExternalWriteIntent {
   switch (intent.action) {
     case 'comment':
-      return { action: 'comment', body: text(intent.body, 32 * 1024) }
+      return {
+        action: 'comment',
+        body: text(intent.body, 32 * 1024),
+        ...(intent.purpose === 'result' ? { purpose: intent.purpose } : {}),
+      }
     case 'draft_pr':
       if (
         !validSha(intent.headSha) ||

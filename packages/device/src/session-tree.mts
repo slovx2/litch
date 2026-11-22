@@ -49,6 +49,7 @@ import { suggestionExpiry } from '../../protocol/src/suggestion-inbox.mjs'
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { EngineLink } from './engine-link.mjs'
 import type { DeviceManagers } from './manager.mjs'
+import { projectedRelations } from './manager-relations.mjs'
 import type { HarnessSource } from './session.mjs'
 import { SessionRecoveryBudget, sessionHistory } from './session-history.mjs'
 import { isUserRequest, pendingRequestExcerpt, SessionPending } from './session-pending.mjs'
@@ -560,6 +561,45 @@ export class SessionTree {
     )
   }
 
+  // 只认可设备实际装入的回报，用户消息中自行写的标签不参与去重。
+  private readonly reportInputs = new WeakSet<unknown[]>()
+
+  private reportInput(input: unknown[]): unknown[] {
+    this.reportInputs.add(input)
+    return input
+  }
+
+  private reportResultHints(threadId: string, notes: readonly SessionEventNote[]) {
+    const owner = this.managers
+    const manager = owner?.store.forThread(threadId)
+    const replies = owner?.external?.store.resultReplies
+    if (!owner || !manager || !replies) return []
+    const edges = projectedRelations(owner.store, manager.id).flatMap(({ from, to }) => [
+      [from, to] as const,
+      [to, from] as const,
+    ])
+    const references = new Set<string>()
+    for (const note of notes) {
+      if (!note.turnId) continue
+      // 子工作线交回的结果也能沿显式绑定找到其上级工作。
+      const chain = new Set<string>()
+      for (let id: string | undefined = note.threadId; id && id !== threadId && !chain.has(id); ) {
+        chain.add(id)
+        id = this.store.parentOf(id)?.parentThreadId
+      }
+      for (const [from, work] of edges) {
+        if (from.kind !== 'thread' || !chain.has(from.target)) continue
+        if (work.kind === 'issue') references.add(work.target)
+        if (work.kind === 'item') {
+          for (const [item, to] of edges)
+            if (item.kind === 'item' && item.target === work.target && to.kind === 'issue')
+              references.add(to.target)
+        }
+      }
+    }
+    return [...references].flatMap((id) => replies.reportHint(manager.id, id) ?? []).slice(0, 20)
+  }
+
   /** 在实际发送前取待投递记录，失败保留；下一次用户回合、设备回合或唤醒都能收到。 */
   prepareQuestionInput(method: string, params: Record<string, unknown>) {
     if (
@@ -569,15 +609,20 @@ export class SessionTree {
     )
       return null
     const records = this.store.questionSettlements(params.threadId, true)
-    if (!records.length) return null
     const input = params.input
+    const fromReport = this.reportInputs.has(input)
+    if (!records.length && !fromReport) return null
     const at = input.findIndex((item) => isObject(item) && item.type === 'text')
     const first = at >= 0 ? input[at] : null
     const original = typeof first?.text === 'string' ? first.text : ''
     const { event, rest } = parseSessionEvent(original)
+    const hints =
+      fromReport && event?.notes.length ? this.reportResultHints(params.threadId, event.notes) : []
+    if (!records.length && !hints.length) return null
     const prefix = formatSessionEvent({
       ...(event ?? { kind: 'notes', notes: [] }),
-      questionSettlements: records,
+      ...(records.length ? { questionSettlements: records } : {}),
+      ...(hints.length ? { externalResultReplies: hints } : {}),
     })
     const text = `${prefix}\n${rest}`
     const shift = Buffer.byteLength(text) - Buffer.byteLength(original)
@@ -595,7 +640,10 @@ export class SessionTree {
         input:
           at >= 0 ? input.map((item, index) => (index === at ? part : item)) : [part, ...input],
       },
-      accepted: () => this.store.deliveredQuestions(records.map((record) => record.id)),
+      accepted: () => {
+        if (records.length) this.store.deliveredQuestions(records.map((record) => record.id))
+        this.managers?.external?.store.resultReplies.reportDelivered(hints)
+      },
     }
   }
 
@@ -1101,6 +1149,7 @@ export class SessionTree {
       automatic?: boolean
       /** 确认事件所在回合：新建回合或成功插话后调用。 */
       onStarted?: (turnId: string) => void
+      onDispatch?: () => void
       /** 完成引擎状态/恢复等等待后，在最终发送前同步重建；null 表示事件已失效。 */
       prepare?: () => { text: string; eventId: string } | null
       external?: {
@@ -1114,10 +1163,12 @@ export class SessionTree {
         if (!options.external.beforeSend(prepared)) throw new Error('外部提醒已过期或当前不能投递')
         return
       }
-      if (!options.prepare) return
-      const current = options.prepare()
-      if (!current || current.text !== prepared.text || current.eventId !== prepared.eventId)
-        throw new Error('经理事件在引擎请求排队期间已变化，保留仍有效的通知重新投递')
+      if (options.prepare) {
+        const current = options.prepare()
+        if (!current || current.text !== prepared.text || current.eventId !== prepared.eventId)
+          throw new Error('经理事件在引擎请求排队期间已变化，保留仍有效的通知重新投递')
+      }
+      options.onDispatch?.()
     }
     const previous = this.checks.get(threadId) ?? Promise.resolve()
     const next = previous
@@ -1186,7 +1237,7 @@ export class SessionTree {
             'turn/start',
             {
               threadId,
-              ...(options.external && !link.native
+              ...((options.external || options.onDispatch) && !link.native
                 ? { clientUserMessageId: prepared.eventId }
                 : {}),
               input: [{ type: 'text', text: prepared.text, text_elements: [] }],
@@ -1258,7 +1309,7 @@ export class SessionTree {
         threadId: parentId,
         expectedTurnId: running,
         clientUserMessageId: `litch-sessions-${this.runMark}-${++this.steerSeq}`,
-        input: [{ type: 'text', text, text_elements: [] }],
+        input: this.reportInput([{ type: 'text', text, text_elements: [] }]),
       })
     } catch (error) {
       if (error instanceof UpstreamRpcError && error.code === -32601) this.noSteer.add(harness)
@@ -1430,7 +1481,7 @@ export class SessionTree {
     })
     const result = await link.request('turn/start', {
       threadId: parentId,
-      input: [{ type: 'text', text, text_elements: [] }],
+      input: this.reportInput([{ type: 'text', text, text_elements: [] }]),
     })
     mark('startAck')
     const turn = isObject(result) && isObject(result.turn) ? result.turn : null
@@ -1584,7 +1635,8 @@ export class SessionTree {
       notes: current,
     })
     const at = input.findIndex((item) => isObject(item) && item.type === 'text')
-    if (at < 0) return [{ type: 'text', text: event, text_elements: [] }, ...input]
+    if (at < 0)
+      return this.reportInput([{ type: 'text', text: event, text_elements: [] }, ...input])
     const first = input[at] as Record<string, unknown>
     const original = typeof first.text === 'string' ? first.text : ''
     // 用户的话前面多了一段，原来按字节位置标的元素（@ 提及等）跟着往后挪
@@ -1597,7 +1649,7 @@ export class SessionTree {
       text: `${event}\n${original}`,
       ...(elements === undefined ? {} : { text_elements: elements }),
     }
-    return input.map((item, index) => (index === at ? merged : item))
+    return this.reportInput(input.map((item, index) => (index === at ? merged : item)))
   }
 
   // ---------- 会话对象、父子关系 ----------

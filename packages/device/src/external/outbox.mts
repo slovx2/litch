@@ -125,12 +125,19 @@ export class ExternalGithubOutbox {
       { ...input, intent },
       this.statusGateConfirmed,
     )
+    const resultReply = intent.action === 'comment' && intent.purpose === 'result'
+    if (
+      resultReply &&
+      !this.store.resultReplies.matches(actor.managerId, input.issueId, source.sourceId, bound)
+    )
+      throw new GithubWriteFault('external_result_reply_requires_original_subject')
     const entry = this.prepare(actor, ids, source, bound, intent)
     return externalOutboxSummary(
       this.store.queue.enqueueOutbox({
         ...entry,
         issueId: input.issueId,
         mandateId: input.mandateId,
+        ...(resultReply ? { resultReply: true as const } : {}),
       }).record,
     )
   }

@@ -5,6 +5,8 @@ import {
   type ExternalWriteRequest,
   externalDraftHead,
 } from '../src/external/outbox.mjs'
+import { ExternalStore } from '../src/external-store.mjs'
+import { MANAGER_SCHEMA_VERSION, ManagerStore, openManagerDatabase } from '../src/manager-store.mjs'
 import {
   actor,
   bot,
@@ -75,6 +77,44 @@ test('只对绑定 X-n 的主题发送评论，同键同意图重放原回执，
     JSON.stringify({ row, audit: f.store.audit(`github/${subject.repoId}/${subject.number}`) }),
     /机器人回复|github_pat_/,
   )
+})
+
+test('升级按原接单恢复回执和历史终态，不补唤醒旧记录', async (t) => {
+  const f = await externalFixture(t, (req, res, url, data) => {
+    if (req.method !== 'POST' || url.pathname !== commentsPath) return false
+    respond(res, commentResponse(data.body), 201)
+    return true
+  })
+  const queued = f.outbox.enqueue(actor, {
+    ...f.request,
+    idempotencyKey: 'legacy-reply',
+    intent: comment,
+  })
+  await f.outbox.tick()
+  assert.equal(f.store.queue.outboxRecord(queued.operationId)?.state, 'confirmed')
+  const raw = f.store.manager.issue(actor.managerId, f.request.issueId) as Record<string, unknown>
+  f.store.manager.saveIssue(actor.managerId, f.request.issueId, { ...raw, status: 'resolved' })
+  f.store.manager.db.exec(
+    `DROP TABLE external_result_replies; PRAGMA user_version=${MANAGER_SCHEMA_VERSION - 1}`,
+  )
+  const reopened = new ManagerStore(openManagerDatabase(f.dir))
+  try {
+    const migrated = new ExternalStore(reopened).resultReplies
+    assert.equal(
+      migrated.matches(actor.managerId, f.request.issueId, f.request.sourceId, subject),
+      true,
+    )
+    assert.equal(migrated.missing(actor.managerId, f.request.issueId), null)
+    const row = reopened.db
+      .prepare('SELECT receipt_id, terminal FROM external_result_replies')
+      .get()
+    assert.equal(row?.receipt_id, queued.operationId)
+    assert.equal(row?.terminal, 1)
+    migrated.queueReminders()
+    assert.deepEqual(migrated.pendingManagerIds(), [])
+  } finally {
+    reopened.close()
+  }
 })
 
 test('工作线自行推送后，设备仅对原仓库和批准 base 创建草稿、回执与原 X-n 同时提交', async (t) => {

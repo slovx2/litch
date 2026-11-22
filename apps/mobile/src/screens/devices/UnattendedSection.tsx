@@ -16,6 +16,7 @@ import { IconButton } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import { failureText, reasonLabel } from '../managers/external/labels'
 import { ManagerRecovery } from '../managers/external/ManagerRecovery'
+import { MissingResultReply } from '../managers/external/MissingResultReply'
 import { useExternalDevice } from '../managers/external/use-external'
 import { InfoLine } from './parts'
 
@@ -97,6 +98,9 @@ export function UnattendedSection({ device }: { device: DeviceView }) {
                 {t(`mgh.source.${state}` as Key)}
                 {pending ? ` · ${t('mgh.source.pending', { n: pending })}` : ''}
               </Text>
+              {status.missingResultReplies?.map((reply) => (
+                <MissingResultReply key={`${reply.managerId}/${reply.issueId}`} reply={reply} />
+              ))}
               {status.readiness?.notify.diagnostics
                 .filter(({ state }) => state === 'blocked')
                 .map((item, index) => (

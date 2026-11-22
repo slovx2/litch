@@ -1072,6 +1072,27 @@ export class DeviceManagers {
       if (this.external?.store.queue.deliveryGroupForDelivery(event.id)) continue
       const parsed = parseSessionEvent(event.text)
       if (parsed.event?.kind === 'manager-issue' && manager.status !== 'active') continue
+      if (parsed.event?.kind === 'manager-issue' && parsed.event.externalResultReplies?.length) {
+        const reply = parsed.event.externalResultReplies[0]
+        const reminders = this.external?.store.resultReplies
+        if (!reply || !reminders) continue
+        const current = () => reminders.reminderCurrent(id, reply.issueId, event.id)
+        const target = reminders.reminderTarget(id, reply.issueId)
+        if (
+          !current() ||
+          (target && (await this.tree.externalDeliveryTurn(target, event.id, event.text)))
+        ) {
+          this.store.delivered(event.id)
+          continue
+        }
+        const sent = await this.tree.deliverManagerEvent(manager.threadId, '', '', {
+          automatic: true,
+          prepare: () => (current() ? { text: event.text, eventId: event.id } : null),
+          onDispatch: () => reminders.attemptingReminder(id, reply.issueId, manager.threadId),
+        })
+        if (sent || !current()) this.store.delivered(event.id)
+        continue
+      }
       if (parsed.event?.kind === 'manager-suggestions') {
         if (suggestionsVisited || this.suggestionTimers.has(id)) continue
         suggestionsVisited = true

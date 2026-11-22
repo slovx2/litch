@@ -19,6 +19,7 @@ import { isExternalEvent } from '../../protocol/src/external-validation.mjs'
 import type { ManagerIssue } from '../../protocol/src/manager-issues.mjs'
 import { ExternalConfigStore } from './external-config-store.mjs'
 import { ExternalQueueStore } from './external-queue-store.mjs'
+import { ExternalResultReplies } from './external-result-replies.mjs'
 import {
   boundedLimit,
   decode,
@@ -53,10 +54,12 @@ export type ExternalConfigResult<T> =
   | { outcome: 'conflict'; record: T | null }
 
 export class ExternalStore {
+  readonly resultReplies: ExternalResultReplies
   readonly manager: ManagerStore
   readonly queue: ExternalQueueStore
   readonly config: ExternalConfigStore
   constructor(manager: ManagerStore) {
+    this.resultReplies = new ExternalResultReplies(manager)
     this.manager = manager
     this.queue = new ExternalQueueStore(this)
     this.config = new ExternalConfigStore(this)
@@ -769,6 +772,10 @@ export class ExternalStore {
       )
       if (previous && previous.updatedAt > updatedAt) return
       this.writePollCheckpoints(key, [{ bucket: 'subject', key: subjectKey, value: observation }])
+      if (observation.state === (subject.kind === 'pull_request' ? 'merged' : 'closed')) {
+        const ref = this.ref(subject)
+        if (ref?.kind === subject.kind) this.resultReplies.finishSubject(ref, updatedAt)
+      }
       const pending = this.db
         .prepare(
           "SELECT body FROM external_intakes WHERE subject_key=? AND status='pending_triage' AND json_extract(body,'$.sourceId')=?",
@@ -1000,7 +1007,9 @@ export class ExternalStore {
   issueFields(managerId: string, issueId: ExternalIssueId): ExternalIssueFields {
     const externalRefs = this.refs(managerId, issueId)
     const intakeMandates = this.mandates(managerId, issueId)
+    const missingResultReply = this.resultReplies.missing(managerId, issueId)
     return {
+      ...(missingResultReply ? { missingResultReply } : {}),
       ...(externalRefs.length ? { externalRefs } : {}),
       ...(intakeMandates.length ? { intakeMandates } : {}),
     }
@@ -1202,6 +1211,14 @@ export class ExternalStore {
         this.db
           .prepare('INSERT INTO external_mandates VALUES(?,?,?,?)')
           .run(mandate.mandateId, mandate.managerId, mandate.issueId, encode(mandate))
+        if (actualRef.issueId === issueId)
+          this.resultReplies.accepted(
+            input.managerId,
+            issueId,
+            before.sourceId,
+            before.subject,
+            input.at,
+          )
       }
       const intake: ExternalIntake = {
         ...before,

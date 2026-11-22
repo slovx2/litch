@@ -12,6 +12,7 @@ import { Cdp, until } from './chrome-m0/cdp.mjs'
 const native = `import React from 'react';
 export const View = ({children}) => <div>{children}</div>;
 export const Text = View;
+export const Pressable = ({children,testID,onPress}) => <button data-testid={testID} onClick={onPress}>{children}</button>;
 export const StyleSheet = {create:v=>v};
 export const Linking = {openURL:async()=>{}};`
 const controls = `import React from 'react';
@@ -234,8 +235,21 @@ try {
   assert.equal(await read(hidden(repoAdd)), true)
   assert.equal(await read('!!document.querySelector("[data-agent-owner]")'), false)
   assert.equal(await read('accessCalls.includes("external.inbox.triage")'), false)
+  await read('setResultMissing(true)')
+  await wait('document.querySelectorAll("[data-missing-result-reply]").length === 2')
+  for (const root of ['#desktop', '#board']) {
+    assert.equal(
+      await read(`document.querySelector('${root} [data-missing-result-reply] a').href`),
+      'https://github.com/example/demo/issues/8',
+    )
+  }
+  await wait(`!!document.querySelector('#mobile [data-testid="missing-result-reply:X-1"]')`)
+  await read('setResultMissing(false)')
+  await wait(
+    '!document.querySelector("[data-missing-result-reply], [data-testid^=missing-result-reply]")',
+  )
   console.log(
-    '通过：远程设备的身份和仓库入口、按设备列出经理、无配置权限不读身份明细、撤权即只读、下载提示、桌面工具恢复及手机跳转',
+    '通过：远程设备的身份和仓库入口、按设备列出经理、无配置权限不读身份明细、撤权即只读、下载提示、桌面工具恢复、手机跳转及回帖标记实时清除',
   )
 } finally {
   cdp?.close()

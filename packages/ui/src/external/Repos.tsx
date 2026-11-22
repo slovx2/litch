@@ -12,6 +12,7 @@ import { Caret, Icon } from '../app/icons.tsx'
 import { useServices } from '../app/services.tsx'
 import { AddRepo } from './AddRepo.tsx'
 import { type ManagerChoice, useRun } from './data.ts'
+import { MissingResultReply } from './MissingResultReply.tsx'
 import {
   allowed,
   type IdentityHead,
@@ -105,6 +106,13 @@ function RepoRow({
           <Caret />
         </button>
       </div>
+      {status.missingResultReplies?.length ? (
+        <div className="ext-chips">
+          {status.missingResultReplies.map((reply) => (
+            <MissingResultReply key={`${reply.managerId}/${reply.issueId}`} reply={reply} />
+          ))}
+        </div>
+      ) : null}
       {act.error ? (
         <div className="devp-note err" role="alert">
           {act.error}

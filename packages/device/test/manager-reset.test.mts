@@ -276,7 +276,10 @@ test('外部经理在原帖回报结果；旧指令触发刷新，普通经理�
     const expected = managerBundle(manager, false, true, DEVICE_EXTERNAL_MANAGER_TOOLS)
     const text = instructions(expected)
     assert.match(text, /substantive result comment on the original issue or PR/)
-    assert.match(text, /external_write with action comment and the existing intake mandate/)
+    assert.match(
+      text,
+      /external_write with intent action comment and purpose result, and the existing intake mandate/,
+    )
     assert.match(text, /do not bypass the write policy/)
     const older = expected.map((spec) =>
       spec.name === 'litch_manager'

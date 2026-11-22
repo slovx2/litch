@@ -12,6 +12,7 @@
   },
   "undeclared": "不提供外部来源方法及通知，不在现有经理对象上发送外部字段。",
   "rules": [
+    "结果回复须由经理用 external_write 将 comment 的 intent.purpose 标为 result，目标为 X-n 的原接单主题。设备只有在回执确认后才算回复；确认的状态评论、反应和接单回执不算。内部收尾或观察到关联 issue 关闭、PR 合并时，缺回执的议题可带 missingResultReply，不阻止收尾。",
     "凭据变更只由设备管理员经私有控制通道提交。所有公开结果、通知及诊断均不得包含秘密、外部正文或待发载荷。",
     "预览不推进水位、不写持久记录；对账只读核验外部证据。按收到请求或通知的连接核验权限和声明。",
     "现有 ManagerIssue 的附加字段同时需要 litchManagerIssues；ManagerAnswer 的答复来源同时需要 litchManager。",
@@ -1018,6 +1019,16 @@
         }
       }
     },
+    "MissingResultReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["managerId", "issueId", "subject"],
+      "properties": {
+        "managerId": { "$ref": "#/definitions/LogicalId" },
+        "issueId": { "type": "string", "pattern": "^X-[1-9][0-9]*$" },
+        "subject": { "$ref": "#/definitions/Subject" }
+      }
+    },
     "SourceStatus": {
       "type": "object",
       "additionalProperties": false,
@@ -1027,7 +1038,12 @@
         "coverage": { "type": "array", "items": { "$ref": "#/definitions/Coverage" } },
         "runtime": { "$ref": "#/definitions/SourceRuntime" },
         "readiness": { "$ref": "#/definitions/Readiness" },
-        "agentGhIdentity": { "$ref": "#/definitions/AgentGhIdentity" }
+        "agentGhIdentity": { "$ref": "#/definitions/AgentGhIdentity" },
+        "missingResultReplies": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/definitions/MissingResultReply" }
+        }
       }
     },
     "SourceRuntime": {
@@ -1361,6 +1377,7 @@
         "revision"
       ],
       "properties": {
+        "missingResultReply": { "$ref": "#/definitions/MissingResultReply" },
         "eventKey": { "type": "string", "minLength": 1, "maxLength": 256 },
         "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 },
         "subjectKey": { "type": "string", "minLength": 1, "maxLength": 256 },
@@ -1860,6 +1877,8 @@
       "type": "array",
       "items": { "$ref": "#/definitions/Mandate" }
     },
+    "ManagerIssue.missingResultReply": { "$ref": "#/definitions/MissingResultReply" },
+    "ManagerIssueHead.missingResultReply": { "$ref": "#/definitions/MissingResultReply" },
     "ManagerAnswer.answerSource": { "$ref": "#/definitions/AnswerSource" }
   }
 }

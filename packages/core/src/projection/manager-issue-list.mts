@@ -238,5 +238,6 @@ export function managerIssueHead(issue: ManagerIssue): ManagerIssueHead {
     revision: issue.revision,
     createdAt: issue.createdAt,
     updatedAt: issue.updatedAt,
+    ...(issue.missingResultReply ? { missingResultReply: issue.missingResultReply } : {}),
   }
 }

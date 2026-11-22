@@ -12,6 +12,7 @@ import { Stamp } from '../transcript/Stamp.tsx'
 import { type ManagerChoice, useDeviceManagers, useExternalInbox, useRun } from './data.ts'
 import { InboxTriage } from './InboxTriage.tsx'
 import { ManagerRecovery } from './ManagerRecovery.tsx'
+import { MissingResultReply } from './MissingResultReply.tsx'
 import {
   groupInbox,
   INBOX_TABS,
@@ -98,6 +99,7 @@ function Detail({
   return (
     <div className="ext-detail" data-inbox-detail={head.eventKey}>
       <div className="ext-row ext-row-meta">
+        {head.missingResultReply ? <MissingResultReply reply={head.missingResultReply} /> : null}
         {head.ruleId ? (
           <span>
             {t('ext.inbox.rule')} <span className="mono">{head.ruleId}</span>

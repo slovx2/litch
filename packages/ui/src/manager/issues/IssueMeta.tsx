@@ -3,6 +3,7 @@
 import type { ManagerIssueHead } from '../../../../protocol/src/manager-issues.mts'
 import { useT } from '../../app/appearance.ts'
 import { Icon } from '../../app/icons.tsx'
+import { MissingResultReply } from '../../external/MissingResultReply.tsx'
 import { Stamp } from '../../transcript/Stamp.tsx'
 
 export function IssueKind({ kind }: { kind: ManagerIssueHead['kind'] }) {
@@ -37,6 +38,7 @@ export function IssueMeta({
           <Icon name="pause" small /> {t('issue.follow.off')}
         </span>
       ) : null}
+      {head.missingResultReply ? <MissingResultReply reply={head.missingResultReply} /> : null}
       <Stamp at={head.updatedAt} />
       {comments ? <span>{t('issue.commentCount', { n: comments })}</span> : null}
     </p>

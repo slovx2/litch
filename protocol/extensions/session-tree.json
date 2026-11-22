@@ -54,6 +54,7 @@
     "litch/sessionProposal/checkWorktree：参数 proposalId、可选 threadId（校验来源）和 cwd（编辑后的目录，空串继承启动父会话）；返回 available 布尔值。只检查实际启动目录是否在 Git 仓库，不创建工作树或子会话；桌面和手机勾选工作树后预检，检查期间或不可用时禁止开始，并提示关闭开关或编辑目录。",
     "客户端重复 dismiss 已 dismissed 的提案成功返回空对象；重复 accept 已 started 且有 startedThreadId 的提案返回原 threadId，不重复开子会话。归属校验照常执行。其他状态冲突、正在开始或未知提案按 invalid params（-32602）给具体原因，不用 method not found（-32601）伪装方法缺失。",
     "fork 只能同 harness，用目标引擎的 thread/fork；跨 harness 只能 fresh。",
+    "送达经理的工作线回报可附 externalResultReplies。提示带原接单来源和未取得确认回执的状态，只按明确绑定生成，不授予回写权限。",
     "子会话一回合结束：取最后一条回答的前 SESSION_TREE_LIMITS.noteChars 个字，等父会话下一个由用户发起的回合时，包成 kind=notes 的 <litch-session-event> 放在用户消息前面。",
     "子会话的回合失败、被打断：回报（SessionEventNote）另带 error，是回合上的错误原文，截到 SESSION_TREE_LIMITS.noteChars 个字以内；给模型的那一行写在最后（error: …）。这样的回报（第一回合也一样）照常进队列，但不算“要唤醒”的：等父会话下一个回合带上，或者别的子会话的回报唤醒父会话时一起交出去（同 Claude 桌面端：被截断的回合不唤醒）。派子会话时简报没发出去（turn/start 失败）不进队列，错误当场回给派它的那次调用。",
     "回报队列一变（进了一条、交出去了、改成不唤醒）就给声明了 sessionTree 的连接发 litch/thread/queuedNotes/updated（threadId、notes），notes 是这个会话现在排着、还没交给模型的回报（SessionQueuedNote：SessionEventNote 加进队列的时间 at，单位秒），每个子会话最新的一条，次序同交出去时；空了是空数组。经过聚合面的会话对象上同样挂 litchQueuedNotes（空着时没有这个字段）。客户端据此不等交给模型就把排着的回报画在父会话对话区的末尾，交出去之后画在带着它的那条消息上。",

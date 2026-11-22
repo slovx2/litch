@@ -3,6 +3,7 @@ import type { Entry } from './types.ts'
 import type { zhExternal } from './zh-CN-external.ts'
 
 export const enExternal: Record<keyof typeof zhExternal, Entry> = {
+  'ext.missingResultReply': 'Result not posted',
   'ext.open': 'Open on GitHub',
   'ext.loading': 'Loading…',
   'ext.save': 'Save',
