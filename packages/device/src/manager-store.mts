@@ -570,6 +570,28 @@ export class ManagerStore {
       .all(managerId)
       .map((row) => JSON.parse(String(row.body)))
   }
+  /** 只查当前页需要的议题。用库内顺序选择最后一次转为受阻，不误取之后的编辑或旧周期。 */
+  issueBlockedReasons(managerId: string, issueIds: readonly string[]): Map<string, string> {
+    if (!issueIds.length) return new Map()
+    const rows = this.db
+      .prepare(`SELECT json_extract(h.body,'$.objectId') AS id, json_extract(h.body,'$.why') AS why
+      FROM issue_history h
+      JOIN (
+        SELECT MAX(seq) AS seq FROM issue_history
+        WHERE manager_id=? AND json_extract(body,'$.objectId') IN (SELECT value FROM json_each(?))
+        AND json_extract(body,'$.before.status') <> 'blocked'
+        AND json_extract(body,'$.after.status') = 'blocked'
+        GROUP BY json_extract(body,'$.objectId')
+      ) latest ON latest.seq=h.seq`)
+      .all(managerId, JSON.stringify(issueIds))
+    const reasons = new Map<string, string>()
+    for (const { id, why } of rows) {
+      const reason = typeof why === 'string' ? why.trim() : ''
+      if (typeof id === 'string' && reason)
+        reasons.set(id, Array.from(reason).slice(0, 500).join(''))
+    }
+    return reasons
+  }
   recordIssue(
     managerId: string,
     objectId: import('../../protocol/src/manager-issues.mjs').ManagerIssueId,

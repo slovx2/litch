@@ -194,9 +194,12 @@ try {
     () =>
       read(String.raw`(() => {
     const card = document.querySelector('[data-testid="issue-card:X-5"]');
+    const noReason = document.querySelector('[data-testid="issue-card:X-9"]');
     const count = document.querySelector('[data-testid="issue-capsule:ordinary"]')?.textContent?.match(/\d+/)?.[0];
     const total = document.querySelector('[data-testid="issue-total"]')?.textContent?.match(/\d+\s*\/\s*(\d+)/)?.[1];
-    return card?.innerText.includes('等待：等上游修复合并，周三复查。') && !!count && count === total;
+    return card?.innerText.includes('等待：等上游修复合并，周三复查。') &&
+      !card.innerText.includes('未记录原因') && noReason?.innerText.includes('等待：未记录原因') &&
+      !!count && count === total;
   })()`),
     '普通议题的待处理项显示等待原因，角标与列表一致',
   )

@@ -687,6 +687,34 @@
   },
   "localObservations": [
     {
+      "id": "2026-11-22-legacy-blocked-workspace-notification",
+      "source": "local",
+      "suite": "node scripts/ci/test-shard.mjs device, 197 files",
+      "test": "工作区：建、读、改、重排、删都在设备层，变了通知所有连接，一个请求都不转给引擎",
+      "sha": "0cd0c9900c69f8127f36db2d0d2ee4087d9e634a",
+      "observedAt": "2026-11-22T04:29:27Z",
+      "environment": { "platform": "darwin-arm64", "node": "24.19.0" },
+      "failure": "完整 device 分片 1224/1225 通过，工作区创建后的 project/changed 通知为 []，预期两条。与已有 CI 42827516748 的现象相同；具体调度原因未确证。",
+      "failureLog": {
+        "name": "device.log",
+        "sha256": "3f85e58d01c1410ef64a87459119fd1aab918e0b7391b5a6d82037d9fdd87cd5"
+      },
+      "evidence": {
+        "kind": "same-sha-local-rerun",
+        "result": "相同源码和构建产物，原样单跑 workspaces.test.mjs，2/2 通过；未修改工作区实现、该用例、断言或时限。",
+        "log": "workspaces-diagnostic.log",
+        "sha256": "0539fb2ba7e101511b3859fbb18d63433907169a2a950b1ef909e68af4a6bfef",
+        "fullRerun": {
+          "command": "node scripts/ci/test-shard.mjs device",
+          "result": "产品源码和构建产物未改，完整 197 文件、1225/1225 通过。",
+          "log": "device-confirm.log",
+          "sha256": "2c08a36357e32555909902c1abe528c9310497ae46a52a0d53dd2fa166d37832"
+        }
+      },
+      "countedInCiThreshold": false,
+      "note": "HEAD 基线如上，工作区含待合入 123dd35f 及经理议题查询边界回归。工作区实现、workspaces.test.mts 和隔离 helpers 未改，没有新 CI run/job，不增加 CI 偶发次数。"
+    },
+    {
       "id": "2026-11-21-device-manager-ending-binding",
       "source": "local",
       "suite": "node scripts/ci/test-shard.mjs device, 197 files",

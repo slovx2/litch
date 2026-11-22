@@ -9,6 +9,8 @@ import {
 } from '../../protocol/src/manager.mjs'
 import {
   MANAGER_ISSUE_METHOD as M,
+  type ManagerIssue,
+  type ManagerIssueHead,
   MANAGER_ISSUE_NOTIFICATION as N,
 } from '../../protocol/src/manager-issues.mjs'
 import { managerQuestionToolAllowed } from '../../protocol/src/manager-question.mjs'
@@ -602,6 +604,111 @@ test('v6 连续升级保留 D/R/P/S/I、问答、关联、报告已阅；不建�
     )
   } finally {
     if (second) await second.close()
+    else await env.close()
+  }
+})
+
+test('升级后从最近一次实际转为受阻的历史恢复等待原因，列表和详情不写回旧记录', async (t) => {
+  const { env, client, managerId } = await setup()
+  let upgraded: ReturnType<typeof rig> | undefined
+  try {
+    const { store } = env.device.managers
+    const seed = async (title: string) =>
+      (await client.call(M.create, { managerId, title, body: '旧版描述', followUp: 'off' }))
+        .issue as ManagerIssue
+    const change = (before: ManagerIssue, status: ManagerIssue['status'], why: string) => {
+      const after = { ...before, status }
+      store.recordIssue(managerId, before.id, 'manager', before, after, why)
+      return after
+    }
+    const old = await seed('旧版等待作者')
+    const first = change(old, 'blocked', '旧周期在等评审')
+    const doing = change(first, 'in_progress', '评审已完成')
+    const reason = '等作者补齐验证；周三复查'
+    const latest = change(doing, 'blocked', `  ${reason}  `)
+    const edited = { ...latest, title: '在等作者补验证' }
+    store.recordIssue(managerId, old.id, 'manager', latest, edited, '只改标题')
+    store.saveIssue(managerId, old.id, edited)
+
+    const noReason = await seed('没有可恢复的原因')
+    const oldReason = change(noReason, 'blocked', '上一轮等合并')
+    const reopened = change(oldReason, 'open', '已不等这一项')
+    store.saveIssue(managerId, noReason.id, {
+      ...change(reopened, 'blocked', '   '),
+      blockedReason: '   ',
+    })
+
+    const explicit = await seed('新版已经记录原因')
+    store.saveIssue(managerId, explicit.id, {
+      ...change(explicit, 'blocked', '不应覆盖新版原因'),
+      blockedReason: '新版已记原因',
+    })
+    const active = await seed('已继续处理')
+    store.saveIssue(
+      managerId,
+      active.id,
+      change(change(active, 'blocked', '已经过期的原因'), 'in_progress', '恢复处理'),
+    )
+    const snapshots = [old, noReason, explicit, active].map(({ id }) => store.issue(managerId, id))
+    const history = store.issueChanges(managerId)
+    await env.device.close()
+
+    upgraded = rig({ pi: env.pi }, {}, { stateDir: env.stateDir })
+    const reopenedStore = upgraded.device.managers.store
+    const readReasons = reopenedStore.issueBlockedReasons.bind(reopenedStore)
+    const queried: string[][] = []
+    t.mock.method(
+      reopenedStore,
+      'issueBlockedReasons',
+      (ownerId: string, ids: readonly string[]) => {
+        queried.push([...ids])
+        return readReasons(ownerId, ids)
+      },
+    )
+    const api = upgraded.connect()
+    await api.initialize(['harness', 'litchManagerIssues'])
+    const { page } = await api.call(M.list, { managerId, kinds: ['ordinary'], order: 'oldest' })
+    const heads = new Map(
+      (page.entries as ManagerIssueHead[]).map(({ id, blockedReason }) => [id, blockedReason]),
+    )
+    assert.equal(heads.get(old.id), reason)
+    assert.equal(heads.get(noReason.id), undefined)
+    assert.equal(heads.get(explicit.id), '新版已记原因')
+    assert.equal(heads.get(active.id), undefined)
+    assert.deepEqual(
+      queried,
+      [
+        (page.entries as ManagerIssueHead[])
+          .filter(({ id }) => id === old.id || id === noReason.id)
+          .map(({ id }) => id),
+      ],
+      '整页缺失项只批量查询一次，已有原因和非受阻项不参与',
+    )
+    const readPage = (id: string) =>
+      api.call(M.list, {
+        managerId,
+        kinds: ['ordinary'],
+        order: 'oldest',
+        limit: 1,
+        cursor: String((page.entries as ManagerIssueHead[]).findIndex((entry) => entry.id === id)),
+      })
+    queried.length = 0
+    await readPage(explicit.id)
+    await readPage(active.id)
+    assert.deepEqual(queried, [], '当前页不缺等待原因时不查历史')
+    await readPage(old.id)
+    assert.deepEqual(queried, [[old.id]], '分页之后只查本页的缺失项')
+    const detail = (id: string) => api.call(M.read, { managerId, id })
+    assert.equal((await detail(old.id)).issue.blockedReason, reason)
+    assert.equal((await detail(noReason.id)).issue.blockedReason, undefined)
+    assert.equal((await detail(explicit.id)).issue.blockedReason, '新版已记原因')
+    assert.deepEqual(
+      [old, noReason, explicit, active].map(({ id }) => reopenedStore.issue(managerId, id)),
+      snapshots,
+    )
+    assert.deepEqual(reopenedStore.issueChanges(managerId), history)
+  } finally {
+    if (upgraded) await upgraded.close()
     else await env.close()
   }
 })
