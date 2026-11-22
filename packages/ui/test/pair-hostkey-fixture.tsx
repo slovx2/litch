@@ -8,7 +8,9 @@ import {
   createReplica,
   type DeviceView,
   keys,
+  type PairingAddressHints,
   type PairingHostKeyWarning,
+  type PairingView,
   serveChannel,
 } from '@litch/core'
 import { useState } from 'react'
@@ -29,12 +31,50 @@ const calls: { name: string; args: unknown }[] = []
 let token: string | null = null
 let seq = 0
 const fingerprint = `SHA256:${'a'.repeat(43)}`
+const scenario = params.get('address')
+const scenarioHosts: Record<string, string> = {
+  proxy: '10.10.10.10',
+  private: '192.168.1.7',
+  tailnet: '100.100.100.7',
+  public: '203.0.113.7',
+}
 core.command = async (name, given, signal) => {
   calls.push({ name, args: given })
   if (name === 'pairing.start') {
     const args = given as {
       address?: { host: string; port: number; user: string }
       hostKeyConfirmation?: string
+    }
+    const host = scenario ? scenarioHosts[scenario] : undefined
+    if (host) {
+      const at = args.address ?? { host, port: 22, user: 'dev' }
+      const hints: PairingAddressHints = {
+        hosts: scenario === 'proxy' ? ['100.100.100.7'] : [],
+        ...(scenario === 'proxy'
+          ? { ssh: { host, port: 22, proxy: true, alias: 'demo-box' } }
+          : {}),
+      }
+      if (scenario === 'proxy' && at.host === host && args.hostKeyConfirmation !== 'address-risk') {
+        const key = { type: 'ssh-ed25519', publicKey: 'ssh-ed25519 ENTRY', fingerprint }
+        throw new ChannelError('rejected', '需要确认', undefined, {
+          key: 'hostKeyMismatch',
+          pairingAddress: { name: '配对夹具', ...at },
+          pairingAddressHints: hints,
+          pairingHostKey: {
+            token: 'address-risk',
+            reason: 'unverified',
+            address: at,
+            reported: [key],
+            known: [key],
+            entrance: [],
+            selected: key,
+          },
+        })
+      }
+      const result = (await originalCommand(name, { ...args, address: at }, signal)) as {
+        pairing: PairingView
+      }
+      return { pairing: { ...result.pairing, ...hints } }
     }
     const failure = params.get('failure')
     if (failure && args.address?.port !== 2224) {

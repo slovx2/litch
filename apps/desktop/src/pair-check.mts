@@ -81,6 +81,49 @@ say('resolve', resolved.host === '127.0.0.1' && resolved.port > 0 && resolved.us
   resolved,
 })
 
+// 只解析隔离配置；ProxyCommand 特意不可执行，确认不会真正连接。
+{
+  const previous = process.env.LITCH_SSH_CONFIG
+  const config = join(root, 'address-hints-ssh-config')
+  writeFileSync(
+    config,
+    [
+      'Host hints-jump',
+      '  HostName 10.10.10.10',
+      '  ProxyJump fixture-jump',
+      'Host hints-command',
+      '  HostName 203.0.113.9',
+      '  ProxyCommand /fixture/never-run',
+      'Host hints-direct',
+      '  HostName 203.0.113.10',
+      '  ProxyJump none',
+      '  ProxyCommand none',
+      '',
+    ].join('\n'),
+    { mode: 0o600 },
+  )
+  process.env.LITCH_SSH_CONFIG = config
+  try {
+    const route = (alias: string) => platform.resolve({ kind: 'alias', alias })
+    const jump = await route('hints-jump')
+    const command = await route('hints-command')
+    const direct = await route('hints-direct')
+    say('resolveProxyJump', jump.host === '10.10.10.10' && jump.proxy === true, { jump })
+    say('resolveProxyCommand', command.host === '203.0.113.9' && command.proxy === true, {
+      command,
+    })
+    say('resolveDirect', direct.host === '203.0.113.10' && !direct.proxy, { direct })
+    say(
+      'resolveSshAlias',
+      (await platform.isSshAlias?.('hints-jump')) === true &&
+        (await platform.isSshAlias?.('public.example.org')) === false,
+    )
+  } finally {
+    if (previous === undefined) delete process.env.LITCH_SSH_CONFIG
+    else process.env.LITCH_SSH_CONFIG = previous
+  }
+}
+
 const known = await platform.knownKeys(ok)
 say('knownKeys', known.includes(hostKey.publicKey), { known })
 const none = await platform.knownKeys({ kind: 'alias', alias: aliases.untrusted ?? '' })

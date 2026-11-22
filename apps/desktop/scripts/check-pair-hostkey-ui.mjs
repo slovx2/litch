@@ -80,9 +80,28 @@ if (!process.versions.electron) {
       }
       await win.loadURL(`${process.env.LITCH_PAIR_URL}test/pair-hostkey-fixture.html?ttl=900`)
       assert.equal(await win.webContents.executeJavaScript(`(${expiryProbe})()`), true)
+      for (const scenario of ['proxy', 'private', 'tailnet', 'public']) {
+        const url = `${process.env.LITCH_PAIR_URL}test/pair-hostkey-fixture.html?address=${scenario}`
+        await win.loadURL(url)
+        assert.equal(
+          await win.webContents.executeJavaScript(`(${addressProbe})(${JSON.stringify(scenario)})`),
+          true,
+        )
+        if (process.env.LITCH_PAIR_SHOTS) {
+          writeFileSync(
+            join(process.env.LITCH_PAIR_SHOTS, `address-${scenario}.png`),
+            (await win.webContents.capturePage()).toPNG(),
+          )
+        }
+        if (scenario === 'proxy') {
+          assert.equal(await win.webContents.executeJavaScript(`(${candidateProbe})()`), true)
+          await win.loadURL(url)
+          assert.equal(await win.webContents.executeJavaScript(`(${candidateProbe})(true)`), true)
+        }
+      }
       assert.equal(win.isVisible(), false)
       console.log(
-        'PASS 隐藏窗口：三种入口失败、失败后改端口重新检查、三种风险、取消、一次确认出码、中英三皮肤、改地址隐藏旧码、到期重新确认',
+        'PASS 隐藏窗口：三种入口失败、风险确认、改地址与到期重新检查；跳板、内网、tailnet、公网双语提示、无候选和一键填入',
       )
       app.exit(0)
     } catch (error) {
@@ -90,6 +109,61 @@ if (!process.versions.electron) {
       app.exit(1)
     }
   })
+}
+
+async function addressProbe(scenario) {
+  const ready = scenario === 'proxy' ? '[data-pair-host-warning]' : '[data-pair-ready="true"]'
+  for (let i = 0; i < 100 && !document.querySelector(ready); i++) {
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  if (!document.querySelector(ready)) throw new Error(`地址状态未就绪：${scenario}`)
+  const input = document.querySelector('[data-field="host"] input')
+  const hint = document.querySelector('[data-pair-address-hint]')
+  const picker = document.querySelector('[data-act="pick-host"]')
+  if (scenario === 'public' ? !!hint : hint?.dataset.pairAddressHint !== scenario)
+    throw new Error(`地址提示错误：${scenario}`)
+  if (!!picker !== (scenario === 'proxy')) throw new Error(`候选显示错误：${scenario}`)
+  if (picker && !hint?.textContent.includes('100.100.100.7')) throw new Error('候选地址不可见')
+  if (hint && input.getAttribute('aria-describedby') !== hint.id)
+    throw new Error('输入框未关联提示')
+  const labels = {
+    proxy: ['手机不支持 SSH 跳板', 'Phones can’t use SSH jump hosts'],
+    private: ['手机需要能直达此内网地址', 'Your phone needs direct access'],
+    tailnet: ['手机须加入同一 tailnet', 'join the same tailnet'],
+  }
+  for (const [index, lang] of ['zh-CN', 'en'].entries()) {
+    window.__litchLook.set({ skin: 'standard', lang })
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+    if (hint && !hint.textContent.includes(labels[scenario][index])) throw new Error(lang)
+    if ((scenario === 'proxy' || scenario === 'tailnet') && !hint.textContent.includes('Litch'))
+      throw new Error('缺少内置登录说明')
+  }
+  window.__litchLook.set({ lang: 'zh-CN' })
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  return true
+}
+
+async function candidateProbe(confirm = false) {
+  const action = confirm ? 'pair-host-confirm' : 'pick-host'
+  const button = () => document.querySelector(`[data-act="${action}"]`)
+  const ready = () => document.querySelector('[data-pair-ready="true"]')
+  const wait = async (predicate) => {
+    for (let i = 0; i < 100; i++) {
+      if (predicate()) return
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    throw new Error(`选择或确认超时：${action}`)
+  }
+  await wait(button)
+  button().click()
+  await wait(ready)
+  const host = confirm ? '10.10.10.10' : '100.100.100.7'
+  const input = document.querySelector('[data-field="host"] input')
+  if (input.value !== host) throw new Error('没有使用选中的主机')
+  const hint = document.querySelector('[data-pair-address-hint]')
+  if (hint?.dataset.pairAddressHint !== (confirm ? 'proxy' : 'tailnet'))
+    throw new Error('提示没有随主机地址变化')
+  return true
 }
 
 async function failureProbe(failure) {

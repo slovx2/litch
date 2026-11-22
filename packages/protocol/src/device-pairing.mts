@@ -316,6 +316,8 @@ interface DevicePairStartBase {
   tailscaleSsh: boolean
   /** 这台机器在 tailnet 里的名字和地址。开着 Tailscale、tailnet 开了 MagicDNS 才有；老的设备服务不带 */
   tailnet?: PairTailnet
+  /** 未启用 MagicDNS 时也可报告设备的 tailnet IP。 */
+  tailnetAddresses?: string[]
 }
 
 /** 一台机器在 tailnet 里的样子（tailscale status --json 的 Self） */

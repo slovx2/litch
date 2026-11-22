@@ -23,6 +23,15 @@ export interface PairingAddress {
 /** 手机要连的地址里决定连到哪的三项（不含别名） */
 export type PairingTarget = Omit<PairingAddress, 'name'>
 
+/** 出码提示只描述桌面的连接与候选地址，不参与手机的 SSH 选路。 */
+export interface PairingAddressHints {
+  /** 设备报告的 tailnet IP、MagicDNS 全名或短名。 */
+  hosts: string[]
+  ssh?: { host: string; port: number; proxy?: boolean; alias?: string }
+  /** 本次输入的主机由桌面的 SSH 配置改写。 */
+  localAlias?: string
+}
+
 /** 一次出码的风险确认；token 仅在当前核心内有效，不落盘。 */
 export interface PairingHostKeyWarning {
   token: string
@@ -34,7 +43,7 @@ export interface PairingHostKeyWarning {
   selected: PairHostKey
 }
 
-export interface PairingView {
+export interface PairingView extends PairingAddressHints {
   deviceId: string
   pairId: string
   /** key：一次性钥匙加强制命令；tailscale：手机自己执行登记命令（设备开着 Tailscale SSH，手机走 tailnet） */
@@ -57,8 +66,6 @@ export interface PairingView {
    * 本机是设备报的主机名、用户、22
    */
   original: PairingAddress
-  /** 主机的候选：设备在 tailnet 里的 IP、MagicDNS 全名、短名（设备报了 tailnet 才有），界面做成下拉 */
-  hosts: string[]
   /** 设备认手机的批准公钥（列了 clientApprovals）：二维码里放 a，手机登记时带上它 */
   approvals: boolean
 }

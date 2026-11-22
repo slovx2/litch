@@ -119,14 +119,26 @@ test('不握手也能走完一次配对；通知只发给声明了 devicePairing
   }
 })
 
-test('Tailscale 方式的应答也合扩展定义：没有 seed，有 enrollCommand', async () => {
+test('Tailscale 方式的应答符合扩展定义：没有 seed，可单报 IP', async () => {
   const place = pairPlace()
-  const device = rig({}, {}, { pairing: pairConfig(place, { tailscaleSsh: async () => true }) })
+  const addresses = ['100.100.100.7']
+  const device = rig(
+    {},
+    {},
+    {
+      pairing: pairConfig(place, {
+        tailscaleSsh: async () => true,
+        tailnet: async () => ({ addresses }),
+      }),
+    },
+  )
   try {
     const cli = new TestClient(device.device)
     params('litch/pair/start', { mode: 'tailscale' })
     const started = await cli.call('litch/pair/start', { mode: 'tailscale' })
     response('litch/pair/start', started)
+    assert.deepEqual(started.tailnetAddresses, addresses)
+    assert.equal(started.tailnet, undefined)
     assert.deepEqual(
       [started.mode, started.tailscaleSsh, 'seed' in started],
       ['tailscale', true, false],
@@ -135,6 +147,7 @@ test('Tailscale 方式的应答也合扩展定义：没有 seed，有 enrollComm
     assert.throws(() => response('litch/pair/start', { ...started, seed: 'A'.repeat(43) }))
     const keyed = await cli.call('litch/pair/start', {})
     response('litch/pair/start', keyed)
+    assert.deepEqual(keyed.tailnetAddresses, addresses)
     assert.throws(() =>
       response('litch/pair/start', { ...keyed, enrollCommand: started.enrollCommand }),
     )

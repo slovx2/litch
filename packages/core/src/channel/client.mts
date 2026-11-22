@@ -50,6 +50,7 @@ const fromShape = (shape: ChannelErrorShape): ChannelError =>
     ...(shape.key === undefined ? {} : { key: shape.key }),
     ...(shape.pairingHostKey ? { pairingHostKey: shape.pairingHostKey } : {}),
     ...(shape.pairingAddress ? { pairingAddress: shape.pairingAddress } : {}),
+    ...(shape.pairingAddressHints ? { pairingAddressHints: shape.pairingAddressHints } : {}),
     ...(shape.modelLimit ? { modelLimit: shape.modelLimit } : {}),
   })
 

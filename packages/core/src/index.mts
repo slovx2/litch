@@ -246,6 +246,7 @@ export {
   type PairingPlatform,
   type PairSelfTestInput,
   type PairSelfTestResult,
+  pairingHostHint,
   pairingPayload,
 } from './device/pairing.mjs'
 export { createPendingInputStore, type PendingInputStore } from './device/pending-inputs.mjs'

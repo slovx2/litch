@@ -26,6 +26,7 @@ import {
   type DevicePairPhonesChangedNotification,
   type DevicePairStartResponse,
   isTailnetHost,
+  normalizeTailnetHost,
   type PairHostKey,
   type PairMode,
   type PairPayload,
@@ -43,6 +44,7 @@ import { RpcError, type RpcRequestOptions } from '../connection/rpc.mjs'
 import type { RemoteTarget } from '../model.mjs'
 import type {
   PairingAddress,
+  PairingAddressHints,
   PairingStartFailure,
   PairingTarget,
   PairingTopicView,
@@ -54,6 +56,7 @@ export interface PairingHostAddress {
   host: string
   port: number
   user: string
+  proxy?: boolean
 }
 
 export interface PairHostInspection {
@@ -98,6 +101,8 @@ export type PairSelfTestResult =
 export interface PairingPlatform {
   /** ssh 设备：用 ssh -G 解析出主机名、端口、用户 */
   resolve(target: RemoteTarget): Promise<PairingHostAddress>
+  /** 本机 SSH 配置会不会将输入的主机名改写成另一地址；只解析，不登录。 */
+  isSshAlias?(host: string): Promise<boolean>
   /** 当前入口的公开钥匙和本次已认证连接的服务端地址，不写 known_hosts。 */
   inspect(
     target: RemoteTarget,
@@ -168,7 +173,7 @@ export interface PairingApprovalKey {
 }
 
 /** pairing.start 的结果，还差“预填哪个地址”（记在桌面端，由核心那一层填） */
-export interface PairingStarted {
+export interface PairingStarted extends PairingAddressHints {
   pairId: string
   mode: PairMode
   seed: string | null
@@ -178,8 +183,6 @@ export interface PairingStarted {
   expiresAt: number
   hostKey: PairHostKey
   original: PairingAddress
-  /** 设备在 tailnet 里的主机写法（tailnetHosts），给界面做下拉；没有是空的 */
-  hosts: string[]
   /** 设备认手机的批准公钥（PairingView.approvals） */
   approvals: boolean
 }
@@ -262,12 +265,42 @@ export function hostKeyTrusted(
  * 这台设备在 tailnet 里能给手机用的主机写法，按预填的先后：IPv4、IPv6、MagicDNS 全名、短名（全名的头一段）。
  * 设备没报 tailnet 是空的
  */
-export function tailnetHosts(tailnet: PairTailnet | undefined): string[] {
-  if (!tailnet) return []
-  const v4 = tailnet.addresses.filter((address) => !address.includes(':'))
-  const v6 = tailnet.addresses.filter((address) => address.includes(':'))
-  const short = tailnet.name.split('.')[0] ?? ''
-  return [...new Set([...v4, ...v6, tailnet.name, short].filter(Boolean))]
+export function tailnetHosts(tailnet: PairTailnet | undefined, addresses: string[] = []): string[] {
+  const ips = tailnet?.addresses ?? addresses
+  const v4 = ips.filter((address) => !address.includes(':'))
+  const v6 = ips.filter((address) => address.includes(':'))
+  const short = tailnet?.name.split('.')[0] ?? ''
+  return [...new Set([...v4, ...v6, tailnet?.name ?? '', short].filter(Boolean))]
+}
+
+/** 只提示可达性风险；桌面能否连上不代表手机能连上。 */
+export function pairingHostHint(
+  host: string,
+  port: number,
+  { hosts, ssh, localAlias }: PairingAddressHints,
+): 'tailnet' | 'proxy' | 'alias' | 'private' | null {
+  const at = normalizeTailnetHost(host)
+  if (!at) return null
+  if (possibleTailnetHost(at, hosts)) return 'tailnet'
+  if (
+    (localAlias && at === normalizeTailnetHost(localAlias)) ||
+    (ssh?.alias && at === normalizeTailnetHost(ssh.alias) && at !== normalizeTailnetHost(ssh.host))
+  )
+    return 'alias'
+  if (ssh?.proxy && at === normalizeTailnetHost(ssh.host) && port === ssh.port) return 'proxy'
+  if (at === 'localhost' || at.endsWith('.localhost') || at === '::1') return 'private'
+  if (/^(?:f[cd][0-9a-f]{2}|fe[89ab][0-9a-f]):/.test(at)) return 'private'
+  const ipv4 = at.replace(/^::ffff:/, '').split('.')
+  if (ipv4.length !== 4 || !ipv4.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255))
+    return null
+  const [a, b] = ipv4.map(Number) as [number, number]
+  return a === 10 ||
+    a === 127 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254)
+    ? 'private'
+    : null
 }
 
 /**
@@ -277,10 +310,10 @@ export function tailnetHosts(tailnet: PairTailnet | undefined): string[] {
  */
 export function phoneHostOf(
   host: string,
-  started: Pick<DevicePairStartResponse, 'tailscaleSsh' | 'tailnet'>,
+  started: Pick<DevicePairStartResponse, 'tailscaleSsh' | 'tailnet' | 'tailnetAddresses'>,
 ): string {
   if (!started.tailscaleSsh) return host
-  const hosts = tailnetHosts(started.tailnet)
+  const hosts = tailnetHosts(started.tailnet, started.tailnetAddresses)
   const bare = host
     .trim()
     .replace(/^\[(.*)\]$/, '$1')
@@ -713,18 +746,42 @@ export function createPairing(host: PairingHost): Pairing {
         }
       }
       // 手机要连的地址：给了就用，否则原配置。本机的原配置要等设备报主机名，这时先不认方式
-      const phoneAt = options.address ?? resolved
+      const phoneAt =
+        options.address ??
+        (resolved ? { host: resolved.host, port: resolved.port, user: resolved.user } : null)
       let failureAddress: PairingAddress | null = phoneAt
         ? { name: host.displayName(), ...phoneAt }
         : null
+      const hints: PairingAddressHints = {
+        hosts: [],
+        ...(resolved
+          ? {
+              ssh: {
+                host: resolved.host,
+                port: resolved.port,
+                ...(resolved.proxy ? { proxy: true } : {}),
+                ...(target?.kind === 'alias' ? { alias: target.alias } : {}),
+              },
+            }
+          : {}),
+      }
       const addressed = (error: unknown): unknown => {
         if (!(error instanceof ChannelError) || !failureAddress) return error
         return new ChannelError(error.code, error.message, error.text, {
           ...error.toShape(),
           pairingAddress: failureAddress,
+          pairingAddressHints: hints,
         })
       }
-      const banner = phoneAt ? await bannerOf(platform, phoneAt) : null
+      const customHost = options.address?.host
+      const [banner, localAlias] = await Promise.all([
+        phoneAt ? bannerOf(platform, phoneAt) : null,
+        customHost &&
+        normalizeTailnetHost(customHost) !== normalizeTailnetHost(resolved?.host ?? '')
+          ? platform.isSshAlias?.(customHost).catch(() => false)
+          : false,
+      ])
+      if (customHost && localAlias) hints.localAlias = customHost
       // 横幅读不到、地址又是 tailnet 的：要看设备自报，先按一次性钥匙建，回来再定
       const mode: PairMode | null =
         options.mode ??
@@ -742,6 +799,7 @@ export function createPairing(host: PairingHost): Pairing {
       let started: DevicePairStartResponse
       try {
         started = await create(mode, inspection?.sshEndpoint)
+        hints.hosts = tailnetHosts(started.tailnet, started.tailnetAddresses)
       } catch (error) {
         throw addressed(error)
       }
@@ -755,7 +813,12 @@ export function createPairing(host: PairingHost): Pairing {
         // 设备开着 Tailscale SSH：换成 tailscale 方式重新建
         if (tailscale === true) {
           discard(started.pairId)
-          started = await create('tailscale', inspection?.sshEndpoint)
+          try {
+            started = await create('tailscale', inspection?.sshEndpoint)
+          } catch (error) {
+            throw addressed(error)
+          }
+          hints.hosts = tailnetHosts(started.tailnet, started.tailnetAddresses)
         } else if (host.kind === 'local' && !phoneAt && !(await platform.localSsh())) {
           discard(started.pairId)
           throw startFailure('sshOff', '127.0.0.1:22 上没有 SSH 服务')
@@ -794,7 +857,7 @@ export function createPairing(host: PairingHost): Pairing {
           expiresAt: started.expiresAt,
           hostKey: started.hostKey,
           original: vetted.original,
-          hosts: tailnetHosts(started.tailnet),
+          ...hints,
           approvals: host.approvals(),
         }
       } catch (error) {

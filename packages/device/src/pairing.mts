@@ -34,9 +34,14 @@ import {
   type PairSshEndpoint,
   type PairState,
   type PairStatus,
-  type PairTailnet,
 } from '../../protocol/src/device-pairing.mjs'
-import { expiryTime, localSshEndpoint, preferredHostKey, type SshdVersion } from './pair-host.mjs'
+import {
+  expiryTime,
+  localSshEndpoint,
+  type PairTailnetSelf,
+  preferredHostKey,
+  type SshdVersion,
+} from './pair-host.mjs'
 import {
   AuthorizedKeys,
   cleanPhoneName,
@@ -97,7 +102,7 @@ export interface PairingConfig {
   /** 这台机器开着 Tailscale SSH 没有（pair-host.mts 的 detectTailscaleSsh） */
   tailscaleSsh(): Promise<boolean>
   /** 这台机器在 tailnet 里的名字和地址（pair-host.mts 的 detectTailnet）。不给当作没有 */
-  tailnet?(): Promise<PairTailnet | null>
+  tailnet?(): Promise<PairTailnetSelf | null>
   platform?: NodeJS.Platform
   clock?: PairingClock
   /** 设备上的主机名和用户名，默认取系统的 */
@@ -149,7 +154,7 @@ export class DevicePairing {
   private readonly pairs = new Map<string, Pair>()
   private version: Promise<SshdVersion | null> | null = null
   private tailscale: { at: number; value: Promise<boolean> } | null = null
-  private tailnetSelf: { at: number; value: Promise<PairTailnet | null> } | null = null
+  private tailnetSelf: { at: number; value: Promise<PairTailnetSelf | null> } | null = null
   /** 已绑定手机的通知排的队 */
   private notices: Promise<void> = Promise.resolve()
   private closed = false
@@ -274,7 +279,11 @@ export class DevicePairing {
       hostname: this.config.hostname ?? osHostname(),
       user: this.config.user ?? currentUser(),
       tailscaleSsh,
-      ...(tailnet ? { tailnet } : {}),
+      ...(tailnet?.name
+        ? { tailnet: { name: tailnet.name, addresses: tailnet.addresses } }
+        : tailnet?.addresses.length
+          ? { tailnetAddresses: tailnet.addresses }
+          : {}),
     }
     return key
       ? { ...base, mode: 'key', seed: key.seed }
@@ -291,7 +300,7 @@ export class DevicePairing {
   }
 
   /** 这台机器在 tailnet 里的名字和地址，也记 TAILSCALE_CACHE_MS */
-  private tailnet(): Promise<PairTailnet | null> {
+  private tailnet(): Promise<PairTailnetSelf | null> {
     const now = this.clock.now()
     if (!this.tailnetSelf || now - this.tailnetSelf.at >= TAILSCALE_CACHE_MS) {
       const value = this.config.tailnet?.().catch(() => null) ?? Promise.resolve(null)

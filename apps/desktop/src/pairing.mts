@@ -12,7 +12,7 @@
 import { execFile, spawn } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { connect } from 'node:net'
+import { connect, isIP } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -94,6 +94,14 @@ function sshConfigOf(target: RemoteTarget): Promise<Map<string, string[]>> {
 
 const first = (config: Map<string, string[]>, key: string): string | null =>
   config.get(key)?.[0] ?? null
+
+const hasProxy = (config: Map<string, string[]>): boolean =>
+  ['proxyjump', 'proxycommand'].some((key) => {
+    const value = first(config, key)?.toLowerCase()
+    return !!value && value !== 'none'
+  })
+
+const compareHost = (host: string): string => host.toLowerCase().replace(/\.$/, '')
 
 /** known_hosts 文件的路径：ssh -G 报的是没展开的写法，~ 自己展开；多个文件用空白隔开 */
 const knownFiles = (config: Map<string, string[]>): string[] =>
@@ -414,7 +422,19 @@ export function desktopPairing(options: DesktopPairingOptions): PairingPlatform 
       const user = first(config, 'user')
       const port = Number(first(config, 'port'))
       if (!host || !user) throw new Error('ssh -G 未解析出主机名或用户名')
-      return { host, port: Number.isInteger(port) && port > 0 ? port : 22, user }
+      return {
+        host,
+        port: Number.isInteger(port) && port > 0 ? port : 22,
+        user,
+        ...(hasProxy(config) ? { proxy: true } : {}),
+      }
+    },
+
+    async isSshAlias(host) {
+      if (isIP(host.replace(/^\[([^\]]+)\]$/, '$1'))) return false
+      const config = await sshConfigOf({ kind: 'alias', alias: host })
+      const resolved = first(config, 'hostname')
+      return resolved !== null && compareHost(resolved) !== compareHost(host)
     },
 
     async knownKeys(target) {

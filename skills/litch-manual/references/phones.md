@@ -67,6 +67,17 @@ You can only open the dialog. Then the user:
 The code is valid for 10 minutes and once only (a new one appears when it expires); the confirmation has
 to happen within 2 minutes. Do not show the QR code while sharing the screen.
 
+“手机连接地址”须能从手机直接访问。手机不支持桌面的 SSH 跳板（ProxyJump、ProxyCommand），
+也不会读取这台电脑的 SSH 别名。看到提示时，可从主机输入框旁选设备报告的 Tailscale IP 或
+MagicDNS 名，并让手机通过系统 Tailscale 或 Litch 内置登录加入同一 tailnet。也可输入已转发到
+设备 SSH 服务的公网主机和端口；如果手机已经能直连内网，仍可用原地址出码。
+
+The phone must be able to reach the address directly. It cannot use the desktop’s SSH jump hosts,
+proxy commands or local SSH aliases. If the dialog shows a hint, choose a reported Tailscale IP or
+MagicDNS name beside the host field and join the same tailnet using system Tailscale or Litch
+sign-in. You can also enter a public host and port already forwarded to the device’s SSH service.
+If the phone can reach the private address directly, you can still use it.
+
 ## Requirements and problems
 
 - 会话输入区会持续显示不可用 harness 的具体原因和下一步（安装、启用、升级或重启）；恢复后自动收起。
@@ -79,8 +90,6 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
   Connection diagnostics use iOS subsystem `dev.litch.connection` and Android tag `LitchConnection`.
   Device labels such as `d1` are local to the current app launch; host addresses, keys and messages are omitted.
 
-- The phone must reach the address in the code directly (no jump hosts). If the phone cannot connect,
-  re-open the dialog with an address the phone can reach (for example the machine's LAN or VPN address).
 - Pairing **this computer** (Local) needs its SSH server on: macOS System Settings → General → Sharing
   → Remote Login; Windows "OpenSSH Server" optional feature; Linux sshd. That is a system setting the user
   turns on.

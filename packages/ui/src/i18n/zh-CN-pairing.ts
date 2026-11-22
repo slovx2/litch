@@ -30,6 +30,13 @@ export const zhPairing = {
   'pairing.starting': '正在设备上准备一次性密钥并验证登录…',
   'pairing.address': '手机连接地址',
   'pairing.address.note': '仅修改给手机使用的地址，不影响本机与此设备的连接配置。',
+  'pairing.address.proxy':
+    '手机不支持 SSH 跳板，可能无法直连。可改用 Tailscale 或公网转发地址和端口。',
+  'pairing.address.alias':
+    '手机不读取本机的 SSH 别名，可能无法解析。可改用 Tailscale 或公网转发地址和端口。',
+  'pairing.address.private': '手机需要能直达此内网地址。可改用 Tailscale 或公网转发地址和端口。',
+  'pairing.address.tailnet':
+    '使用 Tailscale 地址时，手机须加入同一 tailnet（系统 Tailscale 或 Litch 内置登录）。',
   'pairing.field.name': '别名',
   'pairing.field.host': '主机名或 IP',
   'pairing.field.port': '端口',

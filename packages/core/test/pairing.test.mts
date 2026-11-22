@@ -15,12 +15,14 @@ import {
   type PairEnrollTestInput,
   type PairHostInspection,
   type PairingApprovalKey,
+  type PairingHostAddress,
   type PairingOp,
   type PairingPlatform,
   type PairingTopicView,
   type PairingView,
   type PairSelfTestInput,
   type PairSelfTestResult,
+  pairingHostHint,
   pairingPayload,
   type SavedDevices,
 } from '../src/index.mjs'
@@ -89,8 +91,10 @@ interface Options {
   oldDevice?: boolean
   /** 设备自报的 tailnet 名字和地址 */
   tailnet?: PairTailnet
+  tailnetAddresses?: string[]
   /** ssh -G 解析出的地址，默认 10.0.0.5:2222、dev */
-  resolved?: { host: string; port: number; user: string }
+  resolved?: PairingHostAddress
+  localAliases?: string[]
   /** decide 允许后设备回的手机（默认 null） */
   decidedPhone?: PairStatus['phone']
 }
@@ -122,7 +126,10 @@ function world(options: Options = {}) {
       }
       if (options.oldDevice) return { ...base, seed: 'c2VlZA' }
       const tailscaleSsh = options.tailscaleSsh ?? false
-      const more = options.tailnet ? { tailnet: options.tailnet } : {}
+      const more = {
+        ...(options.tailnet ? { tailnet: options.tailnet } : {}),
+        ...(options.tailnetAddresses ? { tailnetAddresses: options.tailnetAddresses } : {}),
+      }
       return (params as { mode?: string }).mode === 'tailscale'
         ? {
             ...base,
@@ -169,6 +176,7 @@ function world(options: Options = {}) {
         entrance: [ED, RSA],
       },
     resolve: async () => options.resolved ?? { host: '10.0.0.5', port: 2222, user: 'dev' },
+    isSshAlias: async (host) => options.localAliases?.includes(host) ?? false,
     knownKeys: async () => options.known ?? ['ssh-rsa AAAARSA'],
     localSsh: async () => {
       calls.localSsh++
@@ -318,6 +326,91 @@ test('ssh 设备出码：核对主机钥匙、按别名自检，地址预填原�
     w.command('pairing.rememberAddress', { address: { ...changed, host: '-oProxy' } }),
   )
   assert.equal(bad.code, 'invalid')
+})
+
+test('手机地址提示区分桌面跳板、别名、内网、tailnet 和可直连地址', () => {
+  const hints = {
+    hosts: ['ts-box'],
+    ssh: { host: '10.10.10.10', port: 2222, proxy: true, alias: 'jump-box' },
+    localAlias: 'desk-only',
+  }
+  const hint = (host: string, port = 22) => pairingHostHint(host, port, hints)
+  assert.equal(hint('10.10.10.10', 2222), 'proxy')
+  assert.equal(hint('jump-box'), 'alias')
+  assert.equal(hint('DESK-ONLY.'), 'alias')
+  for (const host of [
+    '10.10.10.10',
+    '172.16.0.1',
+    '172.31.255.255',
+    '192.168.0.1',
+    '127.0.0.2',
+    '169.254.1.2',
+    'fc00::1',
+    'fd00::1',
+    '[FE80::1]',
+    'febf::1',
+    '::1',
+    'localhost',
+  ]) {
+    assert.equal(hint(host), 'private', host)
+  }
+  for (const host of [
+    '100.64.0.1',
+    '100.127.255.255',
+    'fd7a:115c:a1e0::1',
+    'box.tail.ts.net',
+    'TS-BOX',
+  ]) {
+    assert.equal(hint(host), 'tailnet', host)
+  }
+  for (const host of [
+    '100.63.255.255',
+    '100.128.0.1',
+    '172.15.0.1',
+    '172.32.0.1',
+    'fe7f::1',
+    'fec0::1',
+    '203.0.113.2',
+    'box.example.com',
+    'box',
+  ]) {
+    assert.equal(hint(host), null, host)
+  }
+})
+
+test('待核对主机指纹时也带跳板提示与 IP 候选，换到公网入口后不再提示跳板', async () => {
+  const w = world({
+    resolved: { host: '10.10.10.10', port: 22, user: 'dev', proxy: true },
+    inspection: { known: [RSA], entrance: [] },
+    tailnetAddresses: ['100.100.100.7'],
+    localAliases: ['another-alias'],
+  })
+  w.core.start()
+  await settled()
+  const failed = await failureOf(w.command('pairing.start'))
+  assert.equal(failed.key, 'hostKeyMismatch')
+  assert.deepEqual(failed.pairingAddress, {
+    name: 'build-01',
+    host: '10.10.10.10',
+    port: 22,
+    user: 'dev',
+  })
+  assert.deepEqual(failed.pairingAddressHints, {
+    hosts: ['100.100.100.7'],
+    ssh: { host: '10.10.10.10', port: 22, proxy: true, alias: 'build-01' },
+  })
+  const address = { host: '203.0.113.4', port: 2222, user: 'dev' }
+  const moved = await failureOf(w.command('pairing.start', { address }))
+  assert.ok(moved.pairingAddressHints)
+  assert.equal(pairingHostHint(address.host, address.port, moved.pairingAddressHints), null)
+  const alias = await failureOf(
+    w.command('pairing.start', { address: { ...address, host: 'another-alias' } }),
+  )
+  assert.equal(alias.pairingAddressHints?.localAlias, 'another-alias')
+  const local = world({ kind: 'local', tailnetAddresses: ['100.100.100.8'] })
+  local.core.start()
+  await settled()
+  assert.deepEqual((await started(local)).hosts, ['100.100.100.8'])
 })
 
 test('主机钥匙对不上、自检没过：配对作废，报对应的 key，自检的原话照出', async () => {

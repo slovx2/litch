@@ -34,6 +34,14 @@ export const enPairing: Record<keyof typeof zhPairing, Entry> = {
   'pairing.address': 'Address for the phone',
   'pairing.address.note':
     'Only changes the address given to the phone, not this device’s connection settings here.',
+  'pairing.address.proxy':
+    'Phones can’t use SSH jump hosts. Try Tailscale or a public address and forwarded port.',
+  'pairing.address.alias':
+    'Your phone may not recognize this desktop SSH alias. Try Tailscale or a public address and forwarded port.',
+  'pairing.address.private':
+    'Your phone needs direct access to this private address. Try Tailscale or a public address and forwarded port.',
+  'pairing.address.tailnet':
+    'For Tailscale addresses, join the same tailnet on your phone using system Tailscale or Litch sign-in.',
   'pairing.field.name': 'Name',
   'pairing.field.host': 'Host name or IP',
   'pairing.field.port': 'Port',

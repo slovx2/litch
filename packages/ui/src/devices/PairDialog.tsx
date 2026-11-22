@@ -11,17 +11,19 @@ import {
   encodePairPayload,
   keys,
   type PairingAddress,
+  type PairingAddressHints,
   type PairingTarget,
   type PairingTopicView,
   type PairingView,
   type PairMode,
   type PairState,
+  pairingHostHint,
   pairingPayload,
 } from '@litch/core'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
-import { Close } from '../app/icons.tsx'
+import { Close, Icon } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import type { MessageKey } from '../i18n/index.ts'
@@ -96,12 +98,14 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
   const { channel, replica } = useServices()
   const t = useT()
   const deviceId = device.id
+  const addressId = useId()
   const dialog = useRef<HTMLDialogElement>(null)
   /** 现在这张码。null：还没出来（正在出、没出成） */
   const [pairing, setPairing] = useState<PairingView | null>(null)
   const [starting, setStarting] = useState(false)
   const [failure, setFailure] = useState<ChannelError | null>(null)
   const [draft, setDraft] = useState<AddressDraft | null>(null)
+  const [hints, setHints] = useState<PairingAddressHints>({ hosts: [] })
   const [deciding, setDeciding] = useState(false)
   const [decideError, setDecideError] = useState<string | null>(null)
   /** 最近一次记下（或者一开始预填）的地址：一样的就不再记 */
@@ -156,6 +160,11 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
             return
           }
           setPairing(next)
+          setHints({
+            hosts: next.hosts,
+            ...(next.ssh ? { ssh: next.ssh } : {}),
+            ...(next.localAlias ? { localAlias: next.localAlias } : {}),
+          })
           setStarting(false)
           setDraft((was) => was ?? withPrefill(draftOf(next.address), firstFill.current))
           if (remembered.current === null) remembered.current = next.address
@@ -168,6 +177,7 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
           setStarting(false)
           setFailure(error as ChannelError)
           const failed = error as ChannelError
+          if (failed.pairingAddressHints) setHints(failed.pairingAddressHints)
           const at =
             failed.pairingAddress ??
             (failed.pairingHostKey ? { name: device.host, ...failed.pairingHostKey.address } : null)
@@ -288,6 +298,9 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
   const changed = original !== null && address !== null && !sameAddress(address, original)
   const problem = checked && 'field' in checked ? checked : null
   const phone = status?.phone ?? null
+  const hostHint = draft ? pairingHostHint(draft.host, Number(draft.port), hints) : null
+  const tailnetHint = hostHint === 'tailnet' || hints.hosts.length > 0
+  const fillHost = (host: string) => setDraft((was) => (was ? { ...was, host } : was))
 
   return (
     <dialog
@@ -367,48 +380,89 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
                 <fieldset className="pair-address" disabled={!draft || finalState(state)}>
                   <legend className="form-label">{t('pairing.address')}</legend>
                   {ADDRESS_FIELDS.map((field) => {
-                    // 主机：设备报了 tailnet 时旁边一个下拉，在 IP、MagicDNS 全名、短名之间换
-                    const hosts = field === 'host' ? (pairing?.hosts ?? []) : []
+                    const hosts = field === 'host' ? hints.hosts : []
+                    const candidate = hosts.length === 1 ? hosts[0] : undefined
+                    const fieldId = `${addressId}-${field}`
+                    const hintId = `${fieldId}-hint`
                     return (
-                      <label key={field} className="pair-field" data-field={field}>
-                        <span className="pair-field-label">{t(FIELD_LABEL[field])}</span>
+                      <div key={field} className="pair-field" data-field={field}>
+                        <label className="pair-field-label" htmlFor={fieldId}>
+                          {t(FIELD_LABEL[field])}
+                        </label>
                         <span className="pair-input">
                           <input
+                            id={fieldId}
                             className="req-input"
                             value={draft?.[field] ?? ''}
                             autoComplete="off"
                             spellCheck={false}
                             inputMode={field === 'port' ? 'numeric' : undefined}
                             aria-invalid={problem?.field === field ? 'true' : undefined}
+                            aria-describedby={
+                              field === 'host' && (hostHint || tailnetHint) ? hintId : undefined
+                            }
                             onChange={(event) => {
                               const value = event.target.value
                               setDraft((was) => (was ? { ...was, [field]: value } : was))
                             }}
                           />
-                          {hosts.length > 0 ? (
-                            <select
-                              className="req-input"
+                          {candidate ? (
+                            <button
+                              type="button"
+                              className="btn ghost pair-host-picker"
                               data-act="pick-host"
-                              aria-label={t('pairing.host.choose')}
-                              title={t('pairing.host.choose')}
-                              value={hosts.includes(draft?.host ?? '') ? draft?.host : ''}
-                              onChange={(event) => {
-                                const value = event.target.value
-                                if (value) setDraft((was) => (was ? { ...was, host: value } : was))
-                              }}
+                              aria-describedby={hintId}
+                              aria-label={`${t('pairing.host.choose')} · ${candidate}`}
+                              title={`${t('pairing.host.choose')} · ${candidate}`}
+                              onClick={() => fillHost(candidate)}
                             >
-                              <option value="" disabled>
-                                {t('pairing.host.pick')}
-                              </option>
-                              {hosts.map((host) => (
-                                <option key={host} value={host}>
-                                  {`${t(HOST_KIND_LABEL[hostKind(host)])} · ${host}`}
+                              <Icon name="globe" small />
+                            </button>
+                          ) : hosts.length > 1 ? (
+                            <span className="btn ghost pair-host-picker">
+                              <Icon name="globe" small />
+                              <select
+                                data-act="pick-host"
+                                aria-describedby={hintId}
+                                aria-label={t('pairing.host.choose')}
+                                title={t('pairing.host.choose')}
+                                value={hosts.includes(draft?.host ?? '') ? draft?.host : ''}
+                                onChange={(event) => {
+                                  if (event.target.value) fillHost(event.target.value)
+                                }}
+                              >
+                                <option value="" disabled>
+                                  {t('pairing.host.pick')}
                                 </option>
-                              ))}
-                            </select>
+                                {hosts.map((host) => (
+                                  <option key={host} value={host}>
+                                    {`${t(HOST_KIND_LABEL[hostKind(host)])} · ${host}`}
+                                  </option>
+                                ))}
+                              </select>
+                            </span>
                           ) : null}
                         </span>
-                      </label>
+                        {field === 'host' && (hostHint || tailnetHint) ? (
+                          <small
+                            className="pair-host-hint"
+                            id={hintId}
+                            data-pair-address-hint={hostHint ?? 'candidate'}
+                          >
+                            {hostHint && hostHint !== 'tailnet'
+                              ? t(`pairing.address.${hostHint}`)
+                              : null}
+                            {tailnetHint ? (
+                              <span>
+                                {candidate && candidate !== draft?.host ? (
+                                  <span className="mono">{candidate} · </span>
+                                ) : null}
+                                {t('pairing.address.tailnet')}
+                              </span>
+                            ) : null}
+                          </small>
+                        ) : null}
+                      </div>
                     )
                   })}
                   {problem ? (
