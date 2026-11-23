@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { checkIdentityRepositoryWrites } from '../src/external/execution-boundary.mjs'
@@ -19,29 +19,34 @@ import {
 } from './fixtures/external-d.mjs'
 
 const git = '/usr/bin/git'
-function call(
+interface Ran {
+  code: number
+  out: string
+  err: string
+}
+function run(
   executable: string,
   args: string[],
   env: NodeJS.ProcessEnv,
   cwd: string,
   data?: string,
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = execFile(executable, args, { env, cwd, timeout: 8000 }, (error, stdout) => {
-      if (error) reject(new Error(`夹具命令失败: ${error.code}`))
-      else resolve(stdout)
-    })
+): Promise<Ran> {
+  return new Promise((resolve) => {
+    const child = execFile(executable, args, { env, cwd, timeout: 8000 }, (error, out, err) =>
+      resolve({ code: error ? Number(error.code ?? 1) : 0, out, err }),
+    )
     child.stdin?.end(data)
   })
 }
-
-test('经理身份注入默认开启，运行中的 gh/Git 寻址随轮换、暂停、失效、撤销更新', async (t) => {
-  if (process.platform === 'win32') return t.skip('Git/gh Unix 夹具')
-  const f = await externalFixture(t)
-  const fixtureGh = join(f.dir, 'fixture-system-gh')
-  const fixtureHost = join(f.dir, 'system-gh-config')
+async function call(...input: Parameters<typeof run>): Promise<string> {
+  const result = await run(...input)
+  if (result.code !== 0) throw new Error(`夹具命令失败: ${result.code}`)
+  return result.out
+}
+// 假 gh：带 GH_TOKEN 时报告宿主配置，否则打印设备写的 hosts.yml。
+const fakeGh = (path: string) =>
   writeFileSync(
-    fixtureGh,
+    path,
     `#!${process.execPath}\n
 const fs = require('node:fs')
 const cfg = process.env.GH_CONFIG_DIR
@@ -50,10 +55,31 @@ else process.stdout.write(fs.readFileSync(require('node:path').join(cfg, 'hosts.
 `,
     { mode: 0o700 },
   )
+// 不在 git 仓库里、也不带 -R 的典型命令：附件、发布资产、API。
+const unscopedCommands = [
+  ['pr', 'edit', '829', '--body-file', 'body.md', '--attach', 'shot.png'],
+  ['release', 'upload', 'evidence', 'shot.png'],
+  ['api', '/user'],
+  ['pr', 'comment', '829', '--repo', 'other/unassigned', '--body', 'x'],
+]
+const gitFill = (
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+  path = 'example/demo.git',
+  host = 'github.com',
+) => run(git, ['credential', 'fill'], env, cwd, `protocol=https\nhost=${host}\npath=${path}\n\n`)
+
+test('注入后 gh/Git 在任何目录都用经理身份；凭据轮换跟新代，失效、撤销时报错不回退宿主', async (t) => {
+  if (process.platform === 'win32') return t.skip('Git/gh Unix 夹具')
+  const f = await externalFixture(t)
+  const fixtureGh = join(f.dir, 'fixture-system-gh')
+  const fixtureHost = join(f.dir, 'system-gh-config')
+  fakeGh(fixtureGh)
+  const outside = join(f.dir, 'outside')
+  mkdirSync(outside)
   const env = {
     PATH: '/usr/bin:/bin',
     GH_TOKEN: 'host-fixture',
-    GH_REPO: 'example/demo',
     GH_CONFIG_DIR: fixtureHost,
     HOME: f.dir,
     GIT_CONFIG_GLOBAL: join(f.dir, 'host-git-config'),
@@ -73,13 +99,11 @@ else process.stdout.write(fs.readFileSync(require('node:path').join(cfg, 'hosts.
     secrets: f.secrets,
     callbackPath: join(f.dir, 'gh.sock'),
     ghPath: fixtureGh,
-    hostGhPath: fixtureGh,
     prepareGh: async () => {
       prepares++
       if (downloadFails) throw new GithubWriteFault('github_gh_download_unavailable')
       return fixtureGh
     },
-    gitPath: git,
     stateDirectory: f.dir,
     assignmentForManager: () => ({
       identityId: bot,
@@ -90,6 +114,7 @@ else process.stdout.write(fs.readFileSync(require('node:path').join(cfg, 'hosts.
       lineIsCurrent && line.threadId === 'line' && line.issueId === f.request.issueId,
   })
   t.after(() => service.close())
+  // 普通会话、不属于经理的工作线不注入，环境原样。
   assert.equal(service.environment({ ...actor, threadId: 'ordinary' }, env).env, env)
   assert.equal(service.environment({ ...actor, kind: 'workline', issueId: 'X-3' }, env).env, env)
   const manager = service.environment(actor, env)
@@ -104,28 +129,37 @@ else process.stdout.write(fs.readFileSync(require('node:path').join(cfg, 'hosts.
   const hosts = join(dirname(ghPath), `owner-${resource}`, 'hosts.yml')
   assert.doesNotMatch(JSON.stringify(manager.env), /github_pat_/)
   assert.equal(manager.env.GH_TOKEN, env.GH_TOKEN)
-  const credential = (host = 'github.com', processEnv = manager.env) =>
-    call(
-      git,
-      ['credential', 'fill'],
-      processEnv,
-      f.dir,
-      `protocol=https\nhost=${host}\npath=example/demo.git\n\n`,
-    )
-  const gh = () => call(ghPath, ['api', '/user'], manager.env, f.dir)
-  assert.match(await credential(), new RegExp(token()))
-  assert.match(await credential('different.invalid'), /password=host-fixture/)
-  assert.match(await credential('github.com', line.env), new RegExp(token()))
-  assert.equal(
-    await call(ghPath, ['api', '/user'], { ...manager.env, GH_REPO: 'example/other' }, f.dir),
-    `host:${fixtureHost}`,
+  // 句柄编在助手路径里：用哪个会话的环境，就跑哪个会话的 gh。
+  const gh = (args: string[], launch: { env: NodeJS.ProcessEnv; ghPath?: string } = manager) =>
+    run(launch.ghPath ?? '', args, launch.env, outside)
+
+  // Git：github.com 不论仓库都用注入凭据，其他主机仍用宿主配置。
+  assert.match((await gitFill(manager.env, outside)).out, new RegExp(token()))
+  assert.match(
+    (await gitFill(manager.env, outside, 'other/unassigned.git')).out,
+    new RegExp(token()),
   )
-  assert.equal(prepares, 0, 'Git 和未分派仓库不需要下载受管 gh')
-  await assert.rejects(gh(), /夹具命令失败: 1/, '下载失败不可执行宿主 gh')
+  assert.match(
+    (await gitFill(manager.env, outside, 'x/y.git', 'different.invalid')).out,
+    /host-fixture/,
+  )
+  assert.match((await gitFill(line.env, outside)).out, new RegExp(token()))
+  assert.equal(prepares, 0, 'Git 不需要下载受管 gh')
+  const failed = await gh(['api', '/user'])
+  assert.equal(failed.code, 1, '下载失败也不执行宿主 gh')
+  assert.match(failed.err, /github_gh_download_unavailable/)
   assert.equal(existsSync(hosts), false)
   downloadFails = false
-  assert.match(await gh(), new RegExp(token()))
-  assert.equal(prepares, 2)
+
+  // 不在仓库目录、不带 -R、甚至指向未分派仓库，都用经理身份。
+  for (const args of unscopedCommands) {
+    assert.match((await gh(args)).out, new RegExp(token()), args.join(' '))
+    assert.match((await gh(args, line)).out, new RegExp(token()), args.join(' '))
+  }
+  assert.match(
+    (await gh(['api', '/user'], { ghPath, env: { ...manager.env, GH_REPO: 'other/x' } })).out,
+    new RegExp(token()),
+  )
   assert.equal(statSync(hosts).mode & 0o777, 0o600)
 
   const rotate = await f.secrets.rotate({
@@ -136,34 +170,40 @@ else process.stdout.write(fs.readFileSync(require('node:path').join(cfg, 'hosts.
   })
   assert.equal(rotate.record?.generation, 2)
   assert.match(readFileSync(hosts, 'utf8'), new RegExp(token('rotated')))
-  assert.match(await credential(), new RegExp(token('rotated')))
-  assert.match(await gh(), new RegExp(token('rotated')))
+  assert.match((await gitFill(manager.env, outside)).out, new RegExp(token('rotated')))
+  assert.match(
+    (await gh(['release', 'upload', 'evidence', 'a.png'])).out,
+    new RegExp(token('rotated')),
+  )
 
-  const changed = (enabled: boolean, rev: number) => {
-    assert.equal(
-      f.store.config.saveSource({ ...f.source, enabled }, rev, `config-${rev}`, 'user').outcome,
-      'applied',
-    )
-    service.refresh()
-  }
-  changed(false, 1)
-  assert.equal(service.environment(actor, env).env, env)
-  assert.equal(existsSync(hosts), false)
-  assert.match(await credential(), /password=host-fixture/)
-  assert.equal(await gh(), `host:${fixtureHost}`)
-  changed(true, 2)
+  // 来源暂停只停采集，不影响经理身份的注入。
+  assert.equal(
+    f.store.config.saveSource({ ...f.source, enabled: false }, 1, 'config-1', 'user').outcome,
+    'applied',
+  )
+  service.refresh()
+  assert.equal(service.environment(actor, env).resolution.state, 'active')
+  assert.match((await gh(['api', '/user'])).out, new RegExp(token('rotated')))
+
+  // 注入关闭：新命令拿到原环境（宿主 gh）；已发出的句柄报错，不改用宿主凭据。
   turnedOff = true
   service.refresh()
   assert.equal(service.environment(actor, env).env, env)
   assert.equal(existsSync(hosts), false)
-  assert.match(await credential(), /password=host-fixture/)
+  const off = await gh(['api', '/user'])
+  assert.equal(off.code, 1)
+  assert.match(off.err, /github_agent_injection_off/)
+  const offGit = await gitFill(manager.env, outside)
+  assert.doesNotMatch(offGit.out, /host-fixture|github_pat_/)
   turnedOff = false
   service.refresh()
-  assert.match(await credential(), new RegExp(token('rotated')))
-  assert.match(await gh(), new RegExp(token('rotated')))
+  assert.match((await gh(['api', '/user'])).out, new RegExp(token('rotated')))
   lineIsCurrent = false
-  assert.match(await credential('github.com', line.env), /password=host-fixture/)
+  assert.doesNotMatch((await gitFill(line.env, outside)).out, /host-fixture|github_pat_/)
+  const gone = await gh(['api', '/user'], line)
+  assert.match(gone.err, /github_agent_not_authorized/, JSON.stringify(gone))
 
+  // 凭据失效、撤销：仍是注入的会话，命令说明原因并失败，绝不回退宿主 gh/Git。
   const active = f.secrets.active(f.credentialRef)
   f.store.invalidateExternalCredential(
     f.credentialRef,
@@ -171,8 +211,21 @@ else process.stdout.write(fs.readFileSync(require('node:path').join(cfg, 'hosts.
     f.now(),
     'github_credential_invalid',
   )
-  assert.match(await credential(), /password=host-fixture/)
-  assert.equal(await gh(), `host:${fixtureHost}`)
+  for (const args of unscopedCommands) {
+    const broken = await gh(args)
+    assert.equal(broken.code, 1, args.join(' '))
+    assert.equal(broken.out, '')
+    assert.match(broken.err, /github_agent_credential_unavailable: .*Re-authorize/)
+    assert.match(broken.err, /System gh credentials are not used/)
+  }
+  const brokenGit = await gitFill(manager.env, outside)
+  assert.doesNotMatch(brokenGit.out, /host-fixture|github_pat_/)
+  assert.match(brokenGit.err, /git: github_agent_credential_unavailable/)
+  const fresh = service.environment(actor, env)
+  assert.equal(fresh.resolution.state, 'broken')
+  assert.ok(fresh.ghPath, '失效时新命令也走设备助手')
+  assert.match((await gh(['api', '/user'], fresh)).err, /github_agent_credential_unavailable/)
+  fresh.dispose()
   assert.equal(
     f.secrets.revoke({
       operationId: 'agent-revoke',
@@ -182,14 +235,14 @@ else process.stdout.write(fs.readFileSync(require('node:path').join(cfg, 'hosts.
     'revoked',
   )
   assert.equal(existsSync(hosts), false)
-  assert.equal(service.environment(actor, env).env, env)
-  assert.doesNotMatch(await credential(), /github_pat_/)
-  assert.equal(await gh(), `host:${fixtureHost}`)
+  assert.equal(service.environment(actor, env).resolution.state, 'broken')
+  assert.doesNotMatch((await gitFill(manager.env, outside)).out, /github_pat_|host-fixture/)
+  assert.equal((await gh(['api', '/user'])).code, 1)
   line.dispose()
   manager.dispose()
 })
 
-test('经理身份持有两个资源所有者的 PAT，gh/Git 按准确仓库选令牌，不扩大经理分配', async (t) => {
+test('经理身份有两份可用凭据视为配置异常：gh/Git 报错说明怎么办，不替 Agent 挑一份', async (t) => {
   if (process.platform === 'win32') return t.skip('Unix 回调夹具')
   const secondId = '90071992547410000'
   const secondOwner = '90071992547410001'
@@ -216,63 +269,38 @@ test('经理身份持有两个资源所有者的 PAT，gh/Git 按准确仓库选
     token: token('second'),
   })
   assert.equal(identity.identityId, bot)
-  assert.equal(identity.revision, 2)
   assert.equal(identity.credentials.length, 2)
-  assert.deepEqual([...f.secrets.botUserIds()], [bot])
   const page = f.secrets.repositories({ limit: 1, identityId: bot })
   assert.equal(page.repositories[0]?.repoId, subject.repoId)
   assert.ok(page.nextCursor)
   const next = f.secrets.repositories({ cursor: page.nextCursor, limit: 1, identityId: bot })
   assert.equal(next.repositories[0]?.grants[0]?.write, 'missing')
-  assert.equal(next.nextCursor, null)
   assert.doesNotMatch(JSON.stringify({ identity, page, next }), /github_pat_/)
-
-  const repo = f.source.repos[0]
   const credential = identity.credentials.find((entry) => entry.resourceOwnerId === secondOwner)
-  assert.ok(repo && credential)
-  const { store } = f
-  const draft = {
-    ...f.source,
-    sourceId: 'second',
-    credentialRef: credential.credentialRef,
-    repos: [
-      {
-        ...repo,
-        repoId: secondId,
-        owner: 'other',
-        name: 'second',
-        url: 'https://github.com/other/second',
-      },
-    ],
-    routes: [],
-  }
-  assert.equal(store.config.saveSource(draft, 0, 'source-second', 'user').outcome, 'applied')
+  const repo = f.source.repos[0]
+  assert.ok(credential && repo)
+  const write = checkIdentityRepositoryWrites({
+    secrets: f.secrets,
+    identityId: bot,
+    repositories: [{ ...repo, repoId: secondId, owner: 'other', name: 'second' }],
+  })
+  assert.equal(write[0]?.code, 'github_robot_needs_repository_write_access')
+
   const fixtureGh = join(f.dir, 'fake-gh')
-  writeFileSync(
-    fixtureGh,
-    `#!${process.execPath}\n
-const fs = require('node:fs')
-const cfg = process.env.GH_CONFIG_DIR
-if (process.env.GH_TOKEN) process.stdout.write('host')
-else process.stdout.write(fs.readFileSync(require('node:path').join(cfg, 'hosts.yml'), 'utf8'))
-`,
-    { mode: 0o700 },
-  )
+  fakeGh(fixtureGh)
   const hostGit = join(f.dir, 'host-git')
   writeFileSync(
     hostGit,
     `[credential]\n\thelper = "!f() { echo username=host; echo password=host-fixture; }; f"\n`,
   )
-  let repoIds = [subject.repoId, secondId]
   const service = await GithubAgentLoginService.start({
-    store,
+    store: f.store,
     secrets: f.secrets,
     callbackPath: join(f.dir, 'gh.sock'),
     ghPath: fixtureGh,
-    gitPath: git,
     stateDirectory: f.dir,
     isWorklineCurrent: () => false,
-    assignmentForManager: () => ({ identityId: bot, repoIds }),
+    assignmentForManager: () => ({ identityId: bot, repoIds: [subject.repoId, secondId] }),
   })
   t.after(() => service.close())
   const launch = service.environment(actor, {
@@ -283,56 +311,47 @@ else process.stdout.write(fs.readFileSync(require('node:path').join(cfg, 'hosts.
     GIT_CONFIG_NOSYSTEM: '1',
     GIT_TERMINAL_PROMPT: '0',
   })
+  assert.equal(launch.resolution.state, 'broken')
   const shim = launch.ghPath
   assert.ok(shim)
-  const gh = (repository: string) =>
-    call(shim, ['pr', 'list', '--repo', repository], launch.env, f.dir)
-  const credentialFor = (repository: string) =>
-    call(
-      git,
-      ['credential', 'fill'],
-      launch.env,
-      f.dir,
-      `protocol=https\nhost=github.com\npath=${repository}.git\n\n`,
-    )
-  assert.match(await gh('example/demo'), new RegExp(token()))
-  assert.match(await gh('other/second'), new RegExp(token('second')))
-  assert.match(await credentialFor('example/demo'), new RegExp(token()))
-  assert.match(await credentialFor('other/second'), new RegExp(token('second')))
-  assert.match(await credentialFor('other/unassigned'), /password=host-fixture/)
-  assert.equal(await gh('example.invalid/other/second'), 'host')
+  for (const args of [...unscopedCommands, ['pr', 'list', '--repo', 'example/demo']]) {
+    const failed = await run(shim, args, launch.env, f.dir)
+    assert.equal(failed.code, 1, args.join(' '))
+    assert.equal(failed.out, '')
+    assert.match(failed.err, /github_agent_identity_ambiguous: .*Keep only one/)
+  }
+  for (const path of ['example/demo.git', 'other/second.git']) {
+    const filled = await gitFill(launch.env, f.dir, path)
+    assert.doesNotMatch(filled.out, /github_pat_|host-fixture/)
+    assert.match(filled.err, /github_agent_identity_ambiguous/)
+  }
 
-  const write = checkIdentityRepositoryWrites({
-    secrets: f.secrets,
-    identityId: bot,
-    repositories: draft.repos,
-  })
-  assert.equal(write[0]?.code, 'github_robot_needs_repository_write_access')
-  assert.equal(write[0]?.state, 'unverified')
-  repoIds = [subject.repoId]
-  service.refresh()
-  assert.equal(await gh('other/second'), 'host')
-  assert.match(await credentialFor('other/second'), /password=host-fixture/)
-
-  repoIds = [subject.repoId, secondId]
+  // 去掉一份后恢复：剩下的那份在任何目录、对任何仓库都用。
   f.secrets.revokeIdentityCredential({
     identityId: bot,
     credentialRef: credential.credentialRef,
     operationId: 'remove-other',
     expectedGeneration: 1,
   })
-  assert.equal(await gh('other/second'), 'host')
-  assert.match(await gh('example/demo'), new RegExp(token()))
-  const cwd = f.dir
+  for (const args of unscopedCommands)
+    assert.match(await call(shim, args, launch.env, f.dir), new RegExp(token()))
+  assert.match((await gitFill(launch.env, f.dir, 'other/second.git')).out, new RegExp(token()))
+  // SSH 地址改写成 HTTPS，也走注入凭据。
+  const cwd = join(f.dir, 'repo')
+  mkdirSync(cwd)
   await call(git, ['init', '--quiet'], launch.env, cwd)
   await call(git, ['remote', 'add', 'origin', 'git@github.com:example/demo.git'], launch.env, cwd)
-  assert.match(await call(shim, ['pr', 'list'], launch.env, cwd), new RegExp(token()))
+  assert.equal(
+    (await call(git, ['remote', 'get-url', 'origin'], launch.env, cwd)).trim(),
+    'https://github.com/example/demo.git',
+  )
   f.secrets.revokeIdentityCredential({
     identityId: bot,
     credentialRef: f.credentialRef,
     expectedGeneration: 1,
     operationId: 'remove-bot',
   })
-  assert.equal(await gh('example/demo'), 'host')
+  assert.equal(service.environment(actor, { PATH: '/usr/bin:/bin' }).resolution.state, 'broken')
+  assert.equal((await run(shim, ['api', '/user'], launch.env, cwd)).code, 1)
   assert.deepEqual([...f.secrets.botUserIds()], [bot])
 })

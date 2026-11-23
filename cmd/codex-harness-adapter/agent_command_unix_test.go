@@ -65,8 +65,9 @@ func TestAgentCommandUsesHostGitBeforeStartingNode(t *testing.T) {
 	if got := run("git", "remote", "-v", "update"); got.code != 75 {
 		t.Fatalf("可联网的 Git remote 子命令绕过了凭据入口: %+v", got)
 	}
-	if got := run("gh", "--version"); got.code != 0 || strings.TrimSpace(got.stdout) != "host gh" {
-		t.Fatalf("gh --version 未走宿主: %+v", got)
+	// 有 GitHub 上下文时 gh --version 也要问设备，不能直接报宿主 gh 的版本。
+	if got := run("gh", "--version"); got.code != 75 || got.stdout != "" {
+		t.Fatalf("gh --version 绕过了凭据入口: %+v", got)
 	}
 	_ = held[0].Close()
 	if got := run("git", "fetch"); got.code != 0 || got.stdout != "node started\n" {

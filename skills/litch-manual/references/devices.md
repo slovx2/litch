@@ -172,4 +172,4 @@ computer" 0.10.0, session trees and scheduled tasks 0.11.0, phone pairing 0.12.0
 
 给经理和工作线注入 GitHub 凭据默认开启。分配范围内通过设备入口运行的 `gh` 和 Git HTTPS 可以使用已授权身份；关闭注入后使用宿主命令及凭据。SSH 沿用宿主配置。凭据轮换、撤销或来源暂停后，后续命令会重新核验。除非设备管理员确认 `litch/progress` 未作为合并门禁，否则设备不代写提交状态；探测到该状态被用作门禁时仍拒绝写入。
 
-`git status`、`git rev-parse` 等本地检查直接使用宿主 Git；有宿主 gh 时，`gh --version` 和 `gh --help` 也直接使用它。若提示 GitHub 命令并发已满，等正在运行的命令结束后重试。
+`git status`、`git rev-parse` 等本地检查直接使用宿主 Git。注入了 GitHub 身份的会话里，gh（包括 `gh --version`）一律使用 Litch 的 gh 和这个身份，不看运行目录；凭据不可用时命令报出原因，不改用系统 gh。若提示 GitHub 命令并发已满，等正在运行的命令结束后重试。

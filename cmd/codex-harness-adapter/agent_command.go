@@ -128,9 +128,8 @@ func runAgentCommand(ctx context.Context, args []string) error {
 		names = []string{mode + ".exe"}
 	}
 	binary := executableOnPath(path, names)
-	offlineGh := mode == "gh" && binary != "" && len(argv) == 1 &&
-		(argv[0] == "--version" || argv[0] == "--help" || argv[0] == "-h")
-	needsScope := agentHasGithubContext() && !(mode == "git" && localGitCommand(argv)) && !offlineGh
+	// 注入的会话里 gh 一律用设备给的版本和身份，gh --version 也不例外，以免报出宿主 gh 的版本。
+	needsScope := agentHasGithubContext() && !(mode == "git" && localGitCommand(argv))
 	if !needsScope {
 		if binary == "" {
 			return &exitError{127, fmt.Errorf("%s: executable not found", mode)}
@@ -147,11 +146,11 @@ func runAgentCommand(ctx context.Context, args []string) error {
 }
 
 func runAgentCredential(ctx context.Context, args []string) error {
-	if len(args) != 10 || !filepath.IsAbs(args[0]) || !filepath.IsAbs(args[1]) ||
-		!filepath.IsAbs(args[2]) || args[8] != "git" {
+	if len(args) != 8 || !filepath.IsAbs(args[0]) || !filepath.IsAbs(args[1]) ||
+		!filepath.IsAbs(args[2]) || args[6] != "git" {
 		return errors.New("invalid agent credential command")
 	}
-	if args[9] != "get" {
+	if args[7] != "get" {
 		return nil // Git 审批与删除时，设备凭据从不交给宿主存储。
 	}
 	// Git 可以并行访问多个子模块。凭据助手单独计数，避免等待正在调用它的外层 Git。
