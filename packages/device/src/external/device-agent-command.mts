@@ -23,19 +23,25 @@ export function executableOnPath(name: string, env: NodeJS.ProcessEnv): string |
   }
 }
 
+/** 命令所在会话：各 harness 给命令的会话号变量不同（与 Go 入口 agentHasGithubContext 一致）。 */
+export function githubCommandThread(env: NodeJS.ProcessEnv): string | undefined {
+  const harness = env.LITCH_DEVICE_GITHUB_HARNESS
+  if (!harness) return undefined
+  return harness === 'codex'
+    ? env.CODEX_THREAD_ID
+    : harness === 'pi'
+      ? env.PI_SESSION_ID
+      : harness === 'dsh'
+        ? env.DSH_SESSION_ID
+        : env.LITCH_THREAD_ID
+}
+
 async function run(): Promise<void> {
   const [, , mode, ...args] = process.argv
   if (mode !== 'gh' && mode !== 'git') return
   const env = { ...process.env }
   const harness = env.LITCH_DEVICE_GITHUB_HARNESS
-  const thread =
-    harness === 'codex'
-      ? env.CODEX_THREAD_ID
-      : harness === 'pi'
-        ? env.PI_SESSION_ID
-        : harness === 'dsh'
-          ? env.DSH_SESSION_ID
-          : env.LITCH_THREAD_ID
+  const thread = githubCommandThread(env)
   const scope = harness && thread ? await deviceGithubEnvironment(harness, thread, env) : null
   const injected = scope?.ghPath
   const bin = mode === 'gh' && injected ? injected : executableOnPath(mode, env)

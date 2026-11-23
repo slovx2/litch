@@ -421,9 +421,9 @@ else if (args[0] === 'api' || args[0] === 'pr') {
     )?.answer,
   ).thread_id
   const commands = join(state, 'external-agent-gh', 'command')
-  const runAgent = (thread, command, args) =>
+  const runAgent = (thread, command, args, cwd = root) =>
     exec(join(commands, command), args, {
-      cwd: root,
+      cwd,
       env: {
         ...process.env,
         PATH: `${commands}:${hostBin}:${process.env.PATH}`,
@@ -453,6 +453,17 @@ else if (args[0] === 'api' || args[0] === 'pr') {
   const openPr = ['pr', 'create', '--repo', 'example/demo', '--draft']
   assert.equal((await runGh(line, openPr)).stdout.trim(), `${web}/pull/11`)
   assert.equal(mock.states.opened, 1)
+  // 注入后不看运行目录：仓库外、不带 --repo 也用机器人身份和 Litch 的 gh，不落到系统 gh。
+  const outside = join(dir, 'outside')
+  mkdirSync(outside)
+  assert.equal(
+    (await runAgent(line, 'gh', ['api', '/user'], outside)).stdout.trim(),
+    `{"id":"${bot}","login":"litch-device"}`,
+  )
+  assert.equal(
+    (await runAgent(line, 'gh', ['--version'], outside)).stdout.trim(),
+    'gh version 2.102.0 (fixture)',
+  )
   const latest = (await reconnect.call('litch/manager/issue/read', issue)).issue
   const linked = resultOf(
     (

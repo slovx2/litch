@@ -86,17 +86,13 @@ export class DeviceAgentLaunch {
       ? `${deviceGithubEnvironmentSocket(deviceSocket)}-callback`
       : join(options.stateDirectory, 'gc.sock')
     this.starting = (async () => {
-      const gitPath = executableOnPath('git', process.env)
-      const hostGhPath = executableOnPath('gh', process.env)
-      if (!gitPath || this.closed) return null
+      if (this.closed) return null
       if (!windows) rmSync(callbackPath, { force: true })
       this.login = await GithubAgentLoginService.start({
         ...options,
         callbackPath,
         ghPath: managedCli.path,
         prepareGh: () => managedCli.ensure(),
-        gitPath,
-        ...(hostGhPath ? { hostGhPath } : {}),
         assignmentForManager: configuration.assignmentForManager,
         isWorklineCurrent: ({ threadId, managerId }) =>
           this.actor(threadId)?.managerId === managerId &&
@@ -160,7 +156,8 @@ export class DeviceAgentLaunch {
     const login = await this.service()
     if (!login || this.closed || !this.actor(raw.threadId, raw.harness)) return {}
     const lease = login.environment(actor, base)
-    if (lease.resolution.state !== 'active' || !lease.ghPath) return {}
+    // broken 也给租约：由助手报出凭据为何不可用，不让命令落回宿主 gh。
+    if (lease.resolution.state === 'host' || !lease.ghPath) return {}
     const id = randomUUID()
     // 进程被硬杀时，定期释放不再由命令归还的句柄。
     this.sweep()
