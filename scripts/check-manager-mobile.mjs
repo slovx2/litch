@@ -961,6 +961,12 @@ try {
   await wait('[data-testid="manager:e1"]')
   assert.equal(await endedExpanded(), 'true')
   assert.deepEqual(await endedRows(), ['manager:e1', 'manager:e2'])
+  assert.deepEqual(
+    await read(`['managers:device:local', 'managers:device:build', 'managers:ended-device:local']
+      .map(id => document.querySelector('[data-testid="'+id+'"]').firstElementChild.getAttribute('data-testid'))`),
+    [null, null, 'manager:e1'],
+    '跨设备的进行中分组保留设备标题，只有本机的已结束分组直接显示经理行',
+  )
   await shot('mobile-managers-ended-expanded')
   await tapId('managers:ended')
   assert.equal(await endedExpanded(), 'false')
@@ -974,6 +980,20 @@ try {
     '从经理目录直接进入时默认显示对话',
   )
   await shot('mobile-manager-tabs')
+  await call('Page.navigate', { url: url.replace('scene=manager-console', 'scene=chrome-site') })
+  const siteAsk = '[data-testid="request:clientAsk"]'
+  await wait(`${siteAsk} [data-testid="request:option:once"]`)
+  const siteRows = await read(`(() => {
+    const body = [...document.querySelectorAll('${siteAsk} [data-testid="request:clientAsk:body"]')]
+      .find(el => el.getBoundingClientRect().height > 0);
+    return [...body.querySelectorAll('[dir=auto]')].filter(row => !row.closest('button'))
+      .map(row => ({text:row.textContent,height:row.getBoundingClientRect().height,font:parseFloat(getComputedStyle(row).fontSize)}));
+  })()`)
+  assert.equal(siteRows.length, 2, '一条合并说明，另保留完整网址')
+  assert.match(siteRows[0].text, /https:\/\/example\.com.*本机.*litch_browser\.navigate/)
+  assert.equal(siteRows[1].text, 'https://example.com/docs/start')
+  assert.ok(siteRows[0].height < siteRows[0].font * 1.8, '常规手机宽度下网站说明只占一行')
+  await shot('mobile-chrome-site')
   console.log(
     '手机经理：目录默认打开对话、指定页签和编号链接、半屏议题卡、工作线与回经理、概览、排序、已答决策分块、三皮肤报告、已阅、评论增高与交付、设备服务较旧通过',
   )

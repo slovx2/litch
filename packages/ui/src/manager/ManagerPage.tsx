@@ -33,7 +33,7 @@ import { reasonOf } from '../app/errors.ts'
 import { Icon } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { ExternalInbox, useInboxSummary } from '../external/Inbox.tsx'
-import { ManagerRecovery } from '../external/ManagerRecovery.tsx'
+import { ManagerRecovery, recoveryInManagerHeader } from '../external/ManagerRecovery.tsx'
 import { reasonText } from '../external/Preview.tsx'
 import { SessionTodo } from '../rail/InfoRail.tsx'
 import { onFindPreparing } from '../search/actions.ts'
@@ -630,9 +630,7 @@ export function ManagerPage({
             >
               <Icon name="info" small />
               <span className="ell">{reasonText(t, githubBlocked.reason)}</span>
-              {githubBlocked.recovery.managerId === manager.id &&
-              githubBlocked.recovery.threadId === manager.threadId &&
-              manager.status === 'active' ? null : (
+              {recoveryInManagerHeader(manager, githubBlocked.recovery) ? null : (
                 <ManagerRecovery
                   deviceId={manager.deviceId}
                   recovery={githubBlocked.recovery}

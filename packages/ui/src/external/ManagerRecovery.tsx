@@ -5,6 +5,18 @@ import { useT } from '../app/appearance.ts'
 import { useKey } from '../app/services.tsx'
 import { ResetManager } from '../manager/ResetManager.tsx'
 
+/** 当前活动经理的页头已提供刷新，不重复显示同一入口。 */
+export function recoveryInManagerHeader(
+  manager: Pick<ManagerView, 'id' | 'threadId' | 'status'>,
+  recovery: ExternalManagerRecovery,
+): boolean {
+  return (
+    recovery.managerId === manager.id &&
+    recovery.threadId === manager.threadId &&
+    manager.status === 'active'
+  )
+}
+
 export function ManagerRecovery({
   deviceId,
   recovery,

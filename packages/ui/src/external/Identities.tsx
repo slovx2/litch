@@ -13,6 +13,15 @@ import { Avatar, Dot } from './parts.tsx'
 
 const CREDENTIAL_TONE = { active: 'ok', invalid: 'err', revoked: 'off' } as const
 
+function hasNotifications(identity: ExternalIdentity): boolean {
+  return identity.credentials.some(
+    (credential) =>
+      credential.state === 'active' &&
+      credential.credentialKind === 'oauth' &&
+      credential.scopes?.includes('notifications'),
+  )
+}
+
 function CredentialTag({ credential }: { credential: ExternalCredential }) {
   const t = useT()
   const kind = credential.credentialKind ?? 'fine_grained'
@@ -120,10 +129,11 @@ export function Identities({
                     <span className="ext-row-meta mono">#{credential.resourceOwnerId}</span>
                   ) : null}
                   <span className="grow" />
-                  {index === 0 && writable ? (
+                  {index === 0 && writable && !hasNotifications(identity) ? (
                     <button
                       type="button"
                       className="ext-text-link ext-row-act"
+                      data-act="identity-add-permissions"
                       disabled={!online}
                       onClick={() => {
                         setReauthorize({

@@ -40,6 +40,9 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
   const primary = request.options.find((option) => option.role !== 'decline')
   const { ask, device } = request
   const remote = device.kind === 'ssh'
+  const source = remote ? `${t.text(device.name)} · ${device.host}` : t.text(device.name)
+  const tool = `${request.tool.namespace} · ${request.tool.name}`
+  const chromeSite = ask.kind === 'site' && ask.browser === 'chrome'
   const optionText = ask.kind === 'machine' ? MACHINE_OPTION_TEXT : OPTION_TEXT
   return (
     <Card
@@ -94,19 +97,22 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
       ))}
     >
       {remote ? <Why tone="err">{t('clientAsk.remote')}</Why> : null}
-      <Meta
-        label={t('clientAsk.from')}
-        value={remote ? `${t.text(device.name)} · ${device.host}` : t.text(device.name)}
-      />
-      <Meta
-        label={t('clientAsk.tool')}
-        value={`${request.tool.namespace} · ${request.tool.name}`}
-      />
+      {chromeSite ? (
+        <Meta
+          label={ask.origin}
+          value={`· ${source} · ${request.tool.namespace}.${request.tool.name}`}
+        />
+      ) : (
+        <>
+          <Meta label={t('clientAsk.from')} value={source} />
+          <Meta label={t('clientAsk.tool')} value={tool} />
+        </>
+      )}
       {ask.kind === 'computerSelf' ? (
         <Why tone="err">{t('computerSelf.risk')}</Why>
       ) : ask.kind === 'site' ? (
         <>
-          <Meta label={t('clientAsk.origin')} value={ask.origin} />
+          {chromeSite ? null : <Meta label={t('clientAsk.origin')} value={ask.origin} />}
           {ask.url && ask.url !== ask.origin ? <Well>{ask.url}</Well> : null}
         </>
       ) : ask.kind === 'machine' ? (

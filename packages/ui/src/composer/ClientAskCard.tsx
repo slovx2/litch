@@ -165,6 +165,11 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
           <span>
             {t('clientAsk.tool')} <b>{`${request.tool.namespace} · ${request.tool.name}`}</b>
           </span>
+          {ask.kind === 'site' && ask.browser === 'chrome' ? (
+            <span>
+              {t('clientAsk.origin')} <b>{ask.origin}</b>
+            </span>
+          ) : null}
         </div>
         {/* Chrome 的两种：要用的是哪个 Chrome、在哪个网站登录，和网站审批一样写在说明行里，下面一句说明 */}
         {ask.kind === 'chromeInstance' ? (
@@ -202,11 +207,13 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
         ) : null}
         {ask.kind === 'site' ? (
           <>
-            <div className="req-meta">
-              <span>
-                {t('clientAsk.origin')} <b>{ask.origin}</b>
-              </span>
-            </div>
+            {ask.browser !== 'chrome' ? (
+              <div className="req-meta">
+                <span>
+                  {t('clientAsk.origin')} <b>{ask.origin}</b>
+                </span>
+              </div>
+            ) : null}
             {ask.url && ask.url !== ask.origin ? (
               <div className="well">
                 <pre>{ask.url}</pre>

@@ -103,10 +103,12 @@ function ManagerKey({
 function DeviceManagers({
   deviceId,
   ended,
+  showDevice,
   navigation,
 }: {
   deviceId: string
   ended: boolean
+  showDevice: boolean
   navigation: Props['navigation']
 }) {
   const t = useT()
@@ -117,7 +119,7 @@ function DeviceManagers({
   if (!ids.length) return null
   return (
     <View testID={`managers:${ended ? 'ended-device' : 'device'}:${deviceId}`}>
-      <SectionLabel>{device ? t.text(device.name) : deviceId}</SectionLabel>
+      {showDevice ? <SectionLabel>{device ? t.text(device.name) : deviceId}</SectionLabel> : null}
       {ids.map((id) => (
         <ManagerKey key={id} deviceId={deviceId} id={id} navigation={navigation} />
       ))}
@@ -126,7 +128,12 @@ function DeviceManagers({
 }
 export function ManagersScreen({ navigation }: Props) {
   const devices = useKey<string[]>(keys.devices) ?? []
-  const summary = useKey<{ total: number; ended: number }>(keys.managersSummary)
+  const summary = useKey<{
+    total: number
+    ended: number
+    currentDevices: number
+    endedDevices: number
+  }>(keys.managersSummary)
   const [showEnded, setShowEnded] = useState(false)
   const t = useT()
   const theme = useTheme()
@@ -139,6 +146,7 @@ export function ManagersScreen({ navigation }: Props) {
             key={deviceId}
             deviceId={deviceId}
             ended={false}
+            showDevice={(summary?.currentDevices ?? 0) > 1}
             navigation={navigation}
           />
         ))}
@@ -170,6 +178,7 @@ export function ManagersScreen({ navigation }: Props) {
                     key={deviceId}
                     deviceId={deviceId}
                     ended
+                    showDevice={summary.endedDevices > 1}
                     navigation={navigation}
                   />
                 ))

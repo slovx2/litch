@@ -1,29 +1,44 @@
 // 正式 React 组件的权限回归夹具。通道使用合成快照；手机原生控件在浏览器里映射为等价表单。
 
-import { keys } from '@litch/core'
+import { type ClientAskRequest, keys } from '@litch/core'
 import { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { InboxDetail } from '../apps/mobile/src/screens/managers/external/InboxDetail.tsx'
 import type {
   ExternalAccess,
+  ExternalIdentity,
   ExternalIdentityLogin,
   ExternalSourceStatus,
 } from '../packages/protocol/src/external-sources.mts'
 import { ServicesProvider } from '../packages/ui/src/app/services.tsx'
+import { ClientAskCard } from '../packages/ui/src/composer/ClientAskCard.tsx'
+import { ExternalInbox } from '../packages/ui/src/external/Inbox.tsx'
 import { InboxTriage } from '../packages/ui/src/external/InboxTriage.tsx'
 import { UnattendedPage } from '../packages/ui/src/external/UnattendedPage.tsx'
 import { IssueMeta } from '../packages/ui/src/manager/issues/IssueMeta.tsx'
 
 const intake = { intakeId: 'one', revision: 1, status: 'pending_triage', managerId: 'm1' }
 const recovery = { managerId: 'm1', threadId: 'manager-thread', action: 'refresh' } as const
+const observedAt = Math.floor(Date.now() / 1000) - 120
 const head = {
   eventKey: 'event',
   intakeId: 'one',
-  kind: 'mention',
+  kind: 'comment',
   status: 'pending_triage',
   subject: { number: '8', url: 'https://github.com/example/demo/issues/8' },
-  occurredAt: 1,
+  occurredAt: observedAt,
+  observedAt,
   delivery: { state: 'queued', reason: 'manager_tools_outdated', recovery },
+}
+const otherHead = {
+  ...head,
+  eventKey: 'other-event',
+  intakeId: 'two',
+  subject: { number: '9', url: 'https://github.com/example/demo/issues/9' },
+  delivery: {
+    ...head.delivery,
+    recovery: { ...recovery, managerId: 'm2', threadId: 'other-thread' },
+  },
 }
 const missingResultReply = {
   managerId: 'm1',
@@ -45,12 +60,63 @@ const manager = {
   threadId: recovery.threadId,
   harness: 'claude-code',
 }
-const identity = {
+const identity: ExternalIdentity = {
   identityId: 'fixture',
   botUserId: '99',
   login: 'fixture-bot',
   revision: 1,
   credentials: [],
+}
+const oauth = {
+  credentialRef: 'oauth',
+  provider: 'github',
+  botUserId: '100',
+  resourceOwnerId: '100',
+  credentialKind: 'oauth',
+  scopes: ['notifications'],
+  createdAt: 1,
+  lastVerifiedAt: 1,
+  state: 'active',
+  generation: 1,
+} as const
+const identities: ExternalIdentity[] = [
+  identity,
+  {
+    identityId: 'granted',
+    botUserId: '100',
+    login: 'notified-bot',
+    revision: 1,
+    credentials: [
+      { ...oauth, credentialRef: 'limited', scopes: ['public_repo'] },
+      { ...oauth, scopes: ['notifications'] },
+    ],
+  },
+  {
+    identityId: 'revoked',
+    botUserId: '101',
+    login: 'revoked-bot',
+    revision: 1,
+    credentials: [{ ...oauth, botUserId: '101', scopes: ['notifications'], state: 'revoked' }],
+  },
+]
+const chromeSite: ClientAskRequest = {
+  id: 'chrome-site',
+  itemId: 'chrome-site',
+  kind: 'clientAsk',
+  device: { kind: 'local', name: '本机', host: '' },
+  tool: { namespace: 'litch_browser', name: 'navigate' },
+  ask: {
+    kind: 'site',
+    browser: 'chrome',
+    origin: 'https://example.com',
+    url: 'https://example.com/docs/start',
+  },
+  options: [
+    { id: 'once', role: 'accept' },
+    { id: 'session', role: 'acceptSession' },
+    { id: 'always', role: 'acceptAlways' },
+    { id: 'decline', role: 'decline' },
+  ],
 }
 const availableRepo = {
   repoId: '456',
@@ -119,7 +185,7 @@ const calls: string[] = []
 const snapshot = () => ({
   access,
   sources: { value: [sourceStatus] },
-  configuration: { value: { revision: 1, identities: [identity], assignments: [] } },
+  configuration: { value: { revision: 1, identities, assignments: [] } },
   autostart: {
     value: {
       revision: 1,
@@ -132,6 +198,10 @@ const snapshot = () => ({
 })
 const channel = {
   subscribe(topic: { kind: string }, sink: { snapshot(value: unknown): void }) {
+    if (topic.kind === 'externalInbox') {
+      sink.snapshot({ online: true, value: { entries: [head, otherHead] } })
+      return () => {}
+    }
     if (topic.kind === 'externalIdentityLogin') {
       loginSinks.add(sink)
       sink.snapshot({ value: login })
@@ -141,16 +211,20 @@ const channel = {
     sink.snapshot(snapshot())
     return () => sinks.delete(sink)
   },
-  async command(name: string, args: { deviceId?: string } = {}) {
+  async command(name: string, args: { deviceId?: string; intakeId?: string } = {}) {
     calls.push(name)
     if (
       /^external\.(?:identity\.(?:list|repositories|add)|source\.check)$/.test(name) &&
       args.deviceId !== device.id
     )
       throw new Error('没有选中远程夹具')
-    if (name === 'external.inbox.get') return { events: [head], intake }
+    if (name === 'external.inbox.get')
+      return args.intakeId === otherHead.intakeId
+        ? { events: [otherHead], intake: null }
+        : { events: [head], intake }
     if (name === 'external.identity.repositories') return { repositories: [availableRepo] }
-    if (name === 'external.identity.list') return { identities: [identity] }
+    if (name === 'external.identity.list') return { identities }
+    if (name === 'external.identity.avatar') return null
     if (name === 'external.identity.add') return login
     if (name === 'external.source.check')
       return {
@@ -194,6 +268,12 @@ function App() {
     <ServicesProvider value={{ channel, replica, shell: 'browser' } as never}>
       <div id="desktop">
         <UnattendedPage device={device as never} onBack={() => {}} onClose={() => {}} />
+      </div>
+      <div id="desktop-inbox">
+        <ExternalInbox manager={manager as never} disabled={false} onOpenIssue={() => {}} />
+      </div>
+      <div id="desktop-chrome-site">
+        <ClientAskCard request={chromeSite} deviceId="local" sessionId="fixture" waiting={0} />
       </div>
       <div id="triage">
         <InboxTriage

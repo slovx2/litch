@@ -1,7 +1,7 @@
 // 无 access、有权限及已打开表单撤权：正式桌面和手机组件的浏览器回归。
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { globSync, mkdtempSync, readFileSync } from 'node:fs'
+import { globSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -58,12 +58,15 @@ const plugins = [
   },
 ]
 const result = await build({
-  entryPoints: ['scripts/external-access-fixture.tsx'],
+  entryPoints: {
+    bundle: 'scripts/external-access-fixture.tsx',
+    style: 'packages/ui/src/styles/index.css',
+  },
+  outdir: 'fixture',
   bundle: true,
   write: false,
   format: 'esm',
   jsx: 'automatic',
-  loader: { '.css': 'empty' },
   plugins,
   nodePaths: [resolve('packages/ui/node_modules')],
   alias: {
@@ -73,11 +76,14 @@ const result = await build({
   logLevel: 'silent',
 })
 const server = createServer((req, res) => {
-  res.setHeader('Content-Type', req.url === '/bundle.js' ? 'text/javascript' : 'text/html')
+  const asset = result.outputFiles.find((file) => file.path.endsWith(`/fixture${req.url}`))
+  res.setHeader(
+    'Content-Type',
+    asset ? (req.url.endsWith('.css') ? 'text/css' : 'text/javascript') : 'text/html',
+  )
   res.end(
-    req.url === '/bundle.js'
-      ? result.outputFiles[0].text
-      : '<div id="root"></div><script type="module" src="/bundle.js"></script>',
+    asset?.text ??
+      '<link rel="stylesheet" href="/style.css"><div id="root"></div><script type="module" src="/bundle.js"></script>',
   )
 })
 await new Promise((done) => server.listen(0, '127.0.0.1', done))
@@ -132,6 +138,30 @@ try {
   }
   const wait = (expression) => until(() => read(expression), expression)
   const click = (s) => read(`document.querySelector(${JSON.stringify(s)}).click()`)
+  const shots = process.env.LITCH_EXTERNAL_ACCESS_SHOTS
+  const shot = async (file, selector) => {
+    if (!shots) return
+    const clip = await read(
+      `(()=>{const el=document.querySelector(${JSON.stringify(selector)});
+        const clone=el.cloneNode(true);clone.id='screenshot-subject';
+        Object.assign(clone.style,{position:'fixed',top:'12px',left:'12px',width:'850px',zIndex:'9999',background:'var(--panel)'});
+        document.body.append(clone);const r=clone.getBoundingClientRect();
+        return {x:r.x,y:r.y,width:r.width,height:r.height,scale:1}})()`,
+    )
+    try {
+      const image = await cdp.call('Page.captureScreenshot', { format: 'png', clip })
+      mkdirSync(shots, { recursive: true })
+      writeFileSync(join(shots, file), Buffer.from(image.data, 'base64'))
+    } finally {
+      await read('document.querySelector("#screenshot-subject").remove()')
+    }
+  }
+  await cdp.call('Emulation.setDeviceMetricsOverride', {
+    width: 990,
+    height: 1100,
+    deviceScaleFactor: 1,
+    mobile: false,
+  })
   await cdp.call('Page.navigate', { url: `http://127.0.0.1:${server.address().port}` })
   const identityAdd = '[data-act=identity-add]'
   const repoAdd = '[data-act=repo-add]'
@@ -153,6 +183,41 @@ try {
     'setAccess({configure:true,configureAutostart:true,triageInbox:true,reassignInbox:true})',
   )
   await wait(enabled(identityAdd))
+  const addPermissions = '[data-act=identity-add-permissions]'
+  await wait(enabled(`[data-identity=fixture] ${addPermissions}`))
+  assert.equal(await read(hidden(`[data-identity=granted] ${addPermissions}`)), true)
+  assert.equal(await read(enabled(`[data-identity=revoked] ${addPermissions}`)), true)
+  await read('window.__litchLook.set({lang:"zh-CN",skin:"standard",theme:"light"})')
+  await shot('desktop-github-identities.png', '[data-ext-identities]')
+  await click('#desktop-inbox [data-inbox-item=one] .ext-inbox-main')
+  const ownDetail = '#desktop-inbox [data-inbox-detail=event]'
+  await wait(`!!document.querySelector("${ownDetail}")`)
+  assert.match(
+    await read(`document.querySelector("${ownDetail}").textContent`),
+    /GitHub 工具需要更新/,
+  )
+  assert.equal(
+    await read(hidden(`${ownDetail} [data-act=manager-reset], ${ownDetail} button.ext-text-link`)),
+    true,
+  )
+  await shot('desktop-manager-inbox.png', '#desktop-inbox')
+  await click('#desktop-inbox [data-inbox-item=two] .ext-inbox-main')
+  const otherRecovery = '#desktop-inbox [data-inbox-detail=other-event] button.ext-text-link'
+  await wait(enabled(otherRecovery))
+  const chrome = '#desktop-chrome-site [data-client-ask=site]'
+  const context = await read(
+    `[...document.querySelectorAll("${chrome} .req-meta")].map(e=>e.textContent)`,
+  )
+  assert.equal(context.length, 1)
+  assert.match(context[0], /本机.*litch_browser.*navigate.*https:\/\/example\.com/)
+  assert.equal(
+    await read(`document.querySelector("${chrome} .well pre").textContent`),
+    'https://example.com/docs/start',
+    '合并说明行仍保留单独的完整页面网址',
+  )
+  for (const option of ['once', 'session', 'always', 'decline'])
+    assert.equal(await read(enabled(`${chrome} [data-option=${option}]`)), true)
+  await shot('desktop-chrome-site.png', chrome)
   await click(identityAdd)
   await wait('!!document.querySelector("dialog[open]")')
   await click('#triage [data-act=triage-accept]')
