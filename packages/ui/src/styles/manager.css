@@ -715,6 +715,15 @@
   color: var(--ink-3);
   white-space: nowrap;
 }
+/* 空闲压缩记录在“更新于”前面，窄了先截它 */
+.mg-situation-at.ell {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.mg-situation-at.ell + .mg-situation-at::before {
+  content: "·";
+  margin-inline-end: 8px;
+}
 .mg-situation-empty {
   margin: 0;
   color: var(--ink-3);
@@ -1093,8 +1102,46 @@
 .mg-decision-meta {
   margin-block: 12px;
 }
-.mg-decision footer.mg-item-meta {
-  margin-top: 12px;
+/* 决策卡尾的一行元信息：依据、核对提交号与时间排在一起，不另画分隔线；展开依据时链接占整行 */
+.mg-decision-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  color: var(--ink-2);
+  font-size: calc(12px * var(--fs));
+}
+.mg-decision-foot:empty {
+  display: none;
+}
+.mg-decision-foot > .mg-evidence > summary {
+  padding-block: 0;
+}
+.mg-decision-foot > .mg-evidence[open] {
+  flex-basis: 100%;
+}
+/* 在卡尾操作栏里：固定排最前、占满左侧，按钮和图标都靠右；展开依据时独占一行 */
+.mg-card-actions > .mg-decision-foot {
+  order: -2;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mg-card-actions > .mg-decision-foot:has(> .mg-evidence[open]) {
+  flex-basis: 100%;
+}
+/* 没有操作栏（内嵌旧式帖子）时照原位置留出间距 */
+.mg-post-body .mg-decision-foot {
+  margin-top: 10px;
+}
+.mg-decision-check {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+.mg-evidence:not([open]) + .mg-decision-check::before {
+  content: "·";
+  color: var(--ink-3);
 }
 
 .mg-request {
@@ -1722,10 +1769,37 @@
   order: 8;
   margin-inline-start: auto;
 }
+/* 决策的“忽略”图标排在讨论入口前面，一起靠右 */
+.mg-card-actions .ibtn[data-act="manager-ignore"] {
+  order: 7;
+  margin-inline-start: auto;
+}
+.mg-card-actions:has(.ibtn[data-act="manager-ignore"]) :is(.mg-talk-entry, .mg-issue-full) {
+  margin-inline-start: 0;
+}
 .mg-card-actions .mg-post-compose {
   width: 100%;
   order: 9;
 }
 .mg-idle .form-check:has(> input:disabled) {
   color: var(--ink-3);
+}
+
+/* 看板页签行右侧的 GitHub 投递受阻提示：一行截断，悬停看全文 */
+.mg-board-alert {
+  flex: 0 1 auto;
+  max-width: 55%;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-inline-end: 4px;
+  font-size: calc(12px * var(--fs));
+  color: var(--wait);
+}
+.mg-board-alert > .ell {
+  min-width: 0;
+}
+.mg-board-alert > button {
+  flex: none;
 }

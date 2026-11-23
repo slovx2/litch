@@ -46,7 +46,8 @@ const ownerIdentity: ExternalOwnerIdentity = {
   method: 'localGh',
 }
 
-export function createMockExternal(clock: Clock, devices: () => DeviceView[]) {
+/** extraStates：预览场景（mock-states.mts）里加上投递受阻、通知权限缺失、未回原帖等状态 */
+export function createMockExternal(clock: Clock, devices: () => DeviceView[], extraStates = false) {
   const states = new Map<string, ReturnType<typeof make>>()
   const now = () => Math.floor(clock.now() / 1000)
   const isOnline = (id: string) =>
@@ -90,10 +91,29 @@ export function createMockExternal(clock: Clock, devices: () => DeviceView[]) {
           },
         ],
       },
-      notify: {
-        state: 'ok',
-        diagnostics: [{ check: 'managerTools', state: 'ok', code: 'manager_tools_ready' }],
-      },
+      notify: extraStates
+        ? {
+            state: 'blocked',
+            diagnostics: [
+              {
+                check: 'managerTools',
+                state: 'blocked',
+                code: 'manager_tools_outdated',
+                checkedAt: now(),
+                recovery: { managerId, threadId: managerId, action: 'refresh' },
+              },
+              {
+                check: 'notifications',
+                state: 'blocked',
+                code: 'github_notifications_scope_required',
+                checkedAt: now(),
+              },
+            ],
+          }
+        : {
+            state: 'ok',
+            diagnostics: [{ check: 'managerTools', state: 'ok', code: 'manager_tools_ready' }],
+          },
       dispatch: {
         state: 'unverified',
         diagnostics: [
@@ -342,7 +362,20 @@ export function createMockExternal(clock: Clock, devices: () => DeviceView[]) {
         occurredAt: now() - 900 - i * 300,
         observedAt: now() - 840 - i * 300,
         status: state,
-        ...(i === 0 ? { delivery: { state: 'queued' as const, reason: 'rate_limited' } } : {}),
+        ...(i === 0
+          ? {
+              delivery: extraStates
+                ? {
+                    state: 'blocked' as const,
+                    reason: 'manager_tools_outdated',
+                    recovery: { managerId, threadId: managerId, action: 'refresh' as const },
+                  }
+                : { state: 'queued' as const, reason: 'rate_limited' },
+            }
+          : {}),
+        ...(extraStates && i === 1
+          ? { missingResultReply: { managerId, issueId: 'X-1' as const, subject: subject(107) } }
+          : {}),
         eventUrl: `${repo.url}/issues/${108 - i}#issuecomment-1`,
         reason: i === 2 ? 'role_below_minimum' : i === 0 ? 'rate_limited' : 'manual',
         ruleId: 'owner_comment',
@@ -351,6 +384,8 @@ export function createMockExternal(clock: Clock, devices: () => DeviceView[]) {
         ...(i === 0 ? { intakeId: 'intake-108' } : i === 1 ? { issueId: 'X-1' as const } : {}),
       }),
     )
+    if (extraStates)
+      status.missingResultReplies = [{ managerId, issueId: 'X-1', subject: subject(107) }]
     const intakes = new Map<string, ExternalIntake>()
     for (const evt of events)
       if (evt.intakeId)

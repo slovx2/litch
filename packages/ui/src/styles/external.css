@@ -461,8 +461,34 @@
   flex: none;
   white-space: nowrap;
 }
+/* 未回原帖标记：整枚胶囊可点，字跟胶囊同色，不显示成蓝色链接 */
+[data-missing-result-reply] {
+  flex: none;
+  white-space: nowrap;
+}
+[data-missing-result-reply] a {
+  color: inherit;
+  text-decoration: none;
+}
+[data-missing-result-reply] a:hover {
+  text-decoration: underline;
+}
 
-.ext-delivery-note {
-  padding: 0 12px;
-  color: var(--wait);
+/* 收件箱详情的元信息行：放不下时整项换行，不把短项挤成竖排 */
+.ext-detail > .ext-row-meta {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.ext-detail > .ext-row-meta > * {
+  flex: none;
+  max-width: 100%;
+}
+/* 行内的次要操作（身份行的“加权限”）：小字、不抢主色，悬停再显出链接色 */
+.ext-row-act {
+  flex: none;
+  font-size: calc(12px * var(--fs));
+  color: var(--ink-2);
+}
+.ext-row-act:hover:not(:disabled) {
+  color: var(--accent);
 }

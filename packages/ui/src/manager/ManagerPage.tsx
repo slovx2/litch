@@ -30,6 +30,7 @@ import type { ManagerIssueKind } from '../../../protocol/src/manager-issues.mts'
 import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
+import { Icon } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { ExternalInbox, useInboxSummary } from '../external/Inbox.tsx'
 import { ManagerRecovery } from '../external/ManagerRecovery.tsx'
@@ -596,16 +597,6 @@ export function ManagerPage({
         className="mg-board"
         aria-label={t('manager.board')}
       >
-        {githubBlocked?.recovery ? (
-          <div className="ext-row ext-delivery-note" role="status">
-            <span>{reasonText(t, githubBlocked.reason)}</span>
-            <ManagerRecovery
-              deviceId={manager.deviceId}
-              recovery={githubBlocked.recovery}
-              disabled={disabled}
-            />
-          </div>
-        ) : null}
         <div className="side-tabs">
           <div className="side-tablist" role="tablist">
             {(['inbox', 'overview', 'items'] as const).map((key) => (
@@ -629,12 +620,28 @@ export function ManagerPage({
               </button>
             ))}
           </div>
+          {/* GitHub 投递受阻：页签行右侧一枚提示，悬停看全文。恢复的就是本经理时，
+              入口是页头的“刷新经理”，这里不再放第二个 */}
+          {githubBlocked?.recovery ? (
+            <span
+              className="mg-board-alert"
+              role="status"
+              title={reasonText(t, githubBlocked.reason)}
+            >
+              <Icon name="info" small />
+              <span className="ell">{reasonText(t, githubBlocked.reason)}</span>
+              {githubBlocked.recovery.managerId === manager.id &&
+              githubBlocked.recovery.threadId === manager.threadId &&
+              manager.status === 'active' ? null : (
+                <ManagerRecovery
+                  deviceId={manager.deviceId}
+                  recovery={githubBlocked.recovery}
+                  disabled={disabled}
+                />
+              )}
+            </span>
+          ) : null}
         </div>
-        {tab === 'overview' && manager.idleCompactLast ? (
-          <div className="ext-row ext-delivery-note dim" data-manager-last-compact>
-            {idleCompactLabel(manager.idleCompactLast, t)}
-          </div>
-        ) : null}
         {consoleTab ? (
           <div className="mg-inbox-bar">
             <div className="mg-inbox-tabs seg" ref={inboxTabs}>
@@ -862,6 +869,11 @@ export function ManagerPage({
                             counts={overviewCounts}
                             onOpen={openInbox}
                             issues={overviewIssues}
+                            compacted={
+                              manager.idleCompactLast
+                                ? idleCompactLabel(manager.idleCompactLast, t)
+                                : undefined
+                            }
                           />
                         ) : null}
                         {tab === 'items' || tab === 'lines' ? (

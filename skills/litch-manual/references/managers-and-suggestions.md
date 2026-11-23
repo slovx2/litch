@@ -631,7 +631,7 @@ Handled, withdrawn and expired suggestions leave the pending list; history stays
 Manager issues with discussions also remain under **Handled suggestions** in Console.
 Offline devices keep the last snapshot, but actions need a connection. An archived source is marked
 and opens as a read-only preview. Click the source conversation's name and arrow to open it;
-**Back to list** or Escape returns from an archived preview to the originating global list or
+The back arrow at the start of the read-only bar, or Escape, returns from an archived preview to the originating global list or
 manager board tab.
 **Do it here** first restores it and its worktree; a failed restore
 leaves the suggestion pending. Deleting the source withdraws its pending cards.
@@ -752,7 +752,7 @@ use the same accessible name and placeholder. Related targets use link color and
 
 ### 忽略决策
 
-不想答的待定决策可以点“忽略”，理由选填。忽略后它不计入待处理，不再提醒，也不唤醒经理；经理在下一个回合会得知你忽略了哪一项（经理正在运行时直接插入）。桌面把忽略的决策放在“已忽略”一栏，手机在列表里标“已忽略”并默认收起，点“展开详情”可看理由。手机上点“忽略”后作答区先收起，只留确认忽略那一块。点“撤销忽略”回到待定。
+不想答的待定决策可以点“忽略”（桌面为卡尾右侧的禁止图标），理由选填。忽略后它不计入待处理，不再提醒，也不唤醒经理；经理在下一个回合会得知你忽略了哪一项（经理正在运行时直接插入）。桌面把忽略的决策放在“已忽略”一栏，手机在列表里标“已忽略”并默认收起，点“展开详情”可看理由。手机上点“忽略”后作答区先收起，只留确认忽略那一块。点“撤销忽略”回到待定。
 
 “忽略”是你不处理这个问题；“已关闭”是经理认为问题不在了（失效或撤回）。经理不能直接把忽略的决策记成已答复，只能在情况有变、确实需要你再看时写明理由重新打开；这时卡片上多一块默认展开的“经理重新打开”写着理由（可收起）；“上次关闭”仍默认收起。
 
@@ -787,7 +787,7 @@ there, with **View draft** and **Discard**; discarding asks once more (**Discard
 cannot be undone. If the decision is reopened (including undoing an ignore) and the question itself did not
 change, the draft comes back and can be submitted directly. Phone behaves the same.
 
-**Ignore** an open decision you do not want to answer; a reason is optional. Ignored decisions no
+**Ignore** an open decision you do not want to answer (on desktop, the ban icon at the right of the card footer); a reason is optional. Ignored decisions no
 longer count as pending, send no reminders and do not wake the manager; the manager learns about it
 in its next turn (or immediately if it is running). Desktop lists them under **Ignored**; on phone
 they are labeled **Ignored** and collapsed until you tap **Show details**; tapping **Ignore** on
@@ -916,6 +916,6 @@ A workline report linked to an accepted X-n can carry the original GitHub link a
 
 Managers keep external requests current on the board. Mark accepted work In progress. When waiting on someone, mark it Blocked, record who or what can unblock it and when to check again, and keep follow-up on. Mark delivered work Resolved after the result reply is confirmed. Close mistaken, duplicate or superseded requests and link any replacement. On desktop and mobile, To do includes open and blocked items. A blocked card’s meta line reads “Blocked · author · time” like other states; the waiting reason sits on its own line below, up to two lines, with the full text in the expanded card or full page, or “No reason recorded” when none was given. Older issues use the reason recorded the last time they became blocked. The selected Issues tab counts the current filtered list. If Litch verifies after acceptance that a linked GitHub issue or PR has closed or merged, and a result reply is confirmed, Litch reminds the manager once if the board still says Open or In progress. Updating the board does not close, reopen or merge anything on GitHub.
 
-经理的文字规则可以随时保存，下一回合按新规则执行，GitHub 请求照常投递。旧工具确实需要更新时，收件箱和设备的「无人值守」会显示原因；有候选在等待时，经理看板也会显示恢复入口。Claude Code 会在满足投递条件时尝试原地刷新；若刷新失败，可按提示重试。需要换会话的经理走原有的接班确认。
+经理的文字规则可以随时保存，下一回合按新规则执行，GitHub 请求照常投递。旧工具确实需要更新时，收件箱和设备的「无人值守」会显示原因；有候选在等待时，经理看板的页签行也会显示原因，从页头的刷新按钮恢复。Claude Code 会在满足投递条件时尝试原地刷新；若刷新失败，可按提示重试。需要换会话的经理走原有的接班确认。
 
-Editing a manager’s written rules takes effect on the next turn and does not block GitHub delivery. When the GitHub tools need an update, the inbox and Unattended settings show the reason; the manager board also shows a recovery action when a request is waiting. Claude Code tries to refresh the current session when delivery is allowed. If it fails, retry from the recovery action. A change that requires a new session uses the existing handover confirmation.
+Editing a manager’s written rules takes effect on the next turn and does not block GitHub delivery. When the GitHub tools need an update, the inbox and Unattended settings show the reason; when a request is waiting, the manager board shows the reason beside its tabs; recover from the refresh button in the manager header. Claude Code tries to refresh the current session when delivery is allowed. If it fails, retry from the recovery action. A change that requires a new session uses the existing handover confirmation.

@@ -449,9 +449,9 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
                             id={hintId}
                             data-pair-address-hint={hostHint ?? 'candidate'}
                           >
-                            {hostHint && hostHint !== 'tailnet'
-                              ? t(`pairing.address.${hostHint}`)
-                              : null}
+                            {hostHint && hostHint !== 'tailnet' ? (
+                              <span>{t(`pairing.address.${hostHint}`)}</span>
+                            ) : null}
                             {tailnetHint ? (
                               <span>
                                 {candidate && candidate !== draft?.host ? (

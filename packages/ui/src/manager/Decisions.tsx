@@ -16,6 +16,7 @@ import type { ManagerDraftBoard } from '../../../core/src/projection/manager-dra
 import type { ManagerPost } from '../../../protocol/src/manager-posts.mjs'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
+import { Ban } from '../app/icons.tsx'
 import { useServices } from '../app/services.tsx'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardLinks } from './BoardLinks.tsx'
@@ -650,15 +651,23 @@ export function Decisions({
                             </button>
                           ) : null}
                           {decision.status === 'open' && ignoring?.id !== decision.id ? (
+                            // 忽略是次要操作：图标，和讨论入口一起靠右
                             <button
                               type="button"
-                              className="btn ghost"
+                              className="ibtn"
                               data-act="manager-ignore"
                               disabled={disabled || busy || !features.ignore}
-                              title={features.ignore ? undefined : t('manager.oldDeviceShort')}
+                              title={
+                                features.ignore ? t('manager.ignore') : t('manager.oldDeviceShort')
+                              }
+                              aria-label={
+                                features.ignore
+                                  ? t('manager.ignore')
+                                  : `${t('manager.ignore')} · ${t('manager.oldDeviceShort')}`
+                              }
                               onClick={() => setIgnoring({ id: decision.id, reason: '' })}
                             >
-                              {t('manager.ignore')}
+                              <Ban />
                             </button>
                           ) : null}
                         </div>
@@ -764,25 +773,32 @@ export function Decisions({
                   )}
                 </div>
 
-                <footer className="mg-item-meta">
-                  {decision.basis.length ? (
-                    <details className="mg-evidence" data-evidence={decision.id} key={decision.id}>
-                      <summary>
-                        {t('manager.basis')} {decision.basis.length}
-                      </summary>
-                      <BoardLinks links={decision.basis} />
-                    </details>
-                  ) : null}
-                  {decision.checked ? (
-                    <div className="mg-item-meta-row">
-                      <span className="mg-meta-label">{t('manager.verification')}</span>
-                      <span>
-                        {decision.checked.commit ? `${decision.checked.commit.slice(0, 8)} · ` : ''}
+                {/* 卡尾一行：依据 · 核对（提交号与时间）汇入操作栏靠左，忽略与讨论图标靠右 */}
+                <CardActions>
+                  <div className="mg-decision-foot">
+                    {decision.basis.length ? (
+                      <details
+                        className="mg-evidence"
+                        data-evidence={decision.id}
+                        key={decision.id}
+                      >
+                        <summary>
+                          {t('manager.basis')} {decision.basis.length}
+                        </summary>
+                        <BoardLinks links={decision.basis} />
+                      </details>
+                    ) : null}
+                    {decision.checked ? (
+                      <span className="mg-decision-check">
+                        <span className="mg-meta-label">{t('manager.verification')}</span>
+                        {decision.checked.commit ? (
+                          <span className="mono">{decision.checked.commit.slice(0, 8)}</span>
+                        ) : null}
                         <Stamp at={decision.checked.at} />
                       </span>
-                    </div>
-                  ) : null}
-                </footer>
+                    ) : null}
+                  </div>
+                </CardActions>
               </PostCard>
             )
           })}

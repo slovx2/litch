@@ -271,9 +271,8 @@ export function ExternalInbox({
                       }
                       title={head.delivery.reason ? reasonText(t, head.delivery.reason) : undefined}
                     >
-                      {head.delivery.recovery
-                        ? reasonText(t, head.delivery.reason)
-                        : t(`ext.delivery.${head.delivery.state}`)}
+                      {/* 原因放悬停提示；全文和恢复入口在展开的详情里 */}
+                      {t(`ext.delivery.${head.delivery.state}`)}
                     </span>
                   ) : tab === 'blocked' ? (
                     <span className="pill err">{reasonText(t, head.reason)}</span>

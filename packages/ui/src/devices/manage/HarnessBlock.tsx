@@ -141,16 +141,19 @@ export function HarnessBlock(props: HarnessBlockProps) {
           <Forward />
         </button>
         {harnessRecoveryAvailable(harness) && harness ? (
-          <div className="mng-h-why">
+          <div className="mng-h-why mng-h-recover">
             <HarnessWhy harness={harness} />
+            {/* 与详情页标题行的重启同一个图标按钮，放在原因的右上角 */}
             <button
               type="button"
-              className="btn ghost"
+              className="ibtn"
               data-act="restart"
+              title={t(restarting ? 'manage.restarting' : 'manage.restart')}
+              aria-label={t(restarting ? 'manage.restarting' : 'manage.restart')}
               disabled={restarting || device.connection !== 'online'}
               onClick={() => void restart(false)}
             >
-              {t(restarting ? 'manage.restarting' : 'manage.restart')}
+              <Icon name="reload" />
             </button>
           </div>
         ) : null}

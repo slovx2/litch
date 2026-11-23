@@ -130,3 +130,10 @@
 .arch-bar:focus-visible {
   outline: 0;
 }
+/* 条本身拿焦点只为接 Esc，不画成输入框激活的样子；里面的按钮聚焦时照常 */
+.cmp.arch-bar:focus {
+  border-color: var(--line-3);
+}
+.arch-bar:has(> .ibtn:first-child) {
+  padding-inline-start: 8px;
+}

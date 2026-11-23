@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
+import { Back } from '../app/icons.tsx'
 import { useServices } from '../app/services.tsx'
 
 /** 归档历史和当前打开后被归档的会话用同一个恢复入口。 */
@@ -50,14 +51,21 @@ export function ArchiveBar({
 
   return (
     <>
+      {/* 一句只读说明加一个主操作；返回列表是行首的图标（页头已标“已归档”，这里不再放徽标） */}
       <div className="cmp off arch-bar" ref={bar} tabIndex={preview ? -1 : undefined}>
-        <span className="pill mute">{t('archived.badge')}</span>
-        <span className="grow">{t('archived.readOnly')}</span>
         {onBack ? (
-          <button type="button" className="btn ghost" onClick={onBack}>
-            {t('archived.back')}
+          <button
+            type="button"
+            className="ibtn"
+            data-act="archived-back"
+            title={t('archived.back')}
+            aria-label={t('archived.back')}
+            onClick={onBack}
+          >
+            <Back />
           </button>
         ) : null}
+        <span className="grow">{t('archived.readOnly')}</span>
         <button type="button" className="btn primary" disabled={disabled || busy} onClick={restore}>
           {t('archived.restore')}
         </button>

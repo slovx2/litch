@@ -80,6 +80,10 @@ function RepoRow({
             {pending}
           </span>
         ) : null}
+        {/* 未回原帖的标记并进仓库行，不另起一行 */}
+        {status.missingResultReplies?.map((reply) => (
+          <MissingResultReply key={`${reply.managerId}/${reply.issueId}`} reply={reply} />
+        ))}
         <span className="grow" />
         {canToggle ? (
           <button
@@ -106,13 +110,6 @@ function RepoRow({
           <Caret />
         </button>
       </div>
-      {status.missingResultReplies?.length ? (
-        <div className="ext-chips">
-          {status.missingResultReplies.map((reply) => (
-            <MissingResultReply key={`${reply.managerId}/${reply.issueId}`} reply={reply} />
-          ))}
-        </div>
-      ) : null}
       {act.error ? (
         <div className="devp-note err" role="alert">
           {act.error}
