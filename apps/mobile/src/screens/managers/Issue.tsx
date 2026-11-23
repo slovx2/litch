@@ -784,6 +784,9 @@ export function Issue({
           {suggestion ? <SuggestionMeta row={suggestion} /> : null}
           <IssueRelations id={post.id} />
           {decision?.basis.length ? <IssueRelations id={post.id} basis={decision.basis} /> : null}
+          {decision?.landed.length ? (
+            <IssueRelations id={post.id} landed={decision.landed} />
+          ) : null}
           {post.kind === 'suggestion' ? (
             <SuggestionBrief
               prompt={suggestion?.proposal.prompt ?? post.body}

@@ -134,6 +134,21 @@ try {
     await read(`document.querySelector('[data-testid="${id}"]').click()`)
     await new Promise((r) => setTimeout(r, 150))
   }
+  await call('Page.navigate', {
+    url: url.replace('scene=manager-console', 'scene=manager-file-links'),
+  })
+  // 完整讨论先展开原帖，再展开关联。
+  await tapId('issue-body-toggle')
+  await tapId('issue-relations-toggle')
+  await tapId('issue-reference:cmd/codex-harness-adapter/serve.go#L131')
+  await wait('[data-testid="files"] [data-testid="files:target"]')
+  assert.match(
+    await read(`document.querySelector('[data-testid="files:target"]').textContent`),
+    /131.*listenFailure/,
+  )
+  await shot('mobile-manager-file')
+  await call('Page.navigate', { url })
+  await wait('[data-testid="manager-tab:console"][aria-selected=true]')
   const checked = (id) =>
     read(`document.querySelector('[data-testid="${id}"]')?.getAttribute('aria-checked')`)
   const closeSheet = async () => {

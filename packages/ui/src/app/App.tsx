@@ -610,7 +610,12 @@ export function App() {
           />
         ) : null}
         {/* 右边的侧面板（文件）：跟着眼前的会话走，收起只是不显示 */}
-        <SideSlot selection={selection} draft={draft} page={page} />
+        <SideSlot
+          selection={selection}
+          draft={draft}
+          page={page}
+          {...(pickedManager ? { managerCwd: pickedManager.cwd } : {})}
+        />
       </div>
       {/* litch config 要界面做的事、放宽安全的确认卡、执行器开的出码对话框 */}
       <ConfigAgent />

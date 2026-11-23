@@ -63,6 +63,9 @@ export function threadFixture(platform, kind, options = {}) {
         return { useTheme: () => ({ c: {}, font: { size: {} }, radius: {} }) }
       if (name.endsWith('/services.tsx'))
         return { useServices: () => ({ channel: { command: async () => {} } }) }
+      if (name.endsWith('/shell/services'))
+        return { useChannel: () => ({ command: async () => {} }) }
+      if (name.endsWith('/use-board-reference')) return { useBoardFile: () => () => {} }
       if (name.endsWith('/discussion-pane.ts'))
         return {
           useDiscussionPane: () => ({

@@ -2,7 +2,7 @@
 // 运行 npm run client:check:link-context-menu；不读取真实 SSH 配置或密钥。
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
-import { globSync, mkdtempSync, rmSync } from 'node:fs'
+import { globSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -233,6 +233,72 @@ try {
   )
   await key('Escape')
   assert.equal(await read("document.querySelector('#link-dialog').open"), true, 'Esc 只关菜单')
+  await read("document.querySelector('#link-dialog').close(); window.linkFixture.enabled(false)")
+  const before = await read('window.linkFixture.system.length')
+  for (const selector of ['#prose a', '#board a', '#side-file a']) {
+    await read(`document.querySelector(${JSON.stringify(selector)}).click()`)
+    assert.equal(
+      await read('window.linkFixture.system.at(-1)'),
+      await read('window.linkFixture.url'),
+    )
+  }
+  assert.equal(await read('window.linkFixture.system.length'), before + 3)
+  await open('#board a')
+  await pick('openSystem')
+  assert.equal(
+    await read('window.linkFixture.system.length'),
+    before + 4,
+    '打开设置不改变显式系统浏览器菜单',
+  )
+
+  await cdp.call(
+    'Page.navigate',
+    { url: `http://127.0.0.1:${uiPort}/?onboarding=off&lang=zh-CN&skin=standard&theme=light` },
+    sessionId,
+  )
+  const click = async (selector) => {
+    const query = `document.querySelector(${JSON.stringify(selector)})`
+    await until(() => read(`!!(${query})`), selector, 30000)
+    await read(`${query}.click()`)
+  }
+  await click('[data-sidebar-mode=manager]')
+  await click('[data-manager-id=m1] .mg-pick')
+  await click('[data-inbox-tab=issues]')
+  await click('[data-issue=X-5] [data-act=issue-toggle]')
+  await click('[data-issue=X-5] [data-issue-relations] summary')
+  const relation = (path) => `[data-issue=X-5] [data-relation-target="${path}"]`
+  await click(relation('cmd/codex-harness-adapter/'))
+  await until(
+    () =>
+      read(
+        `!!document.querySelector('.side .files[data-device=local][data-root$="/cmd/codex-harness-adapter"] [data-path$="/serve.go"]')`,
+      ),
+    '在经理会话的文件树内定位目录',
+  ).catch(async (error) => {
+    console.error(
+      await read(`({
+      alerts: [...document.querySelectorAll('[role=alert]')].map(el => el.textContent),
+      side: document.querySelector('.side')?.innerText,
+      dialog: document.querySelector('dialog[open]')?.innerText,
+      tree: [...document.querySelectorAll('.side [data-path]')].slice(0,15).map(el => [el.dataset.path, el.getAttribute('aria-selected')])
+    })`),
+    )
+    throw error
+  })
+  await click(relation('cmd/codex-harness-adapter/serve.go#L131'))
+  await until(
+    () =>
+      read(
+        `document.querySelector('.side .cl.hl[data-line="131"]')?.textContent.includes('listenFailure')`,
+      ),
+    '在同一会话的文件查看器打开文件并高亮第 131 行',
+  )
+  if (process.env.LITCH_BOARD_LINK_SHOTS) {
+    const output = process.env.LITCH_BOARD_LINK_SHOTS
+    mkdirSync(output, { recursive: true })
+    const { data } = await cdp.call('Page.captureScreenshot', { format: 'png' }, sessionId)
+    writeFileSync(join(output, 'desktop-manager-file.png'), Buffer.from(data, 'base64'))
+  }
   console.log(
     'PASS 网页链接三项菜单、剪贴板接口、当前会话标签、禁用原因、键盘/边界/模态框、正文和自动网址及原有点击路由',
   )

@@ -1,4 +1,4 @@
-// 设置页“内置浏览器”那一组：对话里的链接用不用内置浏览器打开（记在界面本地，side/browser/links.ts），
+// 设置页“内置浏览器”那一组：网页链接要不要用系统浏览器打开（记在界面本地，side/browser/links.ts），
 // 信任所有网站的开关和它的黑名单，一直允许的网站（列出、删一个、全删），清除浏览数据（先确认）。
 // 后三样经外壳的 window.litchBrowser（apps/desktop/src/browser/install.mts 的 settings）；普通浏览器里没有外壳，只写一句说明。
 // 浏览器是这台电脑上的，所有会话、所有设备共用一份，所以放在应用级的设置里，不按设备。
@@ -41,28 +41,28 @@ export function BrowserSection() {
   )
 }
 
-/** 对话里的链接用不用内置浏览器打开。默认开 */
+/** 复用原有的链接偏好；系统浏览器开关默认关闭。 */
 function LinkSwitch() {
   const t = useT()
-  const on = useLinksInBrowser()
+  const inBrowser = useLinksInBrowser()
   const key = currentPlatform() === 'mac' ? 'Cmd' : 'Ctrl'
   return (
-    <section className="set-block" data-links={on ? 'browser' : 'external'}>
+    <section className="set-block" data-links={inBrowser ? 'browser' : 'external'}>
       <h3>{t('settings.browser.links')}</h3>
       <div className="set-rows">
         <div className="set-row">
           <div className="set-switch-text">
-            <label htmlFor="set-links-in-browser">{t('settings.browser.links.title')}</label>
+            <label htmlFor="set-links-in-system">{t('settings.browser.links.title')}</label>
             <span className="set-note">{t('settings.browser.links.note', { key })}</span>
           </div>
           <button
-            id="set-links-in-browser"
+            id="set-links-in-system"
             type="button"
             role="switch"
             className="switch"
-            data-act="links-in-browser"
-            aria-checked={on}
-            onClick={() => setLinksInBrowser(!on)}
+            data-act="links-in-system"
+            aria-checked={!inBrowser}
+            onClick={() => setLinksInBrowser(!inBrowser)}
           >
             <i />
           </button>

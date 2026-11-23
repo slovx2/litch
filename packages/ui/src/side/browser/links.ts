@@ -1,9 +1,9 @@
-// 对话里的链接（回答里的 Markdown 链接和网址、请求卡片上的网页、终端里的网址）点了以后：
+// 对话、看板和侧面板里的网页链接点了以后：
 // 默认在内置浏览器里作为眼前这个会话的用户标签打开，打开侧面板、换到浏览器标签；同一个网址已经开着就切过去。
 // 远程设备的会话里的远端 localhost 由外壳照地址栏那样经 ssh 转发（apps/desktop/src/browser/install.mts 的 BROWSER_OPEN）。
 // 中键、Cmd/Ctrl 点，设置里关掉了，或者没有内置浏览器（普通浏览器里的预览）：交给系统的浏览器。规矩在 link-logic.ts。
 //
-// 设置“对话里的链接用内置浏览器打开”记在这台电脑的界面里（litch.browser），和外观、侧面板一样不经核心。
+// 网页打开偏好记在这台电脑的界面里（litch.browser），和外观、侧面板一样不经核心。
 import { useSyncExternalStore } from 'react'
 import { currentPlatform } from '../../app/platform.ts'
 import { showSideTab } from '../side.ts'

@@ -1,4 +1,3 @@
-import { knownFileRef } from '@litch/core'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { createContext, useContext, useEffect, useState } from 'react'
@@ -18,6 +17,7 @@ import { Button } from '../../ui/kit/controls'
 import { Fold, Icon, type IconName } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import { useWebLinkMenu } from '../../ui/WebLinkMenu'
+import { useBoardFile } from './use-board-reference'
 
 const ICONS = {
   issue: 'note',
@@ -39,10 +39,12 @@ export function IssueRelations({
   id,
   kind = 'issue',
   basis,
+  landed,
 }: {
   id: string
   kind?: 'issue' | 'item' | 'thread'
   basis?: ManagerLink[]
+  landed?: ManagerLink[]
 }) {
   const links = useWebLinkMenu()
   const context = useContext(IssueContext)
@@ -55,14 +57,16 @@ export function IssueRelations({
   const { c, font } = useTheme()
   const channel = useChannel()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const openFile = useBoardFile(context?.manager)
   if (!context) return null
   const { board, manager, features } = context
   // 提交、差异之类要向设备读原文（reference/read，属于 Posts）：比应用旧的设备服务读不了
   const unreadable = (target: ManagerRelationTarget) =>
     !features.posts && !['issue', 'item', 'thread', 'url', 'file'].includes(target.kind)
-  const groups = basis
-    ? { source: basis, derived: [], related: [] }
-    : managerRelationGroups(board, { kind, target: id })
+  const groups =
+    basis || landed
+      ? { source: basis ?? landed ?? [], derived: [], related: [] }
+      : managerRelationGroups(board, { kind, target: id })
   if (!Object.values(groups).some((g) => g.length)) return null
   const title = (target: ManagerRelationTarget) => {
     if (target.kind === 'thread')
@@ -96,17 +100,7 @@ export function IssueRelations({
           sessionId: target.target,
           title: title(target),
         })
-      if (target.kind === 'file') {
-        const ref = knownFileRef(target.target, { root: manager.cwd, cwd: manager.cwd })
-        if (!ref) throw new Error(t('manager.linkUnavailable'))
-        return navigation.navigate('Files', {
-          deviceId: manager.deviceId,
-          root: manager.cwd,
-          path: ref.path,
-          ref,
-          href: target.target,
-        })
-      }
+      if (target.kind === 'file') return openFile(target.target)
       if (target.kind === 'url') {
         if (!/^https?:\/\//i.test(target.target)) throw new Error(t('manager.linkUnavailable'))
         await Linking.openURL(target.target)
@@ -131,7 +125,7 @@ export function IssueRelations({
       {links.menu}
       <Fold
         open={expanded}
-        testID={`${basis ? 'evidence' : 'relations'}:${id}`}
+        testID={`${basis ? 'evidence' : landed ? 'landed' : 'relations'}:${id}`}
         onToggle={() => setExpanded(!expanded)}
         style={{ alignSelf: 'flex-start' }}
       >
@@ -139,9 +133,11 @@ export function IssueRelations({
           {t(
             basis
               ? 'manager.basis'
-              : kind === 'issue'
-                ? 'manager.relations'
-                : 'manager.relatedIssues',
+              : landed
+                ? 'manager.landed'
+                : kind === 'issue'
+                  ? 'manager.relations'
+                  : 'manager.relatedIssues',
           )}{' '}
           {Object.values(groups).flat().length}
         </Text>

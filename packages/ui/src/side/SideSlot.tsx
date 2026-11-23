@@ -27,16 +27,26 @@ const NO_ROOTS: readonly string[] = []
  * 在设备层工作树里的会话，根是那棵工作树（文件、终端、差异都看它，不看源仓库）；
  * 正在写的新会话看它要建在哪。眼前什么都没有就是 null。
  */
-function usePlace(selection: Selection | null, draft: Draft | null): SidePlace | null {
+function usePlace(
+  selection: Selection | null,
+  draft: Draft | null,
+  managerCwd?: string,
+): SidePlace | null {
   const deviceId = draft?.deviceId ?? selection?.deviceId ?? ''
   const summary = useKey<SessionSummary>(keys.summary(deviceId, selection?.sessionId ?? ''))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId))
   // 摘要还没到的那一帧先不动：不然面板会先闪到“没有工作区”
-  const known = draft !== null || (selection !== null && summary !== undefined)
+  const known =
+    draft !== null || (selection !== null && (summary !== undefined || managerCwd !== undefined))
   const workspaceId = draft ? draft.workspaceId : (summary?.workspaceId ?? null)
-  const cwd = draft ? null : (summary?.cwd ?? null)
+  const cwd = draft ? null : (summary?.cwd ?? managerCwd ?? null)
   const workspace = workspaces?.find((entry) => entry.id === workspaceId)
-  const roots = draft ? (workspace?.roots ?? NO_ROOTS) : sessionRoots(summary, workspace?.roots)
+  const roots = draft
+    ? (workspace?.roots ?? NO_ROOTS)
+    : sessionRoots(
+        summary ?? (managerCwd ? { cwd: managerCwd, worktree: null } : undefined),
+        workspace?.roots,
+      )
   // 根按内容比：侧栏每来一次增量，工作区的对象都是新的，面板不该跟着重画
   const rootsKey = roots.join('\n')
   const sessionId = draft ? null : (selection?.sessionId ?? null)
@@ -55,12 +65,14 @@ export function SideSlot({
   selection,
   draft,
   page,
+  managerCwd,
 }: {
   selection: Selection | null
   draft: Draft | null
   page: string | null
+  managerCwd?: string
 }) {
-  const place = usePlace(selection, draft)
+  const place = usePlace(selection, draft, managerCwd)
   // 面板开没开按会话记：眼前换了会话，先换成那个会话自己的开合（在别的效果之前，浏览器的 show 要在它上面打开）
   const view =
     page !== null

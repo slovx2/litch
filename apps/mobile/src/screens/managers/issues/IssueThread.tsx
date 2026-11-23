@@ -12,10 +12,12 @@ import type {
   ManagerIssueHead,
   ManagerOrdinaryStatus,
 } from '../../../../../../packages/protocol/src/manager-issues.mts'
+import type { ManagerRelationTarget } from '../../../../../../packages/protocol/src/manager-posts.mts'
 import { stamp } from '../../../../../../packages/ui/src/app/format.ts'
 import { useGrow } from '../../../detail/composer/grow'
+import { useChannel } from '../../../shell/services'
 import { useT } from '../../../ui/i18n'
-import { Chip } from '../../../ui/kit/controls'
+import { Button, Chip } from '../../../ui/kit/controls'
 import { Fold, IconButton } from '../../../ui/kit/Icon'
 import { plainPreview } from '../../../ui/plain-text'
 import { useTheme } from '../../../ui/theme'
@@ -23,6 +25,7 @@ import { Byline } from '../Byline'
 import { IssueExternal } from '../external/IssueExternal'
 import { MissingResultReply } from '../external/MissingResultReply'
 import { Markdown } from '../IssueMarkdown'
+import { useBoardFile } from '../use-board-reference'
 import type { IssueCommands } from './data'
 
 const drafts = new Map<string, string>()
@@ -121,7 +124,7 @@ export function IssueWaitLine({
 }
 
 export function IssueThread({
-  manager: _manager,
+  manager,
   issue,
   changes,
   disabled,
@@ -145,6 +148,9 @@ export function IssueThread({
   bodyOpen?: boolean
 }) {
   const t = useT()
+  const channel = useChannel()
+  const openFile = useBoardFile(manager)
+  const [reference, setReference] = useState<string | null>(null)
   const [openingError, setOpeningError] = useState('')
   const focused = useIsFocused()
   const [relationsOpen, setRelationsOpen] = useState(false)
@@ -172,6 +178,20 @@ export function IssueThread({
   const { c, font, radius } = useTheme()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const openReference = async (target: ManagerRelationTarget) => {
+    setError('')
+    try {
+      if (target.kind === 'file') return openFile(target.target)
+      const response = await channel.command('managers.reference.read', {
+        deviceId: manager.deviceId,
+        managerId: manager.id,
+        reference: target.target,
+      })
+      setReference(response.text)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
+  }
   const [expanded, setExpanded] = useState(false)
   const showBody = bodyMode === 'folded' ? expanded : bodyOpen
   const run = async (request: Promise<unknown>) => {
@@ -327,6 +347,13 @@ export function IssueThread({
                         testID={`issue-item:${target.target}`}
                         onPress={() => onOpenItem(target.target)}
                       />
+                    ) : ['file', 'branch', 'commit'].includes(target.kind) ? (
+                      <Chip
+                        key={`${target.kind}:${target.target}`}
+                        label={`${t(`manager.relationKind.${target.kind}`)} · ${target.label ?? target.target}`}
+                        testID={`issue-reference:${target.target}`}
+                        onPress={() => void openReference(target)}
+                      />
                     ) : (
                       <Text
                         key={`${target.kind}:${target.target}`}
@@ -346,6 +373,18 @@ export function IssueThread({
                     ),
                   )}
                 </View>
+              ) : null}
+              {reference !== null ? (
+                <>
+                  <Button
+                    kind="plain"
+                    label={t('manager.close')}
+                    onPress={() => setReference(null)}
+                  />
+                  <Text selectable style={{ color: c.ink, fontFamily: font.mono }}>
+                    {reference}
+                  </Text>
+                </>
               ) : null}
             </View>
           ) : null}

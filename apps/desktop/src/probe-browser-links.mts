@@ -133,16 +133,24 @@ export async function checkLinks({
     await ui.page("document.querySelector('.sb-settings').click()")
     await ui.until("document.querySelector('.set-page')")
     await ui.page(`document.querySelector('.set-nav [data-section="browser"]')?.click()`)
-    const toggle = 'document.querySelector(\'[data-act="links-in-browser"]\')'
-    check('设置：开关默认开', await ui.until(`${toggle}?.getAttribute('aria-checked') === 'true'`))
+    const toggle = 'document.querySelector(\'[data-act="links-in-system"]\')'
+    check(
+      '设置：默认不用系统浏览器',
+      await ui.until(`${toggle}?.getAttribute('aria-checked') === 'false'`),
+    )
     await pause(600)
     await shot('links-setting')
     await ui.page(`${toggle}.click()`)
     check(
-      '设置：关掉记下来',
-      (await ui.until(`${toggle}?.getAttribute('aria-checked') === 'false'`)) &&
+      '设置：打开系统浏览器选项后保存',
+      (await ui.until(`${toggle}?.getAttribute('aria-checked') === 'true'`)) &&
         (await ui.page("localStorage.getItem('litch.browser')")) === '{"links":false}',
     )
+    // 截图等开关滑块完成现有过渡；行为检查只看即时状态和保存结果。
+    if (process.env.LITCH_BROWSER_SHOTS) {
+      await pause(300)
+      await shot('links-system-on')
+    }
     await ui.page(`${ui.row}.click()`)
     await ui.until(`document.querySelector(${JSON.stringify(LINK_SEL)})`)
     await ui.page(`window.__external = []
@@ -160,7 +168,7 @@ export async function checkLinks({
     await ui.page(`document.querySelector('.set-nav [data-section="browser"]')?.click()`)
     await ui.until(`${toggle}`)
     await ui.page(`${toggle}.click()`)
-    await ui.until(`${toggle}?.getAttribute('aria-checked') === 'true'`)
+    await ui.until(`${toggle}?.getAttribute('aria-checked') === 'false'`)
     await ui.page(`${ui.row}.click()`)
     await ui.until(`document.querySelector(${JSON.stringify(LINK_SEL)})`)
     check(

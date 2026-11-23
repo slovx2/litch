@@ -51,7 +51,7 @@ export const FileLinksProvider = Context.Provider
  */
 export function useSessionFileLinks(
   deviceId: string,
-  summary: SessionSummary | undefined,
+  summary: Pick<SessionSummary, 'id' | 'cwd' | 'workspaceId' | 'worktree'> | undefined,
 ): FileLinks | null {
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId))
   const { channel } = useServices()
