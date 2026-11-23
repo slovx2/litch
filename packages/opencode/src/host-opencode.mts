@@ -1,5 +1,8 @@
-import { execFileSync } from 'node:child_process'
-import { cliCommand, hostCliDiagnostic, resolveHostCli } from '../../shared/src/host-cli.mjs'
+import {
+  hostCliDiagnostic,
+  hostCliVersionOutput,
+  resolveHostCli,
+} from '../../shared/src/host-cli.mjs'
 import { isVersionAtLeast } from '../../shared/src/min-version.mjs'
 
 // OpenCode 本体不随适配器分发：用用户自己装的可执行文件。CHA_OPENCODE_CLI 可指定路径；
@@ -41,17 +44,8 @@ export function assertOpencodeVersion(
 
 // 读取用户安装的 OpenCode 版本并核对下限，返回裸版本号。
 export function hostOpencodeVersion(cli: string, minimum: string): string {
-  let output: string
-  try {
-    const [command, ...args] = cliCommand(cli, ['--version'])
-    output = execFileSync(command as string, args, {
-      encoding: 'utf8',
-      timeout: 15_000,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim()
-  } catch {
-    throw new Error(`无法读取宿主 OpenCode CLI 版本: ${cli}`)
-  }
+  const output = hostCliVersionOutput(cli, process.env, 15_000)
+  if (!output) throw new Error(`无法读取宿主 OpenCode CLI 版本: ${cli}`)
   const version = parseVersion(output)
   assertOpencodeVersion(
     version,

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 // 候选按发现顺序保留；同版本不换位，PATH 顺序优先于固定目录与 npm 全局目录。
@@ -24,6 +25,7 @@ type cliVersionKey struct {
 type cliVersionResult struct {
 	ready   chan struct{}
 	version string
+	retryAt time.Time
 }
 
 var cliVersions = struct {
@@ -31,7 +33,7 @@ var cliVersions = struct {
 	values map[cliVersionKey]*cliVersionResult
 }{values: map[cliVersionKey]*cliVersionResult{}}
 
-// 每次 stat 跟随符号链接，既能识别替换链接，也能识别原地升级。失败结果同样缓存。
+// 每次 stat 跟随符号链接，既能识别替换链接，也能识别原地升级。短暂失败不随每个连接重复探测。
 func cachedCLIVersion(ctx context.Context, path string, env []string) string {
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
@@ -44,12 +46,14 @@ func cachedCLIVersion(ctx context.Context, path string, env []string) string {
 	key := cliVersionKey{real, file.Size(), file.ModTime().UnixNano()}
 	cliVersions.Lock()
 	if cached, found := cliVersions.values[key]; found {
-		cliVersions.Unlock()
-		select {
-		case <-cached.ready:
-			return cached.version
-		case <-ctx.Done():
-			return ""
+		if cached.retryAt.IsZero() || time.Now().Before(cached.retryAt) {
+			cliVersions.Unlock()
+			select {
+			case <-cached.ready:
+				return cached.version
+			case <-ctx.Done():
+				return ""
+			}
 		}
 	}
 	cached := &cliVersionResult{ready: make(chan struct{})}
@@ -60,8 +64,14 @@ func cachedCLIVersion(ctx context.Context, path string, env []string) string {
 	}
 	cliVersions.values[key] = cached
 	cliVersions.Unlock()
-	cached.version = probeVersion(ctx, path, env)
+	version := probeVersion(ctx, path, env)
+	cliVersions.Lock()
+	cached.version = version
+	if version == "" {
+		cached.retryAt = time.Now().Add(15 * time.Second)
+	}
 	close(cached.ready)
+	cliVersions.Unlock()
 	return cached.version
 }
 

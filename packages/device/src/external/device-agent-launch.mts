@@ -4,18 +4,18 @@ import { randomUUID } from 'node:crypto'
 import { chmodSync, rmSync } from 'node:fs'
 import { createServer, type Server, type Socket } from 'node:net'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { adapterCliPath } from '../../../shared/src/adapter-cli.mjs'
 import { deviceGithubEnvironmentSocket } from '../../../shared/src/device-github-environment.mjs'
 import type { ExternalStore } from '../external-store.mjs'
 import type { DeviceManagers } from '../manager.mjs'
 import { isObject } from '../wire.mjs'
 import { executableOnPath } from './device-agent-command.mjs'
+import { agentCommandShim } from './device-agent-shim.mjs'
 import type { ExternalDeviceConfiguration } from './device-configuration.mjs'
 import { probeAgentGithubIdentity } from './execution-boundary.mjs'
 import type { ManagedGithubCli } from './github/gh-install.mjs'
 import type { ExternalGithubSecrets } from './secrets.mjs'
-import { shellQuoteGithubHelper } from './secrets-agent-helper.mjs'
 import { type GithubAgentActor, GithubAgentLoginService } from './secrets-agent-login.mjs'
 import { ExternalPrivateFiles } from './secrets-files.mjs'
 
@@ -48,21 +48,15 @@ export class DeviceAgentLaunch {
 
   async start(): Promise<void> {
     const { deviceSocket, stateDirectory } = this.options
+    const adapter = adapterCliPath()
+    if (!adapter) throw new Error('external_agent_command_missing')
     const path = deviceGithubEnvironmentSocket(deviceSocket)
     if (!windows) rmSync(path, { force: true })
     await this.listen(path)
     const files = new ExternalPrivateFiles(join(stateDirectory, 'external-agent-gh', 'command'))
-    const cli = fileURLToPath(new URL('./device-agent-command.mjs', import.meta.url))
-    const q = shellQuoteGithubHelper
-    for (const tool of ['gh', 'git']) {
+    for (const tool of ['gh', 'git'] as const) {
       const name = windows ? `${tool}.cmd` : tool
-      const cmd = (value: string) => `"${value.replaceAll('%', '%%')}"`
-      files.write(
-        name,
-        windows
-          ? `@echo off\r\n${cmd(process.execPath)} ${cmd(cli)} ${tool} %*\r\n`
-          : `#!/bin/sh\nexec ${q(process.execPath)} ${q(cli)} ${tool} "$@"\n`,
-      )
+      files.write(name, agentCommandShim(files.directory, tool, adapter))
       if (!windows) chmodSync(files.path(name), 0o700)
     }
   }
@@ -192,6 +186,10 @@ export class DeviceAgentLaunch {
   }
 
   private serve(socket: Socket): void {
+    if (this.sockets.size >= 16) {
+      socket.destroy()
+      return
+    }
     this.sockets.add(socket)
     socket.once('close', () => this.sockets.delete(socket))
     socket.on('error', () => socket.destroy())

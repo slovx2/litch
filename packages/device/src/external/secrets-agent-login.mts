@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { chmodSync, rmSync } from 'node:fs'
 import { createServer, type Server, type Socket } from 'node:net'
 import { delimiter, isAbsolute, join } from 'node:path'
+import { adapterCliPath } from '../../../shared/src/adapter-cli.mjs'
 import type { ExternalStore } from '../external-store.mjs'
 import { GithubWriteFault, login, numericId, object, repoName } from './github/write-api.mjs'
 import { activeManager, type ExternalToolActor } from './outbox-read.mjs'
@@ -87,6 +88,8 @@ interface ServiceOptions extends GithubAgentOptions {
 export class GithubAgentLoginService {
   private readonly options: ServiceOptions
   private readonly root: ExternalPrivateFiles
+  private readonly credentialSlots: string
+  private readonly adapter: string
   private readonly launches = new Map<string, Launch>()
   private readonly sockets = new Set<Socket>()
   private readonly server: Server
@@ -95,6 +98,11 @@ export class GithubAgentLoginService {
   private constructor(options: ServiceOptions) {
     this.options = options
     this.root = new ExternalPrivateFiles(join(options.stateDirectory, 'external-agent-gh'))
+    this.credentialSlots = new ExternalPrivateFiles(
+      join(this.root.directory, 'credential-slots'),
+    ).directory
+    this.adapter = adapterCliPath()
+    if (!this.adapter) throw new Error('external_agent_command_missing')
     // 设备状态锁已由 H 持有；重启后旧句柄无法再用。
     for (const key of this.root.keys()) {
       if (/^launch-[a-f\d]{64}$/.test(key))
@@ -170,6 +178,9 @@ export class GithubAgentLoginService {
         this.options.hostGhPath ?? (this.options.prepareGh ? '' : this.options.ghPath),
       ]
       const cmd = args.map(shell).join(' ')
+      const credential = [this.adapter, 'agent-credential', this.credentialSlots, ...args, 'git']
+        .map(shell)
+        .join(' ')
       const isWindows = process.platform === 'win32'
       const shimName = isWindows ? 'gh.cmd' : 'gh'
       const shim = files.path(shimName)
@@ -198,7 +209,7 @@ export class GithubAgentLoginService {
           [`GIT_CONFIG_KEY_${cfg}`]: 'credential.https://github.com.helper',
           [`GIT_CONFIG_VALUE_${cfg}`]: '',
           [`GIT_CONFIG_KEY_${cfg + 1}`]: 'credential.https://github.com.helper',
-          [`GIT_CONFIG_VALUE_${cfg + 1}`]: `!${cmd} git`,
+          [`GIT_CONFIG_VALUE_${cfg + 1}`]: `!${credential}`,
           [`GIT_CONFIG_KEY_${cfg + 2}`]: 'credential.https://github.com.useHttpPath',
           [`GIT_CONFIG_VALUE_${cfg + 2}`]: 'true',
         },

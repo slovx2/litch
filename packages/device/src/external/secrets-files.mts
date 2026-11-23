@@ -19,7 +19,11 @@ import { isAbsolute, join, win32 } from 'node:path'
 
 export const privateName = (name: string): boolean => /^[a-zA-Z0-9_-]{1,160}$/.test(name)
 const privateFilename = (name: string): boolean =>
-  privateName(name) || name === 'hosts.yml' || name === 'helper.cjs' || name === 'gh.cmd'
+  privateName(name) ||
+  name === 'hosts.yml' ||
+  name === 'helper.cjs' ||
+  name === 'gh.cmd' ||
+  name === 'git.cmd'
 
 export function windowsPrivateAcl(directory: boolean): string {
   // 用当前进程身份和 LocalSystem 的 SID，不依赖 Windows 的显示语言。

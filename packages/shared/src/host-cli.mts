@@ -8,7 +8,10 @@ export interface HostCliCandidate {
   selected: boolean
 }
 
-const versions = new Map<string, { key: string; output: string; environment: string }>()
+const versions = new Map<
+  string,
+  { key: string; output: string; environment: string; retryAt: number; timeout: number }
+>()
 const prefixes = new Map<string, { at: number; path: string }>()
 const VERSION = /\d+\.\d+\.\d+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?/
 
@@ -17,14 +20,24 @@ export function cliCommand(path: string, args: string[]): string[] {
 }
 
 /** 只缓存同一路径、大小与修改时间的结果；链接改向和原地更新都会重新探测。 */
-export function hostCliVersionOutput(path: string, env: NodeJS.ProcessEnv = process.env): string {
+export function hostCliVersionOutput(
+  path: string,
+  env: NodeJS.ProcessEnv = process.env,
+  timeout = 2000,
+): string {
   try {
     const real = realpathSync(path)
     const file = statSync(real)
     const key = `${file.size}:${file.mtimeMs}:${file.ctimeMs}`
     const cached = versions.get(real)
     const environment = JSON.stringify(Object.entries(env).sort(([a], [b]) => a.localeCompare(b)))
-    if (cached?.key === key && (cached.output || cached.environment === environment))
+    if (
+      cached?.key === key &&
+      (cached.output ||
+        (cached.environment === environment &&
+          cached.timeout >= timeout &&
+          Date.now() < cached.retryAt))
+    )
       return cached.output
     let output = ''
     try {
@@ -32,7 +45,9 @@ export function hostCliVersionOutput(path: string, env: NodeJS.ProcessEnv = proc
       const result = spawnSync(command!, args, {
         env,
         encoding: 'utf8',
-        timeout: 2000,
+        timeout,
+        killSignal: 'SIGKILL',
+        maxBuffer: 64 * 1024,
         stdio: ['ignore', 'pipe', 'pipe'],
       })
       if (!result.error && result.status === 0) {
@@ -40,7 +55,8 @@ export function hostCliVersionOutput(path: string, env: NodeJS.ProcessEnv = proc
         output = VERSION.test(stdout) ? stdout : result.stderr.trim() || stdout
       }
     } catch {}
-    versions.set(real, { key, output, environment })
+    // 资源紧张时不要随握手反复起探测；恢复后仍能重查，不缓存永久失败。
+    versions.set(real, { key, output, environment, retryAt: Date.now() + 15_000, timeout })
     return output
   } catch {
     return ''
@@ -143,6 +159,8 @@ function globalBin(env: NodeJS.ProcessEnv): string {
         cwd: env.HOME || env.USERPROFILE,
         encoding: 'utf8',
         timeout: 2000,
+        killSignal: 'SIGKILL',
+        maxBuffer: 64 * 1024,
         stdio: ['ignore', 'pipe', 'pipe'],
       })
         .trim()

@@ -144,6 +144,12 @@ func run(ctx context.Context, args []string) error {
 	if args[0] == "entry" {
 		return runEntry(ctx, args[1:])
 	}
+	if args[0] == "agent-command" {
+		return runAgentCommand(ctx, args[1:])
+	}
+	if args[0] == "agent-credential" {
+		return runAgentCredential(ctx, args[1:])
+	}
 	if args[0] == "version" || args[0] == "--version" {
 		return runVersion(args[1:])
 	}
@@ -423,7 +429,6 @@ func (c configuration) environment() []string {
 
 // 仅实际运行时继承这些入口，按启动命令的线程向本机设备解析凭据。
 func (c configuration) agentEnvironment() []string {
-	const commandsKey = "LITCH_DEVICE_GITHUB_COMMANDS"
 	const harnessKey = "LITCH_DEVICE_GITHUB_HARNESS"
 	commands := filepath.Join(c.deviceDirectory(), "external-agent-gh", "command")
 	environment := c.environment()
@@ -437,7 +442,7 @@ func (c configuration) agentEnvironment() []string {
 	result := make([]string, 0, len(environment)+3)
 	for _, entry := range environment {
 		name, _, _ := strings.Cut(entry, "=")
-		if !strings.EqualFold(name, "PATH") && name != commandsKey && name != harnessKey {
+		if !strings.EqualFold(name, "PATH") && name != harnessKey {
 			result = append(result, entry)
 		}
 	}
@@ -445,7 +450,7 @@ func (c configuration) agentEnvironment() []string {
 		commandsPath := commands + string(os.PathListSeparator) + path
 		result = append(result, "PATH="+commandsPath)
 	}
-	return append(result, commandsKey+"="+commands, harnessKey+"="+c.harness)
+	return append(result, harnessKey+"="+c.harness)
 }
 
 // 不含自动选择后注入的 CLI 变量，用于准确判断用户配置与选择来源。
