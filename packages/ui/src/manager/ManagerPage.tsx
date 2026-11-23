@@ -642,11 +642,6 @@ export function ManagerPage({
             </span>
           ) : null}
         </div>
-        {tab === 'overview' && manager.idleCompactLast ? (
-          <div className="ext-row ext-delivery-note dim" data-manager-last-compact>
-            {idleCompactLabel(manager.idleCompactLast, t)}
-          </div>
-        ) : null}
         {consoleTab ? (
           <div className="mg-inbox-bar">
             <div className="mg-inbox-tabs seg" ref={inboxTabs}>
@@ -874,6 +869,11 @@ export function ManagerPage({
                             counts={overviewCounts}
                             onOpen={openInbox}
                             issues={overviewIssues}
+                            compacted={
+                              manager.idleCompactLast
+                                ? idleCompactLabel(manager.idleCompactLast, t)
+                                : undefined
+                            }
                           />
                         ) : null}
                         {tab === 'items' || tab === 'lines' ? (

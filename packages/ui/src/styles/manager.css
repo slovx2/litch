@@ -715,6 +715,15 @@
   color: var(--ink-3);
   white-space: nowrap;
 }
+/* 空闲压缩记录在“更新于”前面，窄了先截它 */
+.mg-situation-at.ell {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.mg-situation-at.ell + .mg-situation-at::before {
+  content: "·";
+  margin-inline-end: 8px;
+}
 .mg-situation-empty {
   margin: 0;
   color: var(--ink-3);

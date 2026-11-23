@@ -25,6 +25,7 @@ export function Overview({
   onOpen,
   refresh,
   issues,
+  compacted,
 }: {
   situation: { text: string; at: number } | null
   counts: OverviewCounts
@@ -33,6 +34,8 @@ export function Overview({
   issues?: OverviewIssues | undefined
   /** 分页看板才有：重读摘要 */
   refresh?: { busy: boolean; run(): void }
+  /** 最近一次空闲自动压缩的记录，并在现状卡片标题行的元信息里 */
+  compacted?: string | undefined
 }) {
   const t = useT()
   return (
@@ -82,6 +85,11 @@ export function Overview({
       <article className="mg-situation" data-overview="situation">
         <header>
           <h3>{t('manager.situation')}</h3>
+          {compacted ? (
+            <span className="mg-situation-at ell" data-manager-last-compact title={compacted}>
+              {compacted}
+            </span>
+          ) : null}
           {situation ? (
             <span className="mg-situation-at">
               {t('manager.situationAt')} <Stamp at={situation.at} />

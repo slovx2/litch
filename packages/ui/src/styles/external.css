@@ -462,10 +462,6 @@
   white-space: nowrap;
 }
 
-.ext-delivery-note {
-  padding: 0 12px;
-  color: var(--wait);
-}
 
 /* 未回原帖标记：整枚胶囊可点，字跟胶囊同色，不显示成蓝色链接 */
 [data-missing-result-reply] {
