@@ -195,7 +195,10 @@ try {
     await selectAppearance(skin, theme, lang)
     await state('unprepared')
     await until(() => has(panel('setup')), '未连接默认打开步骤')
-    assert.equal(await read(`${one(fold)}.textContent`), lang === 'en' ? 'Setup steps' : '设置步骤')
+    assert.equal(
+      await read(`${one(fold)}.textContent`),
+      lang === 'en' ? 'Device Chrome' : '设备 Chrome',
+    )
     assert.equal(
       await read(`(async () => {
         await document.fonts.ready

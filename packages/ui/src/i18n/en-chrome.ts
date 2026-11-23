@@ -2,7 +2,6 @@ export const enChrome = {
   'chrome.device.title': 'Device Chrome',
   'chrome.device.enabled': 'Available to conversations on this device.',
   'chrome.device.disabled': 'Access disabled',
-  'chrome.device.setup': 'Setup steps',
   'chrome.device.prepareStep': 'Prepare the connection',
   'chrome.device.prepareNote':
     'Run this on the Linux device as the Chrome user. A dedicated Chrome profile is recommended.',

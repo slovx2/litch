@@ -68,28 +68,12 @@
   line-height: 18px;
   color: var(--ink-3);
 }
-/* 设备 Chrome 沿用设备状态徽标、折叠按钮和命令框。 */
-.device-chrome-summary,
-.device-chrome-identity {
+/* 设备 Chrome：头部照同页折叠节（标题折叠、状态点加摘要、行尾图标），步骤与命令框在下面 */
+.device-chrome-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-.device-chrome-summary {
-  flex-wrap: wrap;
-  column-gap: 12px;
-}
-.device-chrome-identity {
-  max-width: 100%;
-}
-.device-chrome-actions {
-  align-items: center;
-}
-.device-chrome-actions .fold {
-  padding: 2px 4px;
-  color: var(--ink-2);
-  font-size: 12px;
+  gap: 4px;
+  flex: none;
 }
 .device-chrome-steps {
   display: grid;

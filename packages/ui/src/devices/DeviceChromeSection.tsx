@@ -4,6 +4,7 @@ import { useT } from '../app/appearance.ts'
 import { Fold } from '../app/Fold.tsx'
 import { Ban, Check, Icon } from '../app/icons.tsx'
 import { showToast } from '../app/toasts.tsx'
+import { Dot, type DotTone } from '../external/parts.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 import { ExternalLink } from '../transcript/ExternalLink.tsx'
 
@@ -18,6 +19,11 @@ const CONDITIONS = {
   incompatible: ['chrome.device.incompatible', 'err'],
   error: ['chrome.device.error', 'err'],
 } as const satisfies Record<Status['condition'], readonly [MessageKey, string]>
+
+const DOT = { ok: 'ok', err: 'err', wait: 'wait', mute: 'off' } as const satisfies Record<
+  string,
+  DotTone
+>
 
 const NOTES: Partial<Record<Status['condition'], MessageKey>> = {
   connected: 'chrome.device.enabled',
@@ -112,15 +118,7 @@ function SetupSteps({ status }: { status: Status }) {
   )
 }
 
-function ChromePanel({
-  status,
-  name,
-  connected,
-}: {
-  status: Status
-  name: string
-  connected: boolean
-}) {
+function ChromePanel({ status, connected }: { status: Status; connected: boolean }) {
   const t = useT()
   const bodyId = useId()
   const [panel, setPanel] = useState<'setup' | 'disable' | null>(connected ? null : 'setup')
@@ -131,23 +129,37 @@ function ChromePanel({
   const note =
     status.condition === 'waiting' && !status.enabled ? undefined : NOTES[status.condition]
   const disableLabel = t('chrome.device.disableCommand')
+  const open = panel === 'setup'
+  const label = t(condition)
   return (
-    <section className="mng-sec" data-sec="device-chrome" data-condition={status.condition}>
+    <section
+      className="mng-sec"
+      data-sec="device-chrome"
+      data-condition={status.condition}
+      data-open={open}
+    >
+      {/* 照同页“手机”“设备服务”：标题即折叠，状态跟在标题后面，操作放行尾。 */}
       <div className="mng-sec-head">
-        <h2>{t('chrome.device.title')}</h2>
-        <span className="grow" />
-        <div className="cfail-acts device-chrome-actions">
-          <Fold
-            open={panel === 'setup'}
-            controls={bodyId}
-            onToggle={() => setPanel(panel === 'setup' ? null : 'setup')}
-          >
-            {t('chrome.device.setup')}
+        <h2>
+          <Fold open={open} controls={bodyId} onToggle={() => setPanel(open ? null : 'setup')}>
+            {t('chrome.device.title')}
           </Fold>
+        </h2>
+        <Dot tone={DOT[tone]} label={label} />
+        <span
+          className="mng-sum ell"
+          role="status"
+          data-chrome-state={status.condition}
+          title={note && tone === 'ok' ? `${status.hostLabel} · ${t(note)}` : status.hostLabel}
+        >
+          {label}
+        </span>
+        <span className="grow" />
+        <div className="device-chrome-actions">
           {status.enabled ? (
             <button
               type="button"
-              className="mini"
+              className="ibtn"
               data-act="device-chrome-disable"
               title={disableLabel}
               aria-label={disableLabel}
@@ -160,17 +172,9 @@ function ChromePanel({
           ) : null}
         </div>
       </div>
-      <div className="device-chrome-summary" role="status">
-        <div className="device-chrome-identity">
-          <strong className="ell" title={status.hostLabel}>
-            {name}
-          </strong>
-          <span aria-hidden="true">·</span>
-          <span className={`pill ${tone}`}>{t(condition)}</span>
-        </div>
-        {note ? <p className="mng-sec-note">{t(note)}</p> : null}
-      </div>
-      {panel === 'setup' ? (
+      {/* 已连接的说明并进状态的悬停提示；等待、出错时的处理办法仍要写出来 */}
+      {note && tone !== 'ok' ? <p className="mng-sec-note">{t(note)}</p> : null}
+      {open ? (
         <div id={bodyId} data-chrome-panel="setup">
           <SetupSteps status={status} />
         </div>
@@ -187,17 +191,9 @@ function ChromePanel({
 }
 
 export function DeviceChromeSection({ device }: { device: DeviceView }) {
-  const t = useT()
   const status = device.remoteChrome
   if (!status) return null
   const connected = status.condition === 'connected' && status.enabled
   // 从未连接进入已连接时重新用收起的默认值，而不是沿用等待阶段已经展开的步骤。
-  return (
-    <ChromePanel
-      key={`${device.id}:${connected}`}
-      status={status}
-      name={t.text(device.name)}
-      connected={connected}
-    />
-  )
+  return <ChromePanel key={`${device.id}:${connected}`} status={status} connected={connected} />
 }

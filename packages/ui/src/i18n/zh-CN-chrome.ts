@@ -2,7 +2,6 @@ export const zhChrome = {
   'chrome.device.title': '设备 Chrome',
   'chrome.device.enabled': '本设备的会话可使用此 Chrome。',
   'chrome.device.disabled': '访问已停用',
-  'chrome.device.setup': '设置步骤',
   'chrome.device.prepareStep': '准备连接',
   'chrome.device.prepareNote':
     '在 Linux 设备上，以运行 Chrome 的用户执行。建议使用专用 Chrome 用户资料。',
