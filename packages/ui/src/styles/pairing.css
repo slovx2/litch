@@ -89,23 +89,36 @@
   font-size: 12px;
   color: var(--ink-2);
 }
-/* 主机地址旁的候选入口只留一个图标。 */
+/* 主机地址的 Tailscale 候选：图标嵌在输入框右端，四栏输入框等宽 */
 .pair-input {
+  position: relative;
   display: flex;
-  gap: 6px;
   min-width: 0;
 }
 .pair-input > input {
   flex: 1 1 auto;
   min-width: 0;
 }
+.pair-input:has(.pair-host-picker) > input {
+  padding-inline-end: 32px;
+}
 .pair-input .pair-host-picker {
-  position: relative;
-  justify-content: center;
-  flex: none;
-  width: 30px;
+  position: absolute;
+  inset-block: 2px;
+  inset-inline-end: 2px;
+  width: 28px;
   min-width: 0;
+  height: auto;
   padding: 0;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink-2);
+}
+.pair-input .pair-host-picker:hover {
+  color: var(--ink);
+  background: var(--hover);
 }
 .pair-host-picker > select {
   position: absolute;
@@ -117,14 +130,18 @@
 .pair-host-picker:focus-within {
   outline: 1px solid var(--accent);
 }
+/* 地址提示接成一段小字，和对话框里其他说明同样的颜色与行高 */
 .pair-host-hint {
   grid-column: 2 / -1;
-  display: grid;
-  gap: 2px;
-  color: var(--ink-2);
-  font-size: 12px;
-  line-height: 1.4;
+  margin-top: -4px;
+  color: var(--ink-3);
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   overflow-wrap: anywhere;
+}
+/* 中文句号自带间隔；英文句子之间补一个空格 */
+.pair-host-hint:lang(en) > span + span::before {
+  content: " ";
 }
 .pair-field .req-input[aria-invalid="true"] {
   box-shadow: 0 0 0 1px var(--err);
