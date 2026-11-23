@@ -222,7 +222,7 @@ export const keys = {
   managerEndedIds: (deviceId: string) => `managers:${deviceId}:endedIds`,
   manager: (deviceId: string, managerId: string) => `managers:${deviceId}:manager:${managerId}`,
   managersPending: 'managers:pending',
-  /** 所有设备上的经理数 { active, ended, total }（手机经理目录用） */
+  /** 经理总数及各分组包含的设备数（手机经理目录用） */
   managersSummary: 'managers:summary',
   suggestions: 'suggestions:all',
   suggestionsAvailable: (deviceId: string) => `suggestions:${deviceId}:available`,
@@ -603,17 +603,25 @@ export function createReplica(
       0,
     )
     if (store.get<number>(keys.managersPending) !== total) store.set(keys.managersPending, total)
-    const rows = [...managerLists.values()].flatMap((entry) => [...entry.rows.values()])
-    const summary = {
-      active: rows.filter((m) => m.status === 'active').length,
-      ended: rows.filter((m) => m.status === 'ended').length,
-      total: rows.length,
+    const summary = { active: 0, ended: 0, total: 0, currentDevices: 0, endedDevices: 0 }
+    for (const { rows } of managerLists.values()) {
+      let ended = 0
+      for (const { status } of rows.values()) {
+        if (status === 'ended') ended++
+        if (status === 'active') summary.active++
+      }
+      summary.total += rows.size
+      summary.ended += ended
+      if (ended > 0) summary.endedDevices++
+      if (rows.size > ended) summary.currentDevices++
     }
     const before = store.get<typeof summary>(keys.managersSummary)
     if (
       before?.active !== summary.active ||
       before.ended !== summary.ended ||
-      before.total !== summary.total
+      before.total !== summary.total ||
+      before.currentDevices !== summary.currentDevices ||
+      before.endedDevices !== summary.endedDevices
     )
       store.set(keys.managersSummary, summary)
   }

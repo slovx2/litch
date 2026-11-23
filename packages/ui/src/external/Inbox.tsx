@@ -11,7 +11,7 @@ import { useServices } from '../app/services.tsx'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { type ManagerChoice, useDeviceManagers, useExternalInbox, useRun } from './data.ts'
 import { InboxTriage } from './InboxTriage.tsx'
-import { ManagerRecovery } from './ManagerRecovery.tsx'
+import { ManagerRecovery, recoveryInManagerHeader } from './ManagerRecovery.tsx'
 import { MissingResultReply } from './MissingResultReply.tsx'
 import {
   groupInbox,
@@ -110,7 +110,7 @@ function Detail({
         {head.delivery?.reason && head.delivery.reason !== head.reason ? (
           <span>{reasonText(t, head.delivery.reason)}</span>
         ) : null}
-        {head.delivery?.recovery ? (
+        {head.delivery?.recovery && !recoveryInManagerHeader(manager, head.delivery.recovery) ? (
           <ManagerRecovery
             deviceId={manager.deviceId}
             recovery={head.delivery.recovery}
