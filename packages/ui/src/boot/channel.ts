@@ -172,12 +172,15 @@ export async function openChannel(lang: 'zh-CN' | 'en'): Promise<Boot> {
     ? new URLSearchParams(location.search).get('mockRanking')
     : null
   const modelRankingScenario = MOCK_RANKINGS.find((entry) => entry === ranking)
+  // 预览地址带 mockScene=states：示例加上各种提示与异常状态（界面打磨和截图用）
+  const states = new URLSearchParams(location.search).get('mockScene') === 'states'
   serveChannel(
     corePort,
     createMockCore({
       clock: browserClock,
       lang,
       ...(modelRankingScenario ? { modelRankingScenario } : {}),
+      ...(states ? { scene: 'states' as const } : {}),
     }),
     { clock: browserClock },
   )

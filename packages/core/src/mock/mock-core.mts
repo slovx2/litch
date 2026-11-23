@@ -86,6 +86,7 @@ import { createMockPeer } from './mock-peer.mjs'
 import { createMockRemoteUpgrade } from './mock-remote-upgrade.mjs'
 import { createMockRestart } from './mock-restart.mjs'
 import { createMockService } from './mock-service.mjs'
+import { applyStateDevices } from './mock-states.mjs'
 import { createMockSystem } from './mock-system.mjs'
 import { createMockTasks, type MockTasksHost } from './mock-tasks.mjs'
 import { createMockTerminals } from './mock-terminals.mjs'
@@ -144,9 +145,10 @@ export interface MockCoreOptions {
   pairTtlMs?: number
   /**
    * 演哪一种开局。fresh：刚装好 Litch 的电脑，本机一个 harness 都没装（试首启引导、一键安装）。
+   * states：平常示例加上各种提示与异常状态（mock-states.mts），给界面打磨和截图用。
    * 不给是平常那一套示例
    */
-  scene?: 'fresh'
+  scene?: 'fresh' | 'states'
   /**
    * 设备是否宣告经理 issue（litchManagerIssues），默认宣告。false 时控制台照旧是四类，
    * 给按四类写的验收（经理冒烟）用；比应用旧的设备服务本来就没有这项
@@ -479,8 +481,9 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   const lang = options.lang ?? 'zh-CN'
   const modelRankingEnabled = options.modelRankingEnabled ?? MODEL_RANKING_ENABLED
   const app: AppView = sampleApp(lang, clock.now(), modelRankingEnabled)
-  const external = createMockExternal(clock, () => app.devices)
+  const external = createMockExternal(clock, () => app.devices, options.scene === 'states')
   if (options.scene === 'fresh') freshLocal(app)
+  if (options.scene === 'states') applyStateDevices(app)
   const sidebars = new Map<string, SidebarView>(
     sampleSidebars(clock.now(), lang).map((view) => [view.deviceId, view]),
   )
