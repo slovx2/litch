@@ -591,7 +591,9 @@ export function ManageSection({
         if (group.id === 'power')
           return (
             <View key={group.id}>
-              <Text style={[styles.fold, { color: theme.c.ink2 }]}>{t.said(group.title)}</Text>
+              <Text style={[styles.groupTitle, { color: theme.c.ink2 }]}>
+                {t.said(group.title)}
+              </Text>
               {/* 只阻止空闲休眠、仍会熄屏锁屏这条边界写在组的说明里，状态行不再重复 */}
               {group.description ? (
                 <Text style={[styles.groupNote, { color: theme.c.ink3 }]}>
@@ -645,6 +647,7 @@ const styles = StyleSheet.create({
   runtimeValue: { flex: 1 },
   fold: { fontSize: 13 },
   foldRow: { paddingHorizontal: 16 },
+  groupTitle: { fontSize: 13, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 },
   groupNote: { fontSize: 13, lineHeight: 18, paddingHorizontal: 16 },
   actions: { flexDirection: 'row', gap: 10, paddingHorizontal: 16 },
   save: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, paddingHorizontal: 16 },
