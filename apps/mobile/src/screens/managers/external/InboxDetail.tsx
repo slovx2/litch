@@ -226,15 +226,22 @@ export function InboxDetail({
             </Text>
           </View>
         ))}
-        {head.delivery?.recovery ? (
-          <ManagerRecovery
-            deviceId={deviceId}
-            recovery={head.delivery.recovery}
-            disabled={disabled}
-            onOpen={onClose}
-          />
+        {head.delivery?.recovery || head.missingResultReply ? (
+          // 恢复入口和未回原帖是跟在字段后面的链接，与字段值对齐，不另占整行按钮
+          <View style={styles.links}>
+            {head.delivery?.recovery ? (
+              <ManagerRecovery
+                deviceId={deviceId}
+                recovery={head.delivery.recovery}
+                disabled={disabled}
+                onOpen={onClose}
+              />
+            ) : null}
+            {head.missingResultReply ? (
+              <MissingResultReply reply={head.missingResultReply} />
+            ) : null}
+          </View>
         ) : null}
-        {head.missingResultReply ? <MissingResultReply reply={head.missingResultReply} /> : null}
         {events.length > 1 ? (
           <View style={styles.events}>
             <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
@@ -322,6 +329,7 @@ const styles = StyleSheet.create({
   fact: { flexDirection: 'row', gap: 10, alignItems: 'baseline' },
   label: { width: 64 },
   value: { flex: 1 },
+  links: { paddingLeft: 74, gap: 8 },
   events: { gap: 2 },
   event: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end' },

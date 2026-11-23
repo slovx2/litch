@@ -18,7 +18,8 @@ export const Linking = {openURL:async()=>{}};`
 const controls = `import React from 'react';
 export const Button = ({label,onPress,disabled,busy,testID}) => <button data-testid={testID} disabled={disabled||busy} onClick={onPress}>{label}</button>;
 export const Field = ({label,value,onChangeText,editable,testID}) => <input aria-label={label} data-testid={testID} value={value} readOnly={editable===false} onChange={e=>onChangeText(e.target.value)}/>;
-export const IconButton = Button;`
+export const IconButton = Button;
+export const Icon = () => null;`
 const plugins = [
   {
     name: '手机原生控件替身',

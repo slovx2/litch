@@ -16,7 +16,7 @@ import { IconButton } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import { failureText, reasonLabel } from '../managers/external/labels'
 import { ManagerRecovery } from '../managers/external/ManagerRecovery'
-import { MissingResultReply } from '../managers/external/MissingResultReply'
+import { MissingResultReplies } from '../managers/external/MissingResultReply'
 import { useExternalDevice } from '../managers/external/use-external'
 import { InfoLine } from './parts'
 
@@ -87,24 +87,24 @@ export function UnattendedSection({ device }: { device: DeviceView }) {
               <Text numberOfLines={1} style={{ color: c.ink, fontSize: font.size.body }}>
                 {repo ? repoLabel(repo) : status.source.sourceId}
               </Text>
-              {notification ? (
-                <Text style={{ color: c.err, fontSize: font.size.meta }}>
-                  {t(`mgh.source.${notification.code}` as Key)}
-                </Text>
-              ) : null}
               <Text
                 style={{ color: state === 'blocked' ? c.err : c.ink3, fontSize: font.size.meta }}
               >
                 {t(`mgh.source.${state}` as Key)}
                 {pending ? ` · ${t('mgh.source.pending', { n: pending })}` : ''}
               </Text>
-              {status.missingResultReplies?.map((reply) => (
-                <MissingResultReply key={`${reply.managerId}/${reply.issueId}`} reply={reply} />
-              ))}
+              {notification ? (
+                <Text style={{ color: c.err, fontSize: font.size.meta }}>
+                  {t(`mgh.source.${notification.code}` as Key)}
+                </Text>
+              ) : null}
+              {status.missingResultReplies?.length ? (
+                <MissingResultReplies replies={status.missingResultReplies} />
+              ) : null}
               {status.readiness?.notify.diagnostics
                 .filter(({ state }) => state === 'blocked')
                 .map((item, index) => (
-                  <View key={item.recovery?.managerId ?? index}>
+                  <View key={item.recovery?.managerId ?? index} style={styles.blocked}>
                     <Text style={{ color: c.ink2, fontSize: font.size.meta }}>
                       {reasonLabel(t, item.code)}
                     </Text>
@@ -174,7 +174,9 @@ export function UnattendedSection({ device }: { device: DeviceView }) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', paddingLeft: 16, paddingRight: 8 },
-  main: { flex: 1, paddingVertical: 6, gap: 1 },
+  // 一个来源可能有好几行状态，暂停按钮贴着仓库名那一行，不随内容高度居中
+  row: { flexDirection: 'row', alignItems: 'flex-start', paddingLeft: 16, paddingRight: 8 },
+  main: { flex: 1, paddingVertical: 10, gap: 2 },
+  blocked: { gap: 2 },
   note: { fontSize: 14, lineHeight: 20, paddingHorizontal: 16, paddingVertical: 6 },
 })
