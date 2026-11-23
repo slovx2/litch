@@ -8,9 +8,7 @@
     "scheme": "litch",
     "android": {
       "package": "dev.litch.app",
-      "permissions": [
-        "android.permission.REQUEST_INSTALL_PACKAGES"
-      ],
+      "permissions": ["android.permission.REQUEST_INSTALL_PACKAGES"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
@@ -39,9 +37,7 @@
           "android": {
             "minSdkVersion": 24,
             "usesCleartextTraffic": true,
-            "buildArchs": [
-              "arm64-v8a"
-            ]
+            "buildArchs": ["arm64-v8a"]
           }
         }
       ]
@@ -51,9 +47,7 @@
       "bundleIdentifier": "dev.litch.app",
       "supportsTablet": true,
       "entitlements": {
-        "keychain-access-groups": [
-          "$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)"
-        ]
+        "keychain-access-groups": ["$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)"]
       },
       "infoPlist": {
         "UISupportedInterfaceOrientations": [
