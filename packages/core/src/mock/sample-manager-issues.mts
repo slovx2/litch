@@ -207,6 +207,10 @@ function richIssues(now: number, t: (zh: string, en: string) => string): Manager
       author: 'manager',
       status: 'blocked',
       at: now - 10 * HOUR,
+      related: [
+        { kind: 'file', target: 'cmd/codex-harness-adapter/serve.go#L131' },
+        { kind: 'file', target: 'cmd/codex-harness-adapter/' },
+      ],
     },
     {
       title: t(

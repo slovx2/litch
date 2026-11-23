@@ -1094,9 +1094,9 @@ export const en: Record<MessageKey, Entry> = {
   'settings.browser.desktopOnly':
     'The built-in browser is only available in the Litch desktop app.',
   'settings.browser.links': 'Links',
-  'settings.browser.links.title': 'Open conversation links in the built-in browser',
+  'settings.browser.links.title': 'Open web links in the system browser',
   'settings.browser.links.note':
-    'Includes links in request cards and terminals. {key}-click or middle-click to open in the system browser.',
+    'Applies to chats, boards, and side panels. When off, links open in the built-in browser. {key}-click or middle-click always opens the system browser.',
   'settings.browser.sites': 'Always-allowed sites',
   'settings.browser.sites.empty': 'No always-allowed sites.',
   'settings.browser.sites.at': 'Allowed {day}',

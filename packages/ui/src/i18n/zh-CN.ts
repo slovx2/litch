@@ -1039,9 +1039,9 @@ export const zhCN = {
   'settings.browser.intro': '所有设备和会话共用此浏览器，登录状态和网站授权保存在本机。',
   'settings.browser.desktopOnly': '内置浏览器仅在 Litch 桌面应用中可用。',
   'settings.browser.links': '链接',
-  'settings.browser.links.title': '用内置浏览器打开对话中的链接',
+  'settings.browser.links.title': '在系统浏览器中打开网页链接',
   'settings.browser.links.note':
-    '包括请求卡片和终端中的链接。按住 {key} 点击或中键点击时仍用系统浏览器打开。',
+    '适用于对话、看板和侧面板。关闭时使用内置浏览器；按住 {key} 点击或中键点击仍用系统浏览器。',
   'settings.browser.sites': '始终允许的网站',
   'settings.browser.sites.empty': '暂无始终允许的网站。',
   'settings.browser.sites.at': '{day} 允许',

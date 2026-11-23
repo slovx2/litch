@@ -188,13 +188,15 @@ Agents can sign in directly with authorized credentials available for the task, 
 
 网页链接支持右键菜单：“复制链接”“在系统浏览器中打开”“在内置浏览器中打开”。回答正文（含自动识别的网址）、经理控制台和看板正文、Markdown 文件预览、网页请求卡片及文档链接使用同一菜单。内置浏览器打开到当前会话的用户标签；设置关闭、当前环境没有内置浏览器或页面没有可用会话时，该项置灰并说明原因。文件链接继续使用文件原有操作。
 
-普通点击保持原有路由：回答中的链接默认使用内置浏览器，中键、Cmd/Ctrl 点击或关闭该设置后使用系统浏览器；原本固定使用系统浏览器的安装文档、登录验证入口仍使用系统浏览器。菜单支持上下键、回车，Esc 关闭后焦点回到链接。
+对话、经理看板和侧面板中的网页链接默认在内置浏览器中打开。在「设置 → 内置浏览器 → 链接」开启「在系统浏览器中打开网页链接」，即可改用系统默认浏览器。中键、Cmd/Ctrl 点击和右键菜单中的「在系统浏览器中打开」照常可用。安装文档、登录验证等原本直接使用系统浏览器的入口保持原样。菜单支持上下键、回车，Esc 关闭后焦点回到链接。
+
+Web links in chats, manager boards, and side panels open in the built-in browser by default. Turn on **Settings → Built-in browser → Links → Open web links in the system browser** to use your system default. Middle-click, Cmd/Ctrl-click, and the context menu still offer direct system browser access.
 
 手机没有可供用户浏览网页的内置浏览器。回答、卡片及经理正文中的网页链接长按后提供“复制链接”“在系统浏览器中打开”两项；直接点按仍交给系统浏览器。经理编号和文件链接保留原有行为。
 
 Preferences (Settings → Built-in browser):
 
-- `scripts/litch browser links` sets whether links in conversations open in the built-in browser
+- `scripts/litch browser links` sets whether web links open in the built-in browser
   (default) or the system browser. Cmd/Ctrl-click and middle-click always use the system browser.
 - `scripts/litch browser sites` lists the always-allowed sites.
 - `scripts/litch browser allow` adds a site to the always-allowed list. **Guarded**: the user confirms in

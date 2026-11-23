@@ -160,6 +160,13 @@ export const SCENES: Scene[] = [
     steps: [nav('ManagerIssue', { deviceId: 'local', managerId: 'm1', id: 'D-15' })],
   },
   {
+    id: 'manager-file-links',
+    group: '经理',
+    name: '议题 · 文件关联',
+    note: '打开关联中的文件并定位到第 131 行，或定位到所在目录',
+    steps: [nav('ManagerIssue', { deviceId: 'local', managerId: 'm1', id: 'X-5' })],
+  },
+  {
     id: 'manager-issues-many',
     group: '经理',
     name: 'issue · 大量',

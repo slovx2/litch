@@ -1,6 +1,7 @@
 // 正式网页链接和 Markdown；浏览器外壳与剪贴板使用隔离替身，不改个人剪贴板也不访问公网。
 import { createRoot } from 'react-dom/client'
 import type { ShellBridge } from '../src/boot/channel.ts'
+import MarkdownPreview from '../src/files/preview/renderers/markdown.tsx'
 import { DocsLink } from '../src/install/InstallRow.tsx'
 import { BoardMarkdown } from '../src/manager/BoardMarkdown.tsx'
 import type { BrowserBridge } from '../src/side/browser/bridge.ts'
@@ -69,6 +70,14 @@ createRoot(root).render(
     </div>
     <div id="board">
       <BoardMarkdown text={`[看板正文](${url})`} />
+    </div>
+    <div id="side-file">
+      <MarkdownPreview
+        scope={{ deviceId: owner.deviceId, root: '/fixture', path: '/fixture/README.md' }}
+        data={{ dataBase64: btoa(`[Preview link](${url})`) } as never}
+        resources={{} as never}
+        open={() => {}}
+      />
     </div>
     <div id="docs">
       <DocsLink href={url}>说明文档</DocsLink>

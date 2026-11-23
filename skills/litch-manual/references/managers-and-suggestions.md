@@ -860,7 +860,9 @@ The console expands one card at a time: opening another card collapses the previ
 Expanding and collapsing use a short transition. On desktop, cards that leave the current list after you submit, ignore or handle them elsewhere fold away in place while the cards below move up, and new cards fade in.
 With the system's reduce-motion setting on, these transitions are skipped and changes apply immediately.
 
-请你做与事项的依据、相关链接统一显示在“关联”中，同一目标只显示一次。文件链接在所属设备的文件预览打开，仓库外绝对路径同样支持；目录定位到文件树。
+请你做与事项的依据、相关链接统一显示在“关联”中，同一目标只显示一次。桌面和手机都可以打开看板上的文件关联：文件查看器从经理会话所属设备读取文件，也支持工作区外的绝对路径。目录在文件树中定位；带 `#L131` 的文件链接直接跳到第 131 行。
+
+On desktop and mobile, board file links open in the file viewer on the manager's device. Directory links open the file tree. A suffix such as `#L131` jumps to that line.
 网址沿用浏览器偏好，分支与提交显示 Git 原文，会话与看板编号跳到对应对象。
 桌面悬停显示完整目标，手机长按查看；无法读取时显示原因。
 

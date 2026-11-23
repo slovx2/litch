@@ -1,7 +1,8 @@
 import {
+  explicitFileRef,
   type FileLinkResolution,
+  type FileRef,
   keys,
-  knownFileRef,
   type SessionSummary,
   sessionDestination,
 } from '@litch/core'
@@ -11,10 +12,10 @@ import type { ManagerRelationTarget } from '../../../protocol/src/manager-posts.
 import { requestOpenSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
-import { useServices } from '../app/services.tsx'
+import { useKey, useServices } from '../app/services.tsx'
 import { FileLinkDialog } from '../files/FileLinkDialog.tsx'
-import { openInFiles } from '../files/state.ts'
 import { ExternalLink } from '../transcript/ExternalLink.tsx'
+import { useSessionFileLinks } from '../transcript/FileLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferencesContext } from './BoardReferences.tsx'
 import type { BoardReference } from './references.ts'
@@ -35,7 +36,14 @@ export function RelationLink({
   const { channel, replica } = useServices()
   const navigation = useContext(BoardReferencesContext)
   const [error, setError] = useState('')
-  const [result, setResult] = useState<FileLinkResolution | null>(null)
+  const [result, setResult] = useState<{ ref: FileRef; resolution: FileLinkResolution } | null>(
+    null,
+  )
+  const summary = useKey<SessionSummary>(keys.summary(manager.deviceId, manager.threadId))
+  const files = useSessionFileLinks(
+    manager.deviceId,
+    summary ?? { id: manager.threadId, cwd: manager.cwd, workspaceId: null, worktree: null },
+  )
   const [preview, setPreview] = useState<string | null>(null)
   const content = (
     <>
@@ -46,18 +54,6 @@ export function RelationLink({
       {label ?? target.label ?? target.target}
     </>
   )
-  const openFile = (resolution: FileLinkResolution, found = resolution.candidates[0]) => {
-    if (!found) return
-    const summary = replica.store.get<SessionSummary>(
-      keys.summary(manager.deviceId, manager.threadId),
-    )
-    openInFiles({
-      deviceId: manager.deviceId,
-      workspaceId: summary?.workspaceId ?? null,
-      ...found,
-      link: resolution,
-    })
-  }
   const open = async () => {
     setError('')
     try {
@@ -73,16 +69,12 @@ export function RelationLink({
           throw new Error(t('manager.linkUnavailable'))
         requestOpenSession({ deviceId: manager.deviceId, sessionId: target.target })
       } else if (target.kind === 'file') {
-        const ref = knownFileRef(target.target, { root: manager.cwd, cwd: manager.cwd })
-        if (!ref) throw new Error(t('manager.linkUnavailable'))
-        const resolution = await channel.command('files.resolve', {
-          deviceId: manager.deviceId,
-          root: manager.cwd,
-          ref,
-          href: target.target,
-        })
-        if (resolution.status === 'ready' && resolution.candidates[0]) openFile(resolution)
-        else setResult(resolution)
+        const ref = files && explicitFileRef(target.target, files.scope)
+        if (!ref || !files?.resolve) throw new Error(t('manager.linkUnavailable'))
+        const resolution = await files.resolve(ref, target.target)
+        const found = resolution.candidates[0]
+        if (resolution.status === 'ready' && found) files.open(ref, found, resolution)
+        else setResult({ ref, resolution })
       } else if (target.kind === 'url') {
         throw new Error(t('manager.linkUnavailable'))
       } else {
@@ -119,10 +111,10 @@ export function RelationLink({
       )}
       {result ? (
         <FileLinkDialog
-          result={result}
+          result={result.resolution}
           onClose={() => setResult(null)}
           onPick={(found) => {
-            openFile(result, found)
+            files?.open(result.ref, found, result.resolution)
             setResult(null)
           }}
         />
