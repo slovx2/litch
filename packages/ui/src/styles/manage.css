@@ -187,6 +187,20 @@
 .mng-h-note {
   color: var(--wait);
 }
+/* 设备页的启动异常：原因占满，重启图标靠右上 */
+.mng-h-recover {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.mng-h-recover > .harness-why {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.mng-h-recover > .ibtn {
+  flex: none;
+  margin-top: -2px;
+}
 .mng-h-body > .mng-rows {
   border-top: 1px solid var(--line-1);
 }
