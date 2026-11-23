@@ -123,7 +123,7 @@ export function Identities({
                   {index === 0 && writable ? (
                     <button
                       type="button"
-                      className="ext-text-link"
+                      className="ext-text-link ext-row-act"
                       disabled={!online}
                       onClick={() => {
                         setReauthorize({

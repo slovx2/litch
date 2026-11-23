@@ -1729,3 +1729,22 @@
 .mg-idle .form-check:has(> input:disabled) {
   color: var(--ink-3);
 }
+
+/* 看板页签行右侧的 GitHub 投递受阻提示：一行截断，悬停看全文 */
+.mg-board-alert {
+  flex: 0 1 auto;
+  max-width: 55%;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-inline-end: 4px;
+  font-size: calc(12px * var(--fs));
+  color: var(--wait);
+}
+.mg-board-alert > .ell {
+  min-width: 0;
+}
+.mg-board-alert > button {
+  flex: none;
+}
