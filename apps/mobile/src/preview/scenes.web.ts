@@ -306,6 +306,13 @@ export const SCENES: Scene[] = [
     steps: [nav('DeviceDetail', { deviceId: 'local' })],
   },
   {
+    id: 'external-states',
+    group: '设备',
+    name: '无人值守 · 受阻',
+    note: '隔离模拟核心里注入通知权限缺失、经理工具过期和两条未回原帖；地址加 at=device|console|github|overview 换落点',
+    steps: [],
+  },
+  {
     id: 'device-offline',
     group: '设备',
     name: '设备详情 · 离线',
