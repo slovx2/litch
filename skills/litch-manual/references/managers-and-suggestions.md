@@ -752,7 +752,7 @@ use the same accessible name and placeholder. Related targets use link color and
 
 ### 忽略决策
 
-不想答的待定决策可以点“忽略”，理由选填。忽略后它不计入待处理，不再提醒，也不唤醒经理；经理在下一个回合会得知你忽略了哪一项（经理正在运行时直接插入）。桌面把忽略的决策放在“已忽略”一栏，手机在列表里标“已忽略”并默认收起，点“展开详情”可看理由。手机上点“忽略”后作答区先收起，只留确认忽略那一块。点“撤销忽略”回到待定。
+不想答的待定决策可以点“忽略”（桌面为卡尾右侧的禁止图标），理由选填。忽略后它不计入待处理，不再提醒，也不唤醒经理；经理在下一个回合会得知你忽略了哪一项（经理正在运行时直接插入）。桌面把忽略的决策放在“已忽略”一栏，手机在列表里标“已忽略”并默认收起，点“展开详情”可看理由。手机上点“忽略”后作答区先收起，只留确认忽略那一块。点“撤销忽略”回到待定。
 
 “忽略”是你不处理这个问题；“已关闭”是经理认为问题不在了（失效或撤回）。经理不能直接把忽略的决策记成已答复，只能在情况有变、确实需要你再看时写明理由重新打开；这时卡片上多一块默认展开的“经理重新打开”写着理由（可收起）；“上次关闭”仍默认收起。
 
@@ -787,7 +787,7 @@ there, with **View draft** and **Discard**; discarding asks once more (**Discard
 cannot be undone. If the decision is reopened (including undoing an ignore) and the question itself did not
 change, the draft comes back and can be submitted directly. Phone behaves the same.
 
-**Ignore** an open decision you do not want to answer; a reason is optional. Ignored decisions no
+**Ignore** an open decision you do not want to answer (on desktop, the ban icon at the right of the card footer); a reason is optional. Ignored decisions no
 longer count as pending, send no reminders and do not wake the manager; the manager learns about it
 in its next turn (or immediately if it is running). Desktop lists them under **Ignored**; on phone
 they are labeled **Ignored** and collapsed until you tap **Show details**; tapping **Ignore** on
