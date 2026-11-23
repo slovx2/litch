@@ -30,7 +30,7 @@ import type { RootStackParamList } from '../../nav/routes'
 import { useBusy, useChannel, useKey, useReplica } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
 import { Button, Loading, Row } from '../../ui/kit/controls'
-import { Caret, Fold, Icon } from '../../ui/kit/Icon'
+import { Caret, Fold, Icon, IconButton } from '../../ui/kit/Icon'
 import { Confirm } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { useLeaveGuard } from './hconfig/leave'
@@ -303,8 +303,11 @@ function HarnessHead({
     </>
   )
   if (!detail) {
+    const recoverable = harnessRecoveryAvailable(harness)
+    const failure = recoverable ? harnessFailureText(harness, t) : null
     return (
       <View>
+        {/* 启动异常时原因进第二行（两行截断，全文在独立页），重启是行尾的小图标，不另起整行按钮 */}
         <Row
           title={t.harness(harness.id, harness.name)}
           meta={
@@ -312,8 +315,24 @@ function HarnessHead({
               ? t('install.notInstalled')
               : t(`harness.state.${harness.state}`)
           }
-          detail={pending ? t('manage.pending') : undefined}
+          detail={
+            [pending ? t('manage.pending') : null, failure].filter(Boolean).join('\n') || undefined
+          }
           testID={`harness:${harness.id}:settings`}
+          trail="forward"
+          right={
+            recoverable ? (
+              <IconButton
+                icon="reload"
+                size={18}
+                label={t('manage.restart')}
+                busy={restarting}
+                disabled={restarting}
+                testID={`harness:${harness.id}:restart`}
+                onPress={() => void restart(false)}
+              />
+            ) : undefined
+          }
           onPress={() =>
             navigation.navigate('HarnessSettings', {
               deviceId,
@@ -322,29 +341,6 @@ function HarnessHead({
             })
           }
         />
-        {harnessRecoveryAvailable(harness) && harnessFailureText(harness, t) ? (
-          <Text
-            selectable
-            testID={`harness:${harness.id}:failure`}
-            style={[
-              styles.small,
-              { color: theme.c.ink2, paddingHorizontal: 16, paddingBottom: 12 },
-            ]}
-          >
-            {harnessFailureText(harness, t)}
-          </Text>
-        ) : null}
-        {harnessRecoveryAvailable(harness) ? (
-          <View style={styles.note}>
-            <Button
-              label={t('manage.restart')}
-              busy={restarting}
-              disabled={restarting}
-              testID={`harness:${harness.id}:restart`}
-              onPress={() => void restart(false)}
-            />
-          </View>
-        ) : null}
         <RepairCodexControl deviceId={deviceId} harness={harness} />
         {feedback}
       </View>
@@ -595,7 +591,9 @@ export function ManageSection({
         if (group.id === 'power')
           return (
             <View key={group.id}>
-              <Text style={[styles.fold, { color: theme.c.ink2 }]}>{t.said(group.title)}</Text>
+              <Text style={[styles.groupTitle, { color: theme.c.ink2 }]}>
+                {t.said(group.title)}
+              </Text>
               {/* 只阻止空闲休眠、仍会熄屏锁屏这条边界写在组的说明里，状态行不再重复 */}
               {group.description ? (
                 <Text style={[styles.groupNote, { color: theme.c.ink3 }]}>
@@ -649,6 +647,7 @@ const styles = StyleSheet.create({
   runtimeValue: { flex: 1 },
   fold: { fontSize: 13 },
   foldRow: { paddingHorizontal: 16 },
+  groupTitle: { fontSize: 13, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 },
   groupNote: { fontSize: 13, lineHeight: 18, paddingHorizontal: 16 },
   actions: { flexDirection: 'row', gap: 10, paddingHorizontal: 16 },
   save: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, paddingHorizontal: 16 },

@@ -26,13 +26,14 @@ const nodes = (tree) =>
   Array.isArray(tree)
     ? tree.flatMap(nodes)
     : tree && typeof tree === 'object'
-      ? [tree, ...nodes(tree.props?.children)]
+      ? [tree, ...nodes(tree.props?.children), ...nodes(tree.props?.right)]
       : []
 
 function load(url, extra = '') {
   let cursor = 0
   const states = []
   const commands = []
+  const navigation = []
   const channel = {
     async command(name, params) {
       commands.push({ name, params })
@@ -80,9 +81,11 @@ function load(url, extra = '') {
       if (name.endsWith('/services.tsx')) return { useServices: () => ({ channel }) }
       if (name.endsWith('/services'))
         return { useChannel: () => channel, useBusy: () => [false, (promise) => promise] }
-      if (name === '@react-navigation/native') return { useNavigation: () => ({}) }
+      if (name === '@react-navigation/native')
+        return { useNavigation: () => ({ navigate: (...args) => navigation.push(args) }) }
       if (name.endsWith('/HarnessList.tsx')) return { HarnessWhy: 'harness-why' }
       if (name.endsWith('/controls')) return { Row: 'row', Button: 'button' }
+      if (name.endsWith('/Icon')) return { IconButton: 'button' }
       if (name.endsWith('/Confirm.tsx') || name.endsWith('/overlays')) return { Confirm: 'confirm' }
       if (name.endsWith('/toasts.tsx')) return { showToast() {} }
       return {}
@@ -91,6 +94,7 @@ function load(url, extra = '') {
   return {
     ...module.exports,
     commands,
+    navigation,
     render(name, props) {
       cursor = 0
       return module.exports[name](props)
@@ -186,19 +190,34 @@ for (const platform of ['desktop', 'mobile']) {
   }
 }
 
-test('手机设备列表与 harness 详情均有完整可选中的具体原因，不受 Row 两行省略限制', () => {
-  const { HarnessHead } = load(
+test('手机列表把完整原因交给紧凑行；原详情导航保留，详情原因可选中且不省略', () => {
+  const fixture = load(
     new URL('../../../apps/mobile/src/screens/devices/ManageSection.tsx', import.meta.url),
     '\nexport { HarnessHead }',
   )
   for (const detail of [false, true]) {
-    const tree = HarnessHead({
+    const tree = fixture.render('HarnessHead', {
       deviceId: 'local',
       harness,
       enable: null,
       snapshot: { values: {}, pendingRestart: [] },
       detail,
     })
+    if (!detail) {
+      const row = nodes(tree).find((node) => node.type === 'row')
+      assert.ok(row)
+      assert.equal(row.props.detail, harnessFailureText(harness, t))
+      assert.equal(row.props.trail, 'forward')
+      assert.ok(nodes(row).some((node) => node.props?.testID === 'harness:codex:restart'))
+      row.props.onPress()
+      assert.equal(
+        JSON.stringify(fixture.navigation),
+        JSON.stringify([
+          ['HarnessSettings', { deviceId: 'local', harness: 'codex', name: 'Codex' }],
+        ]),
+      )
+      continue
+    }
     const failure = nodes(tree).find((node) => node.props?.testID === 'harness:codex:failure')
     assert.ok(failure)
     assert.match(failure.props.children, /socket directory is not private/)

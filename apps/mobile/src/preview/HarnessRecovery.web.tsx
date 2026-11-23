@@ -35,7 +35,7 @@ export function HarnessRecoveryPreview({ params }: { params: URLSearchParams }) 
       ),
     )
   const device = recoveryDevice(params.get('device') ?? 'local', harnesses)
-  const theme = makeTheme('standard', false)
+  const theme = makeTheme('standard', params.get('appearance') === 'dark')
   return (
     <SafeAreaProvider>
       <I18nContext.Provider value={translator('zh-CN')}>

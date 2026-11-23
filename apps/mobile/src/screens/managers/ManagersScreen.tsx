@@ -8,7 +8,7 @@ import { ago } from '../../../../../packages/ui/src/app/format.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Empty, ErrorBanner, Row, SectionLabel } from '../../ui/kit/controls'
+import { Empty, ErrorBanner, Row, SectionLabel, sectionFont } from '../../ui/kit/controls'
 import { Fold } from '../../ui/kit/Icon'
 import { StatusMark } from '../../ui/kit/marks'
 import { Sheet } from '../../ui/kit/overlays'
@@ -129,7 +129,8 @@ export function ManagersScreen({ navigation }: Props) {
   const summary = useKey<{ total: number; ended: number }>(keys.managersSummary)
   const [showEnded, setShowEnded] = useState(false)
   const t = useT()
-  const { c, font } = useTheme()
+  const theme = useTheme()
+  const { c, font } = theme
   return (
     <Screen title={t('manager.title')} testID="managers">
       <ScrollView>
@@ -143,22 +144,25 @@ export function ManagersScreen({ navigation }: Props) {
         ))}
         {summary && summary.ended > 0 ? (
           <>
+            {/* 折叠头与设备分组标题同一套字号、颜色和左右边距，计数跟在名字后面，不另占右侧 */}
             <Fold
               open={showEnded}
               onToggle={() => setShowEnded((value) => !value)}
               testID="managers:ended"
               label={`${t('manager.ended')} · ${summary.ended}`}
-              style={[styles.ended, { borderTopColor: c.line1 }]}
-              right={
+              style={styles.ended}
+            >
+              <View style={styles.endedHead}>
+                <Text style={[styles.endedText, sectionFont(theme), { color: c.ink2 }]}>
+                  {t('manager.ended')}
+                </Text>
                 <Text
                   testID="managers:ended-count"
-                  style={{ color: c.ink3, fontFamily: font.mono }}
+                  style={[styles.endedText, { color: c.ink3, fontFamily: font.mono }]}
                 >
                   {summary.ended}
                 </Text>
-              }
-            >
-              <Text style={{ color: c.ink2, fontWeight: '600' }}>{t('manager.ended')}</Text>
+              </View>
             </Fold>
             {showEnded
               ? devices.map((deviceId) => (
@@ -181,7 +185,9 @@ export function ManagersScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  ended: { paddingHorizontal: 16, borderTopWidth: StyleSheet.hairlineWidth },
+  ended: { paddingHorizontal: 16, paddingTop: 8 },
+  endedHead: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+  endedText: { fontSize: 12 },
   pill: {
     borderWidth: 1,
     minWidth: 24,

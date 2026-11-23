@@ -44,7 +44,7 @@ import { usePane } from '../../nav/pane'
 import type { ManagerTab, RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Button, Empty } from '../../ui/kit/controls'
+import { Empty } from '../../ui/kit/controls'
 import { Icon } from '../../ui/kit/Icon'
 import { KeyboardArea } from '../../ui/kit/KeyboardForm'
 import { Sheet } from '../../ui/kit/overlays'
@@ -675,19 +675,48 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
             </Text>
           ) : null}
           {tab === 'overview' && manager.idleCompactLast ? (
-            <Text testID="manager-last-compact" style={[styles.note, { color: c.ink2 }]}>
-              {idleCompactLabel(manager.idleCompactLast, t)}
-            </Text>
+            // 最近一次空闲压缩只是一条元信息：小字、次要墨色，前面一个时钟记号
+            <View style={styles.metaNote}>
+              <Icon name="clock" size={13} color={c.ink3} />
+              <Text
+                testID="manager-last-compact"
+                numberOfLines={1}
+                style={[styles.metaText, { color: c.ink3, fontSize: font.size.meta }]}
+              >
+                {idleCompactLabel(manager.idleCompactLast, t)}
+              </Text>
+            </View>
           ) : null}
           {githubBlocked?.recovery && reset.menu[0] ? (
-            <View style={styles.note} testID="external-delivery-blocked">
-              <Text style={{ color: c.ink2 }}>{reasonLabel(t, githubBlocked.reason)}</Text>
-              <Button
-                kind="plain"
-                label={t('mgh.recoverManager')}
+            // 投递受阻：一行提醒记号加原因，行尾一个短的“恢复”，读屏念完整动作名
+            <View style={styles.metaNote} testID="external-delivery-blocked">
+              <Icon name="notice" size={14} color={c.wait} />
+              <Text
+                numberOfLines={2}
+                style={[styles.metaText, { color: c.ink2, fontSize: font.size.meta }]}
+              >
+                {reasonLabel(t, githubBlocked.reason)}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('mgh.recoverManager')}
+                accessibilityState={{ disabled: Boolean(reset.menu[0].disabled) }}
                 disabled={Boolean(reset.menu[0].disabled)}
+                hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                testID="external-delivery-recover"
                 onPress={reset.menu[0].onPress}
-              />
+                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+              >
+                <Text
+                  style={{
+                    color: reset.menu[0].disabled ? c.ink3 : c.accent,
+                    fontSize: font.size.meta,
+                    fontWeight: '600',
+                  }}
+                >
+                  {t('mgh.recoverShort')}
+                </Text>
+              </Pressable>
             </View>
           ) : null}
           {tab === 'github' ? (
@@ -964,4 +993,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   note: { padding: 12 },
+  metaNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 2,
+  },
+  metaText: { flex: 1, minWidth: 0 },
 })

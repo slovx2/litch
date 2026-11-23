@@ -147,6 +147,7 @@ export function ExternalInbox({ manager, disabled }: { manager: ManagerView; dis
                   </Text>
                 </View>
                 <Text numberOfLines={1} style={{ color: c.ink3, fontSize: font.size.meta }}>
+                  {/* 投递原因和分拣原因常是同一个（如都是限额），同样的字只写一次 */}
                   {[
                     roleLabel(t, head.actorRoleAtCheck),
                     stamp(head.occurredAt * 1000, Date.now(), t.lang),
@@ -163,7 +164,7 @@ export function ExternalInbox({ manager, disabled }: { manager: ManagerView; dis
                       : '',
                     head.issueId ?? '',
                   ]
-                    .filter(Boolean)
+                    .filter((part, index, all) => part && all.indexOf(part) === index)
                     .join(' · ')}
                 </Text>
               </Pressable>

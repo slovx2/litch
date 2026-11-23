@@ -306,6 +306,13 @@ export const SCENES: Scene[] = [
     steps: [nav('DeviceDetail', { deviceId: 'local' })],
   },
   {
+    id: 'external-states',
+    group: '设备',
+    name: '无人值守 · 受阻',
+    note: '隔离模拟核心里注入通知权限缺失、经理工具过期和两条未回原帖；地址加 at=device|console|github|overview 换落点',
+    steps: [],
+  },
+  {
     id: 'device-offline',
     group: '设备',
     name: '设备详情 · 离线',
@@ -376,6 +383,13 @@ export const SCENES: Scene[] = [
     name: '批准电脑上的登录',
     note: '代理请求登录的卡片：打码的账号、批准前过指纹（模拟核心里每台设备第一个不在等人答的会话上一张）',
     steps: [sessions('local'), open('local', 'p1')],
+  },
+  {
+    id: 'archived-session',
+    group: '对话',
+    name: '已归档的会话',
+    note: '打开本机已归档的会话 a1（会话列表底部“已归档”里点开）：只读，输入区换成归档提示和恢复入口',
+    steps: [sessions('local')],
   },
   {
     id: 'chrome-instance',
