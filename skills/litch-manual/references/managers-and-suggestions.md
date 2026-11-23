@@ -631,7 +631,7 @@ Handled, withdrawn and expired suggestions leave the pending list; history stays
 Manager issues with discussions also remain under **Handled suggestions** in Console.
 Offline devices keep the last snapshot, but actions need a connection. An archived source is marked
 and opens as a read-only preview. Click the source conversation's name and arrow to open it;
-**Back to list** or Escape returns from an archived preview to the originating global list or
+The back arrow at the start of the read-only bar, or Escape, returns from an archived preview to the originating global list or
 manager board tab.
 **Do it here** first restores it and its worktree; a failed restore
 leaves the suggestion pending. Deleting the source withdraws its pending cards.
