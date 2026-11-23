@@ -1,4 +1,4 @@
-// 命令入口恢复原 PATH，通过设备取得仅本次启动使用的 GitHub 助手；普通会话原样运行宿主命令。
+// Go 入口已恢复宿主 PATH 并取得席位；这里只处理可能需要设备凭据的命令。
 
 import { spawn } from 'node:child_process'
 import { accessSync, constants, realpathSync, statSync } from 'node:fs'
@@ -27,13 +27,6 @@ async function run(): Promise<void> {
   const [, , mode, ...args] = process.argv
   if (mode !== 'gh' && mode !== 'git') return
   const env = { ...process.env }
-  const key = Object.keys(env).find((name) => /^path$/i.test(name)) ?? 'PATH'
-  const directory = env.LITCH_DEVICE_GITHUB_COMMANDS
-  if (directory)
-    env[key] = (env[key] ?? '')
-      .split(delimiter)
-      .filter((item) => resolve(item) !== resolve(directory))
-      .join(delimiter)
   const harness = env.LITCH_DEVICE_GITHUB_HARNESS
   const thread =
     harness === 'codex'

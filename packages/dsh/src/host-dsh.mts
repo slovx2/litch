@@ -1,5 +1,8 @@
-import { execFileSync } from 'node:child_process'
-import { cliCommand, hostCliDiagnostic, resolveHostCli } from '../../shared/src/host-cli.mjs'
+import {
+  hostCliDiagnostic,
+  hostCliVersionOutput,
+  resolveHostCli,
+} from '../../shared/src/host-cli.mjs'
 import { isVersionAtLeast } from '../../shared/src/min-version.mjs'
 
 // dsh 本体不随适配器分发：使用用户自己安装的可执行文件，默认从 PATH 查找，CHA_DSH_CLI 可指定路径。
@@ -54,13 +57,8 @@ export function dshVersionAtLeast(actual: string | undefined, minimum: string): 
 
 // 读取用户安装的 dsh 版本并核对下限，返回裸版本号。
 export function hostDshVersion(cli: string, minimum: string): string {
-  let output: string
-  try {
-    const [command, ...args] = cliCommand(cli, ['--version'])
-    output = execFileSync(command as string, args, { encoding: 'utf8', timeout: 10_000 }).trim()
-  } catch {
-    throw new Error(`无法读取宿主 dsh CLI 版本: ${cli}`)
-  }
+  const output = hostCliVersionOutput(cli, process.env, 10_000)
+  if (!output) throw new Error(`无法读取宿主 dsh CLI 版本: ${cli}`)
   const version = /\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/.exec(output)?.[0]
   if (!dshVersionAtLeast(version, minimum))
     throw new Error(

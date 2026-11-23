@@ -421,18 +421,35 @@ else if (args[0] === 'api' || args[0] === 'pr') {
     )?.answer,
   ).thread_id
   const commands = join(state, 'external-agent-gh', 'command')
-  const runGh = (thread, args) =>
-    exec(join(commands, 'gh'), args, {
+  const runAgent = (thread, command, args) =>
+    exec(join(commands, command), args, {
       cwd: root,
       env: {
         ...process.env,
         PATH: `${commands}:${hostBin}:${process.env.PATH}`,
-        LITCH_DEVICE_GITHUB_COMMANDS: commands,
         LITCH_DEVICE_GITHUB_HARNESS: 'pi',
         PI_SESSION_ID: thread,
         LITCH_DEVICE_SOCKET: socket,
       },
     })
+  const runGh = (thread, args) => runAgent(thread, 'gh', args)
+  assert.equal(
+    (
+      await runAgent(line, 'git', [
+        '-c',
+        'protocol.file.allow=user',
+        '-c',
+        'log.showSignature=false',
+        'rev-parse',
+        '--is-inside-work-tree',
+      ])
+    ).stdout.trim(),
+    'true',
+  )
+  // 别名无法仅凭首个参数识别，仍要能从设备取得仓库凭据。
+  const credential = runAgent(line, 'git', ['-c', 'alias.fixture=credential', 'fixture', 'fill'])
+  credential.child.stdin.end('protocol=https\nhost=github.com\npath=example/demo.git\n\n')
+  assert.match((await credential).stdout, new RegExp(`^password=${oauth}$`, 'm'))
   const openPr = ['pr', 'create', '--repo', 'example/demo', '--draft']
   assert.equal((await runGh(line, openPr)).stdout.trim(), `${web}/pull/11`)
   assert.equal(mock.states.opened, 1)

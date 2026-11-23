@@ -13,8 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/slovx2/litch/internal/hostplatform"
 )
 
 // 原生 codex：这台设备上用户自己装的 codex，作为又一个受管的 harness 接进聚合面。
@@ -173,11 +171,10 @@ func inspectCodex(ctx context.Context, c configuration) (path, version string, e
 	probeCtx, cancel := context.WithTimeout(ctx, codexVersionTimeout)
 	defer cancel()
 	command := hostCLICommand(probeCtx, path, c.environment(), "--version")
-	hostplatform.Quiet(command)
 	command.Env = c.environment()
 	var output bytes.Buffer
 	command.Stdout, command.Stderr = &output, log
-	runErr := command.Run()
+	runErr := runRuntimeProbe(probeCtx, command)
 	_, _ = log.Write(output.Bytes())
 	if errors.Is(probeCtx.Err(), context.Canceled) {
 		return "", "", context.Canceled

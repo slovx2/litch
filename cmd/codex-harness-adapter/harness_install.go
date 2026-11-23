@@ -17,7 +17,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/slovx2/litch/internal/hostplatform"
 	baseline "github.com/slovx2/litch/protocol"
 )
 
@@ -244,13 +243,9 @@ func probeVersion(ctx context.Context, path string, env []string) string {
 	defer cancel()
 	command := hostCLICommand(ctx, path, env, "--version")
 	command.Env = env
-	// 超时连它起的子进程一起停掉，不等它们放开输出管道
-	hostplatform.Prepare(command)
-	command.Cancel = func() error { return hostplatform.Kill(command) }
-	command.WaitDelay = time.Second
 	var stdout, stderr bytes.Buffer
 	command.Stdout, command.Stderr = &stdout, &stderr
-	err := command.Run()
+	err := runRuntimeProbe(ctx, command)
 	if err != nil || ctx.Err() != nil {
 		return ""
 	}
@@ -286,18 +281,20 @@ func npmGlobalCLI(ctx context.Context, install *installSpec, npm string, env []s
 }
 
 // npm 的配置查询单独短缓存；候选文件每次重新 stat，安装结束清掉前缀缓存。
-var npmPrefixes = struct {
-	sync.Mutex
-	values map[string]struct {
-		prefix string
-		at     time.Time
-	}
-}{values: map[string]struct {
+type npmPrefixResult struct {
+	ready  chan struct{}
 	prefix string
 	at     time.Time
-}{}}
+}
+
+var npmPrefixes = struct {
+	sync.Mutex
+	values map[string]*npmPrefixResult
+}{values: map[string]*npmPrefixResult{}}
 
 func npmGlobalPrefix(ctx context.Context, npm string, env []string) string {
+	ctx, cancel := context.WithTimeout(ctx, npmPrefixTimeout)
+	defer cancel()
 	ordered := []string{}
 	for _, value := range env {
 		name, _, _ := strings.Cut(value, "=")
@@ -308,15 +305,23 @@ func npmGlobalPrefix(ctx context.Context, npm string, env []string) string {
 	sort.Strings(ordered)
 	key := npm + "\n" + strings.Join(ordered, "\n")
 	npmPrefixes.Lock()
-	defer npmPrefixes.Unlock()
-	if cached, ok := npmPrefixes.values[key]; ok && time.Since(cached.at) < 30*time.Second {
-		return cached.prefix
+	if cached := npmPrefixes.values[key]; cached != nil && (cached.at.IsZero() || time.Since(cached.at) < 30*time.Second) {
+		npmPrefixes.Unlock()
+		select {
+		case <-cached.ready:
+			return cached.prefix
+		case <-ctx.Done():
+			return ""
+		}
 	}
+	result := &npmPrefixResult{ready: make(chan struct{})}
+	npmPrefixes.values[key] = result
+	npmPrefixes.Unlock()
 	prefix := readNPMGlobalPrefix(ctx, npm, env)
-	npmPrefixes.values[key] = struct {
-		prefix string
-		at     time.Time
-	}{prefix, time.Now()}
+	npmPrefixes.Lock()
+	result.prefix, result.at = prefix, time.Now()
+	close(result.ready)
+	npmPrefixes.Unlock()
 	return prefix
 }
 
@@ -328,15 +333,14 @@ func readNPMGlobalPrefix(ctx context.Context, npm string, env []string) string {
 	if home := envHome(env); home != "" {
 		command.Dir = home
 	}
-	hostplatform.Prepare(command)
-	command.Cancel = func() error { return hostplatform.Kill(command) }
-	command.WaitDelay = time.Second
-	output, err := command.Output()
+	var output bytes.Buffer
+	command.Stdout = &output
+	err := runRuntimeProbe(ctx, command)
 	if err != nil || ctx.Err() != nil {
 		return ""
 	}
 	prefix := ""
-	for _, line := range strings.Split(string(output), "\n") {
+	for _, line := range strings.Split(output.String(), "\n") {
 		if line = strings.TrimSpace(line); line != "" {
 			prefix = line
 		}
