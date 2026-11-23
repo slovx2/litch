@@ -385,6 +385,13 @@ export const SCENES: Scene[] = [
     steps: [sessions('local'), open('local', 'p1')],
   },
   {
+    id: 'archived-session',
+    group: '对话',
+    name: '已归档的会话',
+    note: '打开本机已归档的会话 a1（会话列表底部“已归档”里点开）：只读，输入区换成归档提示和恢复入口',
+    steps: [sessions('local')],
+  },
+  {
     id: 'chrome-instance',
     group: '对话',
     name: 'Chrome 实例审批',
