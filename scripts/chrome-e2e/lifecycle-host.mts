@@ -76,6 +76,8 @@ void app
               asks.push(ask.kind)
               write({ waiting: true, id: message.id, kind: ask.kind })
               if (message.delay) await new Promise((resolve) => setTimeout(resolve, message.delay))
+              // 调用方点名要拒绝的来源（验证未授权跳转不可读）；其余照旧批准。
+              if (ask.kind === 'site' && message.decline?.includes(ask.origin)) return 'decline'
               return 'always'
             },
           },
