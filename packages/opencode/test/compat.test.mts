@@ -1,3 +1,5 @@
+// 先收紧环境，再加载别的模块（见 setup.mts）
+import './setup.mjs'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'

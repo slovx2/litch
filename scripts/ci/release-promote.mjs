@@ -71,6 +71,11 @@ export function releaseNotes(changelog, version) {
   return body
 }
 
+// 草稿的 html_url 形如 /releases/tag/untagged-…，公开后就 404；对外一律用标签上的规范地址。
+export function publicReleaseUrl(repository, tag) {
+  return `https://github.com/${repository}/releases/tag/${tag}`
+}
+
 export function checkAssets(assets, expected, { complete = true } = {}) {
   const seen = new Set()
   for (const asset of assets) {
@@ -225,6 +230,8 @@ export async function promote(env = process.env, services = {}) {
     const tarPath = join(work, 'source.tar.gz')
     const sourceUrl = `https://github.com/${repo}/archive/refs/tags/${env.TAG}.tar.gz`
     await download(sourceUrl, tarPath)
+    // tap PR 只在公开后提，链接用公开后的规范地址，不用草稿期地址。
+    const publicUrl = publicReleaseUrl(repo, env.TAG)
     const tap = {
       repository: 'slovx2/homebrew-tap',
       formula: 'Formula/codex-harness-adapter.rb',
@@ -237,7 +244,7 @@ export async function promote(env = process.env, services = {}) {
       sourceRun: context.runId,
       artifactId: artifact.id,
       artifactDigest: artifact.digest,
-      releaseUrl: release.html_url,
+      releaseUrl: publicUrl,
     }
     mkdirSync(env.PROMOTE_OUTPUT, { recursive: true })
     writeJson(join(env.PROMOTE_OUTPUT, 'tap-inputs.json'), tap)
@@ -268,10 +275,15 @@ export async function promote(env = process.env, services = {}) {
         input: JSON.stringify({ draft: false, prerelease: false, make_latest: 'true' }),
       })
     }
+    // 草稿只能经草稿地址审阅；公开后草稿地址失效，只给规范地址。
+    const outcome =
+      env.PROMOTE_MODE === 'publish'
+        ? `已按显式人工授权公开：${publicUrl}`
+        : `草稿完成，未公开：${release.html_url}\n\n公开后地址：${publicUrl}`
     if (env.GITHUB_STEP_SUMMARY)
       appendFileSync(
         env.GITHUB_STEP_SUMMARY,
-        `\n${env.PROMOTE_MODE === 'publish' ? '已按显式人工授权公开' : '草稿完成，未公开'}：${release.html_url}\n\nTap PR 输入已生成，未自动修改 tap。\n`,
+        `\n${outcome}\n\nTap PR 输入已生成，未自动修改 tap。\n`,
       )
     return { mode: env.PROMOTE_MODE, sha: context.sha, artifact: artifact.id, release: release.id }
   } finally {

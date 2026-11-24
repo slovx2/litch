@@ -1,3 +1,5 @@
+// 先收紧环境，再加载别的模块（见 setup.mts）
+import './setup.mjs'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'

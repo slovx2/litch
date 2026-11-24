@@ -16,6 +16,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "biome check src test ../shared/src",
     "start": "node dist/dsh/src/adapter.mjs",
-    "test": "npm run build && cd ../.. && node scripts/build-cli.mjs && node --test packages/dsh/dist/dsh/test/*.test.mjs"
+    "test": "npm run build && cd ../.. && node scripts/build-cli.mjs && node --import ./packages/dsh/dist/dsh/test/setup.mjs --test packages/dsh/dist/dsh/test/*.test.mjs"
   }
 }

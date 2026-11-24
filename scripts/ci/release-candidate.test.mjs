@@ -33,6 +33,7 @@ import {
   checkDraft,
   promote,
   promotionInputs,
+  publicReleaseUrl,
   releaseNotes,
 } from './release-promote.mjs'
 
@@ -508,7 +509,12 @@ async function serviceFixture(t, mode = 'standard') {
           return {}
         }
         if (path.endsWith('/releases')) {
-          release = { ...fields, id: 7, html_url: 'https://example.test/draft' }
+          // 与 GitHub 一致：草稿的 html_url 是 untagged 地址，公开后才换成标签地址。
+          release = {
+            ...fields,
+            id: 7,
+            html_url: `https://github.com/${context.repository}/releases/tag/untagged-0123abcd`,
+          }
           return release
         }
       }
@@ -534,6 +540,8 @@ async function serviceFixture(t, mode = 'standard') {
       if (args[0] === 'api') {
         assert.equal(args[3], 'PATCH')
         Object.assign(release, JSON.parse(options.input))
+        if (release.draft === false)
+          release.html_url = `https://github.com/${context.repository}/releases/tag/${release.tag_name}`
         return JSON.stringify(release)
       }
       assert.deepEqual(args.slice(0, 5), [
@@ -674,6 +682,50 @@ test('全部回验通过且明确授权后只 PATCH 一次公开；重复公开�
   assert.equal(f.state().release.make_latest, 'true')
   await assert.rejects(promote(input, f.services), /禁止覆盖已公开/)
   assert.equal(f.commands.filter((c) => c.args?.includes('PATCH')).length, 1)
+})
+
+test('公开后晋级摘要与 tap 的 releaseUrl 用标签地址，不用草稿期 untagged 地址；源码地址与 hash 不变', async (t) => {
+  const canonical = `https://github.com/${context.repository}/releases/tag/${env.TAG}`
+  assert.equal(publicReleaseUrl(context.repository, env.TAG), canonical)
+  const run = async (mode) => {
+    const f = await serviceFixture(t)
+    const summaryFile = join(temp(t), 'summary.md')
+    const input = {
+      ...env,
+      PROMOTE_MODE: mode,
+      ...(mode === 'publish' ? { CONFIRM_PUBLICATION: env.TAG } : {}),
+      PROMOTE_OUTPUT: f.output,
+      GITHUB_STEP_SUMMARY: summaryFile,
+    }
+    await promote(input, f.services)
+    return {
+      f,
+      summary: readFileSync(summaryFile, 'utf8'),
+      tap: JSON.parse(readFileSync(join(f.output, 'tap-inputs.json'), 'utf8')),
+    }
+  }
+  const draft = await run('draft')
+  const draftUrl = draft.f.state().release.html_url
+  assert.match(draftUrl, /\/releases\/tag\/untagged-/, '前提：草稿期地址是 untagged')
+  assert.equal(draft.tap.releaseUrl, canonical)
+  assert.match(draft.summary, new RegExp(`草稿完成，未公开：${draftUrl}\n`))
+  assert.ok(draft.summary.includes(`公开后地址：${canonical}`))
+
+  const published = await run('publish')
+  assert.equal(published.f.state().release.draft, false)
+  assert.equal(published.f.state().release.html_url, canonical, '前提：公开后规范地址变了')
+  assert.equal(published.tap.releaseUrl, canonical)
+  assert.ok(published.summary.includes(`已按显式人工授权公开：${canonical}`))
+  assert.doesNotMatch(`${published.summary}${JSON.stringify(published.tap)}`, /untagged/)
+  // 源码地址和 hash 只取标签 tar 的真实 bytes，与链接无关。
+  const tarHash = createHash('sha256').update('fixture source tar').digest('hex')
+  for (const tap of [draft.tap, published.tap]) {
+    assert.equal(
+      tap.url,
+      `https://github.com/${context.repository}/archive/refs/tags/${env.TAG}.tar.gz`,
+    )
+    assert.equal(tap.sha256, tarHash)
+  }
 })
 
 test('重复 Prepare 复用现有候选提示；原 run 的失败重跑和过期候选不误拦', () => {

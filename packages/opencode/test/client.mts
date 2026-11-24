@@ -1,8 +1,10 @@
+// 先收紧环境，再加载别的模块（见 setup.mts）
+import './setup.mjs'
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { accessSync, constants } from 'node:fs'
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
-import { homedir, tmpdir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { RpcPeer, WireMessage } from '../../shared/src/types.mjs'
 import { OpencodeServer } from '../src/server.mjs'
@@ -20,11 +22,11 @@ const checked = (check: () => void) => {
   }
 }
 
-// 测试用的 OpenCode：CHA_OPENCODE_CLI 指定的，没有就用官方安装脚本装到的位置；都不可执行时整组跳过。
+// 测试用的 OpenCode：CHA_OPENCODE_CLI 指定的（官方安装脚本装到 HOME 下的那份由 setup.mts 换 HOME 前填进来），
+// 没有就找 Homebrew 的位置；都不可执行时整组跳过。
 export const opencodeCli: string | null = (() => {
   for (const path of [
     process.env.CHA_OPENCODE_CLI,
-    join(homedir(), '.opencode/bin/opencode'),
     '/opt/homebrew/bin/opencode',
     '/usr/local/bin/opencode',
   ]) {
@@ -140,10 +142,6 @@ export function client(server: OpencodeServer, declare: string[] = []) {
   return self
 }
 
-// 把真实模型、真实配置挡在外面的环境变量：各家模型的密钥、OpenCode 自己的设置
-const LEAKY =
-  /^(OPENCODE_|ANTHROPIC|OPENAI|AZURE|AWS_|GOOGLE|GEMINI|VERTEX|DEEPSEEK|OPENROUTER|GROQ|MISTRAL|XAI|TOGETHER|FIREWORKS|CEREBRAS|GITHUB_TOKEN|GH_TOKEN|HF_|HUGGING|COHERE|PERPLEXITY|ZHIPU|MOONSHOT|DASHSCOPE|CHA_)/
-
 export interface Isolated {
   root: string
   cwd: string
@@ -225,7 +223,6 @@ export async function isolate(
     }),
   )
   const saved = { ...process.env }
-  for (const key of Object.keys(process.env)) if (LEAKY.test(key)) delete process.env[key]
   Object.assign(process.env, env)
   const git = (...args: string[]) =>
     execFileSync('git', args, { cwd, stdio: 'ignore', env: process.env })
