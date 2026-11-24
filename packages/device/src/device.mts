@@ -33,6 +33,7 @@ import { HARNESS_INSTALL_NOTIFICATION } from '../../protocol/src/device-harness-
 import { DEVICE_POWER_CHANGED } from '../../protocol/src/device-power.mjs'
 import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.mjs'
 import { EXTERNAL_SOURCES_EXTENSION } from '../../protocol/src/external-sources.mjs'
+import { FEISHU_EXTENSION } from '../../protocol/src/feishu.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
 import { managerInputMethod } from '../../protocol/src/manager-idle-compact.mjs'
 import {
@@ -64,6 +65,8 @@ import { DeviceTools } from './device-tools.mjs'
 import { connectEngineLink, type EngineLink, EngineUnavailable } from './engine-link.mjs'
 import { DeviceExternalRpc } from './external/device-rpc.mjs'
 import { type DeviceExternalOptions, DeviceExternalService } from './external/device-service.mjs'
+import { DeviceFeishuRpc } from './feishu/rpc.mjs'
+import { type DeviceFeishuOptions, DeviceFeishuService } from './feishu/service.mjs'
 import type { FlowLimits } from './flow.mjs'
 import { deviceInfo, deviceVersion, HarnessCatalog } from './harness-info.mjs'
 import { WorkspaceImporter } from './importer.mjs'
@@ -121,6 +124,8 @@ export type DeviceTrace = (
 
 export interface DeviceOptions {
   external?: Pick<DeviceExternalOptions, 'deviceSocket' | 'fixture'>
+  /** 飞书来源；生产与 external 同时开，测试经 fixture 指向回环假服务端 */
+  feishu?: Pick<DeviceFeishuOptions, 'fixture'>
   managerIdleCompactClock?: () => number
   /** 隔离验收的附件主目录；生产取系统 home。 */
   attachmentHome?: string
@@ -332,6 +337,7 @@ export class DeviceServer {
   readonly sessionTree: SessionTree
   readonly managers: DeviceManagers
   readonly external: DeviceExternalService | null
+  readonly feishu: DeviceFeishuService | null
   private readonly stopAutostartWatch: () => void
   /** 原生 codex 会话的自动起名 */
   readonly titles: CodexTitles
@@ -707,6 +713,16 @@ export class DeviceServer {
       : null
     this.managers.external = this.external
     if (this.external) info.extensions.push(EXTERNAL_SOURCES_EXTENSION)
+    this.feishu = options.feishu
+      ? new DeviceFeishuService({
+          ...options.feishu,
+          stateDirectory: options.stateDir,
+          managers: this.managers.store,
+          log,
+          announce: (method, params) => this.announce(method, params, FEISHU_EXTENSION),
+        })
+      : null
+    if (this.feishu) info.extensions.push(FEISHU_EXTENSION)
     const autostart = new DeviceAutostart(this.control, log)
     if (this.control) info.extensions.push(DEVICE_AUTOSTART_EXTENSION)
     this.stopAutostartWatch = autostart.watch(options.stateDir, (params) =>
@@ -930,6 +946,7 @@ export class DeviceServer {
       tasks: this.tasks,
       managers: this.managers,
       ...(this.external ? { external: new DeviceExternalRpc(this.external, autostart) } : {}),
+      ...(this.feishu ? { feishu: new DeviceFeishuRpc(this.feishu) } : {}),
       autostart,
       deviceTools: this.deviceTools,
       ...(this.sessionTree.host.modelRanking ? { modelRanking: this.modelRanking } : {}),
@@ -979,6 +996,7 @@ export class DeviceServer {
     this.syncPower()
     void this.restart.recover()
     this.external?.start()
+    this.feishu?.start()
     if (!this.control) this.tasks?.begin()
     else if (this.control.state) this.tasks?.begin(taskSettings(this.control.state))
     else if (this.tasks) {
@@ -1478,6 +1496,7 @@ export class DeviceServer {
     this.closed = true
     this.stopAutostartWatch()
     const externalClose = this.external?.close()
+    this.feishu?.close()
     this.resumeTools.close()
     this.restart.close()
     this.nativeBackground.close()

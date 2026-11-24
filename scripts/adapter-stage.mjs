@@ -500,6 +500,13 @@ export async function stageAdapterTree(
   }
   copyModules(join(repo, 'node_modules'), join(out, 'node_modules'))
   prune(out, out, ['dev'])
+  // 飞书 SDK 的包里有一份 ES 模块副本和约 17MB 的类型声明，设备只用 require 入口 lib/，这两样不带
+  for (const extra of ['es', 'types']) {
+    rmSync(join(out, 'node_modules/@larksuiteoapi/node-sdk', extra), {
+      recursive: true,
+      force: true,
+    })
+  }
 
   copyTree(join(repo, 'protocol'), join(out, 'protocol'))
   for (const file of ['LICENSE', 'THIRD_PARTY_NOTICES.md']) {
