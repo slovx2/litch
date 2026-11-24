@@ -8,7 +8,7 @@ import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Icon } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
-import { CATEGORY_TEXT, useTimedApprovals } from './timed'
+import { timedWhat, useTimedApprovals } from './timed'
 
 /** 剩余时长按分钟显示，半分钟重画一次 */
 function useMinuteClock(): number {
@@ -53,17 +53,19 @@ export function TimedChips({
   return (
     <>
       {grants.map((grant) => {
+        const kind = timedWhat(t, grant)
+        if (!kind) return null
         const { hours, minutes } = timedRemaining(grant.expiresAt, now)
         const left = hours
           ? minutes
             ? t('timed.left.hm', { hours, minutes })
             : t('timed.left.h', { hours })
           : t('timed.left.m', { minutes: Math.max(1, minutes) })
-        const what = t('timed.bar', { what: t(CATEGORY_TEXT[grant.category]) })
+        const what = t('timed.bar', { what: kind })
         return (
           <View
             key={grant.id}
-            testID={`timed:chip:${grant.category}`}
+            testID={`timed:chip:${grant.category}${grant.scope ? `:${grant.scope}` : ''}`}
             style={[styles.chip, { borderColor: c.accent, borderRadius: theme.radius.m }]}
           >
             <Icon name="clock" size={14} color={c.ink2} />
@@ -74,7 +76,7 @@ export function TimedChips({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`${t('timed.revoke')} ${what}`}
-              testID={`timed:revoke:${grant.category}`}
+              testID={`timed:revoke:${grant.category}${grant.scope ? `:${grant.scope}` : ''}`}
               disabled={revoking === grant.id}
               hitSlop={8}
               onPress={() => revoke(grant.id)}

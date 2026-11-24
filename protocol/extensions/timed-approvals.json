@@ -15,11 +15,12 @@
   },
   "undeclared": "方法返回 extensionRequired；changed 仅发给声明了此扩展的实际连接。设备信息的 extensions 里列了 timedApprovals 才有这组方法。",
   "rules": [
-    "授权的键是 (threadId, category)，同键只留一条，再次授予按新时长重算。不跨会话、不跨类别；子会话不继承父会话的授权。",
-    "category 取 command、fileChange、permissions、machine、browser、chrome。前三类是原生审批（item/commandExecution/requestApproval、item/fileChange/requestApproval、item/permissions/requestApproval），设备在收到请求时直接代答上游、不转给客户端：命令与改文件答 {decision:\"accept\"}（请求列了决定且没有 accept 时不代答），追加权限按请求的范围答 scope=turn。授予时这个会话里同类还在等的原生审批一并代答。",
+    "授权的键是 (threadId, category, scope)，同键只留一条，再次授予按新时长重算。scope 只有 mcp 用（MCP 服务名），其余类别是空串。不跨会话、不跨类别、不跨 MCP 服务；子会话不继承父会话的授权。",
+    "category 取 command、fileChange、permissions、machine、browser、chrome、mcp。command、fileChange、permissions 是原生审批（item/commandExecution/requestApproval、item/fileChange/requestApproval、item/permissions/requestApproval），设备在收到请求时直接代答上游、不转给客户端：命令与改文件答 {decision:\"accept\"}（请求列了决定且没有 accept 时不代答），追加权限按请求的范围答 scope=turn。授予时这个会话里同类还在等的原生审批一并代答。",
+    "mcp 是审批性质的 MCP 征询（mcpServer/elicitation/request，mode 为 form）：_meta.codex_approval_kind 为 mcp_tool_call 的工具调用审批，以及不带 codex_approval_kind、requestedSchema 没有栏目的确认。设备按 (threadId, mcp, serverName) 判定并代答 {action:\"accept\", content:{}, _meta:null}（只这一次，不记住）；要填栏目的表单、url 模式、其余 mode 与带别的 codex_approval_kind 的征询不在限时授权里。grant 的 category 为 mcp 时 scope 必填（1 到 256 个字符），其余类别不得带非空 scope。",
     "machine、browser、chrome 是客户端工具的审批：执行它的桌面端按 list/changed 给的名单自己判定，授权内不再挂卡片；内置浏览器的网站与下载归 browser，Chrome 的网站、实例与标签归 chrome；黑名单、明确拒绝、Computer Use 访问 Litch 自身、登录交接、开启操作本机的确认、命令里提到禁止位置的操作本机不在限时授权里。",
     "hours 为 0.25 到 168 之间的有限数。expiresAt 是毫秒时间戳，到期设备删除记录并发一次 changed；会话删除时它的授权一并删除。",
-    "grant、revoke 只供客户端的用户操作，不向模型提供对应工具。提问、表单、计划确认、任务卡等非审批请求不受影响；完全访问下本来就不询问的审批不变。"
+    "grant、revoke 只供客户端的用户操作，不向模型提供对应工具。提问、要填内容的表单、计划确认、任务卡等非审批请求不受影响；完全访问下本来就不询问的审批不变。"
   ],
   "parts": [
     {
@@ -30,7 +31,7 @@
     {
       "kind": "ClientRequest",
       "method": "litch/timedApproval/grant",
-      "description": "参数 {threadId, category, hours}，返回 TimedApproval {id, threadId, category, grantedAt, expiresAt}。"
+      "description": "参数 {threadId, category, scope?, hours}（scope 仅 mcp 必填），返回 TimedApproval {id, threadId, category, scope, grantedAt, expiresAt}。"
     },
     {
       "kind": "ClientRequest",

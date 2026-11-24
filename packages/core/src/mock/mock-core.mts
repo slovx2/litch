@@ -1,7 +1,7 @@
 import { claudeRefusalError, isClaudeRefusalError } from '../../../protocol/src/claude-refusal.mjs'
 import { assertArchiveChildrenStopped } from '../archive.mjs'
 import { matchTitles } from '../search/titles.mjs'
-import { timedCategoryOf } from '../timed-approval-view.mjs'
+import { timedTargetOf } from '../timed-approval-view.mjs'
 import { createMockTimedApprovals } from './mock-timed-approvals.mjs'
 import { OUTSIDE_FILE_REPLY } from './sample-file-links.mjs'
 import { MEDIA_REPLY } from './sample-media.mjs'
@@ -2232,7 +2232,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       })
       const view = key ? sessions.get(key) : undefined
       if (!view) return
-      const hit = view.requests.filter((request) => timedCategoryOf(request) === grant.category)
+      const hit = view.requests.filter((request) => {
+        const target = timedTargetOf(request)
+        return target?.category === grant.category && target.scope === grant.scope
+      })
       if (!hit.length) return
       machineAsks.forEach((_, id) => {
         if (hit.some((request) => request.id === id)) machineAsks.delete(id)
@@ -3036,9 +3039,9 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (tuned !== undefined) return tuned
       if (name === 'projectPermission.retry') return undefined
       if (name === 'timedApproval.grant') {
-        const { deviceId, threadId, category, hours } =
+        const { deviceId, threadId, category, hours, scope } =
           params as Commands['timedApproval.grant']['params']
-        return timed.grant(deviceId, threadId, category, hours)
+        return timed.grant(deviceId, threadId, category, hours, scope)
       }
       if (name === 'timedApproval.revoke') {
         const { deviceId, id } = params as Commands['timedApproval.revoke']['params']

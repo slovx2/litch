@@ -19,4 +19,4 @@ export function useTimedApprovals(deviceId: string): TimedApprovalsView | undefi
   return view
 }
 
-export { CATEGORY_TEXT, untilText } from './text.ts'
+export { timedWhat, untilText } from './text.ts'

@@ -2218,6 +2218,7 @@ export const en: Record<MessageKey, Entry> = {
   'timed.category.machine': 'actions on this computer',
   'timed.category.browser': 'built-in browser sites and downloads',
   'timed.category.chrome': 'Chrome sites',
+  'timed.category.mcp': 'MCP tool calls from {server}',
   'timed.bar': 'Allowing {what}',
   'timed.left': '{left} left',
   'timed.left.hm': '{hours} h {minutes} min',

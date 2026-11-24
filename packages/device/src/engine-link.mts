@@ -25,7 +25,7 @@ import { sessionTurn } from './session-history.mjs'
 import { CLIENT_TOOL_NAMESPACE, isClientToolNamespace } from '../../protocol/src/client-tools.mjs'
 import { prepareSpeed, type SpeedStore } from '../../protocol/src/codex-speeds.mjs'
 import { EXTENSION, EXTENSIONS_CAPABILITY } from '../../protocol/src/device.mjs'
-import { nativeApprovalCategory } from '../../protocol/src/timed-approvals.mjs'
+import { nativeApprovalTarget } from '../../protocol/src/timed-approvals.mjs'
 import { paramFields } from '../../shared/src/log-file.mjs'
 import { NO_RECIPIENT_MESSAGE } from '../../shared/src/server-requests.mjs'
 import type { ClientToolRouter, ClientToolSource } from './client-tools.mjs'
@@ -297,7 +297,7 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
         send({ id, result: refusal })
         return
       }
-      if (nativeApprovalCategory(frame.method))
+      if (nativeApprovalTarget(frame.method, params))
         approvals.set(idKey(id), { id, method: frame.method, params })
       for (const listener of [...requested]) {
         if (closedWith !== null) return

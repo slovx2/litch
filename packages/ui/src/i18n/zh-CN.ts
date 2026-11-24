@@ -2098,6 +2098,7 @@ export const zhCN = {
   'timed.category.machine': '本机操作',
   'timed.category.browser': '内置浏览器网站与下载',
   'timed.category.chrome': 'Chrome 网站',
+  'timed.category.mcp': 'MCP 工具（{server}）',
   'timed.bar': '{what}限时允许',
   'timed.left': '剩 {left}',
   'timed.left.hm': '{hours} 小时 {minutes} 分',

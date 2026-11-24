@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { useChannel } from '../../shell/services'
 
 export {
-  CATEGORY_TEXT,
+  timedWhat,
   untilText,
 } from '../../../../../packages/ui/src/timed/text.ts'
 

@@ -9,6 +9,7 @@ import { CardTextInput } from '../../ui/kit/KeyboardCardScrollView'
 import { useTheme } from '../../ui/theme'
 import { useWebLinkMenu } from '../../ui/WebLinkMenu'
 import { Card, CardButton, type CardProps, useRespond, Well, Why } from './Card'
+import { useTimedAllow } from './TimedAllow'
 
 /** 一栏里填着的东西：字和数都先当字存着，提交时再换 */
 type Filled = string | boolean | string[]
@@ -135,6 +136,8 @@ export function FormCard(props: CardProps<FormRequest>) {
   const theme = useTheme()
   const { c } = theme
   const { busy, error, setError, respond } = useRespond(props)
+  // 一栏都没有的表只是一句确认：可以按这个 MCP 服务限时允许
+  const timed = useTimedAllow({ ...props, disabled: busy })
   const [values, setValues] = useState<Record<string, Filled>>(() =>
     Object.fromEntries(fields.map((field) => [field.id, initialOf(field)])),
   )
@@ -233,6 +236,7 @@ export function FormCard(props: CardProps<FormRequest>) {
               onPress={submit}
             />
           )}
+          {timed.button}
           <CardButton
             kind="ghost"
             testID="form:decline"
@@ -276,6 +280,7 @@ export function FormCard(props: CardProps<FormRequest>) {
           </View>
         )
       })}
+      {timed.panel}
     </Card>
   )
 }

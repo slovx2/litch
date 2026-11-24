@@ -37,16 +37,23 @@ export function createMockTimedApprovals(options: {
         set.delete(sink)
       }
     },
-    active(deviceId: string, threadId: string, category: TimedApprovalCategory) {
+    active(deviceId: string, threadId: string, category: TimedApprovalCategory, scope = '') {
       return live(deviceId).some(
-        (grant) => grant.threadId === threadId && grant.category === category,
+        (grant) =>
+          grant.threadId === threadId && grant.category === category && grant.scope === scope,
       )
     },
     /** 预览场景直接放一条进去 */
     seed(deviceId: string, grant: TimedApproval) {
       grants.set(deviceId, [...(grants.get(deviceId) ?? []), grant])
     },
-    grant(deviceId: string, threadId: string, category: TimedApprovalCategory, hours: number) {
+    grant(
+      deviceId: string,
+      threadId: string,
+      category: TimedApprovalCategory,
+      hours: number,
+      scope = '',
+    ) {
       if (!validTimedApprovalHours(hours))
         throw new ChannelError('invalid', 'Hours out of range', phrase('timedApproval.hoursRange'))
       const now = options.now()
@@ -54,6 +61,7 @@ export function createMockTimedApprovals(options: {
         id: `mock-timed-${++seq}`,
         threadId,
         category,
+        scope,
         grantedAt: now,
         expiresAt: now + Math.round(hours * 3_600_000),
       }
@@ -61,7 +69,12 @@ export function createMockTimedApprovals(options: {
         deviceId,
         [
           ...live(deviceId).filter(
-            (entry) => !(entry.threadId === threadId && entry.category === category),
+            (entry) =>
+              !(
+                entry.threadId === threadId &&
+                entry.category === category &&
+                entry.scope === scope
+              ),
           ),
           grant,
         ].sort((a, b) => a.expiresAt - b.expiresAt),

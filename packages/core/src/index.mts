@@ -822,8 +822,8 @@ export {
   type TimedApproval,
   type TimedApprovalCategory,
   type TimedApprovalsView,
-  timedCategoryOf,
   timedRemaining,
+  timedTargetOf,
   validTimedApprovalHours,
 } from './timed-approval-view.mjs'
 export { createToolHub, type ToolCallHandlers, type ToolHub } from './tool-hub.mjs'

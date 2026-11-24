@@ -277,6 +277,23 @@ export class FakeEngine extends FakeUpstream {
     return id
   }
 
+  /** 发一个 MCP 征询给所有连接；fields 覆盖默认的 MCP 工具审批形状 */
+  elicitation(threadId: string, fields: Record<string, unknown> = {}): string {
+    const id = `elicit-${++this.requestSerial}`
+    const turn = this.current(threadId)
+    this.notifyRequest(id, 'mcpServer/elicitation/request', {
+      threadId,
+      turnId: turn?.id ?? null,
+      serverName: 'docs',
+      mode: 'form',
+      _meta: { codex_approval_kind: 'mcp_tool_call', persist: 'session' },
+      message: '允许运行工具吗？',
+      requestedSchema: { type: 'object', properties: {} },
+      ...fields,
+    })
+    return id
+  }
+
   private notifyRequest(id: string, method: string, params: unknown): void {
     for (const connection of this.live) connection.send({ id, method, params })
   }
