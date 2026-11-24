@@ -58,7 +58,8 @@ export async function criticalProbe(real: boolean): Promise<Record<string, boole
     })
     await until('工具审批焦点', () => document.activeElement === tool)
     result.declined = !approval.isConnected
-    result.approvalActions = all('.req-actions .btn').length === 5
+    // 只数审批本身的答法；MCP 工具审批另有“限时允许”入口（.timed-open），不算在内
+    result.approvalActions = all('.req-actions .btn:not(.timed-open)').length === 5
     press(tool, 'Enter')
     await until(
       '批准后卡片收起并返回输入框',
