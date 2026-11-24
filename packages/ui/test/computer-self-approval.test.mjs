@@ -21,17 +21,23 @@ export const render = (request) => renderToStaticMarkup(React.createElement(Clie
     {
       name: 'self-approval-fixture',
       setup(api) {
-        api.onResolve({ filter: /app\/(appearance\.ts|services\.tsx|toasts\.tsx)$/ }, (args) => ({
-          path: args.path,
-          namespace: 'fixture',
-        }))
+        api.onResolve(
+          { filter: /app\/(appearance\.ts|clock\.ts|services\.tsx|toasts\.tsx)$/ },
+          (args) => ({
+            path: args.path,
+            namespace: 'fixture',
+          }),
+        )
         api.onLoad({ filter: /.*/, namespace: 'fixture' }, (args) => ({
           contents: args.path.endsWith('appearance.ts')
             ? `import {translate} from ${JSON.stringify(new URL('../src/i18n/index.ts', import.meta.url).pathname)};
-export const useT=()=>{const t=(key,args)=>translate(globalThis.__selfLang,key,args);t.text=x=>x;return t;};`
-            : args.path.endsWith('services.tsx')
-              ? 'export const useServices=()=>({channel:{}}); export const useKey=()=>null;'
-              : 'export const showToast=()=>{};',
+export const useT=()=>{const t=(key,args)=>translate(globalThis.__selfLang,key,args);t.text=x=>x;return t;};
+export const useAppearance=()=>({lang:globalThis.__selfLang});`
+            : args.path.endsWith('clock.ts')
+              ? 'export const useNow=()=>0; export const useElapsed=()=>null;'
+              : args.path.endsWith('services.tsx')
+                ? 'export const useServices=()=>({channel:{}}); export const useKey=()=>null;'
+                : 'export const showToast=()=>{};',
           resolveDir: new URL('../', import.meta.url).pathname,
         }))
       },

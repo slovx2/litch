@@ -48,6 +48,7 @@ export const ExternalLink = ({href, children}) => React.createElement('a', {href
               : args.path === 'appearance'
                 ? `import {translate} from ${JSON.stringify(i18n)};
 export const useT = () => { const t=(key,args)=>translate('zh-CN',key,args); t.text=x=>x; t.lang='zh-CN'; return t; };
+export const useAppearance = () => ({ lang: 'zh-CN' });
 export const onAppearanceChange = () => () => {};`
                 : `export * from ${JSON.stringify(clock)};
 export const useNow = () => 0;`,
