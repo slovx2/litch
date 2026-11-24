@@ -21,6 +21,7 @@ import { DeviceGithubPoll } from './device-poll.mjs'
 import { ExternalDispatch, type ExternalSendResult } from './dispatch.mjs'
 import { ExternalFeedback, type FeedbackWaitReason } from './feedback.mjs'
 import { ManagedGithubCli } from './github/gh-install.mjs'
+import { githubLogin } from './github/read-api.mjs'
 import { type GithubSender, githubWriterForLoopbackTest } from './github/write-api.mjs'
 import { ExternalIntakeService } from './intake.mjs'
 import { ExternalManagerTools, isExternalManagerCall } from './manager-tools.mjs'
@@ -286,6 +287,11 @@ export class DeviceExternalService {
   }
 
   project(event: ExternalInboxEvent): ExternalInboxEvent {
+    // 行上显示真实触发人：只取证据里与 actorId 一致且格式合规的登录名。
+    const actor = this.store.eventEvidence(event.eventKey)?.actorEvidence
+    const actorLogin =
+      event.actorId && actor?.userId === event.actorId ? githubLogin(actor.login) : undefined
+    if (actorLogin) event = { ...event, actorLogin }
     const group = this.store.queue.deliveryGroupForEvent(event)
     const missingResultReply =
       event.managerId && event.issueId

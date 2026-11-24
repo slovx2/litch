@@ -130,20 +130,31 @@ export function knownReason(reason: string | undefined): KnownReason | null {
 }
 
 /** 收件条目按候选聚合：同一 intakeId 只出一行，保留最新的那条作代表 */
+/** 行上显示的触发人：登录名，没有时退回数字 ID */
+export function actorName(
+  event: Pick<ExternalInboxEvent, 'actorLogin' | 'actorId'>,
+): string | null {
+  return event.actorLogin ?? (event.actorId ? `#${event.actorId}` : null)
+}
+
+/** 同一候选的多条事件聚成一行；head 是最近一条，actors 是去重后的触发人（最近的在前） */
 export function groupInbox(entries: readonly ExternalInboxEvent[]): {
   head: ExternalInboxEvent
   count: number
+  actors: string[]
 }[] {
-  const rows: { head: ExternalInboxEvent; count: number }[] = []
-  const byIntake = new Map<string, { head: ExternalInboxEvent; count: number }>()
+  const rows: { head: ExternalInboxEvent; count: number; actors: string[] }[] = []
+  const byIntake = new Map<string, { head: ExternalInboxEvent; count: number; actors: string[] }>()
   for (const entry of entries) {
     const key = entry.intakeId
     const found = key ? byIntake.get(key) : undefined
+    const actor = actorName(entry)
     if (found) {
       found.count++
+      if (actor && !found.actors.includes(actor)) found.actors.push(actor)
       continue
     }
-    const row = { head: entry, count: 1 }
+    const row = { head: entry, count: 1, actors: actor ? [actor] : [] }
     rows.push(row)
     if (key) byIntake.set(key, row)
   }

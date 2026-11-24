@@ -264,6 +264,8 @@ export const zhExternal = {
   'ext.inbox.processed': '已处理',
   'ext.inbox.blocked': '被挡下',
   'ext.inbox.owner': '我',
+  'ext.inbox.actors': '{name} 等 {total} 人',
+  'ext.inbox.roleTitle': '核对时的仓库角色：{role}',
   'ext.inbox.rule': '规则',
   'ext.inbox.reason': '原因',
   'ext.inbox.allReasons': '全部原因',

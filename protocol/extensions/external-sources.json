@@ -1411,6 +1411,11 @@
             { "type": "null" }
           ]
         },
+        "actorLogin": {
+          "type": "string",
+          "maxLength": 44,
+          "pattern": "^[A-Za-z0-9]+(-[A-Za-z0-9]+)*(\\[bot\\])?$"
+        },
         "occurredAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
         "observedAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
         "status": { "enum": ["received", "blocked", "pending_triage", "processed", "notified"] },

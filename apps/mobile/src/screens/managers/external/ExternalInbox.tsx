@@ -18,7 +18,14 @@ import { IconButton } from '../../../ui/kit/Icon'
 import { Sheet } from '../../../ui/kit/overlays'
 import { useTheme } from '../../../ui/theme'
 import { InboxDetail } from './InboxDetail'
-import { deliveryLabel, failureText, kindLabel, openGithub, reasonLabel, roleLabel } from './labels'
+import {
+  actorsLabel,
+  deliveryLabel,
+  failureText,
+  kindLabel,
+  openGithub,
+  reasonLabel,
+} from './labels'
 import { useExternalInbox } from './use-external'
 
 /** 页签计数：待分拣的候选数（按候选聚合，不按事件） */
@@ -120,7 +127,7 @@ export function ExternalInbox({ manager, disabled }: { manager: ManagerView; dis
         ) : rows.length === 0 ? (
           <Empty title={t('mgh.inbox.empty')} />
         ) : (
-          rows.map(({ head, count }) => (
+          rows.map(({ head, count, actors }) => (
             <View
               key={head.intakeId ?? head.eventKey}
               style={[styles.row, { borderColor: c.line1, borderRadius: radius.s }]}
@@ -149,7 +156,7 @@ export function ExternalInbox({ manager, disabled }: { manager: ManagerView; dis
                 <Text numberOfLines={1} style={{ color: c.ink3, fontSize: font.size.meta }}>
                   {/* 投递原因和分拣原因常是同一个（如都是限额），同样的字只写一次 */}
                   {[
-                    roleLabel(t, head.actorRoleAtCheck),
+                    actorsLabel(t, actors),
                     stamp(head.occurredAt * 1000, Date.now(), t.lang),
                     head.delivery?.reason
                       ? reasonLabel(t, head.delivery.reason)

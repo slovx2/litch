@@ -359,6 +359,7 @@ export function createMockExternal(clock: Clock, devices: () => DeviceView[], ex
         managerId,
         actorId: i === 0 ? ownerIdentity.userId : String(12345 + i),
         actorRoleAtCheck: i === 2 ? 'read' : i === 0 ? 'owner' : 'write',
+        actorLogin: i === 0 ? ownerIdentity.loginCache : i === 1 ? 'river-fox' : 'quiet-owl',
         occurredAt: now() - 900 - i * 300,
         observedAt: now() - 840 - i * 300,
         status: state,

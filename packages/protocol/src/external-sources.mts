@@ -374,6 +374,8 @@ export interface ExternalInboxEvent {
   sourceEventId: ExternalId
   actorId: ExternalId | null
   actorRoleAtCheck: ExternalRole | 'owner' | null
+  /** 设备投影给客户端：事件证据里与 actorId 一致的 GitHub 登录名，只供界面显示。 */
+  actorLogin?: string
   occurredAt: number
   observedAt: number
   ruleId?: string

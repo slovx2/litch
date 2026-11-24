@@ -268,6 +268,8 @@ export const enExternal: Record<keyof typeof zhExternal, Entry> = {
   'ext.inbox.processed': 'Processed',
   'ext.inbox.blocked': 'Blocked',
   'ext.inbox.owner': 'You',
+  'ext.inbox.actors': '{name} and {others} more',
+  'ext.inbox.roleTitle': 'Repository role at check: {role}',
   'ext.inbox.rule': 'Rule',
   'ext.inbox.reason': 'Reason',
   'ext.inbox.allReasons': 'All reasons',
