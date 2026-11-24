@@ -30,6 +30,7 @@ import {
   actingUserText,
   cliText,
   mentionNames,
+  reviewSendFailureText,
   targetLabel,
   timeLeftText,
 } from '../../../../../../packages/ui/src/feishu/speech-text.ts'
@@ -172,6 +173,7 @@ function Detail({
   const meta = { color: c.ink3, fontSize: font.size.meta }
   const when = (at: number) => stamp(at * 1000, Date.now(), t.lang)
   const turn = review.requestedBy.turnId
+  const sendFailure = reviewSendFailureText(t, review)
   const decided =
     review.decidedAt && state !== 'pending'
       ? [
@@ -227,6 +229,14 @@ function Detail({
         </Text>
       ))}
       <Text style={meta}>{lines.filter(Boolean).join('\n')}</Text>
+      {sendFailure ? (
+        <Text
+          testID={`feishu-review-send-failed:${review.reviewId}`}
+          style={{ color: c.err, fontSize: font.size.meta }}
+        >
+          {sendFailure}
+        </Text>
+      ) : null}
       {review.reason ? (
         <Text selectable style={{ color: c.ink, fontSize: font.size.meta }}>
           <Text style={{ color: c.ink3 }}>{`${t('feishu.review.detail.reason')} `}</Text>

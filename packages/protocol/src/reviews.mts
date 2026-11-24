@@ -70,6 +70,8 @@ export interface Review {
   decidedBy?: { via: 'litch' | 'feishu'; who?: string }
   decidedAt?: number
   reason?: string
+  /** 批准后设备照办失败（比如飞书发送被拒）：原因代码（同发件行的 error）和时间。只出现在 approved 上 */
+  execution?: { state: 'failed'; error: string; at: number }
   createdAt: number
   expiresAt: number
 }

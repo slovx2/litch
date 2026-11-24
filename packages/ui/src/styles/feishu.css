@@ -206,6 +206,9 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.fs-review-reason.err {
+  color: var(--err);
+}
 .fs-decide {
   display: flex;
   flex-direction: column;

@@ -357,3 +357,43 @@ test('飞书卡片审批：审批人收卡片、点按钮批准后原样发出�
     { ...listed.find((one) => one.openId === CAROL), approver: false, retentionDays: 30 },
   )
 })
+
+test('批准后发送失败：审批记下原因，卡片改成“已批准 · 发送失败”，经理在下一次投递时得知', async (t) => {
+  const { h, feishu, botSaid, call, bind, manager } = await setup(t)
+  await bind(CAROL)
+  const { review } = resultOf(
+    await call('feishu_send', { chat: GATED, text: '今晚发布', operationId: 'fail-op-1' }),
+  ) as { review: { reviewId: string } }
+  await feishu.cards?.idle()
+  const card = botSaid(CAROL)
+    .filter((one) => one.type === 'interactive')
+    .at(-1)
+  const announced = () =>
+    h.admin.notifications.filter(
+      (frame) =>
+        frame.method === 'litch/reviews/changed' &&
+        (frame.params as { reviewId?: string }).reviewId === review.reviewId,
+    ).length
+  // 飞书拒绝这次发送（群不存在一类的错误）
+  h.fake.sendFaults.push({ kind: 'error', code: 230002 })
+  const pending = (await h.admin.call(R.get, { reviewId: review.reviewId })).review
+  const before = announced()
+  await h.admin.call(R.decide, {
+    reviewId: review.reviewId,
+    decision: 'approve',
+    expectedRevision: pending.revision,
+  })
+  await until(() => feishu.outbox.get('fail-op-1')?.state === 'failed', '发送失败')
+  const failed = (await h.admin.call(R.get, { reviewId: review.reviewId })).review
+  assert.equal(failed.state, 'approved')
+  assert.equal(failed.revision, pending.revision + 2)
+  assert.equal(failed.execution?.state, 'failed')
+  assert.equal(failed.execution?.error, 'not_found')
+  assert.ok(announced() >= before + 2, '批准和发送失败各通知一次')
+  await feishu.cards?.idle()
+  const patched = h.fake.messages.find((one) => one.message_id === card?.id)
+  assert.match(patched?.content ?? '', /已批准 · 发送失败/)
+  assert.match(patched?.content ?? '', /目标在飞书上不存在/)
+  // 经理照旧在下一次飞书投递时得知（不单独叫醒）
+  assert.equal(feishu.outbox.unreported(manager.id).length, 1)
+})

@@ -796,7 +796,18 @@ export class FakeFeishu {
       if (!app.scopes.has('application:application:patch'))
         return reply({ code: 99991672, msg: 'no permission' }, 400)
       if (configMatch[2] === 'config' && method === 'PATCH') {
-        this.patches.push({ appId: app.appId, body: json() })
+        const body = json()
+        this.patches.push({ appId: app.appId, body })
+        // 真实平台改完配置，权限接口马上就能读到（不等发布）
+        const scope = body.scope as { add_scopes?: { scope_name: string; token_type: string }[] }
+        for (const item of scope?.add_scopes ?? [])
+          (item.token_type === 'user' ? app.userScopes : app.scopes).add(item.scope_name)
+        const events = body.event as { add_events?: string[] } | undefined
+        for (const event of events?.add_events ?? []) app.events.add(event)
+        const callbacks = body.callback as { add_callbacks?: string[] } | undefined
+        for (const callback of callbacks?.add_callbacks ?? []) app.callbacks.add(callback)
+        if ((body.security as { allow_refresh_token?: boolean })?.allow_refresh_token)
+          app.allowRefreshToken = true
         return ok({})
       }
       if (configMatch[2] === 'publish' && method === 'POST') {

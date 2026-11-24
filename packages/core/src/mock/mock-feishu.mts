@@ -325,7 +325,7 @@ const sampleOutbox = (appId: string, managerId: string, now: number): FeishuOutb
   ]
 }
 
-/** 样例审批：三条待批（一条经 lark-cli 以用户身份发、一条带 @ 和回复、一条图片）、一条已拒 */
+/** 样例审批：三条待批（一条经 lark-cli 以用户身份发、一条带 @ 和回复、一条图片）、一条已拒、一条批准后没发出去 */
 const sampleReviews = (appId: string, managerId: string, now: number): Review[] => {
   const base = {
     kind: 'speech' as const,
@@ -344,6 +344,23 @@ const sampleReviews = (appId: string, managerId: string, now: number): Review[] 
     mentions: [],
   }
   return [
+    {
+      ...base,
+      reviewId: 'A-5',
+      revision: 3,
+      subjectRef: 'fs_mock_send_failed',
+      preview: {
+        ...preview,
+        cli: { method: 'POST', path: '/open-apis/IM/v1/messages', action: 'send' },
+        parts: [{ format: 'text', text: '灰度今晚 22:00 开始。' }],
+      },
+      state: 'approved',
+      decidedBy: { via: 'feishu', who: 'ou_mock_owner' },
+      decidedAt: now - 1800,
+      execution: { state: 'failed', error: 'not_found', at: now - 1790 },
+      createdAt: now - 2400,
+      expiresAt: now + 84_000,
+    },
     {
       ...base,
       reviewId: 'A-4',

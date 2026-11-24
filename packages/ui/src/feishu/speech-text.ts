@@ -4,6 +4,7 @@ import {
   type FeishuCliRequest,
   type FeishuOutboxEntry,
   outboxReason,
+  type Review,
   type ReviewSpeechPreview,
   type TimeLeft,
 } from './model.ts'
@@ -38,6 +39,16 @@ export function outboxReasonText(
 ): string | null {
   const reason = outboxReason(entry)
   return reason ? t(`feishu.outbox.error.${reason}`, { code: entry.error ?? '' }) : null
+}
+
+/** 批准后没发出去：“发送失败：原因”（原因文案同发件行）；没失败的是 null */
+export function reviewSendFailureText(
+  t: Translator,
+  review: Pick<Review, 'state' | 'execution'>,
+): string | null {
+  if (review.state !== 'approved' || review.execution?.state !== 'failed') return null
+  const reason = outboxReasonText(t, { state: 'failed', error: review.execution.error })
+  return t('feishu.review.detail.sendFailed', { reason: reason ?? review.execution.error })
 }
 
 /** 经 lark-cli 发的：一行写方法、路径和动作，如“经 lark-cli · POST /open-apis/im/v1/messages · send” */

@@ -273,6 +273,7 @@ export const enFeishu: Record<keyof typeof zhFeishu, Entry> = {
   'feishu.review.detail.created': 'Created',
   'feishu.review.detail.expires': 'Expires',
   'feishu.review.detail.decided': 'Decided',
+  'feishu.review.detail.sendFailed': 'Approved · not sent: {reason}',
   'feishu.review.detail.reason': 'Reason',
   'feishu.review.actingAs.bot': 'Bot {app}',
   'feishu.review.actingAs.user': 'As {name}',

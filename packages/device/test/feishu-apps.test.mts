@@ -3,8 +3,9 @@ import assert from 'node:assert/strict'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import test, { type TestContext } from 'node:test'
+import { gunzipSync } from 'node:zlib'
 import { FEISHU_METHOD as M } from '../../protocol/src/feishu.mjs'
-import { FEISHU_EVENTS, FEISHU_SCOPES } from '../src/feishu/permissions.mjs'
+import { FEISHU_EVENTS, FEISHU_SCOPES, registrationAddons } from '../src/feishu/permissions.mjs'
 import { creationUrl } from '../src/feishu/registration.mjs'
 import { FEISHU_USER_SCOPES } from '../src/feishu/user-oauth.mjs'
 import { FakeFeishu } from './feishu-fake.mjs'
@@ -303,6 +304,61 @@ test('创建向导：轮询拿到凭据后自动添加；Lark 租户被拒；可
     await admin.call(M.appRegisterCancel, { registrationId: waiting.registrationId })
   ).registration
   assert.equal(canceled.state, 'canceled')
+})
+
+test('创建向导：清单带上用户身份权限；建好后还缺的自动补申请并发布，自检不再报缺', async (t) => {
+  const { fake, admin } = await setup(t)
+  const manifest = JSON.parse(
+    gunzipSync(Buffer.from(registrationAddons(), 'base64url')).toString('utf8'),
+  ) as {
+    scopes: { tenant: string[]; user: string[] }
+    events: { items: { tenant: string[] } }
+    callbacks: { items: string[] }
+  }
+  assert.deepEqual(manifest.scopes, { tenant: [...FEISHU_SCOPES], user: [...FEISHU_USER_SCOPES] })
+  // 最坏情况：创建页只开了机器人身份的权限、事件和回调，用户身份的一项没开
+  const app = fake.addApp({ appId: APP, botName: '向导机器人' })
+  for (const scope of manifest.scopes.tenant) app.scopes.add(scope)
+  for (const event of manifest.events.items.tenant) app.events.add(event)
+  for (const callback of manifest.callbacks.items) app.callbacks.add(callback)
+  fake.registration = {
+    deviceCode: '',
+    polls: 0,
+    completeAfter: 1,
+    result: {
+      client_id: APP,
+      client_secret: `secret-${APP}`,
+      user_info: { open_id: 'ou_creator', tenant_brand: 'feishu' },
+    },
+  }
+  const { registration } = await admin.call(M.appRegisterBegin, {
+    operationId: 'w',
+    name: '向导机器人',
+  })
+  assert.equal(new URL(registration.url).searchParams.get('addons'), registrationAddons())
+  const settled = await until(async () => {
+    const { app: current } = await admin.call(M.appGet, { appId: APP }).catch(() => ({ app: null }))
+    return current?.capability?.state === 'ok' && current.capability.publish ? current : undefined
+  })
+  assert.deepEqual(settled.capability.missingUserScopes, [])
+  assert.equal(fake.patches.length, 1)
+  assert.deepEqual(fake.patches[0]?.body, {
+    scope: {
+      add_scopes: FEISHU_USER_SCOPES.map((scope_name) => ({ scope_name, token_type: 'user' })),
+    },
+  })
+  assert.equal(fake.publishes.length, 1)
+
+  // 手动填的应用只自检，不自动补申请
+  const other = fake.addApp({ appId: OTHER })
+  for (const scope of FEISHU_SCOPES) other.scopes.add(scope)
+  await admin.call(M.appConfigure, { operationId: 'm', appId: OTHER, appSecret: other.secret })
+  const manual = await until(async () => {
+    const { app: current } = await admin.call(M.appGet, { appId: OTHER })
+    return current.capability ? current : undefined
+  })
+  assert.equal(manual.capability.state, 'missing')
+  assert.equal(fake.patches.length, 1)
 })
 
 test('能力自检列出缺项；补申请只追加清单里的并提交发布', async (t) => {

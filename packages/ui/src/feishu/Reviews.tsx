@@ -38,6 +38,7 @@ import {
   actingUserText,
   cliText,
   mentionNames,
+  reviewSendFailureText,
   targetLabel,
   timeLeftText,
 } from './speech-text.ts'
@@ -194,6 +195,7 @@ function Detail({
   const t = useT()
   const preview = review.preview
   const turn = review.requestedBy.turnId
+  const sendFailure = reviewSendFailureText(t, review)
   return (
     <div className="ext-detail fs-inbox-detail" data-feishu-review-detail={review.reviewId}>
       {preview.replyTo ? (
@@ -250,6 +252,11 @@ function Detail({
           {t('feishu.inbox.detail.id')} <span className="mono">{review.reviewId}</span>
         </span>
       </div>
+      {sendFailure ? (
+        <p className="fs-review-reason err" role="status" data-feishu-review-send-failed>
+          {sendFailure}
+        </p>
+      ) : null}
       {review.reason ? (
         <p className="fs-review-reason">
           <span className="dim">{t('feishu.review.detail.reason')} </span>

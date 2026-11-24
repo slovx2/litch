@@ -1,7 +1,7 @@
 // 飞书里的审批卡片：发言审批建好后，设备给本应用标了审批人的已绑定用户各私聊发一张卡片，
 // 带“批准”“拒绝”两个按钮。按钮回调（card.action.trigger）经长连接回到设备：核对点的人还是审批人、
 // 审批还在待批、卡片上的版本号和当前一致，再按“在飞书里批”执行决定。审批有了结果（不管在哪批的、撤下、过期），
-// 设备把每张卡片改成结果。卡片是 JSON 2.0，开了 update_multi 才能用接口更新。
+// 设备把每张卡片改成结果；批准后没发出去的再改成“已批准 · 发送失败”。卡片是 JSON 2.0，开了 update_multi 才能用接口更新。
 import type { Review } from '../../../protocol/src/reviews.mjs'
 import type { DeviceReviews } from '../reviews.mjs'
 import type { FeishuApi } from './api.mjs'
@@ -47,6 +47,21 @@ const STATE_TEXT: Record<Review['state'], string> = {
   canceled: '已撤下',
   expired: '已过期',
 }
+/** 批准后没发出去的原因（发件行的 error）；卡片只有中文，认不出的写原因代码 */
+const SEND_FAILURE_TEXT: Record<string, string> = {
+  payload_changed: '内容与审批时不一致',
+  chat_unavailable: '机器人已不在群里或群已解散',
+  user_unbound: '对方已解除私聊绑定',
+  app_inactive: '应用已停用或未连接',
+  review_mismatch: '审批与发言对不上',
+  permission: '应用缺少权限',
+  not_found: '目标在飞书上不存在',
+  platform: '飞书服务异常',
+  invalid: '飞书不接受这条内容',
+  credential_rejected: 'App Secret 无效',
+}
+const sendFailure = (error: string) => SEND_FAILURE_TEXT[error] ?? plain(clip(error, 64))
+
 const STATE_TEMPLATE: Record<Review['state'], string> = {
   pending: 'orange',
   approved: 'green',
@@ -72,6 +87,8 @@ export class FeishuReviewCards {
   private card(review: Review, decidedByName?: string): Json {
     const preview = review.preview
     const now = this.options.now()
+    // 批准了但没发出去
+    const failed = review.state === 'approved' && review.execution?.state === 'failed'
     const facts = [
       `**发到**：${plain(preview.target.kind === 'chat' ? preview.target.name : `私聊 ${preview.target.name}`)}`,
       `**经理**：${plain(this.options.managerName(review.requestedBy.managerId) || review.requestedBy.managerId)}`,
@@ -136,7 +153,7 @@ export class FeishuReviewCards {
           : review.decidedBy?.via === 'litch'
             ? '在 Litch 里批'
             : ''
-      const line = `**${STATE_TEXT[review.state]}**${via && review.state !== 'expired' && review.state !== 'canceled' ? ` · ${via}` : ''}${review.reason ? `\n理由：${plain(clip(review.reason, 500))}` : ''}`
+      const line = `**${STATE_TEXT[review.state]}${failed ? ' · 发送失败' : ''}**${via && review.state !== 'expired' && review.state !== 'canceled' ? ` · ${via}` : ''}${failed && review.execution ? `\n没发出去：${sendFailure(review.execution.error)}` : ''}${review.reason ? `\n理由：${plain(clip(review.reason, 500))}` : ''}`
       elements.push({ tag: 'markdown', content: line })
     }
     return {
@@ -144,8 +161,11 @@ export class FeishuReviewCards {
       config: { update_multi: true },
       header: {
         title: { tag: 'plain_text', content: `发言审批 ${review.reviewId}` },
-        subtitle: { tag: 'plain_text', content: STATE_TEXT[review.state] },
-        template: STATE_TEMPLATE[review.state],
+        subtitle: {
+          tag: 'plain_text',
+          content: failed ? `${STATE_TEXT[review.state]} · 发送失败` : STATE_TEXT[review.state],
+        },
+        template: failed ? 'red' : STATE_TEMPLATE[review.state],
       },
       body: { elements },
     }

@@ -263,6 +263,7 @@ export const zhFeishu = {
   'feishu.review.detail.created': '创建',
   'feishu.review.detail.expires': '过期',
   'feishu.review.detail.decided': '决定',
+  'feishu.review.detail.sendFailed': '已批准 · 发送失败：{reason}',
   'feishu.review.detail.reason': '理由',
   'feishu.review.actingAs.bot': '机器人 {app}',
   'feishu.review.actingAs.user': '以 {name} 的身份',

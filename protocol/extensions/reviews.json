@@ -16,6 +16,7 @@
     "审批批的是冻结的内容：preview 是给人看的样子，payloadHash 是冻结内容的 SHA-256；执行前设备再核一次哈希，对不上就不执行。",
     "只有 pending 的审批能决定；decide 要带当前 revision，对不上回冲突。过了 expiresAt 设备把它标成 expired。",
     "飞书里标了审批人的已绑定用户也能在审批卡片上批（decidedBy.via=feishu）；一处批了，其他地方同步成结果。",
+    "批准后设备照办失败（比如飞书发送被拒）时，在 approved 的审批上补 execution（state=failed、原因代码、时间），revision 加一并照常通知；状态仍是 approved。",
     "时间用 UTC epoch 秒。"
   ],
   "parts": [
@@ -251,6 +252,16 @@
         },
         "decidedAt": { "$ref": "#/definitions/Timestamp" },
         "reason": { "type": "string", "maxLength": 500 },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "error", "at"],
+          "properties": {
+            "state": { "const": "failed" },
+            "error": { "type": "string", "maxLength": 128 },
+            "at": { "$ref": "#/definitions/Timestamp" }
+          }
+        },
         "createdAt": { "$ref": "#/definitions/Timestamp" },
         "expiresAt": { "$ref": "#/definitions/Timestamp" }
       }

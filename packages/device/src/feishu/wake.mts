@@ -38,8 +38,13 @@ export interface FeishuWakeHost {
   manager(managerId: string): Manager | null
   /** 现在能不能投：经理空闲可投、没在重置、没被用户停下等（同外部投递） */
   canDeliver(manager: Manager): boolean
-  /** 经理会话里装没装飞书工具；没装时投递里提示经理重置以装上 */
+  /** 经理会话里装没装飞书工具 */
   toolsInstalled(manager: Manager): boolean
+  /**
+   * 没装时自动排一次原地刷新装上：pending 表示刷新在排队或进行中，这次先不投、等装好再送；
+   * unavailable（要换会话的引擎、上次重置失败）照常投递，正文里提示经理请用户重置
+   */
+  installTools(manager: Manager): 'pending' | 'unavailable'
   /** 引擎发出前同步调用 beforeSend，返回 false 则取消 */
   send(input: {
     manager: Manager
@@ -155,9 +160,10 @@ export class FeishuWake {
     }
     const manager = host.manager(managerId)
     if (!manager || manager.status !== 'active' || !host.canDeliver(manager)) return
+    const tools = host.toolsInstalled(manager)
+    if (!tools && host.installTools(manager) === 'pending') return
     const deliveryId = randomUUID()
     const eventId = `feishu-${deliveryId}`
-    const tools = host.toolsInstalled(manager)
     let submitted: {
       inboxIds: string[]
       cursors: Map<string, number>

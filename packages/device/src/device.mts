@@ -1271,16 +1271,27 @@ export class DeviceServer {
       agent.feishu = feishu.cli
       feishu.cli.current = (actor) => agent.current(actor)
     }
+    const installed = (managerId: string) => {
+      const manager = managers.store.manager(managerId)
+      return (
+        !!manager &&
+        (managers.tree.store.tools(manager.threadId) ?? []).some(
+          (spec) => isObject(spec) && spec.name === FEISHU_TOOLS_NAMESPACE,
+        )
+      )
+    }
+    // 绑上应用后经理空下来就自动原地刷新、装上飞书工具（Claude）；要换会话的引擎仍由用户确认后重置
+    feishu.managerBound = (managerId) => {
+      if (!installed(managerId)) managers.resets.autoRefresh(managerId)
+    }
     feishu.wake.host = {
       manager: (managerId) => managers.store.manager(managerId),
       // 同外部投递的准入，另外经理在跑回合时留队（不插话），等回合结束再送
       canDeliver: (manager) =>
         !managers.tree.isActive(manager.threadId) &&
         managers.tree.canDeliverExternal(manager.threadId),
-      toolsInstalled: (manager) =>
-        (managers.tree.store.tools(manager.threadId) ?? []).some(
-          (spec) => isObject(spec) && spec.name === FEISHU_TOOLS_NAMESPACE,
-        ),
+      toolsInstalled: (manager) => installed(manager.id),
+      installTools: (manager) => managers.resets.autoRefresh(manager.id),
       send: async ({ manager, prepare, beforeSend }) => {
         let turnId: string | undefined
         try {
