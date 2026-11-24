@@ -2,6 +2,7 @@
 import {
   FEISHU_NOTIFICATION,
   type FeishuApp,
+  type FeishuChat,
   type FeishuRegistration,
   type FeishuRequests,
 } from '../../../protocol/src/feishu.mjs'
@@ -34,17 +35,46 @@ function contains(value: unknown, secret: string): boolean {
 
 export function createFeishuDevice(host: FeishuHost) {
   const deviceSinks = new Set<HostSink>()
+  // 管理员标记跟应用列表一起读；连接变了要重读
+  let admin: boolean | null = null
   const apps = new ExternalRead<FeishuApp[]>(
     host,
     host.supported,
-    () => host.request('litch/feishu/app/list', {}).then((value) => value.apps),
+    () =>
+      host.request('litch/feishu/app/list', {}).then((value) => {
+        admin = value.admin ?? false
+        return value.apps
+      }),
     publish,
   )
   const registrations = new Map<string, ExternalRead<FeishuRegistration>>()
+  type ChatsValue = { chats: FeishuChat[]; syncedAt: number | null }
+  const chats = new Map<string, ExternalRead<ChatsValue>>()
+
+  function view() {
+    return { apps: apps.snapshot(), admin }
+  }
 
   function publish() {
-    const value = { apps: apps.snapshot() }
+    const value = view()
     for (const sink of deviceSinks) sink.snapshot(value)
+  }
+
+  function chatsOf(appId: string) {
+    const found = chats.get(appId)
+    if (found) return found
+    if (chats.size >= 8) {
+      const old = [...chats].find(([, read]) => read.sinks.size === 0)
+      if (old) chats.delete(old[0])
+    }
+    const read: ExternalRead<ChatsValue> = new ExternalRead(
+      host,
+      host.supported,
+      () => host.request('litch/feishu/chat/list', { appId }),
+      () => read.send(),
+    )
+    chats.set(appId, read)
+    return read
   }
 
   function registrationOf(registrationId: string) {
@@ -88,7 +118,10 @@ export function createFeishuDevice(host: FeishuHost) {
       })
       if (sensitive && contains(result, secret))
         throw new ChannelError('remote', 'Device returned invalid credential data')
-      if (name !== 'feishu.app.get' && name !== 'feishu.app.register.get') refreshApps()
+      if (name.startsWith('feishu.chat.')) {
+        if (name !== 'feishu.chat.get' && name !== 'feishu.chat.members')
+          chats.get((args as { appId: string }).appId)?.notify()
+      } else if (name !== 'feishu.app.get' && name !== 'feishu.app.register.get') refreshApps()
       if (name.startsWith('feishu.app.register.')) {
         const registration = (result as { registration?: FeishuRegistration }).registration
         if (registration) registrations.get(registration.registrationId)?.notify()
@@ -110,9 +143,10 @@ export function createFeishuDevice(host: FeishuHost) {
     open(topic: FeishuTopic, sink: HostSink): () => void {
       if (topic.kind === 'feishuRegistration')
         return registrationOf(topic.registrationId).open(sink)
+      if (topic.kind === 'feishuChats') return chatsOf(topic.appId).open(sink)
       const first = deviceSinks.size === 0
       deviceSinks.add(sink)
-      sink.snapshot({ apps: apps.snapshot() })
+      sink.snapshot(view())
       if (first) void apps.refresh()
       return () => {
         deviceSinks.delete(sink)
@@ -120,8 +154,13 @@ export function createFeishuDevice(host: FeishuHost) {
     },
     command,
     connectionChanged() {
+      admin = null
       apps.connectionChanged()
       refreshApps()
+      for (const read of chats.values()) {
+        read.connectionChanged()
+        read.notify()
+      }
       for (const read of registrations.values()) {
         read.connectionChanged()
         read.notify()
@@ -135,6 +174,11 @@ export function createFeishuDevice(host: FeishuHost) {
         case FEISHU_NOTIFICATION.registrationChanged: {
           const id = (params as { registrationId?: unknown } | null)?.registrationId
           if (typeof id === 'string') registrations.get(id)?.notify()
+          return true
+        }
+        case FEISHU_NOTIFICATION.chatsChanged: {
+          const appId = (params as { appId?: unknown } | null)?.appId
+          if (typeof appId === 'string') chats.get(appId)?.notify()
           return true
         }
         default:

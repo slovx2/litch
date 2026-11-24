@@ -122,3 +122,51 @@ test('带 App Secret 的请求：远端错误不带回原文，回显秘密的�
     },
   )
 })
+
+test('群列表按应用订阅：带管理员标记；chatsChanged 和写命令后重读，读命令不重读', async () => {
+  const calls: { method: string; params: unknown }[] = []
+  let revision = 1
+  const device = createFeishuDevice({
+    online: () => true,
+    supported: () => true,
+    now: () => 42,
+    fail: (error) => channelFailure(error),
+    async request<M extends keyof FeishuRequests>(
+      method: M,
+      params: FeishuRequests[M]['params'],
+    ): Promise<FeishuRequests[M]['result']> {
+      calls.push({ method, params })
+      if (method === 'litch/feishu/app/list')
+        return { apps: [app(1)], admin: false } as FeishuRequests[M]['result']
+      if (method === 'litch/feishu/chat/list')
+        return { chats: [], syncedAt: revision } as FeishuRequests[M]['result']
+      return { members: [], fetchedAt: 1 } as FeishuRequests[M]['result']
+    },
+  })
+  const views: FeishuDeviceView[] = []
+  device.open({ kind: 'feishuDevice', deviceId: 'd' }, sink(views))
+  await flush()
+  assert.equal(views.at(-1)?.admin, false)
+  const seen: { value?: { syncedAt: number | null } | null }[] = []
+  const close = device.open(
+    { kind: 'feishuChats', deviceId: 'd', appId: 'cli_0123456789abcdef' },
+    sink(seen),
+  )
+  await flush()
+  assert.equal(seen.at(-1)?.value?.syncedAt, 1)
+  revision = 2
+  assert.equal(
+    device.notification(FEISHU_NOTIFICATION.chatsChanged, { appId: 'cli_0123456789abcdef' }),
+    true,
+  )
+  await flush()
+  assert.equal(seen.at(-1)?.value?.syncedAt, 2)
+  const before = calls.filter((call) => call.method === 'litch/feishu/chat/list').length
+  await device.command('feishu.chat.members', {
+    appId: 'cli_0123456789abcdef',
+    chatId: 'oc_example',
+  })
+  await flush()
+  assert.equal(calls.filter((call) => call.method === 'litch/feishu/chat/list').length, before)
+  close()
+})

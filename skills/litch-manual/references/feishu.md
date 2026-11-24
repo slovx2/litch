@@ -21,6 +21,19 @@ App Secret 只保存在设备的私有目录里（只有设备账号能读），
 - **补申请**：只追加清单里缺的项（不删你自己加的），然后提交一个新版本。需要企业管理员审核的，显示“待企业管理员审核”，审核通过后再点一次检查。补申请需要 `application:application:patch` 权限，不会在后台自动做。
 - **停用**：断开飞书，配置和凭据保留。**移除**：断开并删除设备上保存的 App Secret，不可撤销。
 
+## 群
+
+机器人被拉进群后，群只出现在应用详情的“群”列表里，标“未接入”：设备不收、不记、不回这个群的任何消息，也不会提醒或自动退群。要让经理在群里工作，必须在 Litch 里明确接入。
+
+- **接入**：在群列表里点群，选发言模式（必选，不设默认）、叫醒名单和保留天数。
+  - **自由发言**：经理在群里发言不经审批。**审批发言**：每条发言都先给审批人批，批准后原样发出。审批多久过期按群设，默认 24 小时。
+  - **叫醒名单**：只有名单里的人 @ 机器人或回复机器人的消息才会叫醒经理。名单从群成员里选；“包括已绑定用户”默认打开，私聊绑定过的人在所有接入群里都能叫醒经理。
+  - **外部群**（群里有组织外的人）在列表上标出，接入时预选审批发言，还要再确认一次。
+  - 保留天数是这个群的消息记录留多久，默认 90 天。
+- **改设置**：群设置里可以改发言模式、叫醒名单、保留天数和审批过期时间。
+- **取消接入**：确认框默认同时删除这个群的记录，不可撤销；不勾就按保留期清理。
+- 机器人被移出已接入的群时，接入设置保留，群上标“机器人已不在群里”，停收停发；再被拉回来时自动恢复，不用重新接入。群解散后停收停发。
+
 ## 权限清单
 
 | 用途 | 权限 |
@@ -47,5 +60,10 @@ App Secret 只保存在设备的私有目录里（只有设备账号能读），
 - `scripts/litch feishu-app enable <App ID>`、`scripts/litch feishu-app disable <App ID>` 启用、停用。
 - `scripts/litch feishu-app check <App ID>` 能力检查；`scripts/litch feishu-app upgrade <App ID>` 补申请并提交新版本。
 - `scripts/litch feishu-app remove <App ID>` 移除应用，不可撤销，先在对话里问过用户。
+- `scripts/litch feishu-chat list <App ID> [--refresh]` 列出机器人所在的群和接入状态；`--refresh` 先从飞书重新拉一遍。
+- `scripts/litch feishu-chat members <App ID> <群>` 列出群成员。`<群>` 用 chat_id（`oc_` 开头）或唯一的群名。
+- `scripts/litch feishu-chat access <App ID> <群> --speech free|approval [--wakers 成员,成员] [--no-wake-bound] [--retention 天] [--review-ttl 小时]` 接入群。外部群要加 `--confirm-external`。`--wakers` 写成员名或 open_id，重名时报错。选自由发言前先在对话里问过用户。
+- `scripts/litch feishu-chat update <App ID> <群> [--speech …] [--wakers …] [--wake-bound|--no-wake-bound] [--retention 天] [--review-ttl 小时]` 改已接入群的设置。
+- `scripts/litch feishu-chat unaccess <App ID> <群> [--keep-records]` 取消接入，默认同时删除记录，不可撤销，先在对话里问过用户。
 
 手动填写 App Secret 和更换 App Secret 不经命令行，在桌面的应用详情里做。

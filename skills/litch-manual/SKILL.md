@@ -109,7 +109,7 @@ Every operation, with the reference that explains it. Exact arguments: `scripts/
 | `scripts/litch devices list` / `check` / `add` / `rename` / `wire` / `target` / `reconnect` / `remove` | Devices and remote devices | `references/devices.md` |
 | `scripts/litch settings get` / `set` | A device's settings (harness switches, CLI paths, environment, SSH entries, terminals, scheduled tasks, session orchestration) | `references/device-settings.md` |
 | `scripts/litch external-owner`, `device-identity`, `device-source`, `device-autostart` | GitHub accounts, repositories and manager assignments for unattended work, plus device autostart | `references/device-settings.md` |
-| `scripts/litch feishu-app list` / `register` / `registration` / `assign` / `enable` / `disable` / `check` / `upgrade` / `remove` | Feishu apps (bots) on a device: creation wizard, manager assignment, connection, scope check | `references/feishu.md` |
+| `scripts/litch feishu-app list` / `register` / `registration` / `assign` / `enable` / `disable` / `check` / `upgrade` / `remove`; `scripts/litch feishu-chat list` / `members` / `access` / `update` / `unaccess` | Feishu apps (bots) on a device: creation wizard, manager assignment, connection, scope check; chat access, speech mode and wake list | `references/feishu.md` |
 | `scripts/litch harness list` / `enable` / `disable` / `restart` / `auto-title` | Harnesses on a device (installing them is a shell task, see the reference) | `references/harnesses.md` |
 | `scripts/litch projects list` / `add` / `remove` | Projects (folders) on a device | `references/sessions-and-projects.md` |
 | `scripts/litch tasks list` / `create` / `update` / `pause` / `resume` / `run` / `delete` | Scheduled tasks | `references/scheduled-tasks.md` |
@@ -148,7 +148,7 @@ Read only the file you need.
 - `references/operate-this-computer.md`: letting agents on remote devices run commands and touch files
   on this computer.
 - `references/feishu.md`: Feishu apps on a device: creation wizard, manual setup, manager assignment,
-  connection state, scope check and upgrade, the permission list.
+  connection state, scope check and upgrade, chat access and speech modes, the permission list.
 - `references/phones.md`: pairing the Android app by QR code, revoking phones; usage, compacting, quoting replies and updates in the phone app.
 - `references/appearance-and-preferences.md`: look, language, notifications, links.
 - `references/troubleshooting.md`: common problems and how to diagnose them.

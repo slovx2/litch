@@ -1,5 +1,10 @@
 // 模拟核心里的飞书来源：每台在线设备一份应用列表，创建向导两秒后自动完成。样例全是虚构的名字和 ID。
-import type { FeishuApp, FeishuRegistration } from '../../../protocol/src/feishu.mjs'
+import type {
+  FeishuApp,
+  FeishuChat,
+  FeishuMember,
+  FeishuRegistration,
+} from '../../../protocol/src/feishu.mjs'
 import { ChannelError, type Clock } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
 import type { DeviceView } from '../model.mjs'
@@ -31,6 +36,73 @@ const sampleApp = (now: number, managerId: string | null): FeishuApp => ({
   createdAt: now - 86_400 * 3,
 })
 
+const sampleMembers: FeishuMember[] = [
+  { openId: 'ou_mock_alice', name: '示例成员甲' },
+  { openId: 'ou_mock_bob', name: '示例成员乙' },
+  { openId: 'ou_mock_carol', name: '示例成员丙' },
+]
+
+const sampleChats = (appId: string, now: number): FeishuChat[] => [
+  {
+    appId,
+    chatId: 'oc_mock_project',
+    revision: 2,
+    name: '示例项目群',
+    external: false,
+    status: 'normal',
+    botPresent: true,
+    access: {
+      speech: 'free',
+      wakeBound: true,
+      wakers: [{ openId: 'ou_mock_alice', name: '示例成员甲' }],
+      retentionDays: 90,
+      reviewTtlHours: 24,
+      accessAt: now - 86_400,
+    },
+    updatedAt: now - 86_400,
+  },
+  {
+    appId,
+    chatId: 'oc_mock_partner',
+    revision: 1,
+    name: '示例合作群',
+    external: true,
+    status: 'normal',
+    botPresent: true,
+    access: null,
+    updatedAt: now - 7_200,
+  },
+  {
+    appId,
+    chatId: 'oc_mock_casual',
+    revision: 1,
+    name: '示例闲聊群',
+    external: false,
+    status: 'normal',
+    botPresent: true,
+    access: null,
+    updatedAt: now - 3_600,
+  },
+  {
+    appId,
+    chatId: 'oc_mock_left',
+    revision: 3,
+    name: '示例旧项目群',
+    external: false,
+    status: 'normal',
+    botPresent: false,
+    access: {
+      speech: 'approval',
+      wakeBound: false,
+      wakers: [],
+      retentionDays: 30,
+      reviewTtlHours: 12,
+      accessAt: now - 86_400 * 10,
+    },
+    updatedAt: now - 86_400 * 2,
+  },
+]
+
 export function createMockFeishu(clock: Clock, devices: () => DeviceView[], filled: boolean) {
   const now = () => Math.floor(clock.now() / 1000)
   const states = new Map<string, ReturnType<typeof make>>()
@@ -42,6 +114,39 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
     const registrations = new Map<string, FeishuRegistration>()
     const sinks = new Set<HostSink>()
     const registrationSinks = new Map<string, Set<HostSink>>()
+    const chats = new Map<string, FeishuChat[]>()
+    const chatSinks = new Map<string, Set<HostSink>>()
+    const chatsOf = (appId: string) => {
+      const found = chats.get(appId)
+      if (found) return found
+      const value = apps.some((app) => app.appId === appId && app.managerId)
+        ? sampleChats(appId, now())
+        : []
+      chats.set(appId, value)
+      return value
+    }
+    const publishChats = (appId: string) => {
+      const value = { chats: chatsOf(appId), syncedAt: now() - 60 }
+      for (const sink of chatSinks.get(appId) ?? [])
+        sink.snapshot({ available: true, online: true, value, fetchedAt: clock.now(), error: null })
+    }
+    const chatOf = (appId: string, chatId: string) =>
+      chatsOf(appId).find((chat) => chat.chatId === chatId) ?? fail('feishu_chat_not_found')
+    const saveChat = (chat: FeishuChat | null, appId: string, chatId: string) => {
+      const rest = chatsOf(appId).filter((item) => item.chatId !== chatId)
+      chats.set(
+        appId,
+        chat ? chatsOf(appId).map((item) => (item.chatId === chatId ? chat : item)) : rest,
+      )
+      publishChats(appId)
+      return chat
+    }
+    const wakersOf = (openIds: unknown) =>
+      (openIds as string[]).map(
+        (openId) =>
+          sampleMembers.find((member) => member.openId === openId) ??
+          fail('feishu_waker_not_member'),
+      )
     const snapshot = () => ({
       apps: {
         available: true,
@@ -50,6 +155,7 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
         fetchedAt: clock.now(),
         error: null,
       },
+      admin: true,
     })
     const publish = () => {
       for (const sink of sinks) sink.snapshot(snapshot())
@@ -90,6 +196,13 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
     }
     return {
       open(topic: FeishuTopic, sink: HostSink) {
+        if (topic.kind === 'feishuChats') {
+          const set = chatSinks.get(topic.appId) ?? new Set<HostSink>()
+          chatSinks.set(topic.appId, set)
+          set.add(sink)
+          publishChats(topic.appId)
+          return () => set.delete(sink)
+        }
         if (topic.kind === 'feishuRegistration') {
           const set = registrationSinks.get(topic.registrationId) ?? new Set<HostSink>()
           registrationSinks.set(topic.registrationId, set)
@@ -228,6 +341,77 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
                 publish: { state: 'pending_review', versionId: 'mock-version', at: now() },
               },
             })
+          }
+          case 'feishu.chat.list':
+            find(String(args.appId))
+            publishChats(String(args.appId))
+            return { chats: chatsOf(String(args.appId)), syncedAt: now() }
+          case 'feishu.chat.get':
+            return { chat: chatOf(String(args.appId), String(args.chatId)) }
+          case 'feishu.chat.members': {
+            const chat = chatOf(String(args.appId), String(args.chatId))
+            if (!chat.botPresent) fail('feishu_chat_unavailable')
+            return { members: sampleMembers, fetchedAt: now() }
+          }
+          case 'feishu.chat.access': {
+            const appId = String(args.appId)
+            const chat = chatOf(appId, String(args.chatId))
+            if (chat.access) fail('feishu_chat_accessed')
+            if (!chat.botPresent) fail('feishu_chat_unavailable')
+            if (chat.revision !== args.expectedRevision) fail('feishu_revision_conflict')
+            if (chat.external && args.confirmExternal !== true) fail('feishu_external_unconfirmed')
+            const next: FeishuChat = {
+              ...chat,
+              revision: chat.revision + 1,
+              access: {
+                speech: args.speech as 'free' | 'approval',
+                wakeBound: Boolean(args.wakeBound),
+                wakers: wakersOf(args.wakers),
+                retentionDays: Number(args.retentionDays),
+                reviewTtlHours: Number(args.reviewTtlHours),
+                accessAt: now(),
+              },
+              updatedAt: now(),
+            }
+            return { chat: saveChat(next, appId, chat.chatId) }
+          }
+          case 'feishu.chat.update': {
+            const appId = String(args.appId)
+            const chat = chatOf(appId, String(args.chatId))
+            if (!chat.access) fail('feishu_chat_not_accessed')
+            if (chat.revision !== args.expectedRevision) fail('feishu_revision_conflict')
+            const next: FeishuChat = {
+              ...chat,
+              revision: chat.revision + 1,
+              access: {
+                ...chat.access,
+                ...(args.speech ? { speech: args.speech as 'free' | 'approval' } : {}),
+                ...(typeof args.wakeBound === 'boolean' ? { wakeBound: args.wakeBound } : {}),
+                ...(args.wakers ? { wakers: wakersOf(args.wakers) } : {}),
+                ...(typeof args.retentionDays === 'number'
+                  ? { retentionDays: args.retentionDays }
+                  : {}),
+                ...(typeof args.reviewTtlHours === 'number'
+                  ? { reviewTtlHours: args.reviewTtlHours }
+                  : {}),
+              },
+              updatedAt: now(),
+            }
+            return { chat: saveChat(next, appId, chat.chatId) }
+          }
+          case 'feishu.chat.unaccess': {
+            const appId = String(args.appId)
+            const chat = chatOf(appId, String(args.chatId))
+            if (!chat.access) fail('feishu_chat_not_accessed')
+            if (chat.revision !== args.expectedRevision) fail('feishu_revision_conflict')
+            const next: FeishuChat = {
+              ...chat,
+              revision: chat.revision + 1,
+              access: null,
+              updatedAt: now(),
+            }
+            saveChat(chat.botPresent ? next : null, appId, chat.chatId)
+            return { chat: next }
           }
           default:
             throw new ChannelError('unknownCommand', `不认识的命令：${name}`)

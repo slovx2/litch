@@ -61,6 +61,11 @@ export const CONFIG_OPS: readonly ConfigOp[] = [
   { group: 'feishu-app', action: 'check', write: false },
   { group: 'feishu-app', action: 'upgrade', write: true },
   { group: 'feishu-app', action: 'remove', write: true, irreversible: true },
+  { group: 'feishu-chat', action: 'list', write: false },
+  { group: 'feishu-chat', action: 'members', write: false },
+  { group: 'feishu-chat', action: 'access', write: true, guarded: true },
+  { group: 'feishu-chat', action: 'update', write: true, guarded: true },
+  { group: 'feishu-chat', action: 'unaccess', write: true, irreversible: true },
 
   { group: 'devices', action: 'list', write: false },
   { group: 'devices', action: 'check', write: false },
