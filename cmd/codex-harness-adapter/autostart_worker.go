@@ -92,10 +92,17 @@ func (h *autostartHost) runWorker(ctx context.Context, revision int64) error {
 			repair, err = h.apply(ctx, j)
 		}
 	}
+	var busy *autostartBusyError
+	if errors.As(err, &busy) {
+		// 旧实例不闲，没有动它：操作记录恢复成这次之前的样子，只留下作罢的原因给等结果的那条命令。
+		_, saveErr := h.changeJournal(id, func(current *autostartJournal) { finishDeferred(current, id, busy.busy) })
+		return saveErr
+	}
 	logAutostartError(h.c, err)
 	_, saveErr := h.changeJournal(id, func(current *autostartJournal) {
 		current.Revision++
 		current.Hold = false
+		current.Previous, current.PreviousRepair = nil, nil
 		current.Operation.State = "completed"
 		current.Repair = repair
 		if err != nil {
@@ -106,6 +113,15 @@ func (h *autostartHost) runWorker(ctx context.Context, revision int64) error {
 		}
 	})
 	return saveErr
+}
+
+// 带 ifIdle 的操作作罢：恢复这次之前的操作记录，留下原因。
+func finishDeferred(j *autostartJournal, id string, busy []busyReason) {
+	j.Revision++
+	j.Hold = false
+	j.Operation, j.Repair = j.Previous, j.PreviousRepair
+	j.Previous, j.PreviousRepair = nil, nil
+	j.Deferred = &autostartDeferred{OperationID: id, Busy: busy}
 }
 
 func (h *autostartHost) apply(ctx context.Context, j autostartJournal) (*autostartRepair, error) {

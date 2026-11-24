@@ -150,7 +150,8 @@ export function parseBusy(stdout: string): BusyReason[] {
 /**
  * 照旧用在跑的那一份，是因为什么：
  * same 就是同一版；newer 在跑的更新，不降级；incomparable 版本号比不出先后；
- * foreground 它不是 device-start 拉起的，有别的东西管着它的生死（前台的终端、brew services、systemd），不替它换；
+ * foreground 它不是 device-start 拉起的，也不是 Litch 的系统自启，有别的东西管着它的生死（前台的终端、brew services、
+ *   手写的 systemd 单元），不替它换；
  * busy 它不闲（明细在 busy 里）；unsupported 它不认识停止的请求，或者它的控制通道连不上；
  * failed 去停了，没停成（详情里是命令行的原话）
  */
@@ -186,4 +187,9 @@ export interface UpgradeOutcome {
   busy: BusyReason[]
   /** 命令行说的话（给人看的那一句），没有就是 null */
   detail: string | null
+  /**
+   * 在跑的那一份由 Litch 的系统自启（LaunchAgent、systemd 用户服务）管着：换版本时用自带的命令行重新登记自启，
+   * 由系统服务管理器重启服务（device-autostart enable --wait）
+   */
+  autostart: boolean
 }

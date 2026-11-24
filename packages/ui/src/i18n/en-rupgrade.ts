@@ -8,6 +8,7 @@ export const enRupgrade: Record<keyof typeof zhRupgrade, Entry> = {
   'service.remote.flag': 'The device service is older than the app',
   'service.remote.sum.stale': 'Older than the app',
   'service.remote.sum.waiting': 'Waiting to switch',
+  'service.remote.sum.installed': 'Installed, pending restart',
   'service.remote.older': 'The running device service is {from}, older than the app’s {to}.',
   'service.remote.older.unknown':
     'The running device service doesn’t report its version and is treated as older than the app’s {to}.',
@@ -23,6 +24,18 @@ export const enRupgrade: Record<keyof typeof zhRupgrade, Entry> = {
   'service.remote.stopping': 'New version installed. Asking the device service to stop when idle…',
   'service.remote.forcing': 'Stopping the device service…',
   'service.remote.reconnecting': 'Device service stopped. Reconnecting…',
+  'service.remote.stopping.autostart':
+    'New version installed. Asking the device service to restart when idle…',
+  'service.remote.forcing.autostart': 'Restarting the device service…',
+  'service.remote.reconnecting.autostart': 'Autostart restarted the device service. Reconnecting…',
+  'service.remote.autostart.pending':
+    'This service runs under system autostart; the new version takes effect after the device service restarts.',
+  'service.remote.waiting.autostart':
+    '{to} is installed and takes effect after a restart. The device service is busy and restarts once it’s idle:',
+  'service.launch.autostart': 'By system autostart',
+  'service.remote.restartNow': 'Restart Now',
+  'service.busy.autostart':
+    'The new version came with the app and takes effect after a restart. The device service runs under system autostart and is busy; it restarts once it’s idle:',
   'service.remote.waiting':
     '{to} is installed. The device service is busy and switches over once it’s idle:',
   'service.remote.waiting.next':
@@ -52,6 +65,8 @@ export const enRupgrade: Record<keyof typeof zhRupgrade, Entry> = {
   'service.remote.failed.legacy':
     'The new version is installed, but an older service without the aggregate endpoint is running. Restart it by hand:',
   'service.remote.failed.stop': 'The new version is installed, but the device service didn’t stop.',
+  'service.remote.failed.swap':
+    'The new version is installed, but system autostart couldn’t be re-registered with it. The old version is still running.',
   'service.remote.failed.stale':
     'The device service stopped and reconnected, but the old version is still running.',
   'service.remote.again': 'Retry',
@@ -74,12 +89,16 @@ export const enRupgrade: Record<keyof typeof zhRupgrade, Entry> = {
     'Nothing in progress is interrupted: the new version takes over once the service is idle.',
   'service.remote.confirm.managed':
     'This service runs in the foreground or under a service manager: Litch only installs and doesn’t restart it.',
+  'service.remote.confirm.autostart':
+    'This service runs under system autostart: the service manager restarts it once it’s idle, so nothing in progress is interrupted.',
   'service.remote.confirm.yes': 'Upgrade',
   'service.remote.confirm.swapYes': 'Switch',
   'service.remote.confirm.no': 'Cancel',
   'service.remote.force.title': 'Switch to the new version now?',
   'service.remote.force.note':
     'This restarts the device service on {name} now. Eligible ordinary turns resume automatically; the following work is interrupted:',
+  'service.remote.force.now':
+    'This restarts the device service on {name} now. Turns in progress are interrupted; eligible ordinary turns resume automatically.',
   'service.remote.force.clients':
     'Other clients connected to this device are disconnected and reconnect on their own.',
   'service.remote.force.yes': 'Switch Now',

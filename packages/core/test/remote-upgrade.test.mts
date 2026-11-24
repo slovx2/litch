@@ -15,6 +15,7 @@ import {
   type RemoteInstallResult,
   type RemotePlatform,
   type RemoteStopResult,
+  type RemoteSwapResult,
   type RemoteUpgradePlatform,
   type RemoteUpgradeView,
 } from '../src/index.mjs'
@@ -42,16 +43,19 @@ interface Calls {
   inspect: number
   install: { method: string; version: string }[]
   stop: boolean[]
+  swap: boolean[]
 }
 
 interface WorldOptions {
   /** 连上之前先改一改假设备 */
   prepare?(device: FakeDevice): void
   /** 那台机器上装着的那一份 */
-  installed?: { version: string | null; path: string | null }
+  installed?: { version: string | null; path: string | null; autostart?: boolean }
   install?: () => RemoteInstallResult | Promise<RemoteInstallResult>
   /** 每次请停的应答，依次取；取完了就是“停了” */
   stops?: (RemoteStopResult | Error)[]
+  /** 系统自启管着时每次重新登记的应答，依次取；取完了就是“换上了” */
+  swaps?: (RemoteSwapResult | Error)[]
   /** 不给能力（手机端） */
   incapable?: boolean
   reconnectFailure?: boolean
@@ -65,14 +69,16 @@ function world(options: WorldOptions = {}) {
   fake.device.service = facts('0.15.0')
   options.prepare?.(fake.device)
   const far = fakeOpener(fake.handlers)
-  const calls: Calls = { inspect: 0, install: [], stop: [] }
+  const calls: Calls = { inspect: 0, install: [], stop: [], swap: [] }
   const stops = [...(options.stops ?? [])]
+  const swaps = [...(options.swaps ?? [])]
   /** 请停的那一下停了：假设备上的服务就换成 current 指的那一版（装好的新版） */
-  let current = '0.15.0'
+  let current = options.installed?.version ?? '0.15.0'
   const upgrade: RemoteUpgradePlatform = {
     async inspect() {
       calls.inspect++
-      return options.installed ?? { version: current, path: null }
+      const given = options.installed ?? { version: current, path: null }
+      return { autostart: false, ...given }
     },
     async install(_target, plan) {
       calls.install.push(plan)
@@ -91,11 +97,19 @@ function world(options: WorldOptions = {}) {
       if (next.result === 'stopped') fake.device.service = facts(current)
       return next
     },
+    async swap(_target, ifIdle) {
+      calls.swap.push(ifIdle)
+      const next = swaps.shift() ?? { result: 'stopped' }
+      if (next instanceof Error) throw next
+      // 系统服务管理器起的新版：仍不是按需拉起的
+      if (next.result === 'stopped') fake.device.service = facts(current, { detached: false })
+      return next
+    },
   }
   const remote: RemotePlatform = {
     opener: () => async (signal) => {
       if (options.failure) throw options.failure
-      if (options.reconnectFailure && calls.stop.length > 0)
+      if (options.reconnectFailure && calls.stop.length + calls.swap.length > 0)
         throw new ConnectError('unreachable', phrase('ssh.unreachable'), true)
       return far.open(signal)
     },
@@ -586,4 +600,95 @@ test('停服务后重连超时，给该设备失败结果而不是永久停在�
   } finally {
     w.core.stop()
   }
+})
+
+/** 系统自启管着的旧服务：不是按需拉起的，那台机器上 device-autostart get 报 managed */
+const autostartWorld = (options: WorldOptions = {}) =>
+  world({
+    installed: { version: '0.15.0', path: null, autostart: true },
+    ...options,
+    prepare(device) {
+      device.service = facts('0.15.0', { detached: false })
+      options.prepare?.(device)
+    },
+  })
+
+test('系统自启管着：装好后空闲时重新登记自启换上新版，不用 device-stop', async () => {
+  const w = autostartWorld()
+  w.core.start()
+  await flush()
+  const before = w.upgradeView()
+  assert.equal(before?.managed, false, '不再算“只装不换”')
+  assert.equal(before?.autostart, true)
+  await w.run('start')
+  await flush()
+  assert.deepEqual(w.calls.install, [{ method: 'script', version: APP }])
+  assert.deepEqual(w.calls.stop, [], '不经 device-stop：停了起来的还是登记里的旧版')
+  assert.deepEqual(w.calls.swap, [true], '空闲时才换')
+  assert.deepEqual(w.upgradeView()?.phase, { step: 'done', from: '0.15.0', to: APP })
+  assert.equal(w.device().service?.version, APP)
+})
+
+test('系统自启管着而不闲：等待重启生效，每 5 分钟再试，“现在重启”不等', async () => {
+  const busy = {
+    result: 'busy' as const,
+    busy: [{ reason: 'activeTurns', harnesses: ['pi'], count: 0 }],
+  }
+  const w = autostartWorld({ swaps: [busy, busy] })
+  w.core.start()
+  await flush()
+  await w.run('start')
+  await flush()
+  assert.deepEqual(w.upgradeView()?.phase, { step: 'waiting', busy: busy.busy, checking: false })
+  assert.equal(w.upgradeView()?.action, 'swap')
+  w.time.advance(SWAP_RETRY_MS)
+  await flush()
+  assert.deepEqual(w.calls.swap, [true, true], '到点再请一次，仍走重新登记')
+  assert.equal(w.upgradeView()?.phase.step, 'waiting')
+  await w.run('force')
+  await flush()
+  assert.deepEqual(w.calls.swap, [true, true, false], '现在重启：不等空闲')
+  assert.deepEqual(w.calls.stop, [])
+  assert.equal(w.upgradeView()?.phase.step, 'done')
+})
+
+test('系统自启管着、新版已装好（应用重开过）：可以直接换上或现在重启', async () => {
+  const w = autostartWorld({ installed: { version: APP, path: null, autostart: true } })
+  w.core.start()
+  await flush()
+  assert.equal(w.upgradeView()?.action, 'swap')
+  await w.run('start')
+  await flush()
+  assert.deepEqual(w.calls.install, [], '不再装')
+  assert.deepEqual(w.calls.swap, [true])
+
+  const now = autostartWorld({ installed: { version: APP, path: null, autostart: true } })
+  now.core.start()
+  await flush()
+  await now.run('force')
+  await flush()
+  assert.deepEqual(now.calls.swap, [false])
+  assert.equal(now.upgradeView()?.phase.step, 'done')
+})
+
+test('系统自启：那台机器说不是自启登记的实例时只装不换，重新登记失败时报 swap', async () => {
+  const odd = autostartWorld({ swaps: [{ result: 'unmanaged' }] })
+  odd.core.start()
+  await flush()
+  await odd.run('start')
+  await flush()
+  assert.deepEqual(odd.upgradeView()?.phase, { step: 'restart' })
+  assert.equal(odd.upgradeView()?.managed, true)
+  assert.equal(odd.upgradeView()?.autostart, false)
+
+  const broken = autostartWorld({ swaps: [{ result: 'failed', said: 'systemctl: failed' }] })
+  broken.core.start()
+  await flush()
+  await broken.run('start')
+  await flush()
+  const phase = broken.upgradeView()?.phase
+  assert.equal(phase?.step, 'failed')
+  assert.equal(phase?.step === 'failed' && phase.at, 'swap')
+  assert.equal(phase?.step === 'failed' && phase.detail, 'systemctl: failed')
+  assert.equal(broken.device().service?.version, '0.15.0', '旧服务照旧')
 })

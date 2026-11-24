@@ -78,7 +78,9 @@ function UpgradeNote({ device, upgrade, notice, retrying, onRetry }: NoteProps) 
   return (
     <div className="cfail svc-note" data-service-note={notice}>
       <div className="cfail-text">{t(older.key, older.args)}</div>
-      <div className="cfail-text">{t(`service.${notice}`)}</div>
+      <div className="cfail-text">
+        {t(notice === 'busy' && upgrade.autostart ? 'service.busy.autostart' : `service.${notice}`)}
+      </div>
       {notice === 'busy' ? (
         <>
           <ul className="svc-busy">
@@ -111,7 +113,7 @@ function UpgradeNote({ device, upgrade, notice, retrying, onRetry }: NoteProps) 
               disabled={retrying || !canForce}
               onClick={() => setForcing(true)}
             >
-              {t('service.remote.force')}
+              {t(upgrade.autostart ? 'service.remote.restartNow' : 'service.remote.force')}
             </button>
           </div>
         </>
@@ -341,7 +343,13 @@ export function ServiceSection({
                 <div>
                   <dt>{t('service.launch')}</dt>
                   <dd data-fact="launch" data-detached={service.detached}>
-                    {t(service.detached ? 'service.launch.detached' : 'service.launch.managed')}
+                    {t(
+                      service.detached
+                        ? 'service.launch.detached'
+                        : upgrade?.autostart || remote?.autostart
+                          ? 'service.launch.autostart'
+                          : 'service.launch.managed',
+                    )}
                   </dd>
                 </div>
                 <div>

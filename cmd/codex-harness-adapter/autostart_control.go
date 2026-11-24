@@ -68,22 +68,47 @@ func autostartBuildMatches(spec autostartSpec, facts *serviceFacts) bool {
 		facts.Build == spec.Build
 }
 
+// 带 ifIdle 的启用遇到旧实例不闲：没有停它，整个操作作罢。
+type autostartBusyError struct{ busy []busyReason }
+
+func (e *autostartBusyError) Error() string {
+	return "the device service is busy: " + describeBusy(e.busy)
+}
+
+// 不闲的原因只有客户端连着：发起切换的那一端自己就连着，断了会自己重连，不算要等的事。
+func onlyClientsBusy(reasons []busyReason) bool {
+	return len(reasons) > 0 && !slices.ContainsFunc(reasons, func(r busyReason) bool { return r.Reason != "clients" })
+}
+
 func (h *autostartHost) stopExisting(ctx context.Context, j autostartJournal) error {
-	conn, _, err := h.dialVerified(ctx, j.StopPID, j.StopSince)
-	if err != nil {
+	ifIdle := j.Params.IfIdle
+	for {
+		conn, _, err := h.dialVerified(ctx, j.StopPID, j.StopSince)
+		if err != nil {
+			return err
+		}
+		stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+		reply, known, err := requestServiceStop(conn, ifIdle, j.Params.ResumeAfterRestart)
+		if err == nil && known && !reply.Stopping && ifIdle && reply.PID == j.StopPID {
+			stop()
+			_ = conn.Close()
+			if !onlyClientsBusy(reply.Busy) {
+				return &autostartBusyError{busy: reply.Busy}
+			}
+			// 只是有客户端连着：照停，客户端会自己重连到新实例。
+			ifIdle = false
+			continue
+		}
+		if err == nil && (!known || !reply.Stopping || reply.PID != j.StopPID) {
+			err = errors.New("the expected device service did not agree to stop")
+		}
+		if err == nil {
+			err = awaitServiceExit(ctx, h.c, conn, reply.PID)
+		}
+		stop()
+		_ = conn.Close()
 		return err
 	}
-	defer conn.Close()
-	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
-	defer stop()
-	reply, known, err := requestServiceStop(conn, false, j.Params.ResumeAfterRestart)
-	if err != nil {
-		return err
-	}
-	if !known || !reply.Stopping || reply.PID != j.StopPID {
-		return errors.New("the expected device service did not agree to stop")
-	}
-	return awaitServiceExit(ctx, h.c, conn, reply.PID)
 }
 
 // H 线在 run 解析通用参数之前调用。受管入口严格核对参数和登记的规格，

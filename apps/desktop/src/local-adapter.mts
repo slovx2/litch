@@ -8,14 +8,18 @@
 //   - 在跑的和自带的一样、比自带的新、版本号比不出先后：直接用，绝不降级。
 //   - 在跑的比自带的旧（或者它没报自己的来历）：请它闲着的话停下（device-stop --if-idle），停了就用自带的重新拉起；
 //     不闲就照旧连它，交给用户选择；本次应用运行内普通重连不会越过这个选择。
-//   - 只替 device-start 拉起的服务换。前台运行的、brew services 或 systemd 管着的不动：
+//   - 只替 device-start 拉起的服务和 Litch 系统自启管着的服务换。前台运行的、brew services 或别的 systemd 单元管着的不动：
 //     停了它，管它的那一方会把旧的再拉起来，或者用户终端里的服务平白没了。
+//   - Litch 系统自启（LaunchAgent、systemd 用户服务）管着的：不用 device-stop（停了不会被重启，按需拉起的又不归管理器管），
+//     改用自带的命令行重新登记自启（device-autostart enable --wait，带 ifIdle 和 resumeAfterRestart），
+//     停旧实例、写新登记、由管理器起新版一次做完；不闲就整个作罢，和按需拉起的一样等用户选。
 //   - 重新拉起时，旧服务启动时带的参数（SSH 入口开没开、端口）原样带上，不替用户改主意。
 //   - 做了什么、没换是因为什么，都记在 upgrade() 里交给调用方；换不成不妨碍连上旧的。
 //     核心每次连上之后经 upgradeReport() 取走一份，放进设备的显示数据里，界面在设备详情的“设备服务”一节照着说。
 //
 // 这个模块不碰 Electron：路径、环境、语言都由调用方给，自检（adapter-check.mts）直接拿它跑。
 import { spawn } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { resolve as absolute, isAbsolute, join } from 'node:path'
@@ -197,6 +201,7 @@ function runCommand(
   env: NodeJS.ProcessEnv,
   signal: AbortSignalLike,
   timeoutMs: number,
+  input?: string,
 ): Promise<CommandEnd> {
   return new Promise<CommandEnd>((resolve, reject) => {
     // 问登录 shell、等上一条命令的那一会儿里可能已经被取消了
@@ -206,12 +211,16 @@ function runCommand(
     }
     // 服务会一直留着启动时的工作目录：给它用户的主目录，不要碰巧是应用当时所在的那个目录
     // windowsHide：命令行是控制台程序，Windows 上不给的话每条命令都闪一个终端窗口
-    const child = spawn(adapter.bin, args, {
-      cwd: homedir(),
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    })
+    // 要喂标准输入的（device-autostart 的变更参数）才开那一条管道
+    const base = { cwd: homedir(), env, windowsHide: true }
+    const child =
+      input === undefined
+        ? spawn(adapter.bin, args, { ...base, stdio: ['ignore', 'pipe', 'pipe'] })
+        : spawn(adapter.bin, args, { ...base, stdio: ['pipe', 'pipe', 'pipe'] })
+    if (input !== undefined && child.stdin) {
+      child.stdin.on('error', () => {})
+      child.stdin.end(input)
+    }
     let stdout = ''
     let stderr = ''
     let settled = false
@@ -386,6 +395,96 @@ export async function stopDevice(
   return { kind: 'failed', detail }
 }
 
+/** 问自启状态最多等多久：它只查管理器和文件 */
+const AUTOSTART_GET_TIMEOUT_MS = 30_000
+/** 重新登记自启：变更助手最多做 3 分钟，--wait 等 200 秒，这里再留一点 */
+const SWAP_TIMEOUT_MS = 240_000
+
+const autostartArgs = (adapter: BundledAdapter, home: string): string[] => [
+  '--home',
+  home,
+  '--root',
+  adapter.root,
+  '--node',
+  adapter.node,
+]
+
+/**
+ * 在跑的服务是不是 Litch 系统自启登记的那一份（device-autostart get 报 instance.mode 是 managed）。
+ * 是就给出自启状态的 revision（变更要带上它），不是或问不出来是 null。被取消时抛 ConnectError
+ */
+export async function autostartRevision(
+  adapter: BundledAdapter,
+  home: string,
+  env: NodeJS.ProcessEnv,
+  signal: AbortSignalLike,
+): Promise<number | null> {
+  const end = await runCommand(
+    adapter,
+    ['device-autostart', 'get', ...autostartArgs(adapter, home)],
+    env,
+    signal,
+    AUTOSTART_GET_TIMEOUT_MS,
+  )
+  if (end.code !== 0) return null
+  try {
+    const value = JSON.parse(end.stdout.trim().split('\n').at(-1) ?? '') as {
+      revision?: unknown
+      instance?: { mode?: unknown }
+    }
+    return value.instance?.mode === 'managed' && typeof value.revision === 'number'
+      ? value.revision
+      : null
+  } catch {
+    return null
+  }
+}
+
+/** 重新登记自启的结果：多了一种 unmanaged，在跑的其实不是自启管着的那一份，什么都没做 */
+export type SwapOutcome = StopOutcome | { kind: 'unmanaged' }
+
+/** device-autostart enable --wait 的退出码：0 换上了，4 不闲没动，别的没做成（autostart_cli.go 的 awaitOperation） */
+const EXIT_SWAP_BUSY = 4
+
+/**
+ * 系统自启管着的服务换上自带的这一份：用自带的命令行重新登记自启。
+ * ifIdle 为 true 时旧实例不闲就不动（只是有客户端连着不算忙）；被打断的回合按续跑恢复。
+ * 返回时新实例已经由系统服务管理器起来、就绪。被取消时抛 ConnectError
+ */
+export async function swapDevice(
+  adapter: BundledAdapter,
+  home: string,
+  env: NodeJS.ProcessEnv,
+  signal: AbortSignalLike,
+  ifIdle: boolean,
+  timeoutMs: number = SWAP_TIMEOUT_MS,
+): Promise<SwapOutcome> {
+  const revision = await autostartRevision(adapter, home, env, signal)
+  if (revision === null) return { kind: 'unmanaged' }
+  // 操作标识只用来认这一次请求
+  const params = JSON.stringify({
+    operationId: `litch-local-swap-${randomBytes(8).toString('hex')}`,
+    expectedRevision: revision,
+    confirmStop: true,
+    resumeAfterRestart: true,
+    ...(ifIdle ? { ifIdle: true } : {}),
+  })
+  const end = await runCommand(
+    adapter,
+    ['device-autostart', 'enable', '--wait', ...autostartArgs(adapter, home)],
+    env,
+    signal,
+    timeoutMs,
+    params,
+  )
+  if (end.spawnError !== null) return { kind: 'failed', detail: end.spawnError }
+  if (end.timedOut) return { kind: 'failed', detail: tailOf(end.stderr) }
+  const detail = tailOf(end.stderr)
+  if (end.code === 0) return { kind: 'stopped' }
+  if (end.code === EXIT_SWAP_BUSY) return { kind: 'busy', busy: parseBusy(end.stdout), detail }
+  return { kind: 'failed', detail: detail ?? tailOf(end.stdout) }
+}
+
 export interface LocalDevice {
   /** 本机设备的传输怎么打开 */
   open: TransportOpener
@@ -480,8 +579,11 @@ export function localDevice(options: LocalDeviceOptions): LocalDevice {
       upgrade = null
       return found
     }
+    /** 在跑的那一份由 Litch 的系统自启管着：换的那一步改成重新登记自启 */
+    let supervised = false
     const outcome = (result: DeviceStartResult, more: Partial<UpgradeOutcome>) => {
       upgrade = {
+        autostart: supervised,
         action: 'kept',
         running: result.service,
         bundled,
@@ -498,14 +600,23 @@ export function localDevice(options: LocalDeviceOptions): LocalDevice {
     if (order === 'same' || order === 'newer' || order === 'incomparable') {
       return outcome(found, { reason: order })
     }
-    // 不是 device-start 拉起的：有别的东西管着它的生死，不替它换
-    if (found.service && !found.service.detached) return outcome(found, { reason: 'foreground' })
+    // 不是 device-start 拉起的：是 Litch 的系统自启就重新登记着换，别的东西管着它的生死就不替它换
+    if (found.service && !found.service.detached) {
+      supervised = (await autostartRevision(adapter, home, env, signal)) !== null
+      if (!supervised) return outcome(found, { reason: 'foreground' })
+    }
     const key = serviceKey(found)
     if (deferred && deferred.key === key)
       return outcome(found, { reason: 'busy', busy: deferred.busy, detail: deferred.detail })
     const before = key === null ? undefined : gaveUp.get(key)
     if (before) return outcome(found, before)
-    const stop = await stopIdleDevice(adapter, home, env, signal, options.stopTimeoutMs)
+    const stop = supervised
+      ? await swapDevice(adapter, home, env, signal, true)
+      : await stopIdleDevice(adapter, home, env, signal, options.stopTimeoutMs)
+    if (stop.kind === 'unmanaged') {
+      supervised = false
+      return outcome(found, { reason: 'foreground' })
+    }
     if (stop.kind === 'busy') {
       deferred = { key, busy: stop.busy, detail: stop.detail }
       return outcome(found, { reason: 'busy', busy: stop.busy, detail: stop.detail })
@@ -516,19 +627,24 @@ export function localDevice(options: LocalDeviceOptions): LocalDevice {
     }
     // 停掉了，或者没停利索：再执行一次 device-start，现在是什么样以它说的为准。
     // 旧服务启动时带的参数原样带上；它没报过就用我们自己的默认
+    // 系统自启换上的新版已经由管理器起来，这一次只是接上它；它的启动参数里有自启的内部标记，不能交给 device-start
     const again = await startDevice(
       adapter,
       home,
       env,
       signal,
       options.startTimeoutMs,
-      found.service?.options.length ? found.service.options : DEFAULT_OPTIONS,
+      !supervised && found.service?.options.length ? found.service.options : DEFAULT_OPTIONS,
     )
     if (again.started) {
       return outcome(again, { action: 'replaced', running: found.service, order })
     }
     // 没有轮到我们拉起：旧的还在（没停成），或者别人抢先起了一份。照旧用在跑的，这一次不再试
     const now = compareService(again.service, bundled)
+    // 系统自启换上的新版由管理器起，不是这次 device-start 拉起的：在跑的已经不旧就是换成了
+    if (supervised && stop.kind === 'stopped' && !outdated(now)) {
+      return outcome(again, { action: 'replaced', running: found.service, order })
+    }
     if (!outdated(now)) return outcome(again, { reason: now as KeptReason })
     const failure = {
       reason: 'failed' as const,
@@ -563,6 +679,24 @@ export function localDevice(options: LocalDeviceOptions): LocalDevice {
     signal: AbortSignalLike,
   ): Promise<RemoteStopResult> => {
     const env = await environment()
+    if (upgrade?.autostart) {
+      // 系统自启管着而且等着换版本（核心只在这时放行）：重新登记自启，新实例由管理器起，重连时直接连上它
+      const swap = await swapDevice(adapter, home, env, signal, ifIdle)
+      switch (swap.kind) {
+        case 'stopped':
+          relaunch = null
+          return { result: 'stopped' }
+        case 'busy':
+          return {
+            result: 'busy',
+            busy: swap.busy.filter((entry) => entry.reason !== 'clients'),
+          }
+        case 'unmanaged':
+          return { result: 'unsupported', said: null }
+        default:
+          return { result: 'failed', said: swap.detail }
+      }
+    }
     const kept = last?.service?.options ?? []
     const timeout = options.stopTimeoutMs
     let stop = await stopDevice(adapter, home, env, signal, ifIdle, timeout, true)

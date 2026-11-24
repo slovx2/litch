@@ -87,6 +87,7 @@ function run({
   version = '1.0.0',
   build = 'b1',
   stop = 'ok',
+  swap = 'ok',
 }) {
   return new Promise((resolve, reject) => {
     const started = Date.now()
@@ -102,6 +103,7 @@ function run({
         FAKE_VERSION: version,
         FAKE_BUILD: build,
         FAKE_STOP: stop,
+        FAKE_SWAP: swap,
         FAKE_SERVICE: 'facts',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -312,6 +314,7 @@ try {
       reason: null,
       busy: [],
       detail: null,
+      autostart: false,
     })
     // 到了界面上：之前没有服务，不留“之前的版本”；启动参数、程序文件的戳不带过去
     assert.deepEqual(result.view, {
@@ -323,6 +326,7 @@ try {
       busy: [],
       detail: null,
       pid,
+      autostart: false,
     })
   })
 
@@ -609,6 +613,7 @@ try {
         busy: [],
         detail: null,
         pid,
+        autostart: false,
       })
       assert.ok(!JSON.stringify(result.view).includes('--claude-port'), '启动参数到了界面')
     },
@@ -643,6 +648,7 @@ try {
           { reason: 'activeTurns', harnesses: ['pi'], count: 0 },
           { reason: 'clients', harnesses: [], count: 2 },
         ],
+        autostart: false,
       })
       assert.equal(upgrade.running.version, '1.0.0')
       assert.match(detail, /有回合在跑/)
@@ -656,6 +662,7 @@ try {
         busy: upgrade.busy,
         detail,
         pid: old.pid,
+        autostart: false,
       })
       // 同一次运行里普通重连不再隐式停止，等待用户在升级提示中选择。
       const again = lines.find((line) => line.reopened).reopened
@@ -741,6 +748,7 @@ try {
       busy: [],
       detail: result.upgrade.detail,
       pid: old.pid,
+      autostart: false,
     })
     // 再打开一次：问多少遍都一样，不再执行 device-stop，原因照样带着
     const again = lines.find((line) => line.reopened).reopened
@@ -763,7 +771,11 @@ try {
       const { lines } = await run({ home: old.home, version: '1.1.0' })
       const result = resultOf(lines)
       assert.equal(result.result, 'ok', JSON.stringify(lines))
-      assert.deepEqual(callsSince(old.before), [startArgs(old.home, '--ssh=off')])
+      // 只问了一句是不是 Litch 的系统自启，不是就不动
+      assert.deepEqual(callsSince(old.before), [
+        startArgs(old.home, '--ssh=off'),
+        ['device-autostart', 'get', '--home', old.home, '--root', root, '--node', node],
+      ])
       assert.equal(devicePid(old.home), old.pid)
       assert.deepEqual(
         [result.upgrade.action, result.upgrade.reason, result.upgrade.order],
@@ -776,6 +788,94 @@ try {
       )
     },
   )
+
+  const autostartArgs = (home) => ['--home', home, '--root', root, '--node', node]
+  const getArgs = (home) => ['device-autostart', 'get', ...autostartArgs(home)]
+  const swapArgs = (home) => ['device-autostart', 'enable', '--wait', ...autostartArgs(home)]
+
+  await check(
+    '在跑的由 Litch 系统自启管着：不用 device-stop，空闲时重新登记自启换上自带的这一版',
+    async () => {
+      const old = seed('autostart', { version: '1.0.0', service: 'autostart' })
+      const { lines } = await run({ home: old.home, version: '1.1.0' })
+      const result = resultOf(lines)
+      assert.equal(result.result, 'ok', JSON.stringify(lines))
+      assert.deepEqual(callsSince(old.before), [
+        startArgs(old.home, '--ssh=off'),
+        getArgs(old.home),
+        getArgs(old.home),
+        swapArgs(old.home),
+        startArgs(old.home, '--ssh=off'),
+      ])
+      const input = callLog().findLast((call) => call.input)?.input
+      assert.match(input.operationId, /^litch-local-swap-[0-9a-f]{16}$/)
+      assert.deepEqual(
+        { ...input, operationId: 'x' },
+        {
+          operationId: 'x',
+          expectedRevision: 3,
+          confirmStop: true,
+          resumeAfterRestart: true,
+          ifIdle: true,
+        },
+      )
+      assert.equal(alive(old.pid), false, '旧的那一份还在')
+      assert.deepEqual(
+        [result.upgrade.action, result.upgrade.autostart, result.last.service.version],
+        ['replaced', true, '1.1.0'],
+      )
+      assert.equal(result.last.service.detached, false, '新版由系统自启起，不是按需拉起的')
+      assert.deepEqual(
+        [result.view.action, result.view.previous, result.view.autostart],
+        ['replaced', '1.0.0', true],
+      )
+    },
+  )
+
+  await check(
+    '系统自启管着而不闲：照旧连上、说明原因；“现在重启”同样走重新登记，不列客户端',
+    async () => {
+      const old = seed('autostart-busy', { version: '1.0.0', service: 'autostart' })
+      const { lines } = await run({
+        home: old.home,
+        version: '1.1.0',
+        swap: 'busy',
+        flags: ['--restart'],
+      })
+      const result = resultOf(lines)
+      assert.deepEqual(
+        [result.upgrade.action, result.upgrade.reason, result.upgrade.autostart],
+        ['kept', 'busy', true],
+      )
+      assert.deepEqual(
+        [result.view.reason, result.view.autostart, result.view.busy.length],
+        ['busy', true, 2],
+      )
+      const restarted = lines.find((line) => line.restarted)?.restarted
+      assert.deepEqual(restarted.stop, {
+        result: 'busy',
+        busy: [{ reason: 'activeTurns', harnesses: ['pi'], count: 0 }],
+      })
+      assert.ok(
+        callsSince(old.before).every((call) => call[0] !== 'device-stop'),
+        '系统自启管着的服务不经 device-stop',
+      )
+      assert.ok(alive(old.pid), '不闲时不该动它')
+    },
+  )
+
+  await check('系统自启重新登记没做成：照旧连上旧的，带着命令行的原话', async () => {
+    const old = seed('autostart-fail', { version: '1.0.0', service: 'autostart' })
+    const { lines } = await run({ home: old.home, version: '1.1.0', swap: 'fail' })
+    const result = resultOf(lines)
+    assert.equal(result.result, 'ok', JSON.stringify(lines))
+    assert.deepEqual(
+      [result.upgrade.action, result.upgrade.reason, result.upgrade.autostart],
+      ['kept', 'failed', true],
+    )
+    assert.match(result.view.detail ?? '', /自启操作未完成/)
+    assert.ok(alive(old.pid))
+  })
 
   await check('版本号一样但程序换过（同一个根目录，戳不同）：按旧算，闲着就换掉', async () => {
     const old = seed('rebuilt', { version: '1.0.0', build: 'b1' })

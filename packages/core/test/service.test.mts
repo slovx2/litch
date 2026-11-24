@@ -41,6 +41,7 @@ const report = (fields: Partial<ServiceUpgradeReport> = {}): ServiceUpgradeRepor
   busy: [],
   detail: null,
   pid: 4821,
+  autostart: false,
   ...fields,
 })
 
@@ -283,6 +284,7 @@ test('本机：外壳给的换版本结果每次连上之后取一次；重新�
     busy,
     detail: null,
     pid: 4821,
+    autostart: false,
   })
   assert.equal(w.device().service?.version, '0.6.0')
 
@@ -341,6 +343,7 @@ test('换版本的结果只带界面用得着的：没换的原因、忙的明�
       busy: [],
       detail: null,
       pid: 4821,
+      autostart: false,
     },
   )
   // 没报来历的旧服务，不认识停止的请求：版本不知道，原话和进程号带着

@@ -14,6 +14,7 @@
 //   --stop：只按退出应用时的方式停止服务，不安排重启续跑；加 --if-idle 则只在空闲时停。
 //   --restart：连上、打完结果之后照“重启设备服务”做一遍：这条连接还连着时请服务空闲时停（stopService），
 //     再打开一次本机设备的传输（开了就关），把停的结果、前后两份服务的来历打成 {"restarted": …}。
+//   --restart-now：同 --restart，但不等空闲（设备详情里的“现在重启”“立即换上”）。
 //   --reopen：连上、打完结果之后再打开一次本机设备的传输（不握手，开了就关），把这一次的结果打成 {"reopened": …}。
 //     验的是同一次运行里第二次打开时的处理：换不了或首次尝试不闲的服务不再隐式停止，由明确升级动作处理。
 //   --compare <JSON>：不连任何东西，只把版本比较的规则过一遍（adapter-upgrade.mts），打一行 JSON 就退出。
@@ -204,7 +205,8 @@ async function restart(): Promise<Record<string, unknown>> {
   restarting = true
   const before = local.last()?.service ?? null
   if (!local.stopService) return { stop: null, before, after: null, launched: null }
-  const stop = await local.stopService(true, never)
+  // --restart-now：不等空闲（“现在重启”“立即换上”那一种）
+  const stop = await local.stopService(!process.argv.includes('--restart-now'), never)
   const transport = await local.open(never)
   transport.close()
   return { stop, before, after: local.last()?.service ?? null, launched: local.launched() }
@@ -260,7 +262,8 @@ const link = createLink({
             // 同一件事到了界面上的样子
             view: viewOf(),
           })
-          if (process.argv.includes('--restart')) say({ restarted: await restart() })
+          if (process.argv.includes('--restart') || process.argv.includes('--restart-now'))
+            say({ restarted: await restart() })
           if (process.argv.includes('--reopen')) say({ reopened: await reopen() })
           done(0)
         })

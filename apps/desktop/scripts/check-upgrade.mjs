@@ -96,6 +96,20 @@ function makeReleases(work, fixture) {
     `         echo '{"result":"stopped","pid":4242}'; exit 0 ;;`,
     `      5) echo '{"result":"unsupported"}'; echo '这个状态目录上有服务在运行，但这条命令停不了它：它不认识停止的请求' >&2; exit 5 ;;`,
     '    esac ;;',
+    // 系统自启：get 按主目录下 autostart-mode（managed 或没有）答；enable 把参数和标准输入记进 swap.log，
+    // 按 swap-mode 的退出码答（0 换上了，4 不闲，1 没做成）
+    '  device-autostart)',
+    '    if [ "$2" = get ]; then',
+    `      if [ "$(cat "$HOME/autostart-mode" 2>/dev/null)" = managed ]; then echo '{"revision":7,"serviceManager":"systemd","state":"enabled","instance":{"pid":4242,"mode":"managed"}}'; else echo '{"revision":7,"serviceManager":"systemd","state":"disabled"}'; fi`,
+    '      exit 0',
+    '    fi',
+    '    printf "%s %s\\n" "$*" "$(cat)" >>"$HOME/swap.log"',
+    '    mode=$(cat "$HOME/swap-mode" 2>/dev/null || echo 0)',
+    '    case $mode in',
+    `      0) echo '{"state":"completed","operationId":"x"}'; exit 0 ;;`,
+    `      4) echo '{"state":"busy","operationId":"x","busy":[{"reason":"activeTurns","harnesses":["pi"]},{"reason":"clients","count":1}]}'; echo '设备服务不闲，没有切换' >&2; exit 4 ;;`,
+    `      *) echo '{"state":"failed","operationId":"x"}'; echo '自启操作未完成' >&2; exit 1 ;;`,
+    '    esac ;;',
     '  *) echo "未知命令: $1" >&2; exit 2 ;;',
     'esac',
   ])
@@ -234,6 +248,54 @@ try {
       readFileSync(join(home, 'stop.log'), 'utf8').trim().split('\n').at(-1),
       'device-stop --resume-after-restart',
     )
+  })
+
+  check(
+    '系统自启管着：探测报 autostart，换版本走 device-autostart enable --wait，带着 ifIdle 和自启状态的 revision',
+    () => {
+      writeFileSync(join(home, 'autostart-mode'), 'managed')
+      assert.equal(run('--inspect').facts.autostart, true)
+      writeFileSync(join(home, 'swap-mode'), '0')
+      assert.deepEqual(run('--swap').swap, { result: 'stopped' })
+      const line = readFileSync(join(home, 'swap.log'), 'utf8').trim().split('\n').at(-1)
+      assert.match(line, /^device-autostart enable --wait \{/)
+      const params = JSON.parse(line.slice(line.indexOf('{')))
+      assert.match(params.operationId, /^litch-swap-[0-9a-f]{16}$/)
+      assert.deepEqual(
+        { ...params, operationId: 'x' },
+        {
+          operationId: 'x',
+          expectedRevision: 7,
+          confirmStop: true,
+          resumeAfterRestart: true,
+          ifIdle: true,
+        },
+      )
+      run('--swap', '--force')
+      const forced = readFileSync(join(home, 'swap.log'), 'utf8').trim().split('\n').at(-1)
+      assert.equal(
+        JSON.parse(forced.slice(forced.indexOf('{'))).ifIdle,
+        undefined,
+        '现在重启：不等空闲',
+      )
+    },
+  )
+
+  check('系统自启管着而不闲：busy 逐条原因，不列客户端；没做成带原话；不是自启实例时不动', () => {
+    writeFileSync(join(home, 'swap-mode'), '4')
+    assert.deepEqual(run('--swap').swap, {
+      result: 'busy',
+      busy: [{ reason: 'activeTurns', harnesses: ['pi'], count: 0 }],
+    })
+    writeFileSync(join(home, 'swap-mode'), '1')
+    const failed = run('--swap').swap
+    assert.equal(failed.result, 'failed')
+    assert.match(failed.said ?? '', /自启操作未完成/)
+    rmSync(join(home, 'autostart-mode'))
+    rmSync(join(home, 'swap.log'))
+    assert.deepEqual(run('--swap').swap, { result: 'unmanaged' })
+    assert.equal(existsSync(join(home, 'swap.log')), false, '不是自启实例时没有去登记')
+    assert.equal(run('--inspect').facts.autostart, false)
   })
 
   check('太旧不认识停止请求：unsupported，带着它的原话', () => {

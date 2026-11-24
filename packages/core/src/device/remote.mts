@@ -10,6 +10,7 @@ import type {
   RemoteInstallMethod,
   RemoteInstallResult,
   RemoteStopResult,
+  RemoteSwapResult,
 } from '../model-service.mjs'
 import type { CodexThreadNotesStore } from './codex-instructions.mjs'
 import type { SnapshotStore } from './device.mjs'
@@ -54,6 +55,11 @@ export interface RemoteUpgradePlatform {
   ): Promise<RemoteInstallResult>
   /** 请服务停下（device-stop）。ifIdle 为 false 时不等它闲，进行中的事会被打断 */
   stop(target: RemoteTarget, ifIdle: boolean, signal: AbortSignalLike): Promise<RemoteStopResult>
+  /**
+   * 系统自启管着的服务换上装好的新版：用新版重新登记自启（停旧实例、系统服务管理器起新版、回合续跑）。
+   * ifIdle 为 true 时旧实例不闲就不动
+   */
+  swap(target: RemoteTarget, ifIdle: boolean, signal: AbortSignalLike): Promise<RemoteSwapResult>
 }
 
 export interface SavedRemote {

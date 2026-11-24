@@ -16,7 +16,10 @@
 // 怎么表现由环境变量决定：
 //   FAKE_ADAPTER  device-start 这一半（见下面的 switch）
 //   FAKE_VERSION、FAKE_BUILD  这份“适配器”的版本号和程序文件的戳，默认 1.0.0、b1
-//   FAKE_SERVICE  这一次拉起的服务怎么报来历：facts（默认）、nofacts（不报，像旧版）、foreground（报成不是脱离出去的）
+//   FAKE_SERVICE  这一次拉起的服务怎么报来历：facts（默认）、nofacts（不报，像旧版）、foreground（报成不是脱离出去的）、
+//                 autostart（报成不是脱离出去的，并记下由系统自启管着：device-autostart get 报 managed）
+//   FAKE_SWAP     device-autostart enable --wait 这一半：ok（默认，停掉旧的、以系统自启的身份起一份这一版的）、busy、fail
+// device-autostart get 报自启状态；enable --wait 把标准输入里的参数也记进 FAKE_CALLS（键 input）
 //   FAKE_STOP     device-stop 这一半：ok（默认，停掉）、busy、unsupported、fail、hang
 //   FAKE_CALLS    每被调用一次往这个文件里记一行
 import { spawn } from 'node:child_process'
@@ -54,10 +57,11 @@ const reachable = (path) =>
   })
 
 /** 每被调用一次记一行：自检要看参数对不对、调了几次、语言给没给、我们自己的环境变量有没有漏过来 */
-function record() {
+function record(extra = {}) {
   appendFileSync(
     process.env.FAKE_CALLS,
     `${JSON.stringify({
+      ...extra,
       args,
       pid: process.pid,
       cwd: process.cwd(),
@@ -88,6 +92,11 @@ async function deviceStart() {
   const node = option('--node')
   const mode = process.env.FAKE_ADAPTER ?? 'ok'
   record()
+  // 和真命令行一样：自启的内部标记不是 device-start 认的参数
+  if (args.some((arg) => arg.startsWith('--litch-autostart'))) {
+    console.error('flag provided but not defined: -litch-autostart')
+    process.exit(2)
+  }
   // 执行命令的这一份“适配器”
   const cli = {
     version: process.env.FAKE_VERSION ?? '1.0.0',
@@ -136,8 +145,16 @@ async function deviceStart() {
   const kind = process.env.FAKE_SERVICE ?? 'facts'
   const facts = {
     ...cli,
-    detached: kind !== 'foreground',
-    options: args.slice(args.indexOf('--node') + 2),
+    detached: kind !== 'foreground' && kind !== 'autostart',
+    // 系统自启起的服务启动参数里带着自启的内部标记（真命令行的 autostartFlag）
+    options: [
+      ...(kind === 'autostart' ? ['--litch-autostart=fake'] : []),
+      ...args.slice(args.indexOf('--node') + 2),
+    ],
+  }
+  if (kind === 'autostart') {
+    mkdirSync(state, { recursive: true, mode: 0o700 })
+    writeFileSync(join(state, 'autostart.json'), JSON.stringify({ revision: 3 }))
   }
   // 以脱离出去的方式拉起设备进程，用的是传进来的那份 Node。
   // inherit：故意让它继承这条命令的两条输出管道，模拟“没把输出重定向干净”
@@ -222,6 +239,78 @@ async function deviceStop() {
   process.exit(1)
 }
 
+/** 假的系统自启：get 报在跑的是不是自启管着的；enable --wait 换上这一版 */
+async function deviceAutostart() {
+  const home = option('--home')
+  const state = join(home, 'device')
+  const marker = join(state, 'autostart.json')
+  const managed = existsSync(marker) && (await reachable(join(state, 'device.sock')))
+  if (args[1] === 'get') {
+    record()
+    const revision = existsSync(marker) ? JSON.parse(readFileSync(marker, 'utf8')).revision : 0
+    console.log(
+      JSON.stringify({
+        revision,
+        serviceManager: 'launchd',
+        state: managed ? 'enabled' : 'disabled',
+        ...(managed ? { instance: { pid: pidOf(state), mode: 'managed' } } : {}),
+      }),
+    )
+    process.exit(0)
+  }
+  let input = ''
+  for await (const chunk of process.stdin) input += chunk
+  record({ input: JSON.parse(input) })
+  const mode = process.env.FAKE_SWAP ?? 'ok'
+  if (mode === 'busy') {
+    console.log(
+      JSON.stringify({
+        state: 'busy',
+        busy: [
+          { reason: 'activeTurns', harnesses: ['pi'] },
+          { reason: 'clients', count: 1 },
+        ],
+      }),
+    )
+    console.error('设备服务不闲，没有切换：pi 有回合在跑（或者判断不了）；有 1 个客户端连着')
+    process.exit(4)
+  }
+  if (mode === 'fail') {
+    console.log(JSON.stringify({ state: 'failed' }))
+    console.error('自启操作未完成；请检查系统服务管理器和设备服务日志后重试。')
+    process.exit(1)
+  }
+  const old = pidOf(state)
+  if (old) process.kill(old, 'SIGTERM')
+  for (let waited = 0; waited < 5000 && existsSync(join(state, 'device.pid')); waited += 20)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  // 系统服务管理器起的这一版：不是脱离出去的
+  const facts = {
+    version: process.env.FAKE_VERSION ?? '1.0.0',
+    root: option('--root'),
+    build: process.env.FAKE_BUILD ?? 'b1',
+    detached: false,
+    options: ['--litch-autostart=fake', '--ssh=off'],
+  }
+  const socket = join(state, 'device.sock')
+  const child = spawn(
+    option('--node'),
+    [self, '--listen', `unix://${socket}`, '--state', state, '--facts', JSON.stringify(facts)],
+    { detached: true, stdio: 'ignore' },
+  )
+  child.unref()
+  for (let waited = 0; waited < 10_000; waited += 50) {
+    if (await reachable(socket)) {
+      writeFileSync(marker, JSON.stringify({ revision: 5 }))
+      console.log(JSON.stringify({ state: 'completed' }))
+      process.exit(0)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  console.error('新实例没有就绪')
+  process.exit(1)
+}
+
 /** 假的聚合面：unix 套接字上的 WebSocket，一帧一条 JSON，只答握手和列会话 */
 function serveDevice() {
   const socket = option('--listen').replace(/^unix:\/\//, '')
@@ -279,6 +368,7 @@ function serveDevice() {
 
 if (args[0] === 'device-start') await deviceStart()
 else if (args[0] === 'device-stop') await deviceStop()
+else if (args[0] === 'device-autostart') await deviceAutostart()
 else if (args.includes('--listen')) serveDevice()
 else {
   console.error(`假适配器不认识这样的用法：${args.join(' ')}`)

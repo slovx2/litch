@@ -10,6 +10,7 @@
 //   --inspect：一键升级的“看一眼装着的是哪一份”（ssh/upgrade.mts），打一行结果。
 //   --install <script|brew> <版本>：一键升级的“装这一版”，打一行结果。不经确认，只给自检用。
 //   --stop [--force]：一键升级的“请服务停下”（默认 --if-idle），打一行结果。
+//   --swap [--force]：系统自启管着时的“用新版重新登记自启”（默认空闲时才换），打一行结果。
 // 另：node dist/ssh-check.mjs --discover 列出 ssh 配置里发现到的主机；
 //     node dist/ssh-check.mjs --store <目录> 把设备配置和侧栏快照在那个目录里存取一遍。
 import {
@@ -81,7 +82,9 @@ const target = JSON.parse(process.argv[2] ?? 'null') as RemoteTarget
 const hold = process.argv.includes('--hold')
 
 /** 一键升级在远端做的那三件事，各跑一次就退出。远端命令行说中文，自检按中文的原话认 */
-const upgradeAt = ['--inspect', '--install', '--stop'].find((flag) => process.argv.includes(flag))
+const upgradeAt = ['--inspect', '--install', '--stop', '--swap'].find((flag) =>
+  process.argv.includes(flag),
+)
 if (upgradeAt) {
   const platform = remoteUpgrade(() => 'zh-CN')
   const signal = new AbortController().signal
@@ -94,6 +97,8 @@ if (upgradeAt) {
       say({
         install: await platform.install(target, { method, version: value('--install', 2) }, signal),
       })
+    } else if (upgradeAt === '--swap') {
+      say({ swap: await platform.swap(target, !process.argv.includes('--force'), signal) })
     } else say({ stop: await platform.stop(target, !process.argv.includes('--force'), signal) })
     process.exit(0)
   } catch (error) {

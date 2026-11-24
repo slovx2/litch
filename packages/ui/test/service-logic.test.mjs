@@ -27,6 +27,7 @@ const upgrade = (patch) => ({
   busy: [],
   detail: null,
   pid: 4821,
+  autostart: false,
   ...patch,
 })
 const device = (patch) => ({ connection: 'online', service: null, upgrade: null, ...patch })
@@ -201,4 +202,17 @@ test('前台的、有服务管理器管着的：几种办法都说，brew 的两
     ],
   )
   for (const step of FOREGROUND_STEPS) said({ key: step.text, args: {} })
+})
+
+test('系统自启管着、因为忙没换：小标写“已安装，等待重启生效”，正文另有一句', () => {
+  const waiting = upgrade({ reason: 'busy', autostart: true })
+  assert.equal(noticeOf(waiting), 'busy')
+  assert.deepEqual(pillOf(waiting), {
+    tone: 'wait',
+    key: 'service.remote.sum.installed',
+    args: {},
+  })
+  assert.equal(pillOf(upgrade({ reason: 'busy' }))?.key, 'service.sum.stale')
+  said({ key: 'service.busy.autostart', args: {} })
+  said({ key: 'service.remote.restartNow', args: {} })
 })
