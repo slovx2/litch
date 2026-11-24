@@ -612,3 +612,66 @@ test('发件：能撤下的状态、原因文案、合并更早的页', () => {
     ['b:queued', 'a:sent', 'z:sent'],
   )
 })
+
+test('私聊绑定：配对码规范化与格式', () => {
+  assert.equal(m.pairingCode('ABCD-EFGH'), 'ABCD-EFGH')
+  assert.equal(m.pairingCode(' abcd efgh '), 'ABCD-EFGH')
+  assert.equal(m.pairingCode('abcdefgh'), 'ABCD-EFGH')
+  assert.equal(m.pairingCode('ABCD-EFG'), null)
+  // 字母表里没有 0 1 I L O
+  assert.equal(m.pairingCode('ABCD-EFG0'), null)
+  assert.equal(m.pairingCode('ABCD-EFGI'), null)
+  assert.equal(m.pairingCodeBad(''), false)
+  assert.equal(m.pairingCodeBad('abc'), false)
+  assert.equal(m.pairingCodeBad('abco'), true)
+  assert.equal(m.pairingCodeBad('ABCD-EFGHJ'), true)
+  assert.equal(m.pairingCodeBad('AB#D'), true)
+})
+
+const binding = (openId, patch = {}) => ({
+  appId: 'cli_0000000000000001',
+  openId,
+  revision: 1,
+  name: '',
+  state: 'bound',
+  approver: false,
+  retentionDays: 90,
+  boundAt: 0,
+  ...patch,
+})
+
+test('私聊绑定：名字、创建者、排序', () => {
+  assert.equal(m.bindingName(binding('ou_a', { name: '甲' })), '甲')
+  assert.equal(m.bindingName(binding('ou_a', { name: '  ' })), 'ou_a')
+  assert.equal(m.bindingName({ openId: 'ou_b' }), 'ou_b')
+  assert.equal(m.bindingIsCreator(binding('ou_a'), { creatorOpenId: 'ou_a' }), true)
+  assert.equal(m.bindingIsCreator(binding('ou_a'), { creatorOpenId: 'ou_b' }), false)
+  assert.equal(m.bindingIsCreator(binding('ou_a'), {}), false)
+  assert.equal(m.bindingIsCreator(binding('ou_a'), null), false)
+  const sorted = m.sortBindings([
+    binding('old', { boundAt: 10 }),
+    binding('gone', { state: 'revoked', boundAt: 50, revokedAt: 60 }),
+    binding('new', { boundAt: 30 }),
+    binding('gone2', { state: 'revoked', boundAt: 1, revokedAt: 70 }),
+    binding('same', { boundAt: 10 }),
+  ])
+  assert.deepEqual(
+    sorted.map((one) => one.openId),
+    ['new', 'old', 'same', 'gone2', 'gone'],
+  )
+})
+
+test('私聊绑定：快照与手里更新的合并', () => {
+  const merged = m.mergeBindings(
+    [binding('a', { revision: 2 }), binding('b', { revision: 3 })],
+    [binding('a', { revision: 3, approver: true }), binding('b', { revision: 2 }), binding('c')],
+  )
+  assert.deepEqual(
+    merged.map((one) => `${one.openId}:${one.revision}`),
+    ['a:3', 'b:3', 'c:1'],
+  )
+  assert.equal(merged[0].approver, true)
+  assert.equal(m.feishuReason({ message: 'feishu_pairing_not_found' }), 'pairing_not_found')
+  assert.equal(m.staleReason('binding_revoked'), true)
+  assert.equal(m.staleReason('pairing_not_found'), false)
+})

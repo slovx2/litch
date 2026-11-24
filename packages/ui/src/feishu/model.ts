@@ -4,11 +4,13 @@ import {
   FEISHU_APP_ID,
   FEISHU_BACKFILL_LIMIT,
   FEISHU_BOT_NAME_MAX,
+  FEISHU_PAIRING_ALPHABET,
   FEISHU_RETENTION_DAYS,
   FEISHU_REVIEW_TTL_HOURS,
   FEISHU_WAKERS_MAX,
   type FeishuApp,
   type FeishuBackfill,
+  type FeishuBinding,
   type FeishuCapability,
   type FeishuChat,
   type FeishuChatAccess,
@@ -24,6 +26,7 @@ import {
   type FeishuOutboxEntry,
   type FeishuOutboxFormat,
   type FeishuOutboxState,
+  type FeishuPairing,
   type FeishuPerson,
   type FeishuRegistration,
   type FeishuSpeechMode,
@@ -39,6 +42,7 @@ import {
 export type {
   FeishuApp,
   FeishuBackfill,
+  FeishuBinding,
   FeishuCapability,
   FeishuChat,
   FeishuChatAccess,
@@ -51,6 +55,7 @@ export type {
   FeishuOutboxEntry,
   FeishuOutboxFormat,
   FeishuOutboxState,
+  FeishuPairing,
   FeishuPerson,
   FeishuRegistration,
   FeishuSpeechMode,
@@ -132,6 +137,9 @@ export const FEISHU_REASONS = [
   'backfill_window_invalid',
   'outbox_not_found',
   'outbox_sending',
+  'pairing_not_found',
+  'binding_not_found',
+  'binding_revoked',
 ] as const
 export type FeishuReason = (typeof FEISHU_REASONS)[number]
 
@@ -143,10 +151,14 @@ export function feishuReason(error: unknown): FeishuReason | null {
   return (FEISHU_REASONS as readonly string[]).includes(code) ? (code as FeishuReason) : null
 }
 
-/** 说明界面拿的是旧数据的原因：版本冲突，或群的接入状态已在别处变了。收到时先重读再提示 */
+/** 说明界面拿的是旧数据的原因：版本冲突，群的接入状态或私聊绑定已在别处变了。收到时先重读再提示 */
 export function staleReason(reason: FeishuReason | null): boolean {
   return (
-    reason === 'revision_conflict' || reason === 'chat_accessed' || reason === 'chat_not_accessed'
+    reason === 'revision_conflict' ||
+    reason === 'chat_accessed' ||
+    reason === 'chat_not_accessed' ||
+    reason === 'binding_not_found' ||
+    reason === 'binding_revoked'
   )
 }
 
@@ -741,4 +753,70 @@ export function mergeOutbox(
 ): FeishuOutboxEntry[] {
   const seen = new Set(latest.map((entry) => entry.operationId))
   return [...latest, ...older.filter((entry) => !seen.has(entry.operationId))]
+}
+
+// ---------- 私聊绑定 ----------
+
+/** 配对码去掉空白与横线、转大写后的样子 */
+function pairingChars(text: string): string {
+  return text.replace(/[\s-]/g, '').toUpperCase()
+}
+
+/** 输入框里的配对码：不分大小写、可带横线或空格；是 8 位且都在字母表里时给出 XXXX-XXXX，否则 null */
+export function pairingCode(text: string): string | null {
+  const chars = pairingChars(text)
+  if (chars.length !== 8 || [...chars].some((one) => !FEISHU_PAIRING_ALPHABET.includes(one)))
+    return null
+  return `${chars.slice(0, 4)}-${chars.slice(4)}`
+}
+
+/** 已经能看出填错了：有字母表之外的字（含 0 1 I L O），或超过 8 位。还没填完不算错 */
+export function pairingCodeBad(text: string): boolean {
+  const chars = pairingChars(text)
+  return chars.length > 8 || [...chars].some((one) => !FEISHU_PAIRING_ALPHABET.includes(one))
+}
+
+/** 列表上的名字：没有名字用 open_id */
+export function bindingName(person: { name?: string | undefined; openId: string }): string {
+  return person.name?.trim() || person.openId
+}
+
+/** 是不是创建向导里建应用的那个人 */
+export function bindingIsCreator(
+  binding: Pick<FeishuBinding, 'openId'>,
+  app: Pick<FeishuApp, 'creatorOpenId'> | null | undefined,
+): boolean {
+  return Boolean(app?.creatorOpenId) && binding.openId === app?.creatorOpenId
+}
+
+/** 列表顺序：已绑定的在前（绑定时间新的在前），已撤销的在后（撤销时间新的在前）；同样的保持设备给的顺序 */
+export function sortBindings(bindings: readonly FeishuBinding[]): FeishuBinding[] {
+  const at = (one: FeishuBinding) =>
+    one.state === 'bound' ? one.boundAt : (one.revokedAt ?? one.boundAt)
+  return bindings
+    .map((binding, index) => ({ binding, index }))
+    .sort((a, b) => {
+      const ra = a.binding.state === 'revoked'
+      const rb = b.binding.state === 'revoked'
+      if (ra !== rb) return ra ? 1 : -1
+      return at(b.binding) - at(a.binding) || a.index - b.index
+    })
+    .map((one) => one.binding)
+}
+
+/**
+ * 快照加界面手里更新的几条（命令结果、冲突后重读到的）：同一个人取 revision 大的，
+ * 快照里还没有的新绑定补上
+ */
+export function mergeBindings(
+  snapshot: readonly FeishuBinding[],
+  fresh: readonly FeishuBinding[],
+): FeishuBinding[] {
+  const newer = new Map(fresh.map((one) => [one.openId, one]))
+  const merged = snapshot.map((one) => {
+    const other = newer.get(one.openId)
+    newer.delete(one.openId)
+    return other && other.revision > one.revision ? other : one
+  })
+  return [...merged, ...newer.values()]
 }

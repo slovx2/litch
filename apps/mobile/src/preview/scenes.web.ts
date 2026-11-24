@@ -347,6 +347,16 @@ export const SCENES: Scene[] = [
     ],
   },
   {
+    id: 'feishu-bindings',
+    group: '设备',
+    name: '飞书 · 私聊绑定',
+    note: '示例应用详情往下滚到“私聊绑定”：待确认配对 1；填 ABCD-EFGH 查找能查到“示例访客”并确认绑定；列表里示例负责人（创建者、审批人）、示例同事、已撤销的示例前同事，点一行可改审批人、保留天数或撤销',
+    steps: [
+      nav('DeviceDetail', { deviceId: 'local' }),
+      nav('FeishuApp', { deviceId: 'local', appId: 'cli_a1b2c3d4e5f60718' }),
+    ],
+  },
+  {
     id: 'feishu-add',
     group: '设备',
     name: '飞书 · 添加应用',

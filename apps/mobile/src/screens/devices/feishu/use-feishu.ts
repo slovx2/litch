@@ -1,8 +1,9 @@
-// 手机上飞书的数据入口：直接订阅核心的 feishuDevice / feishuRegistration / feishuChats / feishuInbox / feishuOutbox / reviews 主题（核心负责断线保留、重连重读），
+// 手机上飞书的数据入口：直接订阅核心的 feishuDevice / feishuRegistration / feishuChats / feishuInbox / feishuOutbox / feishuBindings / reviews 主题（核心负责断线保留、重连重读），
 // 同设备在用的经理从数据副本取。
 import { keys, type ManagerView } from '@litch/core'
 import { useEffect, useMemo, useState } from 'react'
 import type {
+  FeishuBindingsView,
   FeishuChatsView,
   FeishuDeviceView,
   FeishuInboxView,
@@ -118,6 +119,24 @@ export function useFeishuOutbox(deviceId: string, appId: string): FeishuOutboxVi
     setView(undefined)
     return channel.subscribe(
       { kind: 'feishuOutbox', deviceId, appId },
+      {
+        snapshot: (value) => setView(value),
+        delta: () => {},
+        error: () => setView(undefined),
+      },
+    )
+  }, [channel, deviceId, appId])
+  return view
+}
+
+/** 一个应用的私聊绑定（已绑定和撤销过的） */
+export function useFeishuBindings(deviceId: string, appId: string): FeishuBindingsView | undefined {
+  const channel = useChannel()
+  const [view, setView] = useState<FeishuBindingsView | undefined>()
+  useEffect(() => {
+    setView(undefined)
+    return channel.subscribe(
+      { kind: 'feishuBindings', deviceId, appId },
       {
         snapshot: (value) => setView(value),
         delta: () => {},

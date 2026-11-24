@@ -1,7 +1,6 @@
-// 飞书应用详情（盖住设备详情的一页）：概况（连接、启用、经理）→ 能力自检 → 群 → 发件 → App Secret → 移除。
+// 飞书应用详情（盖住设备详情的一页）：概况（连接、启用、经理）→ 能力自检 → 群 → 私聊绑定 → 发件 → App Secret → 移除。
 // 数据来自这台设备的 feishuDevice 快照；写操作带 expectedRevision，冲突时重读这一个应用并提示重试。
 // 这条连接不是设备管理员（admin 为 false）时写操作都不可点，页首写明原因。
-// 后续里程碑的私聊绑定是一块 ext-block，排在 App Secret 之前。
 import type { DeviceView } from '@litch/core'
 import { useCallback, useEffect, useState } from 'react'
 import { useT } from '../app/appearance.ts'
@@ -10,6 +9,7 @@ import { Back, Close } from '../app/icons.tsx'
 import { useServices } from '../app/services.tsx'
 import { useDeviceManagers } from '../external/data.ts'
 import { Field, Switch } from '../external/parts.tsx'
+import { AppBindings } from './AppBindings.tsx'
 import { AppCapability } from './AppCapability.tsx'
 import { AppChats } from './AppChats.tsx'
 import { AppOutbox } from './AppOutbox.tsx'
@@ -206,6 +206,7 @@ export function AppPage({
               </section>
               <AppCapability deviceId={device.id} app={app} block={block} onApp={setFresh} />
               <AppChats deviceId={device.id} appId={app.appId} block={block} />
+              <AppBindings deviceId={device.id} app={app} block={block} />
               <AppOutbox deviceId={device.id} appId={app.appId} block={block} />
               <AppSecret deviceId={device.id} app={app} block={block} onApp={setFresh} />
               <section className="ext-block" data-feishu-remove>

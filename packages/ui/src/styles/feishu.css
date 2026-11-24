@@ -247,3 +247,57 @@
 .fs-outbox-item[data-state="failed"] .fs-outbox-reason {
   color: var(--err);
 }
+
+/* 应用详情 · 私聊绑定：配对码一行（输入框加查找），查到的人一小块；每个绑定一行，窄了换行 */
+.fs-pair-find {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fs-code {
+  flex: 0 1 160px;
+  min-width: 0;
+  text-transform: uppercase;
+}
+.fs-pairing {
+  margin-left: 0;
+}
+.fs-pairing .err {
+  color: var(--err);
+}
+.fs-binding {
+  flex-wrap: wrap;
+  row-gap: 2px;
+  padding: 3px 0;
+}
+.fs-binding[data-state="revoked"] .ext-row-name {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+.fs-binding-ctl {
+  flex: none;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.fs-binding-approver,
+.fs-binding-days {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.fs-days {
+  width: calc(52px * var(--fs));
+  height: calc(24px * var(--fs));
+  padding: 0 6px;
+  font-size: 12px;
+  text-align: right;
+}
+/* 已撤销的行没有撤销按钮：占同样宽，保留天数对齐 */
+.fs-binding-gap {
+  flex: none;
+  width: calc(22px * var(--fs));
+}

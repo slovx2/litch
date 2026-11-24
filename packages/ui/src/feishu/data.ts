@@ -2,6 +2,7 @@
 // 本机和远程设备走同一条通道，核心负责断线保留与重连重读。
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
+  FeishuBindingsView,
   FeishuChatsView,
   FeishuDeviceView,
   FeishuInboxView,
@@ -25,6 +26,7 @@ type Topic =
   | { kind: 'feishuChats'; deviceId: string; appId: string }
   | { kind: 'feishuInbox'; deviceId: string; managerId: string }
   | { kind: 'feishuOutbox'; deviceId: string; appId: string }
+  | { kind: 'feishuBindings'; deviceId: string; appId: string }
   | { kind: 'reviews'; deviceId: string; managerId?: string }
 
 /** 订一个主题，取最新快照；topic 为 null 时不订 */
@@ -79,6 +81,11 @@ export function useFeishuInbox(deviceId: string, managerId: string, enabled = tr
 /** 一个应用的发件队列：最近一页（新的在前） */
 export function useFeishuOutbox(deviceId: string, appId: string) {
   return useTopic<FeishuOutboxView>({ kind: 'feishuOutbox', deviceId, appId })
+}
+
+/** 一个应用的私聊绑定（已绑定和撤销过的） */
+export function useFeishuBindings(deviceId: string, appId: string) {
+  return useTopic<FeishuBindingsView>({ kind: 'feishuBindings', deviceId, appId })
 }
 
 /**

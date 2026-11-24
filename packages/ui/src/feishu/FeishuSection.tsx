@@ -1,4 +1,4 @@
-// 设备详情里“飞书”一节：每个应用一行（头像、机器人名、分配的经理、连接状态点），点一行进应用详情；
+// 设备详情里“飞书”一节：每个应用一行（头像、机器人名、分配的经理、待确认配对数、连接状态点），点一行进应用详情；
 // 标题行的 + 打开添加向导（这条连接不是设备管理员时不可点，写明原因）。设备服务不支持（没有 litchFeishu）不出这一节。
 import type { DeviceView } from '@litch/core'
 import { useState } from 'react'
@@ -99,6 +99,11 @@ export function FeishuSection({
                   <b className="ext-row-name ell">{app.name || app.appId}</b>
                   <span className="ext-row-meta ell">{managerName(app.managerId)}</span>
                   <span className="grow" />
+                  {app.pendingPairings ? (
+                    <span className="pill wait fs-nowrap" data-feishu-pending-pairings>
+                      {t('feishu.binding.pending', { n: app.pendingPairings })}
+                    </span>
+                  ) : null}
                   <span className="ext-row-meta ell" data-tone={STATE_TONE[state]}>
                     {t(`feishu.state.${state}`)}
                     {reason ? ` · ${t(`feishu.conn.${reason}`)}` : ''}
