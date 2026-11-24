@@ -15,6 +15,8 @@ interface Snapshot {
   onlineVersionId: string
   scopes: Set<string>
   callbacks: Set<string>
+  /** 开着机器人等能力的应用发布时必须带上两端的默认能力，原样取当前值 */
+  abilities: { mobile_default_ability?: string; pc_default_ability?: string }
 }
 
 async function snapshot(api: FeishuApi): Promise<Snapshot> {
@@ -52,7 +54,11 @@ async function snapshot(api: FeishuApi): Promise<Snapshot> {
     scopes?: { scope_name?: string; scope_type?: string; grant_status?: number }[]
   }>('GET', '/open-apis/application/v6/scopes')
   const callbackInfo = (app.callback_info ?? {}) as { subscribed_callbacks?: unknown }
+  const abilities: Snapshot['abilities'] = {}
+  for (const key of ['mobile_default_ability', 'pc_default_ability'] as const)
+    if (typeof app[key] === 'string' && app[key]) abilities[key] = app[key] as string
   return {
+    abilities,
     status: typeof app.status === 'number' ? app.status : undefined,
     versions,
     onlineVersionId: String(app.online_version_id ?? ''),
@@ -162,6 +168,7 @@ export async function upgradeCapability(
     `/open-apis/application/v7/applications/${api.appId}/publish`,
     {
       body: {
+        ...shot.abilities,
         version: nextVersion(shot.versions),
         remark: 'Litch 补齐所需的权限、事件和回调',
         changelog: '补齐 Litch 接入所需的权限、事件订阅和回调',

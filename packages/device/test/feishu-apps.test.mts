@@ -326,6 +326,9 @@ test('能力自检列出缺项；补申请只追加清单里的并提交发布',
     callback: { add_callbacks: ['card.action.trigger'] },
   })
   assert.equal(fake.publishes.length, 1)
+  // 发布带上应用当前的两端默认能力，缺了平台回 210304
+  assert.equal(fake.publishes[0]?.body.mobile_default_ability, 'bot')
+  assert.equal(fake.publishes[0]?.body.pc_default_ability, 'bot')
   // 重发同一操作不再提交
   await admin.call(M.appUpgrade, { appId: APP, operationId: 'u' })
   assert.equal(fake.publishes.length, 1)

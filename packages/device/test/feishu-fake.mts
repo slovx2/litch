@@ -602,6 +602,8 @@ export class FakeFeishu {
           app_id: app.appId,
           status: 1,
           online_version_id: 'v1',
+          mobile_default_ability: 'bot',
+          pc_default_ability: 'bot',
           callback_info: { subscribed_callbacks: [...app.callbacks] },
         },
       })
@@ -638,7 +640,16 @@ export class FakeFeishu {
         return ok({})
       }
       if (configMatch[2] === 'publish' && method === 'POST') {
-        this.publishes.push({ appId: app.appId, body: json() })
+        const body = json()
+        // 开着机器人能力时两端默认能力是必填，缺了回 210304（真实平台的行为）
+        if (
+          !body.mobile_default_ability ||
+          !body.pc_default_ability ||
+          !body.remark ||
+          !body.changelog
+        )
+          return reply({ code: 210304, msg: 'Missing required fields' }, 400)
+        this.publishes.push({ appId: app.appId, body })
         return ok({ version_id: `v${this.publishes.length + 1}` })
       }
     }
