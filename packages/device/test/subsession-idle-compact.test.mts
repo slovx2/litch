@@ -47,8 +47,10 @@ async function setup() {
   })
   const id = manager.id as string
   const samples = new Map<string, IdleCompactSnapshot>()
+  const engines = new Map<string, typeof claude>([[threadId, claude]])
+  const engineOf = (target: string) => engines.get(target) ?? claude
   const settle = async (target: string) => {
-    const ended = claude.end(target)
+    const ended = engineOf(target).end(target)
     await until(() => !tree.isActive(target), `${target} 闲置`)
     samples.set(target, {
       idle: true,
@@ -63,27 +65,30 @@ async function setup() {
   samples.set(threadId, {} as IdleCompactSnapshot)
   await settle(threadId)
   samples.get(threadId)!.usedTokens = 10_000
-  claude.handlers[IDLE_COMPACT_READ] = (params) => {
-    const target = String(params.threadId)
-    reads.push(target)
-    const sample = samples.get(target)
-    assert.ok(sample, `没有 ${target} 的用量夹具`)
-    return { ...sample, idle: !busy.has(target) && !claude.running(target) }
-  }
-  claude.handlers['thread/compact/start'] = (params) => {
-    const target = String(params.threadId)
-    assert.deepEqual(params.litchIdleCompact, { ...samples.get(target), idle: true })
-    attempts.push(target)
-    const turn = claude.selfTurn(target)
-    turn.items.push({ type: 'contextCompaction', id: `compact-${attempts.length}` })
-    return { turnId: turn.id }
+  // Claude 与 Pi 引擎的空闲探测和带快照压缩形状相同，两个假引擎装同一套
+  for (const engine of [claude, pi]) {
+    engine.handlers[IDLE_COMPACT_READ] = (params) => {
+      const target = String(params.threadId)
+      reads.push(target)
+      const sample = samples.get(target)
+      assert.ok(sample, `没有 ${target} 的用量夹具`)
+      return { ...sample, idle: !busy.has(target) && !engine.running(target) }
+    }
+    engine.handlers['thread/compact/start'] = (params) => {
+      const target = String(params.threadId)
+      assert.deepEqual(params.litchIdleCompact, { ...samples.get(target), idle: true })
+      attempts.push(target)
+      const turn = engine.selfTurn(target)
+      turn.items.push({ type: 'contextCompaction', id: `compact-${attempts.length}` })
+      return { turnId: turn.id }
+    }
   }
   const known = new Set([threadId])
   /** 子会话结束会叫醒父会话；把这些唤醒回合都跑完，让各层都闲着、没有排队的回报。 */
   const quiet = async () => {
     for (let round = 0; round < 6; round++) {
       await new Promise((resolve) => setTimeout(resolve, 60))
-      for (const target of known) if (claude.running(target)) await settle(target)
+      for (const target of known) if (engineOf(target).running(target)) await settle(target)
     }
     for (const target of known)
       assert.equal(tree.store.notes(target).length, 0, `${target} 还有排队的回报`)
@@ -96,20 +101,18 @@ async function setup() {
       'model',
     )
     const engine = harness === 'pi' ? pi : claude
+    engines.set(started.threadId, engine)
     await until(() => engine.running(started.threadId), `${title} 启动`)
-    if (harness === 'pi') {
-      pi.end(started.threadId)
-      await until(() => !tree.isActive(started.threadId), `${title} 闲置`)
-    } else {
-      known.add(started.threadId)
-      await settle(started.threadId)
-    }
+    known.add(started.threadId)
+    await settle(started.threadId)
     await quiet()
     return started.threadId
   }
   const line = await child(threadId, 'Claude 工作线')
   const grandchild = await child(line, '子线的子线')
   const piLine = await child(threadId, 'Pi 工作线', 'pi')
+  // Pi 工作线默认用量低：各用例只看 Claude 的两层，Pi 单独一个用例
+  samples.get(piLine)!.usedTokens = 10_000
   external.store.config.saveAssignment(
     { managerId: id, identityId: 'identity', repoIds: ['r1'] },
     0,
@@ -118,6 +121,7 @@ async function setup() {
   )
   return {
     child,
+    pi,
     env,
     client,
     claude,
@@ -148,19 +152,20 @@ async function setup() {
     /** 结束正在进行的压缩回合，压缩后用量降到 after。 */
     async finish(after: number) {
       for (const target of new Set(attempts)) {
-        if (!claude.running(target)) continue
-        const turn = claude.current(target)!
+        const engine = engineOf(target)
+        if (!engine.running(target)) continue
+        const turn = engine.current(target)!
         const sample = samples.get(target)!
         sample.usedTokens = after
         sample.usageTurnId = turn.id
-        claude.end(target)
+        engine.end(target)
       }
       await tree.settleIdleCompacts()
     },
   }
 }
 
-test('各层 Claude 子会话空闲超阈值后各压一次，记录进工作线；经理用量低不压，Pi 工作线不探测', async () => {
+test('各层 Claude 子会话空闲超阈值后各压一次，记录进工作线；经理和 Pi 工作线用量低不压', async () => {
   const f = await setup()
   try {
     // 计时起点取会话登记时间（真实时钟的秒）和最近活动的较晚者，测试时钟与之有亚秒差，边界留余量。
@@ -171,7 +176,7 @@ test('各层 Claude 子会话空闲超阈值后各压一次，记录进工作线
     f.start()
     await until(() => f.attempts.length === 2, '工作线和子线都进入压缩')
     assert.deepEqual(new Set(f.attempts), new Set([f.line, f.grandchild]))
-    assert.ok(!f.reads.includes(f.piLine), 'Pi 会话不走 Claude 的空闲探测')
+    assert.ok(f.reads.includes(f.piLine), 'Pi 工作线也探测')
     await f.finish(30_000)
     const lines = f.managers.lines.lines(f.id)
     const record = (threadId: string) =>
@@ -187,8 +192,12 @@ test('各层 Claude 子会话空闲超阈值后各压一次，记录进工作线
       0,
     )
     f.advance(120 * minute)
-    await f.scan()
-    await f.scan()
+    // 每轮最多两条子会话在探测，多跑几轮让三条都看过一遍（不指定经理，不清掉已试过的记号）
+    for (let round = 0; round < 3; round++) {
+      f.advance(minute)
+      f.managers.idleCompact.tick()
+      await f.tree.settleIdleCompacts()
+    }
     assert.equal(f.attempts.length, 2, '同一段空闲只试一次')
     const lineReads = () => f.reads.filter((id) => id === f.line || id === f.grandchild).length
     const reads = lineReads()
@@ -329,6 +338,30 @@ test('同时最多两条子会话在压缩，其余等下一轮', async () => {
     await until(() => f.attempts.length === 3, '名额空出后压第三条')
     assert.deepEqual(new Set(f.attempts), new Set([f.line, f.grandchild, third]))
     await f.finish(20_000)
+  } finally {
+    await f.env.close()
+  }
+})
+
+test('Pi 子会话按同样规则压缩：经 Pi 引擎的带快照压缩，记录进工作线', async () => {
+  const f = await setup()
+  try {
+    for (const target of [f.line, f.grandchild]) f.busy.add(target)
+    f.samples.get(f.piLine)!.usedTokens = 90_000
+    f.advance(51 * minute)
+    f.start()
+    await until(() => f.attempts.length === 1, 'Pi 工作线进入压缩')
+    assert.deepEqual(f.attempts, [f.piLine])
+    assert.ok(f.pi.running(f.piLine), '压缩回合在 Pi 引擎上')
+    await f.finish(15_000)
+    const record = f.managers.lines
+      .lines(f.id)
+      .find((line) => line.threadId === f.piLine)?.idleCompactLast
+    assert.deepEqual(record, { at: f.now(), before: 90, after: 15 })
+    assert.ok(f.logs.some((line) => line.includes('"harness":"pi"')))
+    f.advance(60 * minute)
+    await f.scan()
+    assert.equal(f.attempts.length, 1, '同一段空闲只试一次')
   } finally {
     await f.env.close()
   }

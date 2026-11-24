@@ -26,18 +26,25 @@ function usage(sample: IdleCompactSnapshot): number | null {
     : null
 }
 
-/** 同时进行的子会话压缩上限：每个都要恢复一个 Claude CLI 进程，经理本身不受此限。 */
+/**
+ * 有带条件压缩入口（litch/thread/idleCompact/read、thread/compact/start 带快照）的引擎。
+ * Codex 的压缩不能按快照核对、也不交回回合号；OpenCode、DSH、ACP 没有这套入口。
+ */
+const IDLE_COMPACT_HARNESSES = new Set(['claude-code', 'pi'])
+
+/** 同时进行的子会话压缩上限：每个都要载入一个会话并请模型写摘要，经理本身不受此限。 */
 const LINE_RUNNING_LIMIT = 2
 
 interface Target {
   threadId: string
+  harness: string
   /** 本机没见过活动时的计时起点，Unix 毫秒。 */
   since: number
   line: boolean
 }
 
 /**
- * Claude Code 经理及其各层 Claude Code 子会话的空闲压缩。子会话沿用所属经理的开关和阈值，
+ * Claude Code 经理及其各层 Claude Code、Pi 子会话的空闲压缩。子会话沿用所属经理的开关和阈值，
  * 所属关系按会话树的祖先判断（ManagerLines.managerFor）。
  */
 export class ManagerIdleCompact {
@@ -57,7 +64,12 @@ export class ManagerIdleCompact {
   }
 
   activity(harness: string, threadId: string, seconds: unknown): void {
-    if (this.closed || harness !== 'claude-code' || !this.owner.lines.managerFor(threadId)) return
+    if (
+      this.closed ||
+      !IDLE_COMPACT_HARNESSES.has(harness) ||
+      !this.owner.lines.managerFor(threadId)
+    )
+      return
     const now = this.now()
     const at =
       typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0
@@ -84,15 +96,20 @@ export class ManagerIdleCompact {
     if (threadId === manager.threadId)
       return !external?.store.queue.hasPendingDelivery(manager.id) && !store.hasDelivery(manager.id)
     return (
-      tree.store.parentOf(threadId)?.harness === 'claude-code' &&
+      IDLE_COMPACT_HARNESSES.has(tree.store.parentOf(threadId)?.harness ?? '') &&
       lines.managerFor(threadId)?.id === manager.id
     )
   }
 
-  /** 经理本身在前，其后是各层没脱离的 Claude Code 子会话（广度优先）。 */
+  /** 经理本身在前，其后是各层没脱离、引擎支持的子会话（广度优先）。 */
   private targets(manager: Manager, byParent: Map<string, LineageRow[]>): Target[] {
     const found: Target[] = [
-      { threadId: manager.threadId, since: manager.createdAt * 1000, line: false },
+      {
+        threadId: manager.threadId,
+        harness: manager.harness,
+        since: manager.createdAt * 1000,
+        line: false,
+      },
     ]
     const queue = [manager.threadId]
     const seen = new Set(queue)
@@ -101,8 +118,13 @@ export class ManagerIdleCompact {
         if (seen.has(row.threadId)) continue
         seen.add(row.threadId)
         queue.push(row.threadId)
-        if (row.harness === 'claude-code')
-          found.push({ threadId: row.threadId, since: row.createdAt * 1000, line: true })
+        if (IDLE_COMPACT_HARNESSES.has(row.harness))
+          found.push({
+            threadId: row.threadId,
+            harness: row.harness,
+            since: row.createdAt * 1000,
+            line: true,
+          })
       }
     }
     return found
@@ -124,7 +146,7 @@ export class ManagerIdleCompact {
     }
     for (const manager of managers) {
       const { idleMinutes } = manager.idleCompact ?? DEFAULT_MANAGER_IDLE_COMPACT
-      for (const { threadId, since, line } of this.targets(manager, byParent)) {
+      for (const { threadId, harness, since, line } of this.targets(manager, byParent)) {
         if (only) {
           this.nextProbe.delete(threadId)
           this.settled.delete(threadId)
@@ -136,7 +158,7 @@ export class ManagerIdleCompact {
         if (line && this.running.size >= LINE_RUNNING_LIMIT) continue
         this.nextProbe.set(threadId, now + PROBE_MS)
         const began = this.owner.tree.runIdleCompact(threadId, (started) =>
-          this.run(manager.id, threadId, line, now, started).finally(() =>
+          this.run(manager.id, threadId, harness, line, now, started).finally(() =>
             this.running.delete(threadId),
           ),
         )
@@ -148,6 +170,7 @@ export class ManagerIdleCompact {
   private async run(
     id: string,
     threadId: string,
+    harness: string,
     line: boolean,
     probedAt: number,
     started: (turnId: string) => void,
@@ -178,7 +201,7 @@ export class ManagerIdleCompact {
     let committing = false
     let dispatchedAt = 0
     try {
-      link = await tree.link('claude-code')
+      link = await tree.link(harness)
       const read = () =>
         link!.request(
           IDLE_COMPACT_READ,
@@ -190,7 +213,7 @@ export class ManagerIdleCompact {
       // 子会话还有没答的提问（收尾时的 ask 等）也算在等用户，不压缩。
       if (line && (await tree.awaitingAnswer(threadId))) return
       if (this.now() - probedAt > PREFLIGHT_MS) return
-      await tree.watch('claude-code', threadId)
+      await tree.watch(harness, threadId)
       // 恢复、调度或订阅的等待期间可能收到新输入，因此在启动前再查一次。
       const current = await read()
       const plan = ready(current)
@@ -218,7 +241,7 @@ export class ManagerIdleCompact {
           `manager.idleCompact.started ${JSON.stringify({
             managerId: id,
             threadId,
-            ...(line ? { line: true } : {}),
+            ...(line ? { line: true, harness } : {}),
             at: dispatchedAt,
             idleMs: dispatchedAt - plan.at,
             before: plan.before,
@@ -251,7 +274,7 @@ export class ManagerIdleCompact {
         )
       }
     } finally {
-      if (link) tree.releaseLater('claude-code', threadId)
+      if (link) tree.releaseLater(harness, threadId)
     }
   }
 

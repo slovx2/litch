@@ -71,7 +71,9 @@ export class ManagerLines {
         const report = this.store.report(child.threadId)
         const startedAt = running ? (this.began.get(child.threadId) ?? null) : null
         const compacted =
-          child.harness === 'claude-code' ? this.store.idleCompact(child.threadId).last : undefined
+          child.harness === 'claude-code' || child.harness === 'pi'
+            ? this.store.idleCompact(child.threadId).last
+            : undefined
         return {
           ...(compacted ? { idleCompactLast: compacted } : {}),
           threadId: child.threadId,
