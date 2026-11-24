@@ -331,6 +331,7 @@ export function IssueThread({
               <Fold
                 open={relationsOpen}
                 onToggle={() => setRelationsOpen(!relationsOpen)}
+                dense
                 testID="issue-relations-toggle"
               >
                 <Text style={{ color: c.ink3, fontSize: font.size.meta }}>

@@ -38,6 +38,8 @@ export interface Palette {
   /** 反白：小标签、图片上的按钮 */
   invBg: string
   invFg: string
+  /** 弹层后面压暗背景的半透明遮罩 */
+  scrim: string
   wire: Record<WireColor, string>
 }
 
@@ -68,6 +70,7 @@ const retroLight: Palette = {
   selFg: '#f4f0e2',
   invBg: '#1a1a14',
   invFg: '#f4f0e2',
+  scrim: 'rgba(26,26,20,0.42)',
   wire: {
     blue: '#2f6fe0',
     orange: '#d2651a',
@@ -104,6 +107,7 @@ const retroDark: Palette = {
   selFg: '#07100a',
   invBg: '#cdeed4',
   invFg: '#07100a',
+  scrim: 'rgba(0,0,0,0.6)',
   wire: {
     blue: '#6ea3ff',
     orange: '#ff9a4d',
@@ -141,6 +145,7 @@ const standardLight: Palette = {
   selFg: '#191a21',
   invBg: '#191a21',
   invFg: '#ffffff',
+  scrim: 'rgba(20,22,34,0.4)',
   wire: retroLight.wire,
 }
 
@@ -168,6 +173,7 @@ const standardDark: Palette = {
   selFg: '#e7e8ef',
   invBg: '#e7e8ef',
   invFg: '#111217',
+  scrim: 'rgba(0,0,0,0.6)',
   wire: retroDark.wire,
 }
 
@@ -196,6 +202,7 @@ const humanLight: Palette = {
   selFg: '#24282c',
   invBg: '#24282c',
   invFg: '#fffdf8',
+  scrim: 'rgba(40,34,22,0.4)',
   wire: {
     blue: '#3b6ea8',
     orange: '#b9652b',
@@ -233,6 +240,7 @@ const humanDark: Palette = {
   selFg: '#ece7d9',
   invBg: '#ece7d9',
   invFg: '#111923',
+  scrim: 'rgba(0,0,0,0.6)',
   wire: {
     blue: '#86b0e0',
     orange: '#e3a06c',

@@ -761,7 +761,7 @@ Follow-up inputs grow with their content up to a limit, then scroll internally. 
 
 手机首页有“经理”入口（第二行是待处理合计），进行中的经理按设备分组，已结束的经理汇总在默认收起的一组，标题显示数量；一组只有一台设备时省略设备名；首页「最近」里经理那一行带“经理”小标签，工作线缩进显示在经理下面，行尾小箭头可收起，开合记在手机上；点击经理或工作线均打开对话详情。经理列表的记号和文字与桌面侧栏相同（见“看板答复与待办提示”）；有待处理时行尾是等待色的计数胶囊，读屏念整行时带上“N 待处理”。
 
-进入经理是一个工作台：标题是经理名，副标题是状态（运行中、N 条工作线运行中、空闲等），下面一排页签“对话 · 控制台 · 工作线 · 概览”，直接进入时默认打开对话；显式链接仍打开目标页签，从其他页面返回时保留已选页签。对话就是经理会话本身，和普通会话页一样能发消息、处理审批和工作线的审批；切到别的页签再回来，滚动位置和没发的草稿都在，只有对话页签显示着才把经理的回复标为已读。页签上的记号：对话在经理回合在跑或等人时有运行记号，有新回复时有未读点；控制台是等待色的待处理数（口径同桌面）；工作线是在跑的条数，有工作线等人或出错时换成等待记号。经理在对话里写到的看板编号（D-n、R-n、P-n、I-n）可以点：经理事项到概览并展开那一项，其他议题从底部拉起半屏议题卡，就在里面作答、忽略或交付，交上去后议题卡自动关上、回到对话原处；卡上的 ↗ 或标题是“在控制台打开”，点讨论记号也会到控制台并打开那条讨论。右上角“⋯”里是经理会话的建议任务、后台任务、用量和压缩上下文。
+进入经理是一个工作台：标题是经理名，副标题是状态（运行中、N 条工作线运行中、空闲等），下面一排页签“对话 · 控制台 · 工作线 · 概览”，直接进入时默认打开对话；显式链接仍打开目标页签，从其他页面返回时保留已选页签。对话就是经理会话本身，和普通会话页一样能发消息、处理审批和工作线的审批；切到别的页签再回来，滚动位置和没发的草稿都在，只有对话页签显示着才把经理的回复标为已读。页签上的记号：对话在经理回合在跑或等人时有运行记号，有新回复时有未读点；控制台是等待色的待处理数（口径同桌面）；工作线是在跑的条数，有工作线等人或出错时换成等待记号。经理在对话里写到的看板编号（D-n、R-n、P-n、I-n）可以点：经理事项到概览并展开那一项，其他议题从底部拉起议题卡，就在里面作答、忽略或交付，交上去后议题卡自动关上、回到对话原处；卡上的 ↗ 或标题是“在控制台打开”，点讨论记号也会到控制台并打开那条讨论。右上角“⋯”里是经理会话的建议任务、后台任务、用量和压缩上下文。
 
 On phones, the Managers list groups ended managers under a collapsed heading with a count. Device names appear only in groups that span multiple devices. Opening a manager takes you to Chat, the first tab. Links still open their target tab.
 
@@ -771,7 +771,7 @@ On phones, the Managers list groups ended managers under a collapsed heading wit
 手机沿用建议的开始/编辑/忽略，支持请求交付/文字回复、决策答复、报告已阅和讨论历史；创建经理、派活设置及完整经理事项看板仍在桌面。
 用户主动新建议题尚未开放。手机也提供只读经理事项供关联定位；每张卡可单独提交，也可用控制台底部的提交条跨卡一起提交（同桌面）。
 
-议题关联栏按来源、派生、相关分组（只有一组时不写组名），宽卡在右侧，窄卡在顶部折叠。编号链接可跳到议题或经理事项，桌面悬停显示标题与状态；手机长按可查看。工作线打开会话，文件进入文件查看器，分支与提交打开只读仓库内容。经理事项和工作线也能回到相关议题。经理创建对象时可填写 source/related，之后可用 relate 补充。已有的阻塞关系、依据和链接也显示在关联栏。
+议题关联栏按来源、派生、相关分组（只有一组时不写组名），宽卡在右侧，窄卡在顶部折叠；手机上关联、依据紧凑地排在正文后面，默认折叠。编号链接可跳到议题或经理事项，桌面悬停显示标题与状态；手机长按可查看。工作线打开会话，文件进入文件查看器，分支与提交打开只读仓库内容。经理事项和工作线也能回到相关议题。经理创建对象时可填写 source/related，之后可用 relate 补充。已有的阻塞关系、依据和链接也显示在关联栏。
 桌面经理模式的追问存为本地草稿，可与答案和交付同批提交；临时对话立即发起。问答、旧版本与关联存储在设备上，跨客户端可读；已处理建议的讨论保留在“已处理建议”分组。
 
 
@@ -868,7 +868,7 @@ Opening a conversation from a suggestion source, decision, item or other board l
 
 控制台卡片标题行的讨论图标显示回复数；当前客户端内新到的回复、等待回复或未发出的追问带小点。点开后，全部问答按时间排在看板底部分屏，卡片列表独立滚动，当前卡片有选中记号。一次只打开一条讨论，换帖子会替换内容。拖动分隔条调整高度并保存在本机；聚焦分隔条后也可用上下方向键调整。点“查看正文”定位卡片，点关闭图标或按 Esc 关闭，未发出的草稿保留。窄窗口仍为卡片列表留出空间。
 
-手机使用半屏底部抽屉，向上拖把手或点展开图标可到全屏，向下拖可收回半屏、再拖关闭；点标题关闭并回到卡片。两端的讨论默认展开，也可手动收起并记住。追问默认发到已有临时会话，没有临时问答时发给经理，输入框旁可切换。原来的草稿计数、随答复提交和已结束议题的草稿规则不变。全局建议窗口中的内嵌讨论仍在超过 1200 字符时默认收起。
+手机使用约占八成屏高的底部抽屉，背后的页面压暗，点暗处关闭；向上拖把手或点展开图标可到全屏，向下拖可收回默认高度、再拖关闭；点标题关闭并回到卡片。两端的讨论默认展开，也可手动收起并记住。追问默认发到已有临时会话，没有临时问答时发给经理，输入框旁可切换。原来的草稿计数、随答复提交和已结束议题的草稿规则不变。全局建议窗口中的内嵌讨论仍在超过 1200 字符时默认收起。
 
 待定决策更新后，已选的选项和已写的文字都保留，提示“决策已更新”，批量提交前先核对并确认新版本；没有填写的草稿静默清空。讨论输入框保留草稿和编辑位置，经理追问提示原帖已更新，两个页签都可继续编辑或单独发送，单独追问使用当前版本。已结束的议题继续保留草稿查看和丢弃入口。手机采用相同规则。推荐选项保留“推荐”标记，直接点选项选择。
 
@@ -880,7 +880,7 @@ On desktop and mobile, paged boards remember the expanded card and scroll positi
 
 The discussion icon in each console card header shows its reply count. A dot indicates a new reply received in this client session, a pending reply or an unsent question. Open it to read all questions and answers chronologically in a pane below the board. The card list scrolls independently and highlights the selected card. Opening another post replaces the single pane. Drag its separator to resize it; the height is saved locally. The focused separator also accepts the Up and Down keys. Select View description to locate the card, or close with the icon or Esc. Drafts survive closing, and narrow windows retain space for the card list.
 
-On phone, discussions open in a half-screen bottom drawer. Drag the handle up or use the expand icon for full screen; drag down to return to half screen, then again to close. Selecting the title closes the drawer and returns to its card. Discussions start expanded on both platforms and remember manual collapse choices. Follow-ups default to the existing temporary conversation, or to the manager when there is none; switch targets beside the input. Draft counts, submission with answers and ended-issue draft rules are unchanged. Inline discussions in the global suggestions window still start collapsed above 1,200 characters.
+On phone, discussions open in a bottom drawer about 80% of the screen tall, with the page behind it dimmed; tap the dimmed area to close. Drag the handle up or use the expand icon for full screen; drag down to return to the default height, then again to close. Selecting the title closes the drawer and returns to its card. Discussions start expanded on both platforms and remember manual collapse choices. Follow-ups default to the existing temporary conversation, or to the manager when there is none; switch targets beside the input. Draft counts, submission with answers and ended-issue draft rules are unchanged. Inline discussions in the global suggestions window still start collapsed above 1,200 characters.
 
 When an open decision changes, existing choices and text are kept with a review prompt. Confirm the new version before submitting. Empty drafts clear silently. Ended issues retain their existing draft review/discard flow. The phone follows the same rules. Recommended options retain their marker; select the option directly.
 

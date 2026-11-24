@@ -35,6 +35,29 @@ export const IssueContext = createContext<{
   features: ManagerFeaturesView
   open(id: string): void
 } | null>(null)
+/** 议题卡正文后面的附注：关联、依据、落地几行紧挨着排，一行都没有就不占位置 */
+export function IssueNotes({
+  id,
+  basis,
+  landed,
+}: {
+  id: string
+  basis?: ManagerLink[]
+  landed?: ManagerLink[]
+}) {
+  const context = useContext(IssueContext)
+  if (!context) return null
+  const related = Object.values(managerRelationGroups(context.board, { kind: 'issue', target: id }))
+  if (!related.some((g) => g.length) && !basis?.length && !landed?.length) return null
+  return (
+    <View testID={`issue-notes:${id}`}>
+      <IssueRelations id={id} />
+      {basis?.length ? <IssueRelations id={id} basis={basis} /> : null}
+      {landed?.length ? <IssueRelations id={id} landed={landed} /> : null}
+    </View>
+  )
+}
+
 export function IssueRelations({
   id,
   kind = 'issue',
@@ -127,6 +150,7 @@ export function IssueRelations({
         open={expanded}
         testID={`${basis ? 'evidence' : landed ? 'landed' : 'relations'}:${id}`}
         onToggle={() => setExpanded(!expanded)}
+        dense
         style={{ alignSelf: 'flex-start' }}
       >
         <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
