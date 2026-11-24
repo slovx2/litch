@@ -235,6 +235,8 @@ export interface ManagerLine {
   report: { text: string; at: number } | null
   /** 从最近 wrap_up 回报中逐行取“没验：”开头的内容，保留前缀。 */
   unverified: string[]
+  /** Claude Code 子会话按所属经理的设置空闲压缩后，最近一次成功的记录。 */
+  idleCompactLast?: ManagerIdleCompactRecord
 }
 export type ManagerActivitySource =
   | { kind: 'manager' | 'user' | 'system' }

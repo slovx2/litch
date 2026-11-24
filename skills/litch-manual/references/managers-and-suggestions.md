@@ -358,6 +358,20 @@ conversation. Creation, board answers and ending have their own event labels as 
 有输入或投递在排队时不压缩。自动压缩走 Claude 原生路径，期间到达的回报和外部提醒继续排队，
 压缩完成后投递。同一轮空闲最多尝试一次。看板概览显示最近一次成功的时间和压缩前后占用。
 
+同一设置也作用于这个经理派出的各层 Claude Code 子会话（工作线、工作线再派出的子会话），
+没有单独的开关；关闭经理的开关，子会话也一起停。子会话按同样的计时和阈值判断，正在跑回合、
+有后台任务、有待处理的审批或没答的提问、还有回报排队时不压缩。同一设备上最多同时压两条子会话。
+Codex、Pi、DSH、OpenCode 等其他 harness 的子会话不自动压缩。工作线页签的卡片上显示该子会话
+最近一次成功的压缩，会话里也有这次压缩的记录。
+
+The same setting applies to every Claude Code session the manager starts, at any depth: work lines and
+the sessions they start. There is no separate switch; turning the manager’s setting off stops them
+too. Sub-sessions use the same clock and thresholds, and are skipped while a turn or background task is
+running, an approval or question is unanswered, or reports are queued. A device compacts at most two
+sub-sessions at a time. Sub-sessions on Codex, Pi, DSH, OpenCode and other harnesses are not compacted
+automatically. Each work line card shows its most recent successful compaction, which also appears in
+the session.
+
 On desktop, open a manager’s Settings → Environment; the Unattended section is saved with the page’s Save
 button. On a phone, tap the settings button on the manager page. It appears only for Claude Code
 managers on devices with external sources, and stays disabled with a reason until GitHub repositories

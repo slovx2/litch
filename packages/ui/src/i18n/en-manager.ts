@@ -395,7 +395,7 @@ export const enManager = {
   'manager.unattended': 'Unattended',
   'manager.idleCompact.enabled': 'Compact context when idle',
   'manager.idleCompact.hint':
-    'Compacts once the manager has been idle this long and context usage is above the threshold. Keep the idle time under the prompt cache lifetime.',
+    'Compacts the manager and its Claude Code sub-sessions once each has been idle this long and context usage is above the threshold. Keep the idle time under the prompt cache lifetime.',
   'manager.idleCompact.unavailable': 'Assign GitHub repositories to this manager to use this.',
   'manager.idleCompact.minutes': 'Idle time',
   'manager.idleCompact.minutesUnit': 'min',
