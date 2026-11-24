@@ -121,8 +121,30 @@ const samples: {
     { chat },
   ],
   [FEISHU_METHOD.chatUnaccess]: [
-    { appId, chatId, expectedRevision: 3, deleteRecords: true },
-    { chat: { ...chat, access: null } },
+    { appId, chatId, expectedRevision: 3, deleteRecords: false },
+    { chat: { ...chat, access: null, records: { messages: 12, oldestAt: 5 } } },
+  ],
+  [FEISHU_METHOD.chatBackfill]: [
+    { appId, chatId, start: 100, end: 200 },
+    {
+      chat: {
+        ...chat,
+        records: {
+          messages: 12,
+          oldestAt: 5,
+          backfill: {
+            kind: 'manual',
+            state: 'running',
+            start: 100,
+            end: 200,
+            fetched: 0,
+            truncated: false,
+            startedAt: 300,
+          },
+          gap: { at: 290, start: 280, end: 290, fetched: 3, complete: true },
+        },
+      },
+    },
   ],
 }
 
@@ -181,6 +203,11 @@ test('入站校验拒绝畸形参数，结果不收秘密', () => {
   assert.equal(
     isFeishuMethodParams(FEISHU_METHOD.chatUnaccess, { appId, chatId, expectedRevision: 3 }),
     false,
+  )
+  assert.equal(
+    isFeishuMethodParams(FEISHU_METHOD.chatBackfill, { appId, chatId, start: 200, end: 200 }),
+    false,
+    '补历史的窗口不能为空',
   )
   assert.equal(wire(FEISHU_METHOD.appGet, 'result', { app: { ...app, appSecret: 'x' } }), false)
   assert.equal(

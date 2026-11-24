@@ -21,6 +21,7 @@ export const FEISHU_METHOD = {
   chatAccess: 'litch/feishu/chat/access',
   chatUpdate: 'litch/feishu/chat/update',
   chatUnaccess: 'litch/feishu/chat/unaccess',
+  chatBackfill: 'litch/feishu/chat/backfill',
 } as const
 
 export const FEISHU_NOTIFICATION = {
@@ -162,7 +163,43 @@ export interface FeishuChat {
   botPresent: boolean
   access: FeishuChatAccess | null
   updatedAt: number
+  /** 设备上这个群的记录；取消接入但留着记录的群也有（界面标“未接入（有记录）”） */
+  records?: FeishuChatRecords
 }
+
+/** 补历史：接入时补最近 7 天，或手动补一段；时间是秒 */
+export interface FeishuBackfill {
+  kind: 'access' | 'manual'
+  state: 'running' | 'done' | 'failed'
+  start: number
+  end: number
+  fetched: number
+  /** 窗口里超过单次上限，只留了最新的那些 */
+  truncated: boolean
+  startedAt: number
+  finishedAt?: number
+}
+
+/** 最近一次补缺口（每次连上都补断线期间的消息）；时间是秒 */
+export interface FeishuGapFill {
+  at: number
+  start: number
+  end: number
+  fetched: number
+  /** false：超过单次上限，这段没补全 */
+  complete: boolean
+}
+
+export interface FeishuChatRecords {
+  messages: number
+  /** 最早一条的时间（秒） */
+  oldestAt?: number
+  backfill?: FeishuBackfill
+  gap?: FeishuGapFill
+}
+
+/** 单次补历史最多补多少条 */
+export const FEISHU_BACKFILL_LIMIT = 1000
 
 /** 群成员（成员选择器用）；判断是否组织外的人要另申请企业信息权限，不做 */
 export type FeishuMember = FeishuPerson
@@ -244,6 +281,11 @@ export interface FeishuRequests {
   /** deleteRecords：同时删这个群的消息记录（D-164，默认由客户端勾上） */
   [FEISHU_METHOD.chatUnaccess]: Request<
     { appId: string; chatId: string; expectedRevision: number; deleteRecords: boolean },
+    { chat: FeishuChat }
+  >
+  /** 手动补一段历史（秒）；补的进度在群的 records.backfill 里 */
+  [FEISHU_METHOD.chatBackfill]: Request<
+    { appId: string; chatId: string; start: number; end: number },
     { chat: FeishuChat }
   >
 }

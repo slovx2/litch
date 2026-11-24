@@ -39,6 +39,7 @@ export const FEISHU_COMMAND = {
   'feishu.chat.access': FEISHU_METHOD.chatAccess,
   'feishu.chat.update': FEISHU_METHOD.chatUpdate,
   'feishu.chat.unaccess': FEISHU_METHOD.chatUnaccess,
+  'feishu.chat.backfill': FEISHU_METHOD.chatBackfill,
 } as const
 
 export type FeishuCommandName = keyof typeof FEISHU_COMMAND

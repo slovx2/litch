@@ -1,4 +1,5 @@
 // 设备的飞书来源：管全部应用的凭据、长连接和配置。随设备进程启动，客户端断开照常运行。
+import { join } from 'node:path'
 import {
   FEISHU_APP_ID,
   FEISHU_NOTIFICATION,
@@ -20,9 +21,14 @@ import { checkCapability, upgradeCapability } from './capability.mjs'
 import { FeishuChats } from './chats.mjs'
 import { FeishuConnectionRunner, type FeishuEventHandler } from './connection.mjs'
 import { FeishuCredentials } from './credentials.mjs'
+import { ImMessages, openImMessages } from './messages.mjs'
+import { FeishuRecords } from './records.mjs'
 import { FeishuRegistrations } from './registration.mjs'
 import { SpeechPolicies } from './speech-policy.mjs'
 import { type FeishuAppRecord, FeishuStore } from './store.mjs'
+
+/** 附件下载到设备状态目录下的这里（0700） */
+export const FEISHU_ATTACHMENTS_DIRECTORY = 'feishu-attachments'
 
 export interface DeviceFeishuOptions {
   stateDirectory: string
@@ -60,6 +66,8 @@ export class DeviceFeishuService {
   readonly options: DeviceFeishuOptions
   readonly policies: SpeechPolicies
   readonly chats: FeishuChats
+  readonly messages: ImMessages
+  readonly records: FeishuRecords
   private readonly credentials: FeishuCredentials
   private readonly endpoints: FeishuEndpoints
   private readonly registrations: FeishuRegistrations
@@ -115,11 +123,39 @@ export class DeviceFeishuService {
     this.on('im.chat.member.bot.deleted_v1', (appId, data) => this.chats.botDeleted(appId, data))
     this.on('im.chat.updated_v1', (appId, data) => this.chats.chatUpdated(appId, data))
     this.on('im.chat.disbanded_v1', (appId, data) => this.chats.disbanded(appId, data))
-    // 每次连上都对一遍群列表，补上断线期间的进退群
+    this.messages = new ImMessages(openImMessages(options.stateDirectory))
+    this.records = new FeishuRecords({
+      messages: this.messages,
+      chats: this.chats,
+      api: (appId) => this.api(appId),
+      now: this.now,
+      announce: options.announce,
+      fail,
+      log: options.log,
+      attachmentsDirectory: join(options.stateDirectory, FEISHU_ATTACHMENTS_DIRECTORY),
+    })
+    this.chats.recordsOf = (appId, chatId) => this.records.view(appId, chatId)
+    this.chats.onAccess((chat, first) => this.records.accessChanged(chat, first))
+    this.chats.onUnaccess((appId, chatId, deleteRecords) =>
+      this.records.unaccessed(appId, chatId, deleteRecords),
+    )
+    this.on('im.message.receive_v1', (appId, data) => this.records.received(appId, data))
+    this.on('im.message.recalled_v1', (appId, data) => this.records.recalled(appId, data))
+    this.on('im.chat.member.user.added_v1', (appId, data) => this.records.membersAdded(appId, data))
+    for (const type of ['im.chat.member.user.deleted_v1', 'im.chat.member.user.withdrawn_v1'])
+      this.on(type, (appId, data) => this.records.membersRemoved(appId, data))
+    // 每次连上都对一遍群列表（补上断线期间的进退群），再补已接入群断线期间的消息
     this.onConnected((appId) => {
-      void this.chats.sync(appId).catch((error: Error) => {
-        options.log(`飞书群列表同步失败：${error.message}`)
-      })
+      void this.chats
+        .sync(appId)
+        .catch((error: Error) => {
+          options.log(`飞书群列表同步失败：${error.message}`)
+        })
+        .then(() => {
+          // 设备已关：库也关了，不再补缺口
+          if (this.started) this.records.connected(appId)
+        })
+        .catch((error: Error) => options.log(`飞书补缺口排队失败：${error.message}`))
     })
   }
 
@@ -140,13 +176,16 @@ export class DeviceFeishuService {
     this.started = true
     const apps = this.store.apps()
     this.credentials.sweep(new Map(apps.map((app) => [app.appId, app.credential.generation])))
+    this.records.start()
     for (const app of apps) this.reconcile(app.appId)
   }
 
   close(): void {
     this.started = false
     this.registrations.close()
+    this.records.close()
     for (const appId of [...this.running.keys()]) this.stop(appId)
+    this.messages.close()
   }
 
   /** 应用当前能用的 REST 客户端；停用或没凭据时为空 */

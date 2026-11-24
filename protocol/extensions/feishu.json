@@ -18,7 +18,8 @@
     "一个应用只分配给一个经理，一个经理也最多分配一个应用。",
     "时间用 UTC epoch 秒；飞书 ID 原样用字符串。",
     "群只有经 chat/access 明确接入后才收、记、发；机器人只是被拉进群什么都不做。接入必须选发言模式，外部群必须带 confirmExternal: true。",
-    "机器人被移出已接入的群时接入设置保留（botPresent=false），重新拉进来自动恢复。"
+    "机器人被移出已接入的群时接入设置保留（botPresent=false），重新拉进来自动恢复。",
+    "设备只记录已接入群里的消息；接入时补最近 7 天、单次补历史最多 1000 条，进度在群的 records 里。"
   ],
   "parts": [
     {
@@ -276,6 +277,22 @@
       "result": { "$ref": "#/definitions/ChatResult" }
     },
     {
+      "kind": "Method",
+      "name": "litch/feishu/chat/backfill",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId", "chatId", "start", "end"],
+        "properties": {
+          "appId": { "$ref": "#/definitions/AppId" },
+          "chatId": { "$ref": "#/definitions/ChatId" },
+          "start": { "$ref": "#/definitions/Timestamp" },
+          "end": { "$ref": "#/definitions/Timestamp" }
+        }
+      },
+      "result": { "$ref": "#/definitions/ChatResult" }
+    },
+    {
       "kind": "Notification",
       "name": "litch/feishu/appsChanged",
       "params": {
@@ -499,7 +516,46 @@
         "status": { "enum": ["normal", "dissolved"] },
         "botPresent": { "type": "boolean" },
         "access": { "oneOf": [{ "$ref": "#/definitions/ChatAccess" }, { "type": "null" }] },
-        "updatedAt": { "$ref": "#/definitions/Timestamp" }
+        "updatedAt": { "$ref": "#/definitions/Timestamp" },
+        "records": { "$ref": "#/definitions/ChatRecords" }
+      }
+    },
+    "ChatRecords": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["messages"],
+      "properties": {
+        "messages": { "$ref": "#/definitions/Count" },
+        "oldestAt": { "$ref": "#/definitions/Timestamp" },
+        "backfill": { "$ref": "#/definitions/Backfill" },
+        "gap": { "$ref": "#/definitions/GapFill" }
+      }
+    },
+    "Backfill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "state", "start", "end", "fetched", "truncated", "startedAt"],
+      "properties": {
+        "kind": { "enum": ["access", "manual"] },
+        "state": { "enum": ["running", "done", "failed"] },
+        "start": { "$ref": "#/definitions/Timestamp" },
+        "end": { "$ref": "#/definitions/Timestamp" },
+        "fetched": { "$ref": "#/definitions/Count" },
+        "truncated": { "type": "boolean" },
+        "startedAt": { "$ref": "#/definitions/Timestamp" },
+        "finishedAt": { "$ref": "#/definitions/Timestamp" }
+      }
+    },
+    "GapFill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "start", "end", "fetched", "complete"],
+      "properties": {
+        "at": { "$ref": "#/definitions/Timestamp" },
+        "start": { "$ref": "#/definitions/Timestamp" },
+        "end": { "$ref": "#/definitions/Timestamp" },
+        "fetched": { "$ref": "#/definitions/Count" },
+        "complete": { "type": "boolean" }
       }
     },
     "Member": { "$ref": "#/definitions/Person" },

@@ -7,6 +7,7 @@ import {
   type FeishuChat,
   type FeishuChatAccess,
   type FeishuChatAccessParams,
+  type FeishuChatRecords,
   type FeishuChatUpdateParams,
   type FeishuMember,
   type FeishuPerson,
@@ -50,12 +51,16 @@ export class FeishuChats {
   private readonly syncedAt = new Map<string, number>()
   private readonly syncing = new Map<string, Promise<void>>()
   private readonly members = new Map<string, { members: FeishuMember[]; fetchedAt: number }>()
-  /** 取消接入时要做的事（F3 起删记录） */
+  /** 取消接入时要做的事（删记录等） */
   private readonly unaccessHooks: ((
     appId: string,
     chatId: string,
     deleteRecords: boolean,
   ) => void)[] = []
+  /** 接入或改了接入设置之后要做的事；first 表示这次是新接入 */
+  private readonly accessHooks: ((chat: FeishuChatRecord, first: boolean) => void)[] = []
+  /** 群在设备上的记录（消息库给出），拼进视图 */
+  recordsOf: (appId: string, chatId: string) => FeishuChatRecords | undefined = () => undefined
 
   constructor(options: FeishuChatsOptions) {
     this.options = options
@@ -63,6 +68,30 @@ export class FeishuChats {
 
   onUnaccess(hook: (appId: string, chatId: string, deleteRecords: boolean) => void): void {
     this.unaccessHooks.push(hook)
+  }
+
+  onAccess(hook: (chat: FeishuChatRecord, first: boolean) => void): void {
+    this.accessHooks.push(hook)
+  }
+
+  private runHooks(work: () => void): void {
+    try {
+      work()
+    } catch (error) {
+      this.options.log(`飞书群设置变化后的处理出错：${(error as Error).message}`)
+    }
+  }
+
+  /** 成员变了（进退群事件）：下次选择器打开时重新回源 */
+  forgetMembers(appId: string, chatId: string): void {
+    this.members.delete(scopeOf(appId, chatId))
+  }
+
+  /** 已接入、机器人还在群里、没解散的群 */
+  activeChats(appId: string): FeishuChatRecord[] {
+    return this.records(appId).filter(
+      (chat) => chat.access && chat.botPresent && chat.status === 'normal',
+    )
   }
 
   private get db() {
@@ -112,12 +141,14 @@ export class FeishuChats {
   }
 
   view(chat: FeishuChatRecord): FeishuChat {
-    if (!chat.access) return { ...chat, access: null }
+    const stored = this.recordsOf(chat.appId, chat.chatId)
+    const records = stored ? { records: stored } : {}
+    if (!chat.access) return { ...chat, access: null, ...records }
     const policy = this.options.policies.get(
       FEISHU_SPEECH_PROVIDER,
       scopeOf(chat.appId, chat.chatId),
     )
-    return { ...chat, access: { ...chat.access, speech: policy?.mode ?? 'approval' } }
+    return { ...chat, access: { ...chat.access, speech: policy?.mode ?? 'approval' }, ...records }
   }
 
   private changed(appId: string, chatId?: string): void {
@@ -314,6 +345,7 @@ export class FeishuChats {
       })
       return updated
     })
+    for (const hook of this.accessHooks) this.runHooks(() => hook(next, true))
     this.changed(appId, chatId)
     return this.view(next)
   }
@@ -364,6 +396,7 @@ export class FeishuChats {
       })
       return updated
     })
+    for (const hook of this.accessHooks) this.runHooks(() => hook(next, false))
     this.changed(appId, chatId)
     return this.view(next)
   }
@@ -396,13 +429,7 @@ export class FeishuChats {
       })
       return updated
     })
-    for (const hook of this.unaccessHooks) {
-      try {
-        hook(appId, chatId, deleteRecords)
-      } catch (error) {
-        this.options.log(`飞书取消接入后的处理出错：${(error as Error).message}`)
-      }
-    }
+    for (const hook of this.unaccessHooks) this.runHooks(() => hook(appId, chatId, deleteRecords))
     this.changed(appId, chatId)
     return this.view(next)
   }

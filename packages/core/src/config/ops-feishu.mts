@@ -66,13 +66,31 @@ function chatLine(ctx: OpContext, chat: FeishuChat): string {
     ? chat.access.speech === 'free'
       ? ctx.say('已接入·自由发言', 'accessed·free')
       : ctx.say('已接入·审批发言', 'accessed·approval')
-    : ctx.say('未接入', 'not accessed')
+    : chat.records?.messages
+      ? ctx.say('未接入（有记录）', 'not accessed (records kept)')
+      : ctx.say('未接入', 'not accessed')
+  const backfill = chat.records?.backfill
   const marks = [
     chat.external ? ctx.say('外部群', 'external') : '',
     chat.botPresent ? '' : ctx.say('机器人已不在群里', 'bot removed'),
     chat.status === 'dissolved' ? ctx.say('已解散', 'dissolved') : '',
+    chat.records
+      ? ctx.say(`记录 ${chat.records.messages} 条`, `${chat.records.messages} messages`)
+      : '',
+    backfill?.state === 'running' ? ctx.say('正在补历史', 'backfilling') : '',
+    backfill?.state === 'failed' ? ctx.say('上次补历史失败', 'last backfill failed') : '',
   ].filter(Boolean)
   return [chat.chatId, chat.name, state, ...marks].join(' · ')
+}
+
+/** YYYY-MM-DD（本地时区当天零点）转秒 */
+function dayOption(ctx: OpContext, name: string): number | undefined {
+  const raw = ctx.cmd.options.get(name)
+  if (raw === undefined) return undefined
+  const at = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? Date.parse(`${raw}T00:00:00`) : Number.NaN
+  if (!Number.isFinite(at))
+    throw invalid(ctx, `--${name} 要写成 YYYY-MM-DD。`, `--${name} must be YYYY-MM-DD.`)
+  return Math.floor(at / 1000)
 }
 
 async function chatsOf(ctx: OpContext, deviceId: string, appId: string): Promise<FeishuChat[]> {
@@ -276,6 +294,42 @@ const FEISHU_CHAT_OPS: Record<string, OpSpec> = {
         ...(wakeBound === undefined ? {} : { wakeBound }),
         ...(retentionDays === undefined ? {} : { retentionDays }),
         ...(reviewTtlHours === undefined ? {} : { reviewTtlHours }),
+      })
+      return { text: chatLine(ctx, data.chat), data }
+    },
+  },
+  'feishu-chat backfill': {
+    args: [2, 2],
+    options: ['device', 'since', 'until'],
+    usage:
+      'feishu-chat backfill <app-id> <chat> --since <YYYY-MM-DD> [--until <YYYY-MM-DD>] [--device <id>]',
+    summary: { zh: '补一段更早的消息（单次最多 1000 条）', en: 'Backfill older messages' },
+    async run(ctx) {
+      const device = await getDevice(ctx)
+      const app = await appOf(ctx, device.id)
+      const chat = await chatOf(ctx, device.id, app.appId)
+      const start = dayOption(ctx, 'since')
+      if (start === undefined)
+        throw invalid(ctx, '用 --since 指定从哪天开始补。', 'Choose the first day with --since.')
+      // --until 那天也补上：到次日零点
+      const until = dayOption(ctx, 'until')
+      const end = until === undefined ? Math.floor(Date.now() / 1000) : until + 86_400
+      if (start >= end)
+        throw invalid(ctx, '--since 要早于 --until。', '--since must be earlier than --until.')
+      await writing(
+        ctx,
+        ctx.nameOf(device),
+        ctx.say(
+          `补飞书群“${chat.name}”这段时间的消息。机器人进群之前的消息能否读到取决于群设置，可能补不全。`,
+          `Backfill messages in the Feishu chat “${chat.name}”. Messages from before the bot joined may be unavailable, depending on the chat's history setting.`,
+        ),
+      )
+      const data = await ctx.run('feishu.chat.backfill', {
+        deviceId: device.id,
+        appId: app.appId,
+        chatId: chat.chatId,
+        start,
+        end,
       })
       return { text: chatLine(ctx, data.chat), data }
     },

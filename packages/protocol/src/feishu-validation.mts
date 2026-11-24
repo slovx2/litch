@@ -104,6 +104,9 @@ const checks = {
     expectedRevision: revision,
     deleteRecords: bool,
   }),
+  [FEISHU_METHOD.chatBackfill]: (value) =>
+    obj({ ...chatRef, start: int(), end: int() })(value) &&
+    (value as { start: number }).start < (value as { end: number }).end,
 } satisfies { [M in FeishuMethod]: Check }
 
 export function isFeishuMethod(method: string): method is FeishuMethod {

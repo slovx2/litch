@@ -60,6 +60,21 @@ const sampleChats = (appId: string, now: number): FeishuChat[] => [
       accessAt: now - 86_400,
     },
     updatedAt: now - 86_400,
+    records: {
+      messages: 326,
+      oldestAt: now - 86_400 * 8,
+      backfill: {
+        kind: 'access',
+        state: 'done',
+        start: now - 86_400 * 8,
+        end: now - 86_400,
+        fetched: 214,
+        truncated: false,
+        startedAt: now - 86_400,
+        finishedAt: now - 86_400 + 12,
+      },
+      gap: { at: now - 600, start: now - 1_500, end: now - 600, fetched: 4, complete: true },
+    },
   },
   {
     appId,
@@ -100,6 +115,7 @@ const sampleChats = (appId: string, now: number): FeishuChat[] => [
       accessAt: now - 86_400 * 10,
     },
     updatedAt: now - 86_400 * 2,
+    records: { messages: 41, oldestAt: now - 86_400 * 17 },
   },
 ]
 
@@ -372,6 +388,21 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
                 accessAt: now(),
               },
               updatedAt: now(),
+              // 模拟核心不真的补，直接给补完的样子
+              records: {
+                messages: (chat.records?.messages ?? 0) + 37,
+                oldestAt: now() - 86_400 * 7,
+                backfill: {
+                  kind: 'access',
+                  state: 'done',
+                  start: now() - 86_400 * 7,
+                  end: now(),
+                  fetched: 37,
+                  truncated: false,
+                  startedAt: now(),
+                  finishedAt: now(),
+                },
+              },
             }
             return { chat: saveChat(next, appId, chat.chatId) }
           }
@@ -404,14 +435,43 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
             const chat = chatOf(appId, String(args.chatId))
             if (!chat.access) fail('feishu_chat_not_accessed')
             if (chat.revision !== args.expectedRevision) fail('feishu_revision_conflict')
+            const { records, ...rest } = chat
             const next: FeishuChat = {
-              ...chat,
+              ...rest,
               revision: chat.revision + 1,
               access: null,
               updatedAt: now(),
+              ...(records && args.deleteRecords !== true ? { records } : {}),
             }
             saveChat(chat.botPresent ? next : null, appId, chat.chatId)
             return { chat: next }
+          }
+          case 'feishu.chat.backfill': {
+            const appId = String(args.appId)
+            const chat = chatOf(appId, String(args.chatId))
+            if (!chat.access) fail('feishu_chat_not_accessed')
+            if (!chat.botPresent) fail('feishu_chat_unavailable')
+            const start = Number(args.start)
+            const end = Math.min(Number(args.end), now())
+            const next: FeishuChat = {
+              ...chat,
+              records: {
+                ...(chat.records ?? { messages: 0 }),
+                messages: (chat.records?.messages ?? 0) + 18,
+                oldestAt: Math.min(chat.records?.oldestAt ?? start, start),
+                backfill: {
+                  kind: 'manual',
+                  state: 'done',
+                  start,
+                  end,
+                  fetched: 18,
+                  truncated: false,
+                  startedAt: now(),
+                  finishedAt: now(),
+                },
+              },
+            }
+            return { chat: saveChat(next, appId, chat.chatId) }
           }
           default:
             throw new ChannelError('unknownCommand', `不认识的命令：${name}`)

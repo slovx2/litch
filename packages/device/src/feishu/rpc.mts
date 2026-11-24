@@ -107,6 +107,11 @@ export class DeviceFeishuRpc {
           ),
         }
       }
+      case M.chatBackfill: {
+        const input = args(method)
+        service.records.backfill(input.appId, input.chatId, input.start, input.end)
+        return { chat: service.chats.get(input.appId, input.chatId) }
+      }
     }
   }
 }
