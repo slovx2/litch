@@ -169,6 +169,7 @@ import type {
   FeishuChatsView,
   FeishuCommands,
   FeishuDeviceView,
+  FeishuInboxView,
   FeishuRegistrationView,
   FeishuTopic,
 } from '../projection/feishu.mjs'
@@ -282,6 +283,7 @@ export interface TopicData {
   feishuDevice: FeishuDeviceView
   feishuRegistration: FeishuRegistrationView
   feishuChats: FeishuChatsView
+  feishuInbox: FeishuInboxView
   fileChanges: { revision: number }
   automationPreview: AutomationPreviewView | null
   app: AppView
@@ -439,6 +441,7 @@ export interface TopicOp {
   feishuDevice: never
   feishuRegistration: never
   feishuChats: never
+  feishuInbox: never
   externalIdentityLogin: never
   externalInbox: never
   externalOutbox: never

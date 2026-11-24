@@ -15,16 +15,31 @@ export class FeishuFakeHarness {
     this.admin = admin
   }
 
-  static async start(t: TestContext): Promise<FeishuFakeHarness> {
+  static async start(
+    t: TestContext,
+    options: {
+      /** 假引擎（经理要用） */
+      upstreams?: Parameters<typeof rig>[0]
+      /** 设备时钟（秒） */
+      now?: () => number
+      wakeTickMs?: number
+      extensions?: string[]
+    } = {},
+  ): Promise<FeishuFakeHarness> {
     const fake = new FakeFeishu()
     await fake.start()
-    const env = rig(
-      {},
-      {},
-      { feishu: { fixture: { origin: fake.origin, registrationIntervalMs: 10 } } },
-    )
+    const env = rig(options.upstreams ?? {}, options.upstreams ? { needsUserMs: 60 } : {}, {
+      feishu: {
+        fixture: {
+          origin: fake.origin,
+          registrationIntervalMs: 10,
+          ...(options.now ? { now: options.now } : {}),
+          ...(options.wakeTickMs === undefined ? {} : { wakeTickMs: options.wakeTickMs }),
+        },
+      },
+    })
     const admin = new TestClient((wire) => env.device.attach(wire, true))
-    await admin.initialize(['harness', 'litchFeishu'])
+    await admin.initialize(['harness', 'litchFeishu', ...(options.extensions ?? [])])
     t.after(async () => {
       admin.close()
       await env.close()

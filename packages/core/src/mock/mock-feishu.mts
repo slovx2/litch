@@ -2,6 +2,8 @@
 import type {
   FeishuApp,
   FeishuChat,
+  FeishuInboxEntry,
+  FeishuInboxMessage,
   FeishuMember,
   FeishuRegistration,
 } from '../../../protocol/src/feishu.mjs'
@@ -119,6 +121,85 @@ const sampleChats = (appId: string, now: number): FeishuChat[] => [
   },
 ]
 
+/** 样例收件箱：一条刚到（排队）、一条已送进回合、一条已处理、一条过了保留期只剩 ID */
+const sampleInbox = (appId: string, managerId: string, now: number) => {
+  const base = {
+    appId,
+    managerId,
+    chatId: 'oc_mock_project',
+    chatKind: 'group' as const,
+  }
+  const entries: FeishuInboxEntry[] = [
+    {
+      ...base,
+      inboxId: 'FI-4',
+      status: 'queued',
+      messageId: 'om_mock_4',
+      senderOpenId: 'ou_mock_alice',
+      senderName: '示例成员甲',
+      senderIdentity: 'member',
+      trigger: 'mention',
+      createdAt: now - 12,
+      receivedAt: now - 11,
+    },
+    {
+      ...base,
+      inboxId: 'FI-3',
+      status: 'notified',
+      messageId: 'om_mock_3',
+      senderOpenId: 'ou_mock_alice',
+      senderName: '示例成员甲',
+      senderIdentity: 'member',
+      trigger: 'reply',
+      createdAt: now - 900,
+      receivedAt: now - 899,
+      deliveryId: 'mock-delivery-1',
+      notifiedAt: now - 870,
+    },
+    {
+      ...base,
+      inboxId: 'FI-2',
+      status: 'processed',
+      messageId: 'om_mock_2',
+      senderOpenId: 'ou_mock_bob',
+      senderName: '示例成员乙',
+      senderIdentity: 'member',
+      trigger: 'mention',
+      createdAt: now - 86_400,
+      receivedAt: now - 86_399,
+      deliveryId: 'mock-delivery-0',
+      notifiedAt: now - 86_370,
+      processedAt: now - 86_000,
+    },
+    {
+      ...base,
+      inboxId: 'FI-1',
+      status: 'processed',
+      messageId: 'om_mock_1',
+      senderOpenId: 'ou_mock_carol',
+      senderIdentity: 'unknown',
+      trigger: 'mention',
+      createdAt: now - 86_400 * 100,
+      receivedAt: now - 86_400 * 100,
+      processedAt: now - 86_400 * 99,
+    },
+  ]
+  const message = (text: string | null, purged = false): FeishuInboxMessage => ({
+    chatName: '示例项目群',
+    text,
+    msgType: 'text',
+    state: 'normal',
+    purged,
+  })
+  const messages: Record<string, FeishuInboxMessage> = {
+    'FI-4': message('@示例助手 帮忙看一下发布清单还差什么'),
+    'FI-3': message('好的，那就按这个顺序来，有问题再找你'),
+    'FI-2': message('@示例助手 周报整理好了吗'),
+    'FI-1': message(null, true),
+  }
+  return { entries, messages }
+}
+
 export function createMockFeishu(clock: Clock, devices: () => DeviceView[], filled: boolean) {
   const now = () => Math.floor(clock.now() / 1000)
   const states = new Map<string, ReturnType<typeof make>>()
@@ -132,6 +213,16 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
     const registrationSinks = new Map<string, Set<HostSink>>()
     const chats = new Map<string, FeishuChat[]>()
     const chatSinks = new Map<string, Set<HostSink>>()
+    const inboxSinks = new Map<string, Set<HostSink>>()
+    const inboxOf = (managerId: string) => {
+      const app = apps.find((item) => item.managerId === managerId)
+      return app ? sampleInbox(app.appId, managerId, now()) : { entries: [], messages: {} }
+    }
+    const publishInbox = (managerId: string) => {
+      const value = inboxOf(managerId)
+      for (const sink of inboxSinks.get(managerId) ?? [])
+        sink.snapshot({ available: true, online: true, value, fetchedAt: clock.now(), error: null })
+    }
     const chatsOf = (appId: string) => {
       const found = chats.get(appId)
       if (found) return found
@@ -217,6 +308,13 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
           chatSinks.set(topic.appId, set)
           set.add(sink)
           publishChats(topic.appId)
+          return () => set.delete(sink)
+        }
+        if (topic.kind === 'feishuInbox') {
+          const set = inboxSinks.get(topic.managerId) ?? new Set<HostSink>()
+          inboxSinks.set(topic.managerId, set)
+          set.add(sink)
+          publishInbox(topic.managerId)
           return () => set.delete(sink)
         }
         if (topic.kind === 'feishuRegistration') {
@@ -472,6 +570,17 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
               },
             }
             return { chat: saveChat(next, appId, chat.chatId) }
+          }
+          case 'feishu.inbox.list':
+            return inboxOf(String(args.managerId))
+          case 'feishu.inbox.get': {
+            for (const app of apps) {
+              if (!app.managerId) continue
+              const { entries, messages } = inboxOf(app.managerId)
+              const entry = entries.find((item) => item.inboxId === args.inboxId)
+              if (entry) return { entry, message: messages[entry.inboxId] ?? null }
+            }
+            return fail('feishu_inbox_not_found')
           }
           default:
             throw new ChannelError('unknownCommand', `不认识的命令：${name}`)

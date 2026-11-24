@@ -9,6 +9,7 @@ import {
   type ClientToolCallResponse,
   clientToolFailure,
 } from '../../protocol/src/client-tools.mjs'
+import { FEISHU_TOOLS_NAMESPACE } from '../../protocol/src/client-tools-feishu.mjs'
 import {
   managerEndText,
   managerOpenText,
@@ -97,6 +98,11 @@ export function managerResetProjection(value: unknown, declared: boolean): unkno
   return result
 }
 
+export interface ManagerFeishuHook {
+  hasApp(managerId: string): boolean
+  unattended(managerId: string): boolean
+}
+
 export class DeviceManagers {
   private readonly boardBackupDir: string
   readonly store: ManagerStore
@@ -110,6 +116,8 @@ export class DeviceManagers {
   readonly resets: ManagerResets
   readonly paging: ManagerPaging
   external: DeviceExternalService | null = null
+  /** 飞书来源（feishu/service.mts）：哪些经理绑了应用、哪些会被飞书自己叫醒 */
+  feishu: ManagerFeishuHook | null = null
   private readonly draining = new Map<string, Promise<void>>()
   /** 先持久入队，再留一个固定的小窗口合并连发卡片；不会因持续提卡无限延后。 */
   private readonly suggestionTimers = new Map<string, NodeJS.Timeout>()
@@ -836,12 +844,17 @@ export class DeviceManagers {
     return { manager: this.manager(manager.id), threadId: thread.id }
   }
 
-  bundle(manager: Manager, native = manager.harness === 'codex') {
+  bundle(
+    manager: Manager,
+    native = manager.harness === 'codex',
+    feishu = this.feishu?.hasApp(manager.id) === true,
+  ) {
     return managerBundle(
       manager,
       native,
       this.tree.host.taskCards(manager.harness),
       this.external ? DEVICE_EXTERNAL_MANAGER_TOOLS : undefined,
+      feishu,
     )
   }
 
@@ -850,23 +863,33 @@ export class DeviceManagers {
    * 这位经理还没结束，并且外部来源会自己唤醒它。不在任何经理树里、经理已结束、没有生效的来源都是 null
    */
   unattended(threadId: string): UnattendedRole | null {
-    const external = this.external
-    if (this.closed || !external) return null
+    const { external, feishu } = this
+    if (this.closed || (!external && !feishu)) return null
     const mark = this.lines.mark(threadId)
     if (!mark) return null
     const manager = this.store.manager(mark.managerId)
-    if (!manager || manager.status === 'ended' || !external.unattended(manager.id)) return null
+    if (
+      !manager ||
+      manager.status === 'ended' ||
+      !(external?.unattended(manager.id) || feishu?.unattended(manager.id))
+    )
+      return null
     return mark.role
   }
 
   externalReady(manager: Manager) {
     const record = this.store.reset(manager.id)
     const fingerprint = record?.applied ?? null
+    const installed = this.tree.store.tools(manager.threadId)
+    // GitHub 投递只看已装的那几组：绑了飞书但还没装上飞书工具，不挡 GitHub 的投递
+    const feishu =
+      this.feishu?.hasApp(manager.id) === true &&
+      (installed ?? []).some((spec) => isObject(spec) && spec.name === FEISHU_TOOLS_NAMESPACE)
     return externalManagerUpgrade(
       manager,
       record && { threadId: record.committed?.manager.threadId ?? record.oldThreadId, fingerprint },
-      this.bundle(manager),
-      this.tree.store.tools(manager.threadId),
+      this.bundle(manager, undefined, feishu),
+      installed,
     )
   }
 

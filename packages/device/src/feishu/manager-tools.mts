@@ -1,0 +1,300 @@
+// 经理的飞书工具（litch_feishu）：设备执行，按调用的会话认出经理，只能用它绑定的应用、只看已接入的群。
+import {
+  type ClientToolCallResponse,
+  clientToolFailure,
+} from '../../../protocol/src/client-tools.mjs'
+import { FEISHU_TOOL } from '../../../protocol/src/client-tools-feishu.mjs'
+import type { FeishuInboxEntry } from '../../../protocol/src/feishu.mjs'
+import type { Manager } from '../../../protocol/src/manager.mjs'
+import type { DeviceToolCall, DeviceToolHandler } from '../device-tools.mjs'
+import { isObject } from '../wire.mjs'
+import type { FeishuChatRecord } from './chats.mjs'
+import { escapeExternal, FEISHU_DATA_NOTE, messageLine } from './format.mjs'
+import type { DeviceFeishuService } from './service.mjs'
+import type { FeishuAppRecord } from './store.mjs'
+
+const HISTORY_DEFAULT = 50
+const HISTORY_MAX = 100
+const REFRESH_MAX = 50
+const LIST_DEFAULT = 50
+
+class ToolError extends Error {}
+const refuse = (message: string): never => {
+  throw new ToolError(message)
+}
+
+const ok = (value: unknown): ClientToolCallResponse => ({
+  success: true,
+  contentItems: [{ type: 'inputText', text: JSON.stringify(value) }],
+})
+
+const iso = (seconds: number) => new Date(seconds * 1000).toISOString()
+
+/** ISO 时间转毫秒；不认识的拒绝 */
+const time = (value: unknown, field: string): number | undefined => {
+  if (value === undefined) return undefined
+  const parsed = typeof value === 'string' ? Date.parse(value) : Number.NaN
+  return Number.isFinite(parsed) ? parsed : refuse(`${field} must be an ISO 8601 time.`)
+}
+
+const strings = (value: unknown, field: string, pattern: RegExp, max: number) => {
+  if (value === undefined) return undefined
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.length > max ||
+    !value.every((one) => typeof one === 'string' && pattern.test(one))
+  )
+    return refuse(`${field} must be a non-empty list of at most ${max} valid IDs.`)
+  return [...new Set(value as string[])]
+}
+
+const integer = (value: unknown, field: string, max: number, fallback: number) => {
+  if (value === undefined) return fallback
+  return Number.isInteger(value) && Number(value) >= 1 && Number(value) <= max
+    ? Number(value)
+    : refuse(`${field} must be an integer from 1 to ${max}.`)
+}
+
+export interface FeishuToolsHost {
+  /** 调用的会话就是一位在职经理时返回它；工作线、临时提问会话返回 null */
+  manager(call: DeviceToolCall): Manager | null
+}
+
+export class FeishuManagerTools {
+  private readonly feishu: DeviceFeishuService
+  private readonly host: FeishuToolsHost
+  /** 每位经理上次列出的那批（feishu_inbox_done 缺省标记它）；at 是秒 */
+  private readonly listed = new Map<string, { inboxIds: string[]; at: number }>()
+
+  constructor(feishu: DeviceFeishuService, host: FeishuToolsHost) {
+    this.feishu = feishu
+    this.host = host
+  }
+
+  readonly handle: DeviceToolHandler = async (call) => {
+    try {
+      const manager =
+        this.host.manager(call) ?? refuse('Only an active manager may use litch_feishu.')
+      const app =
+        this.feishu.appForManager(manager.id) ??
+        refuse('No Feishu app is assigned to this manager.')
+      const args = call.arguments === undefined ? {} : call.arguments
+      if (!isObject(args)) return refuse('Expected structured arguments.')
+      return ok(await this.run(call.tool, manager, app, args))
+    } catch (error) {
+      if (error instanceof ToolError) return clientToolFailure('invalid', error.message)
+      const reason = (error as Error).message
+      return clientToolFailure('invalid', `Feishu request failed: ${reason}`)
+    }
+  }
+
+  private async run(
+    tool: string,
+    manager: Manager,
+    app: FeishuAppRecord,
+    args: Record<string, unknown>,
+  ): Promise<unknown> {
+    switch (tool) {
+      case FEISHU_TOOL.inboxList:
+        return this.inboxList(manager, app, args)
+      case FEISHU_TOOL.inboxDone:
+        return this.inboxDone(manager, app, args)
+      case FEISHU_TOOL.chats:
+        return this.chats(app)
+      case FEISHU_TOOL.members:
+        return this.members(app, args)
+      case FEISHU_TOOL.history:
+        return this.history(app, args)
+      case FEISHU_TOOL.attachment:
+        return this.attachment(app, args)
+      case FEISHU_TOOL.messageRef:
+        return this.messageRef(app, args)
+      default:
+        return refuse(`Unknown litch_feishu tool ${tool}.`)
+    }
+  }
+
+  private inboxList(manager: Manager, app: FeishuAppRecord, args: Record<string, unknown>) {
+    const allowed = ['queued', 'notified', 'processed'] as const
+    const statuses = (args.statuses ?? ['queued', 'notified']) as FeishuInboxEntry['status'][]
+    if (
+      !Array.isArray(statuses) ||
+      statuses.length === 0 ||
+      !statuses.every((one) => (allowed as readonly string[]).includes(one))
+    )
+      refuse('statuses must be a non-empty subset of queued, notified, processed.')
+    const limit = integer(args.limit, 'limit', 100, LIST_DEFAULT)
+    const { inbox, messages, chats } = this.feishu
+    const entries = inbox
+      .list(manager.id, [...new Set(statuses)], limit)
+      .filter((entry) => entry.appId === app.appId)
+    this.listed.set(manager.id, {
+      inboxIds: entries.map((entry) => entry.inboxId),
+      at: this.feishu.now(),
+    })
+    return {
+      note: FEISHU_DATA_NOTE,
+      entries: entries.map((entry) => {
+        const message = messages.get(app.appId, entry.messageId)
+        return {
+          inboxId: entry.inboxId,
+          status: entry.status,
+          chat: { chatId: entry.chatId, name: chats.record(app.appId, entry.chatId)?.name ?? '' },
+          sender: {
+            openId: entry.senderOpenId,
+            ...(entry.senderName ? { name: entry.senderName } : {}),
+            identity: entry.senderIdentity,
+          },
+          trigger: entry.trigger,
+          messageId: entry.messageId,
+          createdAt: iso(entry.createdAt),
+          text: message ? messageLine(messages, app.appId, message) : '[message not recorded]',
+          ...(entry.processedAt ? { processedAt: iso(entry.processedAt) } : {}),
+          ...(entry.note ? { note: entry.note } : {}),
+        }
+      }),
+    }
+  }
+
+  private inboxDone(manager: Manager, app: FeishuAppRecord, args: Record<string, unknown>) {
+    const given = strings(args.inboxIds, 'inboxIds', /^FI-[1-9][0-9]*$/, 200)
+    let inboxIds: string[] = given ?? []
+    if (!given) {
+      // 缺省：上次列出的和上次送进回合的，取更近的那次，不碰之后才到的
+      const listed = this.listed.get(manager.id)
+      const delivered = this.feishu.wake.lastDelivered(manager.id)
+      const latest =
+        listed && (!delivered || listed.at >= delivered.at) ? listed : (delivered ?? null)
+      inboxIds = latest?.inboxIds ?? []
+      if (inboxIds.length === 0) refuse('Nothing was listed or delivered yet; pass inboxIds.')
+    }
+    const { inbox } = this.feishu
+    const now = this.feishu.now()
+    const changed = this.feishu.store.transaction(() =>
+      inbox.transition(manager.id, inboxIds, ['queued', 'notified'], 'processed', {
+        processedAt: now,
+        note: undefined,
+      }),
+    )
+    if (changed.length > 0) this.feishu.inboxChanged(manager.id, app.appId)
+    const done = new Set(changed.map((entry) => entry.inboxId))
+    return {
+      processed: [...done],
+      skipped: inboxIds.filter((id) => !done.has(id)),
+    }
+  }
+
+  private accessed(app: FeishuAppRecord, value: unknown): FeishuChatRecord {
+    if (typeof value !== 'string' || !value.trim()) return refuse('chat is required.')
+    const chats = this.feishu.chats.activeChats(app.appId).filter((chat) => chat.access)
+    const byId = chats.find((chat) => chat.chatId === value)
+    if (byId) return byId
+    const named = chats.filter((chat) => chat.name === value.trim())
+    if (named.length === 1 && named[0]) return named[0]
+    if (named.length > 1)
+      return refuse(
+        `Several accessed chats are named ${value}: ${named.map((chat) => chat.chatId).join(', ')}. Use chat_id.`,
+      )
+    return refuse(`No accessed chat matches ${value}.`)
+  }
+
+  private chats(app: FeishuAppRecord) {
+    const { chats, messages } = this.feishu
+    return {
+      chats: chats
+        .activeChats(app.appId)
+        .filter((chat) => chat.access)
+        .map((chat) => {
+          const view = chats.view(chat)
+          return {
+            chatId: chat.chatId,
+            name: chat.name,
+            speech: view.access?.speech,
+            external: chat.external,
+            members: messages.members(app.appId, chat.chatId).filter((one) => one.present).length,
+          }
+        }),
+    }
+  }
+
+  private async members(app: FeishuAppRecord, args: Record<string, unknown>) {
+    const chat = this.accessed(app, args.chat)
+    const local = this.feishu.messages
+      .members(app.appId, chat.chatId)
+      .filter((one) => one.present)
+      .map(({ openId, name }) => ({ openId, name }))
+    const members =
+      local.length > 0
+        ? local
+        : (await this.feishu.chats.memberList(app.appId, chat.chatId, false)).members.map(
+            ({ openId, name }) => ({ openId, name }),
+          )
+    return { chatId: chat.chatId, name: chat.name, members }
+  }
+
+  private async history(app: FeishuAppRecord, args: Record<string, unknown>) {
+    const chat = this.accessed(app, args.chat)
+    const since = time(args.since, 'since')
+    const until = time(args.until, 'until')
+    if (args.keyword !== undefined && typeof args.keyword !== 'string')
+      refuse('keyword must be a string.')
+    const messageIds = strings(args.messageIds, 'messageIds', /^om_/, HISTORY_MAX)
+    const limit = integer(args.limit, 'limit', HISTORY_MAX, HISTORY_DEFAULT)
+    const { messages, records } = this.feishu
+    const filter = {
+      ...(since === undefined ? {} : { since }),
+      ...(until === undefined ? {} : { until: until - 1 }),
+      ...(typeof args.keyword === 'string' && args.keyword ? { keyword: args.keyword } : {}),
+      ...(messageIds ? { messageIds } : {}),
+    }
+    let found = messages.search(app.appId, chat.chatId, filter, limit)
+    if (args.refresh === true) {
+      for (const message of found.slice(-REFRESH_MAX))
+        await records.fetchMessage(app.appId, message.messageId)
+      found = messages.search(app.appId, chat.chatId, filter, limit)
+    }
+    return {
+      chatId: chat.chatId,
+      name: chat.name,
+      count: found.length,
+      text: [
+        '<litch-external-data source="feishu">',
+        `## ${escapeExternal(chat.name)} (${chat.chatId})`,
+        FEISHU_DATA_NOTE,
+        ...found.map((message) => messageLine(messages, app.appId, message)),
+        '</litch-external-data>',
+      ].join('\n'),
+    }
+  }
+
+  private async attachment(app: FeishuAppRecord, args: Record<string, unknown>) {
+    if (typeof args.messageId !== 'string' || !/^om_/.test(args.messageId))
+      refuse('messageId is required.')
+    if (typeof args.fileKey !== 'string' || !args.fileKey) refuse('fileKey is required.')
+    const saved = await this.feishu.records.download(
+      app.appId,
+      String(args.messageId),
+      String(args.fileKey),
+    )
+    return {
+      path: saved.downloadedPath,
+      size: saved.size,
+      kind: saved.kind,
+      name: saved.name,
+      ...(saved.contentType ? { contentType: saved.contentType } : {}),
+    }
+  }
+
+  private messageRef(app: FeishuAppRecord, args: Record<string, unknown>) {
+    if (typeof args.messageId !== 'string' || !/^om_/.test(args.messageId))
+      refuse('messageId is required.')
+    if (typeof args.issueId !== 'string' || !/^X-[1-9][0-9]*$/.test(args.issueId))
+      refuse('issueId must be an item ID like X-1.')
+    const message =
+      this.feishu.messages.get(app.appId, String(args.messageId)) ??
+      refuse('The message is not recorded on this device.')
+    this.feishu.messages.pin(app.appId, message.messageId)
+    return { messageId: message.messageId, issueId: args.issueId, kept: true }
+  }
+}

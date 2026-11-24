@@ -1,13 +1,14 @@
-// 手机上飞书的数据入口：直接订阅核心的 feishuDevice / feishuRegistration / feishuChats 主题（核心负责断线保留、重连重读），
+// 手机上飞书的数据入口：直接订阅核心的 feishuDevice / feishuRegistration / feishuChats / feishuInbox 主题（核心负责断线保留、重连重读），
 // 同设备在用的经理从数据副本取。
 import { keys, type ManagerView } from '@litch/core'
 import { useEffect, useMemo, useState } from 'react'
 import type {
   FeishuChatsView,
   FeishuDeviceView,
+  FeishuInboxView,
   FeishuRegistrationView,
 } from '../../../../../../packages/core/src/projection/feishu.mts'
-import type { ManagerChoice } from '../../../../../../packages/ui/src/feishu/model.ts'
+import type { FeishuApp, ManagerChoice } from '../../../../../../packages/ui/src/feishu/model.ts'
 import { useChannel, useKey, useReplica } from '../../../shell/services'
 
 export function useFeishuDevice(deviceId: string, enabled: boolean): FeishuDeviceView | undefined {
@@ -71,6 +72,39 @@ export function useFeishuChats(
       },
     )
   }, [channel, deviceId, appId, enabled])
+  return enabled ? view : undefined
+}
+
+/** 经理绑着的飞书应用；设备不支持飞书或没绑时是 null（经理页据此出不出“飞书”页签） */
+export function useManagerFeishuApp(
+  deviceId: string,
+  managerId: string,
+  supported: boolean,
+): FeishuApp | null {
+  const view = useFeishuDevice(deviceId, supported)
+  return view?.apps.value?.find((app) => app.managerId === managerId) ?? null
+}
+
+/** 经理的飞书收件箱：最近一页（新的在前） */
+export function useFeishuInbox(
+  deviceId: string,
+  managerId: string,
+  enabled: boolean,
+): FeishuInboxView | undefined {
+  const channel = useChannel()
+  const [view, setView] = useState<FeishuInboxView | undefined>()
+  useEffect(() => {
+    setView(undefined)
+    if (!enabled) return
+    return channel.subscribe(
+      { kind: 'feishuInbox', deviceId, managerId },
+      {
+        snapshot: (value) => setView(value),
+        delta: () => {},
+        error: () => setView(undefined),
+      },
+    )
+  }, [channel, deviceId, managerId, enabled])
   return enabled ? view : undefined
 }
 

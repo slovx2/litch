@@ -1,4 +1,5 @@
 import { homedir } from 'node:os'
+import { FEISHU_TOOLS_NAMESPACE } from '../../protocol/src/client-tools-feishu.mjs'
 import {
   deviceMachineEnabled,
   deviceToolSwitches,
@@ -65,6 +66,7 @@ import { DeviceTools } from './device-tools.mjs'
 import { connectEngineLink, type EngineLink, EngineUnavailable } from './engine-link.mjs'
 import { DeviceExternalRpc } from './external/device-rpc.mjs'
 import { type DeviceExternalOptions, DeviceExternalService } from './external/device-service.mjs'
+import { FeishuManagerTools } from './feishu/manager-tools.mjs'
 import { DeviceFeishuRpc } from './feishu/rpc.mjs'
 import { type DeviceFeishuOptions, DeviceFeishuService } from './feishu/service.mjs'
 import type { FlowLimits } from './flow.mjs'
@@ -109,7 +111,13 @@ import { ToolImages } from './tool-images.mjs'
 import { TurnNotices } from './turn-notices.mjs'
 import { TurnRecoveryObserver } from './turn-recovery.mjs'
 import { unattendedReply } from './unattended.mjs'
-import { type Connector, isObject, type Wire, type WireHandlers } from './wire.mjs'
+import {
+  type Connector,
+  isObject,
+  UpstreamRpcError,
+  type Wire,
+  type WireHandlers,
+} from './wire.mjs'
 import { Workspaces } from './workspaces.mjs'
 import { gitVersion } from './worktree-git.mjs'
 import { WorktreeLife } from './worktree-life.mjs'
@@ -749,6 +757,7 @@ export class DeviceServer {
     this.index.onChanged = () => this.sessionTree.suggestions.changed()
     this.deviceTools.register(CLIENT_TOOL_NAMESPACE.manager, (call) => this.managers.tool(call))
     this.deviceTools.register(REPOSITORY_NAMESPACE, new RepositoryTools(this.managers).handle)
+    if (this.feishu) this.wireFeishu(this.feishu)
     // 以前删会话时没删它带的动态工具（每个几十 KB）：设备不认识的会话的那一行清一次。
     // 索引是空的（device.sqlite 刚建、刚换过）时分不出哪些会话还在，留到下次启动
     const sessionStore = this.sessionTree.store
@@ -1237,6 +1246,51 @@ export class DeviceServer {
    * harness 没配、不在 running、连不上抛 EngineUnavailable（code 是 harnessUnavailable）。
    * waitMs：它正在起、暂时连不上时最多等多久，默认不等。用完调 close；设备进程关的时候一起关掉
    */
+  /** 飞书接到经理上：叫醒投递、经理工具、无人值守 */
+  private wireFeishu(feishu: DeviceFeishuService): void {
+    const managers = this.managers
+    managers.feishu = feishu
+    feishu.wake.host = {
+      manager: (managerId) => managers.store.manager(managerId),
+      // 同外部投递的准入，另外经理在跑回合时留队（不插话），等回合结束再送
+      canDeliver: (manager) =>
+        !managers.tree.isActive(manager.threadId) &&
+        managers.tree.canDeliverExternal(manager.threadId),
+      toolsInstalled: (manager) =>
+        (managers.tree.store.tools(manager.threadId) ?? []).some(
+          (spec) => isObject(spec) && spec.name === FEISHU_TOOLS_NAMESPACE,
+        ),
+      send: async ({ manager, prepare, beforeSend }) => {
+        let turnId: string | undefined
+        try {
+          await managers.tree.deliverManagerEvent(manager.threadId, '', '', {
+            prepare,
+            external: { beforeSend },
+            onStarted: (id) => {
+              turnId = id
+            },
+          })
+        } catch (error) {
+          if (error instanceof UpstreamRpcError && [-32601, -32602].includes(error.code))
+            return { outcome: 'not_sent' }
+        }
+        return turnId ? { outcome: 'confirmed', turnId } : { outcome: 'unknown' }
+      },
+    }
+    const tools = new FeishuManagerTools(feishu, {
+      manager: (call) => {
+        const manager = managers.store.forThread(call.threadId)
+        return manager?.threadId === call.threadId &&
+          manager.harness === call.harness &&
+          manager.status === 'active'
+          ? manager
+          : null
+      },
+    })
+    // 经理空下来由叫醒的定时检查接着送，不另挂回合结束的钩子
+    this.deviceTools.register(FEISHU_TOOLS_NAMESPACE, tools.handle)
+  }
+
   async openEngineLink(
     harness: string,
     options: {

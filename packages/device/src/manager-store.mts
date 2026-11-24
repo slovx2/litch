@@ -32,6 +32,7 @@ import {
 } from './external-result-replies.mjs'
 import { EXTERNAL_STORE_MIGRATION } from './external-store-schema.mjs'
 import { FEISHU_CHATS_MIGRATION } from './feishu/chats.mjs'
+import { FEISHU_INBOX_MIGRATION } from './feishu/inbox.mjs'
 import { SPEECH_POLICIES_MIGRATION } from './feishu/speech-policy.mjs'
 import { FEISHU_APPS_MIGRATION } from './feishu/store.mjs'
 import { MANAGER_BOARD_TRANSFER_MIGRATION } from './manager-board-transfer.mjs'
@@ -72,6 +73,7 @@ const MIGRATIONS = [
   `CREATE TABLE manager_idle_compact(thread_id TEXT PRIMARY KEY, body TEXT NOT NULL);`,
   FEISHU_APPS_MIGRATION,
   FEISHU_CHATS_MIGRATION + SPEECH_POLICIES_MIGRATION,
+  FEISHU_INBOX_MIGRATION,
 ] as const
 export const MANAGER_SCHEMA_VERSION = MIGRATIONS.length
 export const managerNow = () => Math.floor(Date.now() / 1000)

@@ -418,6 +418,8 @@ export interface ForwardChild {
   messageId: string
   msgType: string
   content: unknown
+  /** 子消息自己的 @ 列表（文字里的 @_user_n 占位按它换成名字） */
+  mentions?: MentionRef[]
   /** 子消息是卡片时回源取到的卡片文字 */
   cardText?: string
 }
@@ -432,6 +434,7 @@ export function expandForward(parentId: string, children: ForwardChild[]): Parse
     const parsed = parseContent(child.msgType, child.content, {
       messageId: child.messageId,
       resourceMessageId: parentId,
+      ...(child.mentions ? { mentions: child.mentions } : {}),
     })
     let text = child.msgType === 'interactive' && child.cardText ? child.cardText : parsed.text
     if (child.msgType === 'merge_forward') text = '[嵌套的合并转发，飞书不支持再展开]'

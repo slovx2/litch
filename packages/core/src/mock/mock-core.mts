@@ -3855,7 +3855,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (
         topic.kind === 'feishuDevice' ||
         topic.kind === 'feishuRegistration' ||
-        topic.kind === 'feishuChats'
+        topic.kind === 'feishuChats' ||
+        topic.kind === 'feishuInbox'
       )
         return feishu.of(topic.deviceId).open(topic, sink)
       if (topic.kind === 'organizer') return organizer.subscribe(sink)

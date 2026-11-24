@@ -17,6 +17,9 @@ import {
   type FeishuChatUpdateParams,
   type FeishuErrorCode,
   type FeishuGapFill,
+  type FeishuInboxEntry,
+  type FeishuInboxMessage,
+  type FeishuInboxStatus,
   type FeishuMember,
   type FeishuPerson,
   type FeishuRegistration,
@@ -31,6 +34,9 @@ export type {
   FeishuChatAccess,
   FeishuChatRecords,
   FeishuGapFill,
+  FeishuInboxEntry,
+  FeishuInboxMessage,
+  FeishuInboxStatus,
   FeishuMember,
   FeishuPerson,
   FeishuRegistration,
@@ -467,4 +473,81 @@ export function backfillWindow(
   const start = Math.floor(startMs / 1000)
   const end = Math.floor(Math.min(next.getTime(), nowMs) / 1000)
   return start < end ? { start, end } : { problem: 'order' }
+}
+
+// ---------- 经理的飞书收件箱 ----------
+
+/** 收件箱的两段：待处理（排队中、已送进回合）与已处理 */
+export const INBOX_SEGMENTS = ['open', 'done'] as const
+export type InboxSegment = (typeof INBOX_SEGMENTS)[number]
+
+export function inboxSegment(status: FeishuInboxStatus): InboxSegment {
+  return status === 'processed' ? 'done' : 'open'
+}
+
+/** 一段里的条目，保持设备给的顺序（新的在前） */
+export function segmentEntries(
+  entries: readonly FeishuInboxEntry[],
+  segment: InboxSegment,
+): FeishuInboxEntry[] {
+  return entries.filter((entry) => inboxSegment(entry.status) === segment)
+}
+
+/** 排队中（还没送进经理回合）的条数：经理页签上的计数 */
+export function queuedCount(entries: readonly FeishuInboxEntry[]): number {
+  return entries.filter((entry) => entry.status === 'queued').length
+}
+
+/**
+ * 订阅给的最新一页加手动读到的更早几页：同一条以订阅的为准（状态更新），
+ * 更早的只补订阅里没有的，整体按设备顺序（新的在前）
+ */
+export function mergeInbox(
+  latest: { entries: readonly FeishuInboxEntry[]; messages: Record<string, FeishuInboxMessage> },
+  older: { entries: readonly FeishuInboxEntry[]; messages: Record<string, FeishuInboxMessage> },
+): { entries: FeishuInboxEntry[]; messages: Record<string, FeishuInboxMessage> } {
+  const seen = new Set(latest.entries.map((entry) => entry.inboxId))
+  return {
+    entries: [...latest.entries, ...older.entries.filter((entry) => !seen.has(entry.inboxId))],
+    messages: { ...older.messages, ...latest.messages },
+  }
+}
+
+/** 行上显示的状态：排队中但叫醒额度用完时单标“限额中” */
+export type InboxShownStatus = FeishuInboxStatus | 'limited'
+export function inboxShownStatus(
+  entry: Pick<FeishuInboxEntry, 'status' | 'note'>,
+): InboxShownStatus {
+  return entry.status === 'queued' && entry.note === 'rate_limited' ? 'limited' : entry.status
+}
+
+/** 发送人：有名字用名字，没有用 open_id */
+export function senderLabel(entry: Pick<FeishuInboxEntry, 'senderName' | 'senderOpenId'>) {
+  return entry.senderName?.trim() || entry.senderOpenId
+}
+
+/**
+ * 消息正文怎么显示：有字就显示；已撤回、已删除、过了保留期、不是文字消息、消息库里没有，
+ * 各给一个文案键的后半（feishu.inbox.text.<kind>）
+ */
+export type InboxText =
+  | { kind: 'text'; text: string }
+  | { kind: 'recalled' | 'deleted' | 'purged' | 'missing' }
+  | { kind: 'other'; msgType: string }
+export function inboxText(message: FeishuInboxMessage | undefined | null): InboxText {
+  if (!message) return { kind: 'missing' }
+  if (message.state === 'recalled') return { kind: 'recalled' }
+  if (message.state === 'deleted') return { kind: 'deleted' }
+  if (message.purged) return { kind: 'purged' }
+  if (message.text?.trim()) return { kind: 'text', text: message.text }
+  return { kind: 'other', msgType: message.msgType }
+}
+
+/** 群名：消息库里有就用；私聊没有群名；都没有时用 chat_id */
+export function inboxChatName(
+  entry: Pick<FeishuInboxEntry, 'chatKind' | 'chatId'>,
+  message: Pick<FeishuInboxMessage, 'chatName'> | undefined | null,
+): string | null {
+  if (message?.chatName?.trim()) return message.chatName
+  return entry.chatKind === 'p2p' ? null : entry.chatId
 }

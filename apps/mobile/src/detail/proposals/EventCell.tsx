@@ -35,6 +35,7 @@ const HEAD: Partial<Record<string, Key>> = {
   'manager-open': 'manager.event.open',
   'manager-end': 'manager.event.end',
   'manager-rules': 'manager.event.rules',
+  'manager-feishu': 'manager.event.feishu',
 } as const
 
 function Note({

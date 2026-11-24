@@ -194,6 +194,17 @@ test('合并转发：逐条展开，附件挂父消息，卡片用回源文字�
   assert.match(expanded.text, /3\. 卡片内容\n4\. \[嵌套的合并转发/)
   assert.equal(expanded.attachments[0]?.resourceMessageId, 'om_parent')
 
+  // 子消息的 @ 占位按子消息自己的 @ 列表换成名字
+  const mentioned = expandForward('om_parent', [
+    {
+      messageId: 'om_e',
+      msgType: 'text',
+      content: '{"text":"@_user_1 能收到吗"}',
+      mentions: [{ key: '@_user_1', name: '测试机器人' }],
+    },
+  ])
+  assert.equal(mentioned.text, '[合并转发]\n1. @测试机器人 能收到吗')
+
   const many = Array.from({ length: FORWARD_CHILD_LIMIT + 3 }, (_, index) => ({
     messageId: `om_${index}`,
     msgType: 'text',

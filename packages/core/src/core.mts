@@ -2031,7 +2031,8 @@ export function createCore(options: CoreOptions): Core {
       if (
         topic.kind === 'feishuDevice' ||
         topic.kind === 'feishuRegistration' ||
-        topic.kind === 'feishuChats'
+        topic.kind === 'feishuChats' ||
+        topic.kind === 'feishuInbox'
       )
         return device.feishu.open(topic, sink)
       if (topic.kind === 'tasks') return device.tasks.open(sink)

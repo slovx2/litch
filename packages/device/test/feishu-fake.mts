@@ -86,6 +86,8 @@ export class FakeFeishu {
   readonly sent: SentRequest[] = []
   readonly calls: { appId: string; method: string; path: string }[] = []
   readonly uploads = new Map<string, { appId: string; kind: 'image' | 'file'; bytes: number }>()
+  /** 消息里的资源（图片、文件）：按 file_key 给字节 */
+  readonly resources = new Map<string, { bytes: Buffer; type: string }>()
   readonly sockets: Socket[] = []
   readonly patches: { appId: string; body: Record<string, unknown> }[] = []
   readonly publishes: { appId: string; body: Record<string, unknown> }[] = []
@@ -412,6 +414,14 @@ export class FakeFeishu {
     }
     const app = this.appOf(request)
     if (!app) return reply({ code: 99991663, msg: 'invalid access token' }, 400)
+    const resource = /^\/open-apis\/im\/v1\/messages\/[^/]+\/resources\/([^/]+)$/.exec(url.pathname)
+    const bytes = resource?.[1] ? this.resources.get(decodeURIComponent(resource[1])) : undefined
+    if (bytes && method === 'GET') {
+      this.calls.push({ appId: app.appId, method, path: url.pathname })
+      response.writeHead(200, { 'content-type': bytes.type })
+      response.end(bytes.bytes)
+      return
+    }
     this.calls.push({ appId: app.appId, method, path })
     return this.api(app, method, path, url, raw, json, reply)
   }

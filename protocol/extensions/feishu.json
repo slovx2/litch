@@ -19,7 +19,8 @@
     "时间用 UTC epoch 秒；飞书 ID 原样用字符串。",
     "群只有经 chat/access 明确接入后才收、记、发；机器人只是被拉进群什么都不做。接入必须选发言模式，外部群必须带 confirmExternal: true。",
     "机器人被移出已接入的群时接入设置保留（botPresent=false），重新拉进来自动恢复。",
-    "设备只记录已接入群里的消息；接入时补最近 7 天、单次补历史最多 1000 条，进度在群的 records 里。"
+    "设备只记录已接入群里的消息；接入时补最近 7 天、单次补历史最多 1000 条，进度在群的 records 里。",
+    "收件箱只列 @ 了机器人或回复机器人、且发送人在叫醒名单里的消息；条目不带正文，inbox/get 从设备的消息库读原文。"
   ],
   "parts": [
     {
@@ -293,6 +294,62 @@
       "result": { "$ref": "#/definitions/ChatResult" }
     },
     {
+      "kind": "Method",
+      "name": "litch/feishu/inbox/list",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["managerId"],
+        "properties": {
+          "managerId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+          "statuses": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "uniqueItems": true,
+            "items": { "$ref": "#/definitions/InboxStatus" }
+          },
+          "before": { "$ref": "#/definitions/InboxId" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entries", "messages"],
+        "properties": {
+          "entries": { "type": "array", "items": { "$ref": "#/definitions/InboxEntry" } },
+          "messages": {
+            "description": "按 inboxId 给出对应消息；消息库里没有的不出现",
+            "type": "object",
+            "additionalProperties": { "$ref": "#/definitions/InboxMessage" }
+          },
+          "next": { "$ref": "#/definitions/InboxId" }
+        }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/inbox/get",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["inboxId"],
+        "properties": { "inboxId": { "$ref": "#/definitions/InboxId" } }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entry", "message"],
+        "properties": {
+          "entry": { "$ref": "#/definitions/InboxEntry" },
+          "message": {
+            "oneOf": [{ "$ref": "#/definitions/InboxMessage" }, { "type": "null" }]
+          }
+        }
+      }
+    },
+    {
       "kind": "Notification",
       "name": "litch/feishu/appsChanged",
       "params": {
@@ -324,6 +381,19 @@
         "properties": {
           "appId": { "$ref": "#/definitions/AppId" },
           "chatId": { "$ref": "#/definitions/ChatId" }
+        }
+      }
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/feishu/inboxChanged",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["managerId", "appId"],
+        "properties": {
+          "managerId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+          "appId": { "$ref": "#/definitions/AppId" }
         }
       }
     }
@@ -518,6 +588,57 @@
         "access": { "oneOf": [{ "$ref": "#/definitions/ChatAccess" }, { "type": "null" }] },
         "updatedAt": { "$ref": "#/definitions/Timestamp" },
         "records": { "$ref": "#/definitions/ChatRecords" }
+      }
+    },
+    "InboxId": { "type": "string", "pattern": "^FI-[1-9][0-9]{0,15}$" },
+    "InboxStatus": { "enum": ["queued", "notified", "processed"] },
+    "InboxEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inboxId",
+        "status",
+        "appId",
+        "managerId",
+        "chatId",
+        "chatKind",
+        "messageId",
+        "senderOpenId",
+        "senderIdentity",
+        "trigger",
+        "createdAt",
+        "receivedAt"
+      ],
+      "properties": {
+        "inboxId": { "$ref": "#/definitions/InboxId" },
+        "status": { "$ref": "#/definitions/InboxStatus" },
+        "appId": { "$ref": "#/definitions/AppId" },
+        "managerId": { "type": "string", "maxLength": 128 },
+        "chatId": { "type": "string", "maxLength": 128 },
+        "chatKind": { "enum": ["group", "p2p"] },
+        "messageId": { "type": "string", "maxLength": 128 },
+        "senderOpenId": { "type": "string", "maxLength": 128 },
+        "senderName": { "type": "string", "maxLength": 256 },
+        "senderIdentity": { "enum": ["bound", "member", "unknown"] },
+        "trigger": { "enum": ["mention", "reply", "p2p"] },
+        "createdAt": { "$ref": "#/definitions/Timestamp" },
+        "receivedAt": { "$ref": "#/definitions/Timestamp" },
+        "deliveryId": { "type": "string", "maxLength": 128 },
+        "notifiedAt": { "$ref": "#/definitions/Timestamp" },
+        "processedAt": { "$ref": "#/definitions/Timestamp" },
+        "note": { "enum": ["rate_limited"] }
+      }
+    },
+    "InboxMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chatName", "text", "msgType", "state", "purged"],
+      "properties": {
+        "chatName": { "type": "string", "maxLength": 256 },
+        "text": { "oneOf": [{ "type": "string", "maxLength": 21000 }, { "type": "null" }] },
+        "msgType": { "type": "string", "maxLength": 64 },
+        "state": { "enum": ["normal", "recalled", "deleted"] },
+        "purged": { "type": "boolean" }
       }
     },
     "ChatRecords": {

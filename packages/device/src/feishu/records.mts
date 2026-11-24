@@ -3,8 +3,8 @@
 // - 补历史：接入时补最近 7 天、手动补一段、每次连上补断线期间的缺口；同一应用的历史请求串行。
 // - 回源：合并转发、卡片、名片要再读一次才看得全，落库后在后台补上，不拖慢 ACK。
 // - 清理：每天按群的保留天数删旧消息；被引用的只清正文。撤回的换成“[已撤回]”。
-import { rmSync } from 'node:fs'
-import { isAbsolute, relative } from 'node:path'
+import { chmodSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { isAbsolute, join, relative } from 'node:path'
 import {
   FEISHU_BACKFILL_LIMIT,
   FEISHU_NOTIFICATION,
@@ -25,9 +25,17 @@ import type {
   ImMessages,
   MessageSource,
   NewMessage,
+  StoredAttachment,
   StoredMention,
   StoredMessage,
 } from './messages.mjs'
+
+/** 文件名里只留安全字符，不让路径跳出附件目录 */
+const safeName = (name: string) =>
+  name
+    .replace(/[^\p{L}\p{N}._-]+/gu, '_')
+    .replace(/^\.+/, '')
+    .slice(0, 120)
 
 /** 接入时补多少天 */
 const ACCESS_BACKFILL_DAYS = 7
@@ -573,6 +581,61 @@ export class FeishuRecords {
     }
   }
 
+  // —— 按需读单条 ——
+
+  /** 回源读一条消息并按最新版存下（本地没有的记 source=fetch）；读不到返回本地那行或 null */
+  async fetchMessage(appId: string, messageId: string): Promise<StoredMessage | null> {
+    const api = this.options.api(appId)
+    if (!api) return this.messages.get(appId, messageId)
+    const item = (await this.detail(api, messageId, false))[0]
+    const incoming = item ? fromHistory(item) : null
+    if (incoming && this.options.chats.record(appId, incoming.chatId)?.access)
+      this.store(appId, incoming, 'fetch')
+    return this.messages.get(appId, messageId)
+  }
+
+  // —— 附件 ——
+
+  /** 下载一条已记录消息的附件到私有目录；同一附件只下一次 */
+  async download(appId: string, messageId: string, fileKey: string): Promise<StoredAttachment> {
+    const { messages, fail } = this.options
+    const message = messages.get(appId, messageId) ?? fail('feishu_message_not_found')
+    if (!this.options.chats.record(appId, message.chatId)?.access) fail('feishu_chat_not_accessed')
+    const attachment =
+      messages.attachments(appId, messageId).find((one) => one.fileKey === fileKey) ??
+      fail('feishu_attachment_not_found')
+    if (attachment.downloadedPath) {
+      try {
+        if (statSync(attachment.downloadedPath).isFile()) return attachment
+      } catch {
+        // 文件被删了：重新下
+      }
+    }
+    if (message.state !== 'normal') fail('feishu_message_unavailable')
+    const api = this.options.api(appId) ?? fail('feishu_app_inactive')
+    // 不排进历史请求的队列：经理在等，不能卡在一次补历史后面
+    const { bytes, type } = await this.retry(() =>
+      api.download(
+        `/open-apis/im/v1/messages/${encodeURIComponent(attachment.resourceMessageId)}/resources/${encodeURIComponent(fileKey)}`,
+        { type: attachment.kind === 'image' ? 'image' : 'file' },
+      ),
+    )
+    const directory = join(this.options.attachmentsDirectory, safeName(appId), safeName(messageId))
+    mkdirSync(directory, { recursive: true, mode: 0o700 })
+    chmodSync(this.options.attachmentsDirectory, 0o700)
+    const path = join(directory, `${safeName(fileKey)}-${safeName(attachment.name) || 'file'}`)
+    writeFileSync(path, bytes, { mode: 0o600 })
+    const saved: StoredAttachment = {
+      ...attachment,
+      size: bytes.length,
+      ...(type ? { contentType: type.split(';')[0]?.trim() || type } : {}),
+      downloadedPath: path,
+      downloadedAt: this.options.now(),
+    }
+    messages.saveDownload(appId, messageId, saved)
+    return saved
+  }
+
   // —— 回源补全 ——
 
   private enrichLater(appId: string, messageId: string, content: ParsedContent): void {
@@ -622,6 +685,7 @@ export class FeishuRecords {
           messageId: childId,
           msgType,
           content: isObject(item.body) ? item.body.content : '',
+          mentions: mentionRefs(mentionsOf(item.mentions)),
         }
         if (msgType === 'interactive' && childId !== messageId && cards < FORWARD_CARD_FETCH) {
           cards += 1

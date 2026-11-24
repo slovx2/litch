@@ -121,3 +121,48 @@
   align-items: flex-end;
   gap: 12px;
 }
+
+/* 经理 Console 的飞书收件箱：沿用 GitHub 收件箱的 ext-inbox 行，第二行是一行正文 */
+.fs-inbox-item {
+  padding-bottom: 6px;
+}
+.fs-inbox-item .ext-inbox-main {
+  flex: 0 1 auto;
+}
+.fs-inbox-item .ext-inbox-main > .ell {
+  min-width: 0;
+}
+.fs-inbox-item .ext-row > .pill,
+.fs-inbox-trigger,
+.fs-inbox-time {
+  flex: none;
+  white-space: nowrap;
+}
+.fs-inbox-line {
+  margin: 0 0 0 16px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+/* 撤回、删除、过了保留期、没有记录等说明性文字：比正文淡 */
+.fs-inbox-line:not([data-kind="text"]),
+.fs-inbox-full:not([data-kind="text"]) {
+  color: var(--ink-3);
+}
+.fs-inbox-full {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.fs-inbox-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+.fs-inbox-meta > * {
+  flex: none;
+  max-width: 100%;
+}
