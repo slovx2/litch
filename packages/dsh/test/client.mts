@@ -1,3 +1,5 @@
+// 先收紧环境，再加载别的模块（见 setup.mts）
+import './setup.mjs'
 import { randomUUID } from 'node:crypto'
 import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
