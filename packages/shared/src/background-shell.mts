@@ -20,6 +20,7 @@ import {
 } from 'node:fs'
 import { open, stat } from 'node:fs/promises'
 import { isAbsolute, join, resolve } from 'node:path'
+import { finished } from 'node:stream'
 import {
   BACKGROUND_ENDED_LIMIT,
   type BackgroundTaskStatus,
@@ -209,6 +210,8 @@ export class BackgroundShells {
    * 只交一次；模型在这之前自己 read、list 看到了的就不再交
    */
   private readonly userStops = new Map<string, ShellTask[]>()
+  /** 已结束、日志还没落完盘的：read 等它写完再读末尾，不然刚结束的命令可能读到空的 */
+  private readonly flushing = new Map<string, Promise<void>>()
   private seq = 0
   private closed = false
 
@@ -409,6 +412,7 @@ export class BackgroundShells {
         entry.waiters.add(finish)
         signal?.addEventListener('abort', finish, { once: true })
       })
+    await this.flushing.get(id)
     const max = Math.min(
       Math.max(1, options.maxBytes ?? BACKGROUND_SHELL_LIMITS.readDefaultBytes),
       BACKGROUND_SHELL_LIMITS.readMaxBytes,
@@ -570,17 +574,30 @@ export class BackgroundShells {
   ): void {
     this.running.delete(task.id)
     if (entry.killTimer) clearTimeout(entry.killTimer)
-    entry.stream.end()
     task.exitCode = code
     task.signal = signal
     task.endedAt = this.now()
     task.status = task.stoppedBy ? 'stopped' : code === 0 && !signal ? 'completed' : 'failed'
-    for (const waiter of [...entry.waiters]) waiter()
     this.host.log?.(`后台 shell ${task.id}（会话 ${task.threadId}）结束：${statusText(task)}`)
     this.evict(task.threadId)
     this.host.changed(task.threadId)
     if (task.stoppedBy === 'user' && !this.closed)
       this.userStops.set(task.threadId, [...(this.userStops.get(task.threadId) ?? []), task])
+    // 日志写入是异步的：落完盘（或写入出错）之后再叫等它的、再交给 host.finished，读到的才是完整输出
+    const flushed = new Promise<void>((done) => {
+      finished(entry.stream, () => done())
+      entry.stream.end()
+    })
+    this.flushing.set(task.id, flushed)
+    void flushed.then(() => {
+      this.flushing.delete(task.id)
+      for (const waiter of [...entry.waiters]) waiter()
+      this.afterEnded(task)
+    })
+  }
+
+  /** 日志落盘之后：自己退出的攒一小会儿一起交给 host.finished */
+  private afterEnded(task: ShellTask): void {
     if (task.stoppedBy || this.closed) return
     // 自己退出的：攒一小会儿，差不多同时结束的一起交出去
     const pending = this.settling.get(task.threadId)
