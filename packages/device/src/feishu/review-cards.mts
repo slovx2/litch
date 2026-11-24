@@ -132,9 +132,9 @@ export class FeishuReviewCards {
     } else {
       const via =
         review.decidedBy?.via === 'feishu'
-          ? `在飞书里${decidedByName ? `由 ${plain(decidedByName)} ` : ''}`
+          ? `${decidedByName ? `由 ${plain(decidedByName)} ` : ''}在飞书里批`
           : review.decidedBy?.via === 'litch'
-            ? '在 Litch 里'
+            ? '在 Litch 里批'
             : ''
       const line = `**${STATE_TEXT[review.state]}**${via && review.state !== 'expired' && review.state !== 'canceled' ? ` · ${via}` : ''}${review.reason ? `\n理由：${plain(clip(review.reason, 500))}` : ''}`
       elements.push({ tag: 'markdown', content: line })
