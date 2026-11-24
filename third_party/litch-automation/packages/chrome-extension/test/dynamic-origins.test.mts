@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ChromeGrant } from '../../automation-contracts/src/litch/chrome-browser.mjs'
+import { ForegroundWatch } from '../src/foreground.mjs'
 import { execute } from '../src/requests.mjs'
 import { documentStamp, type ExtensionState } from '../src/state.mjs'
 
@@ -27,6 +28,7 @@ function fixture() {
     paused: new Set(),
     stoppedTurns: new Set(),
     presentation: { keep: async () => {} },
+    foreground: new ForegroundWatch(),
     chrome: {
       windows: { getLastFocused: async () => ({ id: 1 }) },
       tabs: {

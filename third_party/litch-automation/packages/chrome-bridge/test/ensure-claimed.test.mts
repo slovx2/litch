@@ -95,6 +95,7 @@ function fixture(options: Partial<ChromeExecutorOptions> = {}) {
     expire: () => {
       expired = true
     },
+    emit: (event: ChromeEvent) => receive(instance.id, event),
     reconnect: () => {
       instance.epoch = '2'
       receive(instance.id, { kind: 'disconnected' })
@@ -329,4 +330,32 @@ test('受限当前页列出准确原因，认领前拒绝，不发 claim 或审�
   } finally {
     f.executor.dispose()
   }
+})
+
+test('受控页面抢前台的事件只为本执行器的租约交还前台；输入前记下前台应用', async (t) => {
+  const events: string[] = []
+  const f = fixture({
+    foreground: {
+      note: () => events.push('note'),
+      restore: async () => {
+        events.push('restore')
+        return true
+      },
+    },
+  })
+  t.after(() => f.executor.dispose())
+  const { tabId } = first(await f.call('ensure_claimed', { targetId: 'chrome:fixture' }))
+  events.length = 0
+  const page = [...f.executor.pages.values()][0]
+  assert.equal(page.id, tabId)
+  await page.cdp('Page.getFrameTree')
+  assert.deepEqual(events, [], '观察类命令不记前台')
+  await page.cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter' })
+  assert.deepEqual(events, ['note'])
+  f.emit({ kind: 'foreground', tabId: 1, leaseId: 'someone-else' })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.ok(!events.includes('restore'))
+  f.emit({ kind: 'foreground', tabId: 1, leaseId: page.grant.leaseId })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(events.at(-1), 'restore')
 })

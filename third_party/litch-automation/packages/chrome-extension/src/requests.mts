@@ -257,6 +257,8 @@ export async function execute(state: ExtensionState, request: ChromeRequest): Pr
       throw new ChromeFault('invalid', `CDP method is not allowed: ${method}`)
     const before = await documentStamp(state, grant)
     const params = (args.params ?? {}) as Record<string, unknown>
+    // 先记下代理输入，页面凭这次用户激活打开的新页面才能被认出来。
+    if (isInputCommand(method, params)) state.foreground.input(grant.tabId)
     const dispatch = () => cdp(state, grant.tabId, method, params)
     const result =
       method === 'Page.captureScreenshot' || method === 'Accessibility.getFullAXTree'

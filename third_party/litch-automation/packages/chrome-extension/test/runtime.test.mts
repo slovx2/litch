@@ -12,9 +12,20 @@ function event() {
   }
 }
 function fixture(id = 'a'.repeat(32), productName = 'Example', hostName = 'example.chrome') {
-  const events = Array.from({ length: 9 }, event)
-  const [clicked, installed, startup, message, removed, updated, committed, detached, debug] =
-    events
+  const events = Array.from({ length: 11 }, event)
+  const [
+    clicked,
+    installed,
+    startup,
+    message,
+    removed,
+    updated,
+    committed,
+    detached,
+    debug,
+    created,
+    focusChanged,
+  ] = events
   const local: Record<string, any> = {},
     session: Record<string, any> = {}
   const storage = (values: Record<string, any>) => ({
@@ -59,7 +70,8 @@ function fixture(id = 'a'.repeat(32), productName = 'Example', hostName = 'examp
     management: { getSelf: async () => ({ installType: 'development' }) },
     i18n: { getUILanguage: () => 'en-US' },
     storage: { local: storage(local), session: storage(session) },
-    tabs: { onRemoved: removed, onUpdated: updated },
+    tabs: { onRemoved: removed, onUpdated: updated, onCreated: created },
+    windows: { onFocusChanged: focusChanged, getLastFocused: async () => ({ focused: false }) },
     webNavigation: { onCommitted: committed },
     debugger: { onDetach: detached, onEvent: debug, detach: async () => {} },
   }

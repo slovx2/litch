@@ -2,6 +2,10 @@
 
 ## 未发布
 
+### 受控页面开新页面后交还系统前台
+
+受控页面在代理输入后自己打开新标签或弹窗（`target=_blank`、`window.open`）时，Chrome 会激活窗口，在 macOS 上会抢走前台应用。扩展新增 `foreground` 事件，在 Chrome 原本不在前台、因受控标签刚打开的新页面获得焦点时发出。`ChromeExecutorOptions.foreground` 接收 `ForegroundKeeper`：每次代理输入前记下前台应用，收到事件后还给它。`macForegroundKeeper()` 只用 `lsappinfo` 与 `osascript` 的 JavaScript 桥，不需要辅助功能或自动化权限。不传时行为不变。
+
 ### 0.42.0
 
 复用 browser 的有界 File 构造与清理逻辑；调用取消后仅清理已持有的上传对象，继续核验租约与来源。

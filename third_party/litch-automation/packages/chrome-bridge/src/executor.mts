@@ -16,6 +16,7 @@ import type {
 } from '../../browser/src/tool-port.mjs'
 import { chromeOrigin } from '../../chrome-extension/src/origin.mjs'
 import { type ChromeBridge, ChromeBridgeError, incompatibleMessage } from './bridge.mjs'
+import type { ForegroundKeeper } from './foreground.mjs'
 import { ChromePage } from './page.mjs'
 import { executePageTool } from './tools.mjs'
 
@@ -37,6 +38,8 @@ export interface ChromeExecutorOptions {
   allowed(invocation: ClientToolInvocation): boolean
   /** 最后一张标签交还后，宿主同步交还该会话的原生输入所有权。 */
   onSessionReleased?(owner: { deviceId: string; threadId: string; turnId: string }): Promise<void>
+  /** 受控页面自己打开新页面抢走系统前台时把前台还回去；不提供则不处理。 */
+  foreground?: ForegroundKeeper
   idleMs?: number
   now?(): number
 }
@@ -85,6 +88,13 @@ export class ChromeExecutor implements BrowserExecutor {
     this.namespace = options.namespace
     this.sites = options.sites ?? createSiteBook(null)
     this.off = options.bridge.onEvent((instanceId, event) => {
+      if (
+        event.kind === 'foreground' &&
+        [...this.pages.values()].some(
+          (page) => page.instanceId === instanceId && page.grant.leaseId === event.leaseId,
+        )
+      )
+        void options.foreground?.restore().catch(() => {})
       for (const page of this.pages.values()) {
         if (page.instanceId !== instanceId) continue
         if (
@@ -412,6 +422,8 @@ export class ChromeExecutor implements BrowserExecutor {
     )
     if (token.tab.targetId !== undefined) page.targetId = token.tab.targetId
     page.claimEpoch = token.epoch
+    const keeper = this.options.foreground
+    if (keeper) page.onInput = () => keeper.note()
     this.pages.set(page.id, page)
     return page
   }
