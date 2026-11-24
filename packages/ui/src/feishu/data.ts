@@ -5,7 +5,9 @@ import type {
   FeishuChatsView,
   FeishuDeviceView,
   FeishuInboxView,
+  FeishuOutboxView,
   FeishuRegistrationView,
+  ReviewsView,
 } from '../../../core/src/projection/feishu.mts'
 import { useT } from '../app/appearance.ts'
 import { useServices } from '../app/services.tsx'
@@ -22,6 +24,8 @@ type Topic =
   | { kind: 'feishuRegistration'; deviceId: string; registrationId: string }
   | { kind: 'feishuChats'; deviceId: string; appId: string }
   | { kind: 'feishuInbox'; deviceId: string; managerId: string }
+  | { kind: 'feishuOutbox'; deviceId: string; appId: string }
+  | { kind: 'reviews'; deviceId: string; managerId?: string }
 
 /** 订一个主题，取最新快照；topic 为 null 时不订 */
 function useTopic<T>(topic: Topic | null): T | undefined {
@@ -70,6 +74,19 @@ export function useManagerFeishuApp(
 /** 经理的飞书收件箱：最近一页（新的在前）；enabled 为 false 时不订 */
 export function useFeishuInbox(deviceId: string, managerId: string, enabled = true) {
   return useTopic<FeishuInboxView>(enabled ? { kind: 'feishuInbox', deviceId, managerId } : null)
+}
+
+/** 一个应用的发件队列：最近一页（新的在前） */
+export function useFeishuOutbox(deviceId: string, appId: string) {
+  return useTopic<FeishuOutboxView>({ kind: 'feishuOutbox', deviceId, appId })
+}
+
+/**
+ * 这位经理发起的审批（待批在前）；enabled 为 false 时不订。
+ * 设备没有审批扩展时 available 为 false，界面不出审批入口
+ */
+export function useReviews(deviceId: string, managerId: string, enabled = true) {
+  return useTopic<ReviewsView>(enabled ? { kind: 'reviews', deviceId, managerId } : null)
 }
 
 /**

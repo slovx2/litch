@@ -469,3 +469,146 @@ test('收件箱群名：有群名用群名，私聊没有，群没有名字时�
   assert.equal(m.inboxChatName(entry('FI-1'), undefined), 'oc_1')
   assert.equal(m.inboxChatName(entry('FI-1', { chatKind: 'p2p' }), message({ chatName: '' })), null)
 })
+
+// ---------- 审批与发件 ----------
+
+const NOW = 1_000_000_000 * 1000
+const review = (patch = {}) => ({
+  reviewId: 'A-1',
+  revision: 1,
+  kind: 'speech',
+  provider: 'feishu',
+  scope: 'cli_0000000000000001/oc_x',
+  subjectRef: 'op_1',
+  requestedBy: { managerId: 'm1' },
+  preview: {
+    kind: 'speech',
+    provider: 'feishu',
+    appId: 'cli_0000000000000001',
+    appName: '助手',
+    target: { kind: 'chat', id: 'oc_x', name: '测试群' },
+    actingAs: { type: 'bot' },
+    mentions: [],
+    parts: [{ format: 'text', text: '你好' }],
+  },
+  payloadHash: '0'.repeat(64),
+  state: 'pending',
+  createdAt: NOW / 1000 - 60,
+  expiresAt: NOW / 1000 + 3600,
+  ...patch,
+})
+
+test('审批原因代码：只认 review_ 四种，都要重读', () => {
+  assert.equal(m.reviewReason({ message: 'review_revision_conflict' }), 'review_revision_conflict')
+  assert.equal(m.reviewReason({ message: 'review_expired' }), 'review_expired')
+  assert.equal(m.reviewReason({ message: 'feishu_app_not_found' }), null)
+  assert.equal(m.reviewReason(new Error('review_other')), null)
+  assert.equal(m.reviewReason(null), null)
+  assert.equal(m.reviewStale('review_not_pending'), true)
+  assert.equal(m.reviewStale(null), false)
+  // 撤下发件的两个原因并进 feishu_ 代码
+  assert.equal(m.feishuReason({ message: 'feishu_outbox_sending' }), 'outbox_sending')
+  assert.equal(m.feishuReason({ message: 'feishu_outbox_not_found' }), 'outbox_not_found')
+})
+
+test('审批显示状态：待批但过了过期时间显示成已过期', () => {
+  assert.equal(m.reviewShownState(review(), NOW), 'pending')
+  assert.equal(m.reviewShownState(review({ expiresAt: NOW / 1000 }), NOW), 'expired')
+  assert.equal(m.reviewShownState(review({ state: 'approved', expiresAt: 0 }), NOW), 'approved')
+})
+
+test('审批排序：待批在前且快过期的在前，其余按有结果的时间新的在前', () => {
+  const list = [
+    review({ reviewId: 'A-1', state: 'rejected', decidedAt: 100, createdAt: 50 }),
+    review({ reviewId: 'A-2', expiresAt: NOW / 1000 + 7200 }),
+    review({ reviewId: 'A-3', state: 'expired', createdAt: 300 }),
+    review({ reviewId: 'A-4', expiresAt: NOW / 1000 + 600 }),
+    review({ reviewId: 'A-5', expiresAt: NOW / 1000 - 1, createdAt: 200 }),
+  ]
+  assert.deepEqual(
+    m.sortReviews(list, NOW).map((one) => one.reviewId),
+    ['A-4', 'A-2', 'A-3', 'A-5', 'A-1'],
+  )
+})
+
+test('待批数：用设备给的总数，扣掉列表里已过期没改的', () => {
+  assert.equal(m.pendingReviewCount(undefined, NOW), 0)
+  const reviews = [review(), review({ reviewId: 'A-2', expiresAt: NOW / 1000 - 5 })]
+  assert.equal(m.pendingReviewCount({ reviews, pending: 2 }, NOW), 1)
+  // 总数超过列表（设备只给前 200 条）时照总数算
+  assert.equal(m.pendingReviewCount({ reviews: [review()], pending: 250 }, NOW), 250)
+})
+
+test('剩余时间：天、小时向下取整，不到一小时按分钟向上取整并标提醒', () => {
+  const at = (seconds) => NOW / 1000 + seconds
+  assert.deepEqual(m.timeLeft(at(86_400 * 2 + 5), NOW), { unit: 'day', n: 2, soon: false })
+  assert.deepEqual(m.timeLeft(at(86_399), NOW), { unit: 'hour', n: 23, soon: false })
+  assert.deepEqual(m.timeLeft(at(3600), NOW), { unit: 'hour', n: 1, soon: false })
+  assert.deepEqual(m.timeLeft(at(3599), NOW), { unit: 'minute', n: 60, soon: true })
+  assert.deepEqual(m.timeLeft(at(5), NOW), { unit: 'minute', n: 1, soon: true })
+  assert.equal(m.timeLeft(at(0), NOW), null)
+})
+
+test('发言开头与格式标记：取第一行有字的，图片文件取名字；格式去重', () => {
+  assert.equal(m.speechHead([{ format: 'post', text: '\n  第一行 \n第二行' }]), '第一行')
+  assert.equal(m.speechHead([{ format: 'image', name: '图.png', size: 1 }]), '图.png')
+  assert.equal(
+    m.speechHead([
+      { format: 'image', name: '图.png', size: 1 },
+      { format: 'text', text: '说明' },
+    ]),
+    '说明',
+  )
+  assert.equal(m.speechHead([]), '')
+  assert.deepEqual(m.speechFormats([{ format: 'card' }, { format: 'text' }, { format: 'card' }]), [
+    'card',
+    'text',
+  ])
+})
+
+test('批准参数：带 revision，理由去空白，空理由不带；理由按字符数限长', () => {
+  assert.deepEqual(m.decideParams(review({ revision: 3 }), 'approve', '  '), {
+    reviewId: 'A-1',
+    decision: 'approve',
+    expectedRevision: 3,
+  })
+  assert.deepEqual(m.decideParams(review(), 'reject', ' 不合适 '), {
+    reviewId: 'A-1',
+    decision: 'reject',
+    expectedRevision: 1,
+    reason: '不合适',
+  })
+  assert.equal(m.reasonProblem('字'.repeat(500)), null)
+  assert.equal(m.reasonProblem('字'.repeat(501)), 'long')
+  // 补充平面字符按一个字算
+  assert.equal(m.reasonProblem('😀'.repeat(500)), null)
+})
+
+test('发件：能撤下的状态、原因文案、合并更早的页', () => {
+  assert.deepEqual(
+    [
+      'awaiting_approval',
+      'queued',
+      'sending',
+      'sent',
+      'failed',
+      'rejected',
+      'canceled',
+      'unknown',
+    ].filter((state) => m.canCancelOutbox(state)),
+    ['awaiting_approval', 'queued', 'unknown'],
+  )
+  assert.equal(m.outboxReason({ state: 'sent' }), null)
+  // 被拒且是审批被拒：状态已说明，不再重复
+  assert.equal(m.outboxReason({ state: 'rejected', error: 'review_rejected' }), null)
+  assert.equal(m.outboxReason({ state: 'rejected', error: 'review_expired' }), 'review_expired')
+  assert.equal(m.outboxReason({ state: 'unknown', error: 'unknown_timeout' }), 'unknown_timeout')
+  assert.equal(m.outboxReason({ state: 'failed', error: 'rate_limited' }), 'other')
+  const entry = (operationId, state = 'sent') => ({ operationId, state })
+  assert.deepEqual(
+    m
+      .mergeOutbox([entry('b', 'queued'), entry('a')], [entry('b', 'sent'), entry('z')])
+      .map((one) => `${one.operationId}:${one.state}`),
+    ['b:queued', 'a:sent', 'z:sent'],
+  )
+})

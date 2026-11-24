@@ -1,7 +1,7 @@
 // 手机经理工作台：标题栏是经理名和状态，下面一排页签“对话 · 控制台 · 工作线 · 概览”。
 // 对话就是经理会话本身（与会话页同一套组件，detail/session-page.tsx），切到别的页签时不卸载、只是不显示，
 // 设备支持外部来源时控制台后多一个“GitHub”页签（收件箱，external/ExternalInbox.tsx）；
-// 经理绑了飞书应用时再多一个“飞书”页签（external/FeishuInbox.tsx）。
+// 经理绑了飞书应用时再多一个“飞书”页签（external/FeishuInbox.tsx）；设备有审批扩展时再多一个“审批”页签（external/FeishuReviews.tsx）。
 // 回来时滚动位置和草稿都在；只有对话页签显示着才标已读。默认落在对话；带 issue 的入口（经理事件、#D-n、受阻事项、
 // 工作线回经理）落到控制台（经理事项落到概览）并定位。当前页签存在路由参数里，回经理时可以直接改。
 // 议题卡在 Issue.tsx，对话里点编号拉起的半屏议题卡在 IssueSheet.tsx，工作线列表在 ManagerLines.tsx。
@@ -57,6 +57,7 @@ import { BoardActionScrollView } from './CardActions'
 import { DraftSubmitBar } from './DraftSubmitBar'
 import { ExternalInbox, useGithubSummary } from './external/ExternalInbox'
 import { FeishuInbox, useFeishuSummary } from './external/FeishuInbox'
+import { FeishuReviews, useReviewsSummary } from './external/FeishuReviews'
 import { reasonLabel } from './external/labels'
 import { IdleCompactSettings } from './IdleCompactSettings'
 import { Issue } from './Issue'
@@ -79,13 +80,14 @@ import { useManagerReset } from './use-reset'
 type Props = NativeStackScreenProps<RootStackParamList, 'ManagerConsole'>
 type Category = ManagerPost['kind']
 
-/** 页签顺序：GitHub、飞书两个外部收件箱跟在控制台后面，各自有条件才出 */
-function managerTabs(github: boolean, feishu: boolean): ManagerTab[] {
+/** 页签顺序：GitHub、飞书两个外部收件箱和审批跟在控制台后面，各自有条件才出 */
+function managerTabs(github: boolean, feishu: boolean, reviews: boolean): ManagerTab[] {
   return [
     'chat',
     'console',
     ...(github ? (['github'] as const) : []),
     ...(feishu ? (['feishu'] as const) : []),
+    ...(reviews ? (['reviews'] as const) : []),
     'lines',
     'overview',
   ]
@@ -95,6 +97,7 @@ const TAB_LABEL = {
   console: 'manager.inbox',
   github: 'mgh.tab',
   feishu: 'feishu.title',
+  reviews: 'feishu.review.tab',
   lines: 'mgr.tab.lines',
   overview: 'manager.overview',
 } as const
@@ -142,10 +145,18 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
     : (route.params.tab ?? 'chat')
   // 飞书页签：设备支持飞书、且这个经理绑了应用时才有
   const feishu = useManagerFeishuApp(deviceId, managerId, device?.feishu === true) !== null
+  // 审批页签：设备有审批扩展（reviews 快照 available）时才有，计数是这位经理的待批数
+  const reviewsSummary = useReviewsSummary(manager, device?.feishu === true)
+  const reviews = reviewsSummary.available
   const tab: ManagerTab =
-    (asked === 'github' && !github) || (asked === 'feishu' && !feishu) ? 'console' : asked
-  /** 对话和外部收件箱页签不显示看板滚动区 */
-  const offBoard = tab === 'chat' || tab === 'github' || tab === 'feishu'
+    (asked === 'github' && !github) ||
+    (asked === 'feishu' && !feishu) ||
+    (asked === 'reviews' && !reviews)
+      ? 'console'
+      : asked
+  /** 对话、外部收件箱和审批页签不显示看板滚动区 */
+  const outside = tab === 'github' || tab === 'feishu' || tab === 'reviews'
+  const offBoard = tab === 'chat' || outside
   const { pending: githubPending, blocked: githubBlocked } = useGithubSummary(manager, github)
   const feishuQueued = useFeishuSummary(manager, feishu)
   const t = useT()
@@ -475,6 +486,15 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
             label: t('manager.pending', { n: feishuQueued }),
           }
         : null
+    if (key === 'reviews')
+      return reviewsSummary.pending
+        ? {
+            kind: 'count',
+            text: String(reviewsSummary.pending),
+            color: c.wait,
+            label: t('manager.pending', { n: reviewsSummary.pending }),
+          }
+        : null
     if (key === 'lines') {
       const running = manager.runningLines
       if (!running && !linesWaiting) return null
@@ -536,7 +556,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
         style={[styles.tabsRow, { borderColor: c.line1, backgroundColor: c.panel, height: hit }]}
         contentContainerStyle={styles.tabs}
       >
-        {managerTabs(github, feishu).map((key) => {
+        {managerTabs(github, feishu, reviews).map((key) => {
           const on = tab === key
           const mark = badge(key)
           return (
@@ -753,12 +773,19 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
             />
           ) : null}
           {tab === 'feishu' ? <FeishuInbox key={managerId} manager={manager} /> : null}
+          {tab === 'reviews' ? (
+            <FeishuReviews
+              key={managerId}
+              manager={manager}
+              online={device?.connection === 'online'}
+            />
+          ) : null}
           <BoardActionScrollView
             testID="manager-board-scroll"
             ref={scroll}
+            hidden={outside}
             style={[
               styles.fill,
-              (tab === 'github' || tab === 'feishu') && styles.hidden,
               // 新控制台的加载、空状态和错误不能被旧分页位置恢复隐藏。
               restoringBoard &&
                 board &&

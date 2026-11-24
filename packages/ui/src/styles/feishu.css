@@ -166,3 +166,84 @@
   flex: none;
   max-width: 100%;
 }
+
+/* 审批（经理 Console 的“审批”页签）：沿用收件箱的行与详情 */
+.fs-quote {
+  margin: 0;
+  padding: 2px 0 2px 8px;
+  border-left: 2px solid var(--line-2);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.fs-review-parts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fs-review-part + .fs-review-part {
+  padding-top: 6px;
+  border-top: 1px dashed var(--line-2);
+}
+.fs-review-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+}
+.fs-review-file > .pill,
+.fs-review-file > .dim {
+  flex: none;
+}
+.fs-review-reason {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.fs-decide {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line-1);
+}
+.fs-decide-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fs-decide-row > .req-input {
+  min-width: 0;
+}
+.fs-approve:not(:disabled) {
+  color: var(--ok);
+}
+.fs-reject:not(:disabled) {
+  color: var(--err);
+}
+
+/* 应用详情 · 发件：第一行目标、格式、状态，第二行摘要与原因 */
+.fs-outbox-item {
+  padding-bottom: 6px;
+}
+.fs-outbox-item .ext-row > .pill,
+.fs-nowrap {
+  flex: none;
+  white-space: nowrap;
+}
+.fs-outbox-line {
+  margin-left: 0;
+}
+.fs-outbox-reason {
+  color: var(--ink-3);
+}
+.fs-outbox-item[data-state="unknown"] .fs-outbox-reason,
+.fs-outbox-item[data-state="failed"] .fs-outbox-reason {
+  color: var(--err);
+}
