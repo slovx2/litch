@@ -1,0 +1,191 @@
+# 设备给 Agent 用的 lark-cli（sidecar 版）：从上游 larksuite/cli 的固定标签编译六个平台，macOS 的签名并公证，
+# 在本仓库发一个独立的预发布 lark-cli-sidecar-v<版本>，只放这些二进制和 SHA256SUMS，标成 prerelease、不当 Latest。
+# 设备代码（packages/device/src/feishu/cli-binary.mts）写死版本和各平台的校验和，按需下载核对；升级时手动跑一次、改那份清单。
+# 资产名按 Node 的 process.platform-process.arch：lark-cli-<版本>-<darwin|linux|win32>-<x64|arm64>[.exe]。
+name: lark-cli sidecar
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 上游标签去掉 v，例如 1.0.100
+        required: true
+        default: '1.0.100'
+      commit:
+        description: 上游标签应指向的提交（防止标签被改动）
+        required: true
+        default: ac22a60a23d66c37d43a7ec6d9e99b99a4320356
+      publish:
+        description: 编完发预发布；不勾只编译、签名、公证
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lark-cli-sidecar-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: 检查输入
+        env:
+          VERSION: ${{ inputs.version }}
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "版本号格式不对" >&2; exit 1; }
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "提交号格式不对" >&2; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: larksuite/cli
+          ref: v${{ inputs.version }}
+          path: upstream
+          persist-credentials: false
+      - name: 核对标签指向的提交
+        env:
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          actual="$(git -C upstream rev-parse HEAD)"
+          [ "$actual" = "$COMMIT" ] || { echo "标签指向 $actual，不是 $COMMIT" >&2; exit 1; }
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.10
+          cache: false
+      # -B gobuildid：Go 1.26 不带它时 macOS 拒绝启动；不开 cgo，六个平台都在这台机器上交叉编译
+      - name: 编译六个平台
+        working-directory: upstream
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          module="$(head -1 go.mod | awk '{print $2}')"
+          mkdir -p ../dist
+          for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
+            goos="${target%/*}"; goarch="${target#*/}"
+            platform="$goos"; [ "$goos" = windows ] && platform=win32
+            arch="$goarch"; [ "$goarch" = amd64 ] && arch=x64
+            suffix=""; [ "$goos" = windows ] && suffix=.exe
+            GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build -trimpath -tags authsidecar \
+              -ldflags "-B gobuildid -s -w -X ${module}/internal/build.Version=v${VERSION}" \
+              -o "../dist/lark-cli-${VERSION}-${platform}-${arch}${suffix}" .
+          done
+          cp LICENSE ../dist/LICENSE
+          ls -l ../dist
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: lark-cli-unsigned
+          path: dist/*
+          retention-days: 7
+
+  sign-macos:
+    needs: build
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: lark-cli-unsigned
+          path: dist
+      # 证书放进临时钥匙串，公证凭据用 notarytool 存进同一个钥匙串，用完删掉（同 release.yml）
+      - name: 导入签名证书和公证凭据
+        env:
+          P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          API_KEY: ${{ secrets.APPLE_API_KEY }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          for name in P12 P12_PASSWORD API_KEY API_KEY_ID API_ISSUER; do
+            eval "value=\${$name}"
+            [ -n "$value" ] || { echo "签名和公证的机密不全：$name 是空的" >&2; exit 1; }
+          done
+          umask 077
+          keychain="${RUNNER_TEMP}/lark-signing.keychain-db"
+          password="$(openssl rand -hex 32)"
+          echo "::add-mask::$password"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          printf '%s' "$P12" | base64 --decode > "${RUNNER_TEMP}/certificate.p12"
+          security import "${RUNNER_TEMP}/certificate.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "${RUNNER_TEMP}/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain"
+          identity="$(security find-identity -v -p codesigning "$keychain" | awk -F'"' '/Developer ID Application/ { print $2; exit }')"
+          [ -n "$identity" ] || { echo "证书里没有 Developer ID Application 的签名身份" >&2; exit 1; }
+          key="${RUNNER_TEMP}/AuthKey_${API_KEY_ID}.p8"
+          case "$API_KEY" in
+            *"BEGIN PRIVATE KEY"*) printf '%s\n' "$API_KEY" > "$key" ;;
+            *) printf '%s' "$API_KEY" | base64 --decode > "$key" ;;
+          esac
+          xcrun notarytool store-credentials lark-ci --key "$key" --key-id "$API_KEY_ID" --issuer "$API_ISSUER" --keychain "$keychain" > /dev/null
+          rm -f "$key"
+          {
+            echo "SIGN_IDENTITY=$identity"
+            echo "SIGN_KEYCHAIN=$keychain"
+          } >> "$GITHUB_ENV"
+      # 单个可执行文件不能钉票据：签名（加固运行时、时间戳）后打成 zip 交公证，发的仍是签好的二进制
+      - name: 签名并公证 macOS 二进制
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          for arch in x64 arm64; do
+            file="dist/lark-cli-${VERSION}-darwin-${arch}"
+            chmod 755 "$file"
+            codesign --force --options runtime --timestamp --keychain "$SIGN_KEYCHAIN" -s "$SIGN_IDENTITY" "$file"
+            codesign --verify --strict --verbose=2 "$file"
+            ditto -c -k --keepParent "$file" "${RUNNER_TEMP}/notarize-${arch}.zip"
+            xcrun notarytool submit "${RUNNER_TEMP}/notarize-${arch}.zip" --keychain-profile lark-ci \
+              --keychain "$SIGN_KEYCHAIN" --wait --timeout 30m
+          done
+          "dist/lark-cli-${VERSION}-darwin-arm64" --version
+      - name: 校验和
+        working-directory: dist
+        run: |
+          shasum -a 256 lark-cli-* | tee SHA256SUMS
+      - name: 删掉临时钥匙串
+        if: always()
+        run: |
+          [ -z "${SIGN_KEYCHAIN:-}" ] || security delete-keychain "$SIGN_KEYCHAIN" || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: lark-cli-signed
+          path: dist/*
+          retention-days: 30
+
+  publish:
+    needs: sign-macos
+    if: inputs.publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: lark-cli-signed
+          path: dist
+      # 独立的预发布：不当 Latest，不改动 Litch 自己的发布；标签已存在时直接失败，不覆盖已发的二进制
+      - name: 发预发布
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          tag="lark-cli-sidecar-v${VERSION}"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "$tag 已经发过，不覆盖" >&2
+            exit 1
+          fi
+          notes="Litch 设备给 Agent 用的 lark-cli（sidecar 版），从 larksuite/cli v${VERSION}（${COMMIT}）编译，未改动源码。
+          Litch 按需下载并核对 SHA256SUMS 里的校验和；不需要手动安装。许可证见 LICENSE（MIT）。
+
+          The lark-cli build (auth sidecar) that Litch devices hand to agents, compiled unmodified from larksuite/cli v${VERSION} (${COMMIT}).
+          Litch downloads it on demand and verifies the checksums in SHA256SUMS; no manual install needed. License: MIT (see LICENSE)."
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "lark-cli sidecar v${VERSION}" --notes "$notes" --prerelease --latest=false \
+            dist/lark-cli-* dist/SHA256SUMS dist/LICENSE
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease
