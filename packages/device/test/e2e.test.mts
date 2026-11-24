@@ -23,6 +23,7 @@ import {
   REPO,
   TestClient,
 } from './helpers.mjs'
+import { GO_CACHE_ENV } from './isolate-process.mjs'
 
 const STATUS = 'litch/harness/status/changed'
 const SECTION_UPDATED = 'litch/thread/section/updated'
@@ -50,11 +51,15 @@ function startFixture(flags: string[] = []): Promise<Fixture> {
     )
   const child = spawn(process.execPath, [join(REPO, 'scripts/device-fixture.mjs'), ...flags], {
     // 夹具自己会给子进程一份干净的环境；这里只给它找得到 node 和临时目录的那几项，
+    // 带 --managed 时它要 go build 主进程，再给 Go 的缓存与下载源（隔离预加载已补齐），免得在临时 HOME 里重新下载；
     // 要起 Claude Code 时再给它那份隔离的命令行（没设的话夹具自己报错退出，不跳过）
     env: {
       PATH: process.env.PATH,
       HOME: process.env.HOME,
       TMPDIR: process.env.TMPDIR,
+      ...Object.fromEntries(
+        GO_CACHE_ENV.flatMap((name) => (process.env[name] ? [[name, process.env[name]]] : [])),
+      ),
       ...(process.env.CHA_CLAUDE_CLI ? { CHA_CLAUDE_CLI: process.env.CHA_CLAUDE_CLI } : {}),
     },
     stdio: ['pipe', 'pipe', 'pipe'],

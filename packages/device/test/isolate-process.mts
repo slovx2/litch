@@ -1,8 +1,26 @@
 // npm test 预加载；helpers 也导入，直接跑用例或复用夹具的检查脚本同样隔离。
 import '../../claude/test/fixtures/isolate-process.mjs'
+import { spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, lstatSync, readdirSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { homedir, userInfo } from 'node:os'
 import { join } from 'node:path'
+
+/** 编 Go 主进程时沿用的缓存与下载源；夹具换环境时也照这份名单往下传 */
+export const GO_CACHE_ENV = ['GOMODCACHE', 'GOCACHE', 'GOPROXY'] as const
+
+// 上面已把 HOME 换成临时目录，go 在这里会找不到本机的 module 缓存、构建缓存和 go env 文件里的下载源，
+// 本机 go 比 go.mod 旧时还要重下工具链。调用者没给的几项，按账户的真实 HOME 问一次 go env 补上。
+// 只给缓存和下载源，HOME 仍是临时目录；本地工具链只回答查询，不因 go.mod 切换版本。
+const missing = GO_CACHE_ENV.filter((name) => !process.env[name])
+if (missing.length) {
+  const go = spawnSync('go', ['env', '-json', ...missing], {
+    encoding: 'utf8',
+    env: { ...process.env, HOME: userInfo().homedir, GOTOOLCHAIN: 'local' },
+  })
+  if (go.status === 0)
+    for (const [name, value] of Object.entries(JSON.parse(go.stdout) as Record<string, string>))
+      if (value) process.env[name] = value
+}
 
 process.env.LITCH_TEST_ISOLATED = '1'
 process.env.CODEX_HOME = join(homedir(), '.codex')
