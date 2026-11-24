@@ -111,7 +111,8 @@ function OptionChoice({
       style={({ pressed }) => [
         styles.choice,
         {
-          flex: 1,
+          // 不用 flex: 1：竖排的选项按内容定高。网页上它会变成 flex-basis 0，
+          // 几个选项平分高度，长说明压到下一个选项上（手机的 Yoga 不会）
           minHeight: hit,
           borderColor: selected ? c.accent : c.line1,
           borderWidth: selected ? 2 : 1,
