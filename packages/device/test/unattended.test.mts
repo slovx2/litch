@@ -11,6 +11,7 @@ import {
   MANAGER_DEFAULT_DISPATCH,
   MANAGER_METHOD,
 } from '../../protocol/src/manager.mjs'
+import { TIMED_APPROVAL, TIMED_APPROVALS_EXTENSION } from '../../protocol/src/timed-approvals.mjs'
 import { ExternalStore } from '../src/external-store.mjs'
 import { ManagerStore, openManagerDatabase } from '../src/manager-store.mjs'
 import { startChild } from '../src/session-start.mjs'
@@ -173,7 +174,7 @@ async function managerTree(env: TreeEnv) {
     ],
   })
   const client = env.connect()
-  await client.initialize([...TREE, 'litchManager'], {
+  await client.initialize([...TREE, 'litchManager', TIMED_APPROVALS_EXTENSION], {
     litchClientTools: { namespaces: ['litch_echo'] },
   })
   const { manager, threadId } = await client.call(MANAGER_METHOD.create, {
@@ -289,6 +290,26 @@ test('UNATTENDED-E2E-001：无人值守经理、工作线、工作线的子会�
     })
     assert.deepEqual((await answerOf(env.pi, plainApproval)).result, { decision: 'decline' })
     assert.equal(tree.pending.list(nested).length, 0)
+
+    // 限时授权在前：工作线授权内的命令审批照常放行，授权管不到的（提问、改文件）仍当场拒绝
+    await client.call(TIMED_APPROVAL.grant, { threadId: line, category: 'command', hours: 1 })
+    const timedCommand = ask(env.claude, 'a-line-timed', 'item/commandExecution/requestApproval', {
+      threadId: line,
+      turnId: env.claude.current(line)?.id,
+      itemId: 'cmd',
+      command: 'make',
+      availableDecisions: ['accept', 'decline', 'declineWithNote'],
+    })
+    assert.deepEqual((await answerOf(env.claude, timedCommand)).result, { decision: 'accept' })
+    const untimedFile = ask(env.claude, 'f-line-timed', 'item/fileChange/requestApproval', {
+      threadId: line,
+      turnId: env.claude.current(line)?.id,
+      itemId: 'patch',
+      availableDecisions: ['accept', 'decline', 'declineWithNote'],
+    })
+    assert.deepEqual((await answerOf(env.claude, untimedFile)).result, {
+      decision: { declineWithNote: { note: unattendedNotice('line') } },
+    })
 
     // 经理自己：客户端订阅着时请求不转给客户端，经客户端那条上游当场答掉
     await client.call('thread/resume', { threadId })

@@ -511,3 +511,86 @@ test('UNATTENDED-CHROME-001：无人值守的会话要设备站点审批时不�
   assert.equal(asked, unattendedNotice('line'))
   assert.equal(delivered.includes('litch/remoteChrome/approval'), false)
 })
+
+test('UNATTENDED-CHROME-002：无人值守时 Chrome 限时授权内的站点照常放行，不送审批卡', async () => {
+  let asked: unknown = null
+  const runtime = {
+    status: { enabled: true, hostLabel: 'device' },
+    instances: [{ id: 'local', epoch: 'epoch', protocol: 1 }],
+    async call(
+      _scope: unknown,
+      _params: unknown,
+      _instances: unknown,
+      signal: AbortSignal,
+      ask: (prompt: unknown, signal: AbortSignal) => Promise<unknown>,
+    ) {
+      try {
+        await ask({ kind: 'site', origin: 'https://fixture.invalid' }, signal)
+        return { success: true, contentItems: [] }
+      } catch (error) {
+        asked = error instanceof Error ? error.message : String(error)
+        return { success: false, contentItems: [{ type: 'inputText', text: String(asked) }] }
+      }
+    },
+  } as unknown as DeviceChromeRuntime
+  const router = new ClientToolRouter({
+    log() {},
+    graceMs: 1,
+    remoteChrome: new RemoteChromeRouter(runtime),
+    unattended: () => 'line',
+    timedApproval: (threadId, category) => threadId === 'thread' && category === 'chrome',
+  })
+  const scope = { harness: 'codex', threadId: 'thread', turnId: 'turn' }
+  const delivered: string[] = []
+  const peer: ClientToolPeer = {
+    id: 'desktop',
+    ready: true,
+    remoteChrome: true,
+    chromeTargetRouting: true,
+    desktop: null,
+    clientToolNamespaces: new DeclaredClientTools(['litch_browser']),
+    upstream: () => null,
+    withdrawClientTool() {},
+    deliverClientTool(_harness, frame, answer) {
+      delivered.push(String(frame.method))
+      if ((frame.params as { tool?: string }).tool === 'targets')
+        assert.deepEqual((frame.params as { litchUnattended?: unknown }).litchUnattended, {
+          notice: unattendedNotice('line'),
+        })
+      queueMicrotask(() => answer({ result: ok({ targets: [] }) }))
+      return frame.id as string
+    },
+  }
+  router.join(peer)
+  router.turnStarted(peer, scope.harness, scope.turnId)
+  let next = 0
+  const call = (tool: string, args = {}) =>
+    new Promise<ClientToolCallResponse>((resolve) => {
+      const id = ++next
+      router.offer(
+        peer,
+        {
+          harness: scope.harness,
+          available: true,
+          reply: (raw) => resolve(JSON.parse(raw).result),
+        },
+        {
+          id,
+          method: 'item/tool/call',
+          params: {
+            ...scope,
+            namespace: 'litch_browser',
+            tool,
+            arguments: args,
+            callId: `c-${id}`,
+          },
+        },
+        id,
+      )
+    })
+  const targetId = body(await call('targets')).targets[0].targetId
+  const result = await call('navigate', { targetId, url: 'https://fixture.invalid' })
+  assert.equal(result.success, true)
+  assert.equal(asked, null)
+  assert.equal(delivered.includes('litch/remoteChrome/approval'), false)
+})

@@ -1211,6 +1211,61 @@ for (const kind of ['local', 'ssh'] as const)
     world.core.stop()
   })
 
+test('UNATTENDED-CORE-003：无人值守时限时授权内的卡片照常按这一次允许放行，授权外的才当场 unattended', async () => {
+  const world = timedWorld('local')
+  world.core.start()
+  await settle()
+  await world.command('timedApproval.grant', {
+    deviceId: 'local',
+    threadId: 'a',
+    category: 'browser',
+    hours: 2,
+  })
+  await settle()
+  const notice = 'Litch is running this session unattended (test).'
+  const ask = async (askId: string, value: Record<string, unknown>) => {
+    const result = world.call({
+      namespace: 'litch_browser',
+      tool: 'navigate',
+      callId: askId,
+      litchUnattended: { notice },
+    })
+    for (
+      let index = 0;
+      index < 10 && !world.main?.of('call').some((c) => c.invocation.callId === askId);
+      index++
+    )
+      await settle()
+    const invocation = world.main?.of('call').find((c) => c.invocation.callId === askId)?.invocation
+    assert.ok(invocation)
+    world.main?.reply({ op: 'ask', id: invocation.id, askId, ask: value as never })
+    await settle()
+    return { invocation, result }
+  }
+  const site = { kind: 'site', origin: 'https://a.example', url: 'https://a.example/' }
+  const allowed = await ask('u1', site)
+  assert.equal(answered(world, 'u1'), 'once', '限时授权内照常放行')
+  assert.equal(
+    world.main?.of('cancel').some((c) => c.id === allowed.invocation.id),
+    false,
+    '放行的调用没被取消',
+  )
+  world.main?.reply({
+    op: 'result',
+    id: allowed.invocation.id,
+    response: { success: true, contentItems: [] },
+  })
+  assert.equal(resultOf(await allowed.result)?.success, true)
+  // Chrome 不在内置浏览器的授权里：本来要出卡，无人值守时当场失败
+  const refused = await ask('u2', { ...site, browser: 'chrome' })
+  assert.equal(answered(world, 'u2'), null)
+  assert.equal(
+    resultOf(await refused.result)?.contentItems[0]?.text,
+    `[litch:unattended] ${notice}`,
+  )
+  world.core.stop()
+})
+
 test('限时授权：卡片挂着时授予（或别的端经设备授予后发来 changed），挂着的同类卡片按这一次允许答掉', async () => {
   const world = timedWorld('ssh')
   world.core.start()

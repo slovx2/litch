@@ -1132,6 +1132,37 @@ test('存下来的设置：本机没有“操作这台电脑”的开关；审�
   assert.deepEqual(saved.machine, { 'ssh-1': { approval: 'each', custom: ['~/a'] } })
 })
 
+test('UNATTENDED-MACHINE-002：无人值守时限时授权内的操作本机照常执行；提到禁止位置、别的会话才当场 unattended', async () => {
+  const notice = 'Litch is running this session unattended (test).'
+  const litchUnattended = { notice }
+  const world = await started({
+    timed: true,
+    threads: ['a', 'b'].map((id) =>
+      thread({ id, cwd: '/work/app', turns: [turn('t1', [], { status: 'inProgress' })] }),
+    ),
+  })
+  const { call, enable, command } = world
+  await enable()
+  await command('device.machine.set', { deviceId: 'box', approval: 'each' })
+  const session = watchSession(world.core, 'a', 'box')
+  await command('timedApproval.grant', {
+    deviceId: 'box',
+    threadId: 'a',
+    category: 'machine',
+    hours: 4,
+  })
+  await settle()
+  assert.equal(textOf(await call({ command: 'rm -rf build' }, { litchUnattended })), 'ok')
+  assert.equal(cardsOf(session).length, 0)
+  // 提到禁止位置的本来要问：不出卡
+  await call({ command: 'cat ~/.ssh/id', flagged: ['~/.ssh'] }, { litchUnattended })
+  assert.deepEqual(world.fake.outcomes.at(-1), { kind: 'unattended', message: notice })
+  // 别的会话没有授权
+  await call({ command: 'make' }, { threadId: 'b', litchUnattended })
+  assert.deepEqual(world.fake.outcomes.at(-1), { kind: 'unattended', message: notice })
+  assert.equal(cardsOf(session).length, 0)
+})
+
 test('限时授权·操作本机：远程会话授权内（含逐条确认）执行与读都不再弹；提到禁止位置的仍弹；别的会话、撤销、到期后恢复', async () => {
   const world = await started({
     timed: true,
