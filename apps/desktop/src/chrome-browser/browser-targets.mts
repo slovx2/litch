@@ -14,7 +14,7 @@ import { createSiteBook } from '../browser/sites.mjs'
 import { blockedHostOf } from '../browser/url.mjs'
 import type { ClientToolExecutor, ClientToolInvocation } from '../client-tools/types.mjs'
 import { ChromeBridge, ChromeBridgeError } from './bridge.mjs'
-import { ChromeExecutor, chromeFailure } from './executor.mjs'
+import { ChromeExecutor, chromeFailure, macForegroundKeeper } from './executor.mjs'
 import { ChromeInstaller, chromeIdentity } from './installer.mjs'
 
 const SUPPORTED = ['darwin', 'win32', 'linux'].includes(process.platform)
@@ -86,6 +86,8 @@ export class BrowserTargets {
       bridge: this.bridge,
       sites: this.sites,
       allowed: (invocation) => this.allowed(invocation),
+      // 受控页面自己打开新页面时 Chrome 会抢 macOS 前台，交还给原来的应用。
+      ...(process.platform === 'darwin' ? { foreground: macForegroundKeeper() } : {}),
       onSessionReleased: (optionsOwner) =>
         this.options.onSessionReleased?.(optionsOwner) ?? Promise.resolve(),
     })
