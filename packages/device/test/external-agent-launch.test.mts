@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -257,4 +257,29 @@ test('Qwen 的工具前钩子给已注入会话的命令写上会话号，其余
   assert.deepEqual(await hook(input('acp-session-1', 'read_file')), {}, '只改 shell')
   assert.deepEqual(await hook(input("bad'id")), {}, '会话号带特殊字符不改（即使已注入）')
   assert.deepEqual(await hook(null), {})
+})
+
+test('Gemini 会话进程：会话号从 LITCH_THREAD_ID_FILE 读出，拿得到租约', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'litch-thread-file-'))
+  try {
+    const file = join(dir, 'thread.id')
+    const env = { LITCH_THREAD_ID_FILE: file }
+    assert.equal(githubCommandThread({ ...env, LITCH_DEVICE_GITHUB_HARNESS: 'gemini' }), undefined)
+    writeFileSync(file, 'gemini-session-1\n')
+    await leased('gemini', env, 'gemini-session-1', 'gemini 会话进程')
+    assert.equal(
+      githubCommandThread({ ...env, LITCH_DEVICE_GITHUB_HARNESS: 'gemini', LITCH_THREAD_ID: 'x' }),
+      'x',
+      'LITCH_THREAD_ID 优先',
+    )
+    assert.equal(
+      githubCommandThread({ ...env, LITCH_DEVICE_GITHUB_HARNESS: 'pi' }),
+      undefined,
+      '自带会话号变量的 harness 不看文件',
+    )
+    writeFileSync(file, 'bad id')
+    assert.equal(githubCommandThread({ ...env, LITCH_DEVICE_GITHUB_HARNESS: 'gemini' }), undefined)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

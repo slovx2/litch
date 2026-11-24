@@ -15,6 +15,8 @@ const log = (entry: object) => {
   const path = process.env.FAKE_ACP_LOG
   if (path) appendFileSync(path, `${JSON.stringify({ pid: process.pid, ...entry })}\n`)
 }
+// 进程起来时记一行：它环境里的会话号文件（Gemini 会话自己的进程才有，见 session-agents.mts）
+log({ started: true, threadFile: process.env.LITCH_THREAD_ID_FILE ?? null })
 
 interface Session {
   sessionId: string
@@ -29,13 +31,17 @@ interface Session {
 }
 
 const statePath = process.env.FAKE_ACP_STATE ?? ''
-const sessions = new Map<string, Session>(
-  statePath && existsSync(statePath)
-    ? Object.entries(JSON.parse(readFileSync(statePath, 'utf8')))
-    : [],
-)
+// 同一个状态文件可能有几个进程在用（Gemini 的会话进程，见 session-agents.mts）：写的时候和盘上的合起来，
+// 不认识的会话号再读一次盘
+const onDisk = (): Record<string, Session> =>
+  statePath && existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : {}
+const sessions = new Map<string, Session>(Object.entries(onDisk()))
+const deleted = new Set<string>()
 const persist = () => {
-  if (statePath) writeFileSync(statePath, JSON.stringify(Object.fromEntries(sessions)))
+  if (!statePath) return
+  const merged = { ...onDisk(), ...Object.fromEntries(sessions) }
+  for (const id of deleted) delete merged[id]
+  writeFileSync(statePath, JSON.stringify(merged))
 }
 
 const defaultCaps = {
@@ -175,7 +181,11 @@ const cancels = new Map<string, () => void>()
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const session = (params: any): Session => {
-  const found = sessions.get(params?.sessionId)
+  let found = sessions.get(params?.sessionId)
+  if (!found && !deleted.has(params?.sessionId)) {
+    found = onDisk()[params?.sessionId]
+    if (found) sessions.set(found.sessionId, found)
+  }
   if (!found) throw { code: -32002, message: `Resource not found: ${params?.sessionId}` }
   return found
 }
@@ -605,6 +615,7 @@ async function handle(method: string, params: any): Promise<unknown> {
       return {}
     case 'session/delete':
       if (!sessions.delete(params.sessionId)) throw { code: -32002, message: 'not found' }
+      deleted.add(params.sessionId)
       persist()
       return {}
     case 'session/set_title':
@@ -631,8 +642,8 @@ async function handle(method: string, params: any): Promise<unknown> {
       if (process.env.FAKE_ACP_AUTH_REQUIRED === '1')
         throw { code: -32000, message: 'Authentication required' }
       return {
-        sessions: [...sessions.values()]
-          .filter((entry) => entry.history.length)
+        sessions: Object.values({ ...onDisk(), ...Object.fromEntries(sessions) })
+          .filter((entry) => !deleted.has(entry.sessionId) && entry.history.length)
           .map((entry) => ({
             sessionId: entry.sessionId,
             cwd: entry.cwd,

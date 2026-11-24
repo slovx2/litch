@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url'
 import {
   deviceGithubEnvironment,
   githubThreadVariable,
+  THREAD_ID_FILE_VARIABLE,
+  threadIdFromFile,
 } from '../../../shared/src/device-github-environment.mjs'
 
 export function executableOnPath(name: string, env: NodeJS.ProcessEnv): string | undefined {
@@ -29,7 +31,12 @@ export function executableOnPath(name: string, env: NodeJS.ProcessEnv): string |
 /** 命令所在会话：各 harness 给命令的会话号变量不同（与 Go 入口 agentHasGithubContext 一致）。 */
 export function githubCommandThread(env: NodeJS.ProcessEnv): string | undefined {
   const harness = env.LITCH_DEVICE_GITHUB_HARNESS
-  return harness ? env[githubThreadVariable(harness)] : undefined
+  if (!harness) return undefined
+  const variable = githubThreadVariable(harness)
+  return (
+    env[variable] ||
+    (variable === 'LITCH_THREAD_ID' ? threadIdFromFile(env[THREAD_ID_FILE_VARIABLE]) : undefined)
+  )
 }
 
 async function run(): Promise<void> {

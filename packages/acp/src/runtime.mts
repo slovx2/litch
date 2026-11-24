@@ -49,16 +49,23 @@ export class AcpRuntime {
   private readonly env: NodeJS.ProcessEnv
   private starting: Promise<AgentHandle> | null = null
   private running: AgentHandle | null = null
-  private generations = 0
+  /** 进程编号的来源：同一个入口里几个运行时共用一份，编号不重（会话按编号认自己在哪个进程里接上） */
+  private readonly generations: { value: number }
   /** 最近一次握手拿到的能力。进程退了也留着：声明照它报，下一次起来多半还是这样 */
   known: AgentCapabilities | null = null
   /** agent 写到标准错误的最后一段，起不来的时候带进报错里 */
   private stderrTail = ''
 
-  constructor(home: string, events: RuntimeEvents, env: NodeJS.ProcessEnv = process.env) {
+  constructor(
+    home: string,
+    events: RuntimeEvents,
+    env: NodeJS.ProcessEnv = process.env,
+    generations = { value: 0 },
+  ) {
     this.home = home
     this.events = events
     this.env = env
+    this.generations = generations
   }
 
   /** 现成的 agent，没有就是 null；不为这个去起 */
@@ -120,7 +127,7 @@ export class AcpRuntime {
       this.log(chunk)
       this.stderrTail = (this.stderrTail + chunk).slice(-2000)
     })
-    const generation = ++this.generations
+    const generation = ++this.generations.value
     let handle: AgentHandle | null = null
     const connection = new AcpConnection(child.stdout as any, child.stdin as any, {
       requestTiming: (id, method, params) =>

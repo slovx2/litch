@@ -14,6 +14,10 @@ import {
   type ShellTask,
   withStopNotice,
 } from '../../shared/src/background-shell.mjs'
+import {
+  deviceGithubInjected,
+  THREAD_ID_FILE_VARIABLE,
+} from '../../shared/src/device-github-environment.mjs'
 import { FilesystemRpc } from '../../shared/src/filesystem-rpc.mjs'
 import { FuzzyFileSearch, FuzzySearchSessions } from '../../shared/src/fuzzy-session.mjs'
 import type { JsonlLog } from '../../shared/src/log-file.mjs'
@@ -54,6 +58,7 @@ import { settings } from './envelope.mjs'
 import { type AcpThread, type AcpTurn, Projection } from './projection.mjs'
 import { dispatch } from './protocol.mjs'
 import { AcpRuntime, type AgentHandle } from './runtime.mjs'
+import { SessionAgents } from './session-agents.mjs'
 import { sessionOptions } from './session-options.mjs'
 import { AcpStore } from './store.mjs'
 import { TerminalLogin } from './terminal-login.mjs'
@@ -118,6 +123,10 @@ interface SessionRecord {
   userNamed: boolean
 }
 
+/** 会话发过话（有收了尾的回合）：Gemini 这时才把它写盘，换了进程才接得回来（session-agents.mts） */
+const spoken = (live: LiveThread): boolean =>
+  live.projection.turns.some((turn) => turn.status !== 'inProgress')
+
 export class AcpServer {
   private readonly powerObserver = new PowerObserver()
   readonly agentId: AcpAgentId
@@ -134,6 +143,8 @@ export class AcpServer {
   // 临时线程（客户端生成标题、摘要时用）：只在内存里，没有 agent 会话，无人订阅即卸载。
   readonly ephemeral = new Map<string, LiveThread>()
   readonly runtime: AcpRuntime
+  /** 会话自己的 agent 进程（只用于 Gemini：新会话的第一回合和已注入的会话，见 session-agents.mts） */
+  readonly agents: SessionAgents
   readonly terminals: Terminals
   /** 动态工具（含 Litch 的客户端工具）：按会话挂给 agent 的 MCP 桥 */
   readonly clientTools: ClientTools
@@ -284,22 +295,39 @@ export class AcpServer {
       wakes: true,
     }
     this.clientTools = new ClientTools(this)
-    this.runtime = new AcpRuntime(
-      home,
-      {
-        requestTiming: (id, method, params, agent) => {
-          const live = this.live.get(params?.sessionId)
-          return live?.generation === agent.generation
-            ? live.running?.timing.request(id, method)
-            : undefined
-        },
-        request: (method, params, agent, signal) =>
-          this.agentRequest(method, params, agent, signal),
-        notification: (method, params, agent) => this.agentNotification(method, params, agent),
-        closed: (error, agent) => this.agentClosed(error, agent),
+    // own：会话自己的进程，退出时只收它那几个会话的终端
+    const events = (own: boolean) => ({
+      requestTiming: (id: string | number, method: string, params: any, agent: AgentHandle) => {
+        const live = this.live.get(params?.sessionId)
+        return live?.generation === agent.generation
+          ? live.running?.timing.request(id, method)
+          : undefined
       },
-      env,
-    )
+      request: (method: string, params: any, agent: AgentHandle, signal: AbortSignal) =>
+        this.agentRequest(method, params, agent, signal),
+      notification: (method: string, params: any, agent: AgentHandle) =>
+        this.agentNotification(method, params, agent),
+      closed: (error: Error, agent: AgentHandle) => this.agentClosed(error, agent, own),
+    })
+    const generations = { value: 0 }
+    this.runtime = new AcpRuntime(home, events(false), env, generations)
+    this.agents = new SessionAgents(this.runtime, {
+      enabled: this.agentId === 'gemini',
+      directory: join(home, 'session-agents'),
+      create: (file) =>
+        new AcpRuntime(
+          home,
+          events(true),
+          { ...env, [THREAD_ID_FILE_VARIABLE]: file },
+          generations,
+        ),
+      injected: (threadId) =>
+        deviceGithubInjected(
+          env.LITCH_DEVICE_GITHUB_HARNESS ?? '',
+          threadId,
+          env.LITCH_DEVICE_SOCKET ?? '',
+        ),
+    })
   }
 
   /** 已知的会话：打开着的、库里记着的、agent 清单里有的 */
@@ -790,10 +818,11 @@ export class AcpServer {
   }
 
   // agent 进程退出了：在跑的回合按失败收尾，会话都要重新接上（下一回合时，见 attach）
-  private agentClosed(error: Error, agent: AgentHandle): void {
-    void this.terminals.closeAll()
+  private agentClosed(error: Error, agent: AgentHandle, own: boolean): void {
+    if (!own) void this.terminals.closeAll()
     for (const [id, live] of this.live) {
       if (live.generation !== agent.generation) continue
+      if (own) void this.terminals.closeAll(id)
       this.agyBackground?.stop(id)
       const spontaneous = this.unsolicited.get(id)
       clearTimeout(spontaneous?.timer)
@@ -909,7 +938,7 @@ export class AcpServer {
   async attach(live: LiveThread): Promise<AgentHandle> {
     let agent: AgentHandle
     try {
-      agent = await this.runtime.agent()
+      agent = await (await this.agents.pick(live.projection.thread.id, spoken(live))).agent()
     } catch (error) {
       throw new ProtocolError(-32603, error instanceof Error ? error.message : String(error))
     }
@@ -1096,24 +1125,35 @@ export class AcpServer {
 
   /** thread/start：agent 那边建一个会话（session/new），在这个进程里接上；带了动态工具的挂上 MCP 桥 */
   async create(cwd: string, dynamicTools: unknown, options?: unknown): Promise<LiveThread> {
-    const agent = await this.attachable()
+    // Gemini 的新会话先在自己的进程里建（session-agents.mts）
+    const incubated = this.agents.incubate()
+    let agent: AgentHandle
+    try {
+      agent = await incubated.runtime.agent()
+    } catch (error) {
+      await incubated.discard()
+      throw new ProtocolError(-32603, error instanceof Error ? error.message : String(error))
+    }
     const environment = sessionOptions(options, agent.caps)
     const { servers, key } = await this.clientTools.mount(null, dynamicTools)
     const response = await this.ask(agent, 'session/new', {
       cwd,
       ...environment,
       mcpServers: [...environment.mcpServers, ...servers],
-    }).catch((error) => {
+    }).catch(async (error) => {
       this.clientTools.bind(key, null)
+      await incubated.discard()
       throw error
     })
     if (typeof response?.sessionId !== 'string') {
       this.clientTools.bind(key, null)
+      await incubated.discard()
       throw new ProtocolError(
         -32603,
         `${agent.resolved.spec.displayName} 的 session/new 没有回会话号`,
       )
     }
+    incubated.bind(response.sessionId)
     this.clientTools.bind(key, response.sessionId)
     this.store.setMeta('environment', response.sessionId, environment)
     this.clientTools.remember(response.sessionId, dynamicTools)
@@ -1499,7 +1539,7 @@ export class AcpServer {
   /** 改设置：会话接上着就立刻交给 agent，没接上的等下一回合 */
   async updateSettings(live: LiveThread, params: any): Promise<void> {
     this.applySettings(live, params, false)
-    const agent = this.runtime.current()
+    const agent = this.agents.host(live.projection.thread.id).current()
     if (
       !live.projection.thread.ephemeral &&
       agent &&
@@ -1513,13 +1553,13 @@ export class AcpServer {
     this.agyBackground?.stop(id)
     this.stoppedUnsolicited.add(id)
     if (this.unsolicited.has(id)) {
-      this.runtime.current()?.connection.notify('session/cancel', { sessionId: id })
+      this.agents.host(id).current()?.connection.notify('session/cancel', { sessionId: id })
       this.requests.reject((threadId) => threadId === id, TURN_STOPPED)
       this.finishUnsolicited(id, true)
     }
     const child = this.children.get(id)
     if (child) {
-      const agent = this.runtime.current()
+      const agent = this.agents.host(child.parent).current()
       if (!child.cancel || agent?.generation !== child.generation)
         throw new ProtocolError(-32004, 'agent 没有授权取消这个子会话')
       this.requests.reject((threadId) => threadId === id, TURN_STOPPED)
@@ -1532,7 +1572,7 @@ export class AcpServer {
     running.stopped = true
     // 挂着的审批撤回（回 agent “取消”，见 approvals.mts）
     this.requests.reject((threadId) => threadId === id, TURN_STOPPED)
-    const agent = this.runtime.current()
+    const agent = this.agents.host(id).current()
     if (running.sent && agent && live.generation === agent.generation)
       agent.connection.notify('session/cancel', { sessionId: id })
     await within(running.done, INTERRUPT_WAIT_MS)
@@ -1549,6 +1589,18 @@ export class AcpServer {
   /** 关闭会话只释放 agent 内存；历史留在 agent。最后一个订阅退出后才能关闭。 */
   async release(id: string): Promise<void> {
     const live = this.live.get(id)
+    // 会话自己的进程：没人看、也没在跑就关掉，下次接上时再起
+    if (
+      live &&
+      this.agents.owns(id) &&
+      spoken(live) &&
+      !live.running &&
+      !live.projection.active &&
+      !this.subscriptions.get(id)?.size
+    ) {
+      live.generation = 0
+      await this.agents.drop(id)
+    }
     const agent = this.runtime.current()
     if (
       !live ||
@@ -1581,6 +1633,7 @@ export class AcpServer {
       if (!(error instanceof AcpError) || error.code !== -32002) throw this.failure(agent, error)
     }
     this.requests.reject((threadId) => threadId === id, '会话已删除')
+    await this.agents.drop(id)
     await this.terminals.closeAll(id)
     this.clientTools.release(id)
     if (this.thread(id)) this.projects.assignThread(id, null)
@@ -1636,7 +1689,7 @@ export class AcpServer {
         this.saveTurns(live)
       }
     }
-    await this.runtime.close(signalled)
+    await Promise.all([this.agents.close(signalled), this.runtime.close(signalled)])
     await this.clientTools.close()
     await this.terminals.closeAll()
     this.files.close()

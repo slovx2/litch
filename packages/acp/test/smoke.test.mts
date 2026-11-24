@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { githubCommandThread } from '../../device/src/external/device-agent-command.mjs'
+import { deviceGithubEnvironmentSocket } from '../../shared/src/device-github-environment.mjs'
 import { AcpServer } from '../src/server.mjs'
 import { client, text } from './client.mjs'
 import { startFakeGemini } from './fake-gemini.mjs'
@@ -314,6 +317,91 @@ test('冒烟：真的 gemini --acp 经 MCP 桥调客户端工具，假模型', {
   } finally {
     await server.close()
     await model.close()
+    await rm(box.root, { recursive: true, force: true })
+  }
+})
+
+// 经理注入：真的 gemini --acp，已注入会话的 shell 命令认得出会话（session-agents.mts）。命令把命令入口要看的几个
+// 变量写出来，用命令入口的同一段代码（githubCommandThread）认会话。普通会话第二回合回到共用进程，认不出会话。
+// 设备是回环上只答 probe 的假套接字，模型是假 Gemini API。也用 LITCH_SMOKE_GEMINI 开
+test('冒烟：真的 gemini --acp，已注入会话的命令认得出会话，普通会话回到共用进程', {
+  skip: !gemini || process.platform === 'win32',
+  timeout: 300_000,
+}, async () => {
+  const box = await sandbox()
+  const injected = new Set<string>()
+  const device = createServer((socket) => {
+    let buffer = ''
+    socket.setEncoding('utf8')
+    socket.on('data', (chunk: string) => {
+      buffer += chunk
+      if (!buffer.endsWith('\n')) return
+      const request = JSON.parse(buffer)
+      socket.end(JSON.stringify({ injected: injected.has(request.threadId) }))
+    })
+  })
+  const deviceSocket = join(box.root, 'device.sock')
+  await new Promise<void>((resolve) =>
+    device.listen(deviceGithubEnvironmentSocket(deviceSocket), resolve),
+  )
+  const out = join(box.root, 'thread.json')
+  const dump =
+    'process.stdout.write(JSON.stringify({LITCH_DEVICE_GITHUB_HARNESS:process.env.LITCH_DEVICE_GITHUB_HARNESS,LITCH_THREAD_ID:process.env.LITCH_THREAD_ID,LITCH_THREAD_ID_FILE:process.env.LITCH_THREAD_ID_FILE}))'
+  const model = await startFakeGemini((name) => name === 'run_shell_command', {
+    command: `node -e '${dump}' > '${out}'`,
+    description: '会话号',
+  })
+  await mkdir(join(box.root, '.gemini'), { recursive: true })
+  await writeFile(
+    join(box.root, '.gemini', 'settings.json'),
+    JSON.stringify({
+      security: { auth: { selectedType: 'gemini-api-key' }, folderTrust: { enabled: false } },
+      privacy: { usageStatisticsEnabled: false },
+      general: { disableAutoUpdate: true, disableUpdateNag: true },
+    }),
+  )
+  const { HTTP_PROXY, HTTPS_PROXY, http_proxy, https_proxy, ...direct } = box.env
+  const server = new AcpServer(join(box.root, 'home'), {
+    ...direct,
+    PATH: `${process.execPath.replace(/\/node$/, '')}:${box.env.PATH}`,
+    CHA_ACP_AGENT: 'gemini',
+    CHA_GEMINI_CLI: gemini,
+    GEMINI_CLI_NO_RELAUNCH: 'true',
+    GEMINI_API_KEY: 'fake-key',
+    GOOGLE_GEMINI_BASE_URL: model.url,
+    LITCH_DEVICE_SOCKET: deviceSocket,
+    LITCH_DEVICE_GITHUB_HARNESS: 'gemini',
+  })
+  const desktop = client(server)
+  desktop.onRequest(() => ({ decision: 'accept' }))
+  /** 跑一回合 shell 命令，回命令入口认出的会话 */
+  const shell = async (threadId: string) => {
+    await rm(out, { force: true })
+    const { turn: started } = await desktop.call('turn/start', {
+      threadId,
+      input: text('跑一下命令'),
+    })
+    const done = (await desktop.until('turn/completed', (p) => p.turn.id === started.id)).turn
+    assert.equal(done.status, 'completed', JSON.stringify(done.error))
+    return githubCommandThread(JSON.parse(await readFile(out, 'utf8')))
+  }
+  try {
+    await desktop.call('initialize', { clientInfo: { name: 'litch', version: '0' } })
+    const { thread: line } = await desktop.call('thread/start', { cwd: box.cwd })
+    const { thread: plain } = await desktop.call('thread/start', { cwd: box.cwd })
+    injected.add(line.id)
+    assert.equal(await shell(line.id), line.id, '已注入会话第一回合')
+    assert.equal(
+      await shell(plain.id),
+      plain.id,
+      '普通会话第一回合在自己的进程里（设备会答未注入）',
+    )
+    assert.equal(await shell(line.id), line.id, '已注入会话第二回合')
+    assert.equal(await shell(plain.id), undefined, '普通会话第二回合回到共用进程')
+  } finally {
+    await server.close()
+    await model.close()
+    device.close()
     await rm(box.root, { recursive: true, force: true })
   }
 })

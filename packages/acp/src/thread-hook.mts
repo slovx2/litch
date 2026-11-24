@@ -4,7 +4,7 @@
 // Litch 线程号）：已注入的会话，用 updatedInput 把 shell 命令改写成先 export LITCH_THREAD_ID 再跑原命令；
 // 其余会话不改。Qwen 的 ACP 会话在权限检查和审批之前跑这个钩子，审批卡片上看到的是改写后的命令；模型的历史里
 // 仍是它自己发的那条。出任何问题都输出空对象放行，不挡命令。
-// Gemini 的 ACP 会话不跑钩子（0.38 的 acpSession 直接执行工具），不用这个办法。
+// Gemini 的 ACP 会话不跑钩子（0.38 的 acpSession 直接执行工具），改用会话自己的进程（session-agents.mts）。
 //
 // 用法：node thread-hook.mjs <harness> <设备套接字>，钩子输入从标准输入读。
 import { resolve } from 'node:path'

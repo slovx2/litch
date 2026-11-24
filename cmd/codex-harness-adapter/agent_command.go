@@ -112,8 +112,35 @@ func agentHasGithubContext() bool {
 		thread = os.Getenv("DSH_SESSION_ID")
 	default:
 		thread = os.Getenv("LITCH_THREAD_ID")
+		if thread == "" {
+			thread = threadIDFromFile(os.Getenv(threadIDFileEnvironment))
+		}
 	}
 	return thread != "" && os.Getenv(deviceSocketEnvironment) != ""
+}
+
+// 进程起来时还不知道会话号的（Gemini 的会话进程，见 packages/acp/src/session-agents.mts），环境里放这个变量
+// 指向一个文件，会话号写在文件里；LITCH_THREAD_ID 为空时才看（与 packages/shared/src/device-github-environment.mts 一致）。
+const threadIDFileEnvironment = "LITCH_THREAD_ID_FILE"
+
+func threadIDFromFile(path string) string {
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) > 512 {
+		return ""
+	}
+	value := strings.TrimSpace(string(data))
+	if value == "" || len(value) > 256 {
+		return ""
+	}
+	for _, r := range value {
+		if !(r == '_' || r == ':' || r == '.' || r == '-' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z') {
+			return ""
+		}
+	}
+	return value
 }
 
 func runAgentCommand(ctx context.Context, args []string) error {
