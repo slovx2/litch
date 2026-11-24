@@ -326,7 +326,8 @@ export function IssueThread({
           {disabled ? (
             <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{reason}</Text>
           ) : null}
-          {targets.length ? (
+          {/* 特殊 issue 的原帖是那张卡，卡上已在正文后排了关联、依据；这里只给普通 issue 画，免得重复一行 */}
+          {targets.length && !quick ? (
             <View testID="issue-relations">
               <Fold
                 open={relationsOpen}
