@@ -47,6 +47,7 @@ import {
   REMOTE_CHROME_PREFIX,
   REMOTE_CHROME_STATUS,
 } from '../../protocol/src/remote-chrome.mjs'
+import { REVIEWS_EXTENSION } from '../../protocol/src/reviews.mjs'
 import { SESSION_TREE_METHOD } from '../../protocol/src/session-tree.mjs'
 import { SUGGESTIONS_LIST } from '../../protocol/src/suggestion-inbox.mjs'
 import { localTaskTimeZone } from '../../protocol/src/task-schedule.mjs'
@@ -104,6 +105,7 @@ import type { RecoveryActions } from './recovery-actions.mjs'
 import { Relay } from './relay.mjs'
 import type { DeviceChromeRuntime } from './remote-chrome-runtime.mjs'
 import type { RestartResume } from './restart-resume.mjs'
+import type { DeviceReviewsRpc } from './reviews.mjs'
 import { classify } from './routes.mjs'
 import { describeDevice } from './service-info.mjs'
 import type { SessionArchives } from './session-archive.mjs'
@@ -229,6 +231,7 @@ export interface SessionHost {
   autostart?: DeviceAutostart
   external?: DeviceExternalRpc
   feishu?: DeviceFeishuRpc
+  reviews?: DeviceReviewsRpc
   /** 由设备进程自己执行的 litch_ 命名空间：替每条上游连接声明，调用落到哪条上就在那里拦（device-tools.mts） */
   deviceTools: DeviceTools
   /** 会话树（session-tree.mts） */
@@ -719,6 +722,13 @@ export class ClientSession implements ClientToolPeer {
           if (!this.host.feishu) throw new DeviceError('unsupported', 'Feishu is unavailable')
           return this.host.feishu.call(method, frame.params, {
             declared: this.declared.has(FEISHU_EXTENSION),
+            admin: this.deviceAdmin,
+          })
+        }
+        if (method.startsWith('litch/reviews/')) {
+          if (!this.host.reviews) throw new DeviceError('unsupported', 'Reviews are unavailable')
+          return this.host.reviews.call(method, frame.params, {
+            declared: this.declared.has(REVIEWS_EXTENSION),
             admin: this.deviceAdmin,
           })
         }

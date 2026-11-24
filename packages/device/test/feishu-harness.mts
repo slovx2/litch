@@ -23,6 +23,7 @@ export class FeishuFakeHarness {
       /** 设备时钟（秒） */
       now?: () => number
       wakeTickMs?: number
+      outboxTickMs?: number
       extensions?: string[]
     } = {},
   ): Promise<FeishuFakeHarness> {
@@ -35,6 +36,9 @@ export class FeishuFakeHarness {
           registrationIntervalMs: 10,
           ...(options.now ? { now: options.now } : {}),
           ...(options.wakeTickMs === undefined ? {} : { wakeTickMs: options.wakeTickMs }),
+          ...(options.outboxTickMs === undefined
+            ? {}
+            : { outboxTickMs: options.outboxTickMs, sendGapMs: 0 }),
         },
       },
     })

@@ -1,4 +1,4 @@
-// 设备详情的“飞书”一节：每个应用一行（头像、机器人名、分配的经理、连接状态），点进应用详情；
+// 设备详情的“飞书”一节：每个应用一行（头像、机器人名、分配的经理、连接状态，有待确认的配对时右上角写条数），点进应用详情；
 // 小标题右边的 + 进添加应用（这条连接不是设备管理员时不可点，写明原因）。设备服务不支持（没有 litchFeishu）不出这一节。
 import type { DeviceView } from '@litch/core'
 import { Image, StyleSheet, Text, View } from 'react-native'
@@ -105,6 +105,9 @@ export function FeishuSection({
           left={<BotAvatar app={app} />}
           title={app.name || app.appId}
           detail={`${managerName(app.managerId)} · ${stateText(app, t)}`}
+          {...(app.pendingPairings
+            ? { meta: t('feishu.binding.pending', { n: app.pendingPairings }) }
+            : {})}
           right={<View style={[styles.dot, { backgroundColor: stateColor(app, c) }]} />}
           trail="forward"
           onPress={() => onOpen(app)}

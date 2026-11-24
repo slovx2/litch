@@ -7,10 +7,12 @@ import {
   FEISHU_METHOD,
   FEISHU_NOTIFICATION,
   type FeishuApp,
+  type FeishuBinding,
   type FeishuChat,
   type FeishuInboxEntry,
   type FeishuInboxMessage,
   type FeishuNotifications,
+  type FeishuOutboxEntry,
   type FeishuRegistration,
   type FeishuRequests,
 } from '../src/feishu.mjs'
@@ -111,6 +113,36 @@ const inboxMessage = {
   purged: false,
 } satisfies FeishuInboxMessage
 
+const binding = {
+  appId,
+  openId: 'ou_alice',
+  revision: 2,
+  name: '示例成员甲',
+  unionId: 'on_alice',
+  state: 'bound',
+  approver: true,
+  retentionDays: 90,
+  boundAt: 90,
+} satisfies FeishuBinding
+
+const outboxEntry = {
+  operationId: 'op-sample-1',
+  appId,
+  managerId: 'm-1',
+  target: { kind: 'chat', id: chatId, name: '示例项目群' },
+  replyTo: 'om_parent',
+  format: 'post',
+  summary: '示例发言',
+  parts: 1,
+  messageIds: [],
+  mentions: [{ openId: 'ou_alice', name: '示例成员甲' }],
+  state: 'awaiting_approval',
+  reviewId: 'A-1',
+  attempts: 0,
+  createdAt: 80,
+  updatedAt: 80,
+} satisfies FeishuOutboxEntry
+
 const samples: {
   [M in keyof FeishuRequests]: [FeishuRequests[M]['params'], FeishuRequests[M]['result']]
 } = {
@@ -182,6 +214,65 @@ const samples: {
     { inboxId: 'FI-1' },
     { entry: { ...inboxEntry, status: 'processed', processedAt: 70 }, message: null },
   ],
+  [FEISHU_METHOD.outboxList]: [
+    { appId, states: ['awaiting_approval', 'unknown'], before: 'op-sample-9', limit: 20 },
+    {
+      entries: [
+        outboxEntry,
+        {
+          ...outboxEntry,
+          operationId: 'op-sample-2',
+          state: 'sent',
+          messageIds: ['om_sent'],
+          attempts: 1,
+          sentAt: 90,
+        },
+      ],
+      next: 'op-sample-2',
+    },
+  ],
+  [FEISHU_METHOD.outboxCancel]: [
+    { appId, operationId: 'op-sample-1' },
+    { entry: { ...outboxEntry, state: 'canceled', error: 'canceled_by_admin' } },
+  ],
+  [FEISHU_METHOD.bindingList]: [
+    { appId },
+    {
+      bindings: [
+        binding,
+        {
+          ...binding,
+          openId: 'ou_bob',
+          revision: 3,
+          state: 'revoked',
+          approver: false,
+          revokedAt: 95,
+        },
+      ],
+    },
+  ],
+  [FEISHU_METHOD.bindingLookup]: [
+    { appId, code: 'abcd-efgh' },
+    {
+      pairing: {
+        appId,
+        openId: 'ou_carol',
+        name: '示例用户丙',
+        unionId: 'on_carol',
+        createdAt: 90,
+        expiresAt: 3690,
+      },
+    },
+  ],
+  [FEISHU_METHOD.bindingApprove]: [{ appId, code: 'ABCDEFGH' }, { binding }],
+  [FEISHU_METHOD.bindingRevoke]: [
+    { appId, openId: 'ou_alice', expectedRevision: 2 },
+    { binding: { ...binding, state: 'revoked', revokedAt: 99 } },
+  ],
+  [FEISHU_METHOD.bindingUpdate]: [
+    { appId, openId: 'ou_alice', expectedRevision: 2, approver: false, retentionDays: 30 },
+    { binding: { ...binding, approver: false, retentionDays: 30 } },
+  ],
 }
 
 test('每个方法的样本都通过定义和入站校验', () => {
@@ -206,6 +297,8 @@ test('通知样本通过定义', () => {
     [FEISHU_NOTIFICATION.registrationChanged]: { registrationId: 'reg-1', revision: 1 },
     [FEISHU_NOTIFICATION.chatsChanged]: { appId, chatId },
     [FEISHU_NOTIFICATION.inboxChanged]: { managerId: 'm-1', appId },
+    [FEISHU_NOTIFICATION.outboxChanged]: { appId, operationId: 'op-sample-1' },
+    [FEISHU_NOTIFICATION.bindingsChanged]: { appId, openId: 'ou_alice' },
   }
   for (const [name, value] of Object.entries(params)) assert.ok(wire(name, 'params', value), name)
 })
@@ -222,6 +315,25 @@ test('入站校验拒绝畸形参数，结果不收秘密', () => {
     false,
   )
   assert.equal(isFeishuMethod('litch/feishu/app/unknown'), false)
+  assert.equal(
+    isFeishuMethodParams(FEISHU_METHOD.outboxCancel, { appId, operationId: 'short' }),
+    false,
+    '操作 ID 要放得进飞书 uuid',
+  )
+  assert.equal(
+    isFeishuMethodParams(FEISHU_METHOD.outboxList, { appId, states: ['sent', 'sent'] }),
+    false,
+  )
+  assert.equal(isFeishuMethodParams(FEISHU_METHOD.bindingLookup, { appId, code: 'ABC' }), false)
+  assert.equal(
+    isFeishuMethodParams(FEISHU_METHOD.bindingUpdate, {
+      appId,
+      openId: 'ou_alice',
+      expectedRevision: 1,
+    }),
+    false,
+    '改绑定至少带一项',
+  )
   const { speech: _speech, ...noSpeech } = access
   assert.equal(
     isFeishuMethodParams(FEISHU_METHOD.chatAccess, noSpeech),

@@ -1,12 +1,15 @@
-// 手机上飞书的数据入口：直接订阅核心的 feishuDevice / feishuRegistration / feishuChats / feishuInbox 主题（核心负责断线保留、重连重读），
+// 手机上飞书的数据入口：直接订阅核心的 feishuDevice / feishuRegistration / feishuChats / feishuInbox / feishuOutbox / feishuBindings / reviews 主题（核心负责断线保留、重连重读），
 // 同设备在用的经理从数据副本取。
 import { keys, type ManagerView } from '@litch/core'
 import { useEffect, useMemo, useState } from 'react'
 import type {
+  FeishuBindingsView,
   FeishuChatsView,
   FeishuDeviceView,
   FeishuInboxView,
+  FeishuOutboxView,
   FeishuRegistrationView,
+  ReviewsView,
 } from '../../../../../../packages/core/src/projection/feishu.mts'
 import type { FeishuApp, ManagerChoice } from '../../../../../../packages/ui/src/feishu/model.ts'
 import { useChannel, useKey, useReplica } from '../../../shell/services'
@@ -98,6 +101,65 @@ export function useFeishuInbox(
     if (!enabled) return
     return channel.subscribe(
       { kind: 'feishuInbox', deviceId, managerId },
+      {
+        snapshot: (value) => setView(value),
+        delta: () => {},
+        error: () => setView(undefined),
+      },
+    )
+  }, [channel, deviceId, managerId, enabled])
+  return enabled ? view : undefined
+}
+
+/** 一个应用的发件队列：最近一页（新的在前） */
+export function useFeishuOutbox(deviceId: string, appId: string): FeishuOutboxView | undefined {
+  const channel = useChannel()
+  const [view, setView] = useState<FeishuOutboxView | undefined>()
+  useEffect(() => {
+    setView(undefined)
+    return channel.subscribe(
+      { kind: 'feishuOutbox', deviceId, appId },
+      {
+        snapshot: (value) => setView(value),
+        delta: () => {},
+        error: () => setView(undefined),
+      },
+    )
+  }, [channel, deviceId, appId])
+  return view
+}
+
+/** 一个应用的私聊绑定（已绑定和撤销过的） */
+export function useFeishuBindings(deviceId: string, appId: string): FeishuBindingsView | undefined {
+  const channel = useChannel()
+  const [view, setView] = useState<FeishuBindingsView | undefined>()
+  useEffect(() => {
+    setView(undefined)
+    return channel.subscribe(
+      { kind: 'feishuBindings', deviceId, appId },
+      {
+        snapshot: (value) => setView(value),
+        delta: () => {},
+        error: () => setView(undefined),
+      },
+    )
+  }, [channel, deviceId, appId])
+  return view
+}
+
+/** 这位经理发起的审批（待批在前）；设备没有审批扩展时 available 为 false */
+export function useReviews(
+  deviceId: string,
+  managerId: string,
+  enabled: boolean,
+): ReviewsView | undefined {
+  const channel = useChannel()
+  const [view, setView] = useState<ReviewsView | undefined>()
+  useEffect(() => {
+    setView(undefined)
+    if (!enabled) return
+    return channel.subscribe(
+      { kind: 'reviews', deviceId, managerId },
       {
         snapshot: (value) => setView(value),
         delta: () => {},

@@ -1,5 +1,6 @@
-// 飞书收件箱（D-161、D-166、D-170、D-173）：群里谁找了经理。
-// 消息落库后同步判定（处理函数返回、SDK 回 ACK 之前就写进收件箱），条件是：
+// 飞书收件箱（D-158、D-161、D-166、D-170、D-173）：群里和私聊里谁找了经理。
+// 私聊：已绑定的人发的每一条都进收件箱（没绑定的人的私聊根本不落库）。
+// 群：消息落库后同步判定（处理函数返回、SDK 回 ACK 之前就写进收件箱），条件是：
 // 1. 找的是机器人：@ 了机器人（按 open_id 精确比较），或回复的是机器人发的消息；
 // 2. 发送人在本群的叫醒名单里：手选的成员，加上开关开着时本应用全部已绑定用户。
 // 回复的那条本地没有时先标“待分拣”，后台回源读一次再判；设备重启时把待分拣的重新判一遍。
@@ -42,7 +43,7 @@ export interface FeishuInboxOptions {
   changed: (managerId: string, appId: string) => void
 }
 
-/** 已绑定用户（F6 接上）；没绑定的是 null */
+/** 已绑定用户（私聊绑定挂进来）；没绑定的是 null */
 export type FeishuBoundLookup = (appId: string, openId: string) => { name: string } | null
 
 type InboxBody = Omit<FeishuInboxEntry, 'inboxId' | 'status'>
@@ -136,10 +137,19 @@ export class FeishuInbox {
   /** 消息落库后的钩子：判要不要进收件箱 */
   stored(message: StoredMessage, source: MessageSource): void {
     if (source !== 'event' && source !== 'gap') return
-    if (message.chatKind !== 'group' || message.senderType !== 'user') return
+    if (message.senderType !== 'user') return
     if (source === 'gap' && message.createTime < (this.options.now() - GAP_INBOX_WINDOW) * 1000)
       return
-    this.judge(message)
+    if (message.chatKind === 'p2p') this.direct(message)
+    else this.judge(message)
+  }
+
+  /** 私聊：发送人还绑着就进收件箱 */
+  private direct(message: StoredMessage): void {
+    const app = this.options.store.app(message.appId)
+    if (!app?.managerId || !app.enabled) return
+    const bound = this.bound(message.appId, message.senderId)
+    if (bound) this.enqueue(message, app.managerId, 'p2p', bound)
   }
 
   private judge(message: StoredMessage): void {

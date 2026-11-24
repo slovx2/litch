@@ -4,11 +4,13 @@ import {
   FEISHU_APP_ID,
   FEISHU_BACKFILL_LIMIT,
   FEISHU_BOT_NAME_MAX,
+  FEISHU_PAIRING_ALPHABET,
   FEISHU_RETENTION_DAYS,
   FEISHU_REVIEW_TTL_HOURS,
   FEISHU_WAKERS_MAX,
   type FeishuApp,
   type FeishuBackfill,
+  type FeishuBinding,
   type FeishuCapability,
   type FeishuChat,
   type FeishuChatAccess,
@@ -21,14 +23,26 @@ import {
   type FeishuInboxMessage,
   type FeishuInboxStatus,
   type FeishuMember,
+  type FeishuOutboxEntry,
+  type FeishuOutboxFormat,
+  type FeishuOutboxState,
+  type FeishuPairing,
   type FeishuPerson,
   type FeishuRegistration,
   type FeishuSpeechMode,
 } from '../../../protocol/src/feishu.mts'
+import {
+  REVIEW_REASON_MAX,
+  type Review,
+  type ReviewSpeechPart,
+  type ReviewSpeechPreview,
+  type ReviewState,
+} from '../../../protocol/src/reviews.mts'
 
 export type {
   FeishuApp,
   FeishuBackfill,
+  FeishuBinding,
   FeishuCapability,
   FeishuChat,
   FeishuChatAccess,
@@ -38,9 +52,17 @@ export type {
   FeishuInboxMessage,
   FeishuInboxStatus,
   FeishuMember,
+  FeishuOutboxEntry,
+  FeishuOutboxFormat,
+  FeishuOutboxState,
+  FeishuPairing,
   FeishuPerson,
   FeishuRegistration,
   FeishuSpeechMode,
+  Review,
+  ReviewSpeechPart,
+  ReviewSpeechPreview,
+  ReviewState,
 }
 export {
   FEISHU_BACKFILL_LIMIT,
@@ -48,6 +70,7 @@ export {
   FEISHU_RETENTION_DAYS,
   FEISHU_REVIEW_TTL_HOURS,
   FEISHU_WAKERS_MAX,
+  REVIEW_REASON_MAX,
 }
 
 /**
@@ -112,6 +135,11 @@ export const FEISHU_REASONS = [
   'sync_failed',
   'backfill_running',
   'backfill_window_invalid',
+  'outbox_not_found',
+  'outbox_sending',
+  'pairing_not_found',
+  'binding_not_found',
+  'binding_revoked',
 ] as const
 export type FeishuReason = (typeof FEISHU_REASONS)[number]
 
@@ -123,10 +151,14 @@ export function feishuReason(error: unknown): FeishuReason | null {
   return (FEISHU_REASONS as readonly string[]).includes(code) ? (code as FeishuReason) : null
 }
 
-/** 说明界面拿的是旧数据的原因：版本冲突，或群的接入状态已在别处变了。收到时先重读再提示 */
+/** 说明界面拿的是旧数据的原因：版本冲突，群的接入状态或私聊绑定已在别处变了。收到时先重读再提示 */
 export function staleReason(reason: FeishuReason | null): boolean {
   return (
-    reason === 'revision_conflict' || reason === 'chat_accessed' || reason === 'chat_not_accessed'
+    reason === 'revision_conflict' ||
+    reason === 'chat_accessed' ||
+    reason === 'chat_not_accessed' ||
+    reason === 'binding_not_found' ||
+    reason === 'binding_revoked'
   )
 }
 
@@ -550,4 +582,241 @@ export function inboxChatName(
 ): string | null {
   if (message?.chatName?.trim()) return message.chatName
   return entry.chatKind === 'p2p' ? null : entry.chatId
+}
+
+// ---------- 审批（litchReviews，目前只有经理在审批群里的发言） ----------
+
+/** 设备给的审批原因代码（ChannelError.message 原样是代码）；文案键 feishu.review.error.<代码> */
+export const REVIEW_REASONS = [
+  'review_not_found',
+  'review_revision_conflict',
+  'review_not_pending',
+  'review_expired',
+] as const
+export type ReviewReason = (typeof REVIEW_REASONS)[number]
+
+export function reviewReason(error: unknown): ReviewReason | null {
+  const message = (error as { message?: unknown } | null)?.message
+  return typeof message === 'string' && (REVIEW_REASONS as readonly string[]).includes(message)
+    ? (message as ReviewReason)
+    : null
+}
+
+/** 界面手里的审批已经旧了（别处改过、已有结果、已过期、已不在）：收到时重读 */
+export function reviewStale(reason: ReviewReason | null): boolean {
+  return reason !== null
+}
+
+/** 显示的状态：待批但已过了过期时间（设备还没来得及改）当作已过期，不再给批 */
+export function reviewShownState(
+  review: Pick<Review, 'state' | 'expiresAt'>,
+  nowMs: number,
+): ReviewState {
+  return review.state === 'pending' && review.expiresAt * 1000 <= nowMs ? 'expired' : review.state
+}
+
+/** 列表顺序：待批的在前（快过期的在前），其余按有结果的时间新的在前；同样的保持设备给的顺序 */
+export function sortReviews(reviews: readonly Review[], nowMs: number): Review[] {
+  const pending = (review: Review) => reviewShownState(review, nowMs) === 'pending'
+  return reviews
+    .map((review, index) => ({ review, index }))
+    .sort((a, b) => {
+      const pa = pending(a.review)
+      const pb = pending(b.review)
+      if (pa !== pb) return pa ? -1 : 1
+      const order = pa
+        ? a.review.expiresAt - b.review.expiresAt
+        : (b.review.decidedAt ?? b.review.createdAt) - (a.review.decidedAt ?? a.review.createdAt)
+      return order || a.index - b.index
+    })
+    .map((one) => one.review)
+}
+
+/** 待批数（页签上的计数）：设备给的总数，减去列表里已过了过期时间、设备还没改的 */
+export function pendingReviewCount(
+  value: { reviews: readonly Review[]; pending: number } | null | undefined,
+  nowMs: number,
+): number {
+  if (!value) return 0
+  const lapsed = value.reviews.filter(
+    (review) => review.state === 'pending' && reviewShownState(review, nowMs) === 'expired',
+  ).length
+  return Math.max(0, value.pending - lapsed)
+}
+
+/** 剩余时间：满一天按天、满一小时按小时（向下取整），不到一小时按分钟（向上取整）；已过期是 null */
+export interface TimeLeft {
+  unit: 'day' | 'hour' | 'minute'
+  n: number
+  /** 不到一小时：界面标成提醒色 */
+  soon: boolean
+}
+export function timeLeft(expiresAt: number, nowMs: number): TimeLeft | null {
+  const seconds = expiresAt - nowMs / 1000
+  if (seconds <= 0) return null
+  if (seconds >= 86_400) return { unit: 'day', n: Math.floor(seconds / 86_400), soon: false }
+  if (seconds >= 3600) return { unit: 'hour', n: Math.floor(seconds / 3600), soon: false }
+  return { unit: 'minute', n: Math.max(1, Math.ceil(seconds / 60)), soon: true }
+}
+
+/** 列表上的内容开头：第一段有字的取第一行非空的字，否则取第一个图片或文件的名字 */
+export function speechHead(parts: readonly ReviewSpeechPart[]): string {
+  for (const part of parts) {
+    const line = part.text
+      ?.split('\n')
+      .map((one) => one.trim())
+      .find(Boolean)
+    if (line) return line
+  }
+  return parts.find((part) => part.name)?.name ?? ''
+}
+
+/** 格式小标记：各段的格式去重，按出现的先后 */
+export function speechFormats(parts: readonly ReviewSpeechPart[]): ReviewSpeechPart['format'][] {
+  return [...new Set(parts.map((part) => part.format))]
+}
+
+/** 理由的问题：超过 REVIEW_REASON_MAX 个字（按字符数）；没问题是 null */
+export function reasonProblem(reason: string): 'long' | null {
+  return [...reason.trim()].length > REVIEW_REASON_MAX ? 'long' : null
+}
+
+/** 批准或拒绝的参数（不含 deviceId）：带上界面手里的 revision；理由去掉首尾空白，空的不带 */
+export function decideParams(
+  review: Pick<Review, 'reviewId' | 'revision'>,
+  decision: 'approve' | 'reject',
+  reason: string,
+): { reviewId: string; decision: 'approve' | 'reject'; expectedRevision: number; reason?: string } {
+  const trimmed = reason.trim()
+  return {
+    reviewId: review.reviewId,
+    decision,
+    expectedRevision: review.revision,
+    ...(trimmed ? { reason: trimmed } : {}),
+  }
+}
+
+// ---------- 发件队列 ----------
+
+export const OUTBOX_TONE: Record<FeishuOutboxState, FeishuTone> = {
+  awaiting_approval: 'wait',
+  queued: 'wait',
+  sending: 'wait',
+  sent: 'ok',
+  failed: 'err',
+  rejected: 'off',
+  canceled: 'off',
+  unknown: 'err',
+}
+
+/** 能撤下的：还没发出去的（待审批、排队）和结果不明的；发送中、已有结果的不能撤 */
+export function canCancelOutbox(state: FeishuOutboxState): boolean {
+  return state === 'awaiting_approval' || state === 'queued' || state === 'unknown'
+}
+
+/** 发件行的出错原因代码；文案键 feishu.outbox.error.<代码>，认不出的用 other */
+export const OUTBOX_ERRORS = [
+  'review_rejected',
+  'review_expired',
+  'review_canceled',
+  'canceled_by_manager',
+  'canceled_by_admin',
+  'payload_changed',
+  'chat_unavailable',
+  'user_unbound',
+  'app_inactive',
+  'review_mismatch',
+  'unknown_timeout',
+  'permission',
+  'not_found',
+  'platform',
+  'invalid',
+  'credential_rejected',
+] as const
+export type OutboxError = (typeof OUTBOX_ERRORS)[number] | 'other'
+
+/** 行上要写的原因；没有原因、或原因和状态说的是一回事（被拒且是审批被拒）时是 null */
+export function outboxReason(
+  entry: Pick<FeishuOutboxEntry, 'state' | 'error'>,
+): OutboxError | null {
+  if (!entry.error) return null
+  if (entry.state === 'rejected' && entry.error === 'review_rejected') return null
+  return (OUTBOX_ERRORS as readonly string[]).includes(entry.error)
+    ? (entry.error as OutboxError)
+    : 'other'
+}
+
+/** 订阅给的最新一页加手动读到的更早几页：同一条以订阅的为准，更早的只补没有的 */
+export function mergeOutbox(
+  latest: readonly FeishuOutboxEntry[],
+  older: readonly FeishuOutboxEntry[],
+): FeishuOutboxEntry[] {
+  const seen = new Set(latest.map((entry) => entry.operationId))
+  return [...latest, ...older.filter((entry) => !seen.has(entry.operationId))]
+}
+
+// ---------- 私聊绑定 ----------
+
+/** 配对码去掉空白与横线、转大写后的样子 */
+function pairingChars(text: string): string {
+  return text.replace(/[\s-]/g, '').toUpperCase()
+}
+
+/** 输入框里的配对码：不分大小写、可带横线或空格；是 8 位且都在字母表里时给出 XXXX-XXXX，否则 null */
+export function pairingCode(text: string): string | null {
+  const chars = pairingChars(text)
+  if (chars.length !== 8 || [...chars].some((one) => !FEISHU_PAIRING_ALPHABET.includes(one)))
+    return null
+  return `${chars.slice(0, 4)}-${chars.slice(4)}`
+}
+
+/** 已经能看出填错了：有字母表之外的字（含 0 1 I L O），或超过 8 位。还没填完不算错 */
+export function pairingCodeBad(text: string): boolean {
+  const chars = pairingChars(text)
+  return chars.length > 8 || [...chars].some((one) => !FEISHU_PAIRING_ALPHABET.includes(one))
+}
+
+/** 列表上的名字：没有名字用 open_id */
+export function bindingName(person: { name?: string | undefined; openId: string }): string {
+  return person.name?.trim() || person.openId
+}
+
+/** 是不是创建向导里建应用的那个人 */
+export function bindingIsCreator(
+  binding: Pick<FeishuBinding, 'openId'>,
+  app: Pick<FeishuApp, 'creatorOpenId'> | null | undefined,
+): boolean {
+  return Boolean(app?.creatorOpenId) && binding.openId === app?.creatorOpenId
+}
+
+/** 列表顺序：已绑定的在前（绑定时间新的在前），已撤销的在后（撤销时间新的在前）；同样的保持设备给的顺序 */
+export function sortBindings(bindings: readonly FeishuBinding[]): FeishuBinding[] {
+  const at = (one: FeishuBinding) =>
+    one.state === 'bound' ? one.boundAt : (one.revokedAt ?? one.boundAt)
+  return bindings
+    .map((binding, index) => ({ binding, index }))
+    .sort((a, b) => {
+      const ra = a.binding.state === 'revoked'
+      const rb = b.binding.state === 'revoked'
+      if (ra !== rb) return ra ? 1 : -1
+      return at(b.binding) - at(a.binding) || a.index - b.index
+    })
+    .map((one) => one.binding)
+}
+
+/**
+ * 快照加界面手里更新的几条（命令结果、冲突后重读到的）：同一个人取 revision 大的，
+ * 快照里还没有的新绑定补上
+ */
+export function mergeBindings(
+  snapshot: readonly FeishuBinding[],
+  fresh: readonly FeishuBinding[],
+): FeishuBinding[] {
+  const newer = new Map(fresh.map((one) => [one.openId, one]))
+  const merged = snapshot.map((one) => {
+    const other = newer.get(one.openId)
+    newer.delete(one.openId)
+    return other && other.revision > one.revision ? other : one
+  })
+  return [...merged, ...newer.values()]
 }

@@ -337,6 +337,33 @@ export const SCENES: Scene[] = [
     steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1', tab: 'feishu' })],
   },
   {
+    id: 'feishu-reviews',
+    group: '经理',
+    name: '飞书 · 审批',
+    note: '经理 m1 的“审批”页签带待批数 2：A-2（图片，剩不到一小时，标红）、A-3（富文本、@ 一人、回复一条消息）在前，已拒的 A-1 在后带理由；点开待批的一条可填理由并批准或拒绝，模拟核心随即改状态',
+    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1', tab: 'reviews' })],
+  },
+  {
+    id: 'feishu-outbox',
+    group: '设备',
+    name: '飞书 · 发件',
+    note: '示例应用详情往下滚到“发件”：待审批（可撤下）、已发出两条、结果不明已停止重发（可撤下，确认框写明可能已发出）、被拒',
+    steps: [
+      nav('DeviceDetail', { deviceId: 'local' }),
+      nav('FeishuApp', { deviceId: 'local', appId: 'cli_a1b2c3d4e5f60718' }),
+    ],
+  },
+  {
+    id: 'feishu-bindings',
+    group: '设备',
+    name: '飞书 · 私聊绑定',
+    note: '示例应用详情往下滚到“私聊绑定”：待确认配对 1；填 ABCD-EFGH 查找能查到“示例访客”并确认绑定；列表里示例负责人（创建者、审批人）、示例同事、已撤销的示例前同事，点一行可改审批人、保留天数或撤销',
+    steps: [
+      nav('DeviceDetail', { deviceId: 'local' }),
+      nav('FeishuApp', { deviceId: 'local', appId: 'cli_a1b2c3d4e5f60718' }),
+    ],
+  },
+  {
     id: 'feishu-add',
     group: '设备',
     name: '飞书 · 添加应用',

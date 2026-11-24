@@ -2,12 +2,19 @@
 import {
   FEISHU_METHOD,
   type FeishuApp,
+  type FeishuBinding,
   type FeishuChat,
   type FeishuInboxEntry,
   type FeishuInboxMessage,
+  type FeishuOutboxEntry,
   type FeishuRegistration,
   type FeishuRequests,
 } from '../../../protocol/src/feishu.mjs'
+import {
+  REVIEWS_METHOD,
+  type Review,
+  type ReviewsRequests,
+} from '../../../protocol/src/reviews.mjs'
 import type { ExternalSnapshot } from './external.mjs'
 
 export type FeishuTopic =
@@ -15,6 +22,10 @@ export type FeishuTopic =
   | { kind: 'feishuRegistration'; deviceId: string; registrationId: string }
   | { kind: 'feishuChats'; deviceId: string; appId: string }
   | { kind: 'feishuInbox'; deviceId: string; managerId: string }
+  | { kind: 'feishuOutbox'; deviceId: string; appId: string }
+  | { kind: 'feishuBindings'; deviceId: string; appId: string }
+  /** 审批（litchReviews）：给 managerId 只看这位经理发起的 */
+  | { kind: 'reviews'; deviceId: string; managerId?: string }
 
 export interface FeishuDeviceView {
   apps: ExternalSnapshot<FeishuApp[]>
@@ -31,6 +42,18 @@ export type FeishuInboxView = ExternalSnapshot<{
   messages: Record<string, FeishuInboxMessage>
   next?: string
 }>
+
+/** 应用的发件队列：最近的一页（新的在前） */
+export type FeishuOutboxView = ExternalSnapshot<{ entries: FeishuOutboxEntry[]; next?: string }>
+
+/** 应用的私聊绑定（已绑定和撤销过的，新绑定的在前） */
+export type FeishuBindingsView = ExternalSnapshot<{ bindings: FeishuBinding[] }>
+
+/**
+ * 审批：待批的全部（最多 200 条）在前，再接最近有了结果的；pending 是待批条数。
+ * available=false 是设备不支持审批（没有 litchReviews），界面不出审批入口
+ */
+export type ReviewsView = ExternalSnapshot<{ reviews: Review[]; pending: number }>
 
 export const FEISHU_COMMAND = {
   'feishu.app.get': FEISHU_METHOD.appGet,
@@ -52,7 +75,32 @@ export const FEISHU_COMMAND = {
   'feishu.chat.backfill': FEISHU_METHOD.chatBackfill,
   'feishu.inbox.list': FEISHU_METHOD.inboxList,
   'feishu.inbox.get': FEISHU_METHOD.inboxGet,
+  'feishu.outbox.list': FEISHU_METHOD.outboxList,
+  'feishu.outbox.cancel': FEISHU_METHOD.outboxCancel,
+  'feishu.binding.list': FEISHU_METHOD.bindingList,
+  'feishu.binding.lookup': FEISHU_METHOD.bindingLookup,
+  'feishu.binding.approve': FEISHU_METHOD.bindingApprove,
+  'feishu.binding.revoke': FEISHU_METHOD.bindingRevoke,
+  'feishu.binding.update': FEISHU_METHOD.bindingUpdate,
 } as const
+
+export const REVIEWS_COMMAND = {
+  'reviews.list': REVIEWS_METHOD.list,
+  'reviews.get': REVIEWS_METHOD.get,
+  'reviews.decide': REVIEWS_METHOD.decide,
+} as const
+
+export type ReviewsCommandName = keyof typeof REVIEWS_COMMAND
+export type ReviewsCommands = {
+  [M in ReviewsCommandName]: {
+    params: ReviewsRequests[(typeof REVIEWS_COMMAND)[M]]['params'] & { deviceId: string }
+    result: ReviewsRequests[(typeof REVIEWS_COMMAND)[M]]['result']
+  }
+}
+
+export function isReviewsCommand(name: string): name is ReviewsCommandName {
+  return Object.hasOwn(REVIEWS_COMMAND, name)
+}
 
 export type FeishuCommandName = keyof typeof FEISHU_COMMAND
 export type FeishuCommands = {

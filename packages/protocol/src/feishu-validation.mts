@@ -5,6 +5,8 @@ import {
   FEISHU_CHAT_ID,
   FEISHU_METHOD,
   FEISHU_OPEN_ID,
+  FEISHU_OPERATION_ID,
+  FEISHU_PAIRING_CODE,
   FEISHU_RETENTION_DAYS,
   FEISHU_REVIEW_TTL_HOURS,
   FEISHU_SECRET_MAX,
@@ -66,6 +68,23 @@ const inboxStatuses: Check = (value) =>
   value.length <= 3 &&
   new Set(value).size === value.length &&
   value.every((item) => INBOX_STATUSES.has(item))
+const outboxOperationId = pattern(FEISHU_OPERATION_ID)
+const OUTBOX_STATES = new Set([
+  'awaiting_approval',
+  'queued',
+  'sending',
+  'sent',
+  'failed',
+  'rejected',
+  'canceled',
+  'unknown',
+])
+const outboxStates: Check = (value) =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.length <= OUTBOX_STATES.size &&
+  new Set(value).size === value.length &&
+  value.every((item) => OUTBOX_STATES.has(item))
 const retentionDays = int(FEISHU_RETENTION_DAYS.min, FEISHU_RETENTION_DAYS.max)
 const reviewTtlHours = int(FEISHU_REVIEW_TTL_HOURS.min, FEISHU_REVIEW_TTL_HOURS.max)
 const wakers: Check = (value) =>
@@ -74,6 +93,8 @@ const wakers: Check = (value) =>
   new Set(value).size === value.length &&
   value.every(pattern(FEISHU_OPEN_ID))
 const chatRef = { appId, chatId }
+const openId = pattern(FEISHU_OPEN_ID)
+const pairingCode = pattern(FEISHU_PAIRING_CODE)
 const accessFields = { wakeBound: bool, wakers, retentionDays, reviewTtlHours }
 
 const checks = {
@@ -121,6 +142,19 @@ const checks = {
       { statuses: inboxStatuses, before: inboxId, limit: int(1, 200) },
     )(value),
   [FEISHU_METHOD.inboxGet]: obj({ inboxId }),
+  [FEISHU_METHOD.outboxList]: obj(
+    { appId },
+    { states: outboxStates, before: outboxOperationId, limit: int(1, 200) },
+  ),
+  [FEISHU_METHOD.outboxCancel]: obj({ appId, operationId: outboxOperationId }),
+  [FEISHU_METHOD.bindingList]: obj({ appId }),
+  [FEISHU_METHOD.bindingLookup]: obj({ appId, code: pairingCode }),
+  [FEISHU_METHOD.bindingApprove]: obj({ appId, code: pairingCode }),
+  [FEISHU_METHOD.bindingRevoke]: obj({ appId, openId, expectedRevision: revision }),
+  [FEISHU_METHOD.bindingUpdate]: (value) =>
+    obj({ appId, openId, expectedRevision: revision }, { approver: bool, retentionDays })(value) &&
+    ((value as { approver?: unknown }).approver !== undefined ||
+      (value as { retentionDays?: unknown }).retentionDays !== undefined),
 } satisfies { [M in FeishuMethod]: Check }
 
 export function isFeishuMethod(method: string): method is FeishuMethod {

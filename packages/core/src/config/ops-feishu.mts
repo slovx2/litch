@@ -3,6 +3,7 @@ import {
   FEISHU_RETENTION_DAYS,
   FEISHU_REVIEW_TTL_HOURS,
   type FeishuApp,
+  type FeishuBinding,
   type FeishuChat,
   type FeishuSpeechMode,
 } from '../../../protocol/src/feishu.mjs'
@@ -370,7 +371,90 @@ const FEISHU_CHAT_OPS: Record<string, OpSpec> = {
   },
 }
 
+// —— 私聊绑定 ——
+// 只给列出和撤销：确认配对、设审批人会放大谁能找经理和谁能批，留给人在界面上做（Agent 读到的群消息可能诱导它去确认）
+
+async function bindingsOf(ctx: OpContext, deviceId: string, appId: string) {
+  const view = await ctx.first({ kind: 'feishuBindings', deviceId, appId })
+  if (!view.available || !view.value)
+    throw invalid(
+      ctx,
+      '设备尚未提供私聊绑定；请检查连接与设备版本。',
+      'Direct-message pairing is not available on this device; check the connection and device version.',
+    )
+  return view.value.bindings
+}
+
+function bindingLine(ctx: OpContext, binding: FeishuBinding): string {
+  const state =
+    binding.state === 'revoked'
+      ? ctx.say('已撤销', 'revoked')
+      : binding.approver
+        ? ctx.say('已绑定 · 审批人', 'bound · approver')
+        : ctx.say('已绑定', 'bound')
+  return `${binding.openId} · ${binding.name || '-'} · ${state} · ${ctx.say(`保留 ${binding.retentionDays} 天`, `${binding.retentionDays} days kept`)}`
+}
+
+const BINDING_OPS: Record<string, OpSpec> = {
+  'feishu-binding list': {
+    args: [1, 1],
+    options,
+    usage: 'feishu-binding list <app-id> [--device <id>]',
+    summary: { zh: '列出私聊绑定的人', en: 'List paired users' },
+    async run(ctx) {
+      const device = await getDevice(ctx)
+      const app = await appOf(ctx, device.id)
+      const bindings = await bindingsOf(ctx, device.id, app.appId)
+      return {
+        text: bindings.length
+          ? bindings.map((one) => bindingLine(ctx, one)).join('\n')
+          : ctx.say('没有绑定的人。', 'No paired users.'),
+        data: { bindings },
+      }
+    },
+  },
+  'feishu-binding revoke': {
+    args: [2, 2],
+    options,
+    usage: 'feishu-binding revoke <app-id> <user> [--device <id>]',
+    summary: { zh: '撤销一个人的私聊绑定', en: 'Revoke a paired user' },
+    async run(ctx) {
+      const device = await getDevice(ctx)
+      const app = await appOf(ctx, device.id)
+      const bindings = (await bindingsOf(ctx, device.id, app.appId)).filter(
+        (one) => one.state === 'bound',
+      )
+      const wanted = ctx.cmd.positionals[1]
+      const exact = bindings.find((one) => one.openId === wanted)
+      const named = bindings.filter((one) => one.name && one.name === wanted)
+      const target = exact ?? (named.length === 1 ? named[0] : undefined)
+      if (!target)
+        throw invalid(
+          ctx,
+          '没有这个已绑定的人，或名字不唯一；请先列出并使用 open_id。',
+          'No such paired user, or the name is ambiguous; list them and use the open_id.',
+        )
+      await writing(
+        ctx,
+        ctx.nameOf(device),
+        ctx.say(
+          `撤销“${target.name || target.openId}”的私聊绑定；之后对方私聊会重新收到配对码。`,
+          `Revoke the pairing of “${target.name || target.openId}”; their next direct message gets a new pairing code.`,
+        ),
+      )
+      const data = await ctx.run('feishu.binding.revoke', {
+        deviceId: device.id,
+        appId: app.appId,
+        openId: target.openId,
+        expectedRevision: target.revision,
+      })
+      return { text: bindingLine(ctx, data.binding), data }
+    },
+  },
+}
+
 export const FEISHU_CONFIG_OPS: Record<string, OpSpec> = {
+  ...BINDING_OPS,
   'feishu-app list': {
     args: [0, 0],
     options,

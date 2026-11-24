@@ -43,6 +43,7 @@ export function BoardActionScrollView({
   onContentSizeChange,
   settled,
   moving = false,
+  hidden = false,
   ...props
 }: KeyboardAwareScrollViewProps & {
   ref?: Ref<KeyboardAwareScrollViewRef>
@@ -50,6 +51,8 @@ export function BoardActionScrollView({
   settled?: unknown
   /** 外层正在滑入：卡尾操作栏先不显示，到位重量后再出现 */
   moving?: boolean
+  /** 整块不占位（保留挂载与滚动位置）：只藏里面的滚动视图时外层仍会占一半高度 */
+  hidden?: boolean
 }) {
   const box = useRef<View>(null)
   const scroll = useSharedValue(0)
@@ -81,7 +84,12 @@ export function BoardActionScrollView({
     [bounds, scroll, revision, moving],
   )
   return (
-    <View ref={box} collapsable={false} style={styles.fill} onLayout={measure}>
+    <View
+      ref={box}
+      collapsable={false}
+      style={[styles.fill, hidden && styles.gone]}
+      onLayout={measure}
+    >
       <Scroll.Provider value={value}>
         <Actions.Provider value={null}>
           <KeyboardFormScrollView
@@ -255,6 +263,7 @@ const RANK: Record<Place, number> = { first: -1, normal: 0, last: 1 }
 const styles = StyleSheet.create({
   fill: { flex: 1, minHeight: 0 },
   hidden: { opacity: 0 },
+  gone: { display: 'none' },
 
   actions: {
     zIndex: 2,

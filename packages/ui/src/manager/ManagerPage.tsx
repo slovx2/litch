@@ -37,6 +37,7 @@ import { ManagerRecovery, recoveryInManagerHeader } from '../external/ManagerRec
 import { reasonText } from '../external/Preview.tsx'
 import { useManagerFeishuApp } from '../feishu/data.ts'
 import { FeishuInbox, useFeishuInboxSummary } from '../feishu/Inbox.tsx'
+import { Reviews, useReviewsSummary } from '../feishu/Reviews.tsx'
 import { SessionTodo } from '../rail/InfoRail.tsx'
 import { onFindPreparing } from '../search/actions.ts'
 import { Transcript } from '../transcript/Transcript.tsx'
@@ -87,8 +88,10 @@ export interface ManagerPageLocation {
 }
 const defaultLocation: ManagerPageLocation = { tab: 'inbox', narrow: 'board', settings: false }
 
-/** Console 停在哪个外部收件箱（GitHub、飞书，两者互斥；null 是看板类别）：按经理记在本窗口，离开再回来仍在 */
-type OutsideTab = 'github' | 'feishu' | null
+/**
+ * Console 停在哪个外部页签（GitHub、飞书、审批，互斥；null 是看板类别）：按经理记在本窗口，离开再回来仍在
+ */
+type OutsideTab = 'github' | 'feishu' | 'reviews' | null
 const outsideShown = new Map<string, OutsideTab>()
 function useOutsideTab(key: string) {
   const [shown, setShown] = useState<OutsideTab>(() => outsideShown.get(key) ?? null)
@@ -189,8 +192,12 @@ export function ManagerPage({
     useManagerFeishuApp(manager.deviceId, manager.id, device?.feishu === true) !== null
   const feishu = feishuBound && outside === 'feishu'
   const feishuQueued = useFeishuInboxSummary(manager, feishuBound)
-  /** Console 正停在某个外部收件箱，看板类别都不算选中 */
-  const outsideOn = github || feishu
+  // 审批页签：设备有审批扩展（reviews 快照 available）时才有，计数是这位经理的待批数
+  const reviewsSummary = useReviewsSummary(manager, device?.feishu === true)
+  const reviewsShown = reviewsSummary.available
+  const reviews = reviewsShown && outside === 'reviews'
+  /** Console 正停在某个外部页签，看板类别都不算选中 */
+  const outsideOn = github || feishu || reviews
   const [, renderCategory] = useState(0)
   // issue 控制台（设备支持 litchManagerIssues 时）：编号跳转与概览摘要的过滤都交给它
   const issues = useManagerIssues(view)
@@ -711,6 +718,23 @@ export function ManagerPage({
                   {feishuQueued ? <span className="pill wait">{feishuQueued}</span> : null}
                 </button>
               ) : null}
+              {reviewsShown ? (
+                <button
+                  type="button"
+                  data-inbox-tab="reviews"
+                  key="reviews"
+                  aria-pressed={reviews}
+                  onClick={() => {
+                    setOutside('reviews')
+                    if (tab !== 'inbox') setTab('inbox')
+                  }}
+                >
+                  {t('feishu.review.tab')}
+                  {reviewsSummary.pending ? (
+                    <span className="pill wait">{reviewsSummary.pending}</span>
+                  ) : null}
+                </button>
+              ) : null}
             </div>
             {issueMode ? (
               <div className="mg-inbox-act" ref={setIssueAction} data-inbox-action />
@@ -737,6 +761,9 @@ export function ManagerPage({
             />
           ) : null}
           {feishu && consoleTab ? <FeishuInbox key={manager.id} manager={manager} /> : null}
+          {reviews && consoleTab ? (
+            <Reviews key={manager.id} manager={manager} online={device?.connection === 'online'} />
+          ) : null}
           {outsideOn && consoleTab ? null : error ? (
             <p className="err" role="alert">
               {reasonOf(error, t)}

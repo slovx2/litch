@@ -39,11 +39,28 @@ export type FeishuAuditAction =
   | 'chat_bot_removed'
   | 'chat_bot_returned'
   | 'chat_disbanded'
+  | 'speech_requested'
+  | 'speech_canceled'
+  | 'speech_review_approved'
+  | 'speech_review_rejected'
+  | 'speech_review_canceled'
+  | 'speech_review_expired'
+  | 'speech_sent'
+  | 'speech_failed'
+  | 'speech_unknown'
+  | 'pairing_requested'
+  | 'pairing_limited'
+  | 'binding_approved'
+  | 'binding_revoked'
+  | 'binding_updated'
+  | 'review_card_sent'
+  | 'review_card_decided'
+  | 'review_card_refused'
 
 export interface FeishuAuditEntry {
   action: FeishuAuditAction
-  /** 发起的连接：管理员连接或设备自己 */
-  by: 'admin' | 'device'
+  /** 发起的连接：管理员连接、设备自己，或飞书里的审批人（卡片） */
+  by: 'admin' | 'device' | 'feishu'
   detail?: Record<string, string | number | boolean | null>
 }
 

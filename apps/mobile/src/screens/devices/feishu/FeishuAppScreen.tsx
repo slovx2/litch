@@ -1,6 +1,6 @@
-// 一台设备上一个飞书应用的详情：连接状态、启用、分配经理、能力自检（检查、补申请、待审核）、群、App Secret 更新时间、移除。
+// 一台设备上一个飞书应用的详情：连接状态、启用、分配经理、能力自检（检查、补申请、待审核）、群、私聊绑定、发件、App Secret 更新时间、移除。
 // 与桌面一致，只少“更换 App Secret”（秘密只在桌面输入，litch config 也不收）。写操作带 expectedRevision，冲突时重读并提示重试；
-// 这条连接不是设备管理员时写操作都不可点，页首写明原因。后续里程碑的私聊绑定、发件各加一节，排在 App Secret 之前。
+// 这条连接不是设备管理员时写操作都不可点，页首写明原因。
 import { type DeviceView, keys } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useCallback, useState } from 'react'
@@ -26,7 +26,9 @@ import { Confirm, Sheet } from '../../../ui/kit/overlays'
 import { Screen } from '../../../ui/kit/Screen'
 import { useTheme } from '../../../ui/theme'
 import { InfoLine } from '../parts'
+import { FeishuBindings } from './FeishuBindings'
 import { FeishuChats } from './FeishuChats'
+import { FeishuOutbox } from './FeishuOutbox'
 import { BotAvatar, stateColor, stateText } from './FeishuSection'
 import { useDeviceManagers, useFeishuDevice } from './use-feishu'
 
@@ -247,6 +249,10 @@ export function FeishuAppScreen({ route, navigation }: Props) {
             })
           }
         />
+
+        <FeishuBindings deviceId={deviceId} app={app} block={block} />
+
+        <FeishuOutbox deviceId={deviceId} appId={appId} block={block} />
 
         <SectionLabel>{t('feishu.secret.title')}</SectionLabel>
         <InfoLine

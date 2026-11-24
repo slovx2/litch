@@ -166,12 +166,16 @@ import type {
   ExternalOutboxView,
 } from '../projection/external.mjs'
 import type {
+  FeishuBindingsView,
   FeishuChatsView,
   FeishuCommands,
   FeishuDeviceView,
   FeishuInboxView,
+  FeishuOutboxView,
   FeishuRegistrationView,
   FeishuTopic,
+  ReviewsCommands,
+  ReviewsView,
 } from '../projection/feishu.mjs'
 import type { FileRef } from '../projection/file-refs.mjs'
 import type { SkippingOutput } from '../text/output-cap.mjs'
@@ -284,6 +288,9 @@ export interface TopicData {
   feishuRegistration: FeishuRegistrationView
   feishuChats: FeishuChatsView
   feishuInbox: FeishuInboxView
+  feishuOutbox: FeishuOutboxView
+  feishuBindings: FeishuBindingsView
+  reviews: ReviewsView
   fileChanges: { revision: number }
   automationPreview: AutomationPreviewView | null
   app: AppView
@@ -442,6 +449,9 @@ export interface TopicOp {
   feishuRegistration: never
   feishuChats: never
   feishuInbox: never
+  feishuOutbox: never
+  feishuBindings: never
+  reviews: never
   externalIdentityLogin: never
   externalInbox: never
   externalOutbox: never
@@ -476,7 +486,7 @@ export interface TopicOp {
 
 // ---------- 命令 ----------
 
-export interface Commands extends ExternalCommands, FeishuCommands {
+export interface Commands extends ExternalCommands, FeishuCommands, ReviewsCommands {
   'managers.issues.list': {
     params: import('../../../protocol/src/manager-issues.mjs').ManagerIssueQuery & {
       deviceId: string

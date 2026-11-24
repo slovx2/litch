@@ -91,6 +91,12 @@ export class FakeFeishu {
   readonly sockets: Socket[] = []
   readonly patches: { appId: string; body: Record<string, unknown> }[] = []
   readonly publishes: { appId: string; body: Record<string, unknown> }[] = []
+  /**
+   * 接下来几次发消息的故障：drop=照常发出但断开连接（发送结果不明）；reset=没发就断开；error=按错误码拒绝
+   * （同一 uuid 已发过的照常去重返回，不消耗故障）
+   */
+  sendFaults: ({ kind: 'drop' | 'reset' } | { kind: 'error'; code: number; status?: number })[] = []
+  private abort: (() => void) | null = null
   /** 换令牌失败的应用（凭据被拒） */
   readonly rejectToken = new Set<string>()
   /** 长连接拉配置时返回系统繁忙（可重试）的次数 */
@@ -249,7 +255,7 @@ export class FakeFeishu {
       service: 1,
       method: 1,
       headers: [
-        { key: 'type', value: eventType === 'card.action.trigger' ? 'card' : 'event' },
+        { key: 'type', value: 'event' },
         { key: 'message_id', value: messageId },
         { key: 'sum', value: '1' },
         { key: 'seq', value: '0' },
@@ -423,6 +429,7 @@ export class FakeFeishu {
       return
     }
     this.calls.push({ appId: app.appId, method, path })
+    this.abort = () => response.destroy()
     return this.api(app, method, path, url, raw, json, reply)
   }
 
@@ -688,6 +695,10 @@ export class FakeFeishu {
       : undefined
     const existing = repeat && this.messages.find((item) => item.message_id === repeat.messageId)
     if (existing) return reply({ code: 0, msg: 'success', data: listItem(existing) })
+    const fault = this.sendFaults.shift()
+    if (fault?.kind === 'error')
+      return reply({ code: fault.code, msg: 'injected failure' }, fault.status ?? 400)
+    if (fault?.kind === 'reset') return this.abort?.()
     let chatId = parent?.chat_id
     if (!chatId) {
       const receiveId = String(body.receive_id ?? '')
@@ -722,6 +733,7 @@ export class FakeFeishu {
       ...(uuid ? { uuid } : {}),
       messageId: message.message_id,
     })
+    if (fault?.kind === 'drop') return this.abort?.()
     reply({ code: 0, msg: 'success', data: listItem(message) })
   }
 }
