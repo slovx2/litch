@@ -496,7 +496,6 @@ export function Decisions({
                 data-draft={Boolean(draft) && !ended}
                 tabIndex={-1}
               >
-                <Relations id={decision.id} />
                 <BoardMarkdown text={decision.background} />
                 {decision.blocks.length ? (
                   <div className="mg-item-meta mg-decision-meta">
@@ -511,6 +510,8 @@ export function Decisions({
                   </div>
                 ) : null}
                 <PostHistory post={post} />
+                {/* 关联是正文的附注：排在正文和版本历史后面，默认收起 */}
+                <Relations id={decision.id} />
                 <div>
                   {decision.status === 'open' ||
                   editing.has(decision.id) ||
