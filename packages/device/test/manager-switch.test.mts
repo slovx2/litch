@@ -1228,6 +1228,8 @@ for (const [harness, rulesFirst] of [
         )
         throw error
       }
+      // 收件行带真实触发人的登录名，不再只有仓库角色。
+      assert.equal((await inbox())?.actorLogin, actor.login)
       if (missingTools) {
         const { delivery } = await inbox()
         assert.equal(delivery.state, 'queued')

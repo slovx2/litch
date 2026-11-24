@@ -125,6 +125,36 @@ test('同一候选的多条事件聚合成一行，保留先到的作代表', ()
   )
 })
 
+test('聚合行列出去重后的触发人，最近的在前；没有登录名时退回数字 ID', () => {
+  const rows = m.groupInbox([
+    { seq: 4, intakeId: 'a', actorId: '11', actorLogin: 'river-fox' },
+    { seq: 3, intakeId: 'a', actorId: '12', actorLogin: 'quiet-owl' },
+    { seq: 2, intakeId: 'a', actorId: '11', actorLogin: 'river-fox' },
+    { seq: 1, actorId: '13' },
+    { seq: 0, actorId: null },
+  ])
+  assert.deepEqual(
+    rows.map((row) => row.actors),
+    [['river-fox', 'quiet-owl'], ['#13'], []],
+  )
+})
+
+test('两端的触发人与新原因文案一致', async () => {
+  const { zhExternal } = await import('../src/i18n/zh-CN-external.ts')
+  const { enExternal } = await import('../src/i18n/en-external.ts')
+  const mobile = await import('../../../apps/mobile/src/ui/messages/external.ts')
+  for (const key of [
+    'inbox.actors',
+    'inbox.roleTitle',
+    'reason.terminal_issue',
+    'reason.trigger_invalid',
+  ]) {
+    assert.ok(zhExternal[`ext.${key}`], key)
+    assert.equal(zhExternal[`ext.${key}`], mobile.zhCN[`mgh.${key}`])
+    assert.equal(enExternal[`ext.${key}`], mobile.en[`mgh.${key}`])
+  }
+})
+
 const repository = {
   repoId: '20394867',
   owner: 'o',

@@ -11,6 +11,7 @@ import {
   isTerminalIssue,
   NOTIFY_TTL,
   type ReminderCategory,
+  settleWithdrawnIntake,
 } from './intake.mjs'
 import {
   type ExternalRoutingPolicy,
@@ -107,6 +108,8 @@ type Plan = {
   group: ExternalDeliveryGroup
   events: ExternalInboxEvent[]
   category: ReminderCategory
+  /** 分拣提醒对应的主题已绑定到已结束的事项。 */
+  terminalIssue?: { issueId: string; status: string }
 }
 
 export class ExternalDispatch {
@@ -198,13 +201,20 @@ export class ExternalDispatch {
     const manager = this.store.manager.manager(group.managerId)
     if (!routeManagerMatches(manager, repo)) return block('target_inactive')
     const ref = this.store.ref(sample.subject)
+    let terminalIssue: Plan['terminalIssue']
     if (kind !== 'triage') {
       if (ref?.managerId !== group.managerId || ref?.issueId !== group.issueId || !group.issueId)
         return block('binding_changed')
       const issue = boundIssue(this.store, group.managerId, group.issueId)
       if (!issue || isTerminalIssue(issue)) return block('terminal_issue')
       if (issue.followUp.state !== 'on') return block('follow_up_off')
-    } else if (ref) return block('binding_changed')
+    } else if (ref) {
+      // 绑定到本经理已结束事项的明确请求按分拣提醒；其余绑定变化说明候选已不适用。
+      const issue =
+        ref.managerId === group.managerId && boundIssue(this.store, ref.managerId, ref.issueId)
+      if (!issue || !isTerminalIssue(issue)) return block('binding_changed')
+      terminalIssue = { issueId: ref.issueId, status: issue.status }
+    }
 
     const owner = this.store.config.owner('github')
     const ranks = ['read', 'triage', 'write', 'maintain', 'admin']
@@ -232,6 +242,8 @@ export class ExternalDispatch {
               ranks.indexOf(row.actorRoleAtCheck) < ranks.indexOf(source.minRole)))
       )
         reason = 'actor_scope_changed'
+      else if (kind === 'triage' && terminalIssue && row.issueId !== terminalIssue.issueId)
+        reason = 'binding_changed'
       else if (kind === 'triage' && proof) {
         const chosen = selectRoute(
           source,
@@ -243,11 +255,12 @@ export class ExternalDispatch {
         )
         if (
           explicitTrigger(source, evidence, routing, proof.addressedBotIds) !== row.ruleId ||
-          (!(
-            'routeId' in chosen &&
-            chosen.routeId === row.routeId &&
-            chosen.managerId === group.managerId
-          ) &&
+          (!terminalIssue &&
+            !(
+              'routeId' in chosen &&
+              chosen.routeId === row.routeId &&
+              chosen.managerId === group.managerId
+            ) &&
             !(
               managerIdentity(routing, group.managerId) &&
               this.store.wasIntakeReassigned(row, group.managerId)
@@ -263,7 +276,18 @@ export class ExternalDispatch {
         })
       return false
     })
-    if (!active.length) return block('no_current_evidence')
+    if (!active.length) {
+      block('no_current_evidence')
+      // 证据全部确定失效的待分拣由设备收尾，不留在待分拣里。
+      if (update && kind === 'triage')
+        this.store.transaction(() => {
+          for (const intakeId of new Set(events.flatMap((row) => row.intakeId ?? []))) {
+            const intake = this.store.intake(intakeId)
+            if (intake) settleWithdrawnIntake(this.store, intake, at)
+          }
+        })
+      return null
+    }
     if (kind === 'status') {
       // 同一次合并/关闭只提示一次；同 run/attempt 只保留最近状态。
       const seen = new Set<string>()
@@ -282,7 +306,7 @@ export class ExternalDispatch {
           return true
         })
     }
-    return { group, events: active, category: kind }
+    return { group, events: active, category: kind, ...(terminalIssue ? { terminalIssue } : {}) }
   }
 
   async drain(managerId: string): Promise<boolean> {
@@ -519,7 +543,7 @@ export class ExternalDispatch {
   }
 }
 
-function externalReminder({ group, category, events }: Plan): string {
+function externalReminder({ group, category, events, terminalIssue }: Plan): string {
   return formatSessionEvent({
     kind: category === 'triage' ? 'manager-external-triage' : 'manager-external-bound',
     notes: [],
@@ -531,6 +555,12 @@ function externalReminder({ group, category, events }: Plan): string {
         ...(group.issueId ? { issueId: group.issueId } : {}),
         category,
         count: events.length,
+        ...(terminalIssue
+          ? {
+              boundIssue: terminalIssue,
+              note: `This GitHub subject is bound to ${terminalIssue.issueId}, which is ${terminalIssue.status}. Reopen ${terminalIssue.issueId} and merge the intake into it, or accept it with relatedIssueId ${terminalIssue.issueId} to create a follow-up issue.`,
+            }
+          : {}),
       }),
     },
   })

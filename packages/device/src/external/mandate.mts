@@ -19,7 +19,13 @@ import type {
 } from '../external-store.mjs'
 import { signature } from '../external-store-internal.mjs'
 import { invalid } from '../manager-validate.mjs'
-import { boundIssue, evidenceWithdrawn, issuedLink, isTerminalIssue } from './intake.mjs'
+import {
+  boundIssue,
+  evidenceWithdrawn,
+  INTAKE_TRIGGER_INVALID,
+  issuedLink,
+  isTerminalIssue,
+} from './intake.mjs'
 import {
   checkRequester,
   configuredAddresses,
@@ -70,6 +76,36 @@ export interface ExternalMandateHost {
   }): Promise<NonNullable<ExternalTriageHooks['reply']>>
   onIssueCreated?(managerId: string, issueId: ExternalIssueId, related?: ExternalIssueId): void
   onIssueChanged?(managerId: string, issueId: ExternalIssueId, created: boolean): void
+}
+
+/** 原触发不再成立的原因；definitive 表示证据已确定失效，不会再恢复。 */
+type TriggerFailure = { eventKey: string; reason: string; definitive: boolean }
+const FAILURE_TEXT: Record<string, string> = {
+  evidence_withdrawn:
+    'the triggering content was edited, deleted or withdrawn after collection; edits do not count as new requests',
+  content_changed: 'the current content on GitHub differs from the collected version',
+  unverifiable:
+    'GitHub did not return the original content (deleted, hidden or temporarily unreachable)',
+  agent_marked: 'GitHub now shows it as agent-written content, which cannot request work',
+  recheck_mismatch: 'the current GitHub object no longer matches the collected event',
+  rules_changed: 'the source rules or repository root changed since collection',
+  trigger_mismatch: 'it no longer matches an enabled trigger rule',
+  route_changed: 'the route or binding no longer leads to this manager',
+  owner_changed: 'the configured GitHub owner changed',
+  requester_ineligible: 'the requester no longer has the required repository role',
+}
+
+function triggerFailureMessage(failures: readonly TriggerFailure[], closed: boolean): string {
+  const lines = failures.map(
+    (failure) => `${failure.eventKey}: ${FAILURE_TEXT[failure.reason] ?? failure.reason}.`,
+  )
+  return [
+    'No trigger in this intake still meets current evidence, identity and route requirements.',
+    ...lines,
+    closed
+      ? `Every trigger is permanently invalid, so Litch moved this intake to processed (reason ${INTAKE_TRIGGER_INVALID}). If the requester still wants this, they need to post a new comment or trigger; it will arrive as a new intake.`
+      : 'A later valid trigger in this intake is enough to accept it. Retry after the cause is fixed, or dismiss the intake with external_ignore.',
+  ].join('\n')
 }
 
 const actionPolicy = {
@@ -138,8 +174,18 @@ export class ExternalMandateService {
   }
 
   private async live(ctx: ReturnType<ExternalMandateService['snapshot']>, row: ExternalInboxEvent) {
+    const result = await this.liveCheck(ctx, row)
+    return 'failure' in result ? null : result
+  }
+
+  private async liveCheck(
+    ctx: ReturnType<ExternalMandateService['snapshot']>,
+    row: ExternalInboxEvent,
+  ) {
+    const fail = (reason: string, definitive: boolean) => ({ failure: { reason, definitive } })
     const saved = this.store.routingEvidence(row)
-    if (!saved || evidenceWithdrawn(this.store, row, saved.event)) return null
+    if (!saved || evidenceWithdrawn(this.store, row, saved.event))
+      return fail('evidence_withdrawn', true)
     const original = saved.event
     const proof = await this.host.recheckEvent({
       source: ctx.source,
@@ -148,10 +194,15 @@ export class ExternalMandateService {
       addresses: configuredAddresses(ctx.routing),
     })
     const checked = proof?.event
+    if (!proof || !checked) return fail('unverifiable', false)
     if (
-      !proof ||
-      proof.agentMarked ||
-      !checked ||
+      checked.externalEventKey === original.externalEventKey &&
+      (checked.contentVersion !== original.contentVersion ||
+        checked.targetEvidence.publication !== original.targetEvidence.publication)
+    )
+      return fail('content_changed', true)
+    if (proof.agentMarked) return fail('agent_marked', false)
+    if (
       !isExternalEvent(checked) ||
       !issuedLink(ctx.repo, checked) ||
       checked.externalEventKey !== original.externalEventKey ||
@@ -166,7 +217,7 @@ export class ExternalMandateService {
       checked.contentVersion !== original.contentVersion ||
       checked.targetEvidence.publication !== original.targetEvidence.publication
     )
-      return null
+      return fail('recheck_mismatch', false)
     return {
       original,
       checked,
@@ -180,6 +231,10 @@ export class ExternalMandateService {
     intake: ExternalIntake,
   ) {
     const ref = this.store.ref(intake.subject)
+    const failures: TriggerFailure[] = []
+    const fail = (eventKey: string, reason: string, definitive = false) => {
+      failures.push({ eventKey, reason, definitive })
+    }
     for (const key of intake.eventKeys) {
       const row = this.store.inboxEvent(key)
       if (
@@ -193,16 +248,24 @@ export class ExternalMandateService {
         continue
       const before = this.store.config.sourceRevision(row.sourceId, row.rulesVersion)
       const oldRepo = before?.repos.find((repo) => repo.repoId === ctx.repo.repoId)
-      if (!before || oldRepo?.localRoot !== ctx.repo.localRoot) continue
-      const live = await this.live(ctx, row)
+      if (!before || oldRepo?.localRoot !== ctx.repo.localRoot) {
+        fail(key, 'rules_changed')
+        continue
+      }
+      const live = await this.liveCheck(ctx, row)
+      if ('failure' in live) {
+        fail(key, live.failure.reason, live.failure.definitive)
+        continue
+      }
       if (
-        !live ||
         explicitTrigger(before, live.original, ctx.routing, live.originalAddresses) !==
           row.ruleId ||
         explicitTrigger(ctx.source, live.checked, ctx.routing, live.addresses) !== row.ruleId ||
         (row.ruleId === 'mention' && live.checked.targetEvidence.publication !== 'published')
-      )
+      ) {
+        fail(key, 'trigger_mismatch')
         continue
+      }
       const chosen = selectRoute(
         ctx.source,
         live.checked,
@@ -217,9 +280,15 @@ export class ExternalMandateService {
       const sameBinding = ref && row.issueId === ref.issueId && ref.managerId === ctx.manager.id
       const sameRoute =
         'routeId' in chosen && chosen.managerId === ctx.manager.id && chosen.routeId === row.routeId
-      if (!sameBinding && !reassigned && !sameRoute) continue
+      if (!sameBinding && !reassigned && !sameRoute) {
+        fail(key, 'route_changed')
+        continue
+      }
       // 被撤换的 owner 不能以旧身份受理；新 owner 也不会自动提高旧证据的资格。
-      if ((row.actorRoleAtCheck === 'owner') !== (ctx.owner?.userId === row.actorId)) continue
+      if ((row.actorRoleAtCheck === 'owner') !== (ctx.owner?.userId === row.actorId)) {
+        fail(key, 'owner_changed')
+        continue
+      }
       const identity = await checkRequester(
         ctx.source,
         ctx.repo,
@@ -228,7 +297,10 @@ export class ExternalMandateService {
         ctx.routing,
         this.host.lookupGithubRole,
       )
-      if (!('role' in identity) || !identity.eligible || !live.checked.actorEvidence) continue
+      if (!('role' in identity) || !identity.eligible || !live.checked.actorEvidence) {
+        fail(key, 'requester_ineligible')
+        continue
+      }
       const allowed = (Object.keys(actionPolicy) as Array<keyof typeof actionPolicy>).filter(
         (action) =>
           before.writePolicy[actionPolicy[action]] &&
@@ -238,7 +310,7 @@ export class ExternalMandateService {
             (oldRepo.headNamespace === ctx.repo.headNamespace &&
               ctx.repo.allowedBase.every((base) => oldRepo.allowedBase.includes(base)))),
       )
-      return {
+      const verified = {
         row,
         original: live.original,
         evidence: {
@@ -256,8 +328,9 @@ export class ExternalMandateService {
           },
         },
       }
+      return { verified, failures }
     }
-    return null
+    return { verified: null, failures }
   }
 
   async decide(turn: ExternalManagerTurn, request: Disposition): Promise<ExternalTriageResult> {
@@ -305,15 +378,27 @@ export class ExternalMandateService {
     const previous = currentResult()
     if (previous) return previous
     const ctx = this.snapshot(intake.sourceId, intake.subject.repoId, manager)
-    const verified = await this.evidence(ctx, intake)
+    const { verified, failures } = await this.evidence(ctx, intake)
     const raced = currentResult()
     if (raced) return raced
-    if (!verified)
-      invalid('No original trigger still meets current evidence, identity and route requirements.')
+    // 忽略不需要有效触发：原触发全部失效的候选仍能由经理收尾，只是不能回帖。
+    if (!verified && request.action !== 'ignore') {
+      const closed =
+        failures.length > 0 &&
+        failures.every((failure) => failure.definitive) &&
+        this.store.transaction(() => {
+          const latest = this.store.intake(intake.intakeId)
+          if (latest?.revision !== intake.revision || latest.status !== 'pending_triage')
+            return false
+          this.store.obsoleteIntake(latest, INTAKE_TRIGGER_INVALID, this.host.now())
+          return true
+        })
+      invalid(triggerFailureMessage(failures, closed))
+    }
     this.assertSnapshot(turn, ctx)
     const ref = this.store.ref(intake.subject)
     const followOn = request.action === 'accept' && !!ref
-    const actions = followOn ? [] : verified.evidence.authorizedScope.actions
+    const actions = followOn || !verified ? [] : verified.evidence.authorizedScope.actions
     const reply =
       request.reply === undefined
         ? undefined
@@ -336,7 +421,7 @@ export class ExternalMandateService {
       this.assertSnapshot(turn, ctx)
       if (
         JSON.stringify(this.store.ref(intake.subject)) !== JSON.stringify(ref) ||
-        evidenceWithdrawn(this.store, verified.row, verified.original)
+        (verified && evidenceWithdrawn(this.store, verified.row, verified.original))
       )
         invalid('The evidence changed; read the intake again.')
       const target =
@@ -349,7 +434,7 @@ export class ExternalMandateService {
         managerId: manager.id,
         actorId: turn.threadId,
         at: this.host.now(),
-        ...(disposition.action === 'ignore'
+        ...(disposition.action === 'ignore' || !verified
           ? {}
           : {
               evidence: {

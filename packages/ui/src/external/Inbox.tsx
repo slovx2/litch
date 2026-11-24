@@ -1,5 +1,5 @@
 // 经理 Console 的 GitHub 收件箱：待分拣 / 已处理 / 被挡下三页签。每个候选一行（同一候选的多条事件聚成一行），
-// 行上只放类别、主题、发起人资格、时间、提醒状态和外链；点开读设备的候选详情（证据事件、规则版本）并就地处置。
+// 行上只放类别、主题、触发人、时间、提醒状态和外链；点开读设备的候选详情（证据事件、规则版本）并就地处置。
 // 列表来自设备 externalInbox 快照（按经理过滤），处置后核心自己重读受影响的页。
 import type { ExternalInboxEvent } from '@litch/core'
 import { useEffect, useState } from 'react'
@@ -14,6 +14,7 @@ import { InboxTriage } from './InboxTriage.tsx'
 import { ManagerRecovery, recoveryInManagerHeader } from './ManagerRecovery.tsx'
 import { MissingResultReply } from './MissingResultReply.tsx'
 import {
+  actorName,
   groupInbox,
   INBOX_TABS,
   type InboxTab,
@@ -42,16 +43,33 @@ export function useInboxSummary(manager: Pick<ManagerView, 'deviceId' | 'id'>, e
   }
 }
 
-function Role({ event }: { event: ExternalInboxEvent }) {
+/** 触发人：登录名为主；核对时的仓库角色只作淡色小字和悬停提示，数字 ID 也在提示里 */
+function Actor({ event, actors }: { event: ExternalInboxEvent; actors?: readonly string[] }) {
   const t = useT()
+  const single = actorName(event)
+  const names = actors ?? (single ? [single] : [])
+  const name = names[0]
+  if (!name) return null
   const role = event.actorRoleAtCheck
-  if (!role) return null
+  const roleText = role === 'owner' ? t('ext.inbox.owner') : role
+  const title = [
+    role ? t('ext.inbox.roleTitle', { role }) : '',
+    event.actorId ? `#${event.actorId}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
   return (
-    <span
-      className={role === 'owner' ? 'pill ok' : role === 'read' ? 'pill err' : 'pill mute'}
-      title={event.actorId ? `#${event.actorId}` : undefined}
-    >
-      {role === 'owner' ? t('ext.inbox.owner') : role}
+    <span className="ext-actor" data-actor={name} title={title || undefined}>
+      <span className="ell">
+        {names.length > 1
+          ? t('ext.inbox.actors', { name, total: names.length, others: names.length - 1 })
+          : name}
+      </span>
+      {roleText && names.length === 1 ? (
+        <span className={role === 'read' ? 'ext-actor-role err' : 'ext-actor-role'}>
+          {roleText}
+        </span>
+      ) : null}
     </span>
   )
 }
@@ -132,8 +150,10 @@ function Detail({
         {events.map((event) => (
           <li key={event.eventKey} className="ext-diag" data-event={event.eventKey}>
             <span>{t(`ext.kind.${event.kind}`)}</span>
-            <Role event={event} />
-            {event.actorId ? <span className="dim mono">#{event.actorId}</span> : null}
+            <Actor event={event} />
+            {event.actorId && event.actorLogin ? (
+              <span className="dim mono">#{event.actorId}</span>
+            ) : null}
             <Stamp className="dim" at={event.occurredAt * 1000} />
             <span className="grow" />
             <ExtLink url={event.eventUrl} />
@@ -244,7 +264,7 @@ export function ExternalInbox({
         <p className="ext-empty">{t(`ext.inbox.empty.${tab}`)}</p>
       ) : (
         <ul className="ext-list">
-          {rows.map(({ head, count }) => {
+          {rows.map(({ head, count, actors }) => {
             const key = head.intakeId ?? head.eventKey
             const expanded = open === key
             return (
@@ -261,7 +281,7 @@ export function ExternalInbox({
                     <span className="dim">{t(`ext.kind.${head.kind}`)}</span>
                     {count > 1 ? <span className="pill mute">×{count}</span> : null}
                   </button>
-                  <Role event={head} />
+                  <Actor event={head} actors={actors} />
                   <Stamp className="dim" at={head.observedAt * 1000} />
                   <span className="grow" />
                   {tab === 'pending' && head.delivery ? (

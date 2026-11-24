@@ -940,11 +940,11 @@ Manager items are the manager’s own notebook; the manager must not rely on the
 
 ## 外部收件箱
 
-桌面：设备开启无人值守后，经理控制台多出“GitHub”分段，计数为待分拣数。里面分“待分拣、已处理、被挡下”：待分拣可按原因筛选，已处理可只看已提醒的。点一行展开证据和处置。投递受阻时，如果恢复对象是当前活动经理，详情只显示原因，使用页头的「刷新经理」。接单、并入、忽略、改派按设备给的权限出现；并入要选已有议题，改派只列同设备的经理。X-n 下方的“GitHub”一行链接原帖，“接单依据”和“回写”展开明细。决策答复来自 GitHub 评论时，答复标题旁出现“来自 GitHub 评论”链接。
+桌面：设备开启无人值守后，经理控制台多出“GitHub”分段，计数为待分拣数。里面分“待分拣、已处理、被挡下”：待分拣可按原因筛选，已处理可只看已提醒的。每行显示触发人的 GitHub 登录名（同一候选有多人时显示“甲 等 N 人”），核对时的仓库角色在登录名后用淡色小字标出，悬停可看角色和数字 ID。点一行展开证据和处置。投递受阻时，如果恢复对象是当前活动经理，详情只显示原因，使用页头的「刷新经理」。接单、并入、忽略、改派按设备给的权限出现；并入要选已有议题，改派只列同设备的经理。X-n 下方的“GitHub”一行链接原帖，“接单依据”和“回写”展开明细。决策答复来自 GitHub 评论时，答复标题旁出现“来自 GitHub 评论”链接。
 
 手机：经理页多一个“GitHub”页签，分段和筛选与桌面相同；点一项在底部抽屉里看证据，可接单、忽略或改派（按设备权限），并入已有议题只在桌面。X-n 和决策答复的 GitHub 引用与桌面相同。
 
-The desktop manager console gains a **GitHub** segment (to triage, handled, blocked). Expand an entry to see evidence and accept, merge, ignore or reassign it, as the device allows. X-n issues show the GitHub link, intake basis and write-backs; decision answers taken from a GitHub comment link to it. On the phone the inbox is a **GitHub** tab; merging into an existing issue is desktop-only.
+The desktop manager console gains a **GitHub** segment (to triage, handled, blocked). Each entry shows the triggering user's GitHub login (or the first login and a count when several people are involved), with the repository role at check as secondary text; hover for the role and numeric ID. Expand an entry to see evidence and accept, merge, ignore or reassign it, as the device allows. X-n issues show the GitHub link, intake basis and write-backs; decision answers taken from a GitHub comment link to it. On the phone the inbox is a **GitHub** tab; merging into an existing issue is desktop-only.
 
 外部收件箱保存设备采集并核验的 GitHub 事件。提醒送达经理后，候选仍待分拣。轮询确认未绑定的 issue 或 PR 已关闭或合并时，候选自动移到“已处理”，标明“GitHub 已关闭”或“GitHub 已合并”，取消尚未发送的分拣提醒并保留审计；不会自动接单或回写 GitHub。已绑定的主题保留原有跟进规则。重新打开后按现有触发规则重新评估，不恢复旧候选。合规收件项可以接为新的 X-n、并入已有议题、忽略或改派给同设备的经理。新评论和 PR 可能因轮询覆盖缺口或配额而延迟。
 
@@ -953,6 +953,14 @@ After a reminder is delivered, the intake remains pending. When polling confirms
 接单时会复查先前登记的原始提及。如果机器人回复或添加表情反应只是改变了帖子的更新时间，仍可接单。复查时正文不一致，该条提及不能继续作为接单依据。
 
 At acceptance, Litch rechecks the original mention it recorded. A bot reply or reaction that only changes the post's update time does not prevent acceptance. If the body differs from the one originally recorded, that mention can no longer authorize the request.
+
+提醒送达后仍未分拣的候选，又加入新的有效触发（例如新的 @ 或催促）时，再提醒经理一次，提醒只带新加入的事件；正在发送或结果不明时不重复提醒。已解决或已关闭的 X-n 上有人明确提出新请求（@、指派、标签等）时，同样回到待分拣并提醒经理，标明原 X-n 及其状态，原因显示“原事项已结束”；经理决定重开原 X-n 后并入，或另建关联原 X-n 的后续议题，原 GitHub 绑定不变。这些提醒都受 24 小时时效和限额约束：触发事件超过 24 小时的只留待人工分拣，不提醒。
+
+原触发被编辑、删除或撤销后，同一候选里后来加入的有效触发仍可作为接单依据。接单失败时，报错逐条写明每个触发为什么不再成立以及怎么办。全部触发都已确定失效时，候选移到“已处理”，原因显示“触发已失效”；请求人需要重新发评论或重新触发，作为新候选进来。原文暂时取不到等不确定的情况保留在待分拣，经理可稍后重试或直接忽略；没有有效触发时忽略照常可用，但不能附带回帖。
+
+If an intake is still pending after its reminder was delivered and a new valid trigger joins it (for example another mention or a nudge), Litch reminds the manager once more with only the new events. It does not remind again while a delivery is sending or its outcome is unknown. An explicit request (mention, assignment, label and so on) on a resolved or closed X-n also returns to triage with a reminder that names the original X-n and its status, shown as **Original issue ended**. The manager can reopen the X-n and merge into it, or create a follow-up issue linked to it; the GitHub binding stays unchanged. These reminders keep the 24-hour limit and rate limits: triggers older than 24 hours wait for manual triage without a reminder.
+
+When the original trigger is edited, deleted or withdrawn, a later valid trigger in the same intake can still authorize acceptance. If acceptance fails, the error lists why each trigger no longer qualifies and what to do. When every trigger is permanently invalid, Litch moves the intake to **Processed** with the reason **Trigger no longer valid**; the requester needs to post a new comment or trigger, which arrives as a new intake. Uncertain cases, such as GitHub temporarily not returning the original, stay pending so the manager can retry or ignore. Ignoring works without a valid trigger but cannot include a reply.
 
 外部议题保留 GitHub 原帖、接单依据和回写回执；来自 GitHub 评论的决策答复保留原评论引用。回写待对账时，应先核对 GitHub 原帖和设备记录。
 

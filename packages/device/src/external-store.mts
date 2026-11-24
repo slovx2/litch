@@ -777,16 +777,19 @@ export class ExternalStore {
         if (ref?.kind === subject.kind)
           this.resultReplies.finishSubject(sourceId, ref, updatedAt, observation.state === 'merged')
       }
-      const pending = this.db
-        .prepare(
-          "SELECT body FROM external_intakes WHERE subject_key=? AND status='pending_triage' AND json_extract(body,'$.sourceId')=?",
-        )
-        .all(subjectKey, sourceId)
-      for (const row of pending) {
-        const intake = decode<ExternalIntake>(row)
-        if (intake) this.finishClosedIntake(intake, observation, at)
-      }
+      for (const intake of this.pendingIntakes(subjectKey, sourceId))
+        this.finishClosedIntake(intake, observation, at)
     })
+  }
+
+  pendingIntakes(subjectKey: string, sourceId: string): ExternalIntake[] {
+    return this.db
+      .prepare(
+        "SELECT body FROM external_intakes WHERE subject_key=? AND status='pending_triage' AND json_extract(body,'$.sourceId')=?",
+      )
+      .all(subjectKey, sourceId)
+      .map((row) => decode<ExternalIntake>(row))
+      .filter((intake): intake is ExternalIntake => !!intake)
   }
 
   private finishClosedIntake(
@@ -798,31 +801,42 @@ export class ExternalStore {
     const events = intake.eventKeys.map((key) => this.inboxEvent(key))
     // 比状态快照更新的请求须等下一次平台观察，不能被旧关闭状态结算。
     if (events.some((event) => !event || event.occurredAt > observation.updatedAt)) return intake
-    const reason = observation.state === 'merged' ? 'external_merged' : 'external_closed'
-    const record: ExternalIntake = {
-      ...intake,
-      status: 'processed',
-      reason,
-      revision: intake.revision + 1,
-    }
-    this.writeIntake(record)
-    if (intake.deliveryId && this.queue.deliveryGroup(intake.deliveryId)?.state === 'queued')
-      this.queue.finishDelivery(intake.deliveryId, 'blocked', at, { reason })
-    for (const event of events) {
-      if (!event || event.intakeId !== intake.intakeId) throw new Error('候选事件在关闭时不一致')
-      this.updateInboxEvent(event.eventKey, event.revision, { status: 'processed', reason })
-    }
-    this.appendAudit({
+    return this.obsoleteIntake(
+      intake,
+      observation.state === 'merged' ? 'external_merged' : 'external_closed',
       at,
-      subject: intake.subjectKey,
-      action: 'intake_obsoleted',
-      ...(intake.managerId ? { managerId: intake.managerId } : {}),
-      eventKeys: intake.eventKeys,
-      previousState: intake.status,
-      state: record.status,
-      reason,
+    )
+  }
+
+  /** 设备按程序结算仍待分拣的候选：移到已处理、取消未发的分拣提醒，留审计。 */
+  obsoleteIntake(intake: ExternalIntake, reason: string, at: number): ExternalIntake {
+    return this.transaction(() => {
+      const events = intake.eventKeys.map((key) => this.inboxEvent(key))
+      const record: ExternalIntake = {
+        ...intake,
+        status: 'processed',
+        reason,
+        revision: intake.revision + 1,
+      }
+      this.writeIntake(record)
+      if (intake.deliveryId && this.queue.deliveryGroup(intake.deliveryId)?.state === 'queued')
+        this.queue.finishDelivery(intake.deliveryId, 'blocked', at, { reason })
+      for (const event of events) {
+        if (!event || event.intakeId !== intake.intakeId) throw new Error('候选事件在关闭时不一致')
+        this.updateInboxEvent(event.eventKey, event.revision, { status: 'processed', reason })
+      }
+      this.appendAudit({
+        at,
+        subject: intake.subjectKey,
+        action: 'intake_obsoleted',
+        ...(intake.managerId ? { managerId: intake.managerId } : {}),
+        eventKeys: intake.eventKeys,
+        previousState: intake.status,
+        state: record.status,
+        reason,
+      })
+      return record
     })
-    return record
   }
 
   /** C 线在同一事务里更新事件到候选的索引。重复出现的证据不增加版本。 */

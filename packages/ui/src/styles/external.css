@@ -412,6 +412,21 @@
   gap: 6px;
   text-align: left;
 }
+.ext-actor {
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--ink-2);
+}
+.ext-actor-role {
+  flex: none;
+  color: var(--ink-3);
+  font-size: calc(11px * var(--fs));
+}
+.ext-actor-role.err {
+  color: var(--err);
+}
 .ext-inbox-main .caret-ic {
   flex: none;
   transform: rotate(-90deg);

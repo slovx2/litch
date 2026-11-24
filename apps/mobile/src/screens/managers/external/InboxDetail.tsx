@@ -12,6 +12,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import type { ExternalIntake } from '../../../../../../packages/protocol/src/external-sources.mts'
 import { stamp } from '../../../../../../packages/ui/src/app/format.ts'
 import {
+  actorName,
   allowed,
   canTriageAction,
   operationId,
@@ -24,7 +25,14 @@ import { IconButton } from '../../../ui/kit/Icon'
 import { Sheet } from '../../../ui/kit/overlays'
 import { useTheme } from '../../../ui/theme'
 import { DiscussionDrawer } from '../DiscussionDrawer'
-import { deliveryLabel, failureText, kindLabel, openGithub, reasonLabel, roleLabel } from './labels'
+import {
+  actorDetail,
+  deliveryLabel,
+  failureText,
+  kindLabel,
+  openGithub,
+  reasonLabel,
+} from './labels'
 import { ManagerRecovery } from './ManagerRecovery'
 import { MissingResultReply } from './MissingResultReply'
 
@@ -132,10 +140,7 @@ export function InboxDetail({
         .filter(Boolean)
         .join(' · '),
     ],
-    [
-      t('mgh.field.actor'),
-      head.actorId ? `#${head.actorId} · ${roleLabel(t, head.actorRoleAtCheck)}` : '—',
-    ],
+    [t('mgh.field.actor'), actorDetail(t, head)],
     ...(head.ruleId
       ? ([[t('mgh.field.rule'), `${head.ruleId} · v${head.rulesVersion ?? '?'}`]] as [
           string,
@@ -250,7 +255,7 @@ export function InboxDetail({
             {events.map((event) => (
               <View key={event.eventKey} style={styles.event}>
                 <Text style={{ color: c.ink, flex: 1, fontSize: font.size.meta + 1 }}>
-                  {kindLabel(t, event.kind)} · {roleLabel(t, event.actorRoleAtCheck)} ·{' '}
+                  {[kindLabel(t, event.kind), actorName(event)].filter(Boolean).join(' · ')} ·{' '}
                   {stamp(event.occurredAt * 1000, Date.now(), t.lang)}
                 </Text>
                 <IconButton

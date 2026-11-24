@@ -60,16 +60,16 @@ test('触发已删除、已撤销或规则改变时，必须有同候选的独�
     event.externalEventKey === deleted.externalEventKey
       ? null
       : { event, agentMarked: false, addressedBotIds: [] }
-  await assert.rejects(f.mandates.decide(f.context, request()), /No original trigger/)
+  await assert.rejects(f.mandates.decide(f.context, request()), /No trigger in this intake/)
   f.clock.at++
   await f.collect(f.event('assigned', { target: { assigneeUserId: '200' } }))
   f.source({ triggers: { ...f.draft.triggers, assignment: false } })
-  await assert.rejects(f.mandates.decide(f.context, request()), /No original trigger/)
+  await assert.rejects(f.mandates.decide(f.context, request()), /No trigger in this intake/)
   assert.equal(f.manager.issues('m1').length, 0)
   f.source()
   f.clock.at++
   await f.collect(f.event('unassigned', { target: { assigneeUserId: '200' } }))
-  await assert.rejects(f.mandates.decide(f.context, request()), /No original trigger/)
+  await assert.rejects(f.mandates.decide(f.context, request()), /No trigger in this intake/)
   f.clock.at++
   const [newEvent] = await f.collect(
     f.event('labeled', { target: { labelId: '61', labelName: 'litch' } }),
@@ -99,7 +99,7 @@ test('原文仍有效也不能用已改派路线或已撤销身份接单', async
   }
   const { assignments } = f.configuration()
   f.changeConfiguration({ assignments: assignments.map((one) => ({ ...one, managerId: 'm2' })) })
-  await assert.rejects(f.mandates.decide(f.context, request), /No original trigger/)
+  await assert.rejects(f.mandates.decide(f.context, request), /No trigger in this intake/)
   f.changeConfiguration({ assignments })
   const credential = f.store.config.credential(f.draft.credentialRef)
   assert.ok(credential)
@@ -350,4 +350,118 @@ test('D-140 配置在核验期间改变，不能按旧身份分配完成受理',
     /configuration changed/,
   )
   assert.equal(f.manager.issues('m1').length, 0)
+})
+
+test('原触发被编辑后，后加入的有效触发可接单；全部失效时设备收尾', async (t) => {
+  const f = externalFixture(t)
+  const mention = { publication: 'published', mentionsBot: true, mentionedBotId: '200' } as const
+  const original = f.event('comment', { target: mention, contentVersion: 'v1' })
+  const [first] = await f.collect(original)
+  const intakeId = first!.intakeId!
+  f.clock.at++
+  const [later] = await f.collect(f.event('comment', { target: mention, contentVersion: 'later' }))
+  assert.equal(later?.intakeId, intakeId)
+  f.clock.at++
+  const edit = f.event('comment', {
+    target: {
+      ...mention,
+      publication: 'edited',
+      sourceEventId: original.targetEvidence.sourceEventId,
+    },
+    contentVersion: 'v2',
+  })
+  const [edited] = await f.collect(edit)
+  assert.equal(edited?.reason, 'edited_content')
+  // 仍有有效触发，候选不收尾，接单以后加入的那条为依据。
+  assert.equal(f.store.intake(intakeId)?.status, 'pending_triage')
+  const result = await f.mandates.decide(f.context, {
+    action: 'accept',
+    intakeId,
+    expectedRevision: f.store.intake(intakeId)!.revision,
+    idempotencyKey: 'take',
+    title: '内部',
+    body: '',
+  })
+  assert.equal(result.outcome, 'applied')
+  if (result.outcome === 'applied') assert.deepEqual(result.mandate?.eventKeys, [later!.eventKey])
+
+  // 唯一的触发被编辑：设备收尾，不再挂在待分拣。
+  f.clock.at++
+  const lone = f.event('comment', { number: 2, target: mention, contentVersion: 'lone-v1' })
+  const [loneRow] = await f.collect(lone)
+  const loneIntake = loneRow!.intakeId!
+  f.clock.at++
+  await f.collect(
+    f.event('comment', {
+      number: 2,
+      target: {
+        ...mention,
+        publication: 'edited',
+        sourceEventId: lone.targetEvidence.sourceEventId,
+      },
+      contentVersion: 'lone-v2',
+    }),
+  )
+  assert.equal(f.store.intake(loneIntake)?.status, 'processed')
+  assert.equal(f.store.intake(loneIntake)?.reason, 'trigger_invalid')
+  assert.equal(f.store.inboxEvent(loneRow!.eventKey)?.reason, 'trigger_invalid')
+})
+
+test('分拣时触发全部失效：报清原因；确定失效即收尾，不确定的可忽略', async (t) => {
+  const f = externalFixture(t)
+  const mention = { publication: 'published', mentionsBot: true, mentionedBotId: '200' } as const
+  const accept = (intakeId: string) => ({
+    action: 'accept' as const,
+    intakeId,
+    expectedRevision: f.store.intake(intakeId)!.revision,
+    idempotencyKey: `take-${intakeId}`,
+    title: '内部',
+    body: '',
+  })
+  const recheck = f.mandateHost.recheckEvent
+  // GitHub 上的当前版本已不同于采集时：确定失效。
+  const [changed] = await f.collect(f.event('comment', { target: mention, contentVersion: 'old' }))
+  f.mandateHost.recheckEvent = async ({ event }) => ({
+    event: { ...event, contentVersion: 'new' },
+    agentMarked: false,
+    addressedBotIds: ['200'],
+  })
+  await assert.rejects(
+    f.mandates.decide(f.context, accept(changed!.intakeId!)),
+    (error: Error) =>
+      error.message.includes(changed!.eventKey) &&
+      /differs from the collected version/.test(error.message) &&
+      /moved this intake to processed \(reason trigger_invalid\)/.test(error.message),
+  )
+  assert.equal(f.store.intake(changed!.intakeId!)?.status, 'processed')
+  assert.equal(f.store.intake(changed!.intakeId!)?.reason, 'trigger_invalid')
+
+  // 原文暂时取不到：保留候选，提示重试或忽略，忽略不需要有效触发。
+  f.clock.at++
+  f.mandateHost.recheckEvent = recheck
+  const [unreachable] = await f.collect(
+    f.event('comment', { number: 3, target: mention, contentVersion: 'x' }),
+  )
+  f.mandateHost.recheckEvent = async () => null
+  const intakeId = unreachable!.intakeId!
+  await assert.rejects(
+    f.mandates.decide(f.context, accept(intakeId)),
+    (error: Error) =>
+      /did not return the original content/.test(error.message) &&
+      /external_ignore/.test(error.message),
+  )
+  assert.equal(f.store.intake(intakeId)?.status, 'pending_triage')
+  const ignored = await f.mandates.decide(f.context, {
+    action: 'ignore',
+    intakeId,
+    expectedRevision: f.store.intake(intakeId)!.revision,
+    idempotencyKey: 'drop',
+    reason: '无法核验',
+    reply: '请重新发一条评论',
+  })
+  assert.equal(ignored.outcome, 'applied')
+  if (ignored.outcome === 'applied') {
+    assert.equal(ignored.intake.reason, 'ignored')
+    assert.deepEqual(ignored.reply, { notQueued: 'comment_disabled' })
+  }
 })
