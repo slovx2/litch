@@ -45,6 +45,7 @@ import {
 } from '../../protocol/src/remote-chrome.mjs'
 import { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
 import { SUGGESTION_RETENTION_SETTING } from '../../protocol/src/suggestion-inbox.mjs'
+import { TIMED_APPROVALS_EXTENSION } from '../../protocol/src/timed-approvals.mjs'
 import { TOOL_IMAGES_SETTING } from '../../protocol/src/tool-images.mjs'
 import { TURN_NOTICE } from '../../protocol/src/turn-notices.mjs'
 import { RECOVERY_CHANGED } from '../../protocol/src/turn-recovery.mjs'
@@ -100,6 +101,7 @@ import { DEFAULT_TASK_SETTINGS, type TaskClock, type TaskSettings } from './task
 import { DeviceTasks } from './tasks.mjs'
 import { registerTasksTool } from './tasks-tool.mjs'
 import { ThreadIndex } from './thread-index.mjs'
+import { TimedApprovals } from './timed-approvals.mjs'
 import { ToolImages } from './tool-images.mjs'
 import { TurnNotices } from './turn-notices.mjs'
 import { TurnRecoveryObserver } from './turn-recovery.mjs'
@@ -342,6 +344,7 @@ export class DeviceServer {
   private readonly pairing: DevicePairing | null
   /** 手机上批准：桌面端挂的卡片（只在内存） */
   private readonly approvals: DeviceApprovals
+  private readonly timedApprovals: TimedApprovals
   private readonly chrome: DeviceChromeRuntime | null
   /** 设备层的工作树。这台机器上没有 git 时是 null */
   readonly worktrees: Worktrees | null
@@ -385,6 +388,13 @@ export class DeviceServer {
     this.workspaces = new Workspaces(this.db, (method, params, extension) =>
       this.announce(method, params, extension),
     )
+    this.timedApprovals = new TimedApprovals(this.db, (method, params, extension) =>
+      this.announce(method, params, extension),
+    )
+    this.timedApprovals.onGranted = (grant) => {
+      for (const session of this.sessions) session.timedApprovalGranted(grant)
+      for (const link of this.engineLinks) link.timedApprovalGranted?.(grant)
+    }
     this.background = new DeviceBackground({
       announce: (method, params, extension) => this.announce(method, params, extension),
     })
@@ -552,6 +562,7 @@ export class DeviceServer {
         })
       : null
     info.extensions.push(EXTENSION.harnessProjectPermissions, PATH_PICKER_EXTENSION)
+    info.extensions.push(TIMED_APPROVALS_EXTENSION)
     if (this.worktrees) info.extensions.push(EXTENSION.worktrees)
     this.orchestrating = this.sessionTreeOn()
     this.sessionTree = new SessionTree({
@@ -787,6 +798,7 @@ export class DeviceServer {
     })
     const chrome = this.chrome
     const router = new ClientToolRouter({
+      timedApproval: (threadId, category) => this.timedApprovals.active(threadId, category) !== null,
       ...(chrome
         ? {
             remoteChrome: new RemoteChromeRouter(chrome),
@@ -922,6 +934,7 @@ export class DeviceServer {
       sessionTreeOn: () => this.sessionTreeOn(),
       pairing: this.pairing,
       approvals: this.approvals,
+      timedApprovals: this.timedApprovals,
       chrome: this.chrome,
       harnessConfigChanged: (params) =>
         this.announce(HARNESS_CONFIG_NOTIFICATION.changed, params, EXTENSION.harnessConfig),
@@ -1253,6 +1266,7 @@ export class DeviceServer {
               instructions: this.sessionTree.store,
               speeds: this.sessionTree.store,
               log: (line) => this.options.log?.(`[${harness}] ${line}`),
+              timedApprovals: this.timedApprovals,
               ...this.options.engineLinks,
               // 真正的客户端拿着，或者设备进程的另一条连接接过去了（定时任务回合里的审批）
               held: (from, requestId) =>
@@ -1472,6 +1486,7 @@ export class DeviceServer {
     if (this.tasksWait) clearTimeout(this.tasksWait)
     // 先停任务、关内部连接：等着的回合当场醒来，运行留着 running，下次起来去查
     this.readStates.close()
+    this.timedApprovals.close()
     this.tasks?.close()
     this.pairing?.close()
     this.approvals.shutdown()

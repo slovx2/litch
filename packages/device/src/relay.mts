@@ -29,6 +29,8 @@ export interface RelayHost {
   /** 客户端握手时声明认识这个扩展 */
   declares(extension: string): boolean
   shelf(harness: string, threadId: string, archived: boolean): void
+  /** 限时授权：原生审批在授权内时给出代答的结果（timed-approvals.mts），null 照常转给客户端 */
+  timedApprovals?: { answer(method: string, params: unknown): unknown | null }
   index: ThreadIndex
   workspaces: Workspaces
   /** 会话开始的通知最多扣多久（毫秒），见 SessionTiming.startedHoldMs */
@@ -123,6 +125,9 @@ interface PendingServerRequest {
   /** 客户端看到的请求号。和别的上游撞了的时候才和 upstreamId 不同 */
   facingId: RpcId
   threadId: string | null
+  /** 方法和参数：新授予限时授权时，按它们判断这条还在等的请求能不能一并代答 */
+  method?: string
+  params?: Record<string, unknown> | null
 }
 
 export class Relay {
@@ -454,6 +459,16 @@ export class Relay {
       this.host.clientTools.offer(link, frame, upstreamId)
       return
     }
+    // 限时授权内的原生审批：设备直接代答上游，不转给客户端。引擎随后照常发 serverRequest/resolved
+    const granted =
+      typeof frame.method === 'string'
+        ? this.host.timedApprovals?.answer(frame.method, fields)
+        : null
+    if (granted != null) {
+      this.host.log(`限时授权代答 ${frame.method} ${threadId ?? ''}`)
+      link.reply(JSON.stringify({ id: upstreamId, result: granted }))
+      return
+    }
     let facingId = upstreamId
     // 这个上游的协议里没有、要由聚合面补的内容（原生 codex 的文件改动审批不带决定列表），
     // 只补给声明过相应扩展的连接
@@ -469,8 +484,26 @@ export class Relay {
       frame.id = facingId
       changed = true
     }
-    this.pending.set(idKey(facingId), { link, upstreamId, facingId, threadId })
+    this.pending.set(idKey(facingId), {
+      link,
+      upstreamId,
+      facingId,
+      threadId,
+      ...(typeof frame.method === 'string' ? { method: frame.method } : {}),
+      params: fields,
+    })
     this.host.send(changed ? JSON.stringify(frame) : raw)
+  }
+
+  /** 刚授予了限时授权：这个会话里同类还在等客户端答的原生审批一并代答（卡片随 resolved 收掉） */
+  timedApprovalGranted(threadId: string): void {
+    for (const entry of [...this.pending.values()]) {
+      if (!entry.link || entry.threadId !== threadId || !entry.method) continue
+      const result = this.host.timedApprovals?.answer(entry.method, entry.params)
+      if (result == null || !entry.link.available) continue
+      this.host.log(`限时授权代答 ${entry.method} ${threadId}`)
+      entry.link.reply(JSON.stringify({ id: entry.upstreamId, result }))
+    }
   }
 
   /**

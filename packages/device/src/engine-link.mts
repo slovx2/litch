@@ -21,6 +21,7 @@ import { sessionTurn } from './session-history.mjs'
 import { CLIENT_TOOL_NAMESPACE, isClientToolNamespace } from '../../protocol/src/client-tools.mjs'
 import { prepareSpeed, type SpeedStore } from '../../protocol/src/codex-speeds.mjs'
 import { EXTENSION, EXTENSIONS_CAPABILITY } from '../../protocol/src/device.mjs'
+import { nativeApprovalCategory } from '../../protocol/src/timed-approvals.mjs'
 import { paramFields } from '../../shared/src/log-file.mjs'
 import { NO_RECIPIENT_MESSAGE } from '../../shared/src/server-requests.mjs'
 import type { ClientToolRouter, ClientToolSource } from './client-tools.mjs'
@@ -71,6 +72,8 @@ export interface EngineLink {
   claimed(id: RpcId): boolean
   /** 答一条对面发来的请求。连接断了返回 false */
   answer(id: RpcId, result: unknown): boolean
+  /** 刚授予了限时授权：这条连接拿着的同一会话、同类原生审批一并代答 */
+  timedApprovalGranted?(grant: { threadId: string }): void
   /** 连接断了（引擎退出、设备进程关、自己关）。已经断了的当场调用。返回取消订阅 */
   onClose(listener: (reason: string) => void): () => void
   close(): void
@@ -121,6 +124,8 @@ export interface EngineLinkOptions {
   deviceChrome?: boolean
   /** 这个 harness 发来的这条请求（按请求号）此刻有没有真正的客户端连接拿着 */
   held(harness: string, requestId: RpcId): boolean
+  /** 限时授权：原生审批在授权内时给出代答的结果（timed-approvals.mts） */
+  timedApprovals?: { answer(method: string, params: unknown): unknown | null }
   heldGraceMs?: number
   heldRecheckMs?: number
   /** 原生 codex 的开发者指令按会话记在哪（codex-instructions.mts）。不给就不补 */
@@ -149,6 +154,11 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
   const unanswered = new Map<string, NodeJS.Timeout>()
   /** claimRequests 挑中、由调用方答的请求，键是请求号 */
   const taken = new Set<string>()
+  /** 还没结果的原生审批（方法和参数），新授予限时授权时据此一并代答。键是请求号 */
+  const approvals = new Map<
+    string,
+    { id: RpcId; method: string; params: Record<string, unknown> }
+  >()
   let sequence = 0
   let claims: ((method: string, params: any) => boolean) | null = null
   let closedWith: string | null = null
@@ -184,6 +194,7 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
     for (const timer of unanswered.values()) clearTimeout(timer)
     unanswered.clear()
     taken.clear()
+    approvals.clear()
     for (const listener of [...closing]) listener(reason)
     return true
   }
@@ -226,6 +237,7 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
           clearTimeout(unanswered.get(key))
           unanswered.delete(key)
           taken.delete(key)
+          approvals.delete(key)
         }
         // 回合结束：这个回合里还在执行的设备工具作废
         if (frame.method === 'turn/completed' && isObject(params.turn)) {
@@ -265,6 +277,15 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
         options.clientTools.offer(null, source, frame, id)
         return
       }
+      // 限时授权内的原生审批：直接代答，不交给订阅者，也不由定时任务的时限接过去
+      const granted = options.timedApprovals?.answer(frame.method, params)
+      if (granted != null) {
+        options.log?.(`限时授权代答 ${frame.method} ${String(params.threadId ?? '')}`)
+        send({ id, result: granted })
+        return
+      }
+      if (nativeApprovalCategory(frame.method))
+        approvals.set(idKey(id), { id, method: frame.method, params })
       for (const listener of [...requested]) {
         if (closedWith !== null) return
         listener(frame.method, params, id)
@@ -451,6 +472,20 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
     },
     claimed(id) {
       return taken.has(idKey(id))
+    },
+    timedApprovalGranted(grant) {
+      for (const entry of [...approvals.values()]) {
+        if (closedWith !== null) return
+        if (entry.params.threadId !== grant.threadId) continue
+        const result = options.timedApprovals?.answer(entry.method, entry.params)
+        if (result == null) continue
+        const key = idKey(entry.id)
+        clearTimeout(unanswered.get(key))
+        unanswered.delete(key)
+        approvals.delete(key)
+        options.log?.(`限时授权代答 ${entry.method} ${grant.threadId}`)
+        send({ id: entry.id, result })
+      }
     },
     answer(id, result) {
       if (closedWith !== null) return false

@@ -358,3 +358,73 @@ test('等待设备站点审批时关闭 harness 浏览器开关，迟到的批�
   )
   assert.equal(executed, 0)
 })
+
+test('设备站点审批：这个会话的 Chrome 在限时授权内时不发审批卡直接放行，别的会话照常发卡', async () => {
+  const asked: string[] = []
+  const runtime = {
+    status: { enabled: true, hostLabel: 'device' },
+    instances: [{ id: 'local', epoch: 'epoch', protocol: 1 }],
+    async call(
+      _scope: unknown,
+      _params: unknown,
+      _instances: unknown,
+      signal: AbortSignal,
+      ask: (prompt: unknown, signal: AbortSignal) => Promise<unknown>,
+    ) {
+      const decision = await ask({ kind: 'site', origin: 'https://fixture.invalid' }, signal)
+      return { success: decision === 'once', contentItems: [] }
+    },
+  } as unknown as DeviceChromeRuntime
+  const router = new ClientToolRouter({
+    log() {},
+    graceMs: 1,
+    remoteChrome: new RemoteChromeRouter(runtime),
+    timedApproval: (threadId, category) => threadId === 'granted' && category === 'chrome',
+  })
+  const peer: ClientToolPeer = {
+    id: 'desktop',
+    ready: true,
+    remoteChrome: true,
+    chromeTargetRouting: true,
+    desktop: null,
+    clientToolNamespaces: new DeclaredClientTools(['litch_browser']),
+    upstream: () => null,
+    withdrawClientTool() {},
+    deliverClientTool(_harness, frame, answer) {
+      if (frame.method === 'litch/remoteChrome/approval') {
+        const prompt = frame.params as { id: string; nonce: string; threadId: string }
+        asked.push(prompt.threadId)
+        queueMicrotask(() => answer({ result: { ...prompt, decision: 'decline' } }))
+      } else queueMicrotask(() => answer({ result: ok({ targets: [] }) }))
+      return frame.id as string
+    },
+  }
+  router.join(peer)
+  let next = 0
+  const call = (threadId: string, tool: string, args = {}) =>
+    new Promise<ClientToolCallResponse>((resolve) => {
+      const id = ++next
+      const scope = { harness: 'codex', threadId, turnId: `turn-${threadId}` }
+      router.turnStarted(peer, scope.harness, scope.turnId)
+      router.offer(
+        peer,
+        {
+          harness: scope.harness,
+          available: true,
+          reply: (raw) => resolve(JSON.parse(raw).result),
+        },
+        {
+          id,
+          method: 'item/tool/call',
+          params: { ...scope, namespace: 'litch_browser', tool, arguments: args, callId: `c${id}` },
+        },
+        id,
+      )
+    })
+  for (const threadId of ['granted', 'other']) {
+    const targetId = body(await call(threadId, 'targets')).targets[0].targetId
+    const reply = await call(threadId, 'navigate', { targetId, url: 'https://fixture.invalid' })
+    assert.equal(reply.success, threadId === 'granted')
+  }
+  assert.deepEqual(asked, ['other'], '只有授权外的会话发了审批卡')
+})
