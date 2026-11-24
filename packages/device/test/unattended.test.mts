@@ -311,6 +311,38 @@ test('UNATTENDED-E2E-001：无人值守经理、工作线、工作线的子会�
       decision: { declineWithNote: { note: unattendedNotice('line') } },
     })
 
+    // MCP 征询同样是限时授权在前：授权的服务（tracker）的审批性质征询只允许这一次，不带“记住”；
+    // 别的服务当场拒绝。征询的答复没有放说明的位置，只能普通拒绝（unattendedAnswer）
+    await client.call(TIMED_APPROVAL.grant, {
+      threadId: line,
+      category: 'mcp',
+      scope: 'tracker',
+      hours: 1,
+    })
+    const elicit = (id: string, serverName: string) =>
+      ask(env.claude, id, 'mcpServer/elicitation/request', {
+        threadId: line,
+        turnId: env.claude.current(line)?.id,
+        serverName,
+        mode: 'form',
+        message: '允许运行 create_issue？',
+        requestedSchema: { type: 'object', properties: {} },
+        _meta: { codex_approval_kind: 'mcp_tool_call' },
+      })
+    const timedMcp = elicit('m-line-timed', 'tracker')
+    assert.deepEqual((await answerOf(env.claude, timedMcp)).result, {
+      action: 'accept',
+      content: {},
+      _meta: null,
+    })
+    const untimedMcp = elicit('m-line-other', 'other-server')
+    assert.deepEqual((await answerOf(env.claude, untimedMcp)).result, {
+      action: 'decline',
+      content: null,
+      _meta: null,
+    })
+    assert.equal(tree.pending.list(line).length, 1, 'MCP 征询都没进待答登记')
+
     // 经理自己：客户端订阅着时请求不转给客户端，经客户端那条上游当场答掉
     await client.call('thread/resume', { threadId })
     const managerQuestion = ask(env.pi, 'q-manager', 'item/tool/requestUserInput', {
