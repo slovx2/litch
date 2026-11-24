@@ -6,6 +6,7 @@ import { takeLogDir } from '../../shared/src/log-file.mjs'
 import { type ResolvedAgent, resolveAgent } from './agent.mjs'
 import { AcpConnection, AcpError, type RequestOutcome } from './connection.mjs'
 import { type AgentCapabilities, capabilitiesOf } from './declaration.mjs'
+import { threadHookEnv } from './thread-hook-settings.mjs'
 import { versions } from './versions.mjs'
 
 export interface AgentHandle {
@@ -48,16 +49,23 @@ export class AcpRuntime {
   private readonly env: NodeJS.ProcessEnv
   private starting: Promise<AgentHandle> | null = null
   private running: AgentHandle | null = null
-  private generations = 0
+  /** 进程编号的来源：同一个入口里几个运行时共用一份，编号不重（会话按编号认自己在哪个进程里接上） */
+  private readonly generations: { value: number }
   /** 最近一次握手拿到的能力。进程退了也留着：声明照它报，下一次起来多半还是这样 */
   known: AgentCapabilities | null = null
   /** agent 写到标准错误的最后一段，起不来的时候带进报错里 */
   private stderrTail = ''
 
-  constructor(home: string, events: RuntimeEvents, env: NodeJS.ProcessEnv = process.env) {
+  constructor(
+    home: string,
+    events: RuntimeEvents,
+    env: NodeJS.ProcessEnv = process.env,
+    generations = { value: 0 },
+  ) {
     this.home = home
     this.events = events
     this.env = env
+    this.generations = generations
   }
 
   /** 现成的 agent，没有就是 null；不为这个去起 */
@@ -107,9 +115,11 @@ export class AcpRuntime {
     this.log(`\n[${new Date().toISOString()}] 启动 ${resolved.argv.join(' ')}\n`)
     this.stderrTail = ''
     // 和适配器同一个进程组：适配器被强杀时，命令行给整组发的信号也送到 agent
+    // Gemini、Qwen 的工具前钩子：已注入的会话的 shell 命令带上会话号（thread-hook-settings.mts）
+    const env = { ...this.env, ...threadHookEnv(resolved.spec.id, this.env, this.home) }
     const child = spawn(command, args, {
       cwd: this.home,
-      env: this.env,
+      env,
       stdio: ['pipe', 'pipe', 'pipe'],
     })
     child.stderr?.setEncoding('utf8')
@@ -117,7 +127,7 @@ export class AcpRuntime {
       this.log(chunk)
       this.stderrTail = (this.stderrTail + chunk).slice(-2000)
     })
-    const generation = ++this.generations
+    const generation = ++this.generations.value
     let handle: AgentHandle | null = null
     const connection = new AcpConnection(child.stdout as any, child.stdin as any, {
       requestTiming: (id, method, params) =>

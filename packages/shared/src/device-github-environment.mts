@@ -1,7 +1,39 @@
 // 运行时只向本机设备请求当前线程的启动增量；凭据本身始终由 GitHub 助手回调。
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { connect } from 'node:net'
 import { dirname, join } from 'node:path'
+
+/**
+ * 命令里哪个变量放它所在的 Litch 会话号（与 Go 入口 agentHasGithubContext 一致）：原生 codex、Pi、dsh 用自己给命令的，
+ * 其余（Claude、OpenCode、ACP、Antigravity）由 Litch 给成 LITCH_THREAD_ID。Litch 自己起命令时（litch_shell 等）照这个写。
+ */
+export function githubThreadVariable(harness: string | undefined): string {
+  return harness === 'codex'
+    ? 'CODEX_THREAD_ID'
+    : harness === 'pi'
+      ? 'PI_SESSION_ID'
+      : harness === 'dsh'
+        ? 'DSH_SESSION_ID'
+        : 'LITCH_THREAD_ID'
+}
+
+/**
+ * 进程起来时还不知道会话号的（Gemini 的会话进程先起、session/new 之后才有会话号，见 packages/acp/src/session-agents.mts），
+ * 环境里放这个变量指向一个文件，会话号写在文件里。LITCH_THREAD_ID 为空时才看它（与 Go 入口 agentHasGithubContext 一致）。
+ */
+export const THREAD_ID_FILE_VARIABLE = 'LITCH_THREAD_ID_FILE'
+
+/** 读会话号文件：读不到、为空、太长或带空白以外的怪字符都算没有 */
+export function threadIdFromFile(path: string | undefined): string | undefined {
+  if (!path) return undefined
+  try {
+    const value = readFileSync(path, 'utf8').trim()
+    return /^[\w:.-]{1,256}$/.test(value) ? value : undefined
+  } catch {
+    return undefined
+  }
+}
 
 export function deviceGithubEnvironmentSocket(deviceSocket: string): string {
   return process.platform === 'win32'
@@ -33,6 +65,30 @@ function request(socket: string, data: unknown): Promise<unknown> {
       }
     })
   })
+}
+
+/** 这个会话是不是经理注入了 GitHub 身份的会话；设备不在、问不到都算不是 */
+export async function deviceGithubInjected(
+  harness: string,
+  threadId: string,
+  deviceSocket: string,
+): Promise<boolean> {
+  if (!deviceSocket || !threadId || !harness) return false
+  const value = (await request(deviceGithubEnvironmentSocket(deviceSocket), {
+    action: 'probe',
+    harness,
+    threadId,
+  })) as { injected?: unknown } | null
+  return value?.injected === true
+}
+
+/** 设备上有没有哪位经理开着 GitHub 身份注入（不针对某个会话）；问不到算没有 */
+export async function deviceGithubConfigured(deviceSocket: string): Promise<boolean> {
+  if (!deviceSocket) return false
+  const value = (await request(deviceGithubEnvironmentSocket(deviceSocket), {
+    action: 'configured',
+  })) as { injected?: unknown } | null
+  return value?.injected === true
 }
 
 export async function deviceGithubEnvironment(

@@ -4,7 +4,12 @@ import { spawn } from 'node:child_process'
 import { accessSync, constants, realpathSync, statSync } from 'node:fs'
 import { delimiter, extname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { deviceGithubEnvironment } from '../../../shared/src/device-github-environment.mjs'
+import {
+  deviceGithubEnvironment,
+  githubThreadVariable,
+  THREAD_ID_FILE_VARIABLE,
+  threadIdFromFile,
+} from '../../../shared/src/device-github-environment.mjs'
 
 export function executableOnPath(name: string, env: NodeJS.ProcessEnv): string | undefined {
   const path = env.PATH ?? env.Path ?? ''
@@ -27,13 +32,11 @@ export function executableOnPath(name: string, env: NodeJS.ProcessEnv): string |
 export function githubCommandThread(env: NodeJS.ProcessEnv): string | undefined {
   const harness = env.LITCH_DEVICE_GITHUB_HARNESS
   if (!harness) return undefined
-  return harness === 'codex'
-    ? env.CODEX_THREAD_ID
-    : harness === 'pi'
-      ? env.PI_SESSION_ID
-      : harness === 'dsh'
-        ? env.DSH_SESSION_ID
-        : env.LITCH_THREAD_ID
+  const variable = githubThreadVariable(harness)
+  return (
+    env[variable] ||
+    (variable === 'LITCH_THREAD_ID' ? threadIdFromFile(env[THREAD_ID_FILE_VARIABLE]) : undefined)
+  )
 }
 
 async function run(): Promise<void> {

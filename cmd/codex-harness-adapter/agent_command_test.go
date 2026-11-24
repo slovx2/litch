@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -76,4 +77,40 @@ func TestAgentCommandSlotsAreIndependentAndReusable(t *testing.T) {
 		t.Fatalf("释放后不能复用席位: %v", err)
 	}
 	held = append(held, slot)
+}
+
+func TestAgentGithubContextReadsThreadFile(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "thread")
+	t.Setenv("LITCH_DEVICE_GITHUB_HARNESS", "gemini")
+	t.Setenv(deviceSocketEnvironment, filepath.Join(dir, "device.sock"))
+	t.Setenv("LITCH_THREAD_ID", "")
+	t.Setenv(threadIDFileEnvironment, file)
+	if agentHasGithubContext() {
+		t.Fatal("会话号文件还没写，不该认成有会话")
+	}
+	for value, want := range map[string]bool{
+		"0e8a-session\n":         true,
+		"agy:sdk:c1":             true,
+		"":                       false,
+		"bad id":                 false,
+		"$(touch x)":             false,
+		strings.Repeat("a", 300): false,
+	} {
+		if err := os.WriteFile(file, []byte(value), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if got := agentHasGithubContext(); got != want {
+			t.Fatalf("文件内容 %q：得到 %v，应为 %v", value, got, want)
+		}
+	}
+	// pi 等自带会话号变量的 harness 不看文件
+	t.Setenv("LITCH_DEVICE_GITHUB_HARNESS", "pi")
+	t.Setenv("PI_SESSION_ID", "")
+	if err := os.WriteFile(file, []byte("s-1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if agentHasGithubContext() {
+		t.Fatal("pi 不该读会话号文件")
+	}
 }

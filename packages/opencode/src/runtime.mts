@@ -9,6 +9,33 @@ import { OpencodeApi } from './api.mjs'
 import { assertOpencodeVersion } from './host-opencode.mjs'
 import { compatibilityHint, detectHostOpencode, type HostOpencode, versions } from './versions.mjs'
 
+/**
+ * 给 serve 的 OPENCODE_CONFIG_CONTENT：在用户自己给的这一层（没有就是空的）里加上会话号插件（thread-plugin.mts）。
+ * OpenCode 把各层的 plugin 合起来，不顶掉用户全局、项目里的插件。用户给的不是 JSON 对象时原样留着、不挂插件，
+ * 这时 OpenCode 的命令没有会话号（经理注入的 gh 身份不生效），报一句。
+ * 代价：有插件时 OpenCode 起实例前等配置目录里 @opencode-ai/plugin 装完（它本来就在后台装），装过就不等；
+ * npm 源连不通且从没装成过时，要等 npm 重试完（默认约 70 秒）。测试和夹具因此关了 npm 重试。
+ */
+export function threadPluginConfig(
+  existing: string | undefined,
+  plugin = new URL('./thread-plugin.mjs', import.meta.url).href,
+): string {
+  let config: Record<string, unknown> = {}
+  if (existing?.trim()) {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(existing)
+    } catch {}
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      console.error('[opencode] OPENCODE_CONFIG_CONTENT 不是 JSON 对象，命令里不带 Litch 会话号')
+      return existing
+    }
+    config = parsed as Record<string, unknown>
+  }
+  const list = Array.isArray(config.plugin) ? config.plugin : []
+  return JSON.stringify({ ...config, plugin: [...list, plugin] })
+}
+
 export interface RuntimeHandlers {
   /** /global/event 上的一条事件：directory 是它所属的目录实例（全局事件是 null） */
   event(directory: string | null, payload: any): void
@@ -94,6 +121,7 @@ export class OpencodeRuntime {
         OPENCODE_SERVER_USERNAME: 'opencode',
         // 提问工具只对它自己的几种客户端默认开着；经适配器来的客户端也能答题，明确打开。
         OPENCODE_ENABLE_QUESTION_TOOL: '1',
+        OPENCODE_CONFIG_CONTENT: threadPluginConfig(process.env.OPENCODE_CONFIG_CONTENT),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     })

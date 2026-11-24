@@ -27,6 +27,7 @@ import {
 } from '../../protocol/src/background-tasks.mjs'
 import type { ClientToolNamespaceSpec } from '../../protocol/src/client-tools.mjs'
 import { commandEnv } from './command-env.mjs'
+import { githubThreadVariable } from './device-github-environment.mjs'
 
 /** 设置 harness.<id>.backgroundShell 落到的环境变量：1 开、0 关，运行时起来时读一次 */
 export const BACKGROUND_SHELL_VARIABLE = 'CHA_BACKGROUND_SHELL'
@@ -39,6 +40,14 @@ export function backgroundShellEnabled(env: NodeJS.ProcessEnv = process.env): bo
   if (value === '1') return true
   if (value === '0') return false
   return BACKGROUND_SHELL_DEFAULT
+}
+
+/**
+ * 后台命令的环境：会话号按这个 harness 给命令的变量写上（Pi 是 PI_SESSION_ID，OpenCode 和 ACP 是 LITCH_THREAD_ID），
+ * 设备据此认出命令属于哪个会话（经理注入的 gh/Git 身份、litch-machine 的确认卡片）。
+ */
+export function shellEnv(threadId: string): NodeJS.ProcessEnv {
+  return commandEnv({ [githubThreadVariable(process.env.LITCH_DEVICE_GITHUB_HARNESS)]: threadId })
 }
 
 export const BACKGROUND_SHELL_LIMITS = {
@@ -305,7 +314,7 @@ export class BackgroundShells {
     const { file, args } = shellOf(command)
     const child = spawn(file, args, {
       cwd,
-      env: commandEnv(undefined),
+      env: shellEnv(threadId),
       detached: process.platform !== 'win32',
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
