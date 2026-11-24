@@ -88,6 +88,8 @@ export interface ClientToolRouterOptions {
   chromeHostLabel?(): string
   projectChromeApproval?(prompt: RemoteChromePrompt): () => void
   chromeFullAccess?(harness: string, threadId: string): Promise<boolean>
+  /** 限时授权：这个会话的 Chrome 网站此刻放行（timed-approvals.mts） */
+  timedApproval?(threadId: string, category: 'chrome'): boolean
 
   /**
    * 按已知的发起者和订阅者挑不出执行方时，等其余几份到齐的工夫（毫秒）。几份是 codex 一口气发给
@@ -325,6 +327,10 @@ export class ClientToolRouter {
           throw new Error(
             'Sign-in is required. Full access does not wait for manual login. Sign in on the device Chrome and retry.',
           )
+        }
+        if (ask.kind === 'site' && this.options.timedApproval?.(call.threadId, 'chrome')) {
+          this.options.log(`会话 ${call.threadId} 的 Chrome 网站在限时授权内，放行`)
+          return 'once'
         }
         const approver = this.chromeApprover(call, desktop)
         if (!approver)

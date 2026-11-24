@@ -282,6 +282,8 @@ export function createCore(options: CoreOptions): Core {
         ...(store?.machineLog
           ? { logStore: (deviceId: string) => store.machineLog?.(deviceId) ?? null }
           : {}),
+        timedApproval: (deviceId, threadId) =>
+          devices.get(deviceId)?.timedApprovals.active(threadId, 'machine') != null,
         log: (line) => options.log?.(line),
       })
     : null
@@ -361,6 +363,10 @@ export function createCore(options: CoreOptions): Core {
       },
     })
     if (connectionsPaused && config.kind === 'ssh') device.setConnectionPaused(true)
+    // 会话所在设备的限时授权名单变了：litch_machine 挂着的、已在授权内的卡片当场放行
+    device.timedApprovals.onChange(() => {
+      if (current()) wiring?.timedApprovalsChanged(config.id)
+    })
     return device
   }
 
@@ -1461,6 +1467,15 @@ export function createCore(options: CoreOptions): Core {
           const { deviceId, ...input } = params as Commands['projectPermission.set']['params']
           return deviceOf(deviceId).projectPermissions.set(input)
         }
+        case 'timedApproval.grant': {
+          const { deviceId, threadId, category, hours } =
+            params as Commands['timedApproval.grant']['params']
+          return deviceOf(deviceId).timedApprovals.grant(threadId, category, hours)
+        }
+        case 'timedApproval.revoke': {
+          const { deviceId, id } = params as Commands['timedApproval.revoke']['params']
+          return deviceOf(deviceId).timedApprovals.revoke(id)
+        }
         case 'managers.create': {
           const { deviceId, manager } = params as Commands['managers.create']['params']
           return await deviceOf(deviceId).managers.create(manager)
@@ -1998,6 +2013,7 @@ export function createCore(options: CoreOptions): Core {
       if (topic.kind === 'suggestions') return device.suggestions.open(sink)
       if (topic.kind === 'projectPermission')
         return device.projectPermissions.open(topic.cwd, topic.harness, sink)
+      if (topic.kind === 'timedApprovals') return device.timedApprovals.open(sink)
       if (topic.kind === 'managers') return device.managers.open(sink)
       if (topic.kind === 'managerBoard') return device.managers.openBoard(topic.managerId, sink)
       if (

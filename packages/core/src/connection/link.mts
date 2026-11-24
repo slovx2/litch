@@ -19,6 +19,10 @@ import {
 } from '../../../protocol/src/index.mjs'
 import type { PathPickerRequests } from '../../../protocol/src/path-picker.mjs'
 import { PATH_PICKER_EXTENSION } from '../../../protocol/src/path-picker.mjs'
+import {
+  TIMED_APPROVALS_EXTENSION,
+  type TimedApprovalRequests,
+} from '../../../protocol/src/timed-approvals.mjs'
 import { type Cancel, createCancel } from '../channel/cancel.mjs'
 import type { Clock } from '../channel/protocol.mjs'
 import type { ConnectGuide, ConnectStage } from '../model.mjs'
@@ -96,6 +100,7 @@ export interface Link {
       | ClientRequestMethod
       | keyof ManagerRequests
       | keyof ProjectPermissionRequests
+      | keyof TimedApprovalRequests
       | keyof PathPickerRequests
       | keyof ExternalWireRequests,
   >(
@@ -103,6 +108,7 @@ export interface Link {
     params: (ClientRequests &
       ManagerRequests &
       ProjectPermissionRequests &
+      TimedApprovalRequests &
       PathPickerRequests &
       ExternalWireRequests)[M]['params'],
     options?: RpcRequestOptions,
@@ -110,6 +116,7 @@ export interface Link {
     (ClientRequests &
       ManagerRequests &
       ProjectPermissionRequests &
+      TimedApprovalRequests &
       PathPickerRequests &
       ExternalWireRequests)[M]['result']
   >
@@ -261,6 +268,8 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.managerIssues,
                 EXTENSION.managerIssueDiscussions,
                 EXTENSION.harnessProjectPermissions,
+                // timedApprovals：声明了才能授予、撤销限时授权，收得到名单变化
+                TIMED_APPROVALS_EXTENSION,
                 PATH_PICKER_EXTENSION,
                 // sessionTree：声明了，会话对象上才有 Litch 子会话的 litchLineage，才收得到父子关系、提案变了的通知
                 EXTENSION.sessionTree,

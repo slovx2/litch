@@ -212,6 +212,8 @@ export type Topic =
   | { kind: 'tasks'; deviceId: string }
   /** 经理列表常驻订阅，断线保留快照；可用性同 tasks。 */
   | { kind: 'projectPermission'; deviceId: string; cwd: string; harness: string }
+  /** 一台设备上生效的限时授权（timedApprovals 扩展）；不支持时 available 是 false，断线时名单为空 */
+  | { kind: 'timedApprovals'; deviceId: string }
   | { kind: 'managers'; deviceId: string }
   | { kind: 'suggestions'; deviceId: string }
   /** 只在看板打开时订阅；设备变更通知后重读整块看板。 */
@@ -282,6 +284,7 @@ export interface TopicData {
   tasks: TasksView
   suggestions: import('../model-suggestions.mjs').SuggestionsView
   projectPermission: ProjectPermissionView
+  timedApprovals: import('../device/timed-approvals.mjs').TimedApprovalsView
   managers: ManagersView
   managerBoard: ManagerBoardTopicView
   pairing: PairingTopicView
@@ -438,6 +441,10 @@ export interface TopicOp {
   tasks: TasksOp
   suggestions: { op: 'suggestions.set'; view: import('../model-suggestions.mjs').SuggestionsView }
   projectPermission: { op: 'projectPermission.set'; view: ProjectPermissionView }
+  timedApprovals: {
+    op: 'timedApprovals.set'
+    view: import('../device/timed-approvals.mjs').TimedApprovalsView
+  }
   managers: ManagersOp
   managerBoard: ManagerBoardOp
   pairing: PairingOp
@@ -592,6 +599,18 @@ export interface Commands extends ExternalCommands {
   'projectPermission.set': {
     params: ProjectPermissionSet & { deviceId: string }
     result: ProjectPermission
+  }
+  /** 授予限时授权：这个会话、这一类在 hours 小时内不再询问；同类挂着的卡片随之放行 */
+  'timedApproval.grant': {
+    params: import('../../../protocol/src/timed-approvals.mjs').TimedApprovalGrantParams & {
+      deviceId: string
+    }
+    result: import('../../../protocol/src/timed-approvals.mjs').TimedApproval
+  }
+  /** 撤销一条限时授权，立即生效 */
+  'timedApproval.revoke': {
+    params: { deviceId: string; id: string }
+    result: { revoked: number }
   }
   'managers.question.ask': {
     params: import('../../../protocol/src/manager.mjs').ManagerQuestionParams & { deviceId: string }

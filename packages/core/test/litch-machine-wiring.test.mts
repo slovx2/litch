@@ -164,7 +164,9 @@ function fakeExecutor() {
   }
 }
 
-function setup(options: { threads?: Thread[]; machine?: boolean; desktop?: MachineFacts } = {}) {
+function setup(
+  options: { threads?: Thread[]; machine?: boolean; desktop?: MachineFacts; timed?: boolean } = {},
+) {
   const threads = options.threads ?? [
     thread({
       id: 'a',
@@ -237,6 +239,45 @@ function setup(options: { threads?: Thread[]; machine?: boolean; desktop?: Machi
     harness('pi', { threads, declaration: { extensions: ['clientTools'], features: {} as never } }),
   ])
   aggregate.device.extensions.push('deviceSettings')
+  // 限时授权记在会话所在的远程设备上（timedApprovals）
+  let grants: {
+    id: string
+    threadId: string
+    category: string
+    grantedAt: number
+    expiresAt: number
+  }[] = []
+  if (options.timed) {
+    aggregate.device.extensions.push('timedApprovals')
+    Object.assign(remoteHandlers, {
+      'litch/timedApproval/list': () => ({ grants }),
+      'litch/timedApproval/grant': (params: unknown) => {
+        const { threadId, category, hours } = params as {
+          threadId: string
+          category: string
+          hours: number
+        }
+        const now = time.clock.now()
+        const grant = {
+          id: `g${grants.length + 1}`,
+          threadId,
+          category,
+          grantedAt: now,
+          expiresAt: now + hours * 3_600_000,
+        }
+        grants = [
+          ...grants.filter((g) => !(g.threadId === threadId && g.category === category)),
+          grant,
+        ]
+        return grant
+      },
+      'litch/timedApproval/revoke': (params: unknown) => {
+        const before = grants.length
+        grants = grants.filter((g) => g.id !== (params as { id: string }).id)
+        return { revoked: before - grants.length }
+      },
+    } satisfies Record<string, Handler>)
+  }
   remoteHandlers['runtime/info'] = aggregate.handlers['runtime/info']!
   Object.assign(remoteHandlers, fakeToolSettings(['pi']).handlers)
   const remote = fakeOpener(remoteHandlers)
@@ -1042,4 +1083,74 @@ test('存下来的设置：本机没有“操作这台电脑”的开关；审�
   })
   assert.deepEqual(saved.tools, { local: { browser: false }, 'ssh-1': { machine: true } })
   assert.deepEqual(saved.machine, { 'ssh-1': { approval: 'each', custom: ['~/a'] } })
+})
+
+test('限时授权·操作本机：远程会话授权内（含逐条确认）执行与读都不再弹；提到禁止位置的仍弹；别的会话、撤销、到期后恢复', async () => {
+  const world = await started({
+    timed: true,
+    threads: ['a', 'b'].map((id) =>
+      thread({ id, cwd: '/work/app', turns: [turn('t1', [], { status: 'inProgress' })] }),
+    ),
+  })
+  const { call, enable, command, time } = world
+  await enable()
+  await command('device.machine.set', { deviceId: 'box', approval: 'each' })
+  const session = watchSession(world.core, 'a', 'box')
+  // 卡片挂着时授予：这张按这一次允许答掉
+  const waiting = call({ command: 'make' })
+  await settle()
+  assert.equal(cardsOf(session).length, 1)
+  const grant = (await command('timedApproval.grant', {
+    deviceId: 'box',
+    threadId: 'a',
+    category: 'machine',
+    hours: 4,
+  })) as { id: string }
+  assert.equal(textOf(await waiting), 'ok')
+  await settle()
+  assert.equal(cardsOf(session).length, 0)
+  // 授权内：逐条确认下的执行、读都不弹
+  assert.equal(textOf(await call({ command: 'rm -rf build' })), 'ok')
+  assert.equal(textOf(await call({ path: '/etc/hosts' }, { tool: 'read_file' })), 'ok')
+  assert.equal(cardsOf(session).length, 0)
+  // 提到禁止位置的仍要问
+  const flagged = call({ command: 'cat ~/.ssh/id', flagged: ['~/.ssh'] })
+  await settle()
+  assert.equal(cardsOf(session).length, 1, '禁止位置不在限时授权里')
+  await respond(world, cardsOf(session)[0], 'decline')
+  await flagged
+  // 别的会话照常问
+  const other = watchSession(world.core, 'b', 'box')
+  const elsewhere = call({ command: 'make' }, { threadId: 'b' })
+  await settle()
+  assert.equal(cardsOf(other).length, 1, '不跨会话')
+  await command('session.respond', {
+    deviceId: 'box',
+    sessionId: 'b',
+    requestId: cardsOf(other)[0]?.id,
+    optionId: 'decline',
+  })
+  await elsewhere
+  // 撤销立即恢复询问
+  await command('timedApproval.revoke', { deviceId: 'box', id: grant.id })
+  const revoked = call({ command: 'make' })
+  await settle()
+  assert.equal(cardsOf(session).length, 1, '撤销后恢复询问')
+  await respond(world, cardsOf(session)[0], 'once')
+  await revoked
+  // 到期后恢复询问
+  await command('timedApproval.grant', {
+    deviceId: 'box',
+    threadId: 'a',
+    category: 'machine',
+    hours: 1,
+  })
+  assert.equal(textOf(await call({ command: 'make' })), 'ok')
+  time.advance(3_600_000)
+  await settle()
+  const expired = call({ command: 'make' })
+  await settle()
+  assert.equal(cardsOf(session).length, 1, '到期后恢复询问')
+  await respond(world, cardsOf(session)[0], 'once')
+  await expired
 })

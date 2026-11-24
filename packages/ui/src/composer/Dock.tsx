@@ -18,6 +18,7 @@ import { useKey, useServices } from '../app/services.tsx'
 import { ArchiveBar } from '../archived/ArchiveBar.tsx'
 import { BackgroundBar } from '../background/BackgroundBar.tsx'
 import { GoalBar } from '../goal/GoalBar.tsx'
+import { TimedBar } from '../timed/TimedBar.tsx'
 import { QueuedNotesChip } from '../tree/EventBar.tsx'
 import { SessionComposer } from './Composer.tsx'
 import { PlanAsk } from './PlanAsk.tsx'
@@ -70,6 +71,7 @@ export function Dock({ deviceId, sessionId }: DockProps) {
             右边是还排着、没交给模型的子会话回报，几条合成一个，点开往上弹出。两样都没有时这一行不占地方 */}
         <div className="dock-bars">
           <BackgroundBar deviceId={deviceId} sessionId={sessionId} />
+          <TimedBar deviceId={deviceId} sessionId={sessionId} />
           <QueuedNotesChip deviceId={deviceId} sessionId={sessionId} />
         </div>
         <SessionComposer deviceId={deviceId} sessionId={sessionId} blocked={blocked} />

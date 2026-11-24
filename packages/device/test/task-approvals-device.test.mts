@@ -250,3 +250,36 @@ test('TASK-APPROVAL-DEVICE-003：拿着审批的客户端断开了，请求照�
     await target.close()
   }
 })
+
+test('TASK-APPROVAL-DEVICE-T1：任务会话在限时授权内，内部连接直接按允许代答；挂着时授予一并代答；撤销后恢复等人', async () => {
+  const engine = new AskingEngine()
+  const target = taskRig({ pi: engine }, { engineLinks: { heldGraceMs: 20, heldRecheckMs: 20 } })
+  try {
+    const client = await tasksClient(target)
+    const phone = target.connect()
+    await phone.initialize(['harness', 'timedApprovals'])
+    const turn = await startRun(client, engine, target.stateDir)
+    // 先挂着一条，再授予：一并代答
+    engine.ask(turn.threadId, turn.turnId, 'ask-t1')
+    await until('记进运行', async () => (await lastRun(client)).approvals?.length === 1)
+    await phone.call('litch/timedApproval/grant', {
+      threadId: turn.threadId,
+      category: 'command',
+      hours: 1,
+    })
+    const first = await engine.resolveWhenAnswered('ask-t1')
+    assert.equal(first.connection, turn.connection, '由任务的内部连接代答')
+    assert.deepEqual(first.frame.result, { decision: 'accept' })
+    // 授权内新来的：当场代答
+    engine.ask(turn.threadId, turn.turnId, 'ask-t2')
+    const second = await engine.resolveWhenAnswered('ask-t2')
+    assert.deepEqual(second.frame.result, { decision: 'accept' })
+    // 撤销后：照常等人（定时任务的时限照旧）
+    await phone.call('litch/timedApproval/revoke', { threadId: turn.threadId })
+    engine.ask(turn.threadId, turn.turnId, 'ask-t3')
+    await settle(50)
+    assert.equal(engine.answerOf('ask-t3'), null, '撤销后恢复等人')
+  } finally {
+    await target.close()
+  }
+})

@@ -8,6 +8,7 @@ import { type Key, useT } from '../../ui/i18n'
 import { CardTextInput } from '../../ui/kit/KeyboardCardScrollView'
 import { useTheme } from '../../ui/theme'
 import { Card, CardButton, type CardProps, Meta, useRespond, Well, Why } from './Card'
+import { useTimedAllow } from './TimedAllow'
 
 const OPTION_TEXT: Record<ApprovalOption['role'], Key> = {
   accept: 'request.option.accept',
@@ -44,6 +45,7 @@ export function ApprovalCard(props: CardProps<ApprovalRequest>) {
   const noting = note !== null && refuse?.note === true
   const { permissions, tool } = request
   const rules = request.options.filter((option) => option.rule)
+  const timed = useTimedAllow({ ...props, disabled: busy })
 
   const declineWithNote = () => {
     const said = (note ?? '').trim()
@@ -69,6 +71,8 @@ export function ApprovalCard(props: CardProps<ApprovalRequest>) {
   ) : (
     request.options.map((option) => (
       <Fragment key={option.id}>
+        {/* 拒绝前面：限时允许（这个会话这一类在设定时长内都不再问） */}
+        {option === refuse ? timed.button : null}
         {option === refuse && option.note ? (
           <CardButton
             kind="ghost"
@@ -129,6 +133,7 @@ export function ApprovalCard(props: CardProps<ApprovalRequest>) {
           </Text>
         </View>
       ))}
+      {timed.panel}
       {noting ? (
         <CardTextInput
           autoFocus

@@ -50,6 +50,7 @@ import { SESSION_TREE_METHOD } from '../../protocol/src/session-tree.mjs'
 import { SUGGESTIONS_LIST } from '../../protocol/src/suggestion-inbox.mjs'
 import { localTaskTimeZone } from '../../protocol/src/task-schedule.mjs'
 import { THREAD_READ_STATE } from '../../protocol/src/thread-read-state.mjs'
+import { TIMED_APPROVALS_EXTENSION } from '../../protocol/src/timed-approvals.mjs'
 import {
   RECOVERY_CONTINUE,
   RECOVERY_DISMISS,
@@ -235,6 +236,8 @@ export interface SessionHost {
   pairing: DevicePairing | null
   /** 手机上批准（clientApprovals）：桌面端挂的卡片、手机的答复，各连接共用 */
   approvals: DeviceApprovals
+  /** 限时授权（timedApprovals）：按会话和类别放行审批，各连接共用 */
+  timedApprovals?: import('./timed-approvals.mjs').TimedApprovals
   chrome?: DeviceChromeRuntime | null
   /** harness 详情设置经设备进程的翻译改了配置：告诉所有声明过 harnessConfig 的连接 */
   harnessConfigChanged(params: HarnessConfigChangedNotification): void
@@ -326,6 +329,7 @@ export class ClientSession implements ClientToolPeer {
       declares: (extension) => this.declared.has(extension),
       index: host.index,
       shelf: (harness, threadId, archived) => host.archives.observe(harness, threadId, archived),
+      ...(host.timedApprovals ? { timedApprovals: host.timedApprovals } : {}),
       workspaces: host.workspaces,
       startedHoldMs: host.timing.startedHoldMs,
       log: (line) => host.log(`${this.tag} ${line}`),
@@ -363,7 +367,10 @@ export class ClientSession implements ClientToolPeer {
         },
         itemEvent: (params) => host.sessionTree.itemEvent(params),
         decorate: (thread) => host.sessionTree.decorate(thread, this.remoteChrome),
-        deleted: (threadId) => host.sessionTree.deleted(threadId),
+        deleted: (threadId) => {
+          host.sessionTree.deleted(threadId)
+          host.timedApprovals?.threadDeleted(threadId)
+        },
       },
       worktrees: {
         decorate: (thread) => host.worktrees?.decorate(thread),
@@ -443,6 +450,11 @@ export class ClientSession implements ClientToolPeer {
       // 客户端的通知只有 initialized；和上游的握手是设备进程自己做的，不用转
       if (frame.id != null) this.request(frame.id as RpcId, frame.method, frame as Frame, raw)
     } else if (frame.id != null) this.relay.answer(frame as Frame, raw)
+  }
+
+  /** 新授予了限时授权：这条连接上同一会话里还在等的同类原生审批一并代答 */
+  timedApprovalGranted(grant: { threadId: string }): void {
+    this.relay.timedApprovalGranted(grant.threadId)
   }
 
   /** 客户端断开：这一组上游连接一起断，它开的终端和文件监听一起清掉 */
@@ -728,6 +740,13 @@ export class ClientSession implements ClientToolPeer {
           if (!isObject(frame.params) || typeof frame.params.path !== 'string')
             throw new ProtocolError(-32602, '附件路径无效')
           return this.host.attachments?.status(frame.params.path) ?? { state: 'unknown' }
+        }
+        if (method.startsWith('litch/timedApproval/')) {
+          if (!this.declared.has(TIMED_APPROVALS_EXTENSION))
+            throw new DeviceError('extensionRequired', 'timedApprovals must be declared')
+          if (!this.host.timedApprovals)
+            throw new DeviceError('unsupported', 'Timed approvals are unavailable')
+          return this.host.timedApprovals.call(method, frame.params)
         }
         if (method.startsWith('litch/harnessProjectPermission/')) {
           if (!this.declared.has(EXTENSION.harnessProjectPermissions))

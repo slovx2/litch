@@ -45,6 +45,7 @@ export function isSearchMethod(method: string): boolean {
 export function classify(method: string, params: unknown): Route {
   if (method === 'litch/paths/list') return { kind: 'device' }
   if (method.startsWith('litch/harnessProjectPermission/')) return { kind: 'device' }
+  if (method.startsWith('litch/timedApproval/')) return { kind: 'device' }
   if (method.startsWith('litch/manager/')) return { kind: 'device' }
   if (method.startsWith('litch/external/')) return { kind: 'device' }
   if (method === 'runtime/info') return { kind: 'device' }

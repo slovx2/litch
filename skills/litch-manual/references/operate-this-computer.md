@@ -47,6 +47,11 @@ the phone's signed approval channel currently supports browser sign-in, not this
 Cards offer Allow once / Allow for this session / Decline (with an optional note to the model). There
 is no "always allow". A card unanswered for 10 minutes counts as declined.
 
+**Allow for…** on the card grants this session N hours (0.25–168) of every action, including in
+"Every action" mode; commands that mention a blocked location still ask. The grant is kept on the
+session's device and shown above the composer, where × revokes it (see "Timed approvals" in
+`sessions-and-projects.md`).
+
 **Access** (UI "Access"):
 
 | Value | UI | Behavior |

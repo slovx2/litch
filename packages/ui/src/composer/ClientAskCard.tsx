@@ -16,6 +16,7 @@ import type { MessageKey } from '../i18n/index.ts'
 import { MachineSessionCard } from '../machine/MachineCard.tsx'
 import { browserBridge } from '../side/browser/bridge.ts'
 import { downloadSize } from '../side/browser/Downloads.tsx'
+import { useTimedAllow } from '../timed/TimedAllow.tsx'
 import { useCardFocus } from './focus.ts'
 import { type CardProps, Foot, ownsKey, useRespond } from './respond.tsx'
 import { SignInAskCard } from './SignInAskCard.tsx'
@@ -76,6 +77,7 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
         : browserBridge()
       : undefined
   const once = request.options.find((option) => option.role === 'accept')
+  const timed = useTimedAllow({ ...props, disabled: busy })
 
   const trustAll = () => {
     if (!bridge || !once) return
@@ -225,7 +227,8 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
       <div className="req-actions">
         {request.options.map((option) => (
           <Fragment key={option.id}>
-            {/* 信任所有网站排在拒绝前面 */}
+            {/* 限时允许、信任所有网站排在拒绝前面 */}
+            {option === refuse ? timed.button : null}
             {option === refuse && bridge && once ? (
               <button
                 type="button"
@@ -276,6 +279,7 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
           </Fragment>
         ))}
       </div>
+      {timed.panel}
       <Foot waiting={waiting} error={error} />
     </section>
   )

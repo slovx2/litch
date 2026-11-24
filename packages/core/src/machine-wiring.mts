@@ -93,6 +93,8 @@ export interface MachineWiringHost {
   notify(notice: MachineNotice): void
   /** 一台设备的操作记录存在哪。不给就只记在内存里 */
   logStore?(deviceId: string): MachineLogStore | null
+  /** 限时授权：会话所在设备上，这个会话的“操作本机”此刻放行（命令里提到禁止位置的仍要问） */
+  timedApproval?(deviceId: string, threadId: string): boolean
   log(line: string): void
 }
 
@@ -118,6 +120,8 @@ export interface MachineWiring {
   kill(processId: string): boolean
   /** 全部停：结束进程、撤掉待处理卡片。给了设备只停它的 */
   stopAll(deviceId?: string): void
+  /** 这台设备的限时授权名单变了：挂着的、已在授权内的卡片按“这一次允许”答掉 */
+  timedApprovalsChanged(deviceId: string): void
   logOf(deviceId: string): MachineLogEntry[]
   clearLog(deviceId: string): void
   dispose(): void
@@ -212,6 +216,8 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
   let pendingSeq = 0
   /** “本会话都允许”：设备、会话（找不到会话的是空串）、类别 */
   const grants = new Set<string>()
+  /** 挂着、可被限时授权放行的卡片（命令里没提到禁止位置的）：设备、会话、答掉它 */
+  const timedWaiting = new Set<{ deviceId: string; threadId: string; allow(): void }>()
   /** 同一回合里被拒的：键 → 用户附的那句话 */
   const declined = new Map<string, string | null>()
   /** 各台设备的操作记录（新的在前），用到时才从存储里读 */
@@ -340,6 +346,8 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
     input: MachineCallInput,
     ask: MachineAskView,
     session: MachineSessionAsk | null,
+    /** 卡片挂上了：给调用方一个“按这一次允许答掉”的入口（限时授权放行用） */
+    track?: (allow: () => void) => void,
   ): Promise<AskOutcome> =>
     new Promise<AskOutcome>((resolve) => {
       let over = false
@@ -398,6 +406,7 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
       }
       stopExpiry = clock.setTimer(() => settle({ kind: 'expired' }), MACHINE_ASK_EXPIRES_MS)
       input.signal.addEventListener('abort', abort, { once: true })
+      track?.(() => settle({ kind: 'answered', pick: 'once', note: null }))
     })
 
   /** MachineCallContext.approve：按审批方式决定弹不弹，命令里提到禁止位置时再弹 */
@@ -420,8 +429,18 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
       const flagged = request.ask.flagged.length > 0
       const each = settings.approval === 'each' && request.class === 'mutate'
       if (!flagged && !each && grants.has(grant)) return { kind: 'allowed' } as const
+      // 限时授权按会话放行全部操作（含“逐条确认”下的执行、写入）；提到禁止位置的仍要问
+      const threadId = input.threadId
+      if (!flagged && threadId && host.timedApproval?.(deviceId, threadId))
+        return { kind: 'allowed' } as const
       const ask = each ? { ...request.ask, perCall: true } : request.ask
-      const outcome = await askUser(deviceId, input, ask, session)
+      let waiting: { deviceId: string; threadId: string; allow(): void } | null = null
+      const outcome = await askUser(deviceId, input, ask, session, (allow) => {
+        if (flagged || !threadId) return
+        waiting = { deviceId, threadId, allow }
+        timedWaiting.add(waiting)
+      })
+      if (waiting) timedWaiting.delete(waiting)
       if (outcome.kind !== 'answered') return outcome
       if (outcome.pick === 'decline') {
         if (turnKey !== null) declined.set(turnKey, outcome.note)
@@ -578,6 +597,16 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
     stopAll(deviceId) {
       executor.stopAll(deviceId)
       dropPending(deviceId)
+    },
+
+    timedApprovalsChanged(deviceId) {
+      for (const entry of [...timedWaiting]) {
+        if (entry.deviceId !== deviceId) continue
+        if (!host.timedApproval?.(deviceId, entry.threadId)) continue
+        timedWaiting.delete(entry)
+        host.log(`操作本机限时授权放行挂着的卡片：设备 ${deviceId}，会话 ${entry.threadId}`)
+        entry.allow()
+      }
     },
 
     logOf: (deviceId) => logList(deviceId).map((entry) => ({ ...entry })),
