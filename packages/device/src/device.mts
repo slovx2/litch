@@ -727,6 +727,7 @@ export class DeviceServer {
       EXTENSION.managerPaging,
       EXTENSION.managerIssues,
       EXTENSION.managerIssueDiscussions,
+      EXTENSION.managerIssueWaiting,
       EXTENSION.suggestionInbox,
     )
     this.index.onChanged = () => this.sessionTree.suggestions.changed()

@@ -1,7 +1,9 @@
 import {
+  MANAGER_ISSUE_STALE_SECONDS,
   type ManagerIssue,
   type ManagerIssueFollowUpState,
   type ManagerIssueQuery,
+  type ManagerIssueWaiting,
   managerIssueHasDiscussion,
 } from '../../../protocol/src/manager-issues.mjs'
 import { ChannelError } from '../channel/protocol.mjs'
@@ -9,6 +11,35 @@ import type { ManagerBoardView } from '../model-manager.mjs'
 import { type ManagerIssuesView, managerIssueQueryKey } from '../model-manager-issues.mjs'
 import { managerIssuePending } from '../projection/manager-public-issues.mjs'
 import { copyValue } from '../value.mjs'
+
+/**
+ * 预览里的“下一步在谁”：设备规则（packages/device/src/manager-issue-waiting.mts）的简化版，时间是毫秒。
+ * 预览没有真实工作线：关联了会话（且不受阻）的当作线在跑；经理回合、显式标记不模拟。
+ */
+function mockWaiting(issue: ManagerIssue, now: number): ManagerIssueWaiting | undefined {
+  if (issue.kind !== 'ordinary' || !['open', 'in_progress', 'blocked'].includes(issue.status))
+    return undefined
+  const talk = [
+    { by: issue.author.kind, at: issue.createdAt },
+    ...issue.discussion.comments.map((one) => ({ by: one.author.kind, at: one.updatedAt })),
+  ].reduce((a, b) => (b.at >= a.at ? b : a))
+  const since = Math.max(issue.updatedAt, talk.at)
+  const line = issue.relations.some((r) => r.from.kind === 'thread' || r.to.kind === 'thread')
+  if (issue.status !== 'blocked' && line) return { on: 'agent', why: 'line', since }
+  if (issue.followUp.state === 'off') return { on: 'user', why: 'paused', since }
+  if (issue.status === 'blocked') return { on: 'agent', why: 'blocked', since }
+  if (talk.by === 'user')
+    return now - since > MANAGER_ISSUE_STALE_SECONDS * 1000
+      ? { on: 'user', why: 'user', stale: true, since }
+      : { on: 'agent', why: 'user', since }
+  return { on: 'user', why: 'manager', since }
+}
+const withWaiting = (issue: ManagerIssue, now: number) => {
+  const waiting = mockWaiting(issue, now)
+  if (waiting) issue.waiting = waiting
+  else delete issue.waiting
+  return issue
+}
 
 /** 预览播种：第一次投影某个经理时调用，返回要加入或同编号覆盖的 issue。 */
 export type MockManagerIssueSeed = (
@@ -135,7 +166,7 @@ export class MockManagerIssues {
     const records = this.data(key, board)
     for (const id of Object.keys(cache.details)) {
       const issue = records.get(id)
-      if (issue) cache.details[id] = copyValue(issue)
+      if (issue) cache.details[id] = copyValue(withWaiting(issue, Date.now()))
     }
     for (const [queryKey, query] of this.queries.get(key) ?? [])
       cache.pages[queryKey] = this.cached(records, query)
@@ -152,7 +183,7 @@ export class MockManagerIssues {
   private refreshCache(key: string, records: Map<string, ManagerIssue>, issue: ManagerIssue) {
     const cache = this.caches.get(key)
     if (!cache) return
-    cache.details[issue.id] = copyValue(issue)
+    cache.details[issue.id] = copyValue(withWaiting(issue, Date.now()))
     for (const [queryKey, query] of this.queries.get(key) ?? [])
       cache.pages[queryKey] = this.cached(records, query)
   }
@@ -188,11 +219,15 @@ export class MockManagerIssues {
     return true
   }
   private page(records: Map<string, ManagerIssue>, q: ManagerIssueQuery) {
+    const now = Date.now()
+    const waiting = q.waiting?.length ? q.waiting : null
     const rows = [...records.values()].filter(
       (i) =>
         (q.kinds ?? ['ordinary']).includes(i.kind) &&
         (!q.discussionsOnly || i.kind === 'ordinary' || managerIssueHasDiscussion(i)) &&
-        (!q.statuses?.length || q.statuses.includes(i.status)) &&
+        (waiting && i.kind === 'ordinary'
+          ? !!withWaiting(i, now).waiting && waiting.includes(i.waiting?.on ?? 'user')
+          : !q.statuses?.length || q.statuses.includes(i.status)) &&
         (!q.authors?.length || q.authors.includes(i.author.kind)) &&
         (!q.followUp || q.followUp === 'all' || q.followUp === i.followUp.state) &&
         (q.unread === undefined || q.unread === i.unread),
@@ -222,6 +257,7 @@ export class MockManagerIssues {
         preview: i.body.slice(0, 300),
         status: i.status,
         ...(i.blockedReason ? { blockedReason: i.blockedReason } : {}),
+        ...(withWaiting(i, now).waiting ? { waiting: i.waiting } : {}),
         stateGroup: i.stateGroup,
         author: i.author.kind,
         followUp: i.followUp.state,
@@ -355,7 +391,7 @@ export class MockManagerIssues {
       if (name !== 'managers.issue.read') issue.updatedAt = at
     }
     this.refreshCache(key, records, issue)
-    const result = { issue: copyValue(issue) }
+    const result = { issue: copyValue(withWaiting(issue, Date.now())) }
     if (idem) this.idem.set(idem, result)
     return result
   }

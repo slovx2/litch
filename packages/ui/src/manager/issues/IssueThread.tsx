@@ -24,7 +24,7 @@ import { useDiscussionPane } from '../discussion-pane.ts'
 import { RelationLink } from '../RelationLink.tsx'
 import type { IssueCommands } from './data.ts'
 import { IssueDiscussion } from './IssueDiscussion.tsx'
-import { IssueMeta, IssueWaitReason } from './IssueMeta.tsx'
+import { IssueMeta, IssueNext, IssueWaitReason } from './IssueMeta.tsx'
 
 export interface IssueThreadProps {
   manager: ManagerView
@@ -329,7 +329,7 @@ export function IssueThread({
                   <b className="mono mg-issue-id">{issue.id}</b> {issue.title}
                 </h2>
                 <div className="mg-issue-page-bar">
-                  {/* 行尾留给以后的“下一步在谁” */}
+                  <IssueNext waiting={issue.waiting} />
                   <IssueMeta
                     head={managerIssueHead(issue)}
                     comments={issue.discussion.comments.length}

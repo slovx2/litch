@@ -1,7 +1,10 @@
 // issue 卡头下面的一行小字：（类型记号）· 状态 · 创建者 · 跟进（只在暂停时写） · 更新时间 · 评论数。状态不另占一行。
 // 列表按类型分页签，卡上不再写类型；抽屉和完整讨论页离开了页签，带上类型记号。
 // 受阻的等待原因不挤进这一行，由 IssueWaitReason 单独一行画在下面。
-import type { ManagerIssueHead } from '../../../../protocol/src/manager-issues.mts'
+import type {
+  ManagerIssueHead,
+  ManagerIssueWaiting,
+} from '../../../../protocol/src/manager-issues.mts'
 import { useT } from '../../app/appearance.ts'
 import { Icon } from '../../app/icons.tsx'
 import { MissingResultReply } from '../../external/MissingResultReply.tsx'
@@ -44,6 +47,36 @@ export function IssueMeta({
       <Stamp at={head.updatedAt} />
       {comments ? <span>{t('issue.commentCount', { n: comments })}</span> : null}
     </p>
+  )
+}
+
+/**
+ * 普通 issue 的“下一步在谁”：待处理（等你）、进行中（经理或工作线在跟）、可能卡住。
+ * 设备按规则派生（waiting）；原因放在悬停提示和读屏里。旧设备没有 waiting，不画。
+ */
+export function IssueNext({ waiting }: { waiting: ManagerIssueWaiting | undefined }) {
+  const t = useT()
+  if (!waiting) return null
+  const state = waiting.stale ? 'stale' : waiting.on
+  const label = t(`issue.next.${state}` as const)
+  const why = waiting.stale
+    ? t('issue.next.why.stale')
+    : t(
+        (waiting.why === 'marked'
+          ? `issue.next.why.marked.${waiting.on}`
+          : `issue.next.why.${waiting.why}`) as Parameters<typeof t>[0],
+      )
+  return (
+    <span
+      className="mg-issue-next"
+      data-issue-next={state}
+      data-issue-next-why={waiting.why}
+      title={why}
+      role="img"
+      aria-label={`${label} · ${why}`}
+    >
+      {label}
+    </span>
   )
 }
 

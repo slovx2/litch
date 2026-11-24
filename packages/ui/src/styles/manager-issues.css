@@ -248,6 +248,25 @@
 .mg-issue-marks:empty {
   display: none;
 }
+/* 下一步在谁：进行中用强调色，待处理和可能卡住用等待色 */
+.mg-issue-next {
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--r1);
+  font-size: calc(11px * var(--fs));
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: nowrap;
+  color: var(--wait);
+  background: color-mix(in srgb, var(--wait) 14%, transparent);
+}
+.mg-issue-next[data-issue-next="agent"] {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.mg-issue-next[data-issue-next="stale"] {
+  border: 1px dashed color-mix(in srgb, var(--wait) 60%, transparent);
+}
 .mg-issue-dot {
   flex: none;
   width: 8px;

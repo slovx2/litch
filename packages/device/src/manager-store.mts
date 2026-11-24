@@ -590,6 +590,50 @@ export class ManagerStore {
       .all(managerId)
       .map((row) => JSON.parse(String(row.body)))
   }
+  /**
+   * “下一步在谁”要的历史摘要（manager-issue-waiting.mts）：每条 X-n 用户最后一次说话、经理最后一次动作、
+   * 最近一条记录。说话 = 新建、评论（含改评论）、改标题或正文。只取几个小字段，正文在库里解析。
+   */
+  issueWaitingHistory(
+    managerId: string,
+    issueId?: string,
+  ): Map<
+    string,
+    {
+      lastUserTalk: { seq: number; at: number } | null
+      lastManager: { seq: number; at: number } | null
+      lastAny: number | null
+    }
+  > {
+    const rows = this.db
+      .prepare(`SELECT seq, json_extract(body,'$.objectId') AS id, json_extract(body,'$.by') AS who,
+        json_extract(body,'$.at') AS at,
+        (json_type(body,'$.before') IS NULL OR json_type(body,'$.before') = 'null'
+          OR json_extract(body,'$.after.commentId') IS NOT NULL
+          OR EXISTS (SELECT 1 FROM json_each(body,'$.fields') WHERE value IN ('title','body'))) AS talk
+      FROM issue_history
+      WHERE manager_id=? AND json_extract(body,'$.objectId') LIKE ?
+      ORDER BY seq`)
+      .all(managerId, issueId ?? 'X-%')
+    const facts = new Map<
+      string,
+      {
+        lastUserTalk: { seq: number; at: number } | null
+        lastManager: { seq: number; at: number } | null
+        lastAny: number | null
+      }
+    >()
+    for (const row of rows) {
+      const id = String(row.id)
+      const mark = { seq: Number(row.seq), at: Number(row.at) }
+      const one = facts.get(id) ?? { lastUserTalk: null, lastManager: null, lastAny: null }
+      one.lastAny = Math.max(one.lastAny ?? 0, mark.at)
+      if (row.who === 'manager') one.lastManager = mark
+      else if (row.who === 'user' && Number(row.talk)) one.lastUserTalk = mark
+      facts.set(id, one)
+    }
+    return facts
+  }
   /** 只查当前页需要的议题。用库内顺序选择最后一次转为受阻，不误取之后的编辑或旧周期。 */
   issueBlockedReasons(managerId: string, issueIds: readonly string[]): Map<string, string> {
     if (!issueIds.length) return new Map()

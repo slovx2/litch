@@ -289,6 +289,7 @@ test('设备服务比应用旧：经理看板的后加能力全关，相应命�
     requestIgnore: true,
     issues: true,
     issueDiscussions: true,
+    issueWaiting: true,
     resetTarget: true,
   }
   const none = {
@@ -298,6 +299,7 @@ test('设备服务比应用旧：经理看板的后加能力全关，相应命�
     requestIgnore: false,
     issues: false,
     issueDiscussions: false,
+    issueWaiting: false,
     resetTarget: false,
   }
   assert.deepEqual(views.get('local')?.features, all)

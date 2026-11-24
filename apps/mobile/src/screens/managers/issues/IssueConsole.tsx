@@ -60,7 +60,13 @@ import {
   useIssueCounts,
 } from './data'
 import { IssueFilterDrawer, IssueStatusRow } from './IssueFilters'
-import { IssueComposer, IssueMetaLine, IssueThread, IssueWaitLine } from './IssueThread'
+import {
+  IssueComposer,
+  IssueMetaLine,
+  IssueNextTag,
+  IssueThread,
+  IssueWaitLine,
+} from './IssueThread'
 import { useIssueSeen } from './issue-seen'
 
 /** 页签次序：四类特殊 issue 在前（日常处理的都在这里），普通 issue 在末尾 */
@@ -333,6 +339,7 @@ export function useIssueConsole({
             </Text>
             {head.title}
           </Text>
+          <IssueNextTag waiting={head.waiting} />
           {head.unread ? (
             <View
               testID={`issue-unread:${head.id}`}

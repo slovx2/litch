@@ -13,6 +13,8 @@ export class ManagerLines {
   readonly checkedAt = new Map<string, number>()
   private readonly reserved = new Map<string, { managerId: string; threadId: string | null }>()
   private readonly began = new Map<string, number>()
+  /** 最近一次回合结束的时间：判断关联线“多久没动静”用（manager-issue-waiting.mts） */
+  private readonly ended = new Map<string, number>()
   readonly store: ManagerStore
   readonly tree: SessionTree
   constructor(store: ManagerStore, tree: SessionTree) {
@@ -43,12 +45,29 @@ export class ManagerLines {
     if (method === 'turn/started') this.began.set(id, managerNow())
     if (method === 'turn/completed') {
       this.began.delete(id)
+      this.ended.set(id, managerNow())
       const previous = this.snapshots.get(id)
       const turn = isObject(params.turn) ? params.turn : {}
       this.snapshots.set(id, {
         ...previous,
         status: { type: turn.status === 'failed' ? 'systemError' : 'idle' },
       })
+    }
+  }
+  /** 正在跑的回合从何时开始；没在跑或开始时间不明为 null */
+  turnStartedAt(threadId: string): number | null {
+    return this.tree.occupiesSlot(threadId) ? (this.began.get(threadId) ?? null) : null
+  }
+  /** 一条线是否在跑、最近一次回合开始、结束或回报的时间 */
+  activity(threadId: string): { running: boolean; lastActive: number | null } {
+    const times = [
+      this.began.get(threadId),
+      this.ended.get(threadId),
+      this.store.report(threadId)?.at,
+    ].filter((at): at is number => typeof at === 'number')
+    return {
+      running: this.tree.occupiesSlot(threadId),
+      lastActive: times.length ? Math.max(...times) : null,
     }
   }
   lines(managerId: string): ManagerLine[] {

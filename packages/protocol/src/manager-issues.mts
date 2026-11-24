@@ -50,6 +50,32 @@ export type ManagerIssueStatus =
   | ManagerRequestIssueStatus
   | ManagerReportIssueStatus
 
+/** 普通 issue 下一步在谁：user 等用户（待处理），agent 经理或工作线在跟（进行中）。 */
+export type ManagerIssueWaitingOn = 'user' | 'agent'
+/**
+ * 判定依据：line 关联工作线在跑；turn 经理本回合在处理；paused 跟进已暂停；marked 经理显式标记；
+ * blocked 受阻、经理按约定复查；user 用户最后发言、等经理；manager 经理最后回复、等用户。
+ */
+export type ManagerIssueWaitingWhy =
+  | 'line'
+  | 'turn'
+  | 'paused'
+  | 'marked'
+  | 'blocked'
+  | 'user'
+  | 'manager'
+/** 设备按规则派生，不落库；只有未结束的 X-n 有。需 litchManagerIssueWaiting。 */
+export interface ManagerIssueWaiting {
+  on: ManagerIssueWaitingOn
+  why: ManagerIssueWaitingWhy
+  /** 进行中超过阈值没有动静，改判为等用户 */
+  stale?: true
+  /** 判定所依据的最近一次动静（秒） */
+  since: number
+}
+/** “可能卡住”的阈值：进行中这么久没有动静就算到待处理 */
+export const MANAGER_ISSUE_STALE_SECONDS = 24 * 60 * 60
+
 /** 跨类型列表使用的粗粒度状态；具体 status 仍由 kind 解释。 */
 export type ManagerIssueStateGroup = 'open' | 'pending' | 'closed' | 'read' | 'unread'
 
@@ -130,6 +156,7 @@ export interface ManagerIssue extends ExternalIssueFields {
   status: ManagerIssueStatus
   /** 经理设为受阻时给出的等待条件与跟进时间。 */
   blockedReason?: string
+  waiting?: ManagerIssueWaiting
   stateGroup: ManagerIssueStateGroup
   author: ManagerIssueAuthor
   revision: number
@@ -151,6 +178,7 @@ export interface ManagerIssueHead extends Pick<ExternalIssueFields, 'missingResu
   status: ManagerIssueStatus
   /** 经理设为受阻时给出的等待条件与跟进时间。 */
   blockedReason?: string
+  waiting?: ManagerIssueWaiting
   stateGroup: ManagerIssueStateGroup
   author: ManagerIssueAuthorKind
   followUp: ManagerIssueFollowUp
@@ -170,6 +198,8 @@ export interface ManagerIssueQuery {
   authors?: ManagerIssueAuthorKind[]
   followUp?: ManagerIssueFollowUp | 'all'
   unread?: boolean
+  /** 有它时 X-n 改按“未结束且 waiting.on 在其中”过滤，不看 statuses；其他类型照旧。需 litchManagerIssueWaiting。 */
+  waiting?: ManagerIssueWaitingOn[]
   order: ManagerIssueOrder
   cursor?: string
   limit?: number
@@ -203,6 +233,8 @@ export interface ManagerIssueUpdateParams {
     body?: string
     status?: ManagerOrdinaryStatus
     followUp?: ManagerIssueFollowUp
+    /** 经理纠正自动判定；用户随后有任何动作即失效。只接受经理调用，需 litchManagerIssueWaiting。 */
+    waitingOn?: ManagerIssueWaitingOn
     source?: import('./manager-posts.mjs').ManagerRelationTarget[]
     related?: import('./manager-posts.mjs').ManagerRelationTarget[]
   }

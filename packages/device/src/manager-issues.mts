@@ -13,6 +13,8 @@ import {
   type ManagerIssueId,
   type ManagerIssuePage,
   type ManagerIssueQuery,
+  type ManagerIssueWaiting,
+  type ManagerIssueWaitingOn,
   MANAGER_ISSUE_METHOD as METHOD,
   managerIssueRefKind,
   MANAGER_ISSUE_NOTIFICATION as NOTICE,
@@ -22,6 +24,7 @@ import { formatSessionEvent } from '../../protocol/src/session-tree.mjs'
 import { managerSuggestionIssueStatus } from '../../protocol/src/suggestion-inbox.mjs'
 import { ExternalStore } from './external-store.mjs'
 import type { DeviceManagers } from './manager.mjs'
+import { issueWaiting } from './manager-issue-waiting.mjs'
 import { addRelations, projectedRelations } from './manager-relations.mjs'
 import { isRequest } from './manager-requests.mjs'
 import { managerNow } from './manager-store.mjs'
@@ -30,11 +33,20 @@ import { fields, invalid, keys, ManagerError, text } from './manager-validate.mj
 interface Meta {
   discussionOpened?: boolean
   followUp?: ManagerIssueFollowUpState
+  /** 经理对“下一步在谁”的显式纠正；用户动作、议题结束时清掉 */
+  waitingOn?: { on: ManagerIssueWaitingOn; at: number }
   revision: number
   updatedAt: number
 }
 const fail = (reason: string, message: string): never => {
   throw new ManagerError(reason, message)
+}
+/** 判定“下一步在谁”的一次快照：历史摘要、关联线、经理回合按经理取一次，列表逐条复用 */
+type WaitingOf = (issue: ManagerIssue, meta: Meta | null) => ManagerIssueWaiting | null
+/** 记进审计的议题不带派生的 waiting */
+const bare = (issue: ManagerIssue): Omit<ManagerIssue, 'waiting'> => {
+  const { waiting: _waiting, ...rest } = issue
+  return rest
 }
 const pending = (issue: ManagerIssue) =>
   issue.kind !== 'report' &&
@@ -42,6 +54,8 @@ const pending = (issue: ManagerIssue) =>
 
 export class ManagerIssues {
   private readonly specialVersions = new Map<string, Map<string, string>>()
+  /** 各 X-n 上次广播时的“下一步在谁”，回合起止时只对变了的发 changed */
+  private readonly waitingVersions = new Map<string, Map<string, string>>()
   private readonly seenPending = new Map<
     string,
     {
@@ -110,6 +124,59 @@ export class ManagerIssues {
       pending.reject(new ManagerError('closed', 'Manager service is closed.'))
     }
     this.seenPending.clear()
+  }
+  private waitingOf(managerId: string, issueId?: string): WaitingOf {
+    const history = this.store.issueWaitingHistory(managerId, issueId)
+    const threads = new Map<string, string[]>()
+    for (const r of this.store.relations(managerId)) {
+      const pair =
+        r.from.kind === 'issue' && r.to.kind === 'thread'
+          ? [r.from.target, r.to.target]
+          : r.to.kind === 'issue' && r.from.kind === 'thread'
+            ? [r.to.target, r.from.target]
+            : null
+      if (pair)
+        threads.set(pair[0] as string, [
+          ...(threads.get(pair[0] as string) ?? []),
+          pair[1] as string,
+        ])
+    }
+    const manager = this.store.manager(managerId)
+    const managerTurnStartedAt = manager ? this.owner.lines.turnStartedAt(manager.threadId) : null
+    const now = managerNow()
+    return (issue, meta) => {
+      if (issue.kind !== 'ordinary') return null
+      const facts = history.get(issue.id)
+      return issueWaiting({
+        status: issue.status,
+        followUp: issue.followUp.state,
+        lastUserTalk: facts?.lastUserTalk ?? null,
+        lastManager: facts?.lastManager ?? null,
+        lastAny: facts?.lastAny ?? null,
+        marked: meta?.waitingOn ?? null,
+        lines: (threads.get(issue.id) ?? []).map((id) => this.owner.lines.activity(id)),
+        managerTurnStartedAt,
+        now,
+      })
+    }
+  }
+  /** 关联线或经理回合起止：判定可能变了，对变了的 X-n 发失效通知（版本不变） */
+  waitingChanged(managerId: string): void {
+    const known = this.waitingVersions.get(managerId) ?? new Map<string, string>()
+    this.waitingVersions.set(managerId, known)
+    const waitingOf = this.waitingOf(managerId)
+    for (const raw of this.store.issues(managerId) as ManagerIssue[]) {
+      const issue = this.get(managerId, raw.id, false, waitingOf)
+      const fingerprint = JSON.stringify([
+        issue.waiting?.on,
+        issue.waiting?.why,
+        issue.waiting?.stale,
+      ])
+      const before = known.get(issue.id)
+      known.set(issue.id, fingerprint)
+      if (before !== undefined && before !== fingerprint)
+        this.broadcast(managerId, issue, 'updated')
+    }
   }
   specialChanged(managerId: string): void {
     const known = this.specialVersions.get(managerId) ?? new Map<string, string>()
@@ -231,7 +298,7 @@ export class ManagerIssues {
       else delete issue.blockedReason
     }
   }
-  get(managerId: string, ref: string, detail = true): ManagerIssue {
+  get(managerId: string, ref: string, detail = true, waitingOf?: WaitingOf): ManagerIssue {
     const id = this.resolve(managerId, ref)
     const raw = id.startsWith('X-')
       ? (this.store.issue(managerId, id) as ManagerIssue)
@@ -254,6 +321,11 @@ export class ManagerIssues {
             : 'pending'
           : 'closed'
     issue.unread ||= this.store.issueUnread(managerId, id, 'user')
+    delete issue.waiting
+    if (issue.kind === 'ordinary') {
+      const waiting = (waitingOf ?? this.waitingOf(managerId, id))(issue, meta)
+      if (waiting) issue.waiting = waiting
+    }
     // 列表只取头字段；不能为了分页遍历所有议题的评论和整份审计。
     if (!detail) return issue
     this.fillBlockedReasons(managerId, [issue])
@@ -358,13 +430,18 @@ export class ManagerIssues {
       ...this.store.publishedReports(managerId).map((r) => r.id),
       ...this.owner.paging.suggestions(managerId).map((p) => p.id),
     ]
+    const waitingOf = this.waitingOf(managerId)
+    // waiting 只管 X-n：有它时 X-n 按“未结束且下一步在其中”过滤，不看 statuses
+    const waitingFilter = query.waiting?.length ? query.waiting : null
     let issues = [...new Set(ids)]
-      .map((id) => this.get(managerId, id, false))
+      .map((id) => this.get(managerId, id, false, waitingOf))
       .filter(
         (i) =>
           kinds.includes(i.kind) &&
           (!query.discussionsOnly || i.kind === 'ordinary' || i.discussion.opened === true) &&
-          (!query.statuses?.length || query.statuses.includes(i.status)) &&
+          (waitingFilter && i.kind === 'ordinary'
+            ? !!i.waiting && waitingFilter.includes(i.waiting.on)
+            : !query.statuses?.length || query.statuses.includes(i.status)) &&
           (!query.authors?.length || query.authors.includes(i.author.kind)) &&
           (!query.followUp || query.followUp === 'all' || query.followUp === i.followUp.state) &&
           (query.unread === undefined || query.unread === i.unread),
@@ -403,6 +480,7 @@ export class ManagerIssues {
         preview: i.body.slice(0, 300),
         status: i.status,
         ...(i.blockedReason ? { blockedReason: i.blockedReason } : {}),
+        ...(i.waiting ? { waiting: i.waiting } : {}),
         stateGroup: i.stateGroup,
         author: i.author.kind,
         followUp: i.followUp.state,
@@ -510,11 +588,12 @@ export class ManagerIssues {
         'authors',
         'followUp',
         'unread',
+        'waiting',
         'order',
         'cursor',
         'limit',
       ])
-      for (const field of ['kinds', 'statuses', 'authors'])
+      for (const field of ['kinds', 'statuses', 'authors', 'waiting'])
         if (
           p[field] !== undefined &&
           (!Array.isArray(p[field]) || !(p[field] as unknown[]).every((v) => typeof v === 'string'))
@@ -523,6 +602,7 @@ export class ManagerIssues {
       const accepted: Record<string, readonly string[]> = {
         kinds: ['ordinary', 'decision', 'suggestion', 'request', 'report'],
         authors: ['user', 'manager'],
+        waiting: ['user', 'agent'],
         statuses: [
           'open',
           'in_progress',
@@ -669,6 +749,8 @@ export class ManagerIssues {
           revision: 0,
           updatedAt: before.updatedAt,
         }
+        // 用户一有动作，经理对“下一步在谁”的显式标记就失效
+        if (actor === 'user') delete meta.waitingOn
         if (method === METHOD.comment) {
           keys(p, [
             'managerId',
@@ -733,6 +815,7 @@ export class ManagerIssues {
               'body',
               'status',
               'followUp',
+              'waitingOn',
               'source',
               'related',
               'discussionOpened',
@@ -757,9 +840,16 @@ export class ManagerIssues {
             invalid('Invalid issue status.')
           if (patch.discussionOpened !== undefined && patch.discussionOpened !== true)
             invalid('discussionOpened can only be true.')
+          if (patch.waitingOn !== undefined) {
+            if (actor !== 'manager')
+              fail('issueForbidden', 'Only the manager can mark whose move is next.')
+            if (patch.waitingOn !== 'user' && patch.waitingOn !== 'agent')
+              invalid('Invalid waitingOn.')
+            meta.waitingOn = { on: patch.waitingOn, at }
+          }
           if (patch.discussionOpened === true) meta.discussionOpened = true
-          const after = {
-            ...before,
+          const after: ManagerIssue = {
+            ...bare(before),
             discussion: {
               ...before.discussion,
               ...(meta.discussionOpened ? { opened: true } : {}),
@@ -795,6 +885,7 @@ export class ManagerIssues {
             if (after.status !== before.status)
               this.owner.external?.store.resultReplies.issueStatusChanged(managerId, before.id)
           }
+          if (after.status === 'resolved' || after.status === 'closed') delete meta.waitingOn
           this.store.saveIssueMeta(managerId, before.id, {
             ...meta,
             revision: meta.revision + 1,
@@ -818,7 +909,7 @@ export class ManagerIssues {
             managerId,
             before.id,
             actor,
-            before,
+            bare(before),
             {
               ...after,
               ...(meta.followUp ? { followUp: meta.followUp } : {}),
@@ -832,7 +923,11 @@ export class ManagerIssues {
               : patch.status !== undefined
                 ? 'status'
                 : 'updated'
-          if (actor === 'manager')
+          // 用户改标题或正文和评论一样送给经理（跟进开着时叫醒），“下一步在谁”才名副其实
+          if (
+            actor === 'manager' ||
+            (before.kind === 'ordinary' && (patch.title !== undefined || patch.body !== undefined))
+          )
             event = this.event(
               managerId,
               this.get(managerId, before.id, false),

@@ -67,6 +67,12 @@ export const MANAGER_ISSUE_TOOLS: ClientToolNamespaceSpec['tools'] = [
               enum: ['open', 'in_progress', 'blocked', 'resolved', 'closed'],
             },
             followUp: follow,
+            waitingOn: {
+              type: 'string',
+              enum: ['user', 'agent'],
+              description:
+                'Only when Litch shows the wrong side for whose move is next on an X-n: user = waiting for the user, agent = you or a line are on it. Cleared by the next user action.',
+            },
             ...RELATION_INPUTS,
           },
           [],

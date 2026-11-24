@@ -381,6 +381,9 @@ export class DeviceManagers {
     if (!threadId) return
     const manager = this.lines.managerFor(threadId)
     if (!manager) return
+    // 经理或工作线回合起止：普通 issue 的“下一步在谁”可能变了
+    if (method === 'turn/started' || method === 'turn/completed')
+      this.issues.waitingChanged(manager.id)
     const name =
       typeof params.threadName === 'string'
         ? params.threadName
@@ -402,6 +405,7 @@ export class DeviceManagers {
     if (mark?.role !== 'line') return
     this.store.saveReport(threadId, { text: report, turnId, status, at: managerNow() })
     this.changed(mark.managerId)
+    this.issues.waitingChanged(mark.managerId)
   }
   async call(
     method: string,
@@ -411,6 +415,7 @@ export class DeviceManagers {
     issuesDeclared = false,
     issueDiscussionsDeclared = false,
     resetTargetDeclared = false,
+    issueWaitingDeclared = false,
   ): Promise<unknown> {
     if ((Object.values(MANAGER_ISSUE_METHOD) as string[]).includes(method)) {
       if (!issuesDeclared)
@@ -430,10 +435,31 @@ export class DeviceManagers {
             required: [EXTENSION.managerIssueDiscussions],
           },
         )
-      const result =
+      if (
+        !issueWaitingDeclared &&
+        ('waiting' in params ||
+          (method === MANAGER_ISSUE_METHOD.update && 'waitingOn' in fields(params.patch)))
+      )
+        throw new DeviceError('extensionRequired', `${method} requires litchManagerIssueWaiting.`, {
+          required: [EXTENSION.managerIssueWaiting],
+        })
+      let result: unknown =
         method === MANAGER_ISSUE_METHOD.seen
           ? await this.issues.seen(given)
           : this.issues.call(method, given)
+      // 只有声明新能力的连接能收到“下一步在谁”；其它字段照旧。
+      if (!issueWaitingDeclared && result && typeof result === 'object') {
+        type Issue = import('../../protocol/src/manager-issues.mjs').ManagerIssue
+        type Page = import('../../protocol/src/manager-issues.mjs').ManagerIssuePage
+        const plain = <T extends { waiting?: unknown }>(one: T): T => {
+          const { waiting: _waiting, ...rest } = one
+          return rest as T
+        }
+        const shaped = result as { issue?: Issue; page?: Page }
+        if (shaped.issue) result = { ...shaped, issue: plain(shaped.issue) }
+        else if (shaped.page)
+          result = { ...shaped, page: { ...shaped.page, entries: shaped.page.entries.map(plain) } }
+      }
       // 只有声明新能力的连接能收到开启标记；其它 issue 数据继续按原合同返回。
       if (!issueDiscussionsDeclared && result && typeof result === 'object' && 'issue' in result) {
         const issue = (

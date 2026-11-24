@@ -173,3 +173,34 @@ test('旧值回退：读得出原样返回，读不出回到待处理分组', ()
     'unread',
   ])
 })
+
+test('普通 issue 的待处理、进行中、未完成带“下一步在谁”；细分、其他分组、不含普通 issue 时不带', () => {
+  const ordinary = base('ordinary')
+  assert.deepEqual(ordinary.waiting, ['user'], '默认待处理 = 等用户')
+  assert.deepEqual(g.withIssueStatusGroup(ordinary, 'doing').waiting, ['agent'])
+  assert.deepEqual(g.withIssueStatusGroup(ordinary, 'unfinished').waiting, ['user', 'agent'])
+  assert.equal(g.withIssueStatusGroup(ordinary, 'done').waiting, undefined)
+  assert.equal(g.withIssueStatusGroup(ordinary, 'all').waiting, undefined)
+  // 细分只按状态
+  assert.equal(g.withIssueStatusDetail(ordinary, 'todo', 'blocked').waiting, undefined)
+  assert.deepEqual(g.withIssueStatusDetail(ordinary, 'todo', null).waiting, ['user'])
+  // 换成不含普通 issue 的类型：去掉；再加回来按当前分组补上
+  const decisions = g.withIssueKinds(g.withIssueStatusGroup(ordinary, 'doing'), ['decision'])
+  assert.equal(decisions.waiting, undefined)
+  assert.deepEqual(g.withIssueKinds(ordinary, ['ordinary', 'decision']).waiting, ['user'])
+  // 角标只算待处理；概览预设和编号定位不带默认的 waiting
+  assert.deepEqual(list.MANAGER_ISSUE_ATTENTION_FILTERS.ordinary.waiting, ['user'])
+  assert.equal(list.managerIssuePreset({ unread: true }).filter.waiting, undefined)
+  assert.equal(list.managerIssueLinkFilter({ kind: 'ordinary', status: 'open' }).waiting, undefined)
+  // 查询键随 waiting 变，查询只在有值时带
+  assert.notEqual(
+    list.managerIssueFilterKey(ordinary),
+    list.managerIssueFilterKey(g.withIssueStatusGroup(ordinary, 'doing')),
+  )
+  assert.deepEqual(list.managerIssueQuery('m', ordinary).waiting, ['user'])
+  assert.equal('waiting' in list.managerIssueQuery('m', base('decision')), false)
+  // 读回时补齐缺的 waiting，已对上的原样返回
+  const { waiting: _drop, ...bare } = ordinary
+  assert.deepEqual(g.normalizeIssueFilter(bare).waiting, ['user'])
+  assert.equal(g.normalizeIssueFilter(ordinary), ordinary)
+})

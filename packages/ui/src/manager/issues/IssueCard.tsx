@@ -8,7 +8,7 @@ import { useT } from '../../app/appearance.ts'
 import { Icon } from '../../app/icons.tsx'
 import { CardActionScope, CardActions } from '../CardActions.tsx'
 import type { IssueCommands } from './data.ts'
-import { IssueMeta, IssueWaitReason } from './IssueMeta.tsx'
+import { IssueMeta, IssueNext, IssueWaitReason } from './IssueMeta.tsx'
 import { useIssueSeen } from './issue-seen.ts'
 
 export function IssueCard({
@@ -70,8 +70,9 @@ export function IssueCard({
             <span className="mg-paging-title">
               <b className="mono mg-issue-id">{head.id}</b> {head.title}
             </span>
-            {/* 卡头右端的标记区：未读点；以后的“下一步在谁”也放这里 */}
+            {/* 卡头右端的标记区：下一步在谁、未读点 */}
             <span className="mg-issue-marks">
+              <IssueNext waiting={head.waiting} />
               {head.unread ? (
                 <span
                   className="mg-issue-dot"

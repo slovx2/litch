@@ -29,6 +29,7 @@ export function projectManagerIssue(issue: ManagerIssue): ManagerIssue {
     },
     timeline: issue.timeline.map((entry) => ({ ...entry, at: entry.at * 1000 })),
     relations: issue.relations.map((r) => ({ ...r, at: r.at * 1000 })),
+    ...(issue.waiting ? { waiting: { ...issue.waiting, since: issue.waiting.since * 1000 } } : {}),
   }
 }
 export function projectManagerIssuePage(page: ManagerIssuePage): ManagerIssuePage {
@@ -38,6 +39,7 @@ export function projectManagerIssuePage(page: ManagerIssuePage): ManagerIssuePag
       ...i,
       createdAt: i.createdAt * 1000,
       updatedAt: i.updatedAt * 1000,
+      ...(i.waiting ? { waiting: { ...i.waiting, since: i.waiting.since * 1000 } } : {}),
     })),
   }
 }

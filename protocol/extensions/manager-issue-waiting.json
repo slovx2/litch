@@ -1,0 +1,33 @@
+{
+  "extension": "litchManagerIssueWaiting",
+  "description": "普通 issue（X-n）的“下一步在谁”：设备按规则派生 waiting，列表可按它过滤，经理可显式纠正。依赖 litchManagerIssues。",
+  "appliesTo": "设备聚合面；设备 runtime/info.device.extensions 声明支持，连接 initialize.capabilities.litchExtensions 声明接收。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "litchManagerIssueWaiting"
+      }
+    }
+  },
+  "undeclared": "不回传 waiting，不接受 issues/list 的 waiting 和 issue/update 的 patch.waitingOn（返回 extensionRequired）；其余 issue 方法和字段继续按 litchManagerIssues 提供。",
+  "rules": [
+    "waiting 只出现在未结束（open、in_progress、blocked）的 X-n 上：{ on: user | agent, why, stale?, since }。它是派生事实，不改变 status、stateGroup 或 revision。",
+    "判定顺序：关联工作线在跑或经理本回合处理过它 → agent；跟进暂停 → user；经理显式标记且之后用户无动作 → 按标记；受阻 → agent；用户最后发言（新建、评论、改标题或正文）且跟进开 → agent；其余 → user。",
+    "why 为 agent 的 user 或 marked 判定距最近一次动静超过 MANAGER_ISSUE_STALE_SECONDS（24 小时）时改为 on=user 并带 stale=true。",
+    "issues/list 的 waiting 非空时，X-n 只保留未结束且 waiting.on 在其中的条目，忽略 statuses；其他类型照旧按 statuses 过滤。过滤在分页和计数之前。",
+    "patch.waitingOn 只接受经理调用；用户对该 X-n 的任何写入或 X-n 结束时清除。",
+    "关联工作线或经理回合开始、结束时，设备对受影响的 X-n 发 issue/changed（change=updated，revision 不变），客户端据此重读。"
+  ],
+  "parts": [
+    {
+      "kind": "ClientRequest",
+      "methods": ["litch/manager/issues/list", "litch/manager/issue/read", "litch/manager/issue/update"],
+      "description": "仅新增可选字段，定义见 packages/protocol/src/manager-issues.mts；旧字段含义不变。"
+    }
+  ]
+}
