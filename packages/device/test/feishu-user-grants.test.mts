@@ -211,7 +211,8 @@ test('链接被别人点了：作废 token、记失败；本人拒绝也记失�
   const grant = await settled(DAVE)
   assert.equal(grant?.state, 'failed')
   assert.equal(grant?.error, 'identity_mismatch')
-  assert.ok(h.fake.revoked.length >= 1, '作废了拿到的 token')
+  // 作废 token 是尽力而为、不等结果，这里等它到假服务端
+  await h.until(() => h.fake.revoked.length >= 1)
   const again = await invite(DAVE, 'grant-dave-2')
   h.fake.denyGrant(again)
   assert.equal((await settled(DAVE))?.error, 'denied')
