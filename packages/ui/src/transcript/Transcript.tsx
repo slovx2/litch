@@ -9,7 +9,6 @@ import {
   blockInput,
   bucketItems,
   type DeviceView,
-  governedSegments,
   type ItemView,
   keys,
   type ProcessSegment,
@@ -358,11 +357,18 @@ const Turn = memo(function Turn({
     useTurnsTouched(sessionKey, members),
   )
   const folded = run !== undefined && !runOpen
-  const governed = useMemo(() => (run ? governedSegments(blocks, run.lead) : null), [run, blocks])
+  // 收着时露在外面的：整串最后那段结尾文字（在哪个回合里就由哪个回合画，连同它的回合尾），
+  // 以及计划、待办、压缩、卡片、收尾区这些本来就不随过程收的块
+  const shownHere =
+    run !== undefined &&
+    blocks.some((block) => block.type === 'answer' && run.run.shown.includes(block.itemId))
+  const keepsOutside = blocks.some(
+    (block) => block.type !== 'user' && block.type !== 'process' && block.type !== 'answer',
+  )
   // 正常提醒收尾只留卡片；失败必须显示错误和失败状态，不能把安全拒答一起隐藏。
   if (!turn || (remind && blocks.length === 0 && turn.status !== 'failed')) return null
-  // 整个回合都在收着的块里、标题行也不在它这里：只留一个空的回合（查找、滚动认得出它），什么都不画
-  if (folded && run.whole && !run.head)
+  // 收着的块里什么都不露的回合：只留一个空的回合（查找、滚动认得出它），什么都不画
+  if (folded && !run.head && !shownHere && !keepsOutside)
     return (
       <section
         className="turn"
@@ -413,9 +419,14 @@ const Turn = memo(function Turn({
           />
         ) : null}
         {blocks.map((block, index) => {
-          // 领头（系统消息和紧跟着的过程）归收起块管：块收着时不画
-          const inLead = run !== undefined && index < run.lead
-          if (inLead && folded) return null
+          // 收起块里的系统消息、过程、正文：块收着时不画，只露整串最后那段结尾文字
+          if (
+            folded &&
+            (block.type === 'user' ||
+              block.type === 'process' ||
+              (block.type === 'answer' && !run.run.shown.includes(block.itemId)))
+          )
+            return null
           if (block.type === 'user')
             return (
               <UserMessage
@@ -452,21 +463,17 @@ const Turn = memo(function Turn({
           // 收尾区排在回合最后（下面单独画），这里跳过
           if (block.type === 'tail') return null
           const segment = segments.get(block.key)!
-          // 从领头里开始的过程段没有自己的“已处理”：领头里的块开着就全画；排在正文后面的那部分照收起的规矩
-          if (governed?.has(segment.key)) {
-            const parts = inLead
-              ? block.parts
-              : visibleProcessParts(block.parts, folded, segment.keepSteps)
-            return parts.length === 0 ? null : (
+          // 收起块里的过程没有自己的“已处理”：块开着就照原样摊开（步骤组仍是收着的汇总行）
+          if (run)
+            return (
               <div key={block.key} className="proc" data-run-part="">
                 <div className="proc-body">
                   <CiteScope {...ref} userId={userBefore[index]}>
-                    <ProcessParts {...ref} parts={parts} live={false} />
+                    <ProcessParts {...ref} parts={block.parts} live={false} />
                   </CiteScope>
                 </div>
               </div>
             )
-          }
           return (
             <SegmentBlock
               key={block.key}
@@ -498,7 +505,7 @@ const Turn = memo(function Turn({
           <TurnTail {...ref} turnId={turnId} itemIds={tail.itemIds} fresh={freshTail} />
         ) : null}
         {/* 正文出字且没有工作提示时不占行；实际高度变化由对话区的滚动锚点补偿。 */}
-        {(remind && turn.status !== 'failed') || (folded && run.whole) ? null : running ? (
+        {(remind && turn.status !== 'failed') || (folded && !shownHere) ? null : running ? (
           <div
             className="running-line slot"
             data-anchor={`t:${turnId}`}

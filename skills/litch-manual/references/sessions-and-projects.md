@@ -387,17 +387,20 @@ open. Every message explicitly marked as a final answer stays outside the folded
 a conclusion followed by a short reply to a message received in the same turn. The detailed view
 keeps its usual behavior.
 
-Consecutive finished turns that you did not start (sub-session reports, messages from other
-sessions, finished background tasks, scheduled tasks, external-event notices) fold together with the
-messages that triggered them into one row, for example "Worked for 1 m 52 s · 16 steps · 4 reports".
-Expand it to see each message and its activity in order. Your own messages, including board answers,
-split the row, and so does any reply the agent writes to you: the reply stays visible and the next
-system turn starts a new row. Turns you interjected in and goal continuations show as before. A
-running turn stays live and joins the row when it finishes. Phone and desktop behave the same, and
-unread marks and notifications are unchanged.
-连续的、不是你发起的回合（子会话回报、会话间消息、后台任务结束、定时任务、外部事件提醒）连同触发它们的消息收成一行，
-如“已处理 1 分 52 秒 · 16 步 · 4 条回报”，展开按时间看每条消息和过程。你自己的话（含看板答复）和 Agent 写给你的正文把它切开，
-正文照常露出，之后的系统回合另起一行；你中途插过话的回合、目标续做照旧单独显示。正在跑的回合照常实时显示，结束后并入。
+Consecutive finished turns that you did not start fold together with the messages that triggered
+them into one row, for example "Worked for 1 m 52 s · 16 steps · 4 reports · 1 board update". This
+covers anything that is not you speaking in the conversation: sub-session reports, messages from
+other sessions, board answers and rule updates, issue activity, finished background tasks,
+scheduled tasks, goal continuations and briefings. Only the closing text of the last turn stays
+visible; the messages, activity, mid-turn text and earlier closing texts are inside the row. Expand
+it to see each turn in order. Only your own words in the conversation split the row, including a
+message you send with a report attached and anything you add during a turn. A running turn stays
+live and joins the row when it finishes. Phone and desktop behave the same, and unread marks and
+notifications are unchanged.
+连续的、不是你发起的回合连同触发它们的消息收成一行，如“已处理 1 分 52 秒 · 16 步 · 4 条回报 · 1 条看板动态”。
+不是你本人在对话里说的话都算：子会话回报、会话间消息、看板答复与规矩、议题动态、后台任务结束、定时任务、目标续做、简报。
+整串只露最后一个回合的结尾文字，消息、过程、中途文字和前面各回合的结尾文字都收在里面，展开按时间看。
+只有你本人在对话里说话（含附着回报发出的、回合中途插的话）才把它切开。正在跑的回合照常实时显示，结束后并入。
 
 Native subagents appear as compact rows with a description, status and elapsed time when available
 on desktop and phone. Click a row to open the subagent's conversation. Codex activity markers and

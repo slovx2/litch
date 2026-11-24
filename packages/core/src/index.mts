@@ -692,7 +692,6 @@ export { spanFrom, spanned, spanOf, spanOp } from './projection/span.mjs'
 export {
   type FoldTurn,
   foldTurnOf,
-  governedSegments,
   type RunRole,
   runOpen,
   type SystemMessageCount,

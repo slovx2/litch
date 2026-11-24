@@ -53,7 +53,6 @@ import {
   type FoldTurn,
   foldTurnOf,
   goalReachedIn,
-  governedSegments,
   processDuration,
   processFolded,
   processSegments,
@@ -496,13 +495,13 @@ export class RowBuilder {
   }
 
   /**
-   * 一个回合的行。role：它在跨回合收起块里（核心的 systemRuns），领头（开头的系统消息和过程）归块管；
-   * open：块开没开着。块收着时领头不画，整个都在块里的回合连状态行也不画；标题行画在块里第一个回合的开头
+   * 一个回合的行。role：它在跨回合收起块里（核心的 systemRuns），系统消息、过程、正文都归块管；
+   * open：块开没开着。块收着时只露整串最后那段结尾文字（连同它的状态行）和本来就不随过程收的块；
+   * 标题行画在块里第一个回合的开头
    */
   private buildTurn(view: SessionView, turn: TurnView, role?: RunRole, open = true): Row[] {
     const out: Row[] = []
     const folded = role !== undefined && !open
-    if (folded && role.whole && !role.head) return out
     if (role?.head) out.push(this.runHead(view, role, open))
     const running = turn.status === 'running'
     const items = turn.itemIds.flatMap((id) => {
@@ -543,14 +542,21 @@ export class RowBuilder {
     const divided = items.some((item) => item.kind === 'userMessage' && turnAddition(turn, item.id))
     const touched = this.touchedIn(turn, items)
     const unfinished = agentsUnfinished(items, view.agents)
-    /** 从领头里开始的过程段：没有自己的收起行，开合跟着块走 */
-    const governed = role ? governedSegments(blocks, role.lead) : null
+    /** 收着时这个回合露出整串最后那段结尾文字 */
+    const shownHere =
+      role !== undefined &&
+      blocks.some((block) => block.type === 'answer' && role.run.shown.includes(block.itemId))
     /** 最后一条回答的末尾在 out 里的位置：目标达成那一句插在这里 */
     let answerEnd = -1
     blocks.forEach((block, index) => {
-      // 领头归收起块管：块收着时不画
-      const inLead = role !== undefined && index < role.lead
-      if (inLead && folded) return
+      // 收起块里的系统消息、过程、正文：块收着时不画，只露整串最后那段结尾文字
+      if (
+        folded &&
+        (block.type === 'user' ||
+          block.type === 'process' ||
+          (block.type === 'answer' && !role.run.shown.includes(block.itemId)))
+      )
+        return
       switch (block.type) {
         case 'user':
           this.userRows(out, turn, view, view.items[block.itemId])
@@ -609,12 +615,9 @@ export class RowBuilder {
           return
         case 'process': {
           const segment = segments.get(block.key)!
-          // 领头里的块开着就全画；排在正文后面的那部分照收起的规矩（阶段不明时留着工具组摘要）
-          if (governed?.has(segment.key)) {
-            const parts = inLead
-              ? block.parts
-              : visibleProcessParts(block.parts, folded, segment.keepSteps)
-            for (const part of parts) this.part(out, view, turn, part, reportedOf)
+          // 收起块里的过程没有自己的收起行：块开着就照原样摊开（步骤组仍是收着的汇总行）
+          if (role) {
+            for (const part of block.parts) this.part(out, view, turn, part, reportedOf)
             return
           }
           const read = (ids: string[]) =>
@@ -676,8 +679,8 @@ export class RowBuilder {
       out[index] = this.keep({ ...row, working: index === last && working && !row.running })
     })
     if (remind && turn.status !== 'failed') return out
-    // 整个回合都在收着的块里：回合尾也不画（标题行写了总用时）
-    if (folded && role.whole) return out
+    // 收着的块里不露结尾文字的回合：状态行也不画（标题行写了总用时）
+    if (folded && !shownHere) return out
     if (turn.status === 'failed' && turn.error)
       out.push(this.keep({ type: 'error', key: `${turn.id}:error`, text: turn.error }))
     out.push(
@@ -1128,8 +1131,7 @@ function runSig(role: RunRole, open: boolean): string {
   return [
     run.key,
     role.head,
-    role.lead,
-    role.whole,
+    run.shown.join(' '),
     open,
     run.turnIds.join(' '),
     run.itemIds.join(' '),

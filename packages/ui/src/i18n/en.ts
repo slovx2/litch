@@ -1341,6 +1341,8 @@ export const en: Record<MessageKey, Entry> = {
   'activity.messages.background': ({ n }) =>
     `${plural(n, 'background task', 'background tasks')} finished`,
   'activity.messages.schedule': ({ n }) => plural(n, 'scheduled run', 'scheduled runs'),
+  'activity.messages.board': ({ n }) => plural(n, 'board update', 'board updates'),
+  'activity.messages.goal': ({ n }) => plural(n, 'goal continuation', 'goal continuations'),
   'activity.messages.other': ({ n }) => plural(n, 'system message', 'system messages'),
   'activity.agentsFailed': ({ n }) => `${plural(n, 'subagent', 'subagents')} failed`,
   'reasoning.done': 'Thought',

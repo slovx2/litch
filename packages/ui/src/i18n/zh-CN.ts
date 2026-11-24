@@ -1274,6 +1274,8 @@ export const zhCN = {
   'activity.messages.message': '{n} 条消息',
   'activity.messages.background': '{n} 个后台任务结束',
   'activity.messages.schedule': '{n} 次定时任务',
+  'activity.messages.board': '{n} 条看板动态',
+  'activity.messages.goal': '{n} 轮目标续做',
   'activity.messages.other': '{n} 条系统消息',
   'activity.agentsFailed': '{n} 个子代理失败',
   'reasoning.done': '已思考',

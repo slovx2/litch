@@ -127,6 +127,8 @@ const MESSAGE_KEYS = {
   message: 'activity.messages.message',
   background: 'activity.messages.background',
   schedule: 'activity.messages.schedule',
+  board: 'activity.messages.board',
+  goal: 'activity.messages.goal',
   other: 'activity.messages.other',
 } as const
 

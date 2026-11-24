@@ -92,7 +92,7 @@ export function useSystemRuns(
     const roles = new Map<string, RunRole>()
     for (const [id, role] of fresh) {
       const old = previous.get(id)
-      if (old && old.head === role.head && old.lead === role.lead && old.whole === role.whole) {
+      if (old && old.head === role.head) {
         if (sameRun(old.run, role.run)) {
           roles.set(id, old)
           continue

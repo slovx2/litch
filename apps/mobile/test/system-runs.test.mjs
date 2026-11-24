@@ -101,7 +101,55 @@ test('连续几条回报：一行标题汇总用时、步数和回报条数，�
   assert.deepEqual(shape(builder.build(view, new Set(['r1']))), ['run:r1'])
 })
 
-test('中间夹着用户的话：前后切开；系统回合写了正文：正文露在外面，后面的另起一块', () => {
+const peer = (id) => ({
+  id,
+  kind: 'userMessage',
+  text: '对方发来的话',
+  attachments: [],
+  peer: { name: '别的会话', session: null, bypass: false },
+})
+const wrapUp = (id) => ({ ...read(id), tool: 'wrap_up', wrapUp: { suggestions: [] } })
+/** Claude 经理的事件回合（形状照真实经理会话，内容虚构）：消息 → 工具 →（中途一段话 → 工具）→ 空收尾 → 结尾一段话 */
+const claudeEvent = (id, mid = false) => [
+  id,
+  [
+    id.startsWith('p') ? peer(`${id}-u`) : report(`${id}-u`),
+    read(`${id}-read`),
+    ...(mid ? [answer(`${id}-mid`), read(`${id}-start`)] : []),
+    read(`${id}-send`),
+    wrapUp(`${id}-wrap`),
+    answer(`${id}-end`),
+  ],
+]
+
+test('Claude 经理连续 5 个带结尾文字的事件回合：一行标题，只露最后一段结尾文字和它的状态行', () => {
+  const view = viewOf([
+    claudeEvent('e1'),
+    claudeEvent('p2'),
+    claudeEvent('e3', true),
+    claudeEvent('e4'),
+    claudeEvent('p5'),
+  ])
+  const builder = new RowBuilder()
+  const rows = builder.build(view, 'all')
+  assert.deepEqual(shape(rows), ['run:e1', 'md:p5', 'status:p5'])
+  assert.deepEqual(rows[0].messages, [
+    { kind: 'report', n: 3 },
+    { kind: 'message', n: 2 },
+  ])
+  assert.equal(rows[0].steps, 11)
+  assert.equal(rows[1].itemId, 'p5-end')
+  // 展开：每个回合的消息、过程、中途文字、结尾文字和状态行按时间排
+  builder.toggle('e1:run', 'e1')
+  const open = shape(builder.build(view, new Set(['e1'])))
+  assert.deepEqual(
+    open.filter((entry) => entry.endsWith(':e3')),
+    ['event:e3', 'group:e3', 'md:e3', 'group:e3', 'md:e3', 'status:e3'],
+  )
+  assert.equal(open.filter((entry) => entry.startsWith('status')).length, 5)
+})
+
+test('中间夹着用户的话：前后切开；块里最后几个回合没写字时，露的是块里最近写的那一段', () => {
   const view = viewOf([
     ['r1', [report('r1-u'), read('r1-c')]],
     ['u1', [user('u1-u'), read('u1-c'), answer('u1-a')]],
@@ -119,7 +167,6 @@ test('中间夹着用户的话：前后切开；系统回合写了正文：正�
     'run:r2',
     'md:r2',
     'status:r2',
-    'run:r3',
   ])
 })
 
