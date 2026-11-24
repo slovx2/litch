@@ -2,6 +2,11 @@ import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { unlink } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
+import {
+  IDLE_COMPACT_READ,
+  MANAGER_IDLE_COMPACT_EXTENSION,
+} from '../../protocol/src/manager-idle-compact.mjs'
 import { RESUME_TOOLS_READ } from '../../protocol/src/resume-tools.mjs'
 import { backgroundTerminalsPage, withBackground } from '../../shared/src/background-report.mjs'
 import { gitDiffToRemote } from '../../shared/src/git-diff-remote.mjs'
@@ -502,9 +507,27 @@ export async function dispatch(s: PiServer, peer: RpcPeer, method: string, p: an
     case 'thread/revert':
     case 'thread/delete':
       return nativeMutation(s, peer, method, p)
-    case 'thread/compact/start':
-      await startCompaction(s, peer, s.store.thread(p.threadId))
-      return {}
+    case IDLE_COMPACT_READ:
+      requireIdleCompact(s, peer)
+      return s.idleCompactSnapshot(requiredString(p.threadId, 'threadId'))
+    case 'thread/compact/start': {
+      const thread = s.store.thread(p.threadId)
+      if (p.litchIdleCompact === undefined) {
+        await startCompaction(s, peer, thread)
+        return {}
+      }
+      requireIdleCompact(s, peer)
+      // 快照与此刻不一致（期间有输入、回合、用量变化）就不压；载入会话之后、动手之前再核对一次。
+      const verify = () => {
+        const current = s.idleCompactSnapshot(thread.id)
+        if (!current.idle || !isDeepStrictEqual(current, p.litchIdleCompact))
+          throw new ProtocolError(-32009, '自动压缩之前会话状态已改变')
+      }
+      verify()
+      const turnId = await startCompaction(s, peer, thread, verify)
+      if (!turnId) throw new ProtocolError(-32600, 'Pi 未开始压缩')
+      return { turnId }
+    }
     case 'thread/shellCommand': {
       const command = requiredString(p.command, 'command')
       if (command.includes('\0')) throw new ProtocolError(-32602, 'command 不能包含空字节')
@@ -597,6 +620,11 @@ export async function dispatch(s: PiServer, peer: RpcPeer, method: string, p: an
     default:
       throw new ProtocolError(-32601, `Pi 不支持 ${method}`)
   }
+}
+
+function requireIdleCompact(s: PiServer, peer: RpcPeer): void {
+  if (!s.declares(peer, MANAGER_IDLE_COMPACT_EXTENSION))
+    throw new ProtocolError(-32601, '未声明经理空闲压缩能力')
 }
 
 // 桌面重连或重新打开线程后不会保留用量，恢复时回放最近一次请求的上下文占用。

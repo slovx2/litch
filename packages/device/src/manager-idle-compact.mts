@@ -3,9 +3,11 @@ import {
   DEFAULT_MANAGER_IDLE_COMPACT,
   IDLE_COMPACT_READ,
   type IdleCompactSnapshot,
+  idleCompactSupports,
 } from '../../protocol/src/manager-idle-compact.mjs'
 import { type EngineLink, watchTurn } from './engine-link.mjs'
 import type { DeviceManagers } from './manager.mjs'
+import type { LineageRow } from './session-store.mjs'
 import { isObject, UpstreamRpcError } from './wire.mjs'
 
 const PROBE_MS = 30_000
@@ -25,12 +27,33 @@ function usage(sample: IdleCompactSnapshot): number | null {
     : null
 }
 
+// 引擎支持范围见 idleCompactSupports：Codex 的压缩不能按快照核对、也不交回回合号；
+// OpenCode 的压缩是不等结果的 summarize 请求，服务还开放给别的客户端；DSH、ACP 没有压缩入口。
+
+/** 同时进行的子会话压缩上限：每个都要载入一个会话并请模型写摘要，经理本身不受此限。 */
+const LINE_RUNNING_LIMIT = 2
+
+interface Target {
+  threadId: string
+  harness: string
+  /** 本机没见过活动时的计时起点，Unix 毫秒。 */
+  since: number
+  line: boolean
+}
+
+/**
+ * 经理（harness 支持时）及其各层 Claude Code、Pi 子会话的空闲压缩。子会话沿用所属经理的开关和阈值，
+ * 所属关系按会话树的祖先判断（ManagerLines.managerFor）。
+ */
 export class ManagerIdleCompact {
   private readonly owner: DeviceManagers
   private readonly now: () => number
   private readonly nextProbe = new Map<string, number>()
   private readonly nextLog = new Map<string, number>()
   private readonly activityAt = new Map<string, number>()
+  /** 已对本段空闲试过的子会话：本机见到新的回合活动前不再探测引擎，免得每条闲置工作线反复读。 */
+  private readonly settled = new Set<string>()
+  private readonly running = new Set<string>()
   private closed = false
 
   constructor(owner: DeviceManagers, now: () => number = Date.now) {
@@ -39,58 +62,126 @@ export class ManagerIdleCompact {
   }
 
   activity(harness: string, threadId: string, seconds: unknown): void {
-    if (this.closed || harness !== 'claude-code' || !this.owner.store.forThread(threadId)) return
+    if (this.closed || !idleCompactSupports(harness) || !this.owner.lines.managerFor(threadId))
+      return
     const now = this.now()
     const at =
       typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0
         ? Math.min(now, seconds * 1000)
         : now
     this.activityAt.set(threadId, Math.max(this.activityAt.get(threadId) ?? 0, at))
+    this.settled.delete(threadId)
   }
 
-  private candidate(manager: Manager): boolean {
-    const { external, store, tree } = this.owner
+  /** 经理一级的条件：经理本身和它的子会话共用。 */
+  private enabledFor(manager: Manager): boolean {
     return (
       !this.closed &&
-      manager.harness === 'claude-code' &&
       manager.status === 'active' &&
       (manager.idleCompact ?? DEFAULT_MANAGER_IDLE_COMPACT).enabled &&
-      (external?.store.config.assignment(manager.id).repoIds.length ?? 0) > 0 &&
-      !external?.store.queue.hasPendingDelivery(manager.id) &&
-      !store.hasDelivery(manager.id) &&
-      tree.canIdleCompact(manager.threadId)
+      (this.owner.external?.store.config.assignment(manager.id).repoIds.length ?? 0) > 0
     )
   }
 
-  /** 不为每秒一轮的经理投递定时器另开连接；活跃、未分配和未到期的经理不查询引擎。 */
+  private candidate(manager: Manager, threadId: string): boolean {
+    const { external, store, tree, lines } = this.owner
+    if (!this.enabledFor(manager)) return false
+    if (threadId === manager.threadId)
+      return (
+        idleCompactSupports(manager.harness) &&
+        tree.canIdleCompact(threadId) &&
+        !external?.store.queue.hasPendingDelivery(manager.id) &&
+        !store.hasDelivery(manager.id)
+      )
+    // 子会话：不叫醒父会话的子线（wakeParent: false）留下的回报不挡压缩，压缩期间投递照样排队。
+    return (
+      tree.canIdleCompact(threadId, true) &&
+      idleCompactSupports(tree.store.parentOf(threadId)?.harness ?? '') &&
+      lines.managerFor(threadId)?.id === manager.id
+    )
+  }
+
+  /** 经理本身在前，其后是各层没脱离、引擎支持的子会话（广度优先）。 */
+  private targets(manager: Manager, byParent: Map<string, LineageRow[]>): Target[] {
+    // 经理所用 harness 不支持时（如 Codex 经理），只压它的子会话。
+    const found: Target[] = idleCompactSupports(manager.harness)
+      ? [
+          {
+            threadId: manager.threadId,
+            harness: manager.harness,
+            since: manager.createdAt * 1000,
+            line: false,
+          },
+        ]
+      : []
+    const queue = [manager.threadId]
+    const seen = new Set(queue)
+    while (queue.length) {
+      for (const row of byParent.get(queue.shift() as string) ?? []) {
+        if (seen.has(row.threadId)) continue
+        seen.add(row.threadId)
+        queue.push(row.threadId)
+        if (idleCompactSupports(row.harness))
+          found.push({
+            threadId: row.threadId,
+            harness: row.harness,
+            since: row.createdAt * 1000,
+            line: true,
+          })
+      }
+    }
+    return found
+  }
+
+  /** 不为每秒一轮的经理投递定时器另开连接；活跃、未分配和未到期的会话不查询引擎。 */
   tick(only?: string): void {
     if (this.closed || !this.owner.external) return
     const one = only ? this.owner.store.manager(only) : null
-    const managers = only ? (one ? [one] : []) : this.owner.store.managers()
+    const managers = (only ? (one ? [one] : []) : this.owner.store.managers()).filter((manager) =>
+      this.enabledFor(manager),
+    )
+    if (!managers.length) return
+    const byParent = new Map<string, LineageRow[]>()
+    for (const row of this.owner.tree.store.children()) {
+      const list = byParent.get(row.parentThreadId)
+      if (list) list.push(row)
+      else byParent.set(row.parentThreadId, [row])
+    }
     for (const manager of managers) {
-      const { id, threadId } = manager
-      if (only) this.nextProbe.delete(threadId)
-      const now = this.now()
-      if ((this.nextProbe.get(threadId) ?? 0) > now || !this.candidate(manager)) continue
       const { idleMinutes } = manager.idleCompact ?? DEFAULT_MANAGER_IDLE_COMPACT
-      const localAt = Math.max(manager.createdAt * 1000, this.activityAt.get(threadId) ?? 0)
-      if (now - localAt < idleMinutes * 60_000) continue
-      this.nextProbe.set(threadId, now + PROBE_MS)
-      this.owner.tree.runIdleCompact(threadId, (started) => this.run(id, threadId, now, started))
+      for (const { threadId, harness, since, line } of this.targets(manager, byParent)) {
+        if (only) {
+          this.nextProbe.delete(threadId)
+          this.settled.delete(threadId)
+        }
+        const now = this.now()
+        if ((this.nextProbe.get(threadId) ?? 0) > now || this.settled.has(threadId)) continue
+        const localAt = Math.max(since, this.activityAt.get(threadId) ?? 0)
+        if (now - localAt < idleMinutes * 60_000 || !this.candidate(manager, threadId)) continue
+        if (line && this.running.size >= LINE_RUNNING_LIMIT) continue
+        this.nextProbe.set(threadId, now + PROBE_MS)
+        const began = this.owner.tree.runIdleCompact(threadId, (started) =>
+          this.run(manager.id, threadId, harness, line, now, started).finally(() =>
+            this.running.delete(threadId),
+          ),
+        )
+        if (began && line) this.running.add(threadId)
+      }
     }
   }
 
   private async run(
     id: string,
     threadId: string,
+    harness: string,
+    line: boolean,
     probedAt: number,
     started: (turnId: string) => void,
   ): Promise<void> {
     const { store, tree } = this.owner
     const ready = (sample: IdleCompactSnapshot) => {
       const current = store.manager(id)
-      if (!current || current.threadId !== threadId || !sample.idle || !this.candidate(current))
-        return null
+      if (!current || !sample.idle || !this.candidate(current, threadId)) return null
       const settings = current.idleCompact ?? DEFAULT_MANAGER_IDLE_COMPACT
       const state = store.idleCompact(threadId)
       const engineAt = sample.lastTurnActivityAt
@@ -99,6 +190,9 @@ export class ManagerIdleCompact {
       const at = Math.max(engineAt, this.activityAt.get(threadId) ?? 0)
       const key = JSON.stringify([sample.lastTurnId, engineAt])
       const before = usage(sample)
+      // 空闲着的子会话这几项不会自己变：已试过、用量未知或未过阈值，等本机见到新活动或改设置再探测。
+      if (line && (state.attempted === key || before === null || before <= settings.contextPercent))
+        this.settled.add(threadId)
       return this.now() - at >= settings.idleMinutes * 60_000 &&
         state.attempted !== key &&
         before !== null &&
@@ -110,7 +204,7 @@ export class ManagerIdleCompact {
     let committing = false
     let dispatchedAt = 0
     try {
-      link = await tree.link('claude-code')
+      link = await tree.link(harness)
       const read = () =>
         link!.request(
           IDLE_COMPACT_READ,
@@ -118,8 +212,11 @@ export class ManagerIdleCompact {
           { timeoutMs: PREFLIGHT_MS },
         ) as Promise<IdleCompactSnapshot>
       const snapshot = await read()
-      if (!isObject(snapshot) || !ready(snapshot) || this.now() - probedAt > PREFLIGHT_MS) return
-      await tree.watch('claude-code', threadId)
+      if (!isObject(snapshot) || !ready(snapshot)) return
+      // 子会话还有没答的提问（收尾时的 ask 等）也算在等用户，不压缩。
+      if (line && (await tree.awaitingAnswer(threadId))) return
+      if (this.now() - probedAt > PREFLIGHT_MS) return
+      await tree.watch(harness, threadId)
       // 恢复、调度或订阅的等待期间可能收到新输入，因此在启动前再查一次。
       const current = await read()
       const plan = ready(current)
@@ -147,6 +244,7 @@ export class ManagerIdleCompact {
           `manager.idleCompact.started ${JSON.stringify({
             managerId: id,
             threadId,
+            ...(line ? { line: true, harness } : {}),
             at: dispatchedAt,
             idleMs: dispatchedAt - plan.at,
             before: plan.before,
@@ -179,12 +277,14 @@ export class ManagerIdleCompact {
         )
       }
     } finally {
-      if (link) tree.releaseLater('claude-code', threadId)
+      if (link) tree.releaseLater(harness, threadId)
     }
   }
 
   close(): void {
     this.closed = true
+    this.settled.clear()
+    this.running.clear()
     this.nextProbe.clear()
     this.nextLog.clear()
     this.activityAt.clear()

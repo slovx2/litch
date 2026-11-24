@@ -25,7 +25,10 @@ import {
   type ManagerBoard,
   type ManagerObjectId,
 } from '../../protocol/src/manager.mjs'
-import { DEFAULT_MANAGER_IDLE_COMPACT } from '../../protocol/src/manager-idle-compact.mjs'
+import {
+  DEFAULT_MANAGER_IDLE_COMPACT,
+  idleCompactSupports,
+} from '../../protocol/src/manager-idle-compact.mjs'
 import { MANAGER_ISSUE_METHOD } from '../../protocol/src/manager-issues.mjs'
 import { MANAGER_PAGING_METHOD } from '../../protocol/src/manager-paging.mjs'
 import { MANAGER_POST_METHOD, type ManagerPostId } from '../../protocol/src/manager-posts.mjs'
@@ -174,13 +177,12 @@ export class DeviceManagers {
     if (!saved) throw new ManagerError('unknownManager', 'This manager does not exist.')
     const { idleCompact, ...manager } = saved
     const board = this.board(id)
-    const compact =
-      manager.harness === 'claude-code' ? this.store.idleCompact(manager.threadId).last : undefined
+    const compact = idleCompactSupports(manager.harness)
+      ? this.store.idleCompact(manager.threadId).last
+      : undefined
     return {
       ...manager,
-      ...(manager.harness === 'claude-code'
-        ? { idleCompact: idleCompact ?? DEFAULT_MANAGER_IDLE_COMPACT }
-        : {}),
+      idleCompact: idleCompact ?? DEFAULT_MANAGER_IDLE_COMPACT,
       ...(compact ? { idleCompactLast: compact } : {}),
       reset: this.resets.state(manager),
       historyThreadIds: this.store.history(id),
@@ -598,12 +600,6 @@ export class DeviceManagers {
             message: 'The default line harness is not configured.',
           })
         const before = this.store.manager(id) as Manager
-        if (patch.idleCompact && before.harness !== 'claude-code')
-          invalidSetting({
-            field: 'idleCompact',
-            reason: 'unavailableHarness',
-            message: 'Idle compaction is available for Claude Code managers.',
-          })
         const after = { ...before, ...patch, updatedAt: managerNow() }
         this.store.transaction(() => {
           this.store.saveManager(after)

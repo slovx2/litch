@@ -2,6 +2,7 @@ import {
   type DeviceView,
   IDLE_COMPACT_MINUTES,
   IDLE_COMPACT_PERCENT,
+  idleCompactSupports,
   keys,
   MODEL_RANKING_ENABLED,
   projectPermissionChoice,
@@ -407,6 +408,7 @@ export function ManagerForm({
                   draft={compact}
                   check={compactCheck}
                   unavailable={compactUnavailable}
+                  linesOnly={!idleCompactSupports(manager?.harness ?? '')}
                   onChange={(next) => {
                     setCompact(next)
                     setError('')

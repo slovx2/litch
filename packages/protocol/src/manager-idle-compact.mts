@@ -8,6 +8,14 @@ export interface ManagerIdleCompactSettings {
   contextPercent: number
 }
 
+/**
+ * 引擎有带条件的压缩入口（idleCompact/read、thread/compact/start 带快照）的 harness。
+ * 设置对所有经理开放；经理本身只在这些 harness 上压缩，子会话也只压这些 harness 的。
+ */
+export const IDLE_COMPACT_HARNESSES: readonly string[] = ['claude-code', 'pi']
+export const idleCompactSupports = (harness: string): boolean =>
+  IDLE_COMPACT_HARNESSES.includes(harness)
+
 export const DEFAULT_MANAGER_IDLE_COMPACT: ManagerIdleCompactSettings = {
   enabled: true,
   idleMinutes: 50,

@@ -54,7 +54,7 @@ import type { HarnessSource } from './session.mjs'
 import { SessionRecoveryBudget, sessionHistory } from './session-history.mjs'
 import { isUserRequest, pendingRequestExcerpt, SessionPending } from './session-pending.mjs'
 import { SessionQuestions } from './session-questions.mjs'
-import type { SessionStore } from './session-store.mjs'
+import type { QueuedNote, SessionStore } from './session-store.mjs'
 import { SuggestionInbox } from './suggestion-inbox.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
 import { DeviceError, isObject, UpstreamRpcError } from './wire.mjs'
@@ -674,6 +674,26 @@ export class SessionTree {
     }
   }
 
+  /** 有没答、也没被忽略的异步提问；读不到历史时按在等算，宁可不做自动维护。 */
+  async awaitingAnswer(threadId: string): Promise<boolean> {
+    try {
+      const questions = await this.questions.read(
+        threadId,
+        async () => (await this.read(threadId, true)).thread,
+      )
+      const ignored = new Set(this.store.ignoredQuestions(threadId))
+      const settled = new Set(
+        this.store.questionSettlements(threadId).flatMap((record) => record.sourceIds),
+      )
+      return questions.some(
+        ({ sourceIds }) =>
+          !sourceIds.every((id) => settled.has(id)) && !sourceIds.every((id) => ignored.has(id)),
+      )
+    } catch {
+      return true
+    }
+  }
+
   pendingRequests(threadId: string): SessionPendingRequest[] {
     return [...this.pending.list(threadId), ...(this.host.clientRequests?.(threadId) ?? [])]
   }
@@ -1112,15 +1132,17 @@ export class SessionTree {
   }
 
   private hasWakeNote(parentId: string): boolean {
-    return this.store.notes(parentId).some((note) => {
-      const lineage = this.store.parentOf(note.threadId)
-      return (
-        note.wake &&
+    return this.store.notes(parentId).some((note) => this.wakesParent(note, parentId))
+  }
+
+  private wakesParent(note: QueuedNote, parentId: string): boolean {
+    const lineage = this.store.parentOf(note.threadId)
+    return Boolean(
+      note.wake &&
         lineage?.parentThreadId === parentId &&
         lineage.reportParent &&
-        lineage.wakeParent
-      )
-    })
+        lineage.wakeParent,
+    )
   }
 
   /**
@@ -1397,7 +1419,8 @@ export class SessionTree {
     return lock?.wait
   }
 
-  canIdleCompact(threadId: string): boolean {
+  /** quietNotes：不会叫醒这个会话的回报（如 wakeParent: false 的子线留下的）不算挡着。 */
+  canIdleCompact(threadId: string, quietNotes = false): boolean {
     return (
       !this.closed &&
       !this.host.index.archived(threadId) &&
@@ -1411,7 +1434,7 @@ export class SessionTree {
       !this.host.continuationPending?.(threadId) &&
       !this.reminders.has(threadId) &&
       !this.heres.has(threadId) &&
-      this.store.notes(threadId).length === 0
+      !this.store.notes(threadId).some((note) => !quietNotes || this.wakesParent(note, threadId))
     )
   }
 
@@ -1419,8 +1442,8 @@ export class SessionTree {
   runIdleCompact(
     threadId: string,
     run: (started: (turnId: string) => void) => Promise<void>,
-  ): void {
-    if (this.checks.has(threadId) || this.closed) return
+  ): boolean {
+    if (this.checks.has(threadId) || this.closed) return false
     const lock = { turnId: null as string | null, wait: Promise.resolve(), inputWaiting: false }
     lock.wait = Promise.resolve()
       .then(() =>
@@ -1436,6 +1459,7 @@ export class SessionTree {
       })
     this.idleCompacts.set(threadId, lock)
     this.checks.set(threadId, lock.wait)
+    return true
   }
 
   async settleIdleCompacts(): Promise<void> {

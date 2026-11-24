@@ -395,8 +395,10 @@ export const enManager = {
   'manager.unattended': 'Unattended',
   'manager.idleCompact.enabled': 'Compact context when idle',
   'manager.idleCompact.hint':
-    'Compacts once the manager has been idle this long and context usage is above the threshold. Keep the idle time under the prompt cache lifetime.',
+    'Compacts the manager and its Claude Code and Pi sub-sessions once each has been idle this long and context usage is above the threshold. Keep the idle time under the prompt cache lifetime.',
   'manager.idleCompact.unavailable': 'Assign GitHub repositories to this manager to use this.',
+  'manager.idleCompact.linesOnly':
+    "This manager's harness can't compact itself, so this applies only to its sub-sessions.",
   'manager.idleCompact.minutes': 'Idle time',
   'manager.idleCompact.minutesUnit': 'min',
   'manager.idleCompact.percent': 'Context threshold',

@@ -7,6 +7,7 @@ import { badgeOf, nameOf } from '../app/device.ts'
 import { useKey } from '../app/services.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferences } from './BoardReferences.tsx'
+import { idleCompactLabel } from './idle-compact-label.ts'
 import { Relations } from './Relations.tsx'
 
 export function Item({ item }: { item: ManagerItemView }) {
@@ -157,6 +158,11 @@ export function BoardPanels({
             <small className="dim">
               {t('manager.paging.checked')} ·{' '}
               {new Date(headOf(line.threadId)?.checkedAt ?? 0).toLocaleString()}
+            </small>
+          ) : null}
+          {line.idleCompactLast ? (
+            <small className="dim" data-line-compact>
+              {idleCompactLabel(line.idleCompactLast, t)}
             </small>
           ) : null}
           {line.unverified.map((text) => (

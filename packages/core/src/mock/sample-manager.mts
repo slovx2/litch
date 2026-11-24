@@ -663,6 +663,7 @@ export function sampleManagers(
       ahead: i === 0 ? 3 : i === 1 ? 1 : null,
       merged: i === 3 ? true : i === 2 ? null : false,
       worktreeExists: i === 2 ? null : i !== 3,
+      ...(i === 1 ? { idleCompactLast: { at: ago(55), before: 81, after: 22 } } : {}),
       report: reports[i]
         ? { text: reports[i] ?? '', at: ago(i === 0 ? 12 : i === 1 ? 60 : 120) }
         : null,

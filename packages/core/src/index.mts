@@ -89,6 +89,7 @@ export {
   IDLE_COMPACT_MINUTES,
   IDLE_COMPACT_PERCENT,
   idleCompactInteger,
+  idleCompactSupports,
   type ManagerIdleCompactRecord,
   type ManagerIdleCompactSettings,
 } from '../../protocol/src/manager-idle-compact.mjs'

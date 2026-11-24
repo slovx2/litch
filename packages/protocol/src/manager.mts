@@ -235,6 +235,8 @@ export interface ManagerLine {
   report: { text: string; at: number } | null
   /** 从最近 wrap_up 回报中逐行取“没验：”开头的内容，保留前缀。 */
   unverified: string[]
+  /** Claude Code、Pi 子会话按所属经理的设置空闲压缩后，最近一次成功的记录。 */
+  idleCompactLast?: ManagerIdleCompactRecord
 }
 export type ManagerActivitySource =
   | { kind: 'manager' | 'user' | 'system' }
@@ -251,7 +253,7 @@ export interface ManagerActivity {
 }
 
 export interface Manager {
-  /** Claude Code 经理的无人值守压缩设置；其它经理不带。 */
+  /** 无人值守空闲压缩设置，作用于经理本身（harness 支持时）及其子会话。 */
   idleCompact?: ManagerIdleCompactSettings
   idleCompactLast?: ManagerIdleCompactRecord
   /** 设备生成的能力指纹；旧快照未核验时 applied 为 null。 */

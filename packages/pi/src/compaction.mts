@@ -17,10 +17,13 @@ export async function startCompaction(
   server: PiServer,
   peer: RpcPeer,
   thread: PiThread,
-): Promise<void> {
+  verify?: () => void,
+): Promise<string | null> {
   server.ensureIdle(thread.id)
   const live = await server.load(thread, peer, true)
   server.ensureIdle(thread.id)
+  // 设备的空闲压缩：载入之后、动手之前同步再核对一次，和 Pi 的压缩之间不让出事件循环。
+  verify?.()
   const session = live.session
   let active: ActiveTurn | undefined
   const opened = new Promise<void>((resolve) => {
@@ -34,15 +37,21 @@ export async function startCompaction(
         startedAt: turn.startedAt,
         clientId: null,
       })
-      server.notify(thread.id, 'turn/started', { turn })
-      server.notify(thread.id, 'thread/status/changed', {
-        status: { type: 'active', activeFlags: [] },
-      })
       // Pi 发“开始压缩”时这个回合还没开：压缩条目的开始在这里补，完成照常由 turn.mts 发
       started.compacting = { type: 'contextCompaction', id: `compact:${randomUUID()}` }
       turn.items.push(started.compacting)
       server.store.saveTurn(thread.id, turn)
-      server.notify(thread.id, 'item/started', { turnId: turn.id, item: started.compacting })
+      const compacting = started.compacting
+      const announce = () => {
+        server.notify(thread.id, 'turn/started', { turn: { ...turn, items: [] } })
+        server.notify(thread.id, 'thread/status/changed', {
+          status: { type: 'active', activeFlags: [] },
+        })
+        server.notify(thread.id, 'item/started', { turnId: turn.id, item: compacting })
+      }
+      // 空闲压缩的回合号随应答交回；通知排在应答之后，设备才认得出这是维护回合（同 Claude 入口）。
+      if (verify) setImmediate(announce)
+      else announce()
       active = started
       resolve()
     }
@@ -55,7 +64,9 @@ export async function startCompaction(
   } finally {
     delete live.compacting
   }
-  if (active) void follow(server, active, running)
+  if (!active) return null
+  void follow(server, active, running)
+  return active.turn.id
 }
 
 // 回合开了之后跟着压缩做完；和发消息的回合一样，执行期间原生会话被别的实例改了就停下

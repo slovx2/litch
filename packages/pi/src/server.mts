@@ -7,6 +7,7 @@ import {
 } from '../../protocol/src/background-tasks.mjs'
 import type { ClientToolNamespaceSpec } from '../../protocol/src/client-tools.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
+import type { IdleCompactSnapshot } from '../../protocol/src/manager-idle-compact.mjs'
 import {
   isManagerQuestionTools,
   managerQuestionToolAllowed,
@@ -595,6 +596,47 @@ export class PiServer {
         const shaped = notificationWithOrigin(this.report, peer.id, threadId, method, params)
         peer.send({ method, params: threadId ? { threadId, ...shaped } : shaped })
       }
+  }
+  /** 这条连接握手时声明了这个扩展 */
+  declares(peer: RpcPeer, extension: string): boolean {
+    return this.declared.get(peer.id)?.has(extension) === true
+  }
+  /**
+   * 设备空闲压缩的探测（litch/thread/idleCompact/read）：会话此刻能不能压、最近一个普通回合、最近一次上下文用量。
+   * 压缩回合不算普通回合，压完不开启新的空闲段。
+   */
+  idleCompactSnapshot(threadId: string): IdleCompactSnapshot {
+    const thread = this.store.thread(threadId)
+    const live = this.sessions.get(threadId)
+    const idle =
+      !thread.ephemeral &&
+      !this.store.archivedIds().has(threadId) &&
+      !this.active.has(threadId) &&
+      !this.loading.has(threadId) &&
+      !this.releasing.has(threadId) &&
+      live?.session.isIdle !== false &&
+      !live?.hasPendingInputs() &&
+      !this.asking.has(threadId) &&
+      !this.approving.has(threadId) &&
+      !this.background.get(threadId)?.size &&
+      this.queue.list(threadId).length === 0
+    const work = this.store
+      .turns(threadId)
+      .filter((turn) => turn.items[0]?.type !== 'contextCompaction')
+      .at(-1)
+    const usage = this.store.getMeta('usage-last', threadId)
+    const used = usage?.last?.totalTokens
+    const window = usage?.modelContextWindow
+    return {
+      idle,
+      lastTurnId: work?.id ?? null,
+      lastTurnActivityAt: work
+        ? Math.max(work.startedAt, work.completedAt ?? work.startedAt)
+        : null,
+      usageTurnId: typeof usage?.turnId === 'string' ? usage.turnId : null,
+      usedTokens: typeof used === 'number' ? used : null,
+      windowTokens: typeof window === 'number' ? window : null,
+    }
   }
   /** 扩展的通知（不属于哪个会话）：只发给握手时声明了这个扩展的连接 */
   notifyExtension(extension: string, method: string, params: any): void {
