@@ -602,6 +602,62 @@ test('执行器在别处等人（hold）：停表，不等了表从头算', asyn
   assert.deepEqual(main?.of('cancel'), [{ type: CLIENT_TOOL, op: 'cancel', id }])
 })
 
+test('UNATTENDED-CORE-001：会话设备标了无人值守，要出卡或停表等人时不出卡，当场以 unattended 失败', async () => {
+  const notice = 'Litch is running this session unattended (test).'
+  for (const op of ['ask', 'hold'] as const) {
+    const { core, main, call, summary } = setup()
+    core.start()
+    await settle()
+    const answer = call({ litchUnattended: { notice } })
+    await settle()
+    const id = main?.of('call')[0]?.invocation.id ?? ''
+    if (op === 'ask')
+      main?.reply({
+        op: 'ask',
+        id,
+        askId: 'k1',
+        ask: { kind: 'site', origin: 'https://example.com', url: 'https://example.com/a' },
+      })
+    else main?.reply({ op: 'hold', id, held: true })
+    const result = resultOf(await answer)
+    assert.equal(result?.success, false)
+    assert.equal(result?.contentItems[0]?.text, `[litch:unattended] ${notice}`)
+    assert.deepEqual(main?.of('cancel'), [{ type: CLIENT_TOOL, op: 'cancel', id }])
+    // 没出卡：侧栏不标等待，卡片按“取消”回给执行器
+    assert.notEqual(summary()?.waitingFor, 'approval')
+    if (op === 'ask')
+      assert.deepEqual(main?.of('answer'), [
+        { type: CLIENT_TOOL, op: 'answer', askId: 'k1', answer: null },
+      ])
+  }
+})
+
+test('UNATTENDED-CORE-002：完全访问照常替浏览器站点卡点“允许一次”，无人值守标记不挡已放行的', async () => {
+  const { core, main, call } = setup({ fullAccess: true, namespaces: ['litch_browser'] })
+  core.start()
+  await settle()
+  const answer = call({
+    namespace: 'litch_browser',
+    tool: 'navigate',
+    litchUnattended: { notice: 'unattended' },
+  })
+  await settle()
+  const id = main?.of('call')[0]?.invocation.id ?? ''
+  main?.reply({
+    op: 'ask',
+    id,
+    askId: 'k1',
+    ask: { kind: 'site', origin: 'https://example.com', url: 'https://example.com/a' },
+  })
+  await settle()
+  assert.deepEqual(main?.of('answer'), [
+    { type: CLIENT_TOOL, op: 'answer', askId: 'k1', answer: 'once' },
+  ])
+  assert.equal(main?.of('cancel').length, 0)
+  main?.reply({ op: 'result', id, response: { success: true, contentItems: [] } })
+  assert.equal(resultOf(await answer)?.success, true)
+})
+
 test('回合结束：正在执行的取消、卡片撤掉并回 null，执行过调用的回合告诉主进程收尾；没调用过的回合不报', async () => {
   const { core, main, call, peer } = setup()
   core.start()
@@ -1154,6 +1210,61 @@ for (const kind of ['local', 'ssh'] as const)
     assert.equal(answered(world, 'k7'), undefined, '到期后恢复询问')
     world.core.stop()
   })
+
+test('UNATTENDED-CORE-003：无人值守时限时授权内的卡片照常按这一次允许放行，授权外的才当场 unattended', async () => {
+  const world = timedWorld('local')
+  world.core.start()
+  await settle()
+  await world.command('timedApproval.grant', {
+    deviceId: 'local',
+    threadId: 'a',
+    category: 'browser',
+    hours: 2,
+  })
+  await settle()
+  const notice = 'Litch is running this session unattended (test).'
+  const ask = async (askId: string, value: Record<string, unknown>) => {
+    const result = world.call({
+      namespace: 'litch_browser',
+      tool: 'navigate',
+      callId: askId,
+      litchUnattended: { notice },
+    })
+    for (
+      let index = 0;
+      index < 10 && !world.main?.of('call').some((c) => c.invocation.callId === askId);
+      index++
+    )
+      await settle()
+    const invocation = world.main?.of('call').find((c) => c.invocation.callId === askId)?.invocation
+    assert.ok(invocation)
+    world.main?.reply({ op: 'ask', id: invocation.id, askId, ask: value as never })
+    await settle()
+    return { invocation, result }
+  }
+  const site = { kind: 'site', origin: 'https://a.example', url: 'https://a.example/' }
+  const allowed = await ask('u1', site)
+  assert.equal(answered(world, 'u1'), 'once', '限时授权内照常放行')
+  assert.equal(
+    world.main?.of('cancel').some((c) => c.id === allowed.invocation.id),
+    false,
+    '放行的调用没被取消',
+  )
+  world.main?.reply({
+    op: 'result',
+    id: allowed.invocation.id,
+    response: { success: true, contentItems: [] },
+  })
+  assert.equal(resultOf(await allowed.result)?.success, true)
+  // Chrome 不在内置浏览器的授权里：本来要出卡，无人值守时当场失败
+  const refused = await ask('u2', { ...site, browser: 'chrome' })
+  assert.equal(answered(world, 'u2'), null)
+  assert.equal(
+    resultOf(await refused.result)?.contentItems[0]?.text,
+    `[litch:unattended] ${notice}`,
+  )
+  world.core.stop()
+})
 
 test('限时授权：卡片挂着时授予（或别的端经设备授予后发来 changed），挂着的同类卡片按这一次允许答掉', async () => {
   const world = timedWorld('ssh')

@@ -433,6 +433,8 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
       const threadId = input.threadId
       if (!flagged && threadId && host.timedApproval?.(deviceId, threadId))
         return { kind: 'allowed' } as const
+      // 审批方式、本会话授权、禁止位置之外放行的都在上面；走到这里要人点头，无人值守时不出卡
+      if (input.unattended) return { kind: 'unattended', message: input.unattended } as const
       const ask = each ? { ...request.ask, perCall: true } : request.ask
       let waiting: { deviceId: string; threadId: string; allow(): void } | null = null
       const outcome = await askUser(deviceId, input, ask, session, (allow) => {
@@ -469,6 +471,16 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
     async call(deviceId, input, session) {
       const owner = { deviceId, threadId: input.threadId, harness: input.harness }
       let settings = host.settings(deviceId)
+      if (!settings.enabled && host.device(deviceId) && !input.signal.aborted && input.unattended) {
+        // 开启确认也是等人答：无人值守时不出卡，按没开启记一笔，回给模型无人值守的说明
+        addLog(deviceId, owner, {
+          tool: input.tool,
+          summary: summarizeCall(input.tool, input.arguments),
+          result: 'disabled',
+          flagged: false,
+        })
+        return clientToolFailure('unattended', input.unattended)
+      }
       if (!settings.enabled && host.device(deviceId) && !input.signal.aborted) {
         const key =
           input.threadId && input.turnId

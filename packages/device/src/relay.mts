@@ -40,6 +40,11 @@ export interface RelayHost {
   answered?(link: UpstreamLink, id: RpcId, error: unknown): void
   /** 原生 codex 的客户端工具调用交给设备进程挑执行方（client-tools.mts），这几处要告诉它 */
   clientTools: RelayClientTools
+  /**
+   * 要人答的请求（审批、提问、MCP 征询）在无人值守经理的树里时的替人答复（unattended.mts）：
+   * 给了就不转给客户端，当场从收到它的上游连接答掉。null 或不给是照常转发
+   */
+  unattended?(method: string, params: Record<string, unknown>): Record<string, unknown> | null
   /** 由设备进程自己执行的命名空间：这类 item/tool/call 不管哪种上游都在这里拦下交给它（device-tools.mts） */
   deviceTools: Pick<DeviceTools, 'has' | 'dispatch' | 'turnEnded'> &
     Partial<Pick<DeviceTools, 'allowed'>>
@@ -467,6 +472,16 @@ export class Relay {
     if (granted != null) {
       this.host.log(`限时授权代答 ${frame.method} ${threadId ?? ''}`)
       link.reply(JSON.stringify({ id: upstreamId, result: granted }))
+      return
+    }
+    // 无人值守：不让客户端弹卡等人，当场替人拒绝。原生 codex 一条请求发给每条订阅连接各一份，先到的答复生效
+    const refusal =
+      fields && typeof frame.method === 'string'
+        ? this.host.unattended?.(frame.method, fields)
+        : null
+    if (refusal) {
+      this.host.log(`无人值守，当场拒绝 ${frame.method}（会话 ${threadId ?? '不明'}）`)
+      link.reply(JSON.stringify({ id: upstreamId, result: refusal }))
       return
     }
     let facingId = upstreamId

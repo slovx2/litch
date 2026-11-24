@@ -64,6 +64,11 @@ export interface MachineCallInput {
   signal: AbortSignalLike
   /** 有卡片挂着的时候调：停表（等人答不算在 120 秒里）。返回“卡片没了”，表从头算 */
   hold(): () => void
+  /**
+   * 会话设备说这个会话无人值守（litchUnattended.notice）：要人点头的地方不出卡，当场以 unattended 失败、
+   * 说明用这句话。null 是照常
+   */
+  unattended?: string | null
 }
 
 /**
@@ -283,6 +288,12 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
       )
     }
     const id = `${host.deviceId}:${++seq}`
+    // 无人值守：执行方要人点头（出卡、请人登录停表）时不等，整次调用当场以 unattended 失败
+    const unattended = params.litchUnattended?.notice || null
+    const refuse = (entry: Running, what: string) => {
+      host.log(`客户端工具调用 ${id} 要等人（${what}），会话 ${params.threadId} 无人值守，当场失败`)
+      abandon(entry, clientToolFailure('unattended', unattended ?? ''))
+    }
     const invocation: ToolInvocation = {
       threadId: params.threadId,
       turnId: params.turnId,
@@ -355,6 +366,11 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
               host.hub.answer(askId, 'once')
               return
             }
+            if (unattended) {
+              refuse(entry, ask.kind)
+              host.hub.answer(askId, null)
+              return
+            }
             host.log(
               `客户端工具等待审批：会话 ${params.threadId}，调用 ${params.callId}，卡片 ${askId}，类型 ${ask.kind}`,
             )
@@ -403,6 +419,10 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
           },
           hold(held) {
             if (running.get(id) !== entry) return
+            if (held && unattended) {
+              refuse(entry, 'hold')
+              return
+            }
             if (held) {
               entry.holds++
               entry.stopTimer?.()
@@ -431,7 +451,14 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
    * work 拿到中止信号和停表的口子
    */
   const coreCall = (
-    meta: { threadId: string | null; turnId: string | null; machine: boolean; label: string },
+    meta: {
+      threadId: string | null
+      turnId: string | null
+      machine: boolean
+      label: string
+      /** 无人值守的说明：要停表等人（hold）时不等，整次调用以 unattended 失败 */
+      unattended?: string | null
+    },
     rpcId: string,
     work: (signal: AbortSignalLike, hold: () => () => void) => Promise<unknown>,
   ): Promise<unknown> => {
@@ -453,6 +480,11 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
       running.set(id, entry)
       startTimer(entry)
       const hold = () => {
+        if (meta.unattended) {
+          host.log(`${meta.label} 调用 ${id} 要等人答，会话无人值守，当场失败`)
+          abandon(entry, clientToolFailure('unattended', meta.unattended))
+          return () => {}
+        }
         entry.holds++
         entry.stopTimer?.()
         entry.stopTimer = null
@@ -489,7 +521,13 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
       )
     }
     return coreCall(
-      { threadId: input.threadId, turnId: input.turnId, machine: true, label: 'litch_machine' },
+      {
+        threadId: input.threadId,
+        turnId: input.turnId,
+        machine: true,
+        label: 'litch_machine',
+        unattended: input.unattended ?? null,
+      },
       rpcId,
       (signal, hold) => machine.call({ ...input, signal, hold }),
     )
@@ -522,7 +560,13 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
           ? host.context(threadId).harness
           : null
     return coreCall(
-      { threadId, turnId: raw.turnId ?? null, machine: false, label: 'litch_config' },
+      {
+        threadId,
+        turnId: raw.turnId ?? null,
+        machine: false,
+        label: 'litch_config',
+        unattended: raw.litchUnattended?.notice ?? null,
+      },
       rpcId,
       (_signal, hold) => config({ threadId, harness, arguments: raw.arguments, hold }),
     )
@@ -566,6 +610,7 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
         harness,
         tool: raw.tool,
         arguments: raw.arguments,
+        unattended: raw.litchUnattended?.notice ?? null,
       },
       rpcId,
     )
@@ -677,6 +722,7 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
             harness: host.context(raw.threadId).harness,
             tool: raw.tool,
             arguments: raw.arguments,
+            unattended: raw.litchUnattended?.notice ?? null,
           },
           String(id),
         )

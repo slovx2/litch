@@ -115,6 +115,7 @@ import type { SessionTree } from './session-tree.mjs'
 import { DEVICE_TASK_PREFIX, type DeviceTasks } from './tasks.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
 import type { TurnRecoveryObserver } from './turn-recovery.mjs'
+import { unattendedReply } from './unattended.mjs'
 import { type ForwardedRequest, INTERNAL_ID_PREFIX, UpstreamLink } from './upstream.mjs'
 import {
   type Connector,
@@ -335,6 +336,8 @@ export class ClientSession implements ClientToolPeer {
       log: (line) => host.log(`${this.tag} ${line}`),
       answered: (link, id, error) => this.traced(id, error, link.harness),
       deviceTools: host.deviceTools,
+      unattended: (method, params) =>
+        unattendedReply((id) => host.sessionTree.unattended(id), method, params),
       decorateNative: (link, _method, value, threadId) =>
         link.dialect.clientToolsByDevice === true &&
         (this.declared.has(EXTENSION.backgroundTasks) ||

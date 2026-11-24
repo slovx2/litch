@@ -70,6 +70,8 @@ export type MachineApprovalResult =
   | { kind: 'expired' }
   /** 调用被取消了（回合打断、连接断开、开关关掉） */
   | { kind: 'cancelled' }
+  /** 会话无人值守，没出卡：message 是给模型的说明 */
+  | { kind: 'unattended'; message: string }
 
 /** 谁发起的：进程归它，会话所在设备断开、开关关掉时按它收拾 */
 export interface MachineOwner {

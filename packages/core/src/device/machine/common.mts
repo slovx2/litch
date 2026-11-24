@@ -68,7 +68,12 @@ export const failed = (
   response: clientToolFailure(kind, message),
   note: {
     summary,
-    result: kind === 'blocked' ? 'blocked' : kind === 'declined' ? 'declined' : 'failed',
+    result:
+      kind === 'blocked'
+        ? 'blocked'
+        : kind === 'declined' || kind === 'unattended'
+          ? 'declined'
+          : 'failed',
     flagged,
   },
 })
@@ -151,6 +156,7 @@ export async function approved(
       flagged,
     )
   }
+  if (answer.kind === 'unattended') return failed('unattended', answer.message, summary, flagged)
   if (answer.kind === 'expired') {
     const out = failed(
       'declined',

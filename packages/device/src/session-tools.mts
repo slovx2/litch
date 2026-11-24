@@ -58,6 +58,7 @@ import {
   worktreeDefault,
 } from './session-start.mjs'
 import { lastAnswer, type OfferOutcome, type SessionTree, trimText } from './session-tree.mjs'
+import { unattendedNotice } from './unattended.mjs'
 import { isObject } from './wire.mjs'
 
 /** 参数不对、对象不对：直接回给模型的失败 */
@@ -573,6 +574,13 @@ async function offer(
     throw new Refused(
       'invalid',
       'An offer takes the title only. Call start again with initiation "offer" and no prompt or background; if the user chooses a new session, you pass the brief to accept.',
+    )
+  // offer 卡要等用户选“新会话 / 在这里做”：无人值守时不出卡
+  const unattended = tree.unattended(call.threadId)
+  if (unattended)
+    throw new Refused(
+      'unattended',
+      `${unattendedNotice(unattended)} For this offer: do the work here, or suggest it with ${tree.hasWrapUp(call.threadId) ? 'wrap_up' : 'start (initiation "propose")'}.`,
     )
   const target = await checked(tree, call, targetOf(args, call, tree))
   if (!tree.isUserTurn(call.harness, call.turnId))

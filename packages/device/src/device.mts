@@ -105,6 +105,7 @@ import { TimedApprovals } from './timed-approvals.mjs'
 import { ToolImages } from './tool-images.mjs'
 import { TurnNotices } from './turn-notices.mjs'
 import { TurnRecoveryObserver } from './turn-recovery.mjs'
+import { unattendedReply } from './unattended.mjs'
 import { type Connector, isObject, type Wire, type WireHandlers } from './wire.mjs'
 import { Workspaces } from './workspaces.mjs'
 import { gitVersion } from './worktree-git.mjs'
@@ -839,6 +840,7 @@ export class DeviceServer {
                 )
               : true
       },
+      unattended: (threadId) => this.sessionTree.unattended(threadId),
       graceMs: options.timing?.clientToolGraceMs ?? DEFAULT_TIMING.clientToolGraceMs,
       log,
     })
@@ -1258,6 +1260,8 @@ export class DeviceServer {
               deviceChrome: this.chrome !== null,
               prepareQuestionInput: (method, params) =>
                 this.sessionTree.prepareQuestionInput(method, params),
+              unattended: (method, params) =>
+                unattendedReply((id) => this.sessionTree.unattended(id), method, params),
               reserveTurn: async (threadId) => {
                 const hold = await reserveSessionWork(this.sessionTree, threadId, threadId)
                 return () => hold.release()

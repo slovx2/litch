@@ -184,7 +184,14 @@
         "arguments": true,
         "threadId": { "type": ["string", "null"] },
         "turnId": { "type": ["string", "null"] },
-        "harness": { "type": ["string", "null"] }
+        "harness": { "type": ["string", "null"] },
+        "litchUnattended": {
+          "description": "会话设备判定这次调用所在的会话无人值守（经理有生效的外部来源，或在它的子树里）。执行方不弹卡等人，本来要人点头的当场以 unattended 失败，说明用 notice 原文。",
+          "type": "object",
+          "required": ["notice"],
+          "additionalProperties": false,
+          "properties": { "notice": { "type": "string" } }
+        }
       }
     },
     "ToolCallParams": {
@@ -198,6 +205,13 @@
         "namespace": { "type": "string", "pattern": "^litch_" },
         "tool": { "type": "string" },
         "arguments": true,
+        "litchUnattended": {
+          "description": "会话设备判定这次调用所在的会话无人值守（经理有生效的外部来源，或在它的子树里）。执行方不弹卡等人，本来要人点头的当场以 unattended 失败，说明用 notice 原文。",
+          "type": "object",
+          "required": ["notice"],
+          "additionalProperties": false,
+          "properties": { "notice": { "type": "string" } }
+        },
         "litchChromeTargets": {
           "description": "只发给已声明 chromeTargetRouting 的桌面。设备核对了外层句柄；桌面仍检查底层实例和连接代次。",
           "type": "array",
@@ -251,7 +265,8 @@
         "invalid",
         "failed",
         "blocked",
-        "ambiguous"
+        "ambiguous",
+        "unattended"
       ]
     },
     "FailureResponse": {
@@ -272,7 +287,7 @@
                 "type": { "const": "inputText" },
                 "text": {
                   "type": "string",
-                  "pattern": "^\\[litch:(noExecutor|disabled|permission|declined|invalid|failed|blocked|ambiguous)\\] "
+                  "pattern": "^\\[litch:(noExecutor|disabled|permission|declined|invalid|failed|blocked|ambiguous|unattended)\\] "
                 }
               }
             }

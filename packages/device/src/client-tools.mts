@@ -20,6 +20,7 @@ import {
   type ClientToolCallParams,
   type ClientToolCallResponse,
   type ClientToolsDesktopInfo,
+  type ClientToolUnattended,
   clientToolFailure,
 } from '../../protocol/src/client-tools.mjs'
 import {
@@ -33,6 +34,7 @@ import {
 } from '../../shared/src/client-tool-executor.mjs'
 import { requestChromeApproval } from './remote-chrome-approval.mjs'
 import type { RemoteChromeRouter } from './remote-chrome-routing.mjs'
+import { type UnattendedRole, unattendedNotice } from './unattended.mjs'
 import type { UpstreamLink } from './upstream.mjs'
 import { type Frame, idKey, isObject, type RpcId } from './wire.mjs'
 
@@ -90,6 +92,8 @@ export interface ClientToolRouterOptions {
   chromeFullAccess?(harness: string, threadId: string): Promise<boolean>
   /** 限时授权：这个会话的 Chrome 网站此刻放行（timed-approvals.mts） */
   timedApproval?(threadId: string, category: 'chrome'): boolean
+  /** 会话在无人值守经理的树里（unattended.mts）：交出去的调用带上标记，执行方不弹卡等人 */
+  unattended?(threadId: string): UnattendedRole | null
 
   /**
    * 按已知的发起者和订阅者挑不出执行方时，等其余几份到齐的工夫（毫秒）。几份是 codex 一口气发给
@@ -295,13 +299,14 @@ export class ClientToolRouter {
             hostLabel: desktop.desktop?.name || desktop.desktop?.hostname || 'Litch desktop',
             ready: () => desktop.ready,
             call: async (params, signal) => {
+              const unattended = this.unattendedOf(call.threadId)
               const result = await this.callDesktop(
                 desktop,
                 call.harness,
                 {
                   id: `remote-chrome:${randomUUID()}`,
                   method: 'item/tool/call',
-                  params,
+                  params: unattended ? { ...params, litchUnattended: unattended } : params,
                 },
                 signal,
               )
@@ -332,6 +337,9 @@ export class ClientToolRouter {
           this.options.log(`会话 ${call.threadId} 的 Chrome 网站在限时授权内，放行`)
           return 'once'
         }
+        // 已授权的放行在这之前：走到这里就是要人点头了，无人值守时不出卡
+        const unattended = this.unattendedOf(call.threadId)
+        if (unattended) throw new Error(unattended.notice)
         const approver = this.chromeApprover(call, desktop)
         if (!approver)
           throw new Error(
@@ -438,11 +446,24 @@ export class ClientToolRouter {
     if (call.grace) clearTimeout(call.grace)
     call.grace = null
     call.executor = executor
-    call.facingId = executor.deliverClientTool(call.harness, call.frame, (reply) => {
+    call.facingId = executor.deliverClientTool(call.harness, this.marked(call), (reply) => {
       if (this.calls.get(call.key) !== call) return
       this.send(call, { ...reply, id: call.upstreamId })
       this.settle(call)
     })
+  }
+
+  /** 无人值守的会话：转给执行方的那份参数带上 litchUnattended，原帧不动（迟到的几份还按原样认） */
+  private marked(call: Call): Frame {
+    const unattended = this.unattendedOf(call.threadId)
+    if (!unattended || !isObject(call.frame.params)) return call.frame
+    return { ...call.frame, params: { ...call.frame.params, litchUnattended: unattended } }
+  }
+
+  /** 交给执行方的无人值守标记：会话不在无人值守经理的树里是 null（命令行调用也用它） */
+  unattendedOf(threadId: string): ClientToolUnattended | null {
+    const role = threadId ? this.options.unattended?.(threadId) : null
+    return role ? { notice: unattendedNotice(role) } : null
   }
 
   /**

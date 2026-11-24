@@ -10,6 +10,7 @@ import { sessionTurn } from './session-history.mjs'
 // 通知交给 onNotification 的订阅者；引擎发来要答复的请求里：
 //   - 设备工具（device-tools.mts 注册的 litch_ 命名空间）的 item/tool/call 交给注册表答；
 //   - 客户端工具交给统一路由，使用已声明能力的桌面连接（包括子会话继承的连接），无人可执行即回 noExecutor；
+//   - 无人值守经理树里的审批、提问、MCP 征询（options.unattended 给了答复的）：当场替人答，不交给订阅者；
 //   - 别的（审批、提问、MCP 征询……）交给 onServerRequest 的订阅者看（会话树看子会话是不是在等用户），
 //     这一版不答。只有一件事要替引擎做：这条连接订阅着会话，引擎把请求
 //     也发给了它。对“没有连接可送就当场失败”的引擎（Pi、dsh、OpenCode、ACP 这几个用共享的
@@ -129,6 +130,8 @@ export interface EngineLinkOptions {
   held(harness: string, requestId: RpcId): boolean
   /** 限时授权：原生审批在授权内时给出代答的结果（timed-approvals.mts） */
   timedApprovals?: { answer(method: string, params: unknown): unknown | null }
+  /** 要人答的请求在无人值守时的替人答复（unattended.mts 的 unattendedReply）；null 是照常 */
+  unattended?(method: string, params: Record<string, unknown>): Record<string, unknown> | null
   heldGraceMs?: number
   heldRecheckMs?: number
   /** 原生 codex 的开发者指令按会话记在哪（codex-instructions.mts）。不给就不补 */
@@ -287,6 +290,13 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
         send({ id, result: granted })
         return
       }
+      // 无人值守经理树里的提问、审批：不交给订阅者等人，当场替人拒绝（unattended.mts）
+      const refusal = options.unattended?.(frame.method, params)
+      if (refusal) {
+        options.log?.(`无人值守，当场拒绝 ${frame.method}（会话 ${String(params.threadId)}）`)
+        send({ id, result: refusal })
+        return
+      }
       if (nativeApprovalCategory(frame.method))
         approvals.set(idKey(id), { id, method: frame.method, params })
       for (const listener of [...requested]) {
@@ -360,6 +370,8 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
               EXTENSION.threadCapabilities,
               EXTENSION.acpControls,
               EXTENSION.peerMessages,
+              // 无人值守时这条连接替人拒绝审批，附一句话给模型（unattended.mts）；平时拒绝都不带说明
+              EXTENSION.declineWithNote,
               ...(idleCompactSupports(harness) ? [MANAGER_IDLE_COMPACT_EXTENSION] : []),
               ...(options.clientTools ? [EXTENSION.clientTools] : []),
             ],
