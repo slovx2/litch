@@ -65,7 +65,7 @@ gh workflow run promote.yml --ref <已推送验证分支> \
 
 `publish` 同样先创建/核对完整草稿和回验；临公开再次检查来源 run 当前 attempt 成功、证明有效性、普通模式的最新夜间或修复模式的正式基线、open release-blocker、标签实际 SHA、全部资产 ID/hash 和版本顺序。只能显式公开一次，已公开版本禁止覆写，旧版本不能抢 Latest。Promote 全局串行；不要同时排多个晋级请求，GitHub concurrency 只保留一个等待者。
 
-草稿/公开后生成 `promotion-<attempt>`，含 `promotion.json` 和 `tap-inputs.json`。后者包含版本、真实标签源码 tar URL/hash、formula 路径及源 run/artifact 参数，可直接用于 Homebrew PR；不会自动修改或发布 tap。源码 hash 是标签 URL 的真实 bytes，不拿安装包 hash 或 commit tar hash 替代。
+草稿/公开后生成 `promotion-<attempt>`，含 `promotion.json` 和 `tap-inputs.json`。后者包含版本、真实标签源码 tar URL/hash、formula 路径及源 run/artifact 参数，可直接用于 Homebrew PR；不会自动修改或发布 tap。源码 hash 是标签 URL 的真实 bytes，不拿安装包 hash 或 commit tar hash 替代。`releaseUrl` 和晋级摘要里的公开链接一律是 `/releases/tag/<标签>`；草稿期的 `untagged-…` 地址只在草稿摘要里用来审阅，公开后失效。
 
 桌面公开成功后，独立的 `chrome-store` 作业按商店当前公开版本比较扩展交付内容；有变化才上传并送审，通过后自动公开。它从同一候选 SHA 构建商店 ZIP，不重建任何桌面资产。缺少商店机密时跳过并在 Summary 提醒手动处理。一次性设置、基准和失败恢复见 [Chrome Web Store 自动提交](chrome-store.md)。
 
