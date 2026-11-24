@@ -155,7 +155,12 @@ export function probeScript(): RemoteScript {
     // 报不出版本的：把它的原话带回来，多半是一句“未知命令”
     `  if said=$(${adapter} version </dev/null 2>&1); then`,
     `    printf '%s\\n' "$said" | sed -n '1s/^/adapterVersion=/p'`,
-    `    if ${adapter} device-proxy </dev/null >/dev/null 2>&1; then echo adapterRunning=yes; fi`,
+    `    if ${adapter} device-proxy </dev/null >/dev/null 2>&1; then`,
+    '      echo adapterRunning=yes',
+    // 在跑的是不是 Litch 系统自启登记的那一份：一键升级换版本时走重新登记自启（swapScript）。
+    // 没有这条子命令的旧版报错，照“不是”算
+    `      case $(${adapter} device-autostart get </dev/null 2>/dev/null) in *'"mode":"managed"'*) echo adapterAutostart=managed ;; esac`,
+    '    fi',
     '  else',
     `    printf '%s\\n' "$said" | sed 's/^/adapterSaid=/'`,
     '  fi',
@@ -359,6 +364,42 @@ export function stopScript(options: { ifIdle: boolean; lang: RemoteLang }): Remo
           'fi',
         ]
       : []),
+    `if [ -n "$note" ]; then sed 's/^/said=/' "$note"; rm -f "$note"; fi`,
+    `printf '%s\\n' "$out" | sed 's/^/out=/'`,
+    `printf 'code=%s\\n' "$code"`,
+  ])
+}
+
+/**
+ * 系统自启（systemd 用户服务、LaunchAgent）管着的服务换上装好的新版：用命令名指向的那一份（新版）重新登记自启。
+ * 自启的登记里写的是旧版程序的路径，光停掉服务、或者让系统服务管理器重启，起来的还是旧版；
+ * 重新登记由设备的变更助手一次做完：停旧实例（带 ifIdle 时不闲就整个作罢）、写新登记、由管理器起新版、等它就绪，
+ * 期间按需拉起和管理器的失败重试都被挡住；被打断的回合续跑（resumeAfterRestart）。
+ * 输出：swap=unmanaged（在跑的不是自启登记的那一份，什么都没做）；或者 out=（--wait 的那一行 JSON，不闲时里面有 busy）、
+ * said=（给人看的那一句）、code=（0 换上了，4 不闲没动，别的没做成）
+ */
+export function swapScript(options: { ifIdle: boolean; lang: RemoteLang }): RemoteScript {
+  // 操作标识只用来认这一次请求：这边生成，只有十六进制字符
+  const params = JSON.stringify({
+    operationId: `litch-swap-${randomBytes(8).toString('hex')}`,
+    expectedRevision: 0,
+    confirmStop: true,
+    resumeAfterRestart: true,
+    ...(options.ifIdle ? { ifIdle: true } : {}),
+  }).replace('"expectedRevision":0', '"expectedRevision":%s')
+  return wrap(({ marker, adapter }) => [
+    `printf '%s\\n' ${quote(marker)}`,
+    `${has(adapter)} || exit ${EXIT.notFound}`,
+    `CHA_LANG=${quote(options.lang)}`,
+    'export CHA_LANG',
+    `state=$(${adapter} device-autostart get </dev/null 2>/dev/null) || state=`,
+    `case $state in *'"mode":"managed"'*) ;; *) echo swap=unmanaged; exit 0 ;; esac`,
+    // 自启状态的那一行以 revision 开头（{"revision":3,…}），变更要带上它，防止和别处的变更撞车
+    `revision=$(printf '%s' "$state" | sed -n 's/^{"revision":\\([0-9][0-9]*\\)[,}].*/\\1/p')`,
+    'if [ -z "$revision" ]; then echo swap=unmanaged; exit 0; fi',
+    'note=$(mktemp 2>/dev/null || mktemp -t litch-swap 2>/dev/null) || note=',
+    `out=$(printf ${quote(params)} "$revision" | ${adapter} device-autostart enable --wait 2>"\${note:-/dev/null}")`,
+    'code=$?',
     `if [ -n "$note" ]; then sed 's/^/said=/' "$note"; rm -f "$note"; fi`,
     `printf '%s\\n' "$out" | sed 's/^/out=/'`,
     `printf 'code=%s\\n' "$code"`,

@@ -8,6 +8,7 @@ export const zhRupgrade = {
   'service.remote.flag': '设备服务比应用的版本旧',
   'service.remote.sum.stale': '比应用的版本旧',
   'service.remote.sum.waiting': '等待换上新版',
+  'service.remote.sum.installed': '已安装，等待重启生效',
   'service.remote.older': '正在运行的设备服务为 {from}，比应用的 {to} 旧。',
   'service.remote.older.unknown': '正在运行的设备服务未报告版本，视为比应用的 {to} 旧。',
   'service.remote.swapOnly': '该设备上已安装 {installed}，服务重启前仍运行旧版本。',
@@ -19,6 +20,13 @@ export const zhRupgrade = {
   'service.remote.stopping': '新版已安装，正在请设备服务在空闲时停止…',
   'service.remote.forcing': '正在停止设备服务…',
   'service.remote.reconnecting': '设备服务已停止，正在重新连接…',
+  'service.remote.stopping.autostart': '新版已安装，正在请设备服务在空闲时重启…',
+  'service.remote.forcing.autostart': '正在重启设备服务…',
+  'service.remote.reconnecting.autostart': '设备服务已由系统自启重启，正在重新连接…',
+  'service.remote.autostart.pending': '该服务由系统自启管理，换上新版需要重启设备服务。',
+  'service.remote.waiting.autostart':
+    '新版 {to} 已安装，等待重启生效。设备服务当前忙碌，空闲后自动重启：',
+  'service.remote.restartNow': '现在重启',
   'service.remote.waiting': '新版 {to} 已安装。设备服务当前忙碌，空闲后自动换上：',
   'service.remote.waiting.next': '每次连接时以及每 5 分钟会再试一次；退出应用后不再等待。',
   'service.remote.retry': '立即重试',
@@ -41,6 +49,7 @@ export const zhRupgrade = {
     '新版已安装，但正在运行的服务不支持停止请求，需要手动结束一次：',
   'service.remote.failed.legacy': '新版已安装，但正在运行的是不带聚合面的旧服务，需要手动重启：',
   'service.remote.failed.stop': '新版已安装，但设备服务未能停止。',
+  'service.remote.failed.swap': '新版已安装，但未能用新版重新登记系统自启，设备服务仍运行旧版本。',
   'service.remote.failed.stale': '设备服务已停止并重新连接，但运行的仍是旧版本。',
   'service.remote.again': '重试',
   'service.remote.step.script': '使用安装脚本安装 {to}：',
@@ -60,12 +69,16 @@ export const zhRupgrade = {
   'service.remote.confirm.brew': '方式：Homebrew。',
   'service.remote.confirm.idle': '不会中断正在进行的事：等设备服务空闲后才换上新版。',
   'service.remote.confirm.managed': '该服务由前台或服务管理器启动：只安装，不重启它。',
+  'service.remote.confirm.autostart':
+    '该服务由系统自启管理：等设备服务空闲后由系统服务管理器重启，不会中断正在进行的事。',
   'service.remote.confirm.yes': '升级',
   'service.remote.confirm.swapYes': '换上',
   'service.remote.confirm.no': '取消',
   'service.remote.force.title': '立即换上新版？',
   'service.remote.force.note':
     '将立即重启 {name} 上的设备服务。符合条件的普通回合将自动继续；以下工作会被中断：',
+  'service.remote.force.now':
+    '将立即重启 {name} 上的设备服务。正在进行的回合会被中断，符合条件的普通回合将自动继续。',
   'service.remote.force.clients': '连接该设备的其他客户端会断开并自动重连。',
   'service.remote.force.yes': '立即换上',
 } satisfies Record<string, Entry>

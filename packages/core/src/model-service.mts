@@ -137,7 +137,7 @@ export interface RemoteDiskSpace {
  * diskSpace 安装或临时分区空间不足，diskSpace 字段带路径和空间快照；
  * behind 装完还是旧的（Homebrew 的配方还没跟上这一版）；verify 装完问不出版本，或者版本对不上；
  * unsupported 在跑的服务不认识停止的请求，或者它的控制通道连不上；legacy 在跑的是不带聚合面的旧服务；
- * stop 去停了，没停成；stale 停了、重连上来在跑的还是旧的
+ * stop 去停了，没停成；swap 系统自启管着的服务没能用新版重新登记；stale 停了、重连上来在跑的还是旧的
  */
 export type RemoteUpgradeFailure =
   | 'connect'
@@ -151,6 +151,7 @@ export type RemoteUpgradeFailure =
   | 'unsupported'
   | 'legacy'
   | 'stop'
+  | 'swap'
   | 'stale'
 
 /**
@@ -189,8 +190,16 @@ export interface RemoteUpgradeView {
   installed: string | null
   /** 怎么装的。认不出是 null：不给按钮，只给可复制的命令 */
   method: RemoteInstallMethod | null
-  /** 在跑的服务由前台或者服务管理器管着（不是 device-start 拉起的）：只替用户装，不替用户换 */
+  /**
+   * 在跑的服务由前台或者别的服务管理器管着（不是 device-start 拉起的，也不是 Litch 的系统自启）：
+   * 只替用户装，不替用户换
+   */
   managed: boolean
+  /**
+   * 在跑的服务由 Litch 的系统自启（systemd 用户服务、LaunchAgent）管着：换版本时用新版重新登记自启，
+   * 由系统服务管理器重启服务，被打断的回合续跑
+   */
+  autostart: boolean
   /** 按钮做什么：upgrade 装新版再换上；swap 装着的已经不旧，只差换上 */
   action: 'upgrade' | 'swap'
   /** 这一端能不能替用户做（外壳给了这份能力）。手机端是 false，只显示“比应用旧” */
@@ -202,6 +211,8 @@ export interface RemoteUpgradeView {
 export interface RemoteAdapterFacts {
   version: string | null
   path: string | null
+  /** 在跑的服务是 Litch 系统自启登记的那一份（device-autostart get 报 managed）。问不出来是 false */
+  autostart: boolean
 }
 
 /** 在那台机器上装新版的结果。ssh 自己没连上时外壳抛 ConnectError */
@@ -224,6 +235,17 @@ export type RemoteStopResult =
   | { result: 'stopped' }
   | { result: 'busy'; busy: ServiceBusyView[] }
   | { result: 'legacy' | 'unsupported' | 'failed'; said: string | null }
+
+/**
+ * 系统自启管着的服务换版本的结果（新版的 device-autostart enable --wait）：
+ * stopped 换上了，新版已由系统服务管理器起来；busy 不闲，没动；
+ * unmanaged 在跑的其实不是 Litch 自启登记的那一份，没动；failed 没做成
+ */
+export type RemoteSwapResult =
+  | { result: 'stopped' }
+  | { result: 'busy'; busy: ServiceBusyView[] }
+  | { result: 'unmanaged' }
+  | { result: 'failed'; said: string | null }
 
 // ---------- 重启设备服务（侧栏设备行“⋯”里的那一项） ----------
 

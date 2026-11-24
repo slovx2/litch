@@ -5,6 +5,7 @@
 //                                                  都闲了才换上；“立即换上”不等
 //   远程下载失败（remote download fails）           下载安装脚本失败（连不上 GitHub）
 //   远程配方没跟上（remote formula is behind）      Homebrew 装的，brew upgrade 之后还是旧的
+//   远程自启服务旧而忙（remote autostart is busy）  系统自启管着的服务：装好了等待重启生效，“现在重启”不等
 // 真的状态机在 device/service-upgrade.mts；这里只照它的样子摆出各步的显示数据。
 import { ChannelError, type Clock } from '../channel/protocol.mjs'
 import type { DeviceView } from '../model.mjs'
@@ -12,10 +13,11 @@ import type { RemoteUpgradePhase, RemoteUpgradeView, ServiceBusyView } from '../
 import { phrase } from '../phrase.mjs'
 import { SERVICE_VERSIONS } from './sample-service.mjs'
 
-export type RemoteScene = 'swap' | 'busy' | 'download' | 'behind'
+export type RemoteScene = 'swap' | 'busy' | 'autostart' | 'download' | 'behind'
 
 /** 话里带哪些字样演哪一出。“旧而忙”要排在“旧”前面 */
 const SCENES: readonly (readonly [RegExp, RemoteScene])[] = [
+  [/远程自启服务旧而忙|remote autostart is busy/i, 'autostart'],
   [/远程服务旧而忙|remote service is busy/i, 'busy'],
   [/远程服务旧|remote service is old/i, 'swap'],
   [/远程下载失败|remote download fails/i, 'download'],
@@ -119,7 +121,7 @@ export function createMockRemoteUpgrade(host: MockRemoteUpgradeHost): MockRemote
           ...device.service,
           version: running,
           root: ROOTS[method](running),
-          detached: true,
+          detached: scene !== 'autostart',
         },
         remoteUpgrade: {
           target: SERVICE_VERSIONS.bundled,
@@ -127,6 +129,7 @@ export function createMockRemoteUpgrade(host: MockRemoteUpgradeHost): MockRemote
           installed: running,
           method,
           managed: false,
+          autostart: scene === 'autostart',
           action: 'upgrade',
           capable: true,
           phase: { step: 'idle' },
@@ -194,7 +197,7 @@ export function createMockRemoteUpgrade(host: MockRemoteUpgradeHost): MockRemote
           { installed: SERVICE_VERSIONS.bundled, action: 'swap' },
         )
         later(() => {
-          if (scene === 'busy' && mode !== 'force') {
+          if ((scene === 'busy' || scene === 'autostart') && mode !== 'force') {
             set(deviceId, { step: 'waiting', busy: busyOf(deviceId), checking: false })
           } else swapIn(deviceId)
         })

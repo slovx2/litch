@@ -42,7 +42,7 @@ func decodeAutostartParams(raw json.RawMessage, enable bool) (params autostartPa
 			switch key {
 			case "operationId", "expectedRevision":
 				continue
-			case "takeover", "allowLinger":
+			case "takeover", "allowLinger", "ifIdle":
 				if !enable {
 					goto invalid
 				}
@@ -137,6 +137,7 @@ func (h *autostartHost) queue(ctx context.Context, action string, params autosta
 	if stop && !params.ConfirmStop {
 		return nil, autoRejected("busy", "此操作会停止当前设备服务。请先确认停机以及是否续跑。", "This operation stops the current device service. Confirm the stop and choose whether to resume work.")
 	}
+	j.Previous, j.PreviousRepair, j.Deferred = j.Operation, j.Repair, nil
 	j.Operation = &autostartOperation{OperationID: params.OperationID, Action: action, State: "pending"}
 	j.Params, j.Revision, j.Expires, j.Repair = params, j.Revision+1, time.Now().Add(4*time.Minute), nil
 	j.Hold, j.Released, j.StopPID, j.StopSince = false, false, 0, ""

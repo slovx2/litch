@@ -252,6 +252,13 @@ export function remotePillOf(
       ? { tone: 'ok', key: 'service.sum.replaced', args: { from: view.phase.from } }
       : { tone: 'ok', key: 'service.sum.replaced.plain', args: {} }
   }
+  // 新版已经装好、只差重启的：写“已安装，等待重启生效”
+  if (
+    (notice === 'waiting' && view.autostart) ||
+    (notice === 'older' && view.action === 'swap' && view.installed !== null)
+  ) {
+    return { tone: 'wait', key: 'service.remote.sum.installed', args: {} }
+  }
   if (notice === 'waiting') return { tone: 'wait', key: 'service.remote.sum.waiting', args: {} }
   return { tone: 'wait', key: 'service.remote.sum.stale', args: {} }
 }
@@ -308,6 +315,7 @@ export function remoteSteps(view: RemoteUpgradeView, pid: number | null): GuideS
   const method = view.method ?? 'script'
   switch (phase.at) {
     case 'diskSpace':
+    case 'swap':
       return []
     case 'download':
       return [install(method), step('service.remote.step.from'), swap, after]

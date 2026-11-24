@@ -23,6 +23,7 @@ const view = (patch = {}) => ({
   installed: '0.15.0',
   method: 'script',
   managed: false,
+  autostart: false,
   action: 'upgrade',
   capable: true,
   phase: { step: 'idle' },
@@ -183,4 +184,30 @@ test('确认卡和可复制的命令：装的是应用的这一版，安装脚�
       )
     }
   }
+})
+
+test('系统自启管着：新版装好、只差重启时小标写“已安装，等待重启生效”，照常给“换上新版”，失败不给 device-stop', () => {
+  const pending = view({ autostart: true, action: 'swap', installed: '0.16.0' })
+  assert.deepEqual(remotePillOf(pending), {
+    tone: 'wait',
+    key: 'service.remote.sum.installed',
+    args: {},
+  })
+  assert.equal(remoteButtonOf(pending), 'swap')
+  assert.deepEqual(remoteSteps(pending, null), [], '不让用户照停服务的老办法做')
+  const waiting = view({
+    autostart: true,
+    action: 'swap',
+    installed: '0.16.0',
+    phase: { step: 'waiting', busy: [], checking: false },
+  })
+  assert.equal(remotePillOf(waiting)?.key, 'service.remote.sum.installed')
+  assert.equal(remotePillOf({ ...waiting, autostart: false })?.key, 'service.remote.sum.waiting')
+  const failed = view({
+    autostart: true,
+    action: 'swap',
+    phase: { step: 'failed', at: 'swap', text: null, detail: null },
+  })
+  assert.deepEqual(remoteSteps(failed, null), [])
+  assert.equal(translate('zh-CN', 'service.remote.sum.installed'), '已安装，等待重启生效')
 })

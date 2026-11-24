@@ -18,6 +18,16 @@ type autostartParams struct {
 	ResumeAfterRestart bool   `json:"resumeAfterRestart,omitempty"`
 	Takeover           bool   `json:"takeover,omitempty"`
 	AllowLinger        bool   `json:"allowLinger,omitempty"`
+	// 只在要停的旧实例空闲时才换（升级换版本用）；不闲就整个作罢，登记保持原样。
+	// 只有客户端连着不算忙：发起切换的那一端自己就连着，断了会自己重连。
+	IfIdle bool `json:"ifIdle,omitempty"`
+}
+
+// 带 ifIdle 的启用因为旧实例不闲而作罢时留下的记录：给 device-autostart enable --wait 报原因。
+// 作罢时操作记录恢复成这次之前的样子，自启状态看不出这次请求来过。
+type autostartDeferred struct {
+	OperationID string       `json:"operationId"`
+	Busy        []busyReason `json:"busy"`
 }
 
 type autostartJournal struct {
@@ -34,6 +44,10 @@ type autostartJournal struct {
 	StopPID   int
 	StopSince string
 	Repair    *autostartRepair
+	// 这次操作之前的操作记录和修复提示：带 ifIdle 的操作作罢时恢复它们。
+	Previous       *autostartOperation `json:",omitempty"`
+	PreviousRepair *autostartRepair    `json:",omitempty"`
+	Deferred       *autostartDeferred  `json:",omitempty"`
 }
 
 func (j autostartJournal) pending() bool {

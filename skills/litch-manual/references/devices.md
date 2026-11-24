@@ -108,9 +108,14 @@ computer" 0.10.0, session trees and scheduled tasks 0.11.0, phone pairing 0.12.0
   service to stop when idle (`device-stop --if-idle`); the reconnect then starts the new version. While
   the service is busy the old one keeps running and Litch retries on every connection and every 5
   minutes until the app quits. **Cancel pending upgrade** stops future attempts; remote upgrades never force a stop. If the adapter's install method can't be recognized, Litch only shows the
-  commands to copy; a service run in the foreground or by a service manager (`brew services`, systemd)
-  is installed but not restarted. This is desktop-only and not available through `scripts/litch`; the
-  phone app only shows that the service is older.
+  commands to copy; a service run in the foreground or by another service manager (`brew services`,
+  a hand-written systemd unit) is installed but not restarted. A service under Litch's own
+  **device service autostart** (systemd user service, macOS LaunchAgent) is switched by re-registering
+  autostart with the new version (`device-autostart enable` from the new install, waiting for idle):
+  the service manager restarts it, and interrupted ordinary turns resume. Until then the section reads
+  "Installed, pending restart" and offers **Restart Now** (asks once more, listing what is interrupted).
+  This is desktop-only and not available through `scripts/litch`; the phone app only shows that the
+  service is older.
 - 本机设备服务等待换上应用自带版本时，设备详情的“设备服务”中同时提供“立即重试”和“立即换上”。“立即重试”只在空闲时更新；“立即换上”与远程设备使用同一确认框，列出被中断的工作，确认后停止旧进程并用自带版本重新启动。
 - **Restart device service** is in the device row's ⋯ menu in the sidebar, the desktop device details’ **Device service** section, and the phone's device-list menu, for local and remote devices.
   It asks the service to stop, waits until the old process has exited, starts it again and reconnects;
@@ -147,6 +152,7 @@ computer" 0.10.0, session trees and scheduled tasks 0.11.0, phone pairing 0.12.0
 应用重启完成后，等待设备连接完成（最多十五秒），再并行查询忙闲（最多五秒），按新应用版本弹一次升级提示。已是当前版本、离线或由外部服务管理器管理的设备不列入。第一次安装本功能也适用；同一应用版本不重复弹。
 
 - 本机空闲时自动换上自带版本；忙时可选“不升级”“空闲时自动升级”“强制升级”。弹框中每台设备默认选中“空闲时自动升级”，点击“应用选择”后才执行；取消仍不升级。强制升级复用重启恢复：符合条件的普通回合自动继续，后台任务、待答和定时任务不会自动重跑。
+- 由 Litch 设备服务自启（systemd 用户服务、LaunchAgent）管理的远程设备同样可升级：装好后在空闲时用新版重新登记自启，由系统服务管理器重启服务，符合条件的普通回合自动继续。未换上前设备详情显示“已安装，等待重启生效”，并提供“现在重启”。
 - 远程设备在线、应用能管理该独立服务，且能识别安装方式或新版已安装时，提供“强制升级”。尚未安装时先下载安装并核验版本，成功后才强制切换；安装失败不会停止旧服务。由外部服务管理器管理时不提供。普通升级仍等空闲，强制升级需确认会中断回合及终止已检测到的后台任务数量。手机目前仅显示版本提示，没有升级框。
 - 等待由当前应用运行期间的核心维护：本机每三十秒重试，远程每五分钟及重新连接时重试；设备详情显示等待状态，可取消。取消不会撤销已安装的文件。退出应用会结束等待。
 - 忙闲来自设备的空闲检查；旧设备不支持只读状态查询时显示未知，执行切换前仍进行空闲检查。

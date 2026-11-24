@@ -4,7 +4,9 @@
 //   2. 装好了马上请服务空闲时停下（device-stop --if-idle）。停了就重连，重连时 device-start 起的就是新版；
 //   3. 不闲就留着旧的接着用，记下“装好了、等着换”：之后每次连上、以及连着时每 5 分钟再请一次，换上了就清掉；
 //   4. 确认强制升级后，先安装并核验新版，再强制换上；已经安装则直接换上。也可取消等待。
-// 服务由前台或者服务管理器管着的（detached 为 false），只替用户装，不替用户换。认不出是怎么装的，不给按钮。
+// 服务由 Litch 的系统自启管着的（systemd 用户服务、LaunchAgent）：换的那一步改成用新版重新登记自启，
+// 由系统服务管理器停旧起新、被打断的回合续跑；同样先等空闲，也能强制。
+// 服务由前台或者别的服务管理器管着的（detached 为 false，又不是自启），只替用户装，不替用户换。认不出是怎么装的，不给按钮。
 // “等着换”只记在应用里（这个对象里），不进设备；应用退出就不等了，下次打开时装着的已经不旧，按钮叫“换上新版”。
 // 在那台机器上动手的是外壳（RemoteUpgradePlatform）；用户没确认过，这里不会叫 install 和 stop。
 
@@ -17,6 +19,8 @@ import type {
   DeviceServiceView,
   RemoteAdapterFacts,
   RemoteDiskSpace,
+  RemoteStopResult,
+  RemoteSwapResult,
   RemoteUpgradePhase,
   RemoteUpgradeView,
 } from '../model-service.mjs'
@@ -123,8 +127,12 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
   /** 怎么装的：先看在跑的服务的根目录，没连上时看命令的位置 */
   const method = () => installMethodOf(seen.service?.root) ?? installMethodOf(facts?.path)
 
+  /** 在跑的服务由 Litch 的系统自启管着：换的时候重新登记自启，由系统服务管理器重启 */
+  const supervised = (): boolean =>
+    seen.service !== null && !seen.service.detached && facts?.autostart === true
+
   /** 在跑的服务有别的东西管着：只装，不换（决 463） */
-  const managed = (): boolean => seen.service !== null && !seen.service.detached
+  const managed = (): boolean => seen.service !== null && !seen.service.detached && !supervised()
 
   const view = (): RemoteUpgradeView | null => {
     if (phase.step === 'idle' && !older()) return null
@@ -134,6 +142,7 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
       installed: installed(),
       method: method(),
       managed: managed(),
+      autostart: supervised(),
       action: swapOnly() ? 'swap' : 'upgrade',
       capable: platform !== null,
       phase,
@@ -186,9 +195,11 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
     const waited = phase.step === 'waiting' ? phase.busy : []
     if (auto) set({ step: 'waiting', busy: waited, checking: true })
     else set({ step: 'stopping', force: !ifIdle })
-    let result: Awaited<ReturnType<RemoteUpgradePlatform['stop']>>
+    let result: RemoteStopResult | RemoteSwapResult
     try {
-      result = await platform.stop(target, ifIdle, cancel.signal)
+      result = supervised()
+        ? await platform.swap(target, ifIdle, cancel.signal)
+        : await platform.stop(target, ifIdle, cancel.signal)
     } catch (error) {
       if (cancel.signal.aborted) return
       if (auto) {
@@ -224,8 +235,14 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
       case 'unsupported':
         failed('unsupported', result.said)
         return
+      case 'unmanaged':
+        // 换的时候那台机器说在跑的不是自启登记的那一份：照别的东西管着处理，用户自己重启
+        if (facts) facts = { ...facts, autostart: false }
+        stopRetry()
+        set({ step: 'restart' })
+        return
       case 'failed':
-        failed('stop', result.said)
+        failed(supervised() ? 'swap' : 'stop', result.said)
     }
   }
 
@@ -249,7 +266,11 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
       failed(result.diskSpace ? 'diskSpace' : result.at, result.said, result.diskSpace)
       return
     }
-    facts = { version: result.installed, path: facts?.path ?? null }
+    facts = {
+      version: result.installed,
+      path: facts?.path ?? null,
+      autostart: facts?.autostart ?? false,
+    }
     const order = compareVersions(result.installed, options.version)
     if (order === null || order < 0) {
       // Homebrew 装不了指定的版本：装完还是旧的，是配方还没跟上这一版

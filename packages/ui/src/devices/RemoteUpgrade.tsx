@@ -111,7 +111,13 @@ function UpgradeConfirm({
           </>
         ) : null}
         <span>
-          {t(view.managed ? 'service.remote.confirm.managed' : 'service.remote.confirm.idle')}
+          {t(
+            view.autostart
+              ? 'service.remote.confirm.autostart'
+              : view.managed
+                ? 'service.remote.confirm.managed'
+                : 'service.remote.confirm.idle',
+          )}
         </span>
       </div>
     </Confirm>
@@ -140,14 +146,21 @@ export function ForceConfirm({
       onClose={onClose}
     >
       <div className="svc-confirm" data-confirm="force">
-        <span>{t('service.remote.force.note', { name: t.text(device.name) })}</span>
-        <span>
-          {t('service.batch.forceNote', {
-            count: busy
-              .filter((entry) => entry.reason === 'backgroundTasks')
-              .reduce((sum, entry) => sum + (entry.count ?? 0), 0),
-          })}
-        </span>
+        {busy.length === 0 ? (
+          // 不知道忙不忙（还没问过）：只说会打断进行中的回合
+          <span>{t('service.remote.force.now', { name: t.text(device.name) })}</span>
+        ) : (
+          <>
+            <span>{t('service.remote.force.note', { name: t.text(device.name) })}</span>
+            <span>
+              {t('service.batch.forceNote', {
+                count: busy
+                  .filter((entry) => entry.reason === 'backgroundTasks')
+                  .reduce((sum, entry) => sum + (entry.count ?? 0), 0),
+              })}
+            </span>
+          </>
+        )}
         <ul className="svc-busy">
           {busy.map((entry) => {
             const line = busyLine(entry, (id) => nameOf(device, id, t), t('list.comma'))
@@ -245,6 +258,9 @@ export function RemoteUpgradeNote({
           {t('service.remote.swapOnly', { installed: view.installed })}
         </div>
       ) : null}
+      {notice === 'older' && view.action === 'swap' && view.autostart ? (
+        <div className="cfail-text">{t('service.remote.autostart.pending')}</div>
+      ) : null}
       {notice === 'older' && view.capable && steps.length > 0 ? (
         <div className="cfail-text">
           {t(
@@ -256,11 +272,17 @@ export function RemoteUpgradeNote({
         <div className="cfail-text">{t('service.remote.installing', { to })}</div>
       ) : null}
       {notice === 'stopping' || notice === 'forcing' || notice === 'reconnecting' ? (
-        <div className="cfail-text">{t(`service.remote.${notice}`)}</div>
+        <div className="cfail-text">
+          {t(view.autostart ? `service.remote.${notice}.autostart` : `service.remote.${notice}`)}
+        </div>
       ) : null}
       {notice === 'waiting' && phase.step === 'waiting' ? (
         <>
-          <div className="cfail-text">{t('service.remote.waiting', { to })}</div>
+          <div className="cfail-text">
+            {t(view.autostart ? 'service.remote.waiting.autostart' : 'service.remote.waiting', {
+              to,
+            })}
+          </div>
           <BusyList device={device} view={view} />
           <div className="cfail-guide">
             <span>{t('service.remote.waiting.next')}</span>
@@ -283,7 +305,7 @@ export function RemoteUpgradeNote({
                 disabled={phase.checking}
                 onClick={() => setForcing(true)}
               >
-                {t('service.remote.force')}
+                {t(view.autostart ? 'service.remote.restartNow' : 'service.remote.force')}
               </button>
             ) : null}
             <button
@@ -323,6 +345,17 @@ export function RemoteUpgradeNote({
       {notice === 'older' || notice === 'failed' ? (
         <div className="cfail-acts">
           <UpgradeButton device={device} view={view} />
+          {notice === 'older' && view.capable && view.autostart && view.action === 'swap' ? (
+            // 系统自启管着、新版已装好：除了等空闲时换上，也可以现在就重启
+            <button
+              type="button"
+              className="mini"
+              data-act="remote-restart-now"
+              onClick={() => setForcing(true)}
+            >
+              {t('service.remote.restartNow')}
+            </button>
+          ) : null}
           {phase.step === 'failed' && phase.detail ? (
             <button
               type="button"

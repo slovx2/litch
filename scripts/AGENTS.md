@@ -8,6 +8,8 @@ plain `.mjs` / shell.
 
 - `check-mermaid-viewer.mjs` — 对话 Mermaid 放大视图的隔离 Chromium 验收，验证三种皮肤、明暗和两档窗口尺寸，以及缩放、拖动、复位和关闭；`LITCH_MERMAID_EVIDENCE` 指定截图目录。
 
+- `systemd-upgrade-sim/run.mjs` — 系统自启（systemd 用户服务）管着的设备换版本模拟：真 systemd 的 Debian 容器里装三版真 Go 程序（设备进程是夹具），喂桌面端的探测与换版本脚本；要 Docker，不进 CI。
+
 - `codex-shim` — the `PATH` shim Codex App invokes. Routes `codex app-server`
   into the adapter (`CHA_CLAUDE_ADAPTER`); forwards everything else to the real
   Codex CLI (`CODEX_REAL`). Keep it dependency-free and POSIX-sh portable.

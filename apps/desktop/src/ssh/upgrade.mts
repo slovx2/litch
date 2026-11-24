@@ -3,12 +3,24 @@
 // 什么时候做、做完之后怎么办（等空闲、重连、再试）由核心定（packages/core/src/device/service-upgrade.mts），
 // 这里只跑脚本、把报回来的字读成结果；用户没确认过，核心不会叫 install 和 stop。
 // 解析是单独的几个函数：只看报回来的字，和 ssh 无关，自检里直接喂字就能验。
-import type { RemoteAdapterFacts, RemoteStopResult, RemoteUpgradePlatform } from '@litch/core'
+import type {
+  RemoteAdapterFacts,
+  RemoteStopResult,
+  RemoteSwapResult,
+  RemoteUpgradePlatform,
+} from '@litch/core'
 import { readInstall } from '@litch/core'
 import { parseBusy } from '../adapter-upgrade.mjs'
 import { notInstalled } from './probe.mjs'
 import { fields, type RunResult, runRemote, tailOf } from './run.mjs'
-import { EXIT, installScript, probeScript, type RemoteLang, stopScript } from './script.mjs'
+import {
+  EXIT,
+  installScript,
+  probeScript,
+  type RemoteLang,
+  stopScript,
+  swapScript,
+} from './script.mjs'
 
 /** 看一眼和探测一样宽 */
 const INSPECT_TIMEOUT_MS = 45_000
@@ -16,6 +28,8 @@ const INSPECT_TIMEOUT_MS = 45_000
 const INSTALL_TIMEOUT_MS = { script: 10 * 60_000, brew: 30 * 60_000 } as const
 /** device-stop 自己最多等 40 秒的应答、45 秒的退出，这里留得比它长 */
 const STOP_TIMEOUT_MS = 120_000
+/** 重新登记自启：变更助手最多做 3 分钟（停旧实例、等新实例就绪），--wait 等 200 秒，这里再留一点 */
+const SWAP_TIMEOUT_MS = 240_000
 /** 远端的原话最多留这么多字（末尾） */
 const SAID_MAX = 4000
 
@@ -30,8 +44,12 @@ const versionOf = (line: string | undefined): string | null =>
 
 /** 探测脚本报回来的字 → 装着的那一份在哪、是哪一版 */
 export function readFacts(out: Record<string, string>): RemoteAdapterFacts {
-  if (out.adapter !== 'yes') return { version: null, path: null }
-  return { version: versionOf(out.adapterVersion), path: out.adapterPath?.trim() || null }
+  if (out.adapter !== 'yes') return { version: null, path: null, autostart: false }
+  return {
+    version: versionOf(out.adapterVersion),
+    path: out.adapterPath?.trim() || null,
+    autostart: out.adapterAutostart === 'managed',
+  }
 }
 
 export { readInstall } from '@litch/core'
@@ -56,6 +74,23 @@ export function readStop(out: Record<string, string>): RemoteStopResult {
   }
 }
 
+/** 重新登记自启的脚本报回来的字 → 结果。退出码见 cmd/codex-harness-adapter/autostart_cli.go 的 awaitOperation */
+export function readSwap(out: Record<string, string>): RemoteSwapResult {
+  if (out.swap === 'unmanaged') return { result: 'unmanaged' }
+  switch (out.code) {
+    case '0':
+      return { result: 'stopped' }
+    case '4':
+      // 和停服务一样：连着的客户端不算要等的事，不列出来
+      return {
+        result: 'busy',
+        busy: parseBusy(out.out ?? '').filter((entry) => entry.reason !== 'clients'),
+      }
+    default:
+      return { result: 'failed', said: said(out.said) ?? said(out.out) }
+  }
+}
+
 /** 外壳给核心的那一份。lang：远端命令行说哪种语言，跟界面的 */
 export function remoteUpgrade(lang: () => RemoteLang): RemoteUpgradePlatform {
   return {
@@ -64,7 +99,9 @@ export function remoteUpgrade(lang: () => RemoteLang): RemoteUpgradePlatform {
         signal,
         timeoutMs: INSPECT_TIMEOUT_MS,
       })
-      return result.marked ? readFacts(fields(result.out)) : { version: null, path: null }
+      return result.marked
+        ? readFacts(fields(result.out))
+        : { version: null, path: null, autostart: false }
     },
     async install(target, plan, signal) {
       const result = await runRemote(
@@ -91,6 +128,15 @@ export function remoteUpgrade(lang: () => RemoteLang): RemoteUpgradePlatform {
       if (result.code === EXIT.notFound) throw notInstalled()
       if (!result.marked) return { result: 'failed', said: unmarked(result) }
       return readStop(fields(result.out))
+    },
+    async swap(target, ifIdle, signal) {
+      const result = await runRemote(target, swapScript({ ifIdle, lang: lang() }), {
+        signal,
+        timeoutMs: SWAP_TIMEOUT_MS,
+      })
+      if (result.code === EXIT.notFound) throw notInstalled()
+      if (!result.marked) return { result: 'failed', said: unmarked(result) }
+      return readSwap(fields(result.out))
     },
   }
 }
