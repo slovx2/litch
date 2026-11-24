@@ -49,6 +49,21 @@ function request(socket: string, data: unknown): Promise<unknown> {
   })
 }
 
+/** 这个会话是不是经理注入了 GitHub 身份的会话；设备不在、问不到都算不是 */
+export async function deviceGithubInjected(
+  harness: string,
+  threadId: string,
+  deviceSocket: string,
+): Promise<boolean> {
+  if (!deviceSocket || !threadId || !harness) return false
+  const value = (await request(deviceGithubEnvironmentSocket(deviceSocket), {
+    action: 'probe',
+    harness,
+    threadId,
+  })) as { injected?: unknown } | null
+  return value?.injected === true
+}
+
 export async function deviceGithubEnvironment(
   harness: string,
   threadId: string,

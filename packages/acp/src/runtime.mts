@@ -6,6 +6,7 @@ import { takeLogDir } from '../../shared/src/log-file.mjs'
 import { type ResolvedAgent, resolveAgent } from './agent.mjs'
 import { AcpConnection, AcpError, type RequestOutcome } from './connection.mjs'
 import { type AgentCapabilities, capabilitiesOf } from './declaration.mjs'
+import { threadHookEnv } from './thread-hook-settings.mjs'
 import { versions } from './versions.mjs'
 
 export interface AgentHandle {
@@ -107,9 +108,11 @@ export class AcpRuntime {
     this.log(`\n[${new Date().toISOString()}] 启动 ${resolved.argv.join(' ')}\n`)
     this.stderrTail = ''
     // 和适配器同一个进程组：适配器被强杀时，命令行给整组发的信号也送到 agent
+    // Gemini、Qwen 的工具前钩子：已注入的会话的 shell 命令带上会话号（thread-hook-settings.mts）
+    const env = { ...this.env, ...threadHookEnv(resolved.spec.id, this.env, this.home) }
     const child = spawn(command, args, {
       cwd: this.home,
-      env: this.env,
+      env,
       stdio: ['pipe', 'pipe', 'pipe'],
     })
     child.stderr?.setEncoding('utf8')

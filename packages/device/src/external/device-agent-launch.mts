@@ -136,6 +136,17 @@ export class DeviceAgentLaunch {
       this.release(raw.lease)
       return {}
     }
+    // 只问这个会话是不是已注入（Gemini、Qwen 的工具前钩子据此决定要不要给命令写上会话号），不发租约。
+    if (
+      raw.action === 'probe' &&
+      typeof raw.threadId === 'string' &&
+      typeof raw.harness === 'string'
+    ) {
+      const actor = this.actor(raw.threadId, raw.harness)
+      return {
+        injected: !!actor && !!this.options.configuration.assignmentForManager(actor.managerId),
+      }
+    }
     if (
       raw.action !== 'start' ||
       typeof raw.threadId !== 'string' ||

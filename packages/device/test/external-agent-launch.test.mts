@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { Terminals } from '../../acp/src/client-side.mjs'
+import { threadHook } from '../../acp/src/thread-hook.mjs'
 import { encodeThread } from '../../antigravity/src/id-space.mjs'
 import { commandContext } from '../../antigravity/src/server.mjs'
 import threadPlugin from '../../opencode/src/thread-plugin.mjs'
@@ -74,8 +76,15 @@ function launcher(managerHarness: string, lines: Record<string, string>) {
       harness,
       base: { PATH: '/usr/bin' },
     })
+  const probe = async (threadId: string, harness: string) =>
+    (
+      (await (
+        launch as unknown as { request(raw: unknown): Promise<{ injected?: boolean }> }
+      ).request({ action: 'probe', threadId, harness })) as { injected?: boolean }
+    ).injected === true
   return {
     request,
+    probe,
     set(next: { state?: GithubAgentResolution['state']; assigned?: boolean }) {
       state = next.state ?? state
       assigned = next.assigned ?? assigned
@@ -211,4 +220,41 @@ test('Antigravity 的 localharness 拿到路由给出去的会话号和设备入
     LITCH_DEVICE_GITHUB_HARNESS: 'agy',
   })
   await leased('agy', env, threadId, 'agy SDK')
+})
+
+test('probe 只回答会话是否已注入，不发租约', async () => {
+  const f = launcher('gemini', { line: 'qwen' })
+  assert.equal(await f.probe('m-thread', 'gemini'), true)
+  assert.equal(await f.probe('line', 'qwen'), true)
+  assert.equal(await f.probe('line', 'gemini'), false, 'harness 对不上')
+  assert.equal(await f.probe('ordinary', 'codex'), false, '普通会话')
+  f.set({ assigned: false })
+  assert.equal(await f.probe('m-thread', 'gemini'), false, '经理没分配身份')
+})
+
+test('Qwen 的工具前钩子给已注入会话的命令写上会话号，其余不改', {
+  skip: process.platform === 'win32',
+}, async () => {
+  const f = launcher('qwen', { 'acp-session-1': 'qwen', "bad'id": 'qwen' })
+  const input = (sessionId: string, tool = 'run_shell_command') => ({
+    session_id: sessionId,
+    tool_name: tool,
+    tool_input: { command: 'printf %s "$LITCH_THREAD_ID"', description: 'x' },
+  })
+  const hook = (raw: unknown) =>
+    threadHook('qwen', '/state/device.sock', raw, (harness, threadId) => f.probe(threadId, harness))
+  const result = (await hook(input('acp-session-1'))) as {
+    hookSpecificOutput: { updatedInput: { command: string; description: string } }
+  }
+  const replaced = result.hookSpecificOutput.updatedInput
+  assert.equal(replaced.description, 'x', '其余参数原样')
+  const printed = execFileSync('bash', ['-c', replaced.command], {
+    env: { PATH: process.env.PATH },
+    encoding: 'utf8',
+  })
+  await leased('qwen', { LITCH_THREAD_ID: printed }, 'acp-session-1', 'qwen 钩子')
+  assert.deepEqual(await hook(input('ordinary')), {}, '未注入的会话不改')
+  assert.deepEqual(await hook(input('acp-session-1', 'read_file')), {}, '只改 shell')
+  assert.deepEqual(await hook(input("bad'id")), {}, '会话号带特殊字符不改（即使已注入）')
+  assert.deepEqual(await hook(null), {})
 })
