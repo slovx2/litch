@@ -22,12 +22,15 @@ export const FEISHU_METHOD = {
   chatUpdate: 'litch/feishu/chat/update',
   chatUnaccess: 'litch/feishu/chat/unaccess',
   chatBackfill: 'litch/feishu/chat/backfill',
+  inboxList: 'litch/feishu/inbox/list',
+  inboxGet: 'litch/feishu/inbox/get',
 } as const
 
 export const FEISHU_NOTIFICATION = {
   appsChanged: 'litch/feishu/appsChanged',
   registrationChanged: 'litch/feishu/registrationChanged',
   chatsChanged: 'litch/feishu/chatsChanged',
+  inboxChanged: 'litch/feishu/inboxChanged',
 } as const
 
 /** 只读方法；其余写操作只给设备管理员连接 */
@@ -37,6 +40,8 @@ export const FEISHU_PUBLIC_READS: ReadonlySet<string> = new Set([
   FEISHU_METHOD.chatList,
   FEISHU_METHOD.chatGet,
   FEISHU_METHOD.chatMembers,
+  FEISHU_METHOD.inboxList,
+  FEISHU_METHOD.inboxGet,
 ])
 
 export const FEISHU_APP_ID = /^cli_[0-9a-f]{16}$/
@@ -198,6 +203,44 @@ export interface FeishuChatRecords {
   gap?: FeishuGapFill
 }
 
+/** 收件箱：谁在飞书里找了经理（D-161）。不存正文，正文在设备的消息库里 */
+export type FeishuInboxTrigger = 'mention' | 'reply' | 'p2p'
+export type FeishuInboxStatus = 'queued' | 'notified' | 'processed'
+/** bound：已私聊绑定；member：本群成员；unknown：都不是（设备核过的身份，不信正文里的自称） */
+export type FeishuSenderIdentity = 'bound' | 'member' | 'unknown'
+
+export interface FeishuInboxEntry {
+  /** FI-<n> */
+  inboxId: string
+  status: FeishuInboxStatus
+  appId: string
+  managerId: string
+  chatId: string
+  chatKind: 'group' | 'p2p'
+  messageId: string
+  senderOpenId: string
+  senderName?: string
+  senderIdentity: FeishuSenderIdentity
+  trigger: FeishuInboxTrigger
+  /** 消息在飞书上的创建时间（秒） */
+  createdAt: number
+  receivedAt: number
+  deliveryId?: string
+  notifiedAt?: number
+  processedAt?: number
+  /** rate_limited：叫醒额度用完，排到下一个窗口 */
+  note?: 'rate_limited'
+}
+
+/** 收件箱条目对应的消息（从设备的消息库读；过了保留期的只剩 ID） */
+export interface FeishuInboxMessage {
+  chatName: string
+  text: string | null
+  msgType: string
+  state: 'normal' | 'recalled' | 'deleted'
+  purged: boolean
+}
+
 /** 单次补历史最多补多少条 */
 export const FEISHU_BACKFILL_LIMIT = 1000
 
@@ -288,12 +331,32 @@ export interface FeishuRequests {
     { appId: string; chatId: string; start: number; end: number },
     { chat: FeishuChat }
   >
+  /** 经理的收件箱，新的在前；before 是上一页最后一条的 inboxId */
+  [FEISHU_METHOD.inboxList]: Request<
+    {
+      managerId: string
+      statuses?: FeishuInboxStatus[]
+      before?: string
+      limit?: number
+    },
+    /** messages：按 inboxId 给出对应消息，消息库里没有的不出现 */
+    {
+      entries: FeishuInboxEntry[]
+      messages: Record<string, FeishuInboxMessage>
+      next?: string
+    }
+  >
+  [FEISHU_METHOD.inboxGet]: Request<
+    { inboxId: string },
+    { entry: FeishuInboxEntry; message: FeishuInboxMessage | null }
+  >
 }
 
 export interface FeishuNotifications {
   [FEISHU_NOTIFICATION.appsChanged]: { appId?: string }
   [FEISHU_NOTIFICATION.registrationChanged]: { registrationId: string; revision: number }
   [FEISHU_NOTIFICATION.chatsChanged]: { appId: string; chatId?: string }
+  [FEISHU_NOTIFICATION.inboxChanged]: { managerId: string; appId: string }
 }
 
 export type FeishuMethod = keyof FeishuRequests

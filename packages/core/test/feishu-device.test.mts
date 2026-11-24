@@ -170,3 +170,36 @@ test('群列表按应用订阅：带管理员标记；chatsChanged 和写命令�
   assert.equal(calls.filter((call) => call.method === 'litch/feishu/chat/list').length, before)
   close()
 })
+
+test('收件箱按经理订阅：inboxChanged 只重读那位经理的；读命令不触发重读', async () => {
+  const calls: { method: string; params: unknown }[] = []
+  const device = createFeishuDevice({
+    online: () => true,
+    supported: () => true,
+    now: () => 42,
+    fail: (error) => channelFailure(error),
+    async request<M extends keyof FeishuRequests>(
+      method: M,
+      params: FeishuRequests[M]['params'],
+    ): Promise<FeishuRequests[M]['result']> {
+      calls.push({ method, params })
+      return { entries: [], messages: {} } as unknown as FeishuRequests[M]['result']
+    },
+  })
+  const seen: unknown[] = []
+  device.open({ kind: 'feishuInbox', deviceId: 'd', managerId: 'm1' }, sink(seen))
+  await flush()
+  assert.deepEqual(calls, [
+    { method: 'litch/feishu/inbox/list', params: { managerId: 'm1', limit: 100 } },
+  ])
+  assert.equal(device.notification(FEISHU_NOTIFICATION.inboxChanged, { managerId: 'm2' }), true)
+  await flush()
+  assert.equal(calls.length, 1, '别的经理变了不重读')
+  device.notification(FEISHU_NOTIFICATION.inboxChanged, { managerId: 'm1', appId: 'cli_x' })
+  await flush()
+  assert.equal(calls.length, 2)
+  await device.command('feishu.inbox.get', { inboxId: 'FI-1' })
+  await flush()
+  assert.equal(calls.length, 3)
+  assert.equal(calls.at(-1)?.method, 'litch/feishu/inbox/get')
+})

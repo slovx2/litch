@@ -112,6 +112,23 @@ export class DeviceFeishuRpc {
         service.records.backfill(input.appId, input.chatId, input.start, input.end)
         return { chat: service.chats.get(input.appId, input.chatId) }
       }
+      case M.inboxList: {
+        const input = args(method)
+        return service.inboxPage(
+          input.managerId,
+          input.statuses ?? ['queued', 'notified', 'processed'],
+          input.limit ?? 50,
+          input.before,
+        )
+      }
+      case M.inboxGet: {
+        const entry = service.inbox.entry(args(method).inboxId) ?? fail('feishu_inbox_not_found')
+        return { entry, message: service.inboxMessage(entry) }
+      }
     }
   }
+}
+
+const fail = (reason: string): never => {
+  throw new ProtocolError(-32602, reason)
 }

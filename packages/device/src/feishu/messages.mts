@@ -124,6 +124,7 @@ export type NewMessage = Omit<StoredMessage, 'seq' | 'pinned' | 'bodyPurgedAt'>
 export interface StoredAttachment extends ParsedAttachment {
   messageId: string
   size?: number
+  contentType?: string
   downloadedPath?: string
   downloadedAt?: number
 }
@@ -379,6 +380,78 @@ export class ImMessages {
       .prepare('UPDATE im_messages SET pinned=1 WHERE provider=? AND app_id=? AND message_id=?')
       .run(this.provider, appId, messageId)
     return Number(result.changes) > 0
+  }
+
+  /** 一个群里 seq 在 afterSeq 之后、创建时间不早于 minCreateTime 的消息，按 seq 升序，留最新的 limit 条 */
+  since(
+    appId: string,
+    chatId: string,
+    afterSeq: number,
+    minCreateTime: number,
+    limit: number,
+  ): { messages: StoredMessage[]; total: number } {
+    const where = `provider=? AND app_id=? AND chat_id=? AND seq>? AND create_time>=?`
+    const args = [this.provider, appId, chatId, afterSeq, minCreateTime] as const
+    const total = Number(
+      this.db.prepare(`SELECT count(*) AS n FROM im_messages WHERE ${where}`).get(...args)?.n ?? 0,
+    )
+    const messages = this.db
+      .prepare(`SELECT * FROM im_messages WHERE ${where} ORDER BY seq DESC LIMIT ?`)
+      .all(...args, limit)
+      .map(messageOf)
+      .reverse()
+    return { messages, total }
+  }
+
+  /** 查历史：按时间、关键字、消息 ID 筛，按创建时间升序，留最新的 limit 条 */
+  search(
+    appId: string,
+    chatId: string,
+    filter: { since?: number; until?: number; keyword?: string; messageIds?: string[] },
+    limit: number,
+  ): StoredMessage[] {
+    const clauses = ['provider=?', 'app_id=?', 'chat_id=?']
+    const args: (string | number)[] = [this.provider, appId, chatId]
+    if (filter.since !== undefined) {
+      clauses.push('create_time>=?')
+      args.push(filter.since)
+    }
+    if (filter.until !== undefined) {
+      clauses.push('create_time<=?')
+      args.push(filter.until)
+    }
+    if (filter.keyword) {
+      clauses.push("instr(lower(coalesce(text,'')), lower(?))>0")
+      args.push(filter.keyword)
+    }
+    if (filter.messageIds?.length) {
+      clauses.push(`message_id IN (${filter.messageIds.map(() => '?').join(',')})`)
+      args.push(...filter.messageIds)
+    }
+    return this.db
+      .prepare(
+        `SELECT * FROM im_messages WHERE ${clauses.join(' AND ')}
+         ORDER BY create_time DESC, seq DESC LIMIT ?`,
+      )
+      .all(...args, limit)
+      .map(messageOf)
+      .reverse()
+  }
+
+  /** 附件下载后记下本地路径 */
+  saveDownload(appId: string, messageId: string, attachment: StoredAttachment): void {
+    const { messageId: _drop, ...body } = attachment
+    this.db
+      .prepare(
+        'UPDATE im_attachments SET body=? WHERE provider=? AND app_id=? AND message_id=? AND file_key=?',
+      )
+      .run(JSON.stringify(body), this.provider, appId, messageId, attachment.fileKey)
+  }
+
+  setTriage(appId: string, messageId: string, triage: 'pending' | 'done'): void {
+    this.db
+      .prepare('UPDATE im_messages SET triage=? WHERE provider=? AND app_id=? AND message_id=?')
+      .run(triage, this.provider, appId, messageId)
   }
 
   // —— 统计与水位 ——

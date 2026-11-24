@@ -6,6 +6,9 @@ import {
   type FeishuApp,
   type FeishuAppUpdateParams,
   type FeishuConnection,
+  type FeishuInboxEntry,
+  type FeishuInboxMessage,
+  type FeishuInboxStatus,
   type FeishuRegistration,
 } from '../../../protocol/src/feishu.mjs'
 import { ProtocolError } from '../../../shared/src/protocol-contract.mjs'
@@ -21,11 +24,13 @@ import { checkCapability, upgradeCapability } from './capability.mjs'
 import { FeishuChats } from './chats.mjs'
 import { FeishuConnectionRunner, type FeishuEventHandler } from './connection.mjs'
 import { FeishuCredentials } from './credentials.mjs'
+import { FeishuInbox } from './inbox.mjs'
 import { ImMessages, openImMessages } from './messages.mjs'
 import { FeishuRecords } from './records.mjs'
 import { FeishuRegistrations } from './registration.mjs'
 import { SpeechPolicies } from './speech-policy.mjs'
 import { type FeishuAppRecord, FeishuStore } from './store.mjs'
+import { FeishuWake } from './wake.mjs'
 
 /** 附件下载到设备状态目录下的这里（0700） */
 export const FEISHU_ATTACHMENTS_DIRECTORY = 'feishu-attachments'
@@ -41,6 +46,8 @@ export interface DeviceFeishuOptions {
     now?: () => number
     watchdog?: ConstructorParameters<typeof FeishuConnectionRunner>[0]['watchdog']
     registrationIntervalMs?: number
+    /** 叫醒检查间隔（毫秒） */
+    wakeTickMs?: number
   }
 }
 
@@ -68,10 +75,13 @@ export class DeviceFeishuService {
   readonly chats: FeishuChats
   readonly messages: ImMessages
   readonly records: FeishuRecords
+  readonly inbox: FeishuInbox
+  readonly wake: FeishuWake
   private readonly credentials: FeishuCredentials
   private readonly endpoints: FeishuEndpoints
   private readonly registrations: FeishuRegistrations
-  private readonly now: () => number
+  /** 秒 */
+  readonly now: () => number
   private readonly running = new Map<string, Running>()
   /** 每个应用的连接状态（运行时，不进库） */
   private readonly connections = new Map<string, FeishuConnection>()
@@ -139,6 +149,28 @@ export class DeviceFeishuService {
     this.chats.onUnaccess((appId, chatId, deleteRecords) =>
       this.records.unaccessed(appId, chatId, deleteRecords),
     )
+    const inboxChanged = (managerId: string, appId: string) => this.inboxChanged(managerId, appId)
+    this.inbox = new FeishuInbox({
+      store: this.store,
+      messages: this.messages,
+      chats: this.chats,
+      records: this.records,
+      now: this.now,
+      log: options.log,
+      changed: inboxChanged,
+    })
+    this.wake = new FeishuWake({
+      store: this.store,
+      inbox: this.inbox,
+      messages: this.messages,
+      chats: this.chats,
+      now: this.now,
+      log: options.log,
+      changed: inboxChanged,
+      ...(options.fixture?.wakeTickMs === undefined ? {} : { tickMs: options.fixture.wakeTickMs }),
+    })
+    this.records.onStored((message, source) => this.inbox.stored(message, source))
+    this.inbox.onQueued(() => this.wake.tick())
     this.on('im.message.receive_v1', (appId, data) => this.records.received(appId, data))
     this.on('im.message.recalled_v1', (appId, data) => this.records.recalled(appId, data))
     this.on('im.chat.member.user.added_v1', (appId, data) => this.records.membersAdded(appId, data))
@@ -153,7 +185,10 @@ export class DeviceFeishuService {
         })
         .then(() => {
           // 设备已关：库也关了，不再补缺口
-          if (this.started) this.records.connected(appId)
+          if (!this.started) return
+          this.records.connected(appId)
+          // 上次没判完的回复（回复对象要回源），连上了再判
+          this.inbox.recover(appId)
         })
         .catch((error: Error) => options.log(`飞书补缺口排队失败：${error.message}`))
     })
@@ -167,6 +202,52 @@ export class DeviceFeishuService {
     this.handlers[eventType] = handler
   }
 
+  /** 界面的收件箱：一页条目加对应的消息 */
+  inboxPage(
+    managerId: string,
+    statuses: FeishuInboxStatus[],
+    limit: number,
+    before?: string,
+  ): { entries: FeishuInboxEntry[]; messages: Record<string, FeishuInboxMessage>; next?: string } {
+    const beforeSeq = before ? Number(before.slice(3)) : undefined
+    const page = this.inbox.list(managerId, statuses, limit + 1, beforeSeq)
+    const entries = page.slice(0, limit)
+    const messages: Record<string, FeishuInboxMessage> = {}
+    for (const entry of entries) {
+      const message = this.inboxMessage(entry)
+      if (message) messages[entry.inboxId] = message
+    }
+    const last = entries.at(-1)
+    return { entries, messages, ...(page.length > limit && last ? { next: last.inboxId } : {}) }
+  }
+
+  inboxMessage(entry: FeishuInboxEntry): FeishuInboxMessage | null {
+    const message = this.messages.get(entry.appId, entry.messageId)
+    if (!message) return null
+    return {
+      chatName: this.chats.record(entry.appId, entry.chatId)?.name ?? '',
+      text: message.text,
+      msgType: message.msgType,
+      state: message.state,
+      purged: message.bodyPurgedAt !== undefined,
+    }
+  }
+
+  inboxChanged(managerId: string, appId: string): void {
+    this.options.announce(FEISHU_NOTIFICATION.inboxChanged, { managerId, appId })
+  }
+
+  /** 经理绑了应用；应用停用也算（工具照装，读本地记录） */
+  hasApp(managerId: string): boolean {
+    return this.store.appForManager(managerId) !== null
+  }
+
+  /** 飞书会自己叫醒这位经理：应用启用、至少接入了一个群 */
+  unattended(managerId: string): boolean {
+    const app = this.store.appForManager(managerId)
+    return this.started && !!app?.enabled && this.chats.activeChats(app.appId).length > 0
+  }
+
   onConnected(hook: (appId: string) => void): void {
     this.connectedHooks.push(hook)
   }
@@ -177,12 +258,14 @@ export class DeviceFeishuService {
     const apps = this.store.apps()
     this.credentials.sweep(new Map(apps.map((app) => [app.appId, app.credential.generation])))
     this.records.start()
+    this.wake.start()
     for (const app of apps) this.reconcile(app.appId)
   }
 
   close(): void {
     this.started = false
     this.registrations.close()
+    this.wake.close()
     this.records.close()
     for (const appId of [...this.running.keys()]) this.stop(appId)
     this.messages.close()

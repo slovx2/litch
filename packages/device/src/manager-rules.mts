@@ -5,6 +5,7 @@ import type {
   ClientToolFunctionSpec,
   ClientToolNamespaceSpec,
 } from '../../protocol/src/client-tools.mjs'
+import { FEISHU_TOOLS } from '../../protocol/src/client-tools-feishu.mjs'
 import {
   MANAGER_ITEM_NOTE,
   MANAGER_TOOLS,
@@ -54,8 +55,12 @@ export function managerBundle(
   native: boolean,
   taskCards = true,
   external?: readonly ClientToolFunctionSpec[],
+  feishu = false,
 ) {
-  return [...managerTools(manager, taskCards, external), ...(native ? [] : [PRESENTATION_SPEC])]
+  return [
+    ...managerTools(manager, taskCards, external, feishu),
+    ...(native ? [] : [PRESENTATION_SPEC]),
+  ]
 }
 export function managerFingerprint(tools: unknown): string {
   const canonical = (value: unknown): unknown =>
@@ -110,6 +115,8 @@ export function managerTools(
   manager: RuleSettings,
   taskCards = true,
   external?: readonly ClientToolFunctionSpec[],
+  /** 经理绑了飞书应用：多装 litch_feishu */
+  feishu = false,
 ): ClientToolNamespaceSpec[] {
   const sessions = sessionTools(false, taskCards)
   return [
@@ -170,6 +177,7 @@ export function managerTools(
           }),
     },
     REPOSITORY_TOOLS,
+    ...(feishu ? [FEISHU_TOOLS] : []),
   ]
 }
 export function managerInstructions(manager: RuleSettings, external = false): string {

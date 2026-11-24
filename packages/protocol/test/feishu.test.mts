@@ -8,6 +8,8 @@ import {
   FEISHU_NOTIFICATION,
   type FeishuApp,
   type FeishuChat,
+  type FeishuInboxEntry,
+  type FeishuInboxMessage,
   type FeishuNotifications,
   type FeishuRegistration,
   type FeishuRequests,
@@ -83,6 +85,32 @@ const access = {
   reviewTtlHours: 24,
 } as const
 
+const inboxEntry = {
+  inboxId: 'FI-1',
+  status: 'notified',
+  appId,
+  managerId: 'm-1',
+  chatId,
+  chatKind: 'group',
+  messageId: 'om_1',
+  senderOpenId: 'ou_alice',
+  senderName: '示例成员甲',
+  senderIdentity: 'member',
+  trigger: 'mention',
+  createdAt: 40,
+  receivedAt: 41,
+  deliveryId: 'd-1',
+  notifiedAt: 60,
+  note: 'rate_limited',
+} satisfies FeishuInboxEntry
+const inboxMessage = {
+  chatName: '示例项目群',
+  text: '@机器人 看一下',
+  msgType: 'text',
+  state: 'normal',
+  purged: false,
+} satisfies FeishuInboxMessage
+
 const samples: {
   [M in keyof FeishuRequests]: [FeishuRequests[M]['params'], FeishuRequests[M]['result']]
 } = {
@@ -146,6 +174,14 @@ const samples: {
       },
     },
   ],
+  [FEISHU_METHOD.inboxList]: [
+    { managerId: 'm-1', statuses: ['queued', 'notified'], before: 'FI-9', limit: 20 },
+    { entries: [inboxEntry], messages: { 'FI-1': inboxMessage }, next: 'FI-1' },
+  ],
+  [FEISHU_METHOD.inboxGet]: [
+    { inboxId: 'FI-1' },
+    { entry: { ...inboxEntry, status: 'processed', processedAt: 70 }, message: null },
+  ],
 }
 
 test('每个方法的样本都通过定义和入站校验', () => {
@@ -169,6 +205,7 @@ test('通知样本通过定义', () => {
     [FEISHU_NOTIFICATION.appsChanged]: { appId },
     [FEISHU_NOTIFICATION.registrationChanged]: { registrationId: 'reg-1', revision: 1 },
     [FEISHU_NOTIFICATION.chatsChanged]: { appId, chatId },
+    [FEISHU_NOTIFICATION.inboxChanged]: { managerId: 'm-1', appId },
   }
   for (const [name, value] of Object.entries(params)) assert.ok(wire(name, 'params', value), name)
 })

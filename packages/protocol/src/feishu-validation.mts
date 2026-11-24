@@ -58,6 +58,14 @@ const botName: Check = (value) =>
 const secret = str(FEISHU_SECRET_MAX)
 const chatId = pattern(FEISHU_CHAT_ID)
 const speech: Check = (value) => value === 'free' || value === 'approval'
+const inboxId = pattern(/^FI-[1-9][0-9]{0,15}$/)
+const INBOX_STATUSES = new Set(['queued', 'notified', 'processed'])
+const inboxStatuses: Check = (value) =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.length <= 3 &&
+  new Set(value).size === value.length &&
+  value.every((item) => INBOX_STATUSES.has(item))
 const retentionDays = int(FEISHU_RETENTION_DAYS.min, FEISHU_RETENTION_DAYS.max)
 const reviewTtlHours = int(FEISHU_REVIEW_TTL_HOURS.min, FEISHU_REVIEW_TTL_HOURS.max)
 const wakers: Check = (value) =>
@@ -107,6 +115,12 @@ const checks = {
   [FEISHU_METHOD.chatBackfill]: (value) =>
     obj({ ...chatRef, start: int(), end: int() })(value) &&
     (value as { start: number }).start < (value as { end: number }).end,
+  [FEISHU_METHOD.inboxList]: (value) =>
+    obj(
+      { managerId: logicalId },
+      { statuses: inboxStatuses, before: inboxId, limit: int(1, 200) },
+    )(value),
+  [FEISHU_METHOD.inboxGet]: obj({ inboxId }),
 } satisfies { [M in FeishuMethod]: Check }
 
 export function isFeishuMethod(method: string): method is FeishuMethod {

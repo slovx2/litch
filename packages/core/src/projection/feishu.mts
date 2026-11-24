@@ -3,6 +3,8 @@ import {
   FEISHU_METHOD,
   type FeishuApp,
   type FeishuChat,
+  type FeishuInboxEntry,
+  type FeishuInboxMessage,
   type FeishuRegistration,
   type FeishuRequests,
 } from '../../../protocol/src/feishu.mjs'
@@ -12,6 +14,7 @@ export type FeishuTopic =
   | { kind: 'feishuDevice'; deviceId: string }
   | { kind: 'feishuRegistration'; deviceId: string; registrationId: string }
   | { kind: 'feishuChats'; deviceId: string; appId: string }
+  | { kind: 'feishuInbox'; deviceId: string; managerId: string }
 
 export interface FeishuDeviceView {
   apps: ExternalSnapshot<FeishuApp[]>
@@ -21,6 +24,13 @@ export interface FeishuDeviceView {
 export type FeishuRegistrationView = ExternalSnapshot<FeishuRegistration>
 /** 机器人所在的群（含机器人已不在、但还留着接入设置的群）；syncedAt 是设备最近回源的时间（UTC 秒） */
 export type FeishuChatsView = ExternalSnapshot<{ chats: FeishuChat[]; syncedAt: number | null }>
+
+/** 经理的飞书收件箱：最近的一页（新的在前）加对应的消息 */
+export type FeishuInboxView = ExternalSnapshot<{
+  entries: FeishuInboxEntry[]
+  messages: Record<string, FeishuInboxMessage>
+  next?: string
+}>
 
 export const FEISHU_COMMAND = {
   'feishu.app.get': FEISHU_METHOD.appGet,
@@ -40,6 +50,8 @@ export const FEISHU_COMMAND = {
   'feishu.chat.update': FEISHU_METHOD.chatUpdate,
   'feishu.chat.unaccess': FEISHU_METHOD.chatUnaccess,
   'feishu.chat.backfill': FEISHU_METHOD.chatBackfill,
+  'feishu.inbox.list': FEISHU_METHOD.inboxList,
+  'feishu.inbox.get': FEISHU_METHOD.inboxGet,
 } as const
 
 export type FeishuCommandName = keyof typeof FEISHU_COMMAND

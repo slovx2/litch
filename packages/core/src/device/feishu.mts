@@ -3,6 +3,8 @@ import {
   FEISHU_NOTIFICATION,
   type FeishuApp,
   type FeishuChat,
+  type FeishuInboxEntry,
+  type FeishuInboxMessage,
   type FeishuRegistration,
   type FeishuRequests,
 } from '../../../protocol/src/feishu.mjs'
@@ -50,6 +52,12 @@ export function createFeishuDevice(host: FeishuHost) {
   const registrations = new Map<string, ExternalRead<FeishuRegistration>>()
   type ChatsValue = { chats: FeishuChat[]; syncedAt: number | null }
   const chats = new Map<string, ExternalRead<ChatsValue>>()
+  type InboxValue = {
+    entries: FeishuInboxEntry[]
+    messages: Record<string, FeishuInboxMessage>
+    next?: string
+  }
+  const inboxes = new Map<string, ExternalRead<InboxValue>>()
 
   function view() {
     return { apps: apps.snapshot(), admin }
@@ -74,6 +82,23 @@ export function createFeishuDevice(host: FeishuHost) {
       () => read.send(),
     )
     chats.set(appId, read)
+    return read
+  }
+
+  function inboxOf(managerId: string) {
+    const found = inboxes.get(managerId)
+    if (found) return found
+    if (inboxes.size >= 8) {
+      const old = [...inboxes].find(([, read]) => read.sinks.size === 0)
+      if (old) inboxes.delete(old[0])
+    }
+    const read: ExternalRead<InboxValue> = new ExternalRead(
+      host,
+      host.supported,
+      () => host.request('litch/feishu/inbox/list', { managerId, limit: 100 }),
+      () => read.send(),
+    )
+    inboxes.set(managerId, read)
     return read
   }
 
@@ -118,7 +143,9 @@ export function createFeishuDevice(host: FeishuHost) {
       })
       if (sensitive && contains(result, secret))
         throw new ChannelError('remote', 'Device returned invalid credential data')
-      if (name.startsWith('feishu.chat.')) {
+      if (name.startsWith('feishu.inbox.')) {
+        // 只读，不用刷新
+      } else if (name.startsWith('feishu.chat.')) {
         if (name !== 'feishu.chat.get' && name !== 'feishu.chat.members')
           chats.get((args as { appId: string }).appId)?.notify()
       } else if (name !== 'feishu.app.get' && name !== 'feishu.app.register.get') refreshApps()
@@ -144,6 +171,7 @@ export function createFeishuDevice(host: FeishuHost) {
       if (topic.kind === 'feishuRegistration')
         return registrationOf(topic.registrationId).open(sink)
       if (topic.kind === 'feishuChats') return chatsOf(topic.appId).open(sink)
+      if (topic.kind === 'feishuInbox') return inboxOf(topic.managerId).open(sink)
       const first = deviceSinks.size === 0
       deviceSinks.add(sink)
       sink.snapshot(view())
@@ -161,7 +189,7 @@ export function createFeishuDevice(host: FeishuHost) {
         read.connectionChanged()
         read.notify()
       }
-      for (const read of registrations.values()) {
+      for (const read of [...registrations.values(), ...inboxes.values()]) {
         read.connectionChanged()
         read.notify()
       }
@@ -179,6 +207,11 @@ export function createFeishuDevice(host: FeishuHost) {
         case FEISHU_NOTIFICATION.chatsChanged: {
           const appId = (params as { appId?: unknown } | null)?.appId
           if (typeof appId === 'string') chats.get(appId)?.notify()
+          return true
+        }
+        case FEISHU_NOTIFICATION.inboxChanged: {
+          const managerId = (params as { managerId?: unknown } | null)?.managerId
+          if (typeof managerId === 'string') inboxes.get(managerId)?.notify()
           return true
         }
         default:
