@@ -26,7 +26,10 @@ export const zhRupgrade = {
   'service.remote.autostart.pending': '该服务由系统自启管理，换上新版需要重启设备服务。',
   'service.remote.waiting.autostart':
     '新版 {to} 已安装，等待重启生效。设备服务当前忙碌，空闲后自动重启：',
+  'service.launch.autostart': '由系统自启管理',
   'service.remote.restartNow': '现在重启',
+  'service.busy.autostart':
+    '新版已随应用安装，等待重启生效。设备服务由系统自启管理且当前忙碌，空闲后自动重启：',
   'service.remote.waiting': '新版 {to} 已安装。设备服务当前忙碌，空闲后自动换上：',
   'service.remote.waiting.next': '每次连接时以及每 5 分钟会再试一次；退出应用后不再等待。',
   'service.remote.retry': '立即重试',

@@ -91,6 +91,11 @@ export interface ServiceUpgradeView {
    * 只在要用户手工结束它的时候拿来给命令用，应用自己从不按它去结束谁
    */
   pid: number | null
+  /**
+   * 在跑的那一份由 Litch 的系统自启（LaunchAgent、systemd 用户服务）管着：
+   * 换版本时重新登记自启，由系统服务管理器重启服务，被打断的回合续跑
+   */
+  autostart: boolean
 }
 
 /**
@@ -112,6 +117,7 @@ export interface ServiceUpgradeReport {
   }[]
   detail: string | null
   pid: number | null
+  autostart: boolean
 }
 
 // ---------- 远程设备的一键升级 ----------

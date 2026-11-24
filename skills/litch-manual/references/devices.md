@@ -116,6 +116,7 @@ computer" 0.10.0, session trees and scheduled tasks 0.11.0, phone pairing 0.12.0
   "Installed, pending restart" and offers **Restart Now** (asks once more, listing what is interrupted).
   This is desktop-only and not available through `scripts/litch`; the phone app only shows that the
   service is older.
+- 本机设备服务由 Litch 设备服务自启（LaunchAgent、systemd 用户服务）管理时，应用更新后同样在空闲时换上自带版本：用自带版本重新登记自启，由系统服务管理器重启服务，符合条件的普通回合自动继续。忙时“设备服务”显示“已安装，等待重启生效”，并提供“立即重试”和“现在重启”；前台运行或由其他服务管理器管理的服务仍不替换。
 - 本机设备服务等待换上应用自带版本时，设备详情的“设备服务”中同时提供“立即重试”和“立即换上”。“立即重试”只在空闲时更新；“立即换上”与远程设备使用同一确认框，列出被中断的工作，确认后停止旧进程并用自带版本重新启动。
 - **Restart device service** is in the device row's ⋯ menu in the sidebar, the desktop device details’ **Device service** section, and the phone's device-list menu, for local and remote devices.
   It asks the service to stop, waits until the old process has exited, starts it again and reconnects;

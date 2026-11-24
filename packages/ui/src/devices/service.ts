@@ -95,6 +95,10 @@ export function pillOf(
 ): (Line & { tone: 'ok' | 'wait' }) | null {
   const notice = noticeOf(upgrade)
   if (upgrade === null || notice === null) return null
+  // 系统自启管着、因为忙还没换：应用自带的新版已经在，只差重启
+  if (notice === 'busy' && upgrade.autostart) {
+    return { tone: 'wait', key: 'service.remote.sum.installed', args: {} }
+  }
   if (notice !== 'replaced') return { tone: 'wait', key: 'service.sum.stale', args: {} }
   return upgrade.previous !== null && upgrade.order !== 'rebuilt'
     ? { tone: 'ok', key: 'service.sum.replaced', args: { from: upgrade.previous } }

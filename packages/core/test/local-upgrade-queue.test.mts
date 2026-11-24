@@ -30,7 +30,14 @@ function setup(results: RemoteStopResult[]) {
     sessions: () => [{ id: 's1', title: 'test', running: true, background: 0 }],
     interrupted() {},
   })
-  const seen = { online: true, full: true, service, failure: null, upgrading: false }
+  const seen = {
+    online: true,
+    full: true,
+    service,
+    failure: null,
+    upgrading: false,
+    swappable: false,
+  }
   restart.seen(seen)
   return { time, stops, restart, seen, reconnected: () => reconnected }
 }
@@ -89,5 +96,23 @@ test('排队期间服务变为外部管理：不抛定时器异常，不擅自�
   assert.deepEqual(w.stops, [true])
   w.restart.run('cancel')
   assert.equal(w.restart.view().autoUpgrade, false)
+  w.restart.dispose()
+})
+
+test('系统自启管着、等着换新版的本机服务可以重启（外壳改成重新登记自启）；不等换版本时照旧拦下', async () => {
+  const w = setup([busy])
+  const managed = { ...service, detached: false }
+  w.restart.seen({ ...w.seen, service: managed })
+  assert.equal(w.restart.view().blocked, 'managed')
+  assert.throws(() => w.restart.run('auto'), /managed/)
+  w.restart.seen({ ...w.seen, service: managed, swappable: true })
+  assert.equal(w.restart.view().blocked, null)
+  w.restart.run('auto')
+  await settle()
+  assert.deepEqual(w.restart.view().phase, { step: 'busy', busy: busy.busy })
+  w.restart.run('force')
+  await settle()
+  assert.deepEqual(w.stops, [true, false])
+  assert.equal(w.reconnected(), 1)
   w.restart.dispose()
 })

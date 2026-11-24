@@ -811,6 +811,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       service: online ? service : null,
       failure,
       upgrading: step === 'installing' || step === 'stopping' || step === 'reconnecting',
+      swappable:
+        upgrade?.autostart === true &&
+        upgrade.action === 'kept' &&
+        ['older', 'rebuilt', 'unknown'].includes(upgrade.order),
     })
   }
   /** 设备的主目录和系统。主目录只有设备服务会报 */

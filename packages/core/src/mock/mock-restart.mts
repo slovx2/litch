@@ -61,7 +61,8 @@ export function createMockRestart(host: MockRestartHost): MockRestart {
   const blockedOf = (device: DeviceView): ServiceRestartBlock | null => {
     if (device.connection !== 'online') return 'offline'
     if (device.mode !== 'full') return 'single'
-    if (device.service && !device.service.detached) return 'managed'
+    // 系统自启管着而等着换新版的本机服务不拦（和真的 service-restart.mts 一样）
+    if (device.service && !device.service.detached && !device.upgrade?.autostart) return 'managed'
     const step = device.remoteUpgrade?.phase.step
     if (step === 'installing' || step === 'stopping' || step === 'reconnecting') return 'upgrading'
     return null

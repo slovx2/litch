@@ -32,7 +32,10 @@ export const enRupgrade: Record<keyof typeof zhRupgrade, Entry> = {
     'This service runs under system autostart; the new version takes effect after the device service restarts.',
   'service.remote.waiting.autostart':
     '{to} is installed and takes effect after a restart. The device service is busy and restarts once it’s idle:',
+  'service.launch.autostart': 'By system autostart',
   'service.remote.restartNow': 'Restart Now',
+  'service.busy.autostart':
+    'The new version came with the app and takes effect after a restart. The device service runs under system autostart and is busy; it restarts once it’s idle:',
   'service.remote.waiting':
     '{to} is installed. The device service is busy and switches over once it’s idle:',
   'service.remote.waiting.next':

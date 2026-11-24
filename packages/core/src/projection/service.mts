@@ -56,5 +56,6 @@ export function projectUpgrade(
         : [],
     detail: report.detail,
     pid: report.pid,
+    autostart: report.autostart === true,
   }
 }

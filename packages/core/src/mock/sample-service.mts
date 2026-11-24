@@ -22,11 +22,19 @@ const LOCAL_PID = 4821
 const BUNDLED = { version: SERVICE_VERSIONS.bundled, root: BUNDLED_ROOT }
 
 /** 本机能演的几出。没有的那一种（一样的版本）就是一开始的样子 */
-export type ServiceScene = 'replaced' | 'busy' | 'foreground' | 'unsupported' | 'failed' | 'newer'
+export type ServiceScene =
+  | 'replaced'
+  | 'busy'
+  | 'autostart'
+  | 'foreground'
+  | 'unsupported'
+  | 'failed'
+  | 'newer'
 
 /** 话里带哪些字样演哪一出，中文和英文各一种说法 */
 export const SERVICE_SCENES: readonly (readonly [RegExp, ServiceScene])[] = [
   [/服务换了新版|service was replaced/i, 'replaced'],
+  [/自启服务旧而忙|autostart service is busy/i, 'autostart'],
   [/服务旧而忙|service is busy/i, 'busy'],
   [/服务是前台的|service in the foreground/i, 'foreground'],
   [/服务太旧|service is too old/i, 'unsupported'],
@@ -67,6 +75,7 @@ const kept = (fields: Partial<ServiceUpgradeView>): ServiceUpgradeView => ({
   bundled: BUNDLED,
   previous: SERVICE_VERSIONS.older,
   order: 'older',
+  autostart: false,
   reason: null,
   busy: [],
   detail: null,
@@ -113,6 +122,12 @@ export function sampleScene(
       return {
         service: running(now, { ageMs: 26 * HOUR }),
         upgrade: kept({ reason: 'busy', busy }),
+      }
+    case 'autostart':
+      // 由系统自启（LaunchAgent）管着的：不是按需拉起的，等空闲时重新登记自启换上
+      return {
+        service: running(now, { detached: false, ageMs: 3 * DAY }),
+        upgrade: kept({ reason: 'busy', busy, autostart: true }),
       }
     case 'foreground':
       return {

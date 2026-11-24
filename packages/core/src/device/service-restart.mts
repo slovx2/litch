@@ -8,6 +8,7 @@
 //      设备侧为符合条件的普通回合持久准备一次自动恢复；客户端只记录受影响会话以显示说明。
 //      待答、用户停止、自动任务和后台进程不因此恢复；具体规则由设备维护。
 // 服务由前台或者服务管理器管着的（detached 为 false）不替用户重启：停了它，管它的那一方或者用户的终端会怎样说不准。
+// 例外是 Litch 的系统自启管着、等着换上新版的本机服务（swappable）：外壳的 stop 改成重新登记自启。
 // 在那台机器上动手的是外壳（stop）；用户没点过，这里不会叫它。
 
 import { createCancel } from '../channel/cancel.mjs'
@@ -58,6 +59,11 @@ export interface ServiceRestartSeen {
   failure: ConnectFailureView | null
   /** 一键升级正在进行（装、停、等重连）：这时不能重启 */
   upgrading: boolean
+  /**
+   * 在跑的服务由 Litch 的系统自启管着、等着换上新版：不算“别的东西管着”，
+   * 外壳的 stop 会改成重新登记自启
+   */
+  swappable: boolean
 }
 
 /** start：先带 ifIdle 停；force：用户确认过会打断什么，直接停；dismiss：收起 busy、done、failed */
@@ -77,6 +83,7 @@ const OFFLINE: ServiceRestartSeen = {
   service: null,
   failure: null,
   upgrading: false,
+  swappable: false,
 }
 
 /** 认一份在跑的服务：进程号加启动时间 */
@@ -135,7 +142,7 @@ export function createServiceRestarter(options: ServiceRestarterOptions): Servic
   const blocked = (): ServiceRestartBlock | null => {
     if (!seen.online) return 'offline'
     if (!seen.full) return 'single'
-    if (seen.service !== null && !seen.service.detached) return 'managed'
+    if (seen.service !== null && !seen.service.detached && !seen.swappable) return 'managed'
     if (seen.upgrading) return 'upgrading'
     return null
   }
