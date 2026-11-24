@@ -253,7 +253,7 @@ export interface ManagerActivity {
 }
 
 export interface Manager {
-  /** Claude Code 经理的无人值守压缩设置；其它经理不带。 */
+  /** 无人值守空闲压缩设置，作用于经理本身（harness 支持时）及其子会话。 */
   idleCompact?: ManagerIdleCompactSettings
   idleCompactLast?: ManagerIdleCompactRecord
   /** 设备生成的能力指纹；旧快照未核验时 applied 为 null。 */

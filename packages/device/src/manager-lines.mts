@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import type { Manager, ManagerLine, SessionManagerMark } from '../../protocol/src/manager.mjs'
+import { idleCompactSupports } from '../../protocol/src/manager-idle-compact.mjs'
 import { type ManagerStore, managerNow } from './manager-store.mjs'
 import { ManagerError } from './manager-validate.mjs'
 import type { SessionTree } from './session-tree.mjs'
@@ -70,10 +71,9 @@ export class ManagerLines {
             : null)
         const report = this.store.report(child.threadId)
         const startedAt = running ? (this.began.get(child.threadId) ?? null) : null
-        const compacted =
-          child.harness === 'claude-code' || child.harness === 'pi'
-            ? this.store.idleCompact(child.threadId).last
-            : undefined
+        const compacted = idleCompactSupports(child.harness)
+          ? this.store.idleCompact(child.threadId).last
+          : undefined
         return {
           ...(compacted ? { idleCompactLast: compacted } : {}),
           threadId: child.threadId,

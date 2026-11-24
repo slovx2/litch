@@ -356,6 +356,7 @@ export const zhManager = {
   'manager.idleCompact.hint':
     '经理及其 Claude Code、Pi 子会话空闲达到设定时长且上下文占用超过阈值时自动压缩，时长需小于提示缓存有效期。',
   'manager.idleCompact.unavailable': '为此经理分配 GitHub 仓库后可用。',
+  'manager.idleCompact.linesOnly': '本经理所用的 harness 不支持自身压缩，仅对子会话生效。',
   'manager.idleCompact.minutes': '空闲时长',
   'manager.idleCompact.minutesUnit': '分钟',
   'manager.idleCompact.percent': '上下文占用阈值',

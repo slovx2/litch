@@ -3,6 +3,7 @@ import {
   DEFAULT_MANAGER_IDLE_COMPACT,
   IDLE_COMPACT_READ,
   type IdleCompactSnapshot,
+  idleCompactSupports,
 } from '../../protocol/src/manager-idle-compact.mjs'
 import { type EngineLink, watchTurn } from './engine-link.mjs'
 import type { DeviceManagers } from './manager.mjs'
@@ -26,11 +27,8 @@ function usage(sample: IdleCompactSnapshot): number | null {
     : null
 }
 
-/**
- * 有带条件压缩入口（litch/thread/idleCompact/read、thread/compact/start 带快照）的引擎。
- * Codex 的压缩不能按快照核对、也不交回回合号；OpenCode、DSH、ACP 没有这套入口。
- */
-const IDLE_COMPACT_HARNESSES = new Set(['claude-code', 'pi'])
+// 引擎支持范围见 idleCompactSupports：Codex 的压缩不能按快照核对、也不交回回合号；
+// OpenCode 的压缩是不等结果的 summarize 请求，服务还开放给别的客户端；DSH、ACP 没有压缩入口。
 
 /** 同时进行的子会话压缩上限：每个都要载入一个会话并请模型写摘要，经理本身不受此限。 */
 const LINE_RUNNING_LIMIT = 2
@@ -44,7 +42,7 @@ interface Target {
 }
 
 /**
- * Claude Code 经理及其各层 Claude Code、Pi 子会话的空闲压缩。子会话沿用所属经理的开关和阈值，
+ * 经理（harness 支持时）及其各层 Claude Code、Pi 子会话的空闲压缩。子会话沿用所属经理的开关和阈值，
  * 所属关系按会话树的祖先判断（ManagerLines.managerFor）。
  */
 export class ManagerIdleCompact {
@@ -64,11 +62,7 @@ export class ManagerIdleCompact {
   }
 
   activity(harness: string, threadId: string, seconds: unknown): void {
-    if (
-      this.closed ||
-      !IDLE_COMPACT_HARNESSES.has(harness) ||
-      !this.owner.lines.managerFor(threadId)
-    )
+    if (this.closed || !idleCompactSupports(harness) || !this.owner.lines.managerFor(threadId))
       return
     const now = this.now()
     const at =
@@ -83,7 +77,6 @@ export class ManagerIdleCompact {
   private enabledFor(manager: Manager): boolean {
     return (
       !this.closed &&
-      manager.harness === 'claude-code' &&
       manager.status === 'active' &&
       (manager.idleCompact ?? DEFAULT_MANAGER_IDLE_COMPACT).enabled &&
       (this.owner.external?.store.config.assignment(manager.id).repoIds.length ?? 0) > 0
@@ -92,25 +85,35 @@ export class ManagerIdleCompact {
 
   private candidate(manager: Manager, threadId: string): boolean {
     const { external, store, tree, lines } = this.owner
-    if (!this.enabledFor(manager) || !tree.canIdleCompact(threadId)) return false
+    if (!this.enabledFor(manager)) return false
     if (threadId === manager.threadId)
-      return !external?.store.queue.hasPendingDelivery(manager.id) && !store.hasDelivery(manager.id)
+      return (
+        idleCompactSupports(manager.harness) &&
+        tree.canIdleCompact(threadId) &&
+        !external?.store.queue.hasPendingDelivery(manager.id) &&
+        !store.hasDelivery(manager.id)
+      )
+    // 子会话：不叫醒父会话的子线（wakeParent: false）留下的回报不挡压缩，压缩期间投递照样排队。
     return (
-      IDLE_COMPACT_HARNESSES.has(tree.store.parentOf(threadId)?.harness ?? '') &&
+      tree.canIdleCompact(threadId, true) &&
+      idleCompactSupports(tree.store.parentOf(threadId)?.harness ?? '') &&
       lines.managerFor(threadId)?.id === manager.id
     )
   }
 
   /** 经理本身在前，其后是各层没脱离、引擎支持的子会话（广度优先）。 */
   private targets(manager: Manager, byParent: Map<string, LineageRow[]>): Target[] {
-    const found: Target[] = [
-      {
-        threadId: manager.threadId,
-        harness: manager.harness,
-        since: manager.createdAt * 1000,
-        line: false,
-      },
-    ]
+    // 经理所用 harness 不支持时（如 Codex 经理），只压它的子会话。
+    const found: Target[] = idleCompactSupports(manager.harness)
+      ? [
+          {
+            threadId: manager.threadId,
+            harness: manager.harness,
+            since: manager.createdAt * 1000,
+            line: false,
+          },
+        ]
+      : []
     const queue = [manager.threadId]
     const seen = new Set(queue)
     while (queue.length) {
@@ -118,7 +121,7 @@ export class ManagerIdleCompact {
         if (seen.has(row.threadId)) continue
         seen.add(row.threadId)
         queue.push(row.threadId)
-        if (IDLE_COMPACT_HARNESSES.has(row.harness))
+        if (idleCompactSupports(row.harness))
           found.push({
             threadId: row.threadId,
             harness: row.harness,

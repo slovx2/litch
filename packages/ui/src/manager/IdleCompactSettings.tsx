@@ -7,12 +7,15 @@ export function IdleCompactFields({
   draft,
   check,
   unavailable,
+  linesOnly,
   onChange,
 }: {
   draft: IdleCompactDraft
   check: IdleCompactCheck
   /** 还没分配外部来源：整节禁用，并说明原因。 */
   unavailable: boolean
+  /** 经理所用 harness 不支持自身压缩：设置只作用于子会话。 */
+  linesOnly: boolean
   onChange(next: IdleCompactDraft): void
 }) {
   const t = useT()
@@ -70,6 +73,12 @@ export function IdleCompactFields({
           <br />
           <small id="manager-idle-note" className="form-note">
             {t(unavailable ? 'manager.idleCompact.unavailable' : 'manager.idleCompact.hint')}
+            {!unavailable && linesOnly ? (
+              <>
+                <br />
+                <span data-manager-idle-lines-only>{t('manager.idleCompact.linesOnly')}</span>
+              </>
+            ) : null}
           </small>
         </span>
       </label>

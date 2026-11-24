@@ -54,7 +54,7 @@ import type { HarnessSource } from './session.mjs'
 import { SessionRecoveryBudget, sessionHistory } from './session-history.mjs'
 import { isUserRequest, pendingRequestExcerpt, SessionPending } from './session-pending.mjs'
 import { SessionQuestions } from './session-questions.mjs'
-import type { SessionStore } from './session-store.mjs'
+import type { QueuedNote, SessionStore } from './session-store.mjs'
 import { SuggestionInbox } from './suggestion-inbox.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
 import { DeviceError, isObject, UpstreamRpcError } from './wire.mjs'
@@ -1132,15 +1132,17 @@ export class SessionTree {
   }
 
   private hasWakeNote(parentId: string): boolean {
-    return this.store.notes(parentId).some((note) => {
-      const lineage = this.store.parentOf(note.threadId)
-      return (
-        note.wake &&
+    return this.store.notes(parentId).some((note) => this.wakesParent(note, parentId))
+  }
+
+  private wakesParent(note: QueuedNote, parentId: string): boolean {
+    const lineage = this.store.parentOf(note.threadId)
+    return Boolean(
+      note.wake &&
         lineage?.parentThreadId === parentId &&
         lineage.reportParent &&
-        lineage.wakeParent
-      )
-    })
+        lineage.wakeParent,
+    )
   }
 
   /**
@@ -1417,7 +1419,8 @@ export class SessionTree {
     return lock?.wait
   }
 
-  canIdleCompact(threadId: string): boolean {
+  /** quietNotes：不会叫醒这个会话的回报（如 wakeParent: false 的子线留下的）不算挡着。 */
+  canIdleCompact(threadId: string, quietNotes = false): boolean {
     return (
       !this.closed &&
       !this.host.index.archived(threadId) &&
@@ -1431,7 +1434,7 @@ export class SessionTree {
       !this.host.continuationPending?.(threadId) &&
       !this.reminders.has(threadId) &&
       !this.heres.has(threadId) &&
-      this.store.notes(threadId).length === 0
+      !this.store.notes(threadId).some((note) => !quietNotes || this.wakesParent(note, threadId))
     )
   }
 

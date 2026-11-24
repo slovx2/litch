@@ -348,44 +348,54 @@ conversation. Creation, board answers and ending have their own event labels as 
 ### 无人值守空闲压缩 / Unattended idle compaction
 
 桌面经理设置的“运行环境”页签下方有“无人值守”一节，和其他设置一起由页面的“保存”提交；
-手机上点经理页右上角的设置。只对 Claude Code 经理显示，设备不支持外部来源时不显示，
+手机上点经理页右上角的设置。所有经理都有这一节；设备不支持外部来源时不显示，
 还没给经理分配 GitHub 仓库时整节禁用并说明原因。默认开启；关闭后两个数值保留但不可改。
 只有分配了外部来源，且实际占用超过 70% 时才运行。空闲默认 50 分钟，可设 5–55 分钟；
 占用阈值可设 1–99%。空闲时长应短于提示缓存有效期；例如缓存有效期为一小时，可用默认值，
 让压缩尽量在缓存失效前发起。
 
 普通回合的开始和结束都会重置计时，回合来源不限。引擎忙、被另一个进程占用、状态或用量未知、
-有输入或投递在排队时不压缩。自动压缩走 Claude 原生路径，期间到达的回报和外部提醒继续排队，
+有输入或投递在排队时不压缩。自动压缩走 harness 原生的压缩，期间到达的回报和外部提醒继续排队，
 压缩完成后投递。同一轮空闲最多尝试一次。看板概览显示最近一次成功的时间和压缩前后占用。
 
-同一设置也作用于这个经理派出的各层 Claude Code 和 Pi 子会话（工作线、工作线再派出的子会话），
-没有单独的开关；关闭经理的开关，子会话也一起停。子会话按同样的计时和阈值判断，正在跑回合、
-有后台任务、有待处理的审批或没答的提问、还有回报排队时不压缩。同一设备上最多同时压两条子会话。
-Codex、DSH、OpenCode 等其他 harness 的子会话不自动压缩。Pi 自己判断有没有可压的内容，
-会话太小或刚压过时这次不压，同一段空闲不再重试。工作线页签的卡片上显示该子会话
-最近一次成功的压缩，会话里也有这次压缩的记录。
+经理本身只在 Claude Code 和 Pi 上压缩。Codex 等其他 harness 的经理在设置里提示“本经理所用的
+harness 不支持自身压缩，仅对子会话生效”。
 
-The same setting applies to every Claude Code and Pi session the manager starts, at any depth: work lines and
-the sessions they start. There is no separate switch; turning the manager’s setting off stops them
-too. Sub-sessions use the same clock and thresholds, and are skipped while a turn or background task is
-running, an approval or question is unanswered, or reports are queued. A device compacts at most two
-sub-sessions at a time. Sub-sessions on Codex, DSH, OpenCode and other harnesses are not compacted
-automatically. Pi decides whether there is anything to compact; if the session is too small or was just
-compacted, it is skipped for the rest of that idle period. Each work line card shows its most recent successful compaction, which also appears in
-the session.
+同一设置也作用于这个经理派出的各层 Claude Code 和 Pi 子会话（工作线、工作线再派出的子会话），
+不论经理本身用哪种 harness，没有单独的开关；关闭经理的开关，子会话也一起停。子会话按同样的
+计时和阈值判断，正在跑回合、有后台任务、有待处理的审批或没答的提问时不压缩；排着的回报只有
+会唤醒它的才挡住压缩，不唤醒父会话的子线（wakeParent: false）留下的回报不挡，压缩期间照样排队。
+同一设备上最多同时压两条子会话。Codex、DSH、OpenCode 等其他 harness 的子会话不自动压缩。
+Pi 自己判断有没有可压的内容，会话太小或刚压过时这次不压，同一段空闲不再重试。
+工作线页签的卡片上显示该子会话最近一次成功的压缩，会话里也有这次压缩的记录。
 
 On desktop, open a manager’s Settings → Environment; the Unattended section is saved with the page’s Save
-button. On a phone, tap the settings button on the manager page. It appears only for Claude Code
-managers on devices with external sources, and stays disabled with a reason until GitHub repositories
-are assigned to the manager. Turning it off keeps both values visible but read-only. It is enabled by default and runs only for managers assigned to an external source. The default is
-50 idle minutes and usage above 70%. Set 5–55 minutes and a 1–99% threshold. Set the delay below your
-prompt cache lifetime; with a one-hour cache, the default aims to compact before the cache expires.
+button. On a phone, tap the settings button on the manager page. Every manager has this section on
+devices with external sources; it stays disabled with a reason until GitHub repositories are assigned
+to the manager. Turning it off keeps both values visible but read-only. It is enabled by default and
+runs only for managers assigned to an external source. The default is 50 idle minutes and usage above
+70%. Set 5–55 minutes and a 1–99% threshold. Set the delay below your prompt cache lifetime; with a
+one-hour cache, the default aims to compact before the cache expires.
 
 Each ordinary turn resets the clock when it starts and when it ends, regardless of its source.
 Compaction waits if the engine is busy or owned elsewhere, a turn or delivery is queued, or status
 or context usage is unavailable. Workline reports and external notices queue during native
 compaction and are delivered afterwards. Each idle period gets at most one attempt. The board
 overview shows the most recent successful compaction and context usage before and after it.
+
+A manager compacts itself only on Claude Code and Pi. For managers on Codex and other harnesses, the
+settings note that the setting applies only to sub-sessions.
+
+The same setting applies to every Claude Code and Pi session the manager starts, at any depth: work
+lines and the sessions they start, whatever harness the manager itself uses. There is no separate
+switch; turning the manager’s setting off stops them too. Sub-sessions use the same clock and
+thresholds, and are skipped while a turn or background task is running or an approval or question is
+unanswered. Queued reports block compaction only if they would wake the session; reports from
+sub-sessions started with wakeParent: false do not, and keep queuing during compaction. A device
+compacts at most two sub-sessions at a time. Sub-sessions on Codex, DSH, OpenCode and other harnesses
+are not compacted automatically. Pi decides whether there is anything to compact; if the session is
+too small or was just compacted, it is skipped for the rest of that idle period. Each work line card
+shows its most recent successful compaction, which also appears in the session.
 
 ### Commands
 

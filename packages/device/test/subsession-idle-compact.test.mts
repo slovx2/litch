@@ -366,3 +366,69 @@ test('Pi 子会话按同样规则压缩：经 Pi 引擎的带快照压缩，记�
     await f.env.close()
   }
 })
+
+test('经理所用 harness 不支持自身压缩时设置照样可改，只压它的 Claude、Pi 子会话', async () => {
+  const f = await setup()
+  try {
+    // 夹具只有 Claude、Pi 两个假引擎：把存下的经理改成 Codex 经理，调度只认存下的经理。
+    const saved = f.managers.store.manager(f.id)!
+    f.managers.store.saveManager({ ...saved, harness: 'codex' })
+    f.samples.get(f.threadId)!.usedTokens = 90_000
+    f.samples.get(f.piLine)!.usedTokens = 90_000
+    assert.ok(f.managers.manager(f.id).idleCompact, '非 Claude 经理也带设置')
+    await f.config({ enabled: false, idleMinutes: 50, contextPercent: 70 })
+    assert.equal(f.managers.manager(f.id).idleCompact?.enabled, false)
+    f.advance(51 * minute)
+    await f.scan()
+    assert.deepEqual(f.attempts, [], '关掉后都不压')
+    await f.config({ enabled: true, idleMinutes: 50, contextPercent: 70 })
+    await until(() => f.attempts.length === 2, '先压两条子会话')
+    await f.finish(20_000)
+    f.start()
+    await until(() => f.attempts.length === 3, '再压第三条')
+    await f.finish(20_000)
+    assert.deepEqual(new Set(f.attempts), new Set([f.line, f.grandchild, f.piLine]))
+    assert.ok(!f.reads.includes(f.threadId), '经理本身不探测')
+    assert.equal(f.managers.manager(f.id).idleCompactLast, undefined)
+  } finally {
+    await f.env.close()
+  }
+})
+
+test('不唤醒父会话的子线留下的回报不挡父工作线压缩；会唤醒的仍挡', async () => {
+  const f = await setup()
+  try {
+    f.busy.add(f.grandchild)
+    const quiet = await startChild(
+      f.tree,
+      f.line,
+      {
+        kind: 'fresh',
+        title: '不唤醒的子线',
+        prompt: '跑一项工作',
+        worktree: false,
+        wakeParent: false,
+        harness: 'claude-code',
+      },
+      'model',
+    )
+    f.busy.add(quiet.threadId)
+    await until(() => f.claude.running(quiet.threadId), '子线启动')
+    f.claude.end(quiet.threadId)
+    await until(() => f.tree.store.notes(f.line).length > 0, '回报排在工作线上')
+    assert.equal(f.claude.running(f.line), false, '不唤醒工作线')
+    assert.equal(f.tree.canIdleCompact(f.line), false, '经理的规则：有排队回报就不压')
+    assert.equal(f.tree.canIdleCompact(f.line, true), true)
+    f.tree.store.setWakeParent(quiet.threadId, true)
+    assert.equal(f.tree.canIdleCompact(f.line, true), false, '会唤醒的回报仍挡住')
+    f.tree.store.setWakeParent(quiet.threadId, false)
+    f.advance(51 * minute)
+    f.start()
+    await until(() => f.attempts.length === 1, '工作线照常压缩')
+    assert.deepEqual(f.attempts, [f.line])
+    await f.finish(20_000)
+    assert.ok(f.tree.store.notes(f.line).length > 0, '回报仍在排队，没丢')
+  } finally {
+    await f.env.close()
+  }
+})

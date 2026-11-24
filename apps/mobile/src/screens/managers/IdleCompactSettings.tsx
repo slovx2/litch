@@ -3,6 +3,7 @@ import {
   type DeviceView,
   IDLE_COMPACT_MINUTES,
   IDLE_COMPACT_PERCENT,
+  idleCompactSupports,
   type ManagerIdleCompactSettings,
   type ManagerView,
 } from '@litch/core'
@@ -141,6 +142,11 @@ export function IdleCompactSettings({
           <Text style={[styles.note, { color: c.ink3 }]}>
             {t(unavailable ? 'manager.idleCompact.unavailable' : 'manager.idleCompact.hint')}
           </Text>
+          {!unavailable && !idleCompactSupports(manager.harness) ? (
+            <Text style={[styles.note, { color: c.ink3 }]} testID="manager-idle-lines-only">
+              {t('manager.idleCompact.linesOnly')}
+            </Text>
+          ) : null}
         </View>
         <View style={styles.values}>
           {number(
