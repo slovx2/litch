@@ -1,4 +1,4 @@
-// 一台设备上一个飞书应用的详情：连接状态、启用、分配经理、能力自检（检查、补申请、待审核）、群、私聊绑定、发件、App Secret 更新时间、移除。
+// 一台设备上一个飞书应用的详情：连接状态、启用、分配经理、能力自检（检查、补申请、待审核，含用户身份缺的权限与设置）、群、私聊绑定、发件、App Secret 更新时间、移除。
 // 与桌面一致，只少“更换 App Secret”（秘密只在桌面输入，litch config 也不收）。写操作带 expectedRevision，冲突时重读并提示重试；
 // 这条连接不是设备管理员时写操作都不可点，页首写明原因。
 import { type DeviceView, keys } from '@litch/core'
@@ -15,6 +15,7 @@ import {
   managerOptions,
   missingGroups,
   pendingReview,
+  userIdentityMissing,
   writeBlock,
 } from '../../../../../../packages/ui/src/feishu/model.ts'
 import type { RootStackParamList } from '../../../nav/routes'
@@ -220,6 +221,16 @@ export function FeishuAppScreen({ route, navigation }: Props) {
               />
             ))
           : null}
+        {capability?.refreshTokenDisabled ? (
+          <Text testID="feishu:refresh-off" style={[styles.note, { color: c.err }]}>
+            {t('feishu.cap.refreshToken')}
+          </Text>
+        ) : null}
+        {userIdentityMissing(capability) ? (
+          <Text testID="feishu:user-note" style={note}>
+            {t('feishu.cap.userNote')}
+          </Text>
+        ) : null}
         {canUpgrade(capability) ? (
           <View style={styles.block}>
             <Text style={note}>{t('feishu.cap.upgradeNote')}</Text>

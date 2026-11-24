@@ -44,6 +44,8 @@ const app = {
     missingScopes: ['im:resource'],
     missingEvents: [],
     missingCallbacks: ['card.action.trigger'],
+    missingUserScopes: ['im:chat:read'],
+    refreshTokenDisabled: true,
   },
   createdAt: 9,
 } satisfies FeishuApp
@@ -227,6 +229,11 @@ const samples: {
           attempts: 1,
           sentAt: 90,
         },
+        {
+          ...outboxEntry,
+          operationId: 'op-sample-3',
+          cli: { method: 'POST', path: '/open-apis/im/v1/messages', action: 'send' },
+        },
       ],
       next: 'op-sample-2',
     },
@@ -234,6 +241,72 @@ const samples: {
   [FEISHU_METHOD.outboxCancel]: [
     { appId, operationId: 'op-sample-1' },
     { entry: { ...outboxEntry, state: 'canceled', error: 'canceled_by_admin' } },
+  ],
+  [FEISHU_METHOD.grantList]: [
+    { appId },
+    {
+      grants: [
+        {
+          appId,
+          openId: 'ou_alice',
+          revision: 3,
+          name: '示例成员甲',
+          state: 'active',
+          scopes: ['docx:document:readonly', 'offline_access'],
+          grantedAt: 10,
+          lastUsedAt: 20,
+          refreshedAt: 15,
+          pending: {
+            verificationUrl:
+              'https://accounts.feishu.cn/oauth/v1/device/verify?user_code=ABCD-EFGH',
+            userCode: 'ABCD-EFGH',
+            expiresAt: 300,
+          },
+        },
+        {
+          appId,
+          openId: 'ou_bob',
+          revision: 2,
+          name: '示例成员乙',
+          state: 'failed',
+          scopes: [],
+          error: 'identity_mismatch',
+        },
+      ],
+    },
+  ],
+  [FEISHU_METHOD.grantInvite]: [
+    { appId, openId: 'ou_bob', operationId: 'grant-op-1' },
+    {
+      grant: {
+        appId,
+        openId: 'ou_bob',
+        revision: 3,
+        name: '示例成员乙',
+        state: 'pending',
+        scopes: [],
+        pending: {
+          verificationUrl: 'https://accounts.feishu.cn/x',
+          userCode: 'WXYZ-1234',
+          expiresAt: 240,
+        },
+      },
+    },
+  ],
+  [FEISHU_METHOD.grantRevoke]: [
+    { appId, openId: 'ou_alice' },
+    {
+      grant: {
+        appId,
+        openId: 'ou_alice',
+        revision: 4,
+        name: '示例成员甲',
+        state: 'revoked',
+        scopes: [],
+        revokedAt: 30,
+        error: 'revoked_by_admin',
+      },
+    },
   ],
   [FEISHU_METHOD.bindingList]: [
     { appId },
@@ -299,6 +372,7 @@ test('通知样本通过定义', () => {
     [FEISHU_NOTIFICATION.inboxChanged]: { managerId: 'm-1', appId },
     [FEISHU_NOTIFICATION.outboxChanged]: { appId, operationId: 'op-sample-1' },
     [FEISHU_NOTIFICATION.bindingsChanged]: { appId, openId: 'ou_alice' },
+    [FEISHU_NOTIFICATION.grantsChanged]: { appId, openId: 'ou_alice' },
   }
   for (const [name, value] of Object.entries(params)) assert.ok(wire(name, 'params', value), name)
 })

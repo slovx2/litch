@@ -1,5 +1,6 @@
 // 应用详情 · 发件：经理经这个应用的发言（发件队列，新的在前）。每条一行：发到哪、格式、分几条、状态、时间，
 // 下面一行内容摘要，有原因时跟在后面（结果不明且已停止重发时提示到群里核对）；审批 ID 与尝试次数放在行尾。
+// 以用户身份发的在格式后标“以 某某 身份发”；经 lark-cli 发的再加一行小字写方法、路径和动作。
 // 待审批、排队、结果不明的可撤下（确认后调 feishu.outbox.cancel）；已发出的不撤回飞书上的消息。
 // 列表来自核心的 feishuOutbox 快照（最近一页），“加载更多”按游标读更早的页，只留在本组件里。
 import { useState } from 'react'
@@ -17,7 +18,7 @@ import {
   outboxReason,
   type WriteBlock,
 } from './model.ts'
-import { outboxReasonText, targetLabel } from './speech-text.ts'
+import { actingUserText, cliText, outboxReasonText, targetLabel } from './speech-text.ts'
 
 const TONE_PILL = { ok: 'pill ok', wait: 'pill wait', err: 'pill err', off: 'pill mute' } as const
 
@@ -94,6 +95,7 @@ export function AppOutbox({
           {rows.map((entry) => {
             const reason = outboxReason(entry)
             const reasonText = outboxReasonText(t, entry)
+            const acting = actingUserText(t, entry.actingAs)
             return (
               <li
                 key={entry.operationId}
@@ -104,6 +106,11 @@ export function AppOutbox({
                 <div className="ext-row">
                   <b className="ext-row-name ell">{targetLabel(t, entry.target)}</b>
                   <span className="pill mute">{t(`feishu.format.${entry.format}`)}</span>
+                  {acting ? (
+                    <span className="pill mute fs-acting ell" data-feishu-acting>
+                      {acting}
+                    </span>
+                  ) : null}
                   {entry.parts > 1 ? (
                     <span className="ext-row-meta fs-nowrap">
                       {t('feishu.outbox.parts', { n: entry.parts })}
@@ -153,6 +160,11 @@ export function AppOutbox({
                     </span>
                   ) : null}
                 </p>
+                {entry.cli ? (
+                  <p className="fs-cli mono ell" data-feishu-cli title={cliText(t, entry.cli)}>
+                    {cliText(t, entry.cli)}
+                  </p>
+                ) : null}
               </li>
             )
           })}

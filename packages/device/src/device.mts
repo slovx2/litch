@@ -136,7 +136,7 @@ export type DeviceTrace = (
 export interface DeviceOptions {
   external?: Pick<DeviceExternalOptions, 'deviceSocket' | 'fixture'>
   /** 飞书来源；生产与 external 同时开，测试经 fixture 指向回环假服务端 */
-  feishu?: Pick<DeviceFeishuOptions, 'fixture'>
+  feishu?: Pick<DeviceFeishuOptions, 'fixture' | 'cliBinary'>
   managerIdleCompactClock?: () => number
   /** 隔离验收的附件主目录；生产取系统 home。 */
   attachmentHome?: string
@@ -1265,6 +1265,12 @@ export class DeviceServer {
   private wireFeishu(feishu: DeviceFeishuService): void {
     const managers = this.managers
     managers.feishu = feishu
+    // lark-cli 的租约经设备的命令入口（和 gh、git 同一个）发出
+    const agent = this.external?.agent
+    if (agent) {
+      agent.feishu = feishu.cli
+      feishu.cli.current = (actor) => agent.current(actor)
+    }
     feishu.wake.host = {
       manager: (managerId) => managers.store.manager(managerId),
       // 同外部投递的准入，另外经理在跑回合时留队（不插话），等回合结束再送

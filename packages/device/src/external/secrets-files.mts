@@ -23,7 +23,8 @@ const privateFilename = (name: string): boolean =>
   name === 'hosts.yml' ||
   name === 'helper.cjs' ||
   name === 'gh.cmd' ||
-  name === 'git.cmd'
+  name === 'git.cmd' ||
+  name === 'lark-cli.cmd'
 
 export function windowsPrivateAcl(directory: boolean): string {
   // 用当前进程身份和 LocalSystem 的 SID，不依赖 Windows 的显示语言。

@@ -31,6 +31,9 @@ export const FEISHU_METHOD = {
   bindingApprove: 'litch/feishu/binding/approve',
   bindingRevoke: 'litch/feishu/binding/revoke',
   bindingUpdate: 'litch/feishu/binding/update',
+  grantList: 'litch/feishu/grant/list',
+  grantInvite: 'litch/feishu/grant/invite',
+  grantRevoke: 'litch/feishu/grant/revoke',
 } as const
 
 export const FEISHU_NOTIFICATION = {
@@ -40,6 +43,7 @@ export const FEISHU_NOTIFICATION = {
   inboxChanged: 'litch/feishu/inboxChanged',
   outboxChanged: 'litch/feishu/outboxChanged',
   bindingsChanged: 'litch/feishu/bindingsChanged',
+  grantsChanged: 'litch/feishu/grantsChanged',
 } as const
 
 /** 只读方法；其余写操作只给设备管理员连接 */
@@ -53,6 +57,7 @@ export const FEISHU_PUBLIC_READS: ReadonlySet<string> = new Set([
   FEISHU_METHOD.inboxGet,
   FEISHU_METHOD.outboxList,
   FEISHU_METHOD.bindingList,
+  FEISHU_METHOD.grantList,
 ])
 
 export const FEISHU_APP_ID = /^cli_[0-9a-f]{16}$/
@@ -62,9 +67,9 @@ export const FEISHU_CHAT_ID = /^oc_[0-9A-Za-z_-]{1,64}$/
 export const FEISHU_OPEN_ID = /^ou_[0-9A-Za-z_-]{1,64}$/
 /** 发件的操作 ID：经理给的或设备生成的，拼上分片序号后要放得进飞书 uuid（50 字符） */
 export const FEISHU_OPERATION_ID = /^[A-Za-z0-9_-]{8,40}$/
-/** 群记录的保留天数（D-164） */
+/** 群记录的保留天数 */
 export const FEISHU_RETENTION_DAYS = { min: 1, max: 3650, default: 90 } as const
-/** 审批过期小时数（D-175） */
+/** 审批过期小时数 */
 export const FEISHU_REVIEW_TTL_HOURS = { min: 1, max: 168, default: 24 } as const
 /** 每群手选的叫醒成员上限 */
 export const FEISHU_WAKERS_MAX = 200
@@ -111,6 +116,10 @@ export interface FeishuCapability {
   missingScopes: string[]
   missingEvents: string[]
   missingCallbacks: string[]
+  /** 用户身份要的权限里还没开的；旧设备不带 */
+  missingUserScopes?: string[]
+  /** 应用没开“刷新 user_access_token”：用户身份授权拿不到 refresh token */
+  refreshTokenDisabled?: boolean
   /** 补申请后提交的版本；审核通过前是 pending_review */
   publish?: { state: 'pending_review' | 'published' | 'unknown'; versionId?: string; at: number }
 }
@@ -164,7 +173,7 @@ export interface FeishuPerson {
 /** 接入设置；没接入的群是 null */
 export interface FeishuChatAccess {
   speech: FeishuSpeechMode
-  /** 叫醒名单是否包括本应用全部已绑定用户（D-161） */
+  /** 叫醒名单是否包括本应用全部已绑定用户 */
   wakeBound: boolean
   /** 手选的叫醒成员（名字是选的时候的快照） */
   wakers: FeishuPerson[]
@@ -179,10 +188,10 @@ export interface FeishuChat {
   revision: number
   name: string
   avatar?: string
-  /** 外部群：群里有组织外的人（D-172） */
+  /** 外部群：群里有组织外的人 */
   external: boolean
   status: 'normal' | 'dissolved'
-  /** 机器人当前在不在群里；移出后接入设置保留（D-178） */
+  /** 机器人当前在不在群里；移出后接入设置保留 */
   botPresent: boolean
   access: FeishuChatAccess | null
   updatedAt: number
@@ -221,7 +230,7 @@ export interface FeishuChatRecords {
   gap?: FeishuGapFill
 }
 
-/** 收件箱：谁在飞书里找了经理（D-161）。不存正文，正文在设备的消息库里 */
+/** 收件箱：谁在飞书里找了经理。不存正文，正文在设备的消息库里 */
 export type FeishuInboxTrigger = 'mention' | 'reply' | 'p2p'
 export type FeishuInboxStatus = 'queued' | 'notified' | 'processed'
 /** bound：已私聊绑定；member：本群成员；unknown：都不是（设备核过的身份，不信正文里的自称） */
@@ -275,6 +284,14 @@ export type FeishuOutboxState =
 /** 发出去的样子：纯文本、富文本（Markdown 段落加 @）、卡片（有代码块或表格时）、图片、文件 */
 export type FeishuOutboxFormat = 'text' | 'post' | 'card' | 'image' | 'file'
 
+/** 经 lark-cli 发、被设备代理拦下转审批的原始请求（路径里的 ID 已打码） */
+export interface FeishuCliRequest {
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  path: string
+  /** send、reply、edit、update、forward、urgent、announcement 等 */
+  action: string
+}
+
 export interface FeishuOutboxEntry {
   /** 操作 ID，也是发给飞书的 uuid 前缀 */
   operationId: string
@@ -301,9 +318,13 @@ export interface FeishuOutboxEntry {
   createdAt: number
   updatedAt: number
   sentAt?: number
+  /** 经 lark-cli 发的：原始请求 */
+  cli?: FeishuCliRequest
+  /** 以用户身份发的；机器人发的不带 */
+  actingAs?: { type: 'user'; openId: string; name: string }
 }
 
-/** 私聊绑定（D-158）：和经理私聊的人。撤销后保留这一行（私聊记录照保留期清理） */
+/** 私聊绑定：和经理私聊的人。撤销后保留这一行（私聊记录照保留期清理） */
 export interface FeishuBinding {
   appId: string
   openId: string
@@ -313,12 +334,35 @@ export interface FeishuBinding {
   unionId?: string
   userId?: string
   state: 'bound' | 'revoked'
-  /** 能在飞书里批审批（D-174）；第一个绑定的人默认是 */
+  /** 能在飞书里批审批；第一个绑定的人默认是 */
   approver: boolean
   /** 私聊记录的保留天数 */
   retentionDays: number
   boundAt: number
   revokedAt?: number
+}
+
+/** 用户身份授权的状态：等本人点链接、可用、失效（刷新被拒或 30 天没用）、撤销、没授权成（本人拒绝、链接过期、不是本人点的） */
+export type FeishuGrantState = 'pending' | 'active' | 'expired' | 'revoked' | 'failed'
+
+/** 已绑定用户的用户身份授权；token 不出设备 */
+export interface FeishuUserGrant {
+  appId: string
+  openId: string
+  revision: number
+  /** 绑定时的名字 */
+  name: string
+  state: FeishuGrantState
+  /** 进行中的授权：给本人点的链接、用户码、过期时间 */
+  pending?: { verificationUrl: string; userCode: string; expiresAt: number }
+  /** 飞书实际授予的权限 */
+  scopes: string[]
+  grantedAt?: number
+  lastUsedAt?: number
+  refreshedAt?: number
+  revokedAt?: number
+  /** 失效、撤销或上一次授权失败的原因代码 */
+  error?: string
 }
 
 /** 待批的配对请求（按配对码查到的） */
@@ -411,7 +455,7 @@ export interface FeishuRequests {
   >
   [FEISHU_METHOD.chatAccess]: Request<FeishuChatAccessParams, { chat: FeishuChat }>
   [FEISHU_METHOD.chatUpdate]: Request<FeishuChatUpdateParams, { chat: FeishuChat }>
-  /** deleteRecords：同时删这个群的消息记录（D-164，默认由客户端勾上） */
+  /** deleteRecords：同时删这个群的消息记录（默认由客户端勾上） */
   [FEISHU_METHOD.chatUnaccess]: Request<
     { appId: string; chatId: string; expectedRevision: number; deleteRecords: boolean },
     { chat: FeishuChat }
@@ -461,6 +505,18 @@ export interface FeishuRequests {
   [FEISHU_METHOD.bindingApprove]: Request<
     { appId: string; code: string },
     { binding: FeishuBinding }
+  >
+  /** 本应用已绑定用户的用户身份授权 */
+  [FEISHU_METHOD.grantList]: Request<{ appId: string }, { grants: FeishuUserGrant[] }>
+  /** 发起授权（设备码流程）：返回链接和用户码；同一个人再发起就作废上一个 */
+  [FEISHU_METHOD.grantInvite]: Request<
+    { appId: string; openId: string; operationId: string },
+    { grant: FeishuUserGrant }
+  >
+  /** 撤销授权：先在飞书撤销 token（尽力而为），再删设备上的 token */
+  [FEISHU_METHOD.grantRevoke]: Request<
+    { appId: string; openId: string },
+    { grant: FeishuUserGrant }
   >
   [FEISHU_METHOD.bindingRevoke]: Request<
     { appId: string; openId: string; expectedRevision: number },

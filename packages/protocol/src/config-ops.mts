@@ -69,6 +69,9 @@ export const CONFIG_OPS: readonly ConfigOp[] = [
   { group: 'feishu-chat', action: 'backfill', write: true },
   { group: 'feishu-binding', action: 'list', write: false },
   { group: 'feishu-binding', action: 'revoke', write: true, guarded: true },
+  { group: 'feishu-grant', action: 'list', write: false },
+  { group: 'feishu-grant', action: 'invite', write: true, guarded: true },
+  { group: 'feishu-grant', action: 'revoke', write: true, guarded: true },
 
   { group: 'devices', action: 'list', write: false },
   { group: 'devices', action: 'check', write: false },

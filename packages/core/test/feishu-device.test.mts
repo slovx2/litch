@@ -307,7 +307,7 @@ test('发件按应用订阅、审批按经理订阅：各自的通知只重读�
   )
 })
 
-test('私聊绑定按应用订阅：bindingsChanged 重读；确认、撤销、修改后重读并刷新应用（待批配对数），查码不重读', async () => {
+test('私聊绑定按应用订阅（连同用户身份授权）：bindingsChanged、grantsChanged 重读；确认、撤销、修改后重读并刷新应用（待批配对数），查码不重读', async () => {
   const calls: { method: string; params: unknown }[] = []
   const device = createFeishuDevice({
     online: () => true,
@@ -323,33 +323,46 @@ test('私聊绑定按应用订阅：bindingsChanged 重读；确认、撤销、�
       if (method === 'litch/feishu/app/list') return { apps: [] } as never
       if (method === 'litch/feishu/binding/lookup')
         return { pairing: { appId: APP_ID, openId: 'ou_x', createdAt: 1, expiresAt: 2 } } as never
+      if (method === 'litch/feishu/grant/list') return { grants: [] } as never
       return { bindings: [] } as unknown as Requests[M]['result']
     },
   })
   const seen: unknown[] = []
   device.open({ kind: 'feishuBindings', deviceId: 'd', appId: APP_ID }, sink(seen))
   await flush()
-  assert.deepEqual(calls, [{ method: 'litch/feishu/binding/list', params: { appId: APP_ID } }])
+  assert.deepEqual(calls, [
+    { method: 'litch/feishu/binding/list', params: { appId: APP_ID } },
+    { method: 'litch/feishu/grant/list', params: { appId: APP_ID } },
+  ])
+  assert.deepEqual((seen.at(-1) as { value?: unknown }).value, { bindings: [], grants: [] })
   // 有人看应用列表时，绑定变了才刷新应用（待批配对数）
   device.open({ kind: 'feishuDevice', deviceId: 'd' }, sink([]))
   await flush()
   calls.splice(0, calls.length, ...calls.filter((call) => call.method !== 'litch/feishu/app/list'))
   device.notification(FEISHU_NOTIFICATION.bindingsChanged, { appId: 'cli_ffffffffffffffff' })
   await flush()
-  assert.equal(calls.length, 1, '别的应用变了不重读')
+  assert.equal(calls.length, 2, '别的应用变了不重读')
   device.notification(FEISHU_NOTIFICATION.bindingsChanged, { appId: APP_ID })
   await flush()
-  assert.equal(calls.length, 2)
+  assert.equal(calls.length, 4)
+  device.notification(FEISHU_NOTIFICATION.grantsChanged, { appId: APP_ID, openId: 'ou_x' })
+  await flush()
+  assert.equal(calls.length, 6, '授权变了也重读')
   await device.command('feishu.binding.lookup', { appId: APP_ID, code: 'ABCD-EFGH' })
   await flush()
-  assert.equal(calls.length, 3, '查码不重读')
+  assert.equal(calls.length, 7, '查码不重读')
   await device.command('feishu.binding.approve', { appId: APP_ID, code: 'ABCD-EFGH' })
   await flush()
   assert.deepEqual(
     calls
-      .slice(3)
+      .slice(7)
       .map((call) => call.method)
       .sort(),
-    ['litch/feishu/app/list', 'litch/feishu/binding/approve', 'litch/feishu/binding/list'],
+    [
+      'litch/feishu/app/list',
+      'litch/feishu/binding/approve',
+      'litch/feishu/binding/list',
+      'litch/feishu/grant/list',
+    ],
   )
 })

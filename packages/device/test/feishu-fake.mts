@@ -55,6 +55,10 @@ export interface FakeApp {
   botName: string
   /** 能力自检用：已生效的权限、在线版本订阅的事件与回调 */
   scopes: Set<string>
+  /** 用户身份权限（scope_type=user） */
+  userScopes: Set<string>
+  /** 应用信息的 allow_refresh_token */
+  allowRefreshToken: boolean
   events: Set<string>
   callbacks: Set<string>
 }
@@ -84,7 +88,52 @@ export class FakeFeishu {
   readonly chats = new Map<string, FakeChat>()
   readonly messages: FakeMessage[] = []
   readonly sent: SentRequest[] = []
-  readonly calls: { appId: string; method: string; path: string }[] = []
+  readonly calls: { appId: string; method: string; path: string; userOpenId?: string }[] = []
+  /** 用户身份授权：设备码 → 申请 */
+  readonly grantRequests = new Map<
+    string,
+    {
+      appId: string
+      scope: string
+      userCode: string
+      state: 'pending' | 'approved' | 'denied'
+      openId?: string
+    }
+  >()
+  /** 用户 token → 谁 */
+  readonly userTokens = new Map<string, { appId: string; openId: string }>()
+  private readonly refreshTokens = new Map<string, { appId: string; openId: string }>()
+  /** 撤销过的 token */
+  readonly revoked: string[] = []
+  /** 刷新一律拒绝（模拟用户在飞书里取消了授权） */
+  rejectRefresh = false
+  /** 授权时不给 refresh token（应用没开刷新） */
+  omitRefreshToken = false
+
+  /** 本人在飞书里点了同意（openId 是实际点的人） */
+  approveGrant(userCode: string, openId: string): void {
+    for (const request of this.grantRequests.values())
+      if (request.userCode === userCode) Object.assign(request, { state: 'approved', openId })
+  }
+
+  denyGrant(userCode: string): void {
+    for (const request of this.grantRequests.values())
+      if (request.userCode === userCode) request.state = 'denied'
+  }
+
+  private issueUserTokens(appId: string, openId: string, scope: string) {
+    const accessToken = `u-${randomBytes(8).toString('hex')}`
+    const refreshToken = this.omitRefreshToken ? '' : `r-${randomBytes(8).toString('hex')}`
+    this.userTokens.set(accessToken, { appId, openId })
+    if (refreshToken) this.refreshTokens.set(refreshToken, { appId, openId })
+    return {
+      access_token: accessToken,
+      ...(refreshToken ? { refresh_token: refreshToken, refresh_token_expires_in: 604800 } : {}),
+      expires_in: 7200,
+      token_type: 'Bearer',
+      scope,
+    }
+  }
   readonly uploads = new Map<string, { appId: string; kind: 'image' | 'file'; bytes: number }>()
   /** 消息里的资源（图片、文件）：按 file_key 给字节 */
   readonly resources = new Map<string, { bytes: Buffer; type: string }>()
@@ -131,6 +180,8 @@ export class FakeFeishu {
       botOpenId: `ou_bot_${app.appId.slice(-6)}`,
       botName: '测试机器人',
       scopes: new Set(),
+      userScopes: new Set(),
+      allowRefreshToken: true,
       events: new Set(),
       callbacks: new Set(),
       ...app,
@@ -360,7 +411,7 @@ export class FakeFeishu {
   private appOf(request: IncomingMessage): FakeApp | undefined {
     const auth = request.headers.authorization ?? ''
     const token = auth.replace(/^Bearer /, '')
-    const appId = this.tokens.get(token)
+    const appId = this.tokens.get(token) ?? this.userTokens.get(token)?.appId
     return appId ? this.apps.get(appId) : undefined
   }
 
@@ -404,6 +455,79 @@ export class FakeFeishu {
         },
       })
     }
+    if (path === '/oauth/v1/device_authorization' && method === 'POST') {
+      const form = new URLSearchParams(raw.toString('utf8'))
+      const [id, secret] = Buffer.from(
+        (request.headers.authorization ?? '').replace(/^Basic /, ''),
+        'base64',
+      )
+        .toString('utf8')
+        .split(':')
+      const app = this.apps.get(id ?? '')
+      if (!app || app.secret !== secret || form.get('client_id') !== app.appId)
+        return reply({ error: 'invalid_client' }, 401)
+      const deviceCode = `udc-${randomBytes(6).toString('hex')}`
+      const userCode = `${randomBytes(2).toString('hex').toUpperCase()}-${randomBytes(2).toString('hex').toUpperCase()}`
+      this.grantRequests.set(deviceCode, {
+        appId: app.appId,
+        scope: form.get('scope') ?? '',
+        userCode,
+        state: 'pending',
+      })
+      return reply({
+        device_code: deviceCode,
+        user_code: userCode,
+        verification_uri: 'https://accounts.feishu.cn/oauth/v1/device/verify',
+        verification_uri_complete: `https://accounts.feishu.cn/oauth/v1/device/verify?user_code=${userCode}`,
+        expires_in: 240,
+        interval: 1,
+      })
+    }
+    if (path === '/oauth/v3/token' && method === 'POST') {
+      const form = request.headers['content-type']?.includes('json')
+        ? new URLSearchParams(Object.entries(json()).map(([k, v]) => [k, String(v)]))
+        : new URLSearchParams(raw.toString('utf8'))
+      const app = this.apps.get(form.get('client_id') ?? '')
+      if (!app || app.secret !== form.get('client_secret'))
+        return reply({ error: 'invalid_client' }, 401)
+      if (form.get('grant_type') === 'refresh_token') {
+        const who = this.refreshTokens.get(form.get('refresh_token') ?? '')
+        if (!who || this.rejectRefresh) return reply({ code: 20064, error: 'invalid_grant' }, 400)
+        this.refreshTokens.delete(form.get('refresh_token') ?? '')
+        return reply({ code: 0, ...this.issueUserTokens(app.appId, who.openId, '') })
+      }
+      const grant = this.grantRequests.get(form.get('device_code') ?? '')
+      if (!grant) return reply({ error: 'invalid_grant' }, 400)
+      if (grant.state === 'pending') return reply({ error: 'authorization_pending' }, 400)
+      if (grant.state === 'denied') return reply({ error: 'access_denied' }, 400)
+      this.grantRequests.delete(form.get('device_code') ?? '')
+      return reply(
+        this.issueUserTokens(
+          app.appId,
+          grant.openId ?? '',
+          grant.scope.replace(' offline_access', ''),
+        ),
+      )
+    }
+    if (path === '/oauth/v1/revoke' && method === 'POST') {
+      const form = new URLSearchParams(raw.toString('utf8'))
+      const token = form.get('token') ?? ''
+      this.revoked.push(token)
+      this.userTokens.delete(token)
+      this.refreshTokens.delete(token)
+      return reply({})
+    }
+    if (path === '/open-apis/authen/v1/user_info' && method === 'GET') {
+      const token = (request.headers.authorization ?? '').replace(/^Bearer /, '')
+      const who = this.userTokens.get(token)
+      if (!who) return reply({ code: 99991668, msg: 'invalid user token' }, 400)
+      this.calls.push({ appId: who.appId, method, path, userOpenId: who.openId })
+      return reply({
+        code: 0,
+        msg: 'ok',
+        data: { open_id: who.openId, name: this.users.get(who.openId)?.name ?? '' },
+      })
+    }
     if (path === '/oauth/v1/app/registration' && method === 'POST') {
       this.register(new URLSearchParams(raw.toString('utf8')), reply)
       return
@@ -428,7 +552,10 @@ export class FakeFeishu {
       response.end(bytes.bytes)
       return
     }
-    this.calls.push({ appId: app.appId, method, path })
+    const userOpenId = this.userTokens.get(
+      (request.headers.authorization ?? '').replace(/^Bearer /, ''),
+    )?.openId
+    this.calls.push({ appId: app.appId, method, path, ...(userOpenId ? { userOpenId } : {}) })
     this.abort = () => response.destroy()
     return this.api(app, method, path, url, raw, json, reply)
   }
@@ -630,6 +757,7 @@ export class FakeFeishu {
           mobile_default_ability: 'bot',
           pc_default_ability: 'bot',
           callback_info: { subscribed_callbacks: [...app.callbacks] },
+          allow_refresh_token: app.allowRefreshToken,
         },
       })
     }
@@ -648,11 +776,18 @@ export class FakeFeishu {
     }
     if (path === '/open-apis/application/v6/scopes' && method === 'GET') {
       return ok({
-        scopes: [...app.scopes].map((scope_name) => ({
-          scope_name,
-          scope_type: 'tenant',
-          grant_status: 1,
-        })),
+        scopes: [
+          ...[...app.scopes].map((scope_name) => ({
+            scope_name,
+            scope_type: 'tenant',
+            grant_status: 1,
+          })),
+          ...[...app.userScopes].map((scope_name) => ({
+            scope_name,
+            scope_type: 'user',
+            grant_status: 1,
+          })),
+        ],
       })
     }
     const configMatch =

@@ -13,6 +13,7 @@ export const FEISHU_TOOL = {
   send: 'feishu_send',
   sendGet: 'feishu_send_get',
   sendCancel: 'feishu_send_cancel',
+  userGrantRequest: 'feishu_user_grant_request',
 } as const
 
 const text = (description: string) => ({ type: 'string', description })
@@ -37,7 +38,8 @@ export const FEISHU_TOOLS_INSTRUCTIONS =
   'When an item refers to a Feishu message, call feishu_message_ref so its ID and metadata outlive the retention period. ' +
   'feishu_send speaks as the bot: free chats send right away; approval chats wait for a person to approve the frozen content, so do not resend while it is awaiting_approval. ' +
   'Mention people only through the mentions parameter (names or open_ids resolved against the chat members); "@name" written in the text is not a mention. ' +
-  'Keep the same operationId when retrying a call so it is not sent twice. Results that come back later (rejected, expired, failed) appear in a later Feishu delivery or via feishu_send_get.'
+  'Keep the same operationId when retrying a call so it is not sent twice. Results that come back later (rejected, expired, failed) appear in a later Feishu delivery or via feishu_send_get. ' +
+  'For other Feishu APIs (docs, sheets, base, calendar, tasks, contacts) run the lark-cli command, as the bot by default; to act as a bound user who granted user identity (feishu_user_grant_request), prefix LITCH_FEISHU_AS_USER=<name or open_id>; see "lark-cli <domain> --help" and "lark-cli skills read <domain>". Its speaking calls follow the same chat rules: approval chats answer "sent for approval (A-n)", so do not retry them.'
 
 export const FEISHU_TOOLS: ClientToolNamespaceSpec = {
   type: 'namespace',
@@ -171,6 +173,23 @@ export const FEISHU_TOOLS: ClientToolNamespaceSpec = {
       inputSchema: object({ operationId: { type: 'string', pattern: '^[A-Za-z0-9_-]{8,40}$' } }, [
         'operationId',
       ]),
+    },
+    {
+      type: 'function',
+      name: FEISHU_TOOL.userGrantRequest,
+      description:
+        'Start a user-identity grant for a bound user, so lark-cli can act as them (LITCH_FEISHU_AS_USER=<name> lark-cli ...). Returns a link and code that only that person can approve in Feishu; pass them on to that person. Starting again voids the previous link. After granting, lark-cli can read all of their Feishu chats; say so when you ask.',
+      inputSchema: object(
+        {
+          user,
+          reason: {
+            type: 'string',
+            maxLength: 500,
+            description: 'Why you need their identity (kept in the audit log).',
+          },
+        },
+        ['user'],
+      ),
     },
     {
       type: 'function',

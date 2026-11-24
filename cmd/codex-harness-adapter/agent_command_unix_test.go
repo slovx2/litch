@@ -29,10 +29,11 @@ func TestAgentCommandUsesHostGitBeforeStartingNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	for path, contents := range map[string]string{
-		node:                          "#!/bin/sh\nprintf 'node started\\n'\n",
-		filepath.Join(host, "git"):    "#!/bin/sh\nprintf 'git:%s\\n' \"$@\"\nexit 42\n",
-		filepath.Join(host, "gh"):     "#!/bin/sh\nprintf 'host gh\\n'\n",
-		filepath.Join(slotDir, "git"): "#!/bin/sh\nexit 99\n",
+		node:                            "#!/bin/sh\nprintf 'node started\\n'\n",
+		filepath.Join(host, "git"):      "#!/bin/sh\nprintf 'git:%s\\n' \"$@\"\nexit 42\n",
+		filepath.Join(host, "gh"):       "#!/bin/sh\nprintf 'host gh\\n'\n",
+		filepath.Join(host, "lark-cli"): "#!/bin/sh\nprintf 'host lark\\n'\n",
+		filepath.Join(slotDir, "git"):   "#!/bin/sh\nexit 99\n",
 	} {
 		if err := os.WriteFile(path, []byte(contents), 0o700); err != nil {
 			t.Fatal(err)
@@ -68,6 +69,15 @@ func TestAgentCommandUsesHostGitBeforeStartingNode(t *testing.T) {
 	// 有 GitHub 上下文时 gh --version 也要问设备，不能直接报宿主 gh 的版本。
 	if got := run("gh", "--version"); got.code != 75 || got.stdout != "" {
 		t.Fatalf("gh --version 绕过了凭据入口: %+v", got)
+	}
+	// lark-cli 同样要问设备（经理绑了飞书应用时用设备的代理），没有会话上下文的直达宿主。
+	if got := run("lark-cli", "--version"); got.code != 75 || got.stdout != "" {
+		t.Fatalf("lark-cli 绕过了设备入口: %+v", got)
+	}
+	plain := runCLI(t, "", []string{"HOME=" + dir, "PATH=" + slotDir + ":" + host, "LITCH_DEVICE_GITHUB_HARNESS="},
+		"agent-command", slotDir, node, node, "lark-cli", "--version")
+	if plain.code != 0 || plain.stdout != "host lark\n" {
+		t.Fatalf("没有会话上下文的 lark-cli 未直达宿主: %+v", plain)
 	}
 	_ = held[0].Close()
 	if got := run("git", "fetch"); got.code != 0 || got.stdout != "node started\n" {

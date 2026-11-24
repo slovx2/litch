@@ -301,3 +301,47 @@
   flex: none;
   width: calc(22px * var(--fs));
 }
+
+/* 私聊绑定 · 用户身份授权：失败、失效的原因跟在状态后面；进行中的链接与用户码在行下面一小行，窄了换行 */
+.fs-binding-item {
+  padding-bottom: 2px;
+}
+.fs-grant-reason {
+  flex: 0 1 auto;
+  color: var(--err);
+}
+.fs-grant-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+  padding: 0 0 4px;
+}
+.fs-grant-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.fs-grant-url {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+.fs-grant-code {
+  color: var(--ink);
+  letter-spacing: 0.04em;
+}
+
+/* 审批与发件：以用户身份发的标记可被挤短；经 lark-cli 的一行小字 */
+.fs-outbox-item .ext-row > .fs-acting,
+.fs-acting {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 14em;
+}
+.fs-cli {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ink-3);
+}

@@ -9,6 +9,7 @@ import {
   type FeishuOutboxEntry,
   type FeishuRegistration,
   type FeishuRequests,
+  type FeishuUserGrant,
 } from '../../../protocol/src/feishu.mjs'
 import { isFeishuMethodParams } from '../../../protocol/src/feishu-validation.mjs'
 import {
@@ -77,7 +78,7 @@ export function createFeishuDevice(host: FeishuHost) {
   const inboxes = new Map<string, ExternalRead<InboxValue>>()
   type OutboxValue = { entries: FeishuOutboxEntry[]; next?: string }
   const outboxes = new Map<string, ExternalRead<OutboxValue>>()
-  type BindingsValue = { bindings: FeishuBinding[] }
+  type BindingsValue = { bindings: FeishuBinding[]; grants: FeishuUserGrant[] }
   const bindings = new Map<string, ExternalRead<BindingsValue>>()
   type ReviewsValue = { reviews: Review[]; pending: number }
   /** 键是 managerId，空串是全部 */
@@ -113,7 +114,13 @@ export function createFeishuDevice(host: FeishuHost) {
       const read: ExternalRead<BindingsValue> = new ExternalRead(
         host,
         host.supported,
-        () => host.request('litch/feishu/binding/list', { appId }),
+        async () => {
+          const [list, grants] = await Promise.all([
+            host.request('litch/feishu/binding/list', { appId }),
+            host.request('litch/feishu/grant/list', { appId }),
+          ])
+          return { bindings: list.bindings, grants: grants.grants }
+        },
         () => read.send(),
       )
       return read
@@ -232,8 +239,12 @@ export function createFeishuDevice(host: FeishuHost) {
         throw new ChannelError('remote', 'Device returned invalid credential data')
       if (name.startsWith('feishu.inbox.')) {
         // 只读，不用刷新
-      } else if (name.startsWith('feishu.binding.')) {
-        if (name !== 'feishu.binding.list' && name !== 'feishu.binding.lookup') {
+      } else if (name.startsWith('feishu.binding.') || name.startsWith('feishu.grant.')) {
+        if (
+          name !== 'feishu.binding.list' &&
+          name !== 'feishu.binding.lookup' &&
+          name !== 'feishu.grant.list'
+        ) {
           bindings.get((args as { appId: string }).appId)?.notify()
           refreshApps()
         }
@@ -339,6 +350,7 @@ export function createFeishuDevice(host: FeishuHost) {
           if (typeof appId === 'string') chats.get(appId)?.notify()
           return true
         }
+        case FEISHU_NOTIFICATION.grantsChanged:
         case FEISHU_NOTIFICATION.bindingsChanged: {
           const appId = (params as { appId?: unknown } | null)?.appId
           if (typeof appId === 'string') bindings.get(appId)?.notify()

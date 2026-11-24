@@ -25,17 +25,23 @@ export class FeishuFakeHarness {
       wakeTickMs?: number
       outboxTickMs?: number
       extensions?: string[]
+      /** 用户身份授权的轮询间隔（毫秒） */
+      grantPollMs?: number
+      /** lark-cli 用这份（测试不真跑它时随便给个路径） */
+      cliBinary?: string
     } = {},
   ): Promise<FeishuFakeHarness> {
     const fake = new FakeFeishu()
     await fake.start()
     const env = rig(options.upstreams ?? {}, options.upstreams ? { needsUserMs: 60 } : {}, {
       feishu: {
+        ...(options.cliBinary ? { cliBinary: options.cliBinary } : {}),
         fixture: {
           origin: fake.origin,
           registrationIntervalMs: 10,
           ...(options.now ? { now: options.now } : {}),
           ...(options.wakeTickMs === undefined ? {} : { wakeTickMs: options.wakeTickMs }),
+          ...(options.grantPollMs === undefined ? {} : { grantPollMs: options.grantPollMs }),
           ...(options.outboxTickMs === undefined
             ? {}
             : { outboxTickMs: options.outboxTickMs, sendGapMs: 0 }),

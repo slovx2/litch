@@ -1,4 +1,4 @@
-// 机器人所在的群与接入设置（D-150、D-160、D-162、D-172、D-178）。
+// 机器人所在的群与接入设置。
 // 群列表在连上时回源同步，进退群、改名、解散事件随时更新；没接入的群只有列表信息。
 // 接入后才收、记、发：发言模式记在通用发言权限里（speech_policies），其余设置在群行的 body 里。
 // 系统同步改的字段（名字、头像、在不在群、解散）不升 revision，免得和用户正在做的修改冲突。
@@ -209,7 +209,7 @@ export class FeishuChats {
       }
       for (const chat of this.records(appId)) {
         if (seen.has(chat.chatId)) continue
-        // 不在列表里：没接入的直接忘掉；接入过的保留设置，标机器人已不在群里（D-178）
+        // 不在列表里：没接入的直接忘掉；接入过的保留设置，标机器人已不在群里
         if (!chat.access) this.delete(appId, chat.chatId)
         else if (chat.botPresent) this.save({ ...chat, botPresent: false, updatedAt: now })
       }
@@ -313,7 +313,7 @@ export class FeishuChats {
     if (before.access) this.fail('feishu_chat_accessed')
     if (!before.botPresent || before.status !== 'normal') this.fail('feishu_chat_unavailable')
     if (before.revision !== params.expectedRevision) this.fail('feishu_revision_conflict')
-    // 外部群要二次确认（D-172）
+    // 外部群要二次确认
     if (before.external && params.confirmExternal !== true) this.fail('feishu_external_unconfirmed')
     const wakers = await this.wakers(appId, chatId, params.wakers, [])
     const now = this.options.now()
@@ -436,7 +436,7 @@ export class FeishuChats {
 
   // —— 事件 ——
 
-  /** 机器人被拉进群：只进列表，不接入；之前接入过的自动恢复（D-178） */
+  /** 机器人被拉进群：只进列表，不接入；之前接入过的自动恢复 */
   botAdded(appId: string, data: Record<string, unknown>): void {
     const chatId = text(data.chat_id, 128)
     if (!/^oc_/.test(chatId)) return

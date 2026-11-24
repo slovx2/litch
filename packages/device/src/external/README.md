@@ -17,7 +17,7 @@
 - 升级在现有检查点表的一个事务中为旧来源补通知起点：取仓库已完成水位的最大值，无水位时用升级时刻。已存在的流继续使用原水位和续页，尚无检查点的流从新起点开始。新启用来源和新分配从当时开始。表结构、事件键、收件箱与 X-n 都无需改写。
 - 没有活跃绑定、又未到仓库核对时间时，通常每个机器人/仓库只发一个通知列表请求；有通知时按相关主题补详情，304 节省配额。全仓兜底轮仍有列表与明细成本；活跃绑定越多，跟进与 CI 请求也越多。
 
-## GitHub CLI 授权（D-141）
+## GitHub CLI 授权
 
 - 设备首次需要受管 **gh 2.102.0** 时，从 GitHub 官方 Release 下载归档，用内置 SHA-256 校验后装到 `<stateDirectory>/tools/github-cli/2.102.0/<platform>-<arch>/bin/gh[.exe]`，再核对版本。下载和退避由设备状态锁下的各入口共用；只清理较旧且在正常退出时确认无人使用的版本。受管 gh 不搜索 PATH；明确导入系统登录时才查找系统 gh。
 - 私有管理员 RPC 以 `GithubGhAuthorizationService.create({ secrets, stateDirectory, managedCli, systemGithubConfig, changed })` 构造。`changed` 只推 `{loginId, revision}`。首次设备码登录可先返回下载阶段，经同一登录 ID 订阅或查询；下载结束后，等待首个设备码最多 20 秒。桌面仅打开等待态中的固定 GitHub 网址。系统导入和粘贴令牌只等待 API 核验，不会下载受管 gh。

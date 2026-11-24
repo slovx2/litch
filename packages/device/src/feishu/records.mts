@@ -1,4 +1,4 @@
-// 记录与历史：已接入群的消息落进消息库（D-163、D-164、D-165、D-167）。
+// 记录与历史：已接入群的消息落进消息库。
 // - 实时：收消息事件在处理函数里同步落库再返回（SDK 随后才回 ACK），未接入的群直接丢弃，不留任何正文。
 // - 补历史：接入时补最近 7 天、手动补一段、每次连上补断线期间的缺口；同一应用的历史请求串行。
 // - 回源：合并转发、卡片、名片要再读一次才看得全，落库后在后台补上，不拖慢 ACK。
@@ -412,7 +412,7 @@ export class FeishuRecords {
     }
     const { chats } = this.options
     if (!chats.active(appId, incoming.chatId)) {
-      // 未接入：不落库、不计数（D-167）；列表里没有这个群说明漏了进群事件，回源对一遍
+      // 未接入：不落库、不计数；列表里没有这个群说明漏了进群事件，回源对一遍
       if (!chats.record(appId, incoming.chatId)) void chats.sync(appId).catch(() => undefined)
       return
     }

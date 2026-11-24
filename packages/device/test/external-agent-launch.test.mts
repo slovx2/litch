@@ -312,3 +312,59 @@ test('Gemini 会话进程：会话号从 LITCH_THREAD_ID_FILE 读出，拿得到
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('lark-cli：经理和工作线按经理拿飞书租约，未路由的交回宿主；归还转给飞书代理', async () => {
+  const lines = { line: 'pi' }
+  const options = {
+    managers: {
+      store: {
+        manager: (id: string) =>
+          id === 'm' ? { id: 'm', status: 'active', harness: 'codex', threadId: 'm-thread' } : null,
+        managers: () => [],
+      },
+      lines: {
+        mark: (threadId: string) =>
+          threadId === 'm-thread'
+            ? { managerId: 'm', role: 'manager' }
+            : threadId in lines
+              ? { managerId: 'm', role: 'line' }
+              : null,
+      },
+      tree: {
+        host: {
+          index: {
+            archived: () => false,
+            lookup: (threadId: string) => (lines as Record<string, string>)[threadId] ?? null,
+          },
+        },
+      },
+      resets: { refusal: () => null, held: () => false },
+    },
+    // 飞书租约不看 GitHub 身份分配
+    configuration: { assignmentForManager: () => null },
+  }
+  const launch = new DeviceAgentLaunch(options as never)
+  const released: string[] = []
+  launch.feishu = {
+    lease: async (actor: { kind: string; managerId: string; threadId: string }) =>
+      actor.managerId === 'm'
+        ? { lease: `L-${actor.threadId}`, larkPath: '/device/lark-cli', env: { WHO: actor.kind } }
+        : null,
+    release: (id: string) => released.push(id),
+  } as never
+  const ask = (raw: unknown) =>
+    (launch as unknown as { request(raw: unknown): Promise<Record<string, unknown>> }).request(raw)
+  assert.deepEqual(await ask({ action: 'feishu', threadId: 'm-thread', harness: 'codex' }), {
+    lease: 'L-m-thread',
+    larkPath: '/device/lark-cli',
+    env: { WHO: 'manager' },
+  })
+  assert.equal((await ask({ action: 'feishu', threadId: 'line', harness: 'pi' })).lease, 'L-line')
+  assert.deepEqual(await ask({ action: 'feishu', threadId: 'ordinary', harness: 'codex' }), {})
+  assert.deepEqual(await ask({ action: 'feishu', threadId: 'line', harness: 'codex' }), {})
+  await ask({ action: 'release', lease: 'L-line' })
+  assert.deepEqual(released, ['L-line'])
+  assert.equal(launch.current({ kind: 'workline', managerId: 'm', threadId: 'line' }), true)
+  assert.equal(launch.current({ kind: 'manager', managerId: 'm', threadId: 'line' }), false)
+  assert.equal(launch.current({ kind: 'workline', managerId: 'x', threadId: 'line' }), false)
+})

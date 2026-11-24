@@ -12,8 +12,15 @@ import type {
 } from '../../../core/src/projection/feishu.mts'
 import { useT } from '../app/appearance.ts'
 import { useServices } from '../app/services.tsx'
-import { feishuFailure } from './failure.ts'
-import { type FeishuApp, type FeishuChat, feishuReason, staleReason } from './model.ts'
+import { feishuFailure, grantFailure } from './failure.ts'
+import {
+  type FeishuApp,
+  type FeishuChat,
+  feishuReason,
+  grantFail,
+  grantStale,
+  staleReason,
+} from './model.ts'
 
 /** 写操作成功后把设备回的应用交给页面，不等快照重读 */
 export type OnApp = (app: FeishuApp) => void
@@ -98,9 +105,10 @@ export function useReviews(deviceId: string, managerId: string, enabled = true) 
 
 /**
  * 一次命令的忙与错：run 返回结果，失败时记下原因并返回 undefined。
- * 版本冲突（或群的接入状态已在别处变了）时先调 onConflict（重读），提示换成“已重新读取，请重试”
+ * 版本冲突（或群的接入状态已在别处变了）时先调 onConflict（重读），提示换成“已重新读取，请重试”。
+ * grant 为 true 时是用户身份授权的命令：多认授权的原因代码（人已解绑、授权已不在也重读）
  */
-export function useFeishuRun(onConflict?: () => void) {
+export function useFeishuRun(onConflict?: () => void, grant = false) {
   const t = useT()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -111,14 +119,15 @@ export function useFeishuRun(onConflict?: () => void) {
       try {
         return await request()
       } catch (cause) {
-        if (staleReason(feishuReason(cause))) onConflict?.()
-        setError(feishuFailure(cause, t))
+        if (staleReason(feishuReason(cause)) || (grant && grantStale(grantFail(cause))))
+          onConflict?.()
+        setError(grant ? grantFailure(cause, t) : feishuFailure(cause, t))
         return undefined
       } finally {
         setBusy(false)
       }
     },
-    [t, onConflict],
+    [t, onConflict, grant],
   )
   return useMemo(() => ({ busy, error, run, setError }), [busy, error, run])
 }

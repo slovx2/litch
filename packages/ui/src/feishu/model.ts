@@ -17,6 +17,7 @@ import {
   type FeishuChatAccessParams,
   type FeishuChatRecords,
   type FeishuChatUpdateParams,
+  type FeishuCliRequest,
   type FeishuErrorCode,
   type FeishuGapFill,
   type FeishuInboxEntry,
@@ -30,6 +31,7 @@ import {
   type FeishuPerson,
   type FeishuRegistration,
   type FeishuSpeechMode,
+  type FeishuUserGrant,
 } from '../../../protocol/src/feishu.mts'
 import {
   REVIEW_REASON_MAX,
@@ -47,6 +49,7 @@ export type {
   FeishuChat,
   FeishuChatAccess,
   FeishuChatRecords,
+  FeishuCliRequest,
   FeishuGapFill,
   FeishuInboxEntry,
   FeishuInboxMessage,
@@ -59,6 +62,7 @@ export type {
   FeishuPerson,
   FeishuRegistration,
   FeishuSpeechMode,
+  FeishuUserGrant,
   Review,
   ReviewSpeechPart,
   ReviewSpeechPreview,
@@ -205,16 +209,25 @@ export function managerOptions(
   return options
 }
 
-/** 能力自检缺的项合起来：权限、事件、回调 */
+/** 能力自检缺的项合起来：权限、用户身份权限、事件、回调 */
 export function missingGroups(capability: FeishuCapability) {
   return [
     { kind: 'scopes', items: capability.missingScopes },
+    { kind: 'userScopes', items: capability.missingUserScopes ?? [] },
     { kind: 'events', items: capability.missingEvents },
     { kind: 'callbacks', items: capability.missingCallbacks },
   ].filter((group) => group.items.length > 0) as {
-    kind: 'scopes' | 'events' | 'callbacks'
+    kind: 'scopes' | 'userScopes' | 'events' | 'callbacks'
     items: string[]
   }[]
+}
+
+/** 用户身份的前提还缺：用户身份权限没开全，或没开“刷新 user_access_token”。补申请会一并处理 */
+export function userIdentityMissing(capability: FeishuCapability | null | undefined): boolean {
+  return Boolean(
+    capability &&
+      ((capability.missingUserScopes?.length ?? 0) > 0 || capability.refreshTokenDisabled),
+  )
 }
 
 /** 补申请已提交、在等企业管理员审核 */
@@ -819,4 +832,122 @@ export function mergeBindings(
     return other && other.revision > one.revision ? other : one
   })
   return [...merged, ...newer.values()]
+}
+
+// ---------- 用户身份授权 ----------
+
+/** 绑定行上显示的授权状态：没有授权记录的是 none（未授权） */
+export type GrantShown = 'none' | FeishuUserGrant['state']
+
+export const GRANT_TONE: Record<GrantShown, FeishuTone> = {
+  none: 'off',
+  pending: 'wait',
+  active: 'ok',
+  expired: 'err',
+  revoked: 'off',
+  failed: 'err',
+}
+
+/** 这个人的授权；没有记录是 null */
+export function grantFor(
+  grants: readonly FeishuUserGrant[] | null | undefined,
+  openId: string,
+): FeishuUserGrant | null {
+  return grants?.find((one) => one.openId === openId) ?? null
+}
+
+export function grantShown(grant: Pick<FeishuUserGrant, 'state'> | null): GrantShown {
+  return grant?.state ?? 'none'
+}
+
+/** 进行中的链接还没过期（设备给 UTC 秒） */
+export function grantLinkLive(
+  grant: Pick<FeishuUserGrant, 'pending'> | null,
+  nowMs: number,
+): boolean {
+  return Boolean(grant?.pending && grant.pending.expiresAt > nowMs / 1000)
+}
+
+/**
+ * 能点“授权用户身份”：未授权、已失效、已撤销、失败；待同意但链接已过期的也能重新发起。
+ * 已授权的不出（要换人或重来先撤销）
+ */
+export function canInviteGrant(grant: FeishuUserGrant | null, nowMs: number): boolean {
+  const shown = grantShown(grant)
+  if (shown === 'active') return false
+  if (shown === 'pending') return !grantLinkLive(grant, nowMs)
+  return true
+}
+
+/** 能点“撤销授权”：已授权、待本人同意 */
+export function canRevokeGrant(grant: Pick<FeishuUserGrant, 'state'> | null): boolean {
+  return grant?.state === 'active' || grant?.state === 'pending'
+}
+
+/** 快照加命令结果：同一个人取 revision 大的，快照里还没有的补上 */
+export function mergeGrants(
+  snapshot: readonly FeishuUserGrant[],
+  fresh: readonly FeishuUserGrant[],
+): FeishuUserGrant[] {
+  const newer = new Map(fresh.map((one) => [one.openId, one]))
+  const merged = snapshot.map((one) => {
+    const other = newer.get(one.openId)
+    newer.delete(one.openId)
+    return other && other.revision > one.revision ? other : one
+  })
+  return [...merged, ...newer.values()]
+}
+
+/** 授权失效、撤销、失败的原因代码；文案键 feishu.grant.error.<代码>，认不出的用 other */
+export const GRANT_ERRORS = [
+  'denied',
+  'invite_expired',
+  'identity_mismatch',
+  'whoami_failed',
+  'no_refresh_token',
+  'user_unbound',
+  'unbound',
+  'invite_interrupted',
+  'token_missing',
+  'app_inactive',
+  'refresh_rejected',
+  'revoked_by_admin',
+  'app_removed',
+  'unused',
+] as const
+export type GrantError = (typeof GRANT_ERRORS)[number] | 'other'
+
+/** 行上要说的原因；没有原因或状态不需要原因（未授权、待同意、已授权）时是 null */
+export function grantError(
+  grant: Pick<FeishuUserGrant, 'state' | 'error'> | null,
+): GrantError | null {
+  if (!grant?.error) return null
+  if (grant.state !== 'failed' && grant.state !== 'expired' && grant.state !== 'revoked')
+    return null
+  return (GRANT_ERRORS as readonly string[]).includes(grant.error)
+    ? (grant.error as GrantError)
+    : 'other'
+}
+
+/** 发起、撤销授权时设备给的原因代码（去掉 feishu_ 前缀后）；文案键 feishu.grant.fail.<代码> */
+export const GRANT_FAILS = [
+  'user_unbound',
+  'user_scopes_missing',
+  'authorize_failed',
+  'network',
+  'grant_not_found',
+] as const
+export type GrantFail = (typeof GRANT_FAILS)[number]
+
+/** 认出授权命令的原因代码；认不出是 null */
+export function grantFail(error: unknown): GrantFail | null {
+  const message = (error as { message?: unknown } | null)?.message
+  if (typeof message !== 'string' || !message.startsWith('feishu_')) return null
+  const code = message.slice('feishu_'.length)
+  return (GRANT_FAILS as readonly string[]).includes(code) ? (code as GrantFail) : null
+}
+
+/** 授权已在别处变了（人已解绑、授权已不在）：先重读再提示 */
+export function grantStale(reason: GrantFail | null): boolean {
+  return reason === 'user_unbound' || reason === 'grant_not_found'
 }

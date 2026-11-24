@@ -1,4 +1,4 @@
-// 飞书收件箱（D-158、D-161、D-166、D-170、D-173）：群里和私聊里谁找了经理。
+// 飞书收件箱：群里和私聊里谁找了经理。
 // 私聊：已绑定的人发的每一条都进收件箱（没绑定的人的私聊根本不落库）。
 // 群：消息落库后同步判定（处理函数返回、SDK 回 ACK 之前就写进收件箱），条件是：
 // 1. 找的是机器人：@ 了机器人（按 open_id 精确比较），或回复的是机器人发的消息；
@@ -28,7 +28,7 @@ CREATE TABLE feishu_deliveries(
 CREATE INDEX feishu_deliveries_app ON feishu_deliveries(app_id, at);
 `
 
-/** 补缺口补到的找机器人的消息，只有 24 小时内的进收件箱（D-173） */
+/** 补缺口补到的找机器人的消息，只有 24 小时内的进收件箱 */
 const GAP_INBOX_WINDOW = 86_400
 
 export interface FeishuInboxOptions {

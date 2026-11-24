@@ -5,6 +5,7 @@ import { accessSync, constants, realpathSync, statSync } from 'node:fs'
 import { delimiter, extname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  deviceFeishuEnvironment,
   deviceGithubEnvironment,
   githubThreadVariable,
   THREAD_ID_FILE_VARIABLE,
@@ -39,8 +40,39 @@ export function githubCommandThread(env: NodeJS.ProcessEnv): string | undefined 
   )
 }
 
+/** lark-cli：绑了飞书应用的会话用设备给的 sidecar 版和代理；没绑的用宿主自己装的 */
+async function runLark(args: string[]): Promise<void> {
+  const env = { ...process.env }
+  const harness = env.LITCH_DEVICE_GITHUB_HARNESS
+  const thread = githubCommandThread(env)
+  const scope = harness && thread ? await deviceFeishuEnvironment(harness, thread, env) : null
+  if (scope?.state === 'error') {
+    process.stderr.write(`lark-cli: ${scope.message}\n`)
+    process.exitCode = 1
+    return
+  }
+  const lease = scope?.state === 'lease' ? scope : null
+  const bin = lease?.larkPath ?? executableOnPath('lark-cli', env)
+  if (!bin) {
+    lease?.release()
+    process.stderr.write('lark-cli: executable not found\n')
+    process.exitCode = 127
+    return
+  }
+  const child = spawn(bin, args, { stdio: 'inherit', env: lease?.env ?? env, windowsHide: true })
+  child.once('error', () => {
+    lease?.release()
+    process.exitCode = 1
+  })
+  child.once('exit', (code) => {
+    lease?.release()
+    process.exitCode = code ?? 1
+  })
+}
+
 async function run(): Promise<void> {
   const [, , mode, ...args] = process.argv
+  if (mode === 'lark-cli') return runLark(args)
   if (mode !== 'gh' && mode !== 'git') return
   const env = { ...process.env }
   const harness = env.LITCH_DEVICE_GITHUB_HARNESS

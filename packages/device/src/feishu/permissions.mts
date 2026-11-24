@@ -1,6 +1,7 @@
 // 飞书应用要申请的权限、订阅的事件和回调：创建向导、能力自检、补申请和界面都用这一份。
 // 改这里要同时改产品手册的权限表。
 import { gzipSync } from 'node:zlib'
+import { FEISHU_USER_SCOPES } from './user-oauth.mjs'
 
 export const FEISHU_SCOPES = [
   // 收消息、读历史、撤回事件
@@ -66,16 +67,24 @@ export interface CapabilityDiff {
   missingScopes: string[]
   missingEvents: string[]
   missingCallbacks: string[]
+  /** 用户身份要的权限里还没开的 */
+  missingUserScopes: string[]
+  /** 没开“刷新 user_access_token”（应用信息的 allow_refresh_token） */
+  refreshTokenDisabled: boolean
 }
 
 export function diffCapability(have: {
   scopes: ReadonlySet<string>
+  userScopes: ReadonlySet<string>
   events: ReadonlySet<string>
   callbacks: ReadonlySet<string>
+  allowRefreshToken: boolean
 }): CapabilityDiff {
   return {
     missingScopes: FEISHU_SCOPES.filter((scope) => !have.scopes.has(scope)),
     missingEvents: FEISHU_EVENTS.filter((event) => !have.events.has(event)),
     missingCallbacks: FEISHU_CALLBACKS.filter((callback) => !have.callbacks.has(callback)),
+    missingUserScopes: FEISHU_USER_SCOPES.filter((scope) => !have.userScopes.has(scope)),
+    refreshTokenDisabled: !have.allowRefreshToken,
   }
 }

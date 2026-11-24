@@ -1,6 +1,7 @@
 // 审批与发件对人说的几句：桌面和手机共用（手机的 t 是桌面文案的超集），不碰 DOM 与 React。
 import type { Translator } from '../i18n/index.ts'
 import {
+  type FeishuCliRequest,
   type FeishuOutboxEntry,
   outboxReason,
   type ReviewSpeechPreview,
@@ -37,4 +38,18 @@ export function outboxReasonText(
 ): string | null {
   const reason = outboxReason(entry)
   return reason ? t(`feishu.outbox.error.${reason}`, { code: entry.error ?? '' }) : null
+}
+
+/** 经 lark-cli 发的：一行写方法、路径和动作，如“经 lark-cli · POST /open-apis/im/v1/messages · send” */
+export function cliText(t: Translator, cli: FeishuCliRequest): string {
+  return t('feishu.cli.line', { method: cli.method, path: cli.path, action: cli.action })
+}
+
+/** 以用户身份发的标记“以 某某 身份发”；机器人发的是 null */
+export function actingUserText(
+  t: Translator,
+  actingAs: FeishuOutboxEntry['actingAs'] | ReviewSpeechPreview['actingAs'] | undefined,
+): string | null {
+  if (actingAs?.type !== 'user') return null
+  return t('feishu.actingAsUser', { name: actingAs.name.trim() || actingAs.openId })
 }

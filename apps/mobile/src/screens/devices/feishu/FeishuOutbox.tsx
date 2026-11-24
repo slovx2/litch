@@ -1,6 +1,7 @@
 // 飞书应用详情里的“发件”一节：经理经这个应用的发言（新的在前）。每条两行——第一行发到哪、格式与条数、状态、时间，
 // 能撤下的（待审批、排队、结果不明）行尾一个小图标按钮；第二行内容摘要，有原因时跟在后面，审批 ID 与尝试次数放在末尾。
 // 撤下先确认；已发出的消息不会从飞书撤回（小标题下写明）。“加载更多”按游标读更早的页，只留在本节。
+// 以用户身份发的在格式后写“以 某某 身份发”；经 lark-cli 发的再加一行小字写方法、路径和动作。
 import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { stamp } from '../../../../../../packages/ui/src/app/format.ts'
@@ -14,6 +15,8 @@ import {
   type WriteBlock,
 } from '../../../../../../packages/ui/src/feishu/model.ts'
 import {
+  actingUserText,
+  cliText,
   outboxReasonText,
   targetLabel,
 } from '../../../../../../packages/ui/src/feishu/speech-text.ts'
@@ -112,6 +115,7 @@ export function FeishuOutbox({
         const kind = [
           t(`feishu.format.${entry.format}`),
           entry.parts > 1 ? t('feishu.outbox.parts', { n: entry.parts }) : '',
+          actingUserText(t, entry.actingAs) ?? '',
         ]
           .filter(Boolean)
           .join(' · ')
@@ -167,6 +171,15 @@ export function FeishuOutbox({
                 <Text style={{ color: c.ink3 }}>{` · ${tail.join(' · ')}`}</Text>
               ) : null}
             </Text>
+            {entry.cli ? (
+              <Text
+                numberOfLines={1}
+                testID={`feishu:outbox:cli:${entry.operationId}`}
+                style={[meta, { fontFamily: font.mono }]}
+              >
+                {cliText(t, entry.cli)}
+              </Text>
+            ) : null}
           </View>
         )
       })}

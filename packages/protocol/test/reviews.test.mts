@@ -44,6 +44,7 @@ const review = {
       { format: 'post', text: '@示例成员甲 示例发言' },
       { format: 'image', name: 'shot.png', size: 1024 },
     ],
+    cli: { method: 'POST', path: '/open-apis/im/v1/messages/:id/reply', action: 'reply' },
   },
   payloadHash: 'a'.repeat(64),
   state: 'pending',

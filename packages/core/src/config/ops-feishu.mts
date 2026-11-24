@@ -6,6 +6,7 @@ import {
   type FeishuBinding,
   type FeishuChat,
   type FeishuSpeechMode,
+  type FeishuUserGrant,
 } from '../../../protocol/src/feishu.mjs'
 import type { OpContext, OpSpec } from './context.mjs'
 import { getDevice, invalid, newOperation, writing } from './ops-external.mjs'
@@ -453,7 +454,119 @@ const BINDING_OPS: Record<string, OpSpec> = {
   },
 }
 
+// —— 用户身份授权 ——
+// 发起授权只拿到链接和用户码，要本人在飞书里点同意才生效
+
+function grantLine(ctx: OpContext, grant: FeishuUserGrant): string {
+  const state = {
+    pending: ctx.say('等本人确认', 'waiting for the person'),
+    active: ctx.say('已授权', 'granted'),
+    expired: ctx.say('已失效', 'expired'),
+    revoked: ctx.say('已撤销', 'revoked'),
+    failed: ctx.say('未成功', 'failed'),
+  }[grant.state]
+  const pending = grant.pending
+    ? ` · ${grant.pending.verificationUrl} · ${ctx.say('用户码', 'code')} ${grant.pending.userCode}`
+    : ''
+  return `${grant.openId} · ${grant.name || '-'} · ${state}${grant.error ? ` (${grant.error})` : ''}${pending}`
+}
+
+async function grantTarget(ctx: OpContext, deviceId: string, appId: string) {
+  const bindings = (await bindingsOf(ctx, deviceId, appId)).filter((one) => one.state === 'bound')
+  const wanted = ctx.cmd.positionals[1]
+  const exact = bindings.find((one) => one.openId === wanted)
+  const named = bindings.filter((one) => one.name && one.name === wanted)
+  const target = exact ?? (named.length === 1 ? named[0] : undefined)
+  if (!target)
+    throw invalid(
+      ctx,
+      '没有这个已绑定的人，或名字不唯一；请先列出并使用 open_id。',
+      'No such paired user, or the name is ambiguous; list them and use the open_id.',
+    )
+  return target
+}
+
+const GRANT_OPS: Record<string, OpSpec> = {
+  'feishu-grant list': {
+    args: [1, 1],
+    options,
+    usage: 'feishu-grant list <app-id> [--device <id>]',
+    summary: { zh: '列出用户身份授权', en: 'List user-identity grants' },
+    async run(ctx) {
+      const device = await getDevice(ctx)
+      const app = await appOf(ctx, device.id)
+      const view = await ctx.first({
+        kind: 'feishuBindings',
+        deviceId: device.id,
+        appId: app.appId,
+      })
+      const grants = view.value?.grants ?? []
+      return {
+        text: grants.length
+          ? grants.map((one) => grantLine(ctx, one)).join('\n')
+          : ctx.say('没有用户身份授权。', 'No user-identity grants.'),
+        data: { grants },
+      }
+    },
+  },
+  'feishu-grant invite': {
+    args: [2, 2],
+    options,
+    usage: 'feishu-grant invite <app-id> <user> [--device <id>]',
+    summary: {
+      zh: '给已绑定的人发起用户身份授权（返回链接和用户码，本人点了才生效）',
+      en: 'Start a user-identity grant for a paired user (returns a link and code; it only takes effect when they approve)',
+    },
+    async run(ctx) {
+      const device = await getDevice(ctx)
+      const app = await appOf(ctx, device.id)
+      const target = await grantTarget(ctx, device.id, app.appId)
+      await writing(
+        ctx,
+        ctx.nameOf(device),
+        ctx.say(
+          `给“${target.name || target.openId}”发起用户身份授权；本人同意后，经理能以他的身份调飞书接口，并能读到他在飞书里的所有会话。`,
+          `Start a user-identity grant for “${target.name || target.openId}”; once they approve, the manager can call Feishu as them and read all of their Feishu chats.`,
+        ),
+      )
+      const data = await ctx.run('feishu.grant.invite', {
+        deviceId: device.id,
+        appId: app.appId,
+        openId: target.openId,
+        operationId: `config-${Date.now().toString(36)}`,
+      })
+      return { text: grantLine(ctx, data.grant), data }
+    },
+  },
+  'feishu-grant revoke': {
+    args: [2, 2],
+    options,
+    usage: 'feishu-grant revoke <app-id> <user> [--device <id>]',
+    summary: { zh: '撤销一个人的用户身份授权', en: "Revoke a person's user-identity grant" },
+    async run(ctx) {
+      const device = await getDevice(ctx)
+      const app = await appOf(ctx, device.id)
+      const target = await grantTarget(ctx, device.id, app.appId)
+      await writing(
+        ctx,
+        ctx.nameOf(device),
+        ctx.say(
+          `撤销“${target.name || target.openId}”的用户身份授权；之后要用得重新授权。`,
+          `Revoke the user-identity grant of “${target.name || target.openId}”; they must grant again before it can be used.`,
+        ),
+      )
+      const data = await ctx.run('feishu.grant.revoke', {
+        deviceId: device.id,
+        appId: app.appId,
+        openId: target.openId,
+      })
+      return { text: grantLine(ctx, data.grant), data }
+    },
+  },
+}
+
 export const FEISHU_CONFIG_OPS: Record<string, OpSpec> = {
+  ...GRANT_OPS,
   ...BINDING_OPS,
   'feishu-app list': {
     args: [0, 0],

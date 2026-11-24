@@ -14,6 +14,7 @@ import {
   type FeishuOutboxState,
   type FeishuPairing,
   type FeishuRegistration,
+  type FeishuUserGrant,
 } from '../../../protocol/src/feishu.mjs'
 import { ProtocolError } from '../../../shared/src/protocol-contract.mjs'
 import { type ManagerStore, managerNow } from '../manager-store.mjs'
@@ -28,6 +29,8 @@ import {
 import { bindingView, FeishuBindings } from './bindings.mjs'
 import { checkCapability, upgradeCapability } from './capability.mjs'
 import { FEISHU_SPEECH_PROVIDER, FeishuChats } from './chats.mjs'
+import { ManagedLarkCli } from './cli-binary.mjs'
+import { FeishuCliProxy } from './cli-proxy.mjs'
 import { FeishuConnectionRunner, type FeishuEventHandler } from './connection.mjs'
 import { FeishuCredentials } from './credentials.mjs'
 import { escapeExternal } from './format.mjs'
@@ -39,6 +42,8 @@ import { FeishuRegistrations } from './registration.mjs'
 import { FeishuReviewCards } from './review-cards.mjs'
 import { SpeechPolicies } from './speech-policy.mjs'
 import { type FeishuAppRecord, FeishuStore } from './store.mjs'
+import { FeishuUserGrants } from './user-grants.mjs'
+import { FEISHU_USER_SCOPES, FeishuOAuth } from './user-oauth.mjs'
 import { FeishuWake } from './wake.mjs'
 
 /** 附件下载到设备状态目录下的这里（0700） */
@@ -62,7 +67,11 @@ export interface DeviceFeishuOptions {
     /** 发件重试检查间隔、两次发送的间隔（毫秒） */
     outboxTickMs?: number
     sendGapMs?: number
+    /** 用户身份授权的轮询间隔（毫秒） */
+    grantPollMs?: number
   }
+  /** 测试与联调：lark-cli 直接用这份（sidecar 版），不下载 */
+  cliBinary?: string
 }
 
 /** 入参不对或状态不允许：消息就是给客户端认的原因代码 */
@@ -95,6 +104,10 @@ export class DeviceFeishuService {
   readonly bindings: FeishuBindings
   /** 飞书里的审批卡片；没有通用审批时为空 */
   readonly cards: FeishuReviewCards | null
+  /** lark-cli 的设备代理（租约经设备的命令入口发出） */
+  readonly cli: FeishuCliProxy
+  /** 已绑定用户的用户身份授权 */
+  readonly grants: FeishuUserGrants
   private readonly credentials: FeishuCredentials
   private readonly endpoints: FeishuEndpoints
   private readonly registrations: FeishuRegistrations
@@ -188,6 +201,8 @@ export class DeviceFeishuService {
       ...(options.fixture?.wakeTickMs === undefined ? {} : { tickMs: options.fixture.wakeTickMs }),
     })
     this.outbox = new FeishuOutbox({
+      // 授权在后面建好；发送时才用
+      userToken: (appId, openId) => this.grants.token(appId, openId),
       stateDirectory: options.stateDirectory,
       store: this.store,
       chats: this.chats,
@@ -241,6 +256,31 @@ export class DeviceFeishuService {
       ...(cards ? { changed: (review) => cards.changed(review) } : {}),
     })
     this.on('card.action.trigger', (appId, data) => cards?.action(appId, data) ?? {})
+    this.grants = new FeishuUserGrants({
+      stateDirectory: options.stateDirectory,
+      store: this.store,
+      bindings: this.bindings,
+      oauth: new FeishuOAuth(this.endpoints),
+      secret: (appId) => this.secret(appId),
+      enabledScopes: (appId) => {
+        const missing = this.store.app(appId)?.capability?.missingUserScopes
+        return missing ? FEISHU_USER_SCOPES.filter((one) => !missing.includes(one)) : null
+      },
+      now: this.now,
+      announce: options.announce,
+      fail,
+      log: options.log,
+      ...(options.fixture?.grantPollMs === undefined
+        ? {}
+        : { pollMs: options.fixture.grantPollMs }),
+    })
+    const binary = new ManagedLarkCli(options.stateDirectory, options.cliBinary)
+    this.cli = new FeishuCliProxy({
+      feishu: this,
+      stateDirectory: options.stateDirectory,
+      binary: () => binary.ensure(),
+      log: options.log,
+    })
     this.records.onStored((message, source) => this.inbox.stored(message, source))
     this.inbox.onQueued(() => this.wake.tick())
     this.on('im.message.receive_v1', (appId, data) => this.records.received(appId, data))
@@ -320,7 +360,34 @@ export class DeviceFeishuService {
   }
 
   bindingRevoke(appId: string, openId: string, expectedRevision: number): FeishuBinding {
-    return this.bindings.revoke(appId, openId, expectedRevision)
+    const binding = this.bindings.revoke(appId, openId, expectedRevision)
+    // 撤销绑定一并撤销用户身份授权
+    this.grants.revoke(appId, openId, 'unbound')
+    return binding
+  }
+
+  // —— 用户身份授权 ——
+
+  grantList(appId: string): FeishuUserGrant[] {
+    this.store.app(appId) ?? fail('feishu_app_not_found')
+    return this.grants.list(appId)
+  }
+
+  async grantInvite(appId: string, openId: string, operationId: string): Promise<FeishuUserGrant> {
+    const app = this.store.app(appId) ?? fail('feishu_app_not_found')
+    if (!app.enabled) fail('feishu_app_inactive')
+    return await this.grants.invite(appId, openId, operationId)
+  }
+
+  grantRevoke(appId: string, openId: string): FeishuUserGrant {
+    this.store.app(appId) ?? fail('feishu_app_not_found')
+    return this.grants.revoke(appId, openId, 'revoked_by_admin') ?? fail('feishu_grant_not_found')
+  }
+
+  /** 应用当前的 App Secret（只给设备内部的授权接口用） */
+  private secret(appId: string): string | null {
+    const app = this.store.app(appId)
+    return app?.enabled ? this.credentials.read(appId, app.credential.generation) : null
   }
 
   bindingUpdate(
@@ -425,6 +492,7 @@ export class DeviceFeishuService {
     this.records.start()
     this.wake.start()
     this.outbox.start()
+    this.grants.start()
     for (const app of apps) this.reconcile(app.appId)
   }
 
@@ -433,6 +501,8 @@ export class DeviceFeishuService {
     this.registrations.close()
     this.wake.close()
     this.outbox.close()
+    this.grants.close()
+    void this.cli.close()
     this.records.close()
     for (const appId of [...this.running.keys()]) this.stop(appId)
     this.messages.close()
@@ -635,6 +705,7 @@ export class DeviceFeishuService {
       if (app.revision !== expectedRevision) fail('feishu_revision_conflict')
       this.store.removeApp(appId)
       this.chats.removeApp(appId)
+      this.grants.removeApp(appId)
       this.bindings.removeApp(appId)
       this.store.audit(appId, now, { action: 'app_removed', by: 'admin' })
     })

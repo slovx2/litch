@@ -9,6 +9,7 @@ import {
   type FeishuOutboxEntry,
   type FeishuRegistration,
   type FeishuRequests,
+  type FeishuUserGrant,
 } from '../../../protocol/src/feishu.mjs'
 import {
   REVIEWS_METHOD,
@@ -46,8 +47,11 @@ export type FeishuInboxView = ExternalSnapshot<{
 /** 应用的发件队列：最近的一页（新的在前） */
 export type FeishuOutboxView = ExternalSnapshot<{ entries: FeishuOutboxEntry[]; next?: string }>
 
-/** 应用的私聊绑定（已绑定和撤销过的，新绑定的在前） */
-export type FeishuBindingsView = ExternalSnapshot<{ bindings: FeishuBinding[] }>
+/** 应用的私聊绑定（已绑定和撤销过的，新绑定的在前），连同各人的用户身份授权 */
+export type FeishuBindingsView = ExternalSnapshot<{
+  bindings: FeishuBinding[]
+  grants: FeishuUserGrant[]
+}>
 
 /**
  * 审批：待批的全部（最多 200 条）在前，再接最近有了结果的；pending 是待批条数。
@@ -82,6 +86,9 @@ export const FEISHU_COMMAND = {
   'feishu.binding.approve': FEISHU_METHOD.bindingApprove,
   'feishu.binding.revoke': FEISHU_METHOD.bindingRevoke,
   'feishu.binding.update': FEISHU_METHOD.bindingUpdate,
+  'feishu.grant.list': FEISHU_METHOD.grantList,
+  'feishu.grant.invite': FEISHU_METHOD.grantInvite,
+  'feishu.grant.revoke': FEISHU_METHOD.grantRevoke,
 } as const
 
 export const REVIEWS_COMMAND = {

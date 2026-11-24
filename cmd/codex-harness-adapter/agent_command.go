@@ -145,7 +145,7 @@ func threadIDFromFile(path string) string {
 
 func runAgentCommand(ctx context.Context, args []string) error {
 	if len(args) < 4 || !filepath.IsAbs(args[0]) || !filepath.IsAbs(args[1]) || !filepath.IsAbs(args[2]) ||
-		(args[3] != "git" && args[3] != "gh") {
+		(args[3] != "git" && args[3] != "gh" && args[3] != "lark-cli") {
 		return errors.New("invalid agent command")
 	}
 	directory, node, script, mode, argv := filepath.Clean(args[0]), args[1], args[2], args[3], args[4:]
@@ -156,6 +156,7 @@ func runAgentCommand(ctx context.Context, args []string) error {
 	}
 	binary := executableOnPath(path, names)
 	// 注入的会话里 gh 一律用设备给的版本和身份，gh --version 也不例外，以免报出宿主 gh 的版本。
+	// lark-cli 同样一律问设备：经理绑了飞书应用的会话用设备给的版本和代理，没绑的再交回宿主。
 	needsScope := agentHasGithubContext() && !(mode == "git" && localGitCommand(argv))
 	if !needsScope {
 		if binary == "" {

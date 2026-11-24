@@ -1,6 +1,7 @@
 // 经理控制台的“审批”页签（设备有审批扩展时才有）：这位经理在审批发言的群里要发的话，待批的在前（快过期的在前）。
 // 每条两行——第一行发到哪、格式、剩余时间或状态与时间，第二行内容开头；点一条就地展开回复的哪条、每段内容、
-// @ 到的人、身份、发起的回合、各个时间、谁在哪批的与理由。待批的下面一行理由输入框加“批准”“拒绝”两个小图标按钮。
+// @ 到的人、身份、经 lark-cli 的方法与路径、发起的回合、各个时间、谁在哪批的与理由。待批的下面一行理由输入框加“批准”“拒绝”两个小图标按钮。
+// 以用户身份发的、经 lark-cli 发的在第一行格式后面标出。
 // 写操作只给设备管理员连接：判断沿用飞书设置的 admin；冲突、已有结果、已过期时提示并重读这一条。
 import type { ManagerView } from '@litch/core'
 import { useCallback, useState } from 'react'
@@ -26,6 +27,8 @@ import {
 } from '../../../../../../packages/ui/src/feishu/model.ts'
 import {
   actingLabel,
+  actingUserText,
+  cliText,
   mentionNames,
   targetLabel,
   timeLeftText,
@@ -184,6 +187,7 @@ function Detail({
     `${t('feishu.review.detail.target')} ${targetLabel(t, preview.target)}`,
     preview.mentions.length ? `${t('feishu.review.detail.mentions')} ${mentionNames(preview)}` : '',
     `${t('feishu.review.detail.actingAs')} ${actingLabel(t, preview)}`,
+    preview.cli ? cliText(t, preview.cli) : '',
     preview.parts.length > 1 ? t('feishu.review.detail.parts', { n: preview.parts.length }) : '',
     `${t('feishu.review.detail.manager')} ${manager.name}${turn ? ` · ${t('feishu.review.detail.turn', { id: turn })}` : ''}`,
     `${t('feishu.review.detail.created')} ${when(review.createdAt)}`,
@@ -296,8 +300,12 @@ export function FeishuReviews({ manager, online }: { manager: ManagerView; onlin
             const expanded = open === review.reviewId
             const state = reviewShownState(review, now)
             const left = state === 'pending' ? timeLeft(review.expiresAt, now) : null
-            const formats = speechFormats(review.preview.parts)
-              .map((format) => t(`feishu.format.${format}`))
+            const formats = [
+              ...speechFormats(review.preview.parts).map((format) => t(`feishu.format.${format}`)),
+              actingUserText(t, review.preview.actingAs) ?? '',
+              review.preview.cli ? 'lark-cli' : '',
+            ]
+              .filter(Boolean)
               .join(' · ')
             return (
               <View

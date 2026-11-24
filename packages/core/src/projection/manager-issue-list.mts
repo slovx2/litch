@@ -53,7 +53,7 @@ export interface ManagerIssueFilter {
   order: ManagerIssueOrder
 }
 
-/** 默认只看普通 issue（D-100 起的控制台首屏）。 */
+/** 默认只看普通 issue（控制台首屏）。 */
 export const DEFAULT_MANAGER_ISSUE_FILTER: ManagerIssueFilter = {
   kinds: ['ordinary'],
   statuses: [],
