@@ -28,13 +28,14 @@ const threadVariable: Record<string, string> = {
 function launcher(managerHarness: string, lines: Record<string, string>) {
   let state: GithubAgentResolution['state'] = 'active'
   let assigned = true
+  let inject = true
+  let status = 'active'
   const options = {
     managers: {
       store: {
         manager: (id: string) =>
-          id === 'm'
-            ? { id: 'm', status: 'active', harness: managerHarness, threadId: 'm-thread' }
-            : null,
+          id === 'm' ? { id: 'm', status, harness: managerHarness, threadId: 'm-thread' } : null,
+        managers: () => [{ id: 'm', status, harness: managerHarness, threadId: 'm-thread' }],
       },
       lines: {
         mark: (threadId: string) =>
@@ -56,7 +57,8 @@ function launcher(managerHarness: string, lines: Record<string, string>) {
       resets: { refusal: () => null, held: () => false },
     },
     configuration: {
-      assignmentForManager: () => (assigned ? { identityId: 'bot', repoIds: ['r'] } : null),
+      assignmentForManager: () =>
+        assigned ? { identityId: 'bot', repoIds: ['r'], injectCredentials: inject } : null,
     },
   }
   const launch = new DeviceAgentLaunch(options as never)
@@ -82,12 +84,26 @@ function launcher(managerHarness: string, lines: Record<string, string>) {
         launch as unknown as { request(raw: unknown): Promise<{ injected?: boolean }> }
       ).request({ action: 'probe', threadId, harness })) as { injected?: boolean }
     ).injected === true
+  const configured = async () =>
+    (
+      (await (
+        launch as unknown as { request(raw: unknown): Promise<{ injected?: boolean }> }
+      ).request({ action: 'configured' })) as { injected?: boolean }
+    ).injected === true
   return {
     request,
     probe,
-    set(next: { state?: GithubAgentResolution['state']; assigned?: boolean }) {
+    configured,
+    set(next: {
+      state?: GithubAgentResolution['state']
+      assigned?: boolean
+      inject?: boolean
+      status?: string
+    }) {
       state = next.state ?? state
       assigned = next.assigned ?? assigned
+      inject = next.inject ?? inject
+      status = next.status ?? status
     },
   }
 }
@@ -228,8 +244,21 @@ test('probe 只回答会话是否已注入，不发租约', async () => {
   assert.equal(await f.probe('line', 'qwen'), true)
   assert.equal(await f.probe('line', 'gemini'), false, 'harness 对不上')
   assert.equal(await f.probe('ordinary', 'codex'), false, '普通会话')
-  f.set({ assigned: false })
+  f.set({ inject: false })
+  assert.equal(await f.probe('m-thread', 'gemini'), false, '经理关了注入')
+  f.set({ inject: true, assigned: false })
   assert.equal(await f.probe('m-thread', 'gemini'), false, '经理没分配身份')
+})
+
+test('configured 只回答设备上有没有在用的经理开着注入', async () => {
+  const f = launcher('gemini', {})
+  assert.equal(await f.configured(), true)
+  f.set({ inject: false })
+  assert.equal(await f.configured(), false, '注入关了')
+  f.set({ inject: true, assigned: false })
+  assert.equal(await f.configured(), false, '没分配身份')
+  f.set({ assigned: true, status: 'ended' })
+  assert.equal(await f.configured(), false, '经理已结束')
 })
 
 test('Qwen 的工具前钩子给已注入会话的命令写上会话号，其余不改', {

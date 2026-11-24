@@ -15,6 +15,7 @@ import {
   withStopNotice,
 } from '../../shared/src/background-shell.mjs'
 import {
+  deviceGithubConfigured,
   deviceGithubInjected,
   THREAD_ID_FILE_VARIABLE,
 } from '../../shared/src/device-github-environment.mjs'
@@ -327,6 +328,7 @@ export class AcpServer {
           threadId,
           env.LITCH_DEVICE_SOCKET ?? '',
         ),
+      configured: () => deviceGithubConfigured(env.LITCH_DEVICE_SOCKET ?? ''),
     })
   }
 
@@ -1125,8 +1127,8 @@ export class AcpServer {
 
   /** thread/start：agent 那边建一个会话（session/new），在这个进程里接上；带了动态工具的挂上 MCP 桥 */
   async create(cwd: string, dynamicTools: unknown, options?: unknown): Promise<LiveThread> {
-    // Gemini 的新会话先在自己的进程里建（session-agents.mts）
-    const incubated = this.agents.incubate()
+    // 设备开着注入时，Gemini 的新会话先在自己的进程里建（session-agents.mts）
+    const incubated = await this.agents.incubate()
     let agent: AgentHandle
     try {
       agent = await incubated.runtime.agent()

@@ -82,6 +82,15 @@ export async function deviceGithubInjected(
   return value?.injected === true
 }
 
+/** 设备上有没有哪位经理开着 GitHub 身份注入（不针对某个会话）；问不到算没有 */
+export async function deviceGithubConfigured(deviceSocket: string): Promise<boolean> {
+  if (!deviceSocket) return false
+  const value = (await request(deviceGithubEnvironmentSocket(deviceSocket), {
+    action: 'configured',
+  })) as { injected?: unknown } | null
+  return value?.injected === true
+}
+
 export async function deviceGithubEnvironment(
   harness: string,
   threadId: string,

@@ -11,8 +11,12 @@ import { client, isolate, text } from './client.mjs'
 // Gemini 的已注入会话各用一个 agent 进程，进程环境里带 LITCH_THREAD_ID（session-agents.mts）。
 // 假 agent 起来时记下自己环境里的会话号，收到的每条消息带着进程号（fake-agent.mts）。
 
-/** 假设备：只答 probe，injected 里有的会话算已注入 */
-async function fakeDevice(socketDir: string, injected: Set<string>): Promise<Server> {
+/** 假设备：probe 时 injected 里有的会话算已注入；configured 答设备上有没有经理开着注入 */
+async function fakeDevice(
+  socketDir: string,
+  injected: Set<string>,
+  configured = true,
+): Promise<Server> {
   const server = createServer((socket) => {
     let buffer = ''
     socket.setEncoding('utf8')
@@ -22,7 +26,11 @@ async function fakeDevice(socketDir: string, injected: Set<string>): Promise<Ser
       const request = JSON.parse(buffer)
       socket.end(
         JSON.stringify(
-          request.action === 'probe' ? { injected: injected.has(request.threadId) } : {},
+          request.action === 'probe'
+            ? { injected: injected.has(request.threadId) }
+            : request.action === 'configured'
+              ? { injected: configured }
+              : {},
         ),
       )
     })
@@ -32,13 +40,9 @@ async function fakeDevice(socketDir: string, injected: Set<string>): Promise<Ser
   return server
 }
 
-test('Gemini：新会话先单独建；发过话后已注入的留在自己的进程，其余回到共用进程', {
-  skip: process.platform === 'win32',
-}, async () => {
-  const injected = new Set<string>()
-  const base = await isolate()
-  const device = await fakeDevice(base.root, injected)
-  const env = {
+/** Gemini 入口的环境：设备套接字和 harness 名都给上 */
+function geminiEnv(base: Awaited<ReturnType<typeof isolate>>): NodeJS.ProcessEnv {
+  return {
     ...base.env,
     CHA_ACP_AGENT: 'gemini',
     CHA_GEMINI_CLI: base.env.CHA_ACP_CLI as string,
@@ -46,7 +50,15 @@ test('Gemini：新会话先单独建；发过话后已注入的留在自己的�
     LITCH_DEVICE_SOCKET: join(base.root, 'device.sock'),
     LITCH_DEVICE_GITHUB_HARNESS: 'gemini',
   }
-  const server = new AcpServer(base.home, env)
+}
+
+test('Gemini：新会话先单独建；发过话后已注入的留在自己的进程，其余回到共用进程', {
+  skip: process.platform === 'win32',
+}, async () => {
+  const injected = new Set<string>()
+  const base = await isolate()
+  const device = await fakeDevice(base.root, injected)
+  const server = new AcpServer(base.home, geminiEnv(base))
   const desktop = client(server)
   try {
     await desktop.call('initialize', { clientInfo: { name: 'test', version: '0' } })
@@ -117,6 +129,36 @@ test('Gemini：新会话先单独建；发过话后已注入的留在自己的�
     const again = await promptedBy(line.id)
     assert.notEqual(again.pid, shared.pid)
     assert.equal(again.thread, line.id)
+  } finally {
+    await server.close()
+    device.close()
+    await base.restore()
+  }
+})
+
+test('Gemini：设备上没人开注入时，新会话照旧在共用进程里建', {
+  skip: process.platform === 'win32',
+}, async () => {
+  const base = await isolate()
+  const device = await fakeDevice(base.root, new Set(), false)
+  const server = new AcpServer(base.home, geminiEnv(base))
+  const desktop = client(server)
+  try {
+    await desktop.call('initialize', { clientInfo: { name: 'test', version: '0' } })
+    const { thread } = await desktop.call('thread/start', { cwd: base.cwd })
+    assert.equal(server.agents.owns(thread.id), false)
+    const { turn: started } = await desktop.call('turn/start', {
+      threadId: thread.id,
+      input: text('你好'),
+    })
+    await desktop.until('turn/completed', (p) => p.turn.id === started.id)
+    const agents = (await readFile(join(base.root, 'agent-messages.jsonl'), 'utf8'))
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((entry) => entry.started)
+    assert.equal(agents.length, 1, '只起了共用进程')
+    assert.equal(agents[0].threadFile, null)
   } finally {
     await server.close()
     device.close()

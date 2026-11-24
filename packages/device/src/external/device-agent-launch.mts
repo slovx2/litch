@@ -129,6 +129,12 @@ export class DeviceAgentLaunch {
     }
   }
 
+  /** 这位经理分了身份、注入也开着（关了注入时租约照样不发，见 resolveGithubAgentLogin） */
+  private injects(managerId: string): boolean {
+    const assignment = this.options.configuration.assignmentForManager(managerId)
+    return !!assignment && assignment.injectCredentials !== false
+  }
+
   private async request(raw: unknown): Promise<unknown> {
     if (!isObject(raw) || this.closed) return {}
     if (raw.action === 'release' && typeof raw.lease === 'string') {
@@ -143,10 +149,15 @@ export class DeviceAgentLaunch {
       typeof raw.harness === 'string'
     ) {
       const actor = this.actor(raw.threadId, raw.harness)
-      return {
-        injected: !!actor && !!this.options.configuration.assignmentForManager(actor.managerId),
-      }
+      return { injected: !!actor && this.injects(actor.managerId) }
     }
+    // 设备上有没有在用的经理开着注入（Gemini 据此决定新会话要不要单独起进程），不针对会话。
+    if (raw.action === 'configured')
+      return {
+        injected: this.options.managers.store
+          .managers()
+          .some((manager) => manager.status === 'active' && this.injects(manager.id)),
+      }
     if (
       raw.action !== 'start' ||
       typeof raw.threadId !== 'string' ||

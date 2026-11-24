@@ -6,12 +6,13 @@
 // 它跑的命令都认得出会话，设备据此发租约。
 //
 // 什么时候在哪个进程：
-// - 新建的会话一律先在自己的进程里建。Gemini 要到第一条消息才把会话写盘，没写盘的会话别的进程 session/load 不出来，
-//   而派出工作线时还不知道它会不会被注入（设备在会话建好后才记父子关系），只能先单独建。
+// - 设备上有经理开着注入时，新建的会话一律先在自己的进程里建。Gemini 要到第一条消息才把会话写盘，没写盘的会话
+//   别的进程 session/load 不出来，而派出工作线时还不知道它会不会被注入（设备在会话建好后才记父子关系），只能先单独建。
+//   设备上没人开注入时照旧在共用进程里建，不多冷启动；之后才开的注入，等会话发过话、下次接上时换进程。
 // - 会话发过话以后（movable），每次接上前（AcpServer.attach）问一次设备：已注入的留在（或换到）自己的进程，没注入的
 //   关掉自己的进程、回到共用的（进程编号变了，attach 照“进程换过”的路子用 session/load 接回去）。
 // - 没人看、也没在跑、发过话的会话释放时关掉它自己的进程，下次接上时再起。
-// 代价：普通会话第一回合多一次冷启动；已注入会话一直多占一个 Gemini 进程。
+// 代价：设备开着注入时，普通会话第一回合多一次冷启动；已注入会话一直多占一个 Gemini 进程。
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -26,6 +27,8 @@ export interface SessionAgentOptions {
   create(file: string): AcpRuntime
   /** 设备说这个会话是否已注入；问不到算否 */
   injected(threadId: string): Promise<boolean>
+  /** 设备上有没有经理开着注入；没有时新会话照旧在共用进程里建 */
+  configured(): Promise<boolean>
 }
 
 interface Own {
@@ -66,8 +69,9 @@ export class SessionAgents {
     return { runtime: this.options.create(file), file }
   }
 
-  incubate(): Incubated {
-    if (!this.options.enabled) return { runtime: this.shared, bind() {}, async discard() {} }
+  async incubate(): Promise<Incubated> {
+    if (!this.options.enabled || !(await this.options.configured().catch(() => false)))
+      return { runtime: this.shared, bind() {}, async discard() {} }
     const own = this.spawn()
     return {
       runtime: own.runtime,

@@ -323,7 +323,7 @@ test('冒烟：真的 gemini --acp 经 MCP 桥调客户端工具，假模型', {
 
 // 经理注入：真的 gemini --acp，已注入会话的 shell 命令认得出会话（session-agents.mts）。命令把命令入口要看的几个
 // 变量写出来，用命令入口的同一段代码（githubCommandThread）认会话。普通会话第二回合回到共用进程，认不出会话。
-// 设备是回环上只答 probe 的假套接字，模型是假 Gemini API。也用 LITCH_SMOKE_GEMINI 开
+// 设备是回环上的假套接字（开着注入，probe 按 injected 答），模型是假 Gemini API。也用 LITCH_SMOKE_GEMINI 开
 test('冒烟：真的 gemini --acp，已注入会话的命令认得出会话，普通会话回到共用进程', {
   skip: !gemini || process.platform === 'win32',
   timeout: 300_000,
@@ -337,7 +337,11 @@ test('冒烟：真的 gemini --acp，已注入会话的命令认得出会话，�
       buffer += chunk
       if (!buffer.endsWith('\n')) return
       const request = JSON.parse(buffer)
-      socket.end(JSON.stringify({ injected: injected.has(request.threadId) }))
+      socket.end(
+        JSON.stringify({
+          injected: request.action === 'configured' || injected.has(request.threadId),
+        }),
+      )
     })
   })
   const deviceSocket = join(box.root, 'device.sock')
