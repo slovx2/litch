@@ -7,7 +7,13 @@ import { useServices } from '../app/services.tsx'
 import { operationId } from '../external/model.ts'
 import { Field } from '../external/parts.tsx'
 import { type OnApp, useFeishuRun } from './data.ts'
-import { canUpgrade, type FeishuApp, missingGroups, pendingReview } from './model.ts'
+import {
+  canUpgrade,
+  type FeishuApp,
+  missingGroups,
+  pendingReview,
+  type WriteBlock,
+} from './model.ts'
 
 const STATE_CLASS = {
   ok: 'pill ok',
@@ -20,17 +26,19 @@ const STATE_CLASS = {
 export function AppCapability({
   deviceId,
   app,
-  online,
+  block,
   onApp,
 }: {
   deviceId: string
   app: FeishuApp
-  online: boolean
+  /** 写操作为什么不能做（检查、补申请都只给管理员连接）；null 是能做 */
+  block: WriteBlock
   onApp: OnApp
 }) {
   const t = useT()
   const { channel } = useServices()
   const act = useFeishuRun()
+  const denied = block === 'readOnly' ? t('feishu.readOnly') : undefined
   const capability = app.capability
   const check = async () => {
     const result = await act.run(() =>
@@ -75,9 +83,9 @@ export function AppCapability({
           type="button"
           className="ibtn"
           data-act="feishu-check"
-          title={t('feishu.cap.check')}
+          title={denied ?? t('feishu.cap.check')}
           aria-label={t('feishu.cap.check')}
-          disabled={!online || act.busy}
+          disabled={block !== null || act.busy}
           onClick={() => void check()}
         >
           <Icon name="reload" small />
@@ -106,7 +114,8 @@ export function AppCapability({
             type="button"
             className="btn"
             data-act="feishu-upgrade"
-            disabled={!online || act.busy}
+            title={denied}
+            disabled={block !== null || act.busy}
             onClick={() => void upgrade()}
           >
             {t('feishu.cap.upgrade')}

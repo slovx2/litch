@@ -40,7 +40,7 @@ export class DeviceFeishuRpc {
     switch (method) {
       case M.appList:
         args(method)
-        return { apps: service.apps() }
+        return { apps: service.apps(), admin: access.admin }
       case M.appGet:
         return { app: service.app(args(method).appId) }
       case M.appRegisterBegin: {
@@ -78,6 +78,39 @@ export class DeviceFeishuRpc {
       case M.appUpgrade: {
         const input = args(method)
         return { app: await service.upgrade(input.appId, input.operationId) }
+      }
+      case M.chatList: {
+        const input = args(method)
+        service.app(input.appId)
+        return await service.chats.list(input.appId, input.refresh === true)
+      }
+      case M.chatGet: {
+        const input = args(method)
+        return { chat: service.chats.get(input.appId, input.chatId) }
+      }
+      case M.chatMembers: {
+        const input = args(method)
+        return await service.chats.memberList(input.appId, input.chatId, input.refresh === true)
+      }
+      case M.chatAccess:
+        return { chat: await service.chats.access(args(method)) }
+      case M.chatUpdate:
+        return { chat: await service.chats.update(args(method)) }
+      case M.chatUnaccess: {
+        const input = args(method)
+        return {
+          chat: service.chats.unaccess(
+            input.appId,
+            input.chatId,
+            input.expectedRevision,
+            input.deleteRecords,
+          ),
+        }
+      }
+      case M.chatBackfill: {
+        const input = args(method)
+        service.records.backfill(input.appId, input.chatId, input.start, input.end)
+        return { chat: service.chats.get(input.appId, input.chatId) }
       }
     }
   }

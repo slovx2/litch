@@ -3852,7 +3852,11 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         topic.kind === 'externalOutbox'
       )
         return external.of(topic.deviceId).open(topic, sink)
-      if (topic.kind === 'feishuDevice' || topic.kind === 'feishuRegistration')
+      if (
+        topic.kind === 'feishuDevice' ||
+        topic.kind === 'feishuRegistration' ||
+        topic.kind === 'feishuChats'
+      )
         return feishu.of(topic.deviceId).open(topic, sink)
       if (topic.kind === 'organizer') return organizer.subscribe(sink)
       if (topic.kind === 'suggestions') {

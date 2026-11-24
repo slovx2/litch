@@ -35,3 +35,89 @@
 .fs-hint.err {
   color: var(--err);
 }
+
+/* 群列表：已解散的整行灰掉；不能点的行不响应悬停 */
+.fs-chat-row[data-off="dissolved"] {
+  color: var(--ink-3);
+}
+.fs-chat-row:disabled {
+  cursor: default;
+}
+.fs-chat-row:disabled:hover {
+  background: transparent;
+}
+.fs-chat-row [data-tone="ok"] {
+  color: var(--ink-2);
+}
+
+/* 接入对话框 */
+.fs-speech {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.fs-speech-opt {
+  flex-wrap: wrap;
+}
+.fs-external {
+  color: var(--ink);
+}
+.fs-members {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fs-members-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fs-members-search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.fs-members-list {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+}
+.fs-members-list .form-check {
+  min-width: 0;
+}
+.fs-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.fs-pair > .fs-form-row {
+  flex: 1 1 200px;
+}
+.fs-num {
+  width: 120px;
+}
+.fs-why {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* 群设置里的记录一块 */
+.fs-records-line {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.fs-records-more {
+  padding-top: 4px;
+}
+.fs-records-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}

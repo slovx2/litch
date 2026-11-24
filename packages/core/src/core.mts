@@ -2028,7 +2028,11 @@ export function createCore(options: CoreOptions): Core {
         topic.kind === 'externalOutbox'
       )
         return device.external.open(topic, sink)
-      if (topic.kind === 'feishuDevice' || topic.kind === 'feishuRegistration')
+      if (
+        topic.kind === 'feishuDevice' ||
+        topic.kind === 'feishuRegistration' ||
+        topic.kind === 'feishuChats'
+      )
         return device.feishu.open(topic, sink)
       if (topic.kind === 'tasks') return device.tasks.open(sink)
       if (topic.kind === 'pairing') return device.pairing.open(sink)

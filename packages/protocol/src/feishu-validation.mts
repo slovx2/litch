@@ -2,8 +2,13 @@
 import {
   FEISHU_APP_ID,
   FEISHU_BOT_NAME_MAX,
+  FEISHU_CHAT_ID,
   FEISHU_METHOD,
+  FEISHU_OPEN_ID,
+  FEISHU_RETENTION_DAYS,
+  FEISHU_REVIEW_TTL_HOURS,
   FEISHU_SECRET_MAX,
+  FEISHU_WAKERS_MAX,
   type FeishuMethod,
   type FeishuRequests,
 } from './feishu.mjs'
@@ -51,6 +56,17 @@ const revision = int(1)
 const botName: Check = (value) =>
   str(FEISHU_BOT_NAME_MAX)(value) && (value as string).trim().length > 0
 const secret = str(FEISHU_SECRET_MAX)
+const chatId = pattern(FEISHU_CHAT_ID)
+const speech: Check = (value) => value === 'free' || value === 'approval'
+const retentionDays = int(FEISHU_RETENTION_DAYS.min, FEISHU_RETENTION_DAYS.max)
+const reviewTtlHours = int(FEISHU_REVIEW_TTL_HOURS.min, FEISHU_REVIEW_TTL_HOURS.max)
+const wakers: Check = (value) =>
+  Array.isArray(value) &&
+  value.length <= FEISHU_WAKERS_MAX &&
+  new Set(value).size === value.length &&
+  value.every(pattern(FEISHU_OPEN_ID))
+const chatRef = { appId, chatId }
+const accessFields = { wakeBound: bool, wakers, retentionDays, reviewTtlHours }
 
 const checks = {
   [FEISHU_METHOD.appList]: obj(),
@@ -72,6 +88,25 @@ const checks = {
   [FEISHU_METHOD.appRemove]: obj({ appId, expectedRevision: revision }),
   [FEISHU_METHOD.appCheck]: obj({ appId }),
   [FEISHU_METHOD.appUpgrade]: obj({ appId, operationId }),
+  [FEISHU_METHOD.chatList]: obj({ appId }, { refresh: bool }),
+  [FEISHU_METHOD.chatGet]: obj(chatRef),
+  [FEISHU_METHOD.chatMembers]: obj(chatRef, { refresh: bool }),
+  [FEISHU_METHOD.chatAccess]: obj(
+    { ...chatRef, expectedRevision: revision, speech, ...accessFields },
+    { confirmExternal: bool },
+  ),
+  [FEISHU_METHOD.chatUpdate]: obj(
+    { ...chatRef, expectedRevision: revision },
+    { speech, ...accessFields },
+  ),
+  [FEISHU_METHOD.chatUnaccess]: obj({
+    ...chatRef,
+    expectedRevision: revision,
+    deleteRecords: bool,
+  }),
+  [FEISHU_METHOD.chatBackfill]: (value) =>
+    obj({ ...chatRef, start: int(), end: int() })(value) &&
+    (value as { start: number }).start < (value as { end: number }).end,
 } satisfies { [M in FeishuMethod]: Check }
 
 export function isFeishuMethod(method: string): method is FeishuMethod {

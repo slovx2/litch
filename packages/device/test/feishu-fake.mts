@@ -42,6 +42,10 @@ export interface FakeMessage {
     tenant_key: string
   }
   mentions?: { key: string; id: string; id_type: 'open_id'; name: string; tenant_key: string }[]
+  /** 合并转发的子消息：读单条消息时跟在父消息后面一起返回 */
+  children?: FakeMessage[]
+  /** 卡片的原始 JSON：读单条消息带 card_msg_content_type=user_card_content 时返回它 */
+  cardRaw?: string
 }
 
 export interface FakeApp {
@@ -543,9 +547,13 @@ export class FakeFeishu {
     const messageMatch =
       /^\/open-apis\/im\/v1\/messages\/([^/]+)(\/reply|\/resources\/([^/]+))?$/.exec(path)
     if (messageMatch && method === 'GET' && !messageMatch[2]) {
-      const message = this.messages.find((item) => item.message_id === messageMatch[1])
+      const all = this.messages.flatMap((item) => [item, ...(item.children ?? [])])
+      const message = all.find((item) => item.message_id === messageMatch[1])
       if (!message) return reply({ code: 230011, msg: 'message not found' }, 400)
-      return ok({ items: [listItem(message)] })
+      const raw = url.searchParams.get('card_msg_content_type') === 'user_card_content'
+      const item = (one: FakeMessage) =>
+        raw && one.cardRaw ? listItem({ ...one, content: one.cardRaw }) : listItem(one)
+      return ok({ items: [item(message), ...(message.children ?? []).map(item)] })
     }
     if (messageMatch?.[3] && method === 'GET') {
       response404Safe(reply)

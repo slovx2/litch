@@ -11,6 +11,7 @@ import { DeviceDetailScreen } from '../screens/devices/DeviceDetailScreen'
 import { DevicesScreen } from '../screens/devices/DevicesScreen'
 import { FeishuAddScreen } from '../screens/devices/feishu/FeishuAddScreen'
 import { FeishuAppScreen } from '../screens/devices/feishu/FeishuAppScreen'
+import { FeishuChatScreen } from '../screens/devices/feishu/FeishuChatScreen'
 import { HarnessSettingsScreen } from '../screens/devices/hconfig/HarnessSettingsScreen'
 import { PairDeviceScreen } from '../screens/devices/PairDeviceScreen'
 import { FilesScreen } from '../screens/files/FilesScreen'
@@ -75,6 +76,7 @@ export function Navigator() {
       <Stack.Screen name="HarnessSettings" component={HarnessSettingsScreen} />
       <Stack.Screen name="FeishuAdd" component={FeishuAddScreen} />
       <Stack.Screen name="FeishuApp" component={FeishuAppScreen} />
+      <Stack.Screen name="FeishuChat" component={FeishuChatScreen} />
       <Stack.Screen
         name="Sessions"
         getId={({ params }) => (tablet ? params.deviceId : undefined)}

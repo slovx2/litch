@@ -7,6 +7,7 @@ import {
   FEISHU_METHOD,
   FEISHU_NOTIFICATION,
   type FeishuApp,
+  type FeishuChat,
   type FeishuNotifications,
   type FeishuRegistration,
   type FeishuRequests,
@@ -51,10 +52,41 @@ const registration = {
   expiresAt: 600,
 } satisfies FeishuRegistration
 
+const chatId = 'oc_example1'
+const chat = {
+  appId,
+  chatId,
+  revision: 3,
+  name: '示例项目群',
+  external: true,
+  status: 'normal',
+  botPresent: true,
+  access: {
+    speech: 'approval',
+    wakeBound: true,
+    wakers: [{ openId: 'ou_alice', name: '示例成员甲' }],
+    retentionDays: 90,
+    reviewTtlHours: 24,
+    accessAt: 20,
+  },
+  updatedAt: 21,
+} satisfies FeishuChat
+const access = {
+  appId,
+  chatId,
+  expectedRevision: 2,
+  speech: 'approval',
+  confirmExternal: true,
+  wakeBound: true,
+  wakers: ['ou_alice'],
+  retentionDays: 90,
+  reviewTtlHours: 24,
+} as const
+
 const samples: {
   [M in keyof FeishuRequests]: [FeishuRequests[M]['params'], FeishuRequests[M]['result']]
 } = {
-  [FEISHU_METHOD.appList]: [{}, { apps: [app] }],
+  [FEISHU_METHOD.appList]: [{}, { apps: [app], admin: true }],
   [FEISHU_METHOD.appGet]: [{ appId }, { app }],
   [FEISHU_METHOD.appRegisterBegin]: [{ operationId: 'op', name: '示例机器人' }, { registration }],
   [FEISHU_METHOD.appRegisterGet]: [{ registrationId: 'reg-1' }, { registration }],
@@ -74,6 +106,46 @@ const samples: {
   [FEISHU_METHOD.appRemove]: [{ appId, expectedRevision: 2 }, {}],
   [FEISHU_METHOD.appCheck]: [{ appId }, { app }],
   [FEISHU_METHOD.appUpgrade]: [{ appId, operationId: 'op' }, { app }],
+  [FEISHU_METHOD.chatList]: [
+    { appId, refresh: true },
+    { chats: [chat, { ...chat, chatId: 'oc_other', access: null }], syncedAt: null },
+  ],
+  [FEISHU_METHOD.chatGet]: [{ appId, chatId }, { chat }],
+  [FEISHU_METHOD.chatMembers]: [
+    { appId, chatId },
+    { members: [{ openId: 'ou_alice', name: '示例成员甲' }], fetchedAt: 30 },
+  ],
+  [FEISHU_METHOD.chatAccess]: [access, { chat }],
+  [FEISHU_METHOD.chatUpdate]: [
+    { appId, chatId, expectedRevision: 3, speech: 'free', reviewTtlHours: 48 },
+    { chat },
+  ],
+  [FEISHU_METHOD.chatUnaccess]: [
+    { appId, chatId, expectedRevision: 3, deleteRecords: false },
+    { chat: { ...chat, access: null, records: { messages: 12, oldestAt: 5 } } },
+  ],
+  [FEISHU_METHOD.chatBackfill]: [
+    { appId, chatId, start: 100, end: 200 },
+    {
+      chat: {
+        ...chat,
+        records: {
+          messages: 12,
+          oldestAt: 5,
+          backfill: {
+            kind: 'manual',
+            state: 'running',
+            start: 100,
+            end: 200,
+            fetched: 0,
+            truncated: false,
+            startedAt: 300,
+          },
+          gap: { at: 290, start: 280, end: 290, fetched: 3, complete: true },
+        },
+      },
+    },
+  ],
 }
 
 test('每个方法的样本都通过定义和入站校验', () => {
@@ -96,6 +168,7 @@ test('通知样本通过定义', () => {
   const params: FeishuNotifications = {
     [FEISHU_NOTIFICATION.appsChanged]: { appId },
     [FEISHU_NOTIFICATION.registrationChanged]: { registrationId: 'reg-1', revision: 1 },
+    [FEISHU_NOTIFICATION.chatsChanged]: { appId, chatId },
   }
   for (const [name, value] of Object.entries(params)) assert.ok(wire(name, 'params', value), name)
 })
@@ -112,6 +185,30 @@ test('入站校验拒绝畸形参数，结果不收秘密', () => {
     false,
   )
   assert.equal(isFeishuMethod('litch/feishu/app/unknown'), false)
+  const { speech: _speech, ...noSpeech } = access
+  assert.equal(
+    isFeishuMethodParams(FEISHU_METHOD.chatAccess, noSpeech),
+    false,
+    '接入必须选发言模式',
+  )
+  assert.equal(
+    isFeishuMethodParams(FEISHU_METHOD.chatAccess, { ...access, wakers: ['ou_a', 'ou_a'] }),
+    false,
+  )
+  assert.equal(
+    isFeishuMethodParams(FEISHU_METHOD.chatAccess, { ...access, reviewTtlHours: 169 }),
+    false,
+  )
+  assert.equal(wire(FEISHU_METHOD.chatAccess, 'params', { ...access, reviewTtlHours: 0 }), false)
+  assert.equal(
+    isFeishuMethodParams(FEISHU_METHOD.chatUnaccess, { appId, chatId, expectedRevision: 3 }),
+    false,
+  )
+  assert.equal(
+    isFeishuMethodParams(FEISHU_METHOD.chatBackfill, { appId, chatId, start: 200, end: 200 }),
+    false,
+    '补历史的窗口不能为空',
+  )
   assert.equal(wire(FEISHU_METHOD.appGet, 'result', { app: { ...app, appSecret: 'x' } }), false)
   assert.equal(
     wire(FEISHU_METHOD.appRegisterGet, 'result', {

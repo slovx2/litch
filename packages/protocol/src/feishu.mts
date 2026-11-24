@@ -15,22 +15,41 @@ export const FEISHU_METHOD = {
   appRemove: 'litch/feishu/app/remove',
   appCheck: 'litch/feishu/app/check',
   appUpgrade: 'litch/feishu/app/upgrade',
+  chatList: 'litch/feishu/chat/list',
+  chatGet: 'litch/feishu/chat/get',
+  chatMembers: 'litch/feishu/chat/members',
+  chatAccess: 'litch/feishu/chat/access',
+  chatUpdate: 'litch/feishu/chat/update',
+  chatUnaccess: 'litch/feishu/chat/unaccess',
+  chatBackfill: 'litch/feishu/chat/backfill',
 } as const
 
 export const FEISHU_NOTIFICATION = {
   appsChanged: 'litch/feishu/appsChanged',
   registrationChanged: 'litch/feishu/registrationChanged',
+  chatsChanged: 'litch/feishu/chatsChanged',
 } as const
 
 /** 只读方法；其余写操作只给设备管理员连接 */
 export const FEISHU_PUBLIC_READS: ReadonlySet<string> = new Set([
   FEISHU_METHOD.appList,
   FEISHU_METHOD.appGet,
+  FEISHU_METHOD.chatList,
+  FEISHU_METHOD.chatGet,
+  FEISHU_METHOD.chatMembers,
 ])
 
 export const FEISHU_APP_ID = /^cli_[0-9a-f]{16}$/
 export const FEISHU_BOT_NAME_MAX = 30
 export const FEISHU_SECRET_MAX = 256
+export const FEISHU_CHAT_ID = /^oc_[0-9A-Za-z_-]{1,64}$/
+export const FEISHU_OPEN_ID = /^ou_[0-9A-Za-z_-]{1,64}$/
+/** 群记录的保留天数（D-164） */
+export const FEISHU_RETENTION_DAYS = { min: 1, max: 3650, default: 90 } as const
+/** 审批过期小时数（D-175） */
+export const FEISHU_REVIEW_TTL_HOURS = { min: 1, max: 168, default: 24 } as const
+/** 每群手选的叫醒成员上限 */
+export const FEISHU_WAKERS_MAX = 200
 
 export type FeishuConnectionState =
   | 'stopped'
@@ -112,6 +131,103 @@ export interface FeishuRegistration {
   error?: 'lark_tenant' | 'unavailable' | 'credential_invalid' | 'already_configured'
 }
 
+export type FeishuSpeechMode = 'free' | 'approval'
+
+export interface FeishuPerson {
+  openId: string
+  name: string
+}
+
+/** 接入设置；没接入的群是 null */
+export interface FeishuChatAccess {
+  speech: FeishuSpeechMode
+  /** 叫醒名单是否包括本应用全部已绑定用户（D-161） */
+  wakeBound: boolean
+  /** 手选的叫醒成员（名字是选的时候的快照） */
+  wakers: FeishuPerson[]
+  retentionDays: number
+  reviewTtlHours: number
+  accessAt: number
+}
+
+export interface FeishuChat {
+  appId: string
+  chatId: string
+  revision: number
+  name: string
+  avatar?: string
+  /** 外部群：群里有组织外的人（D-172） */
+  external: boolean
+  status: 'normal' | 'dissolved'
+  /** 机器人当前在不在群里；移出后接入设置保留（D-178） */
+  botPresent: boolean
+  access: FeishuChatAccess | null
+  updatedAt: number
+  /** 设备上这个群的记录；取消接入但留着记录的群也有（界面标“未接入（有记录）”） */
+  records?: FeishuChatRecords
+}
+
+/** 补历史：接入时补最近 7 天，或手动补一段；时间是秒 */
+export interface FeishuBackfill {
+  kind: 'access' | 'manual'
+  state: 'running' | 'done' | 'failed'
+  start: number
+  end: number
+  fetched: number
+  /** 窗口里超过单次上限，只留了最新的那些 */
+  truncated: boolean
+  startedAt: number
+  finishedAt?: number
+}
+
+/** 最近一次补缺口（每次连上都补断线期间的消息）；时间是秒 */
+export interface FeishuGapFill {
+  at: number
+  start: number
+  end: number
+  fetched: number
+  /** false：超过单次上限，这段没补全 */
+  complete: boolean
+}
+
+export interface FeishuChatRecords {
+  messages: number
+  /** 最早一条的时间（秒） */
+  oldestAt?: number
+  backfill?: FeishuBackfill
+  gap?: FeishuGapFill
+}
+
+/** 单次补历史最多补多少条 */
+export const FEISHU_BACKFILL_LIMIT = 1000
+
+/** 群成员（成员选择器用）；判断是否组织外的人要另申请企业信息权限，不做 */
+export type FeishuMember = FeishuPerson
+
+export interface FeishuChatAccessParams {
+  appId: string
+  chatId: string
+  expectedRevision: number
+  speech: FeishuSpeechMode
+  /** 外部群必须带 true（二次确认） */
+  confirmExternal?: boolean
+  wakeBound: boolean
+  wakers: string[]
+  retentionDays: number
+  reviewTtlHours: number
+}
+
+export interface FeishuChatUpdateParams {
+  appId: string
+  chatId: string
+  expectedRevision: number
+  speech?: FeishuSpeechMode
+  wakeBound?: boolean
+  wakers?: string[]
+  retentionDays?: number
+  reviewTtlHours?: number
+}
+
 type Empty = Record<string, never>
 type Request<P, R> = { params: P; result: R }
 
@@ -123,7 +239,8 @@ export interface FeishuAppUpdateParams {
 }
 
 export interface FeishuRequests {
-  [FEISHU_METHOD.appList]: Request<Empty, { apps: FeishuApp[] }>
+  /** admin：这条连接能不能做写操作 */
+  [FEISHU_METHOD.appList]: Request<Empty, { apps: FeishuApp[]; admin?: boolean }>
   [FEISHU_METHOD.appGet]: Request<{ appId: string }, { app: FeishuApp }>
   [FEISHU_METHOD.appRegisterBegin]: Request<
     { operationId: string; name: string },
@@ -149,11 +266,34 @@ export interface FeishuRequests {
   [FEISHU_METHOD.appRemove]: Request<{ appId: string; expectedRevision: number }, Empty>
   [FEISHU_METHOD.appCheck]: Request<{ appId: string }, { app: FeishuApp }>
   [FEISHU_METHOD.appUpgrade]: Request<{ appId: string; operationId: string }, { app: FeishuApp }>
+  /** 机器人所在的群，加上机器人已不在但还留着接入设置的群；refresh 时先回源 */
+  [FEISHU_METHOD.chatList]: Request<
+    { appId: string; refresh?: boolean },
+    { chats: FeishuChat[]; syncedAt: number | null }
+  >
+  [FEISHU_METHOD.chatGet]: Request<{ appId: string; chatId: string }, { chat: FeishuChat }>
+  [FEISHU_METHOD.chatMembers]: Request<
+    { appId: string; chatId: string; refresh?: boolean },
+    { members: FeishuMember[]; fetchedAt: number }
+  >
+  [FEISHU_METHOD.chatAccess]: Request<FeishuChatAccessParams, { chat: FeishuChat }>
+  [FEISHU_METHOD.chatUpdate]: Request<FeishuChatUpdateParams, { chat: FeishuChat }>
+  /** deleteRecords：同时删这个群的消息记录（D-164，默认由客户端勾上） */
+  [FEISHU_METHOD.chatUnaccess]: Request<
+    { appId: string; chatId: string; expectedRevision: number; deleteRecords: boolean },
+    { chat: FeishuChat }
+  >
+  /** 手动补一段历史（秒）；补的进度在群的 records.backfill 里 */
+  [FEISHU_METHOD.chatBackfill]: Request<
+    { appId: string; chatId: string; start: number; end: number },
+    { chat: FeishuChat }
+  >
 }
 
 export interface FeishuNotifications {
   [FEISHU_NOTIFICATION.appsChanged]: { appId?: string }
   [FEISHU_NOTIFICATION.registrationChanged]: { registrationId: string; revision: number }
+  [FEISHU_NOTIFICATION.chatsChanged]: { appId: string; chatId?: string }
 }
 
 export type FeishuMethod = keyof FeishuRequests

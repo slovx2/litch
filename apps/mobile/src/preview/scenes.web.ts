@@ -316,7 +316,7 @@ export const SCENES: Scene[] = [
     id: 'feishu-app',
     group: '设备',
     name: '飞书 · 应用详情',
-    note: '本机的示例应用：连接状态、启用、经理、能力缺项与补申请、移除',
+    note: '本机的示例应用：连接状态、启用、经理、能力缺项与补申请、群列表、移除',
     steps: [
       nav('DeviceDetail', { deviceId: 'local' }),
       nav('FeishuApp', { deviceId: 'local', appId: 'cli_a1b2c3d4e5f60718' }),
@@ -328,6 +328,66 @@ export const SCENES: Scene[] = [
     name: '飞书 · 添加应用',
     note: '创建向导：填机器人名后开始，模拟核心两秒后完成',
     steps: [nav('DeviceDetail', { deviceId: 'local' }), nav('FeishuAdd', { deviceId: 'local' })],
+  },
+  {
+    id: 'feishu-chat-access',
+    group: '设备',
+    name: '飞书 · 接入外部群',
+    note: '未接入的外部群：发言模式预选审批，要勾外部群确认才能接入；成员选择单可搜、可多选',
+    steps: [
+      nav('DeviceDetail', { deviceId: 'local' }),
+      nav('FeishuApp', { deviceId: 'local', appId: 'cli_a1b2c3d4e5f60718' }),
+      nav('FeishuChat', {
+        deviceId: 'local',
+        appId: 'cli_a1b2c3d4e5f60718',
+        chatId: 'oc_mock_partner',
+      }),
+    ],
+  },
+  {
+    id: 'feishu-chat-settings',
+    group: '设备',
+    name: '飞书 · 群设置',
+    note: '已接入、自由发言的群：只提交改了的字段；底部取消接入（默认同时删除记录）',
+    steps: [
+      nav('DeviceDetail', { deviceId: 'local' }),
+      nav('FeishuApp', { deviceId: 'local', appId: 'cli_a1b2c3d4e5f60718' }),
+      nav('FeishuChat', {
+        deviceId: 'local',
+        appId: 'cli_a1b2c3d4e5f60718',
+        chatId: 'oc_mock_project',
+      }),
+    ],
+  },
+  {
+    id: 'feishu-chat-records',
+    group: '设备',
+    name: '飞书 · 有记录与补历史',
+    note: '示例项目群的记录一节：326 条、接入时补历史已完成、最近一次补缺口；下方补更早的消息（两个日期框，模拟核心直接补完）',
+    steps: [
+      nav('DeviceDetail', { deviceId: 'local' }),
+      nav('FeishuApp', { deviceId: 'local', appId: 'cli_a1b2c3d4e5f60718' }),
+      nav('FeishuChat', {
+        deviceId: 'local',
+        appId: 'cli_a1b2c3d4e5f60718',
+        chatId: 'oc_mock_project',
+      }),
+    ],
+  },
+  {
+    id: 'feishu-chat-left',
+    group: '设备',
+    name: '飞书 · 机器人已离开的群',
+    note: '仍接入（审批发言）但机器人已不在群里：41 条记录；成员选择与补更早的消息不可用并写明原因，其余设置照样能改',
+    steps: [
+      nav('DeviceDetail', { deviceId: 'local' }),
+      nav('FeishuApp', { deviceId: 'local', appId: 'cli_a1b2c3d4e5f60718' }),
+      nav('FeishuChat', {
+        deviceId: 'local',
+        appId: 'cli_a1b2c3d4e5f60718',
+        chatId: 'oc_mock_left',
+      }),
+    ],
   },
   {
     id: 'external-states',

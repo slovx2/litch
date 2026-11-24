@@ -8,7 +8,7 @@ import { useServices } from '../app/services.tsx'
 import { operationId } from '../external/model.ts'
 import { Field } from '../external/parts.tsx'
 import { type OnApp, useFeishuRun } from './data.ts'
-import type { FeishuApp } from './model.ts'
+import type { FeishuApp, WriteBlock } from './model.ts'
 
 function RotateDialog({
   deviceId,
@@ -116,12 +116,13 @@ function RotateDialog({
 export function AppSecret({
   deviceId,
   app,
-  online,
+  block,
   onApp,
 }: {
   deviceId: string
   app: FeishuApp
-  online: boolean
+  /** 写操作为什么不能做；null 是能做 */
+  block: WriteBlock
   onApp: OnApp
 }) {
   const t = useT()
@@ -139,13 +140,14 @@ export function AppSecret({
           type="button"
           className="btn ghost"
           data-act="feishu-rotate"
-          disabled={!online}
+          title={block === 'readOnly' ? t('feishu.readOnly') : undefined}
+          disabled={block !== null}
           onClick={() => setRotating(true)}
         >
           {t('feishu.secret.rotate')}
         </button>
       </Field>
-      {rotating && online ? (
+      {rotating && block === null ? (
         <RotateDialog
           deviceId={deviceId}
           app={app}

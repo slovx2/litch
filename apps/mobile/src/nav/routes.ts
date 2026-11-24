@@ -33,6 +33,8 @@ export type RootStackParamList = {
   FeishuAdd: { deviceId: string }
   /** 一台设备上一个飞书应用的详情：状态、启用、经理、能力自检与补申请、移除。title 是机器人名，首帧就画 */
   FeishuApp: { deviceId: string; appId: string; title?: string }
+  /** 飞书应用的一个群：未接入的是接入页，已接入的是群设置页。title 是群名，首帧就画 */
+  FeishuChat: { deviceId: string; appId: string; chatId: string; title?: string }
   /** 一个本机分组（只存在这台手机上，混装各台设备的会话）：成员、长按的动作单。title 是组名，首帧就画 */
   LocalGroup: { groupId: string; title?: string }
   /** 一台设备上的工作区和会话（相当于桌面端侧栏里这台设备的那一段），含已归档 */

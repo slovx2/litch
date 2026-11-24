@@ -2,15 +2,57 @@
 // 只认核心给的快照与协议类型；字由各端按这里给出的键拼。设备时间是 UTC 秒。
 import {
   FEISHU_APP_ID,
+  FEISHU_BACKFILL_LIMIT,
   FEISHU_BOT_NAME_MAX,
+  FEISHU_RETENTION_DAYS,
+  FEISHU_REVIEW_TTL_HOURS,
+  FEISHU_WAKERS_MAX,
   type FeishuApp,
+  type FeishuBackfill,
   type FeishuCapability,
+  type FeishuChat,
+  type FeishuChatAccess,
+  type FeishuChatAccessParams,
+  type FeishuChatRecords,
+  type FeishuChatUpdateParams,
   type FeishuErrorCode,
+  type FeishuGapFill,
+  type FeishuMember,
+  type FeishuPerson,
   type FeishuRegistration,
+  type FeishuSpeechMode,
 } from '../../../protocol/src/feishu.mts'
 
-export type { FeishuApp, FeishuCapability, FeishuRegistration }
-export { FEISHU_BOT_NAME_MAX }
+export type {
+  FeishuApp,
+  FeishuBackfill,
+  FeishuCapability,
+  FeishuChat,
+  FeishuChatAccess,
+  FeishuChatRecords,
+  FeishuGapFill,
+  FeishuMember,
+  FeishuPerson,
+  FeishuRegistration,
+  FeishuSpeechMode,
+}
+export {
+  FEISHU_BACKFILL_LIMIT,
+  FEISHU_BOT_NAME_MAX,
+  FEISHU_RETENTION_DAYS,
+  FEISHU_REVIEW_TTL_HOURS,
+  FEISHU_WAKERS_MAX,
+}
+
+/**
+ * 写操作为什么不能做：设备离线，或这条连接不是设备管理员（admin 为 false）。
+ * admin 还没读到（null、undefined）时照常可点，由设备拒绝兜底
+ */
+export type WriteBlock = 'offline' | 'readOnly' | null
+export function writeBlock(online: boolean, admin: boolean | null | undefined): WriteBlock {
+  if (!online) return 'offline'
+  return admin === false ? 'readOnly' : null
+}
 
 /** 列表上显示的连接状态：停用（enabled 为 false 或设备已停）优先于连接本身 */
 export type FeishuShownState = 'connected' | 'connecting' | 'reconnecting' | 'failed' | 'stopped'
@@ -54,6 +96,16 @@ export const FEISHU_REASONS = [
   'upgrade_failed',
   'registration_unavailable',
   'registration_not_found',
+  'chat_not_found',
+  'chat_accessed',
+  'chat_not_accessed',
+  'chat_unavailable',
+  'external_unconfirmed',
+  'waker_not_member',
+  'members_failed',
+  'sync_failed',
+  'backfill_running',
+  'backfill_window_invalid',
 ] as const
 export type FeishuReason = (typeof FEISHU_REASONS)[number]
 
@@ -63,6 +115,13 @@ export function feishuReason(error: unknown): FeishuReason | null {
   if (typeof message !== 'string' || !message.startsWith('feishu_')) return null
   const code = message.slice('feishu_'.length)
   return (FEISHU_REASONS as readonly string[]).includes(code) ? (code as FeishuReason) : null
+}
+
+/** 说明界面拿的是旧数据的原因：版本冲突，或群的接入状态已在别处变了。收到时先重读再提示 */
+export function staleReason(reason: FeishuReason | null): boolean {
+  return (
+    reason === 'revision_conflict' || reason === 'chat_accessed' || reason === 'chat_not_accessed'
+  )
 }
 
 export function validAppId(appId: string): boolean {
@@ -142,4 +201,270 @@ export function registrationEnd(registration: FeishuRegistration): RegistrationE
 /** 剩余秒数（设备给 UTC 秒，客户端时钟是毫秒） */
 export function secondsLeft(expiresAt: number, nowMs: number): number {
   return Math.max(0, Math.floor(expiresAt - nowMs / 1000))
+}
+
+// ---------- 群 ----------
+
+/** 列表上的接入状态：未接入、未接入但设备还留着记录（kept），或已接入的发言模式 */
+export type ChatAccessState = 'none' | 'kept' | FeishuSpeechMode
+export function chatAccessState(chat: Pick<FeishuChat, 'access' | 'records'>): ChatAccessState {
+  if (chat.access) return chat.access.speech
+  return chat.records ? 'kept' : 'none'
+}
+
+/** 群现在用不了（拉不到成员、不能新接入）的原因：已解散优先于机器人不在群里 */
+export function chatUnavailable(
+  chat: Pick<FeishuChat, 'status' | 'botPresent'>,
+): 'dissolved' | 'botLeft' | null {
+  if (chat.status === 'dissolved') return 'dissolved'
+  return chat.botPresent ? null : 'botLeft'
+}
+
+/** 列表顺序：能用的在前，其中已接入的在前；同一组里保持设备给的顺序 */
+export function sortChats(chats: readonly FeishuChat[]): FeishuChat[] {
+  const rank = (chat: FeishuChat) => (chatUnavailable(chat) ? 2 : chat.access ? 0 : 1)
+  return chats
+    .map((chat, index) => ({ chat, index }))
+    .sort((a, b) => rank(a.chat) - rank(b.chat) || a.index - b.index)
+    .map((one) => one.chat)
+}
+
+/** 接入对话框 / 群设置里正在填的内容；两个数字按输入框里的原文存，提交时再校验 */
+export interface ChatDraft {
+  speech: FeishuSpeechMode | null
+  /** 外部群的二次确认，只在新接入时要 */
+  confirmExternal: boolean
+  wakeBound: boolean
+  wakers: FeishuPerson[]
+  retentionDays: string
+  reviewTtlHours: string
+}
+
+/** 打开时的初值：已接入的照现有设置；未接入的不预选发言模式（外部群预选审批），其余用默认值 */
+export function chatDraft(chat: Pick<FeishuChat, 'access' | 'external'>): ChatDraft {
+  const access = chat.access
+  if (access)
+    return {
+      speech: access.speech,
+      confirmExternal: false,
+      wakeBound: access.wakeBound,
+      wakers: access.wakers,
+      retentionDays: String(access.retentionDays),
+      reviewTtlHours: String(access.reviewTtlHours),
+    }
+  return {
+    speech: chat.external ? 'approval' : null,
+    confirmExternal: false,
+    wakeBound: true,
+    wakers: [],
+    retentionDays: String(FEISHU_RETENTION_DAYS.default),
+    reviewTtlHours: String(FEISHU_REVIEW_TTL_HOURS.default),
+  }
+}
+
+/** 输入框里的整数：只认十进制数字，超出范围是 null */
+export function boundedInt(
+  text: string,
+  range: { readonly min: number; readonly max: number },
+): number | null {
+  const trimmed = text.trim()
+  if (!/^\d{1,6}$/.test(trimmed)) return null
+  const value = Number(trimmed)
+  return value >= range.min && value <= range.max ? value : null
+}
+
+export type DraftProblem = 'speech' | 'external' | 'retention' | 'ttl' | 'wakers'
+
+/** 还不能提交的原因；审批过期时间只在审批发言时校验（自由发言时不显示） */
+export function draftProblems(
+  draft: ChatDraft,
+  chat: Pick<FeishuChat, 'access' | 'external'>,
+): DraftProblem[] {
+  const problems: DraftProblem[] = []
+  if (!draft.speech) problems.push('speech')
+  if (!chat.access && chat.external && !draft.confirmExternal) problems.push('external')
+  if (boundedInt(draft.retentionDays, FEISHU_RETENTION_DAYS) === null) problems.push('retention')
+  if (
+    draft.speech === 'approval' &&
+    boundedInt(draft.reviewTtlHours, FEISHU_REVIEW_TTL_HOURS) === null
+  )
+    problems.push('ttl')
+  if (draft.wakers.length > FEISHU_WAKERS_MAX) problems.push('wakers')
+  return problems
+}
+
+/** 自由发言时审批过期时间不显示：填坏了就沿用现有值或默认值 */
+function ttlOf(draft: ChatDraft, access: FeishuChatAccess | null): number {
+  return (
+    boundedInt(draft.reviewTtlHours, FEISHU_REVIEW_TTL_HOURS) ??
+    access?.reviewTtlHours ??
+    FEISHU_REVIEW_TTL_HOURS.default
+  )
+}
+
+/** 新接入的参数（不含 deviceId）；还有问题时是 null */
+export function accessParams(
+  draft: ChatDraft,
+  chat: Pick<FeishuChat, 'appId' | 'chatId' | 'revision' | 'access' | 'external'>,
+): FeishuChatAccessParams | null {
+  const retentionDays = boundedInt(draft.retentionDays, FEISHU_RETENTION_DAYS)
+  if (!draft.speech || retentionDays === null || draftProblems(draft, chat).length) return null
+  return {
+    appId: chat.appId,
+    chatId: chat.chatId,
+    expectedRevision: chat.revision,
+    speech: draft.speech,
+    ...(chat.external ? { confirmExternal: true } : {}),
+    wakeBound: draft.wakeBound,
+    wakers: draft.wakers.map((one) => one.openId),
+    retentionDays,
+    reviewTtlHours: ttlOf(draft, null),
+  }
+}
+
+export type ChatChanges = Omit<FeishuChatUpdateParams, 'appId' | 'chatId' | 'expectedRevision'>
+
+/** 已接入的群改了哪些字段：只带改了的；叫醒名单按成员集合比较，不看顺序 */
+export function chatChanges(draft: ChatDraft, access: FeishuChatAccess): ChatChanges {
+  const changes: ChatChanges = {}
+  if (draft.speech && draft.speech !== access.speech) changes.speech = draft.speech
+  if (draft.wakeBound !== access.wakeBound) changes.wakeBound = draft.wakeBound
+  const before = new Set(access.wakers.map((one) => one.openId))
+  const after = new Set(draft.wakers.map((one) => one.openId))
+  if (before.size !== after.size || [...after].some((id) => !before.has(id)))
+    changes.wakers = [...after]
+  const retentionDays = boundedInt(draft.retentionDays, FEISHU_RETENTION_DAYS)
+  if (retentionDays !== null && retentionDays !== access.retentionDays)
+    changes.retentionDays = retentionDays
+  const ttl = ttlOf(draft, access)
+  if (ttl !== access.reviewTtlHours) changes.reviewTtlHours = ttl
+  return changes
+}
+
+/** 成员选择器的一项；listed 为 false 是名单里有、但这次读到的成员里没有的人 */
+export interface MemberChoice {
+  person: FeishuPerson
+  listed: boolean
+}
+
+/**
+ * 成员选择器的候选：已选但不在成员里的排最前（可取消勾选），其后是成员，按名字或 open_id 筛。
+ * members 为 null（还没读到、读不到）时只列已选的，不标“不在群成员中”
+ */
+export function memberChoices(
+  members: readonly FeishuMember[] | null,
+  selected: readonly FeishuPerson[],
+  query = '',
+): MemberChoice[] {
+  const listed = new Set((members ?? []).map((one) => one.openId))
+  const all: MemberChoice[] = members
+    ? [
+        ...selected
+          .filter((one) => !listed.has(one.openId))
+          .map((person) => ({ person, listed: false })),
+        ...members.map((person) => ({ person, listed: true })),
+      ]
+    : selected.map((person) => ({ person, listed: true }))
+  const needle = query.trim().toLowerCase()
+  if (!needle) return all
+  return all.filter(
+    ({ person }) =>
+      person.name.toLowerCase().includes(needle) || person.openId.toLowerCase().includes(needle),
+  )
+}
+
+/** 勾选或取消一位成员；已满 FEISHU_WAKERS_MAX 时不再加 */
+export function toggleWaker(wakers: readonly FeishuPerson[], person: FeishuPerson): FeishuPerson[] {
+  if (wakers.some((one) => one.openId === person.openId))
+    return wakers.filter((one) => one.openId !== person.openId)
+  if (wakers.length >= FEISHU_WAKERS_MAX) return [...wakers]
+  return [...wakers, { openId: person.openId, name: person.name }]
+}
+
+// ---------- 记录与补历史 ----------
+
+/** 已接入的群正在补历史 */
+export function backfilling(chat: Pick<FeishuChat, 'access' | 'records'>): boolean {
+  return chat.access !== null && chat.records?.backfill?.state === 'running'
+}
+
+/** 补历史一行用哪句：正在补 / 补完（超过上限时只留了最新的）/ 失败 */
+export type BackfillLine = 'running' | 'done' | 'truncated' | 'failed'
+export function backfillLine(backfill: Pick<FeishuBackfill, 'state' | 'truncated'>): BackfillLine {
+  if (backfill.state === 'done') return backfill.truncated ? 'truncated' : 'done'
+  return backfill.state
+}
+
+/** 手动补历史为什么不能做；按“能不能写 → 群能不能用 → 是否已接入 → 是否正在补”的次序给一个 */
+export type BackfillBlock =
+  | Exclude<WriteBlock, null>
+  | 'dissolved'
+  | 'botLeft'
+  | 'notAccessed'
+  | 'running'
+  | null
+export function backfillBlock(
+  chat: Pick<FeishuChat, 'access' | 'records' | 'status' | 'botPresent'>,
+  block: WriteBlock,
+): BackfillBlock {
+  if (block) return block
+  const unavailable = chatUnavailable(chat)
+  if (unavailable) return unavailable
+  if (!chat.access) return 'notAccessed'
+  return backfilling(chat) ? 'running' : null
+}
+
+const DAY_TEXT = /^(\d{4})-(\d{2})-(\d{2})$/
+
+/** 本地日期 YYYY-MM-DD 那天零点（毫秒）；不是合法日期时是 null */
+function localMidnight(text: string): number | null {
+  const match = DAY_TEXT.exec(text.trim())
+  if (!match) return null
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])]
+  const date = new Date(year, month - 1, day)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day)
+    return null
+  return date.getTime()
+}
+
+/** 某个时刻（毫秒）所在的本地日期，写成 YYYY-MM-DD（日期输入框的格式） */
+export function dayText(ms: number): string {
+  const date = new Date(ms)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+/** 补历史窗口（秒，结束不含）显示成起止日期：结束日期是结束前一秒所在的那天 */
+export function windowDays(start: number, end: number): { from: string; to: string } {
+  return { from: dayText(start * 1000), to: dayText(Math.max(start, end - 1) * 1000) }
+}
+
+/** 手动补历史的初值：结束是今天，开始是最早一条记录（没有就是今天）往前 30 天 */
+export function backfillDefaults(
+  records: Pick<FeishuChatRecords, 'oldestAt'> | undefined,
+  nowMs: number,
+): { from: string; to: string } {
+  const base = records?.oldestAt !== undefined ? records.oldestAt * 1000 : nowMs
+  const before = new Date(base)
+  before.setDate(before.getDate() - 30)
+  return { from: dayText(before.getTime()), to: dayText(nowMs) }
+}
+
+/**
+ * 两个日期换成补历史的窗口（秒）：开始取那天本地零点，结束取结束那天次日零点和现在中较早的那个。
+ * 日期不合法是 format；开始不早于结束（含开始日期在今天之后）是 order
+ */
+export function backfillWindow(
+  from: string,
+  to: string,
+  nowMs: number,
+): { start: number; end: number } | { problem: 'format' | 'order' } {
+  const startMs = localMidnight(from)
+  const toMs = localMidnight(to)
+  if (startMs === null || toMs === null) return { problem: 'format' }
+  const next = new Date(toMs)
+  next.setDate(next.getDate() + 1)
+  const start = Math.floor(startMs / 1000)
+  const end = Math.floor(Math.min(next.getTime(), nowMs) / 1000)
+  return start < end ? { start, end } : { problem: 'order' }
 }

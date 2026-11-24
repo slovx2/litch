@@ -5,9 +5,13 @@ import type { Entry } from '../../../../../packages/ui/src/i18n/types.ts'
 export const zhCN = {
   'mfs.secretDesktop': '更换 App Secret 请在桌面端操作。',
   'mfs.manualDesktop': '已有应用请在桌面端填写 App ID 与 App Secret。',
+  'mfs.unset': '未选择',
+  'mfs.members': '成员',
 } satisfies Record<string, Entry>
 
 export const en: Record<keyof typeof zhCN, Entry> = {
   'mfs.secretDesktop': 'Replace the App Secret on desktop.',
   'mfs.manualDesktop': 'To use an existing app, enter its App ID and App Secret on desktop.',
+  'mfs.unset': 'Not chosen',
+  'mfs.members': 'Members',
 }

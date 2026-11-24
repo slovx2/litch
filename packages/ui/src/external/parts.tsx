@@ -69,12 +69,15 @@ export function Switch({
   disabled,
   onChange,
   act,
+  title,
 }: {
   checked: boolean
   label: string
   disabled?: boolean
   onChange(next: boolean): void
   act?: string
+  /** 悬停提示：不能点时写原因 */
+  title?: string | undefined
 }) {
   return (
     <button
@@ -83,6 +86,7 @@ export function Switch({
       className="switch"
       aria-checked={checked}
       aria-label={label}
+      title={title}
       data-act={act}
       disabled={disabled}
       onClick={() => onChange(!checked)}
