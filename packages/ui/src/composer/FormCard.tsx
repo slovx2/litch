@@ -2,6 +2,7 @@ import type { FormField, FormRequest } from '@litch/core'
 import { useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import type { MessageKey } from '../i18n/index.ts'
+import { useTimedAllow } from '../timed/TimedAllow.tsx'
 import { ExternalLink } from '../transcript/ExternalLink.tsx'
 import { busyWriting } from './focus.ts'
 import { type CardProps, Foot, ownsKey, useRespond } from './respond.tsx'
@@ -119,6 +120,8 @@ export function FormCard(props: CardProps<FormRequest>) {
   const { fields, link } = request
   const t = useT()
   const { busy, error, respond } = useRespond(props)
+  // 一栏都没有的表只是一句确认：可以按这个 MCP 服务限时允许
+  const timed = useTimedAllow({ ...props, disabled: busy })
   const card = useRef<HTMLElement>(null)
   const [values, setValues] = useState<Record<string, Filled>>(() =>
     Object.fromEntries(fields.map((field) => [field.id, initialOf(field)])),
@@ -281,11 +284,13 @@ export function FormCard(props: CardProps<FormRequest>) {
             <span className="kbd">↵</span>
           </button>
         )}
+        {timed.button}
         <button type="button" className="btn ghost" disabled={busy} onClick={decline}>
           {t('request.option.decline')}
           <span className="kbd">Esc</span>
         </button>
       </div>
+      {timed.panel}
       <Foot waiting={waiting} error={error} />
     </section>
   )

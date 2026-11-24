@@ -224,17 +224,17 @@ Claude、Pi、OpenCode、ACP、DSH 等入口推断的阶段不用于隐藏文字
 
 ## 限时允许 / Timed approvals
 
-审批卡上的“限时允许”（时钟图标）展开一行：选 1、4、8、24 小时，或自己填 0.25 到 168 小时，卡片写明到期时刻，确认“N 小时内允许所有动作”后，这个会话里同一类审批在到期前不再询问，当前这张和同会话里同类还在等的卡片一并放行。类别分开计：命令、文件修改、权限申请（各 harness 原生审批）、本机操作（远程会话操作这台电脑）、内置浏览器的网站与下载、Chrome 网站。授权只管这一个会话，不跨会话、不跨类别，子会话不继承。
+审批卡上的“限时允许”（时钟图标）展开一行：选 1、4、8、24 小时，或自己填 0.25 到 168 小时，卡片写明到期时刻，确认“N 小时内允许所有动作”后，这个会话里同一类审批在到期前不再询问，当前这张和同会话里同类还在等的卡片一并放行。类别分开计：命令、文件修改、权限申请（各 harness 原生审批）、本机操作（远程会话操作这台电脑）、内置浏览器的网站与下载、Chrome 网站、MCP 工具（按 MCP 服务分开计）。MCP 这一类包括 MCP 工具调用的审批和只有确认、拒绝的 MCP 表单；授予后只放行同一个 MCP 服务，别的服务照常询问。授权只管这一个会话，不跨会话、不跨类别，子会话不继承。
 
 授权记在会话所在的设备上，按到期时刻计算，设备服务重启后仍在；桌面、手机看到同一份，远程设备与本机行为一致。生效的授权显示在输入框上方（类别和剩余时长），点叉撤销，撤销后立即恢复询问；到期自动失效。会话删除时授权一并删除。
 
-不在限时允许里、仍逐次询问：提问与表单、MCP 工具调用、计划确认、任务卡与“在这里做”、Computer Use 访问 Litch 自身、浏览器登录交接、开启“操作本机”的确认、命令里提到禁止位置的本机操作、`litch config` 的风险确认。黑名单、“始终允许”与已有名单照旧；完全访问下本来不询问的审批不受影响。设备服务较旧时卡片上不出这个入口。
+不在限时允许里、仍逐次询问：提问、要填内容或去网页办理的 MCP 表单、计划确认、任务卡与“在这里做”、Computer Use 访问 Litch 自身、浏览器登录交接、开启“操作本机”的确认、命令里提到禁止位置的本机操作、`litch config` 的风险确认。黑名单、“始终允许”与已有名单照旧；完全访问下本来不询问的审批不受影响。设备服务较旧时卡片上不出这个入口。
 
-On an approval card, **Allow for…** (clock icon) opens a row: pick 1, 4, 8 or 24 hours or enter 0.25–168, check the shown end time, then confirm **Allow all for N h**. Until then, that category in this session stops asking; the current card and any waiting cards of the same category in the session are approved. Categories: commands, file changes, permission requests (native harness approvals), actions on this computer (remote sessions operating the desktop), built-in browser sites and downloads, Chrome sites. Grants cover one session and one category; sub-sessions do not inherit them.
+On an approval card, **Allow for…** (clock icon) opens a row: pick 1, 4, 8 or 24 hours or enter 0.25–168, check the shown end time, then confirm **Allow all for N h**. Until then, that category in this session stops asking; the current card and any waiting cards of the same category in the session are approved. Categories: commands, file changes, permission requests (native harness approvals), actions on this computer (remote sessions operating the desktop), built-in browser sites and downloads, Chrome sites, and MCP tools (counted per MCP server). The MCP category covers MCP tool call approvals and MCP forms that only ask to confirm or decline; a grant approves that one server, other servers still ask. Grants cover one session and one category; sub-sessions do not inherit them.
 
 Grants live on the session's device and use an absolute end time, so they survive a device service restart; desktop and phone see the same list, and remote devices behave like the local one. Active grants show above the composer with the time left; the × revokes immediately. Grants expire on their own and are removed when the session is deleted.
 
-Still asked every time: questions and forms, MCP tool calls, plan confirmations, task cards, Computer Use access to Litch itself, browser sign-in handovers, turning on "Operate this computer", machine actions that mention a blocked location, and `litch config` risk confirmations. Blocklists, "Always allow" and saved lists work as before; approvals that full access already skips are unchanged. Older device services do not show the entry.
+Still asked every time: questions, MCP forms with fields to fill or a web page to visit, plan confirmations, task cards, Computer Use access to Litch itself, browser sign-in handovers, turning on "Operate this computer", machine actions that mention a blocked location, and `litch config` risk confirmations. Blocklists, "Always allow" and saved lists work as before; approvals that full access already skips are unchanged. Older device services do not show the entry.
 
 ## Projects
 

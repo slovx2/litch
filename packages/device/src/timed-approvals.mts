@@ -1,5 +1,5 @@
-// 限时授权：按“会话 + 类别”记在设备库里，按绝对到期时间判定，设备重启后仍在。
-// 原生审批（命令、改文件、追加权限）由设备在收到请求时直接代答，不再转给客户端；
+// 限时授权：按“会话 + 类别（MCP 再加服务名）”记在设备库里，按绝对到期时间判定，设备重启后仍在。
+// 原生审批（命令、改文件、追加权限、审批性质的 MCP 征询）由设备在收到请求时直接代答，不再转给客户端；
 // 客户端工具（操作本机、浏览器、Chrome）由执行它的桌面端拿名单自己判定。
 // 授予、撤销只走客户端请求（用户操作），不给模型任何对应工具。约定见 protocol/extensions/timed-approvals.json。
 import { randomUUID } from 'node:crypto'
@@ -7,8 +7,9 @@ import type { DatabaseSync } from 'node:sqlite'
 import {
   findTimedApproval,
   isTimedApprovalCategory,
-  nativeApprovalCategory,
+  nativeApprovalTarget,
   TIMED_APPROVAL,
+  TIMED_APPROVAL_SCOPE_MAX,
   TIMED_APPROVALS_EXTENSION,
   TIMED_APPROVALS_MAX,
   type TimedApproval,
@@ -54,15 +55,15 @@ export class TimedApprovals {
     this.db = db
     this.announce = announce
     this.clock = clock
-    db.exec(`CREATE TABLE IF NOT EXISTS timed_approvals(
+    db.exec(`CREATE TABLE IF NOT EXISTS timed_approval_grants(
       id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, category TEXT NOT NULL,
-      granted_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
-      UNIQUE(thread_id, category)
+      scope TEXT NOT NULL, granted_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
+      UNIQUE(thread_id, category, scope)
     )`)
     // 已经到期的不再加载，顺手从库里删掉
-    db.prepare('DELETE FROM timed_approvals WHERE expires_at<=?').run(this.clock.now())
+    db.prepare('DELETE FROM timed_approval_grants WHERE expires_at<=?').run(this.clock.now())
     this.grants = db
-      .prepare('SELECT * FROM timed_approvals ORDER BY expires_at')
+      .prepare('SELECT * FROM timed_approval_grants ORDER BY expires_at')
       .all()
       .flatMap((row): TimedApproval[] => {
         const category = String(row.category)
@@ -72,6 +73,7 @@ export class TimedApprovals {
             id: String(row.id),
             threadId: String(row.thread_id),
             category,
+            scope: String(row.scope),
             grantedAt: Number(row.granted_at),
             expiresAt: Number(row.expires_at),
           },
@@ -92,28 +94,36 @@ export class TimedApprovals {
     return this.grants.filter((grant) => grant.expiresAt > now)
   }
 
-  /** 这个会话、这一类此刻有没有生效的授权 */
-  active(threadId: string, category: TimedApprovalCategory): TimedApproval | null {
-    return findTimedApproval(this.grants, threadId, category, this.clock.now())
+  /** 这个会话、这一类（这个范围）此刻有没有生效的授权 */
+  active(threadId: string, category: TimedApprovalCategory, scope = ''): TimedApproval | null {
+    return findTimedApproval(this.grants, threadId, category, this.clock.now(), scope)
   }
 
-  grant(threadId: string, category: TimedApprovalCategory, hours: number): TimedApproval {
+  grant(
+    threadId: string,
+    category: TimedApprovalCategory,
+    hours: number,
+    scope = '',
+  ): TimedApproval {
     const now = this.clock.now()
     const grant: TimedApproval = {
       id: randomUUID(),
       threadId,
       category,
+      scope,
       grantedAt: now,
       expiresAt: now + Math.round(hours * HOUR_MS),
     }
-    // 同一会话同一类只留一条：再授予就是按新的时长重算
+    // 同一会话同一类同一范围只留一条：再授予就是按新的时长重算
     this.db
-      .prepare(`INSERT INTO timed_approvals VALUES(?,?,?,?,?)
-        ON CONFLICT(thread_id,category) DO UPDATE SET id=excluded.id,
+      .prepare(`INSERT INTO timed_approval_grants(id,thread_id,category,scope,granted_at,expires_at)
+        VALUES(?,?,?,?,?,?)
+        ON CONFLICT(thread_id,category,scope) DO UPDATE SET id=excluded.id,
           granted_at=excluded.granted_at, expires_at=excluded.expires_at`)
-      .run(grant.id, threadId, category, grant.grantedAt, grant.expiresAt)
+      .run(grant.id, threadId, category, scope, grant.grantedAt, grant.expiresAt)
     this.grants = this.grants.filter(
-      (entry) => !(entry.threadId === threadId && entry.category === category),
+      (entry) =>
+        !(entry.threadId === threadId && entry.category === category && entry.scope === scope),
     )
     this.grants.push(grant)
     this.grants.sort((a, b) => a.expiresAt - b.expiresAt)
@@ -121,7 +131,7 @@ export class TimedApprovals {
     while (this.grants.length > TIMED_APPROVALS_MAX) {
       const dropped = this.grants.shift()
       if (!dropped) break
-      this.db.prepare('DELETE FROM timed_approvals WHERE id=?').run(dropped.id)
+      this.db.prepare('DELETE FROM timed_approval_grants WHERE id=?').run(dropped.id)
     }
     this.changed()
     this.onGranted(grant)
@@ -138,7 +148,7 @@ export class TimedApprovals {
     const gone = this.grants.filter(hit)
     if (!gone.length) return 0
     for (const grant of gone)
-      this.db.prepare('DELETE FROM timed_approvals WHERE id=?').run(grant.id)
+      this.db.prepare('DELETE FROM timed_approval_grants WHERE id=?').run(grant.id)
     this.grants = this.grants.filter((grant) => !hit(grant))
     this.changed()
     return gone.length
@@ -159,6 +169,14 @@ export class TimedApprovals {
       if (!isTimedApprovalCategory(params.category))
         throw new ProtocolError(-32602, '未知的授权类别')
       if (!validTimedApprovalHours(params.hours)) throw new ProtocolError(-32602, '时长超出范围')
+      // MCP 按服务名分，必须给；其余类别不分范围
+      const scope = params.scope
+      if (params.category === 'mcp') {
+        if (typeof scope !== 'string' || !scope || scope.length > TIMED_APPROVAL_SCOPE_MAX)
+          throw new ProtocolError(-32602, 'MCP 授权需要服务名 scope')
+        return this.grant(params.threadId, params.category, params.hours, scope)
+      }
+      if (scope !== undefined && scope !== '') throw new ProtocolError(-32602, '这一类授权不分范围')
       return this.grant(params.threadId, params.category, params.hours)
     }
     if (method === TIMED_APPROVAL.revoke) {
@@ -183,9 +201,12 @@ export class TimedApprovals {
    * 列了决定列表却没有“允许”的不代答（引擎本来就不让这一次被直接允许）。
    */
   answer(method: string, params: unknown): unknown | null {
-    const category = nativeApprovalCategory(method)
-    if (!category || !isObject(params) || typeof params.threadId !== 'string') return null
-    if (!this.active(params.threadId, category)) return null
+    const target = nativeApprovalTarget(method, params)
+    if (!target || !isObject(params) || typeof params.threadId !== 'string') return null
+    const { category, scope } = target
+    if (!this.active(params.threadId, category, scope)) return null
+    // MCP：只答这一次允许，不带“记住”（_meta 里的 persist），授权到期后照常再问
+    if (category === 'mcp') return { action: 'accept', content: {}, _meta: null }
     if (category === 'permissions') {
       const requested = isObject(params.permissions) ? params.permissions : {}
       return {
@@ -221,7 +242,7 @@ export class TimedApprovals {
         const expired = this.grants.filter((grant) => grant.expiresAt <= now)
         if (!expired.length) return this.schedule()
         for (const grant of expired)
-          this.db.prepare('DELETE FROM timed_approvals WHERE id=?').run(grant.id)
+          this.db.prepare('DELETE FROM timed_approval_grants WHERE id=?').run(grant.id)
         this.grants = this.grants.filter((grant) => grant.expiresAt > now)
         this.changed()
       },

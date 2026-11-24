@@ -244,6 +244,7 @@ function setup(
     id: string
     threadId: string
     category: string
+    scope: string
     grantedAt: number
     expiresAt: number
   }[] = []
@@ -252,21 +253,30 @@ function setup(
     Object.assign(remoteHandlers, {
       'litch/timedApproval/list': () => ({ grants }),
       'litch/timedApproval/grant': (params: unknown) => {
-        const { threadId, category, hours } = params as {
+        const {
+          threadId,
+          category,
+          hours,
+          scope = '',
+        } = params as {
           threadId: string
           category: string
           hours: number
+          scope?: string
         }
         const now = time.clock.now()
         const grant = {
           id: `g${grants.length + 1}`,
           threadId,
           category,
+          scope,
           grantedAt: now,
           expiresAt: now + hours * 3_600_000,
         }
         grants = [
-          ...grants.filter((g) => !(g.threadId === threadId && g.category === category)),
+          ...grants.filter(
+            (g) => !(g.threadId === threadId && g.category === category && g.scope === scope),
+          ),
           grant,
         ]
         return grant

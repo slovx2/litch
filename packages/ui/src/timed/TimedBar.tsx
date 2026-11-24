@@ -1,4 +1,4 @@
-// 输入框上方：这个会话里生效的限时授权，每类一个小条（类别、剩多久、撤销）。没有就不占地方。
+// 输入框上方：这个会话里生效的限时授权，每类（MCP 每个服务）一个小条（类别、剩多久、撤销）。没有就不占地方。
 import { timedRemaining } from '@litch/core'
 import { useState } from 'react'
 import { useAppearance, useT } from '../app/appearance.ts'
@@ -7,7 +7,7 @@ import { reasonOf } from '../app/errors.ts'
 import { Close, Icon } from '../app/icons.tsx'
 import { useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
-import { CATEGORY_TEXT, untilText, useTimedApprovals } from './timed.ts'
+import { timedWhat, untilText, useTimedApprovals } from './timed.ts'
 
 export function TimedBar({ deviceId, sessionId }: { deviceId: string; sessionId: string }) {
   const t = useT()
@@ -38,6 +38,8 @@ export function TimedBar({ deviceId, sessionId }: { deviceId: string; sessionId:
   return (
     <>
       {grants.map((grant) => {
+        const what = timedWhat(t, grant)
+        if (!what) return null
         const { hours, minutes } = timedRemaining(grant.expiresAt, now)
         const left = hours
           ? minutes
@@ -52,9 +54,7 @@ export function TimedBar({ deviceId, sessionId }: { deviceId: string; sessionId:
             title={t('timed.barTitle', { time: untilText(grant.expiresAt, now, lang) })}
           >
             <Icon name="clock" small />
-            <span className="lead">
-              {t('timed.bar', { what: t(CATEGORY_TEXT[grant.category]) })}
-            </span>
+            <span className="lead">{t('timed.bar', { what })}</span>
             <span className="left">{t('timed.left', { left })}</span>
             <button
               type="button"

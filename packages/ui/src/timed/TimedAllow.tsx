@@ -1,11 +1,11 @@
-// 审批卡上的“限时允许”：点开一行选时长（几个常用值或自己填），确认后授予这个会话这一类的限时授权。
+// 审批卡上的“限时允许”：点开一行选时长（几个常用值或自己填），确认后授予这个会话这一类（MCP 再按服务）的限时授权。
 // 授予之后不用再答这张卡片：原生审批由设备一并代答，客户端工具由核心按名单放行，卡片自己消失。
 import {
   type RequestView,
   TIMED_APPROVAL_MAX_HOURS,
   TIMED_APPROVAL_MIN_HOURS,
   TIMED_APPROVAL_PRESETS,
-  timedCategoryOf,
+  timedTargetOf,
   validTimedApprovalHours,
 } from '@litch/core'
 import { useState } from 'react'
@@ -14,7 +14,7 @@ import { useNow } from '../app/clock.ts'
 import { reasonOf } from '../app/errors.ts'
 import { Icon } from '../app/icons.tsx'
 import { useServices } from '../app/services.tsx'
-import { CATEGORY_TEXT, untilText, useTimedApprovals } from './timed.ts'
+import { timedWhat, untilText, useTimedApprovals } from './timed.ts'
 
 const DEFAULT_HOURS = 4
 
@@ -33,22 +33,28 @@ export function useTimedAllow({ deviceId, sessionId, request, disabled }: Props)
   const now = useNow()
   const { channel } = useServices()
   const view = useTimedApprovals(deviceId)
-  const category = timedCategoryOf(request)
+  const target = timedTargetOf(request)
   const [open, setOpen] = useState(false)
   const [text, setText] = useState(String(DEFAULT_HOURS))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  if (!category || !view?.available) return { button: null, panel: null }
+  const what = target ? timedWhat(t, target) : null
+  if (!target || !what || !view?.available) return { button: null, panel: null }
 
   const hours = Number(text)
   const valid = text.trim() !== '' && validTimedApprovalHours(hours)
-  const what = t(CATEGORY_TEXT[category])
   const grant = () => {
     if (!valid || busy) return
     setBusy(true)
     setError(null)
     channel
-      .command('timedApproval.grant', { deviceId, threadId: sessionId, category, hours })
+      .command('timedApproval.grant', {
+        deviceId,
+        threadId: sessionId,
+        category: target.category,
+        ...(target.scope ? { scope: target.scope } : {}),
+        hours,
+      })
       .catch((failure: unknown) => {
         setBusy(false)
         setError(t('timed.failed', { reason: reasonOf(failure, t) }))

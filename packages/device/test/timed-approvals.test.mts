@@ -58,7 +58,7 @@ test('授予后在到期前生效、到期后失效并通知；跨会话、跨�
   assert.equal(store.active('t1', 'command'), null, '到期后恢复询问')
   assert.equal(store.answer('item/commandExecution/requestApproval', { threadId: 't1' }), null)
   assert.deepEqual(said.at(-1), [TIMED_APPROVAL.changed, { grants: [] }], '到期时通知一次')
-  assert.equal(db.prepare('SELECT count(*) AS n FROM timed_approvals').get()?.n, 0)
+  assert.equal(db.prepare('SELECT count(*) AS n FROM timed_approval_grants').get()?.n, 0)
   store.close()
 })
 
@@ -134,9 +134,67 @@ test('代答的形状：命令与改文件答 accept，没列 accept 的不代�
       scope: 'turn',
     },
   )
-  // 提问、表单不在限时授权里
+  // 提问不在限时授权里；没给 MCP 授权时征询照常问
   assert.equal(store.answer('item/tool/requestUserInput', { threadId: 't' }), null)
-  assert.equal(store.answer('mcpServer/elicitation/request', { threadId: 't' }), null)
+  assert.equal(store.answer('mcpServer/elicitation/request', mcpTool('t', 'docs')), null)
+  store.close()
+})
+
+const mcpTool = (threadId: string, serverName: string, fields: Record<string, unknown> = {}) => ({
+  threadId,
+  turnId: 'turn',
+  serverName,
+  mode: 'form',
+  _meta: { codex_approval_kind: 'mcp_tool_call', persist: 'session' },
+  message: '允许运行工具吗？',
+  requestedSchema: { type: 'object', properties: {} },
+  ...fields,
+})
+
+test('MCP：按会话加服务名授予；只代答审批性质的征询，答这一次允许、不记住', () => {
+  const store = new TimedApprovals(new DatabaseSync(':memory:'), () => {}, fakeClock())
+  const grant = store.grant('t', 'mcp', 1, 'docs')
+  assert.equal(grant.scope, 'docs')
+  const method = 'mcpServer/elicitation/request'
+  const accepted = { action: 'accept', content: {}, _meta: null }
+  assert.deepEqual(store.answer(method, mcpTool('t', 'docs')), accepted)
+  assert.equal(store.answer(method, mcpTool('t', 'mail')), null, '别的 MCP 服务照常问')
+  assert.equal(store.answer(method, mcpTool('u', 'docs')), null, '别的会话照常问')
+  // 不带特权标记、也不要填栏目的普通征询只有允许、拒绝，同样代答
+  assert.deepEqual(store.answer(method, mcpTool('t', 'docs', { _meta: null })), accepted)
+  // 要填内容的表单、网页上办的事、别的特权征询都照旧每次问
+  const asking = [
+    mcpTool('t', 'docs', {
+      _meta: null,
+      requestedSchema: { type: 'object', properties: { name: { type: 'string' } } },
+    }),
+    mcpTool('t', 'docs', { mode: 'url', url: 'https://example.com', elicitationId: 'e' }),
+    mcpTool('t', 'docs', { mode: 'openai/form' }),
+    mcpTool('t', 'docs', { _meta: { codex_approval_kind: 'tool_suggestion' } }),
+  ]
+  for (const params of asking) assert.equal(store.answer(method, params), null)
+  // 命令类授权不放行 MCP，MCP 授权也不放行命令
+  assert.equal(store.answer('item/commandExecution/requestApproval', { threadId: 't' }), null)
+  store.grant('t', 'command', 1)
+  assert.equal(store.answer(method, mcpTool('t', 'mail')), null)
+  // 同会话同服务再授予只留一条；按类别撤销撤掉全部服务
+  store.grant('t', 'mcp', 2, 'docs')
+  store.grant('t', 'mcp', 2, 'mail')
+  assert.equal(store.list().filter((entry) => entry.category === 'mcp').length, 2)
+  assert.equal(revoked(store.call(TIMED_APPROVAL.revoke, { threadId: 't', category: 'mcp' })), 2)
+  assert.equal(store.answer(method, mcpTool('t', 'docs')), null)
+  store.close()
+})
+
+test('MCP 授权的参数：必须给服务名，别的类别不许带范围', () => {
+  const store = new TimedApprovals(new DatabaseSync(':memory:'), () => {}, fakeClock())
+  const grant = (params: Record<string, unknown>) =>
+    store.call(TIMED_APPROVAL.grant, { threadId: 't', hours: 1, ...params })
+  for (const scope of [undefined, '', 3, 'x'.repeat(257)])
+    assert.throws(() => grant({ category: 'mcp', scope }), /服务名/)
+  assert.throws(() => grant({ category: 'command', scope: 'docs' }), /不分范围/)
+  assert.equal((grant({ category: 'mcp', scope: 'docs' }) as { scope: string }).scope, 'docs')
+  assert.equal((grant({ category: 'command' }) as { scope: string }).scope, '')
   store.close()
 })
 
@@ -230,6 +288,38 @@ test('经聚合面：授予时同一会话里还在等的同类审批一并代�
     await litch.call(TIMED_APPROVAL.grant, { threadId, category: 'command', hours: 1 })
     await until(() => approvalAnswers(pi, waiting).length > 0, '在等的一并代答')
     assert.deepEqual(approvalAnswers(pi, waiting)[0]?.result, { decision: 'accept' })
+  } finally {
+    await env.close()
+  }
+})
+
+test('经聚合面：MCP 工具审批按服务名代答，授予时还在等的同服务征询一并代答', async () => {
+  const pi = new FakeEngine('pi')
+  const env = rig({ pi })
+  try {
+    const litch = await client(env, ['harness', TIMED_APPROVALS_EXTENSION])
+    const threadId = await startThread(litch)
+    const waiting = pi.elicitation(threadId)
+    const otherServer = pi.elicitation(threadId, { serverName: 'mail' })
+    const form = pi.elicitation(threadId, {
+      _meta: null,
+      requestedSchema: { type: 'object', properties: { name: { type: 'string' } } },
+    })
+    await litch.waitFor((frame) => frame.id === form)
+    await litch.call(TIMED_APPROVAL.grant, { threadId, category: 'mcp', scope: 'docs', hours: 1 })
+    await until(() => approvalAnswers(pi, waiting).length > 0, '在等的同服务征询一并代答')
+    assert.deepEqual(approvalAnswers(pi, waiting)[0]?.result, {
+      action: 'accept',
+      content: {},
+      _meta: null,
+    })
+    const asked = litch.requests.length
+    const next = pi.elicitation(threadId)
+    await until(() => approvalAnswers(pi, next).length > 0, '授权内的新征询直接代答')
+    await settle()
+    assert.equal(litch.requests.length, asked, '授权内的征询不转给客户端')
+    assert.equal(approvalAnswers(pi, otherServer).length, 0, '别的 MCP 服务照常问')
+    assert.equal(approvalAnswers(pi, form).length, 0, '要填内容的表单照常问')
   } finally {
     await env.close()
   }

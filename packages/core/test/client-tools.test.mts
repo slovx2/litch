@@ -1031,6 +1031,7 @@ function timedDevice(now: () => number) {
     id: string
     threadId: string
     category: string
+    scope: string
     grantedAt: number
     expiresAt: number
   }[] = []
@@ -1038,20 +1039,29 @@ function timedDevice(now: () => number) {
   const handlers: Record<string, Handler> = {
     'litch/timedApproval/list': () => ({ grants }),
     'litch/timedApproval/grant': (params) => {
-      const { threadId, category, hours } = params as {
+      const {
+        threadId,
+        category,
+        hours,
+        scope = '',
+      } = params as {
         threadId: string
         category: string
         hours: number
+        scope?: string
       }
       const grant = {
         id: `g${++seq}`,
         threadId,
         category,
+        scope,
         grantedAt: now(),
         expiresAt: now() + hours * 3_600_000,
       }
       grants = [
-        ...grants.filter((g) => !(g.threadId === threadId && g.category === category)),
+        ...grants.filter(
+          (g) => !(g.threadId === threadId && g.category === category && g.scope === scope),
+        ),
         grant,
       ]
       return grant
@@ -1172,7 +1182,14 @@ test('限时授权：卡片挂着时授予（或别的端经设备授予后发�
   const now = world.time.clock.now()
   world.peer.last().notify('litch/timedApproval/changed', {
     grants: [
-      { id: 'g9', threadId: 'a', category: 'chrome', grantedAt: now, expiresAt: now + 3_600_000 },
+      {
+        id: 'g9',
+        threadId: 'a',
+        category: 'chrome',
+        scope: '',
+        grantedAt: now,
+        expiresAt: now + 3_600_000,
+      },
     ],
   })
   await settle()

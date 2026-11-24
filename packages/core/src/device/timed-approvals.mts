@@ -105,10 +105,14 @@ export function createTimedApprovals(host: Host) {
         listeners.delete(listener)
       }
     },
-    /** 这个会话、这一类此刻有没有生效的授权 */
-    active(threadId: string | null, category: TimedApprovalCategory): TimedApproval | null {
+    /** 这个会话、这一类（这个范围）此刻有没有生效的授权 */
+    active(
+      threadId: string | null,
+      category: TimedApprovalCategory,
+      scope = '',
+    ): TimedApproval | null {
       if (!threadId || !host.supported() || !host.online()) return null
-      return findTimedApproval(grants, threadId, category, host.now())
+      return findTimedApproval(grants, threadId, category, host.now(), scope)
     },
     resync() {
       void read()
@@ -120,20 +124,23 @@ export function createTimedApprovals(host: Host) {
       replace(Array.isArray(list) ? (list as TimedApproval[]) : [])
       return true
     },
-    async grant(threadId: string, category: TimedApprovalCategory, hours: number) {
+    async grant(threadId: string, category: TimedApprovalCategory, hours: number, scope = '') {
       if (!validTimedApprovalHours(hours))
         throw new ChannelError('invalid', 'Hours out of range', phrase('timedApproval.hoursRange'))
       if (!host.online()) throw failure(new RpcAbortError('closed', 'Device disconnected'))
       if (!host.supported()) throw failure(new RpcError(-32601, 'Timed approvals unavailable'))
       const grant = await host
-        .request(TIMED_APPROVAL.grant, { threadId, category, hours })
+        .request(TIMED_APPROVAL.grant, { threadId, category, hours, ...(scope ? { scope } : {}) })
         .catch((error: unknown) => {
           throw failure(error)
         })
       // 设备随后还会发 changed；先按应答更新，判定不用等通知
       epoch++
       replace([
-        ...grants.filter((one) => !(one.threadId === threadId && one.category === category)),
+        ...grants.filter(
+          (one) =>
+            !(one.threadId === threadId && one.category === category && one.scope === grant.scope),
+        ),
         grant,
       ])
       return grant

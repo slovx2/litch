@@ -1468,9 +1468,9 @@ export function createCore(options: CoreOptions): Core {
           return deviceOf(deviceId).projectPermissions.set(input)
         }
         case 'timedApproval.grant': {
-          const { deviceId, threadId, category, hours } =
+          const { deviceId, threadId, category, hours, scope } =
             params as Commands['timedApproval.grant']['params']
-          return deviceOf(deviceId).timedApprovals.grant(threadId, category, hours)
+          return deviceOf(deviceId).timedApprovals.grant(threadId, category, hours, scope)
         }
         case 'timedApproval.revoke': {
           const { deviceId, id } = params as Commands['timedApproval.revoke']['params']
