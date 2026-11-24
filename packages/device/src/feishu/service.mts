@@ -17,9 +17,11 @@ import {
   feishuEndpointsForLoopbackTest,
 } from './api.mjs'
 import { checkCapability, upgradeCapability } from './capability.mjs'
+import { FeishuChats } from './chats.mjs'
 import { FeishuConnectionRunner, type FeishuEventHandler } from './connection.mjs'
 import { FeishuCredentials } from './credentials.mjs'
 import { FeishuRegistrations } from './registration.mjs'
+import { SpeechPolicies } from './speech-policy.mjs'
 import { type FeishuAppRecord, FeishuStore } from './store.mjs'
 
 export interface DeviceFeishuOptions {
@@ -56,6 +58,8 @@ interface Running {
 export class DeviceFeishuService {
   readonly store: FeishuStore
   readonly options: DeviceFeishuOptions
+  readonly policies: SpeechPolicies
+  readonly chats: FeishuChats
   private readonly credentials: FeishuCredentials
   private readonly endpoints: FeishuEndpoints
   private readonly registrations: FeishuRegistrations
@@ -96,6 +100,26 @@ export class DeviceFeishuService {
       ...(options.fixture?.registrationIntervalMs === undefined
         ? {}
         : { minIntervalMs: options.fixture.registrationIntervalMs }),
+    })
+    this.policies = new SpeechPolicies(options.managers)
+    this.chats = new FeishuChats({
+      store: this.store,
+      policies: this.policies,
+      api: (appId) => this.api(appId),
+      now: this.now,
+      announce: options.announce,
+      fail,
+      log: options.log,
+    })
+    this.on('im.chat.member.bot.added_v1', (appId, data) => this.chats.botAdded(appId, data))
+    this.on('im.chat.member.bot.deleted_v1', (appId, data) => this.chats.botDeleted(appId, data))
+    this.on('im.chat.updated_v1', (appId, data) => this.chats.chatUpdated(appId, data))
+    this.on('im.chat.disbanded_v1', (appId, data) => this.chats.disbanded(appId, data))
+    // 每次连上都对一遍群列表，补上断线期间的进退群
+    this.onConnected((appId) => {
+      void this.chats.sync(appId).catch((error: Error) => {
+        options.log(`飞书群列表同步失败：${error.message}`)
+      })
     })
   }
 
@@ -320,6 +344,7 @@ export class DeviceFeishuService {
       const app = this.store.app(appId) ?? fail('feishu_app_not_found')
       if (app.revision !== expectedRevision) fail('feishu_revision_conflict')
       this.store.removeApp(appId)
+      this.chats.removeApp(appId)
       this.store.audit(appId, now, { action: 'app_removed', by: 'admin' })
     })
     this.stop(appId)

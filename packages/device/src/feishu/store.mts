@@ -33,6 +33,12 @@ export type FeishuAuditAction =
   | 'app_updated'
   | 'app_removed'
   | 'app_upgrade_submitted'
+  | 'chat_accessed'
+  | 'chat_updated'
+  | 'chat_unaccessed'
+  | 'chat_bot_removed'
+  | 'chat_bot_returned'
+  | 'chat_disbanded'
 
 export interface FeishuAuditEntry {
   action: FeishuAuditAction
