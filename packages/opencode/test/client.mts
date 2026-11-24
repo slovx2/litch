@@ -185,6 +185,8 @@ export async function isolate(
     OPENCODE_DISABLE_SHARE: '1',
     OPENCODE_DISABLE_DEFAULT_PLUGINS: '1',
     npm_config_registry: 'http://127.0.0.1:9/',
+    // 配了插件（Litch 的会话号插件）时 OpenCode 起实例要等配置目录里的依赖装完；源是死的，不重试才不会每次等一分多钟。
+    npm_config_fetch_retries: '0',
     GIT_CONFIG_NOSYSTEM: '1',
   }
   for (const dir of [

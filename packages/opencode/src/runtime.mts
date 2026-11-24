@@ -13,6 +13,8 @@ import { compatibilityHint, detectHostOpencode, type HostOpencode, versions } fr
  * 给 serve 的 OPENCODE_CONFIG_CONTENT：在用户自己给的这一层（没有就是空的）里加上会话号插件（thread-plugin.mts）。
  * OpenCode 把各层的 plugin 合起来，不顶掉用户全局、项目里的插件。用户给的不是 JSON 对象时原样留着、不挂插件，
  * 这时 OpenCode 的命令没有会话号（经理注入的 gh 身份不生效），报一句。
+ * 代价：有插件时 OpenCode 起实例前等配置目录里 @opencode-ai/plugin 装完（它本来就在后台装），装过就不等；
+ * npm 源连不通且从没装成过时，要等 npm 重试完（默认约 70 秒）。测试和夹具因此关了 npm 重试。
  */
 export function threadPluginConfig(
   existing: string | undefined,

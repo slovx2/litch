@@ -129,6 +129,8 @@ function opencodeEnv(dir, baseURL) {
     plain('OPENCODE_DISABLE_SHARE', '1'),
     plain('OPENCODE_DISABLE_DEFAULT_PLUGINS', '1'),
     plain('npm_config_registry', `${DEAD_END}/`),
+    // 配了插件（Litch 的会话号插件）时起实例要等这次安装；连不通就别重试，免得每个实例等一分多钟
+    plain('npm_config_fetch_retries', '0'),
     ...['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy'].map(
       (name) => plain(name, DEAD_END),
     ),
