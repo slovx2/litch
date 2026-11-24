@@ -323,6 +323,13 @@ export const SCENES: Scene[] = [
     ],
   },
   {
+    id: 'feishu-inbox',
+    group: '经理',
+    name: '飞书 · 经理收件箱',
+    note: '经理 m1 绑了示例应用：页签“飞书”带排队中的条数；待处理两条（排队中、已送进回合），已处理两条（其中一条过了保留期只剩编号）；点一条就地展开全文与各个时间',
+    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1', tab: 'feishu' })],
+  },
+  {
     id: 'feishu-add',
     group: '设备',
     name: '飞书 · 添加应用',

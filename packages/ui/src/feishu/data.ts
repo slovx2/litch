@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
   FeishuChatsView,
   FeishuDeviceView,
+  FeishuInboxView,
   FeishuRegistrationView,
 } from '../../../core/src/projection/feishu.mts'
 import { useT } from '../app/appearance.ts'
@@ -20,6 +21,7 @@ type Topic =
   | { kind: 'feishuDevice'; deviceId: string }
   | { kind: 'feishuRegistration'; deviceId: string; registrationId: string }
   | { kind: 'feishuChats'; deviceId: string; appId: string }
+  | { kind: 'feishuInbox'; deviceId: string; managerId: string }
 
 /** 订一个主题，取最新快照；topic 为 null 时不订 */
 function useTopic<T>(topic: Topic | null): T | undefined {
@@ -52,6 +54,22 @@ export function useFeishuRegistration(deviceId: string, registrationId: string |
 /** 一个应用的机器人所在的群；设备离线时核心保留上次读到的 */
 export function useFeishuChats(deviceId: string, appId: string) {
   return useTopic<FeishuChatsView>({ kind: 'feishuChats', deviceId, appId })
+}
+
+/** 经理绑着的飞书应用（设备不支持飞书、没绑时是 null）：经理页据此决定出不出“飞书”页签 */
+export function useManagerFeishuApp(
+  deviceId: string,
+  managerId: string,
+  supported: boolean,
+): FeishuApp | null {
+  const view = useFeishuDevice(deviceId, supported)
+  if (!supported) return null
+  return view?.apps.value?.find((app) => app.managerId === managerId) ?? null
+}
+
+/** 经理的飞书收件箱：最近一页（新的在前）；enabled 为 false 时不订 */
+export function useFeishuInbox(deviceId: string, managerId: string, enabled = true) {
+  return useTopic<FeishuInboxView>(enabled ? { kind: 'feishuInbox', deviceId, managerId } : null)
 }
 
 /**

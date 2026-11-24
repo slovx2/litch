@@ -35,6 +35,8 @@ import { useKey, useServices } from '../app/services.tsx'
 import { ExternalInbox, useInboxSummary } from '../external/Inbox.tsx'
 import { ManagerRecovery, recoveryInManagerHeader } from '../external/ManagerRecovery.tsx'
 import { reasonText } from '../external/Preview.tsx'
+import { useManagerFeishuApp } from '../feishu/data.ts'
+import { FeishuInbox, useFeishuInboxSummary } from '../feishu/Inbox.tsx'
 import { SessionTodo } from '../rail/InfoRail.tsx'
 import { onFindPreparing } from '../search/actions.ts'
 import { Transcript } from '../transcript/Transcript.tsx'
@@ -85,14 +87,15 @@ export interface ManagerPageLocation {
 }
 const defaultLocation: ManagerPageLocation = { tab: 'inbox', narrow: 'board', settings: false }
 
-/** Console 是否停在 GitHub 收件箱：按经理记在本窗口，离开再回来仍在 */
-const githubShown = new Map<string, boolean>()
-function useGithubTab(key: string) {
-  const [shown, setShown] = useState(() => githubShown.get(key) === true)
-  useEffect(() => setShown(githubShown.get(key) === true), [key])
+/** Console 停在哪个外部收件箱（GitHub、飞书，两者互斥；null 是看板类别）：按经理记在本窗口，离开再回来仍在 */
+type OutsideTab = 'github' | 'feishu' | null
+const outsideShown = new Map<string, OutsideTab>()
+function useOutsideTab(key: string) {
+  const [shown, setShown] = useState<OutsideTab>(() => outsideShown.get(key) ?? null)
+  useEffect(() => setShown(outsideShown.get(key) ?? null), [key])
   const set = useCallback(
-    (next: boolean) => {
-      githubShown.set(key, next)
+    (next: OutsideTab) => {
+      outsideShown.set(key, next)
       setShown(next)
     },
     [key],
@@ -178,9 +181,16 @@ export function ManagerPage({
   const requestLocated = useCallback(() => setRequestTarget(null), [])
   const reading = managerBoardMemory(manager.deviceId, manager.id)
   const external = device?.externalSources === true
-  const [githubOn, setGithub] = useGithubTab(`${manager.deviceId}:${manager.id}`)
-  const github = external && githubOn
+  const [outside, setOutside] = useOutsideTab(`${manager.deviceId}:${manager.id}`)
+  const github = external && outside === 'github'
   const { pending: githubPending, blocked: githubBlocked } = useInboxSummary(manager, external)
+  // 飞书页签：设备支持飞书、且这个经理绑了应用时才有
+  const feishuBound =
+    useManagerFeishuApp(manager.deviceId, manager.id, device?.feishu === true) !== null
+  const feishu = feishuBound && outside === 'feishu'
+  const feishuQueued = useFeishuInboxSummary(manager, feishuBound)
+  /** Console 正停在某个外部收件箱，看板类别都不算选中 */
+  const outsideOn = github || feishu
   const [, renderCategory] = useState(0)
   // issue 控制台（设备支持 litchManagerIssues 时）：编号跳转与概览摘要的过滤都交给它
   const issues = useManagerIssues(view)
@@ -200,7 +210,7 @@ export function ManagerPage({
     onLocation({ ...location, tab: 'inbox', narrow: 'board' })
   }
   const openReference = (ref: BoardReference) => {
-    setGithub(false)
+    setOutside(null)
     if (issueMode && !ref.startsWith('I-')) {
       setBoardLayout({ open: true })
       setIssueTarget(ref)
@@ -287,7 +297,7 @@ export function ManagerPage({
   // 类别分段放不下时横向滚动：选中的类别滚进可见区
   const inboxTabs = useRef<HTMLDivElement>(null)
   const pickedTab = issueMode ? issueKind : activeTab
-  const issueBadge = issueKind === 'ordinary' && !github ? ordinaryTotal : issueCounts?.todo
+  const issueBadge = issueKind === 'ordinary' && !outsideOn ? ordinaryTotal : issueCounts?.todo
   // biome-ignore lint/correctness/useExhaustiveDependencies: 选中项变化时重新对齐
   useEffect(() => {
     inboxTabs.current
@@ -295,7 +305,7 @@ export function ManagerPage({
       ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   }, [pickedTab])
   const pickIssueKind = (kind: ManagerIssueKind) => {
-    setGithub(false)
+    setOutside(null)
     reading.ordinary = kind === 'ordinary'
     if (kind !== 'ordinary') reading.category = kind
     renderCategory((value) => value + 1)
@@ -424,7 +434,7 @@ export function ManagerPage({
   }
   /** 概览跳到控制台某一类：和点控制台里的类别按钮是同一件事 */
   const openInbox = (kind: OverviewCategory) => {
-    setGithub(false)
+    setOutside(null)
     if (issueMode) {
       pickIssueKind(
         (
@@ -650,7 +660,8 @@ export function ManagerPage({
                   data-board-tab={kind}
                   key={kind}
                   aria-pressed={
-                    !github && (issueMode ? issueKind === CATEGORY_KIND[kind] : activeTab === kind)
+                    !outsideOn &&
+                    (issueMode ? issueKind === CATEGORY_KIND[kind] : activeTab === kind)
                   }
                   onClick={() => openInbox(kind)}
                 >
@@ -663,7 +674,7 @@ export function ManagerPage({
                   type="button"
                   data-inbox-tab="issues"
                   key="issues"
-                  aria-pressed={!github && issueKind === 'ordinary'}
+                  aria-pressed={!outsideOn && issueKind === 'ordinary'}
                   onClick={() => pickIssueKind('ordinary')}
                 >
                   {t('issue.tab')}
@@ -677,12 +688,27 @@ export function ManagerPage({
                   key="github"
                   aria-pressed={github}
                   onClick={() => {
-                    setGithub(true)
+                    setOutside('github')
                     if (tab !== 'inbox') setTab('inbox')
                   }}
                 >
                   {t('ext.inbox.tab')}
                   {githubPending ? <span className="pill wait">{githubPending}</span> : null}
+                </button>
+              ) : null}
+              {feishuBound ? (
+                <button
+                  type="button"
+                  data-inbox-tab="feishu"
+                  key="feishu"
+                  aria-pressed={feishu}
+                  onClick={() => {
+                    setOutside('feishu')
+                    if (tab !== 'inbox') setTab('inbox')
+                  }}
+                >
+                  {t('feishu.title')}
+                  {feishuQueued ? <span className="pill wait">{feishuQueued}</span> : null}
                 </button>
               ) : null}
             </div>
@@ -710,7 +736,8 @@ export function ManagerPage({
               onOpenIssue={(id) => openReference(id as BoardReference)}
             />
           ) : null}
-          {github && consoleTab ? null : error ? (
+          {feishu && consoleTab ? <FeishuInbox key={manager.id} manager={manager} /> : null}
+          {outsideOn && consoleTab ? null : error ? (
             <p className="err" role="alert">
               {reasonOf(error, t)}
             </p>

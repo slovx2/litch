@@ -33,6 +33,7 @@ const HEAD_TEXT: Partial<Record<string, MessageKey>> = {
   'manager-open': 'manager.event.open',
   'manager-end': 'manager.event.end',
   'manager-rules': 'manager.event.rules',
+  'manager-feishu': 'manager.event.feishu',
 } as const
 
 const NOTE_MARK: Record<SessionNoteView['status'], string> = {

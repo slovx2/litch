@@ -94,4 +94,4 @@ export type RootStackParamList = {
 }
 
 export type RouteName = keyof RootStackParamList
-export type ManagerTab = 'chat' | 'console' | 'github' | 'lines' | 'overview'
+export type ManagerTab = 'chat' | 'console' | 'github' | 'feishu' | 'lines' | 'overview'

@@ -378,3 +378,94 @@ test('补历史的两个原因代码认得出', () => {
     'backfill_window_invalid',
   )
 })
+
+// ---------- 经理的飞书收件箱 ----------
+
+const entry = (inboxId, patch = {}) => ({
+  inboxId,
+  status: 'queued',
+  appId: 'cli_0000000000000001',
+  managerId: 'm1',
+  chatId: 'oc_1',
+  chatKind: 'group',
+  messageId: `om_${inboxId}`,
+  senderOpenId: 'ou_1',
+  senderIdentity: 'member',
+  trigger: 'mention',
+  createdAt: 0,
+  receivedAt: 0,
+  ...patch,
+})
+const message = (patch = {}) => ({
+  chatName: '项目群',
+  text: '你好',
+  msgType: 'text',
+  state: 'normal',
+  purged: false,
+  ...patch,
+})
+
+test('收件箱分段：排队中和已送进回合算待处理，已处理单列，顺序不变', () => {
+  const all = [
+    entry('FI-4'),
+    entry('FI-3', { status: 'processed' }),
+    entry('FI-2', { status: 'notified' }),
+    entry('FI-1', { status: 'processed' }),
+  ]
+  assert.deepEqual(
+    m.segmentEntries(all, 'open').map((one) => one.inboxId),
+    ['FI-4', 'FI-2'],
+  )
+  assert.deepEqual(
+    m.segmentEntries(all, 'done').map((one) => one.inboxId),
+    ['FI-3', 'FI-1'],
+  )
+  assert.equal(m.queuedCount(all), 1)
+  assert.equal(m.queuedCount([]), 0)
+})
+
+test('收件箱合并：同一条以订阅为准，更早的只补没有的', () => {
+  const merged = m.mergeInbox(
+    { entries: [entry('FI-3', { status: 'processed' })], messages: { 'FI-3': message() } },
+    {
+      entries: [entry('FI-3'), entry('FI-2')],
+      messages: { 'FI-3': message({ text: '旧' }), 'FI-2': message({ text: '更早' }) },
+    },
+  )
+  assert.deepEqual(
+    merged.entries.map((one) => [one.inboxId, one.status]),
+    [
+      ['FI-3', 'processed'],
+      ['FI-2', 'queued'],
+    ],
+  )
+  assert.equal(merged.messages['FI-3'].text, '你好')
+  assert.equal(merged.messages['FI-2'].text, '更早')
+})
+
+test('收件箱行：限额只标在排队中的条目上，发送人没名字用 open_id', () => {
+  assert.equal(m.inboxShownStatus({ status: 'queued', note: 'rate_limited' }), 'limited')
+  assert.equal(m.inboxShownStatus({ status: 'notified', note: 'rate_limited' }), 'notified')
+  assert.equal(m.inboxShownStatus({ status: 'processed' }), 'processed')
+  assert.equal(m.senderLabel({ senderName: '甲', senderOpenId: 'ou_1' }), '甲')
+  assert.equal(m.senderLabel({ senderName: '  ', senderOpenId: 'ou_1' }), 'ou_1')
+  assert.equal(m.senderLabel({ senderOpenId: 'ou_2' }), 'ou_2')
+})
+
+test('收件箱正文：撤回、删除优先于保留期，没字的按消息类型说', () => {
+  assert.deepEqual(m.inboxText(message()), { kind: 'text', text: '你好' })
+  assert.deepEqual(m.inboxText(message({ state: 'recalled', text: null })), { kind: 'recalled' })
+  assert.deepEqual(m.inboxText(message({ state: 'deleted' })), { kind: 'deleted' })
+  assert.deepEqual(m.inboxText(message({ text: null, purged: true })), { kind: 'purged' })
+  assert.deepEqual(m.inboxText(message({ text: null, msgType: 'image' })), {
+    kind: 'other',
+    msgType: 'image',
+  })
+  assert.deepEqual(m.inboxText(undefined), { kind: 'missing' })
+})
+
+test('收件箱群名：有群名用群名，私聊没有，群没有名字时用 chat_id', () => {
+  assert.equal(m.inboxChatName(entry('FI-1'), message()), '项目群')
+  assert.equal(m.inboxChatName(entry('FI-1'), undefined), 'oc_1')
+  assert.equal(m.inboxChatName(entry('FI-1', { chatKind: 'p2p' }), message({ chatName: '' })), null)
+})
