@@ -3,6 +3,20 @@ import { createHash } from 'node:crypto'
 import { connect } from 'node:net'
 import { dirname, join } from 'node:path'
 
+/**
+ * 命令里哪个变量放它所在的 Litch 会话号（与 Go 入口 agentHasGithubContext 一致）：原生 codex、Pi、dsh 用自己给命令的，
+ * 其余（Claude、OpenCode、ACP、Antigravity）由 Litch 给成 LITCH_THREAD_ID。Litch 自己起命令时（litch_shell 等）照这个写。
+ */
+export function githubThreadVariable(harness: string | undefined): string {
+  return harness === 'codex'
+    ? 'CODEX_THREAD_ID'
+    : harness === 'pi'
+      ? 'PI_SESSION_ID'
+      : harness === 'dsh'
+        ? 'DSH_SESSION_ID'
+        : 'LITCH_THREAD_ID'
+}
+
 export function deviceGithubEnvironmentSocket(deviceSocket: string): string {
   return process.platform === 'win32'
     ? `\\\\.\\pipe\\litch-github-env-${createHash('sha256').update(deviceSocket.toLowerCase()).digest('hex')}`

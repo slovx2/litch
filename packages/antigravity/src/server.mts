@@ -11,6 +11,7 @@ import { ServerRequests } from '../../shared/src/server-requests.mjs'
 import type { RpcPeer, WireMessage } from '../../shared/src/types.mjs'
 import { Configuration } from './config.mjs'
 import { harnessConfig } from './harness-config.mjs'
+import { encodeThread } from './id-space.mjs'
 import { ensureRuntime } from './install.mjs'
 import { Projection } from './projection.mjs'
 import { dispatch } from './protocol.mjs'
@@ -26,6 +27,17 @@ interface Live {
   failure: string | null
   timer?: NodeJS.Timeout
 }
+/**
+ * localharness 一个会话一个进程，只拿到最少的环境（runtime.mts）。它自己跑的命令（run_command）要带上 Litch 会话号
+ *（路由给出去的 agy:sdk: 形式）和设备入口，设备才认得出命令属于哪个会话（经理注入的 gh/Git 身份、litch-machine）。
+ */
+export function commandContext(env: NodeJS.ProcessEnv, threadId: string): NodeJS.ProcessEnv {
+  const result: NodeJS.ProcessEnv = { LITCH_THREAD_ID: threadId }
+  for (const key of ['LITCH_DEVICE_SOCKET', 'LITCH_DEVICE_GITHUB_HARNESS'])
+    if (env[key]) result[key] = env[key]
+  return result
+}
+
 export interface ServerOptions {
   env?: NodeJS.ProcessEnv
   runtime?: (options: RuntimeOptions) => LocalHarness
@@ -173,6 +185,7 @@ export class AntigravityServer {
         executable,
         home: this.home,
         config: harnessConfig(thread, endpoint, this.home, resume),
+        env: commandContext(this.config.env, encodeThread('sdk', thread.id)),
         event: (event) => this.event(thread, event),
         failed: (error) => this.failed(thread, error),
       }
