@@ -141,11 +141,15 @@ export class ManagerIssueCache {
     let result: ManagerIssueRequests[M]['result']
     try {
       // 每次发送（包括重连后的缓存刷新）都按当前能力裁剪，不能只在 UI 隐藏入口。
-      if (!this.host.features().issueDiscussions && method === METHOD.list) {
-        const { discussionsOnly, ...query } = params as ManagerIssueQuery
+      const features = this.host.features()
+      if ((!features.issueDiscussions || !features.issueWaiting) && method === METHOD.list) {
+        const { discussionsOnly, waiting, ...query } = params as ManagerIssueQuery
+        // 旧设备没有“下一步在谁”：待处理、进行中退回按状态分（statuses 本来就带着）
         const reply = await this.host.request(METHOD.list, {
           ...query,
-          ...(discussionsOnly ? { kinds: ['ordinary'] } : {}),
+          ...(features.issueWaiting && waiting ? { waiting } : {}),
+          ...(features.issueDiscussions && discussionsOnly ? { discussionsOnly } : {}),
+          ...(!features.issueDiscussions && discussionsOnly ? { kinds: ['ordinary'] } : {}),
         })
         // 用调用方原查询缓存结果，防止降级后页面一直等不到原来的页键。
         result = {

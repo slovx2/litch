@@ -213,6 +213,7 @@ test('mock 命令行为与协议一致，普通 X-n 不影响旧对象编号', (
 
 test('讨论子能力门禁：旧 I-255 白名单接受默认列表、混合记忆与讨论打开；新能力保留字段', async () => {
   let supported = false
+  let waitingSupported = false
   const calls: { method: string; params: any }[] = []
   const issue = structuredClone(managerIssueFixture.newOrdinary)
   const host: ManagersHost = {
@@ -223,6 +224,7 @@ test('讨论子能力门禁：旧 I-255 白名单接受默认列表、混合记�
     features: () => ({
       issues: true,
       issueDiscussions: supported,
+      issueWaiting: waitingSupported,
       posts: true,
       feedback: true,
       ignore: true,
@@ -249,6 +251,7 @@ test('讨论子能力门禁：旧 I-255 白名单接受默认列表、混合记�
           'cursor',
           'limit',
           ...(supported ? ['discussionsOnly'] : []),
+          ...(waitingSupported ? ['waiting'] : []),
         ])
         return { page: { query: params, entries: [], total: 0, nextCursor: null } }
       }
@@ -299,6 +302,16 @@ test('讨论子能力门禁：旧 I-255 白名单接受默认列表、混合记�
   await service.issue(M.list, query)
   assert.equal(calls.at(-1)?.params.discussionsOnly, true)
   assert.deepEqual(calls.at(-1)?.params.kinds, ['ordinary', 'report'])
+  // 旧设备没有“下一步在谁”：去掉 waiting，按 statuses 分；页键仍是原查询
+  const waiting = { ...query, statuses: ['open' as const], waiting: ['user' as const] }
+  const plain = await service.issue(M.list, waiting)
+  assert.equal('waiting' in (calls.at(-1)?.params ?? {}), false)
+  assert.deepEqual(calls.at(-1)?.params.statuses, ['open'])
+  assert.deepEqual(plain.page.query, waiting)
+  waitingSupported = true
+  await service.issue(M.list, waiting)
+  assert.deepEqual(calls.at(-1)?.params.waiting, ['user'])
+  waitingSupported = false
   await service.issue(M.update, marker)
   await settle()
   assert.equal(calls.findLast((c) => c.method === M.update)?.params.patch.discussionOpened, true)

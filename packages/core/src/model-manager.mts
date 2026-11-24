@@ -108,6 +108,8 @@ export interface ManagerFeaturesView {
   issues?: boolean
   /** issue 讨论开启标记与按讨论过滤；未声明时保持 X-n 列表。 */
   issueDiscussions?: boolean
+  /** 普通 issue 的“下一步在谁”：列表与详情带 waiting，待处理、进行中按它分。未声明时按状态分。 */
+  issueWaiting?: boolean
   /** 用户忽略请你做请求 */
   requestIgnore?: boolean
   paging?: boolean

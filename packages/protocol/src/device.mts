@@ -42,6 +42,8 @@ export const EXTENSION = {
   /** 公共 issue 外壳、X-n/特殊类型编号、评论、跟进和通知；只发给声明过的连接。 */
   managerIssues: 'litchManagerIssues',
   managerIssueDiscussions: 'litchManagerIssueDiscussions',
+  /** 普通 issue 的“下一步在谁”：列表头与详情的 waiting、按它过滤、经理的显式标记。 */
+  managerIssueWaiting: 'litchManagerIssueWaiting',
   suggestionInbox: 'suggestionInbox',
   /** 受根目录与字节预算约束的 fs/readFile，见 file-preview.mts。 */
   filePreview: 'filePreview',

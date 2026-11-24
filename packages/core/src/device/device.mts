@@ -2091,6 +2091,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
           issues: info.device.extensions?.includes(EXTENSION.managerIssues) === true,
           issueDiscussions:
             info.device.extensions?.includes(EXTENSION.managerIssueDiscussions) === true,
+          issueWaiting: info.device.extensions?.includes(EXTENSION.managerIssueWaiting) === true,
           feedback: info.device.extensions?.includes(EXTENSION.managerFeedback) === true,
           posts: info.device.extensions?.includes(EXTENSION.managerPosts) === true,
           ignore: info.device.extensions?.includes(EXTENSION.managerIgnore) === true,

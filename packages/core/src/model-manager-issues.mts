@@ -48,5 +48,6 @@ export function managerIssueQueryKey(query: ManagerIssueQuery): string {
     query.order ?? 'newest',
     query.limit ?? 30,
     query.discussionsOnly ?? false,
+    query.waiting ?? [],
   ])
 }

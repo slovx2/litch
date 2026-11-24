@@ -20,7 +20,14 @@ import { BoardActionScrollView, CardActionArea, CardActions } from '../CardActio
 import { Issue } from '../Issue'
 import { IssueContext } from '../IssueRelations'
 import { useIssueCommands, useManagerIssues } from './data'
-import { IssueComposer, IssueMetaLine, IssueThread, IssueWaitLine } from './IssueThread'
+import {
+  IssueComposer,
+  IssueMetaLine,
+  IssueNextTag,
+  IssueThread,
+  IssueWaitLine,
+} from './IssueThread'
+import { useIssueSeen } from './issue-seen'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ManagerIssue'>
 
@@ -50,6 +57,9 @@ export function ManagerIssueScreen({ route, navigation }: Props) {
       current = false
     }
   }, [commands, id])
+  const offline = device?.connection !== 'online'
+  const disabled = offline || manager?.status !== 'active'
+  useIssueSeen({ manager: { deviceId, id: managerId }, issue, open: true, disabled, commands })
   const paged = Boolean(view?.paging)
   const detailId = issue && issue.kind !== 'ordinary' ? issue.id : undefined
   useEffect(() => {
@@ -58,8 +68,6 @@ export function ManagerIssueScreen({ route, navigation }: Props) {
       .command('managers.board.detail', { deviceId, managerId, id: detailId as ManagerObjectId })
       .catch(() => {})
   }, [channel, deviceId, managerId, paged, detailId])
-  const offline = device?.connection !== 'online'
-  const disabled = offline || manager?.status !== 'active'
   const reason = t(offline ? 'issue.offline' : 'issue.readOnly')
   const openItem = (item: string) =>
     navigation.navigate('ManagerConsole', { deviceId, managerId, issue: item })
@@ -105,6 +113,7 @@ export function ManagerIssueScreen({ route, navigation }: Props) {
             }}
             comments={issue.discussion.comments.length}
           />
+          <IssueNextTag waiting={issue.waiting} withWhy />
           <IssueWaitLine full head={issue} />
           {offline ? (
             <Text testID="issue-offline" style={{ color: c.wait, fontSize: font.size.meta }}>

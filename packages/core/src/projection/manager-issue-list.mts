@@ -10,6 +10,7 @@ import type {
   ManagerIssueOrder,
   ManagerIssueQuery,
   ManagerIssueStatus,
+  ManagerIssueWaitingOn,
 } from '../../../protocol/src/manager-issues.mjs'
 import { managerIssueQueryKey } from '../model-manager-issues.mjs'
 
@@ -47,6 +48,8 @@ export interface ManagerIssueFilter {
   authors: ManagerIssueAuthorKind[]
   followUp: ManagerIssueFollowUp | 'all'
   unread: boolean
+  /** 普通 issue 按“下一步在谁”分：待处理 user、进行中 agent、未完成两者；不带时按 statuses。设备不支持时核心去掉它。 */
+  waiting?: ManagerIssueWaitingOn[]
   order: ManagerIssueOrder
 }
 
@@ -71,6 +74,7 @@ export function managerIssueFilterKey(filter: ManagerIssueFilter): string {
     filter.unread,
     filter.order,
     filter.discussionsOnly ?? false,
+    sorted(filter.waiting ?? []),
   ])
 }
 
@@ -88,7 +92,7 @@ export function managerIssueKindFilter(kind: ManagerIssueKind): ManagerIssueFilt
     ...DEFAULT_MANAGER_ISSUE_FILTER,
     kinds: [kind],
     statuses: kind === 'ordinary' ? ['open', 'blocked'] : [MANAGER_ISSUE_STATUSES[kind][0]],
-    ...(kind === 'ordinary' ? { discussionsOnly: true } : {}),
+    ...(kind === 'ordinary' ? { discussionsOnly: true, waiting: ['user'] } : {}),
   }
 }
 
@@ -98,7 +102,9 @@ export function managerIssuePreset(patch: Partial<ManagerIssueFilter>): {
   filter: ManagerIssueFilter
 } {
   const kind = patch.kinds?.length === 1 ? (patch.kinds[0] ?? 'ordinary') : 'ordinary'
-  return { kind, filter: { ...managerIssueKindFilter(kind), statuses: [], ...patch } }
+  // 默认的“待处理”分法不带进预设：预设自己给状态
+  const { waiting: _waiting, ...base } = managerIssueKindFilter(kind)
+  return { kind, filter: { ...base, statuses: [], ...patch } }
 }
 
 /** 编号定位采用目标的真实类型和状态，清掉可能隐藏它的条件，只保留该页签的排序。 */
@@ -106,8 +112,9 @@ export function managerIssueLinkFilter(
   issue: Pick<ManagerIssue, 'kind' | 'status'>,
   previous?: ManagerIssueFilter,
 ): ManagerIssueFilter {
+  const { waiting: _waiting, ...base } = managerIssueKindFilter(issue.kind)
   return {
-    ...managerIssueKindFilter(issue.kind),
+    ...base,
     statuses: [issue.status],
     order: previous?.order ?? DEFAULT_MANAGER_ISSUE_FILTER.order,
   }
@@ -168,6 +175,7 @@ export function managerIssueQuery(
     authors: inOrder(['user', 'manager'], filter.authors),
     followUp: filter.followUp,
     ...(filter.unread ? { unread: true } : {}),
+    ...(filter.waiting?.length ? { waiting: inOrder(['user', 'agent'], filter.waiting) } : {}),
     order: filter.order,
     ...(limit === undefined ? {} : { limit }),
   }
@@ -205,7 +213,7 @@ export const MANAGER_ISSUE_SUMMARY_FILTERS = {
 } satisfies Record<string, ManagerIssueFilter>
 export type ManagerIssueSummaryKey = keyof typeof MANAGER_ISSUE_SUMMARY_FILTERS
 
-/** 各类别未选中时的角标：普通 issue 用默认待处理列表，报告给未读，其余给待处理状态。 */
+/** 各类别未选中时的角标：普通 issue 用默认待处理列表（下一步在用户，进行中不计），报告给未读，其余给待处理状态。 */
 export const MANAGER_ISSUE_ATTENTION_FILTERS: Record<ManagerIssueKind, ManagerIssueFilter> = {
   ordinary: managerIssueKindFilter('ordinary'),
   decision: { ...DEFAULT_MANAGER_ISSUE_FILTER, kinds: ['decision'], statuses: ['open'] },
@@ -232,6 +240,7 @@ export function managerIssueHead(issue: ManagerIssue): ManagerIssueHead {
     preview: preview.length > 200 ? `${preview.slice(0, 199)}…` : preview,
     status: issue.status,
     ...(issue.blockedReason ? { blockedReason: issue.blockedReason } : {}),
+    ...(issue.waiting ? { waiting: issue.waiting } : {}),
     stateGroup: issue.stateGroup,
     author: issue.author.kind,
     followUp: issue.followUp.state,

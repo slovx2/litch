@@ -1,5 +1,6 @@
-// 一条 issue 的讨论界面，三处共用同一套：卡片里展开（inline）、看板底部抽屉（pane）、完整讨论页（page）。
-// 抽屉只显示讨论；标题行可定位上方原帖，不在列表时才临时展开原帖。完整页保留原帖与操作。
+// 一条 issue 的讨论界面，两处共用同一套：看板底部抽屉（pane）、全屏阅读页（page）。
+// 抽屉只显示讨论；标题行可定位上方原帖，不在列表时才临时展开原帖。
+// 阅读页占满控制台的筛选栏和列表区：顶栏是返回、标题和状态、跟进这些操作，正文按文章宽度排版，评论和输入框接在后面。
 import { type ReactNode, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { ManagerChangeView, ManagerView } from '../../../../core/src/model-manager.mts'
@@ -23,7 +24,7 @@ import { useDiscussionPane } from '../discussion-pane.ts'
 import { RelationLink } from '../RelationLink.tsx'
 import type { IssueCommands } from './data.ts'
 import { IssueDiscussion } from './IssueDiscussion.tsx'
-import { IssueMeta, IssueWaitReason } from './IssueMeta.tsx'
+import { IssueMeta, IssueNext, IssueWaitReason } from './IssueMeta.tsx'
 
 export interface IssueThreadProps {
   manager: ManagerView
@@ -37,9 +38,9 @@ export interface IssueThreadProps {
   reason: string
   commands: IssueCommands
   onOpenItem(id: string): void
-  /** 抽屉里和卡片里有；完整讨论页没有 */
+  /** 抽屉里有；阅读页没有 */
   onFull?: (() => void) | undefined
-  /** 完整讨论页的返回 */
+  /** 阅读页的返回 */
   onBack?: (() => void) | undefined
   /** 特殊 issue 的正文和主操作：完整页显示，抽屉仅在无法定位原帖时按需显示。 */
   quick?: ReactNode
@@ -185,6 +186,21 @@ export function IssueRelationsRow({
   )
 }
 
+/** 阅读页回到列表 */
+export function IssueBackButton({ onBack }: { onBack?: (() => void) | undefined }) {
+  const t = useT()
+  return (
+    <button
+      type="button"
+      className="btn ghost mg-issue-back"
+      data-act="issue-back"
+      onClick={onBack}
+    >
+      <span aria-hidden="true">‹</span> {t('issue.back')}
+    </button>
+  )
+}
+
 /** “打开完整讨论”：只放图标，名称在悬停提示和读屏里 */
 export function FullDiscussionButton({ onClick }: { onClick(): void }) {
   const t = useT()
@@ -217,7 +233,7 @@ export function IssueThread({
   changes,
   onShowBody,
   bodyInList,
-}: IssueThreadProps & { mode: 'inline' | 'pane' | 'page' }) {
+}: IssueThreadProps & { mode: 'pane' | 'page' }) {
   const t = useT()
   const [openingError, setOpeningError] = useState('')
   const opened =
@@ -276,13 +292,9 @@ export function IssueThread({
           })
       : undefined
   return (
-    <CardActionScope active={mode !== 'pane'}>
+    <CardActionScope active={mode === 'page'}>
       {(footer) => (
-        <section
-          className="mg-issue-thread"
-          data-issue-thread={mode}
-          data-issue={mode === 'inline' ? undefined : issue.id}
-        >
+        <section className="mg-issue-thread" data-issue-thread={mode} data-issue={issue.id}>
           {bodySlot
             ? createPortal(
                 <button
@@ -311,40 +323,40 @@ export function IssueThread({
           ) : null}
           {mode === 'page' ? (
             <header className="mg-issue-page-head">
-              <button
-                type="button"
-                className="ibtn"
-                data-act="issue-back"
-                title={t('manager.back')}
-                aria-label={t('manager.back')}
-                onClick={onBack}
-              >
-                <span aria-hidden="true">‹</span>
-              </button>
-              <h2 className="mg-paging-title">
-                <b className="mono mg-issue-id">{issue.id}</b> {issue.title}
-              </h2>
+              <IssueBackButton onBack={onBack} />
+              <div className="mg-issue-page-title">
+                <h2 className="mg-paging-title">
+                  <b className="mono mg-issue-id">{issue.id}</b> {issue.title}
+                </h2>
+                <div className="mg-issue-page-bar">
+                  <IssueNext waiting={issue.waiting} />
+                  <IssueMeta
+                    head={managerIssueHead(issue)}
+                    comments={issue.discussion.comments.length}
+                    withKind
+                  />
+                  <IssueControls
+                    issue={issue}
+                    disabled={disabled}
+                    reason={reason}
+                    commands={commands}
+                  />
+                </div>
+                <IssueWaitReason head={issue} full />
+              </div>
             </header>
           ) : null}
-          {mode === 'page' ? (
-            <>
-              <IssueMeta
-                head={managerIssueHead(issue)}
-                comments={issue.discussion.comments.length}
-                withKind
-              />
-              <IssueWaitReason head={issue} full />
-            </>
-          ) : null}
-          {mode !== 'pane' || bodyOpen ? (
+          {mode === 'page' || bodyOpen ? (
             <div data-issue-original={issue.id}>
               {body}
-              <IssueControls
-                issue={issue}
-                disabled={disabled}
-                reason={reason}
-                commands={commands}
-              />
+              {mode === 'pane' ? (
+                <IssueControls
+                  issue={issue}
+                  disabled={disabled}
+                  reason={reason}
+                  commands={commands}
+                />
+              ) : null}
               <IssueRelationsRow manager={manager} issue={issue} onOpenItem={onOpenItem} />
               <IssueExternal manager={manager} issue={issue} />
             </div>
@@ -358,9 +370,6 @@ export function IssueThread({
             special={special}
             onComment={(body) => commands.comment({ id: issue.id, revision: issue.revision, body })}
             onAsk={ask}
-            headAction={
-              onFull && mode !== 'pane' ? <FullDiscussionButton onClick={onFull} /> : undefined
-            }
           />
           {footer}
         </section>

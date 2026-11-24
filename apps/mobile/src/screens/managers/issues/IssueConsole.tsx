@@ -35,9 +35,10 @@ import {
   managerIssuePreset,
   supportedManagerIssueFilter,
 } from '../../../../../../packages/core/src/projection/manager-issue-list.mts'
-import type {
-  ManagerIssueHead,
-  ManagerIssueKind,
+import {
+  type ManagerIssueHead,
+  type ManagerIssueKind,
+  managerIssueRefKind,
 } from '../../../../../../packages/protocol/src/manager-issues.mts'
 import {
   clearIssueFilter,
@@ -59,7 +60,14 @@ import {
   useIssueCounts,
 } from './data'
 import { IssueFilterDrawer, IssueStatusRow } from './IssueFilters'
-import { IssueComposer, IssueMetaLine, IssueThread, IssueWaitLine } from './IssueThread'
+import {
+  IssueComposer,
+  IssueMetaLine,
+  IssueNextTag,
+  IssueThread,
+  IssueWaitLine,
+} from './IssueThread'
+import { useIssueSeen } from './issue-seen'
 
 /** 页签次序：四类特殊 issue 在前（日常处理的都在这里），普通 issue 在末尾 */
 const TABS: readonly ManagerIssueKind[] = [
@@ -178,8 +186,13 @@ export function useIssueConsole({
       return
     save({ kind: linkedIssue.kind, filters: { ...saved.filters, [linkedIssue.kind]: next } })
   }, [linkedIssue, kind, filter, saved.filters, save])
+  // 普通 issue 正文长、带评论，直接进完整讨论页；特殊 issue 打开半屏抽屉
   const open = useCallback(
     (id: string) => {
+      if (managerIssueRefKind(id) === 'ordinary') {
+        onFull(id)
+        return
+      }
       located.current = false
       setLinked(id)
       setSheet(id)
@@ -187,7 +200,7 @@ export function useIssueConsole({
         .read(id, { manual: true })
         .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
     },
-    [commands],
+    [commands, onFull],
   )
   const attention = useIssueCounts(manager, issues, MANAGER_ISSUE_ATTENTION_FILTERS)
   const list = useCallback(
@@ -302,6 +315,10 @@ export function useIssueConsole({
           }
         }}
         onPress={() => {
+          if (head.kind === 'ordinary') {
+            onFull(head.id)
+            return
+          }
           if (head.id !== linked) setLinked(null)
           setSheet(head.id)
           void commands.read(head.id, { manual: true }).catch(() => {})
@@ -322,6 +339,7 @@ export function useIssueConsole({
             </Text>
             {head.title}
           </Text>
+          <IssueNextTag waiting={head.waiting} />
           {head.unread ? (
             <View
               testID={`issue-unread:${head.id}`}
@@ -413,8 +431,7 @@ export function useIssueConsole({
           commands={commands}
           onClose={(id) => {
             setCreating(false)
-            if (!id) return
-            setSheet(id)
+            if (id) onFull(id)
           }}
         />
       ) : null}
@@ -501,25 +518,7 @@ export function IssueSheetDrawer({
   const special = issue ? issue.kind !== 'ordinary' : false
   const [talking, setTalking] = useState(!special)
   const [bodyOpen, setBodyOpen] = useState(false)
-  const seenAttempt = useRef('')
-  useEffect(() => {
-    if (!issue?.unread || issue.kind === 'report' || disabled) {
-      seenAttempt.current = ''
-      return
-    }
-    const key = JSON.stringify([
-      manager.deviceId,
-      manager.id,
-      issue.id,
-      issue.revision,
-      issue.updatedAt,
-      issue.discussion.comments.at(-1)?.id,
-      issue.discussion.comments.at(-1)?.revision,
-    ])
-    if (seenAttempt.current === key) return
-    seenAttempt.current = key
-    void commands.seen({ id: issue.id, revision: issue.revision }).catch(() => {})
-  }, [issue, commands, disabled, manager.deviceId, manager.id])
+  useIssueSeen({ manager, issue, open: true, disabled, commands })
   if (!issue) return null
   const post = board?.posts?.find((one) => one.id === (issue.id as string))
   const quick =

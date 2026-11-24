@@ -97,6 +97,7 @@ export function createMockManagers(host: MockManagerHost) {
       requestIgnore: !old,
       issues: !old && host.issues !== false,
       issueDiscussions: !old && host.issues !== false,
+      issueWaiting: !old && host.issues !== false,
       resetTarget: !old,
     }
   }

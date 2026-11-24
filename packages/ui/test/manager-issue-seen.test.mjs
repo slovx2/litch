@@ -4,14 +4,10 @@ import { test } from 'node:test'
 import { runInNewContext } from 'node:vm'
 import { transform } from 'esbuild'
 
-// 执行真实的两端组件与 effect；只替换绘制和调度，复现同一份未读被重复快照替换的条件。
+// 执行两端真实的已读钩子与 effect（列表展开、抽屉、阅读页共用）；只替换绘制和调度，复现同一份未读被重复快照替换的条件。
 for (const [platform, path, name] of [
-  ['desktop', '../src/manager/issues/IssueCard.tsx', 'IssueCard'],
-  [
-    'mobile',
-    '../../../apps/mobile/src/screens/managers/issues/IssueConsole.tsx',
-    'IssueSheetDrawer',
-  ],
+  ['desktop', '../src/manager/issues/issue-seen.ts', 'useIssueSeen'],
+  ['mobile', '../../../apps/mobile/src/screens/managers/issues/issue-seen.ts', 'useIssueSeen'],
 ]) {
   const compiled = await transform(readFileSync(new URL(path, import.meta.url), 'utf8'), {
     loader: 'tsx',

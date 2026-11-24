@@ -865,6 +865,7 @@ export class ClientSession implements ClientToolPeer {
               this.declared.has(EXTENSION.managerIssues),
               this.declared.has(EXTENSION.managerIssueDiscussions),
               this.declared.has(EXTENSION.managerResetTarget),
+              this.declared.has(EXTENSION.managerIssueWaiting),
             )
             .then((result) =>
               projectExternalManagerPayload(

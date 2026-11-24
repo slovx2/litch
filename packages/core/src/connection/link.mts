@@ -272,6 +272,7 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.managerPaging,
                 EXTENSION.managerIssues,
                 EXTENSION.managerIssueDiscussions,
+                EXTENSION.managerIssueWaiting,
                 EXTENSION.harnessProjectPermissions,
                 // timedApprovals：声明了才能授予、撤销限时授权，收得到名单变化
                 TIMED_APPROVALS_EXTENSION,

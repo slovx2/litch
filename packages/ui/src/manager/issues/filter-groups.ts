@@ -3,6 +3,8 @@
 // 只选了一种类型时，可以在分组下面再选该类型的一个具体状态（细分，默认收起）。
 // 查询仍是 ManagerIssueFilter.statuses：分组展开成所选类型里属于它的那几个状态，设备照旧按 kinds × statuses 过滤。
 // 同名状态在各类型里语义一致，所以一张状态 → 分组的表就够，不按类型分开。
+// 普通 issue 的待处理、进行中另按“下一步在谁”分（条件里的 waiting，设备派生）：待处理 = 等用户，
+// 进行中 = 经理或工作线在跟；设备不支持时核心去掉 waiting，退回下表按状态分。
 import {
   MANAGER_ISSUE_KINDS,
   MANAGER_ISSUE_STATUSES,
@@ -12,6 +14,7 @@ import {
 import type {
   ManagerIssueKind,
   ManagerIssueStatus,
+  ManagerIssueWaitingOn,
 } from '../../../../protocol/src/manager-issues.mts'
 
 /** 四个基本分组：每个具体状态恰好属于其中一个 */
@@ -84,6 +87,31 @@ export function issueGroupStatuses(
   ]
 }
 
+/** 普通 issue 在这一组里按“下一步在谁”取哪几种；所选类型不含普通 issue 或分组不按它分时为 undefined */
+export function issueGroupWaiting(
+  group: IssueStatusGroup,
+  kinds: readonly ManagerIssueKind[],
+): ManagerIssueWaitingOn[] | undefined {
+  if (!kindsOf(kinds).includes('ordinary')) return undefined
+  if (group === 'todo') return ['user']
+  if (group === 'doing') return ['agent']
+  if (group === 'unfinished') return ['user', 'agent']
+  return undefined
+}
+
+/** 条件换成某一组（或组下的一个细分）：状态和 waiting 一起定，细分只看状态 */
+function grouped(
+  filter: ManagerIssueFilter,
+  kinds: ManagerIssueKind[],
+  group: IssueStatusGroup,
+  statuses: ManagerIssueStatus[],
+  detail: boolean,
+): ManagerIssueFilter {
+  const { waiting: _waiting, ...rest } = filter
+  const waiting = detail ? undefined : issueGroupWaiting(group, kinds)
+  return { ...rest, kinds, statuses, ...(waiting ? { waiting } : {}) }
+}
+
 const sameSet = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((one) => b.includes(one))
 
@@ -154,7 +182,7 @@ export function withIssueStatusGroup(
   filter: ManagerIssueFilter,
   group: IssueStatusGroup,
 ): ManagerIssueFilter {
-  return { ...filter, statuses: issueGroupStatuses(group, filter.kinds) }
+  return grouped(filter, filter.kinds, group, issueGroupStatuses(group, filter.kinds), false)
 }
 
 /** 选一个细分状态；detail 为 null 时回到整组 */
@@ -163,7 +191,9 @@ export function withIssueStatusDetail(
   group: IssueStatusGroup,
   detail: ManagerIssueStatus | null,
 ): ManagerIssueFilter {
-  return { ...filter, statuses: detail ? [detail] : issueGroupStatuses(group, filter.kinds) }
+  return detail
+    ? grouped(filter, filter.kinds, group, [detail], true)
+    : withIssueStatusGroup(filter, group)
 }
 
 /**
@@ -180,11 +210,11 @@ export function withIssueKinds(
   }
   const single = issueSingleKind(kinds)
   if (choice.detail && single && MANAGER_ISSUE_STATUSES[single].includes(choice.detail))
-    return { ...filter, kinds, statuses: [choice.detail] }
+    return grouped(filter, kinds, choice.group, [choice.detail], true)
   const group = issueStatusGroups(kinds).includes(choice.group)
     ? choice.group
     : DEFAULT_ISSUE_STATUS_GROUP
-  return { ...filter, kinds, statuses: issueGroupStatuses(group, kinds) }
+  return grouped(filter, kinds, group, issueGroupStatuses(group, kinds), false)
 }
 
 /** 类型多选里勾上或去掉一种；至少留一种（全去掉不生效） */
@@ -210,8 +240,12 @@ export function issueKindChecked(filter: ManagerIssueFilter, kind: ManagerIssueK
  * 读得出来时原样返回同一个对象，不打断依赖它的查询。
  */
 export function normalizeIssueFilter(filter: ManagerIssueFilter): ManagerIssueFilter {
-  if (readIssueStatus(filter.statuses, filter.kinds)) return filter
-  return { ...filter, statuses: issueGroupStatuses(DEFAULT_ISSUE_STATUS_GROUP, filter.kinds) }
+  const choice = readIssueStatus(filter.statuses, filter.kinds)
+  if (!choice) return withIssueStatusGroup(filter, DEFAULT_ISSUE_STATUS_GROUP)
+  // 分组读得出来，但 waiting 和它对不上（比如细分后又整组）：只补 waiting
+  const waiting = choice.detail ? undefined : issueGroupWaiting(choice.group, filter.kinds)
+  if ((waiting ?? []).join() === (filter.waiting ?? []).join()) return filter
+  return grouped(filter, filter.kinds, choice.group, filter.statuses, Boolean(choice.detail))
 }
 
 /**

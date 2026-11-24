@@ -37,6 +37,16 @@ const groupsBundle = await build({
 const groups = await import(
   `data:text/javascript;base64,${Buffer.from(groupsBundle.outputFiles[0].text).toString('base64')}`
 )
+const issuesBundle = await build({
+  entryPoints: [new URL('../../protocol/src/manager-issues.mts', import.meta.url).pathname],
+  bundle: true,
+  write: false,
+  format: 'esm',
+  platform: 'node',
+})
+const protocolIssues = await import(
+  `data:text/javascript;base64,${Buffer.from(issuesBundle.outputFiles[0].text).toString('base64')}`
+)
 const sources = {
   desktop: new URL('../src/manager/issues/IssueConsole.tsx', import.meta.url),
   mobile: new URL(
@@ -140,11 +150,13 @@ function fixture(platform) {
         usePopover: () => ({ open: false, setOpen() {}, root: {}, trigger: {}, pop: {} }),
       }
     if (name.endsWith('/manager-issue-list.mts')) return list
+    if (name.endsWith('/protocol/src/manager-issues.mts')) return protocolIssues
     if (name.endsWith('/manager-board-memory.mts')) return boardMemory
     if (name.endsWith('/appearance.ts') || name.endsWith('/i18n')) return { useT: () => t }
     if (name.endsWith('/theme'))
       return { useTheme: () => ({ c: {}, font: { size: {} }, radius: {} }) }
     if (name.endsWith('/discussion-pane.ts')) return { useDiscussionPane: () => null }
+    if (name === './issue-seen.ts' || name === './issue-seen') return { useIssueSeen() {} }
     if (name === './data.ts' || name === './data')
       return { useIssueCommands: () => commands, useIssueCounts: () => null }
     // 子组件只保留 JSX 节点，不运行无关绘制。
@@ -167,6 +179,7 @@ function fixture(platform) {
   let linkedIssue = null
   let offPage = false
   let details = {}
+  const fulls = []
   let result
   let tree
   const nodes = (node) => {
@@ -253,6 +266,7 @@ function fixture(platform) {
       onLocated: () => {
         target = null
       },
+      onFull: (id) => fulls.push(id),
       preset,
     }
     result = renderConsole(props)
@@ -310,6 +324,31 @@ function fixture(platform) {
       linkedIssue = { ...linkedIssue, status }
       details = { [linkedIssue.id]: linkedIssue }
       for (let i = 0; i < 4; i++) render()
+    },
+    /** 正在全屏阅读的 issue：桌面看阅读页节点，手机看推入的完整页 */
+    reading() {
+      if (platform === 'mobile') return fulls.at(-1) ?? null
+      const page = nodes(tree).find((node) => node.props?.['data-issue-full'])
+      return page?.props['data-issue-full'] ?? null
+    },
+    listKind() {
+      return nodes(tree).find((node) => node.props?.['data-issue-kind'])?.props['data-issue-kind']
+    },
+    back() {
+      const thread = nodes(tree).find((node) => node.props?.mode === 'page')
+      assert.ok(thread, '应在阅读页')
+      thread.props.onBack()
+      render()
+    },
+    tapCard(id) {
+      const card = nodes(tree).find((node) =>
+        platform === 'desktop'
+          ? node.props?.head?.id === id
+          : node.props?.testID === `issue-card:${id}`,
+      )
+      assert.ok(card, `缺少卡片 ${id}`)
+      ;(card.props.onToggle ?? card.props.onPress)()
+      for (let i = 0; i < 2; i++) render()
     },
     visible(id) {
       return nodes(tree).some((node) =>
@@ -471,7 +510,6 @@ for (const platform of Object.keys(sources)) {
     ['request', 'delivered', 'R-901'],
     ['report', 'read', 'P-901'],
     ['suggestion', 'started', 'S-fixture'],
-    ['ordinary', 'closed', 'X-901'],
   ]) {
     test(`${platform}：链接 ${id} 切到 ${status}，收起后仍在列表（含后续页）`, () => {
       const f = fixture(platform)
@@ -498,6 +536,42 @@ for (const platform of Object.keys(sources)) {
       assert.equal(f.visible(id), false, '用户主动改过滤时结束定位，不能强行保留目标')
     })
   }
+  test(`${platform}：普通 issue 的链接直接进全屏阅读页，列表筛选不变，返回后仍是原列表`, () => {
+    const f = fixture(platform)
+    f.render()
+    f.link(
+      {
+        id: 'X-901',
+        kind: 'ordinary',
+        status: 'closed',
+        title: '虚构的已结束事项',
+        body: '测试正文',
+        author: { kind: 'manager' },
+        followUp: { state: 'off' },
+        discussion: { comments: [] },
+        quick: {},
+        unread: false,
+      },
+      { offPage: true },
+    )
+    assert.notDeepEqual(f.filters.at(-1)?.statuses, ['closed'], '不为定位改筛选')
+    assert.equal(f.reading(), 'X-901')
+    assert.equal(f.visible('X-901'), false, '不插进列表')
+    if (platform === 'desktop') {
+      f.back()
+      assert.equal(f.reading(), null)
+      assert.equal(f.listKind(), 'ordinary', '返回后是普通 issue 列表')
+    }
+  })
+  test(`${platform}：点普通 issue 的卡片进全屏阅读页，特殊 issue 仍在列表里展开`, () => {
+    const f = fixture(platform)
+    f.render()
+    f.tapCard('decision-0')
+    assert.equal(f.reading(), null, '决策不进阅读页')
+    f.pickOrdinary()
+    f.tapCard('ordinary-1')
+    assert.equal(f.reading(), 'ordinary-1')
+  })
   test(`${platform}：详情延迟到达时不中途取消链接定位`, () => {
     const f = fixture(platform)
     f.render()

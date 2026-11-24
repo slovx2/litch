@@ -10,6 +10,7 @@ import { MANAGER_ISSUE_STATUSES } from '../../../../../../packages/core/src/proj
 import type {
   ManagerIssue,
   ManagerIssueHead,
+  ManagerIssueWaiting,
   ManagerOrdinaryStatus,
 } from '../../../../../../packages/protocol/src/manager-issues.mts'
 import type { ManagerRelationTarget } from '../../../../../../packages/protocol/src/manager-posts.mts'
@@ -52,6 +53,57 @@ export function IssueKindTag({ kind }: { kind: ManagerIssueHead['kind'] }) {
     >
       {t(`issue.kind.${kind}`)}
     </Text>
+  )
+}
+
+/**
+ * 普通 issue 的“下一步在谁”（设备派生的 waiting）：待处理、进行中、可能卡住。
+ * 手机没有悬停提示：列表只画标记；完整页 withWhy 时把原因跟在后面。旧设备没有 waiting，不画。
+ */
+export function IssueNextTag({
+  waiting,
+  withWhy = false,
+}: {
+  waiting: ManagerIssueWaiting | undefined
+  withWhy?: boolean
+}) {
+  const t = useT()
+  const { c, radius, font } = useTheme()
+  if (!waiting) return null
+  const state = waiting.stale ? 'stale' : waiting.on
+  const color = state === 'agent' ? c.accent : c.wait
+  const why = waiting.stale
+    ? t('issue.next.why.stale')
+    : t(
+        (waiting.why === 'marked'
+          ? `issue.next.why.marked.${waiting.on}`
+          : `issue.next.why.${waiting.why}`) as Parameters<typeof t>[0],
+      )
+  const label = t(`issue.next.${state}` as const)
+  return (
+    <View
+      style={styles.next}
+      testID={`issue-next:${state}`}
+      accessibilityLabel={`${label} · ${why}`}
+    >
+      <Text
+        style={[
+          styles.kind,
+          {
+            color,
+            borderColor: color,
+            borderRadius: radius.s,
+            borderStyle: state === 'stale' ? 'dashed' : 'solid',
+            fontSize: font.size.meta - 1,
+          },
+        ]}
+      >
+        {label}
+      </Text>
+      {withWhy ? (
+        <Text style={{ color: c.ink3, fontSize: font.size.meta, flexShrink: 1 }}>{why}</Text>
+      ) : null}
+    </View>
   )
 }
 
@@ -535,6 +587,7 @@ export function IssueComposer({
 const styles = StyleSheet.create({
   kind: { borderWidth: 1, paddingHorizontal: 4, lineHeight: 16 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  next: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
   thread: { gap: 12 },
   controls: { gap: 8 },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' },
