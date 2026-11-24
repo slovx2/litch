@@ -19,6 +19,11 @@ const MAX_WAIT = 60
 const RATE_WINDOW = 900
 const RATE_LIMIT = 10
 const PER_CHAT = 50
+const TRIGGER_TEXT = {
+  mention: 'mentioned the bot',
+  reply: 'replied to the bot',
+  p2p: 'direct message',
+} as const
 
 export interface Prepared {
   text: string
@@ -67,6 +72,11 @@ export class FeishuWake {
   private readonly options: FeishuWakeOptions
   host: FeishuWakeHost | null = null
   outcomes: FeishuSendOutcomes | null = null
+  /** 私聊会话（私聊绑定挂进来）：对方名字和绑定时间（秒） */
+  direct: (
+    appId: string,
+    chatId: string,
+  ) => { name: string; openId: string; since: number } | null = () => null
   private readonly running = new Set<string>()
   private timer: NodeJS.Timeout | null = null
   private closed = false
@@ -261,9 +271,12 @@ export class FeishuWake {
     const cursors = new Map<string, number>()
     for (const [chatId, found] of byChat) {
       const chat = chats.record(appId, chatId)
-      const name = chat?.name || chatId
+      const direct = chat ? null : this.direct(appId, chatId)
+      const name = direct
+        ? `Direct message with ${direct.name || 'a bound user'}`
+        : chat?.name || chatId
       const after = inbox.cursor(manager.id, appId, chatId)
-      const since = (chat?.access?.accessAt ?? 0) * 1000
+      const since = (chat?.access?.accessAt ?? direct?.since ?? 0) * 1000
       const window = messages.since(appId, chatId, after, since, PER_CHAT)
       const shown = new Map(window.messages.map((message) => [message.messageId, message]))
       // 找经理的那几条一定带上，哪怕不在最近 50 条里
@@ -277,21 +290,21 @@ export class FeishuWake {
       const lines = ordered.map((message) => {
         const mark = marks.get(message.messageId)
         const flag = mark
-          ? ` [${mark.inboxId} · ${mark.trigger === 'mention' ? 'mentioned the bot' : 'replied to the bot'} · sender ${mark.senderIdentity}]`
+          ? ` [${mark.inboxId} · ${TRIGGER_TEXT[mark.trigger]} · sender ${mark.senderIdentity}]`
           : ''
         return messageLine(messages, appId, message, flag)
       })
       const omitted = window.total - window.messages.length
       sections.push(
         [
-          `## ${escapeExternal(name)} (${chatId})${chat?.external ? ' · external chat: includes people outside the organization' : ''}`,
+          `## ${escapeExternal(name)} (${direct ? `reply with feishu_send user=${direct.openId}` : chatId})${chat?.external ? ' · external chat: includes people outside the organization' : ''}`,
           ...(omitted > 0
             ? [`(${omitted} earlier new messages omitted; read them with feishu_history.)`]
             : []),
           ...lines,
         ].join('\n'),
       )
-      summary.push(`${name} ${found.length}`)
+      summary.push(`${direct ? direct.name || chatId : name} ${found.length}`)
       const top = Math.max(after, ...ordered.map((message) => message.seq))
       cursors.set(chatId, top)
     }
@@ -299,7 +312,7 @@ export class FeishuWake {
     const outcomes = this.outcomes?.pending(manager.id) ?? []
     const modelText = [
       '<litch-external-data source="feishu">',
-      `Feishu app ${escapeExternal(app?.name ?? appId)} (${appId}). New messages in accessed chats since you were last given context. Entries marked [FI-n] asked for you. ${FEISHU_DATA_NOTE}`,
+      `Feishu app ${escapeExternal(app?.name ?? appId)} (${appId}). New messages in accessed chats and direct messages since you were last given context. Entries marked [FI-n] asked for you. ${FEISHU_DATA_NOTE}`,
       ...sections,
       '</litch-external-data>',
       ...(outcomes.length

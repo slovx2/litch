@@ -19,6 +19,7 @@ const text = (description: string) => ({ type: 'string', description })
 const chat = text(
   'Accessed chat: its exact name or chat_id (oc_...). Ambiguous names are rejected with candidates.',
 )
+const user = text('Bound user (direct message): name or open_id (ou_...). Use either chat or user.')
 const object = (properties: Record<string, unknown>, required: string[] = []) => ({
   type: 'object',
   properties,
@@ -32,6 +33,7 @@ export const FEISHU_TOOLS_INSTRUCTIONS =
   'Track follow-up work on the board (open an item when needed). Do not reply only to acknowledge. ' +
   'After handling inbox entries, mark them with feishu_inbox_done. Without inboxIds it marks only the batch last listed or delivered, never entries that arrived later. ' +
   'History, members and attachments come from the device record of accessed chats; chats that are not accessed are not visible. ' +
+  'People paired with Litch (bound users) can message the bot directly: every direct message reaches your inbox, and you answer with feishu_send user=<open_id> (no approval). People who are not bound only get a pairing code from the device; you never see their messages. ' +
   'When an item refers to a Feishu message, call feishu_message_ref so its ID and metadata outlive the retention period. ' +
   'feishu_send speaks as the bot: free chats send right away; approval chats wait for a person to approve the frozen content, so do not resend while it is awaiting_approval. ' +
   'Mention people only through the mentions parameter (names or open_ids resolved against the chat members); "@name" written in the text is not a mention. ' +
@@ -76,7 +78,8 @@ export const FEISHU_TOOLS: ClientToolNamespaceSpec = {
     {
       type: 'function',
       name: FEISHU_TOOL.chats,
-      description: 'List accessed chats (name, chat_id, speech mode, member count, external flag).',
+      description:
+        'List accessed chats (name, chat_id, speech mode, member count, external flag) and bound users you can message directly (name, open_id).',
       inputSchema: object({}),
     },
     {
@@ -89,25 +92,23 @@ export const FEISHU_TOOLS: ClientToolNamespaceSpec = {
       type: 'function',
       name: FEISHU_TOOL.history,
       description:
-        'Read recorded messages of an accessed chat from the device record, oldest first. Times are ISO 8601. refresh=true re-reads the returned messages from Feishu first (at most 50).',
-      inputSchema: object(
-        {
-          chat,
-          since: text('ISO 8601 time; only messages created at or after it.'),
-          until: text('ISO 8601 time; only messages created before it.'),
-          keyword: text('Case-insensitive substring of the message text.'),
-          messageIds: {
-            type: 'array',
-            items: { type: 'string', pattern: '^om_' },
-            minItems: 1,
-            maxItems: 100,
-            uniqueItems: true,
-          },
-          limit: { type: 'integer', minimum: 1, maximum: 100 },
-          refresh: { type: 'boolean' },
+        'Read recorded messages of an accessed chat, or of the direct messages with a bound user, from the device record, oldest first. Give chat or user. Times are ISO 8601. refresh=true re-reads the returned messages from Feishu first (at most 50).',
+      inputSchema: object({
+        chat,
+        user,
+        since: text('ISO 8601 time; only messages created at or after it.'),
+        until: text('ISO 8601 time; only messages created before it.'),
+        keyword: text('Case-insensitive substring of the message text.'),
+        messageIds: {
+          type: 'array',
+          items: { type: 'string', pattern: '^om_' },
+          minItems: 1,
+          maxItems: 100,
+          uniqueItems: true,
         },
-        ['chat'],
-      ),
+        limit: { type: 'integer', minimum: 1, maximum: 100 },
+        refresh: { type: 'boolean' },
+      }),
     },
     {
       type: 'function',
@@ -129,7 +130,7 @@ export const FEISHU_TOOLS: ClientToolNamespaceSpec = {
         'Send a message as the bot to an accessed chat (or a bound user). Give exactly one of text, imagePath or filePath. Text is Markdown: format auto uses a card when it has code blocks or tables, otherwise rich text; long text is split into several messages. Returns the operation ID and state (queued, awaiting_approval with reviewId, sent...).',
       inputSchema: object({
         chat,
-        user: text('Bound user to message privately: name or open_id. Use either chat or user.'),
+        user,
         text: text('Markdown body, at most 40000 characters.'),
         format: { type: 'string', enum: ['auto', 'text', 'post', 'card'] },
         title: text('Optional title for rich text or card.'),

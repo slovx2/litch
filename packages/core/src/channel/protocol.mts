@@ -166,6 +166,7 @@ import type {
   ExternalOutboxView,
 } from '../projection/external.mjs'
 import type {
+  FeishuBindingsView,
   FeishuChatsView,
   FeishuCommands,
   FeishuDeviceView,
@@ -288,6 +289,7 @@ export interface TopicData {
   feishuChats: FeishuChatsView
   feishuInbox: FeishuInboxView
   feishuOutbox: FeishuOutboxView
+  feishuBindings: FeishuBindingsView
   reviews: ReviewsView
   fileChanges: { revision: number }
   automationPreview: AutomationPreviewView | null
@@ -448,6 +450,7 @@ export interface TopicOp {
   feishuChats: never
   feishuInbox: never
   feishuOutbox: never
+  feishuBindings: never
   reviews: never
   externalIdentityLogin: never
   externalInbox: never

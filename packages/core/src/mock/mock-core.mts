@@ -3858,6 +3858,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         topic.kind === 'feishuChats' ||
         topic.kind === 'feishuInbox' ||
         topic.kind === 'feishuOutbox' ||
+        topic.kind === 'feishuBindings' ||
         topic.kind === 'reviews'
       )
         return feishu.of(topic.deviceId).open(topic, sink)

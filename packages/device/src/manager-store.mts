@@ -31,6 +31,7 @@ import {
   EXTERNAL_RESULT_REPLY_MIGRATION,
 } from './external-result-replies.mjs'
 import { EXTERNAL_STORE_MIGRATION } from './external-store-schema.mjs'
+import { FEISHU_BINDINGS_MIGRATION } from './feishu/bindings.mjs'
 import { FEISHU_CHATS_MIGRATION } from './feishu/chats.mjs'
 import { FEISHU_INBOX_MIGRATION } from './feishu/inbox.mjs'
 import { FEISHU_OUTBOX_MIGRATION } from './feishu/outbox.mjs'
@@ -77,6 +78,7 @@ const MIGRATIONS = [
   FEISHU_CHATS_MIGRATION + SPEECH_POLICIES_MIGRATION,
   FEISHU_INBOX_MIGRATION,
   REVIEWS_MIGRATION + FEISHU_OUTBOX_MIGRATION,
+  FEISHU_BINDINGS_MIGRATION,
 ] as const
 export const MANAGER_SCHEMA_VERSION = MIGRATIONS.length
 export const managerNow = () => Math.floor(Date.now() / 1000)

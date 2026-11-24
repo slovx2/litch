@@ -2038,6 +2038,7 @@ export function createCore(options: CoreOptions): Core {
         topic.kind === 'feishuChats' ||
         topic.kind === 'feishuInbox' ||
         topic.kind === 'feishuOutbox' ||
+        topic.kind === 'feishuBindings' ||
         topic.kind === 'reviews'
       )
         return device.feishu.open(topic, sink)

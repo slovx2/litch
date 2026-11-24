@@ -5,12 +5,14 @@ import {
   FEISHU_NOTIFICATION,
   type FeishuApp,
   type FeishuAppUpdateParams,
+  type FeishuBinding,
   type FeishuConnection,
   type FeishuInboxEntry,
   type FeishuInboxMessage,
   type FeishuInboxStatus,
   type FeishuOutboxEntry,
   type FeishuOutboxState,
+  type FeishuPairing,
   type FeishuRegistration,
 } from '../../../protocol/src/feishu.mjs'
 import { ProtocolError } from '../../../shared/src/protocol-contract.mjs'
@@ -23,6 +25,7 @@ import {
   type FeishuEndpoints,
   feishuEndpointsForLoopbackTest,
 } from './api.mjs'
+import { bindingView, FeishuBindings } from './bindings.mjs'
 import { checkCapability, upgradeCapability } from './capability.mjs'
 import { FEISHU_SPEECH_PROVIDER, FeishuChats } from './chats.mjs'
 import { FeishuConnectionRunner, type FeishuEventHandler } from './connection.mjs'
@@ -33,6 +36,7 @@ import { ImMessages, openImMessages } from './messages.mjs'
 import { FeishuOutbox } from './outbox.mjs'
 import { FeishuRecords } from './records.mjs'
 import { FeishuRegistrations } from './registration.mjs'
+import { FeishuReviewCards } from './review-cards.mjs'
 import { SpeechPolicies } from './speech-policy.mjs'
 import { type FeishuAppRecord, FeishuStore } from './store.mjs'
 import { FeishuWake } from './wake.mjs'
@@ -88,6 +92,9 @@ export class DeviceFeishuService {
   readonly inbox: FeishuInbox
   readonly wake: FeishuWake
   readonly outbox: FeishuOutbox
+  readonly bindings: FeishuBindings
+  /** 飞书里的审批卡片；没有通用审批时为空 */
+  readonly cards: FeishuReviewCards | null
   private readonly credentials: FeishuCredentials
   private readonly endpoints: FeishuEndpoints
   private readonly registrations: FeishuRegistrations
@@ -206,10 +213,34 @@ export class DeviceFeishuService {
         })),
       mark: (operationIds, reported) => this.outbox.markReported(operationIds, reported),
     }
+    this.bindings = new FeishuBindings({
+      store: this.store,
+      messages: this.messages,
+      api: (appId) => this.api(appId),
+      now: this.now,
+      announce: options.announce,
+      fail,
+      log: options.log,
+    })
+    this.wireBindings()
+    this.cards = options.reviews
+      ? new FeishuReviewCards({
+          store: this.store,
+          bindings: this.bindings,
+          reviews: options.reviews,
+          api: (appId) => this.api(appId),
+          now: this.now,
+          log: options.log,
+          managerName: (managerId) => this.store.managers.manager(managerId)?.name ?? '',
+        })
+      : null
+    const cards = this.cards
     options.reviews?.register(FEISHU_SPEECH_PROVIDER, {
       settled: (review) => this.outbox.reviewSettled(review),
       after: (review) => this.outbox.reviewAfter(review),
+      ...(cards ? { changed: (review) => cards.changed(review) } : {}),
     })
+    this.on('card.action.trigger', (appId, data) => cards?.action(appId, data) ?? {})
     this.records.onStored((message, source) => this.inbox.stored(message, source))
     this.inbox.onQueued(() => this.wake.tick())
     this.on('im.message.receive_v1', (appId, data) => this.records.received(appId, data))
@@ -233,6 +264,75 @@ export class DeviceFeishuService {
         })
         .catch((error: Error) => options.log(`飞书补缺口排队失败：${error.message}`))
     })
+  }
+
+  /** 私聊绑定接到记录、收件箱、叫醒、发件上 */
+  private wireBindings(): void {
+    const { bindings } = this
+    this.records.p2p = {
+      bound: (appId, openId) => bindings.bound(appId, openId) !== null,
+      chat: (appId, chatId) => {
+        const binding = bindings.byChat(appId, chatId)
+        return binding
+          ? {
+              active: binding.state === 'bound',
+              since: binding.boundAt,
+              retentionDays: binding.retentionDays,
+            }
+          : null
+      },
+      chats: (appId) =>
+        bindings
+          .records(appId)
+          .filter((one) => one.state === 'bound' && one.p2pChatId)
+          .map((one) => one.p2pChatId as string),
+      unbound: (appId, request) => bindings.requested(appId, request),
+    }
+    this.inbox.bound = (appId, openId) => {
+      const binding = bindings.bound(appId, openId)
+      return binding ? { name: binding.name } : null
+    }
+    this.outbox.bound = (appId, openId) => {
+      const binding = bindings.bound(appId, openId)
+      return binding
+        ? { name: binding.name, ...(binding.p2pChatId ? { p2pChatId: binding.p2pChatId } : {}) }
+        : null
+    }
+    this.wake.direct = (appId, chatId) => {
+      const binding = bindings.byChat(appId, chatId)
+      return binding ? { name: binding.name, openId: binding.openId, since: binding.boundAt } : null
+    }
+  }
+
+  // —— 私聊绑定 ——
+
+  bindingList(appId: string): FeishuBinding[] {
+    if (!this.store.app(appId)) fail('feishu_app_not_found')
+    return this.bindings.list(appId)
+  }
+
+  bindingLookup(appId: string, code: string): FeishuPairing {
+    return this.bindings.lookup(appId, code)
+  }
+
+  async bindingApprove(appId: string, code: string): Promise<FeishuBinding> {
+    return await this.bindings.approve(appId, code)
+  }
+
+  bindingRevoke(appId: string, openId: string, expectedRevision: number): FeishuBinding {
+    return this.bindings.revoke(appId, openId, expectedRevision)
+  }
+
+  bindingUpdate(
+    appId: string,
+    openId: string,
+    expectedRevision: number,
+    patch: { approver?: boolean; retentionDays?: number },
+  ): FeishuBinding {
+    const record = this.bindings.update(appId, openId, expectedRevision, patch)
+    if (patch.retentionDays !== undefined && record.p2pChatId)
+      this.records.retentionChanged(appId, record.p2pChatId, patch.retentionDays)
+    return bindingView(record)
   }
 
   /** 注册一种事件的处理函数（各里程碑的模块在启动前挂进来） */
@@ -266,7 +366,10 @@ export class DeviceFeishuService {
     const message = this.messages.get(entry.appId, entry.messageId)
     if (!message) return null
     return {
-      chatName: this.chats.record(entry.appId, entry.chatId)?.name ?? '',
+      chatName:
+        this.chats.record(entry.appId, entry.chatId)?.name ??
+        this.bindings.byChat(entry.appId, entry.chatId)?.name ??
+        '',
       text: message.text,
       msgType: message.msgType,
       state: message.state,
@@ -359,7 +462,8 @@ export class DeviceFeishuService {
       since: app.createdAt,
       reconnects: 0,
     }
-    return { ...app, connection }
+    const pendingPairings = this.bindings.pendingCount(app.appId)
+    return { ...app, connection, ...(pendingPairings > 0 ? { pendingPairings } : {}) }
   }
 
   private changed(appId?: string): void {
@@ -531,6 +635,7 @@ export class DeviceFeishuService {
       if (app.revision !== expectedRevision) fail('feishu_revision_conflict')
       this.store.removeApp(appId)
       this.chats.removeApp(appId)
+      this.bindings.removeApp(appId)
       this.store.audit(appId, now, { action: 'app_removed', by: 'admin' })
     })
     this.stop(appId)

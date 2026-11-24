@@ -564,6 +564,16 @@ export class ImMessages {
     return row ? String(row.name) : null
   }
 
+  /** 任一已接入群成员表里这个人的名字（私聊配对时显示用） */
+  personName(appId: string, openId: string): string | null {
+    const row = this.db
+      .prepare(
+        'SELECT name FROM im_members WHERE provider=? AND app_id=? AND open_id=? ORDER BY synced_at DESC LIMIT 1',
+      )
+      .get(this.provider, appId, openId)
+    return row ? String(row.name) : null
+  }
+
   // —— 删除与清理 ——
 
   /**

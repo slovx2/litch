@@ -180,6 +180,31 @@ const rawContent = (value: unknown): string | null => {
 
 const sleep = (delay: number) => new Promise((resolve) => setTimeout(resolve, delay))
 
+/** 私聊（私聊绑定挂进来）：只记已绑定的人的私聊，没绑定的交给配对 */
+export interface FeishuP2pHooks {
+  /** 发送人已绑定（没撤销） */
+  bound(appId: string, openId: string): boolean
+  /** 私聊 chat_id 对应的绑定；active 是还绑着，since 是绑定时间（秒） */
+  chat(
+    appId: string,
+    chatId: string,
+  ): { active: boolean; since: number; retentionDays: number } | null
+  /** 还绑着的人的私聊会话 */
+  chats(appId: string): string[]
+  unbound(
+    appId: string,
+    request: { openId: string; unionId?: string; userId?: string; chatId: string },
+  ): void
+}
+
+/** 设备记录的一个会话：已接入的群，或已绑定（含撤销后留着记录）的私聊 */
+interface Scope {
+  kind: 'group' | 'p2p'
+  active: boolean
+  since: number
+  retentionDays: number
+}
+
 export class FeishuRecords {
   private readonly options: FeishuRecordsOptions
   /** 每个应用一条串行的历史请求队列 */
@@ -188,6 +213,12 @@ export class FeishuRecords {
   private readonly storedHooks: ((message: StoredMessage, source: MessageSource) => void)[] = []
   private purgeTimer: NodeJS.Timeout | null = null
   private closed = false
+  p2p: FeishuP2pHooks = {
+    bound: () => false,
+    chat: () => null,
+    chats: () => [],
+    unbound: () => undefined,
+  }
 
   constructor(options: FeishuRecordsOptions) {
     this.options = options
@@ -327,8 +358,28 @@ export class FeishuRecords {
     return message
   }
 
+  private scope(appId: string, chatId: string): Scope | null {
+    const { chats } = this.options
+    const chat = chats.record(appId, chatId)
+    if (chat?.access)
+      return {
+        kind: 'group',
+        active: chats.active(appId, chatId),
+        since: chat.access.accessAt,
+        retentionDays: chat.access.retentionDays,
+      }
+    const p2p = chat ? null : this.p2p.chat(appId, chatId)
+    return p2p ? { kind: 'p2p', ...p2p } : null
+  }
+
   private retentionOf(appId: string, chatId: string): number {
-    return this.options.chats.record(appId, chatId)?.access?.retentionDays ?? 90
+    return this.scope(appId, chatId)?.retentionDays ?? 90
+  }
+
+  /** 私聊的保留天数改了 */
+  retentionChanged(appId: string, chatId: string, days: number): void {
+    if (!this.messages.sync(appId, chatId)) return
+    this.messages.patchSync(appId, chatId, days, (sync) => ({ ...sync, retentionDays: days }))
   }
 
   private advance(appId: string, chatId: string, createTime: number): void {
@@ -338,10 +389,27 @@ export class FeishuRecords {
     }))
   }
 
-  /** 收消息事件：只记已接入的群；私聊留给私聊绑定 */
+  /** 收消息事件：只记已接入的群和已绑定的人的私聊；没绑定的人的私聊只交给配对，不落库 */
   received(appId: string, data: Json): void {
     const incoming = fromEvent(data)
-    if (!incoming || incoming.chatKind !== 'group') return
+    if (!incoming) return
+    if (incoming.chatKind === 'p2p') {
+      if (incoming.senderType !== 'user') return
+      if (!this.p2p.bound(appId, incoming.senderId)) {
+        const sender =
+          isObject(data.sender) && isObject(data.sender.sender_id) ? data.sender.sender_id : {}
+        this.p2p.unbound(appId, {
+          openId: incoming.senderId,
+          ...optional('unionId', text(sender.union_id, 128)),
+          ...optional('userId', text(sender.user_id, 128)),
+          chatId: incoming.chatId,
+        })
+        return
+      }
+      this.store(appId, incoming, 'event')
+      this.advance(appId, incoming.chatId, incoming.createTime)
+      return
+    }
     const { chats } = this.options
     if (!chats.active(appId, incoming.chatId)) {
       // 未接入：不落库、不计数（D-167）；列表里没有这个群说明漏了进群事件，回源对一遍
@@ -526,20 +594,22 @@ export class FeishuRecords {
     })
   }
 
-  /** 每次连上：每个已接入的群补断线期间的消息，顺便对一遍成员表 */
+  /** 每次连上：每个已接入的群和已绑定的私聊补断线期间的消息，群顺便对一遍成员表 */
   connected(appId: string): void {
     for (const chat of this.options.chats.activeChats(appId)) {
       void this.enqueue(appId, () => this.fillGap(appId, chat.chatId))
       void this.enqueue(appId, () => this.syncMembers(appId, chat.chatId))
     }
+    for (const chatId of this.p2p.chats(appId))
+      void this.enqueue(appId, () => this.fillGap(appId, chatId))
   }
 
   private async fillGap(appId: string, chatId: string): Promise<void> {
     const api = this.options.api(appId)
-    const chat = this.options.chats.record(appId, chatId)
-    if (!api || !chat?.access || !this.options.chats.active(appId, chatId)) return
+    const scope = this.scope(appId, chatId)
+    if (!api || !scope?.active) return
     const sync = this.messages.sync(appId, chatId)
-    const from = (sync?.liveWatermark ?? chat.access.accessAt * 1000) - GAP_OVERLAP_MS
+    const from = (sync?.liveWatermark ?? scope.since * 1000) - GAP_OVERLAP_MS
     const start = Math.max(0, Math.floor(from / 1000))
     const end = this.options.now()
     if (start >= end) return
@@ -549,15 +619,15 @@ export class FeishuRecords {
       { start, end },
       'asc',
       FEISHU_BACKFILL_LIMIT,
-      () => this.options.chats.active(appId, chatId),
+      () => this.scope(appId, chatId)?.active === true,
     )
     let fetched = 0
     let watermark = sync?.liveWatermark ?? 0
     for (const incoming of items) {
-      if (this.store(appId, incoming, 'gap')) fetched += 1
+      if (this.store(appId, { ...incoming, chatKind: scope.kind }, 'gap')) fetched += 1
       watermark = Math.max(watermark, incoming.createTime)
     }
-    if (!this.messages.sync(appId, chatId) && !this.options.chats.active(appId, chatId)) return
+    if (!this.messages.sync(appId, chatId) && !this.scope(appId, chatId)?.active) return
     this.messages.patchSync(appId, chatId, this.retentionOf(appId, chatId), (current) => ({
       ...current,
       ...(watermark > 0 ? { liveWatermark: watermark } : {}),
@@ -589,14 +659,14 @@ export class FeishuRecords {
     if (!api) return this.messages.get(appId, messageId)
     const item = (await this.detail(api, messageId, false))[0]
     const incoming = item ? fromHistory(item) : null
-    if (incoming && this.options.chats.record(appId, incoming.chatId)?.access)
-      this.store(appId, incoming, 'fetch')
+    const scope = incoming ? this.scope(appId, incoming.chatId) : null
+    if (incoming && scope) this.store(appId, { ...incoming, chatKind: scope.kind }, 'fetch')
     return this.messages.get(appId, messageId)
   }
 
   /**
    * 经理发出去的消息按 source=sent 记下（发送接口回的就是消息对象），这样“回复机器人的消息”能在本地判断，
-   * 查历史也看得到经理说过什么。群要已接入；私聊（F6 的已绑定用户）照记
+   * 查历史也看得到经理说过什么。群要已接入；私聊是已绑定用户的，照记
    */
   storeSent(appId: string, item: Json, chatKind: 'group' | 'p2p'): StoredMessage | null {
     const incoming = fromHistory(item)
@@ -613,7 +683,7 @@ export class FeishuRecords {
   async download(appId: string, messageId: string, fileKey: string): Promise<StoredAttachment> {
     const { messages, fail } = this.options
     const message = messages.get(appId, messageId) ?? fail('feishu_message_not_found')
-    if (!this.options.chats.record(appId, message.chatId)?.access) fail('feishu_chat_not_accessed')
+    if (!this.scope(appId, message.chatId)) fail('feishu_chat_not_accessed')
     const attachment =
       messages.attachments(appId, messageId).find((one) => one.fileKey === fileKey) ??
       fail('feishu_attachment_not_found')

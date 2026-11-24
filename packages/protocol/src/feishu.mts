@@ -26,6 +26,11 @@ export const FEISHU_METHOD = {
   inboxGet: 'litch/feishu/inbox/get',
   outboxList: 'litch/feishu/outbox/list',
   outboxCancel: 'litch/feishu/outbox/cancel',
+  bindingList: 'litch/feishu/binding/list',
+  bindingLookup: 'litch/feishu/binding/lookup',
+  bindingApprove: 'litch/feishu/binding/approve',
+  bindingRevoke: 'litch/feishu/binding/revoke',
+  bindingUpdate: 'litch/feishu/binding/update',
 } as const
 
 export const FEISHU_NOTIFICATION = {
@@ -34,6 +39,7 @@ export const FEISHU_NOTIFICATION = {
   chatsChanged: 'litch/feishu/chatsChanged',
   inboxChanged: 'litch/feishu/inboxChanged',
   outboxChanged: 'litch/feishu/outboxChanged',
+  bindingsChanged: 'litch/feishu/bindingsChanged',
 } as const
 
 /** 只读方法；其余写操作只给设备管理员连接 */
@@ -46,6 +52,7 @@ export const FEISHU_PUBLIC_READS: ReadonlySet<string> = new Set([
   FEISHU_METHOD.inboxList,
   FEISHU_METHOD.inboxGet,
   FEISHU_METHOD.outboxList,
+  FEISHU_METHOD.bindingList,
 ])
 
 export const FEISHU_APP_ID = /^cli_[0-9a-f]{16}$/
@@ -61,6 +68,9 @@ export const FEISHU_RETENTION_DAYS = { min: 1, max: 3650, default: 90 } as const
 export const FEISHU_REVIEW_TTL_HOURS = { min: 1, max: 168, default: 24 } as const
 /** 每群手选的叫醒成员上限 */
 export const FEISHU_WAKERS_MAX = 200
+/** 配对码：8 位，去掉易混的 0、1、I、L、O；显示成 XXXX-XXXX，输入不分大小写、可不带横线 */
+export const FEISHU_PAIRING_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+export const FEISHU_PAIRING_CODE = /^[A-Za-z0-9]{4}[- ]?[A-Za-z0-9]{4}$/
 
 export type FeishuConnectionState =
   | 'stopped'
@@ -120,6 +130,8 @@ export interface FeishuApp {
   /** 通过创建向导建的应用：创建者的 open_id，只用来在绑定页标“创建者” */
   creatorOpenId?: string
   createdAt: number
+  /** 待批的私聊配对数（还没过期的） */
+  pendingPairings?: number
 }
 
 export type FeishuRegistrationState =
@@ -291,6 +303,34 @@ export interface FeishuOutboxEntry {
   sentAt?: number
 }
 
+/** 私聊绑定（D-158）：和经理私聊的人。撤销后保留这一行（私聊记录照保留期清理） */
+export interface FeishuBinding {
+  appId: string
+  openId: string
+  revision: number
+  /** 绑定时查到的名字（通讯录或群成员表），查不到为空 */
+  name: string
+  unionId?: string
+  userId?: string
+  state: 'bound' | 'revoked'
+  /** 能在飞书里批审批（D-174）；第一个绑定的人默认是 */
+  approver: boolean
+  /** 私聊记录的保留天数 */
+  retentionDays: number
+  boundAt: number
+  revokedAt?: number
+}
+
+/** 待批的配对请求（按配对码查到的） */
+export interface FeishuPairing {
+  appId: string
+  openId: string
+  name?: string
+  unionId?: string
+  createdAt: number
+  expiresAt: number
+}
+
 /** 单次补历史最多补多少条 */
 export const FEISHU_BACKFILL_LIMIT = 1000
 
@@ -410,6 +450,32 @@ export interface FeishuRequests {
     { appId: string; operationId: string },
     { entry: FeishuOutboxEntry }
   >
+  /** 已绑定和撤销过的用户（新绑定的在前） */
+  [FEISHU_METHOD.bindingList]: Request<{ appId: string }, { bindings: FeishuBinding[] }>
+  /** 按配对码预览是谁要绑定（不改状态） */
+  [FEISHU_METHOD.bindingLookup]: Request<
+    { appId: string; code: string },
+    { pairing: FeishuPairing }
+  >
+  /** 确认配对：绑定后给对方回一句“已绑定” */
+  [FEISHU_METHOD.bindingApprove]: Request<
+    { appId: string; code: string },
+    { binding: FeishuBinding }
+  >
+  [FEISHU_METHOD.bindingRevoke]: Request<
+    { appId: string; openId: string; expectedRevision: number },
+    { binding: FeishuBinding }
+  >
+  [FEISHU_METHOD.bindingUpdate]: Request<
+    {
+      appId: string
+      openId: string
+      expectedRevision: number
+      approver?: boolean
+      retentionDays?: number
+    },
+    { binding: FeishuBinding }
+  >
 }
 
 export interface FeishuNotifications {
@@ -418,6 +484,7 @@ export interface FeishuNotifications {
   [FEISHU_NOTIFICATION.chatsChanged]: { appId: string; chatId?: string }
   [FEISHU_NOTIFICATION.inboxChanged]: { managerId: string; appId: string }
   [FEISHU_NOTIFICATION.outboxChanged]: { appId: string; operationId: string }
+  [FEISHU_NOTIFICATION.bindingsChanged]: { appId: string; openId?: string }
 }
 
 export type FeishuMethod = keyof FeishuRequests

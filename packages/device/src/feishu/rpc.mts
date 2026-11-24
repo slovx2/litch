@@ -133,6 +133,31 @@ export class DeviceFeishuRpc {
         const input = args(method)
         return { entry: service.outboxCancel(input.appId, input.operationId) }
       }
+      case M.bindingList:
+        return { bindings: service.bindingList(args(method).appId) }
+      case M.bindingLookup: {
+        const input = args(method)
+        return { pairing: service.bindingLookup(input.appId, input.code) }
+      }
+      case M.bindingApprove: {
+        const input = args(method)
+        return { binding: await service.bindingApprove(input.appId, input.code) }
+      }
+      case M.bindingRevoke: {
+        const input = args(method)
+        return {
+          binding: service.bindingRevoke(input.appId, input.openId, input.expectedRevision),
+        }
+      }
+      case M.bindingUpdate: {
+        const input = args(method)
+        return {
+          binding: service.bindingUpdate(input.appId, input.openId, input.expectedRevision, {
+            ...(input.approver === undefined ? {} : { approver: input.approver }),
+            ...(input.retentionDays === undefined ? {} : { retentionDays: input.retentionDays }),
+          }),
+        }
+      }
     }
   }
 }

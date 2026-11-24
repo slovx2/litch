@@ -2,6 +2,7 @@
 import {
   FEISHU_METHOD,
   type FeishuApp,
+  type FeishuBinding,
   type FeishuChat,
   type FeishuInboxEntry,
   type FeishuInboxMessage,
@@ -22,6 +23,7 @@ export type FeishuTopic =
   | { kind: 'feishuChats'; deviceId: string; appId: string }
   | { kind: 'feishuInbox'; deviceId: string; managerId: string }
   | { kind: 'feishuOutbox'; deviceId: string; appId: string }
+  | { kind: 'feishuBindings'; deviceId: string; appId: string }
   /** 审批（litchReviews）：给 managerId 只看这位经理发起的 */
   | { kind: 'reviews'; deviceId: string; managerId?: string }
 
@@ -43,6 +45,9 @@ export type FeishuInboxView = ExternalSnapshot<{
 
 /** 应用的发件队列：最近的一页（新的在前） */
 export type FeishuOutboxView = ExternalSnapshot<{ entries: FeishuOutboxEntry[]; next?: string }>
+
+/** 应用的私聊绑定（已绑定和撤销过的，新绑定的在前） */
+export type FeishuBindingsView = ExternalSnapshot<{ bindings: FeishuBinding[] }>
 
 /**
  * 审批：待批的全部（最多 200 条）在前，再接最近有了结果的；pending 是待批条数。
@@ -72,6 +77,11 @@ export const FEISHU_COMMAND = {
   'feishu.inbox.get': FEISHU_METHOD.inboxGet,
   'feishu.outbox.list': FEISHU_METHOD.outboxList,
   'feishu.outbox.cancel': FEISHU_METHOD.outboxCancel,
+  'feishu.binding.list': FEISHU_METHOD.bindingList,
+  'feishu.binding.lookup': FEISHU_METHOD.bindingLookup,
+  'feishu.binding.approve': FEISHU_METHOD.bindingApprove,
+  'feishu.binding.revoke': FEISHU_METHOD.bindingRevoke,
+  'feishu.binding.update': FEISHU_METHOD.bindingUpdate,
 } as const
 
 export const REVIEWS_COMMAND = {

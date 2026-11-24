@@ -41,6 +41,8 @@ export interface ReviewExecutor {
   settled(review: Review): void
   /** 事务提交以后（比如开始发送） */
   after?(review: Review): void
+  /** 每次通知客户端时（新建、撤下、有结果），比如同步飞书里的审批卡片 */
+  changed?(review: Review): void
 }
 
 export type NewReview = Omit<Review, 'reviewId' | 'revision' | 'state' | 'createdAt'>
@@ -147,6 +149,11 @@ export class DeviceReviews {
       revision: review.revision,
       managerId: review.requestedBy.managerId,
     })
+    try {
+      this.executors.get(review.provider)?.changed?.(review)
+    } catch (error) {
+      this.options.log(`审批变更的后续处理出错：${(error as Error).message}`)
+    }
   }
 
   /** 在事务里把待批的改成结果，交给执行方；不是待批的原样返回 null */

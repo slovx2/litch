@@ -1,11 +1,13 @@
 // 模拟核心里的飞书来源：每台在线设备一份应用列表，创建向导两秒后自动完成。样例全是虚构的名字和 ID。
 import type {
   FeishuApp,
+  FeishuBinding,
   FeishuChat,
   FeishuInboxEntry,
   FeishuInboxMessage,
   FeishuMember,
   FeishuOutboxEntry,
+  FeishuPairing,
   FeishuRegistration,
 } from '../../../protocol/src/feishu.mjs'
 import type { Review } from '../../../protocol/src/reviews.mjs'
@@ -39,6 +41,7 @@ const sampleApp = (now: number, managerId: string | null): FeishuApp => ({
   },
   creatorOpenId: 'ou_mock_owner',
   createdAt: now - 86_400 * 3,
+  pendingPairings: 1,
 })
 
 const sampleMembers: FeishuMember[] = [
@@ -125,6 +128,43 @@ const sampleChats = (appId: string, now: number): FeishuChat[] => [
 ]
 
 /** 样例发件：一条待审批、一条已发出（两段）、一条结果不明停下、一条被拒 */
+/** 模拟的待批配对：输入这个码能查到、能确认 */
+const SAMPLE_PAIRING_CODE = 'ABCDEFGH'
+const sampleBindings = (appId: string, now: number): FeishuBinding[] => [
+  {
+    appId,
+    openId: 'ou_mock_owner',
+    revision: 2,
+    name: '示例负责人',
+    unionId: 'on_mock_owner',
+    state: 'bound',
+    approver: true,
+    retentionDays: 90,
+    boundAt: now - 86_400 * 3,
+  },
+  {
+    appId,
+    openId: 'ou_mock_member',
+    revision: 1,
+    name: '示例同事',
+    state: 'bound',
+    approver: false,
+    retentionDays: 90,
+    boundAt: now - 3600,
+  },
+  {
+    appId,
+    openId: 'ou_mock_former',
+    revision: 3,
+    name: '示例前同事',
+    state: 'revoked',
+    approver: false,
+    retentionDays: 30,
+    boundAt: now - 86_400 * 20,
+    revokedAt: now - 86_400 * 2,
+  },
+]
+
 const sampleOutbox = (appId: string, managerId: string, now: number): FeishuOutboxEntry[] => {
   const base = {
     appId,
@@ -348,10 +388,13 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
     const chatSinks = new Map<string, Set<HostSink>>()
     const inboxSinks = new Map<string, Set<HostSink>>()
     const outboxSinks = new Map<string, Set<HostSink>>()
+    const bindingSinks = new Map<string, Set<HostSink>>()
     const reviewSinks = new Map<string, Set<HostSink>>()
     const managed = filled && deviceId === 'local'
     let outbox: FeishuOutboxEntry[] = managed ? sampleOutbox(sampleAppId, 'm1', now()) : []
     let reviews: Review[] = managed ? sampleReviews(sampleAppId, 'm1', now()) : []
+    let bindings: FeishuBinding[] = managed ? sampleBindings(sampleAppId, now()) : []
+    let pairingOpen = managed
     const ready = (value: unknown) => ({
       available: true,
       online: true,
@@ -359,6 +402,40 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
       fetchedAt: clock.now(),
       error: null,
     })
+    const publishBindings = (appId: string) => {
+      const value = { bindings: bindings.filter((one) => one.appId === appId) }
+      for (const sink of bindingSinks.get(appId) ?? []) sink.snapshot(ready(value))
+    }
+    const pairing = (appId: string, code: string): FeishuPairing => {
+      if (
+        !pairingOpen ||
+        appId !== sampleAppId ||
+        code.replace(/[- ]/g, '').toUpperCase() !== SAMPLE_PAIRING_CODE
+      )
+        return fail('feishu_pairing_not_found')
+      return {
+        appId,
+        openId: 'ou_mock_guest',
+        name: '示例访客',
+        unionId: 'on_mock_guest',
+        createdAt: now() - 300,
+        expiresAt: now() + 3300,
+      }
+    }
+    const binding = (appId: string, openId: string, expectedRevision: number): FeishuBinding => {
+      const found = bindings.find((one) => one.appId === appId && one.openId === openId)
+      if (!found) return fail('feishu_binding_not_found')
+      if (found.revision !== expectedRevision) return fail('feishu_revision_conflict')
+      return found
+    }
+    const saveBinding = (next: FeishuBinding) => {
+      bindings = [
+        next,
+        ...bindings.filter((one) => !(one.appId === next.appId && one.openId === next.openId)),
+      ]
+      publishBindings(next.appId)
+      return { binding: next }
+    }
     const publishOutbox = (appId: string) => {
       const value = { entries: outbox.filter((entry) => entry.appId === appId) }
       for (const sink of outboxSinks.get(appId) ?? []) sink.snapshot(ready(value))
@@ -471,6 +548,13 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
           chatSinks.set(topic.appId, set)
           set.add(sink)
           publishChats(topic.appId)
+          return () => set.delete(sink)
+        }
+        if (topic.kind === 'feishuBindings') {
+          const set = bindingSinks.get(topic.appId) ?? new Set<HostSink>()
+          bindingSinks.set(topic.appId, set)
+          set.add(sink)
+          publishBindings(topic.appId)
           return () => set.delete(sink)
         }
         if (topic.kind === 'feishuOutbox') {
@@ -759,6 +843,63 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
               if (entry) return { entry, message: messages[entry.inboxId] ?? null }
             }
             return fail('feishu_inbox_not_found')
+          }
+          case 'feishu.binding.list':
+            return { bindings: bindings.filter((one) => one.appId === args.appId) }
+          case 'feishu.binding.lookup':
+            return { pairing: pairing(String(args.appId), String(args.code)) }
+          case 'feishu.binding.approve': {
+            const found = pairing(String(args.appId), String(args.code))
+            pairingOpen = false
+            apps = apps.map((app) => {
+              if (app.appId !== found.appId) return app
+              const { pendingPairings: _pending, ...rest } = app
+              return rest
+            })
+            publish()
+            return saveBinding({
+              appId: found.appId,
+              openId: found.openId,
+              revision: 1,
+              name: found.name ?? '',
+              ...(found.unionId ? { unionId: found.unionId } : {}),
+              state: 'bound',
+              approver: !bindings.some((one) => one.state === 'bound' && one.approver),
+              retentionDays: 90,
+              boundAt: now(),
+            })
+          }
+          case 'feishu.binding.revoke': {
+            const found = binding(
+              String(args.appId),
+              String(args.openId),
+              Number(args.expectedRevision),
+            )
+            if (found.state === 'revoked') return fail('feishu_binding_revoked')
+            return saveBinding({
+              ...found,
+              revision: found.revision + 1,
+              state: 'revoked',
+              approver: false,
+              revokedAt: now(),
+            })
+          }
+          case 'feishu.binding.update': {
+            const found = binding(
+              String(args.appId),
+              String(args.openId),
+              Number(args.expectedRevision),
+            )
+            if (args.approver === true && found.state !== 'bound')
+              return fail('feishu_binding_revoked')
+            return saveBinding({
+              ...found,
+              revision: found.revision + 1,
+              ...(typeof args.approver === 'boolean' ? { approver: args.approver } : {}),
+              ...(typeof args.retentionDays === 'number'
+                ? { retentionDays: args.retentionDays }
+                : {}),
+            })
           }
           case 'feishu.outbox.list':
             return { entries: outbox.filter((entry) => entry.appId === args.appId) }

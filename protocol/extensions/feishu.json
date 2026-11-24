@@ -21,7 +21,8 @@
     "机器人被移出已接入的群时接入设置保留（botPresent=false），重新拉进来自动恢复。",
     "设备只记录已接入群里的消息；接入时补最近 7 天、单次补历史最多 1000 条，进度在群的 records 里。",
     "收件箱只列 @ 了机器人或回复机器人、且发送人在叫醒名单里的消息；条目不带正文，inbox/get 从设备的消息库读原文。",
-    "发言经发件队列：自由发言的群直接排队发出；审批发言的群先冻结内容、建 litchReviews 审批，批准后按冻结的内容原样发出。outbox/cancel 只撤还没发出的，不撤回飞书上已发的消息。"
+    "发言经发件队列：自由发言的群直接排队发出；审批发言的群先冻结内容、建 litchReviews 审批，批准后按冻结的内容原样发出。outbox/cancel 只撤还没发出的，不撤回飞书上已发的消息。",
+    "私聊只和已绑定用户：没绑定的人私聊机器人时设备只回配对码（不记正文），设备管理员用 binding/lookup、binding/approve 按配对码确认；撤销后对方私聊和没绑定一样。标了 approver 的已绑定用户能在飞书的审批卡片上批审批。"
   ],
   "parts": [
     {
@@ -448,6 +449,74 @@
       }
     },
     {
+      "kind": "Method",
+      "name": "litch/feishu/binding/list",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId"],
+        "properties": { "appId": { "$ref": "#/definitions/AppId" } }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["bindings"],
+        "properties": {
+          "bindings": { "type": "array", "items": { "$ref": "#/definitions/Binding" } }
+        }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/binding/lookup",
+      "params": { "$ref": "#/definitions/PairingCodeParams" },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pairing"],
+        "properties": { "pairing": { "$ref": "#/definitions/Pairing" } }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/binding/approve",
+      "params": { "$ref": "#/definitions/PairingCodeParams" },
+      "result": { "$ref": "#/definitions/BindingResult" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/binding/revoke",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId", "openId", "expectedRevision"],
+        "properties": {
+          "appId": { "$ref": "#/definitions/AppId" },
+          "openId": { "$ref": "#/definitions/OpenId" },
+          "expectedRevision": { "$ref": "#/definitions/Revision" }
+        }
+      },
+      "result": { "$ref": "#/definitions/BindingResult" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/binding/update",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId", "openId", "expectedRevision"],
+        "minProperties": 4,
+        "properties": {
+          "appId": { "$ref": "#/definitions/AppId" },
+          "openId": { "$ref": "#/definitions/OpenId" },
+          "expectedRevision": { "$ref": "#/definitions/Revision" },
+          "approver": { "type": "boolean" },
+          "retentionDays": { "$ref": "#/definitions/RetentionDays" }
+        }
+      },
+      "result": { "$ref": "#/definitions/BindingResult" }
+    },
+    {
       "kind": "Notification",
       "name": "litch/feishu/outboxChanged",
       "params": {
@@ -459,9 +528,77 @@
           "operationId": { "$ref": "#/definitions/OutboxOperationId" }
         }
       }
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/feishu/bindingsChanged",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId"],
+        "properties": {
+          "appId": { "$ref": "#/definitions/AppId" },
+          "openId": { "$ref": "#/definitions/OpenId" }
+        }
+      }
     }
   ],
   "definitions": {
+    "PairingCodeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["appId", "code"],
+      "properties": {
+        "appId": { "$ref": "#/definitions/AppId" },
+        "code": { "type": "string", "pattern": "^[A-Za-z0-9]{4}[- ]?[A-Za-z0-9]{4}$" }
+      }
+    },
+    "Pairing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["appId", "openId", "createdAt", "expiresAt"],
+      "properties": {
+        "appId": { "$ref": "#/definitions/AppId" },
+        "openId": { "$ref": "#/definitions/OpenId" },
+        "name": { "type": "string", "maxLength": 256 },
+        "unionId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "$ref": "#/definitions/Timestamp" },
+        "expiresAt": { "$ref": "#/definitions/Timestamp" }
+      }
+    },
+    "Binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "appId",
+        "openId",
+        "revision",
+        "name",
+        "state",
+        "approver",
+        "retentionDays",
+        "boundAt"
+      ],
+      "properties": {
+        "appId": { "$ref": "#/definitions/AppId" },
+        "openId": { "$ref": "#/definitions/OpenId" },
+        "revision": { "$ref": "#/definitions/Revision" },
+        "name": { "type": "string", "maxLength": 256 },
+        "unionId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "state": { "enum": ["bound", "revoked"] },
+        "approver": { "type": "boolean" },
+        "retentionDays": { "$ref": "#/definitions/RetentionDays" },
+        "boundAt": { "$ref": "#/definitions/Timestamp" },
+        "revokedAt": { "$ref": "#/definitions/Timestamp" }
+      }
+    },
+    "BindingResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binding"],
+      "properties": { "binding": { "$ref": "#/definitions/Binding" } }
+    },
     "OutboxOperationId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{8,40}$" },
     "OutboxState": {
       "enum": [
@@ -588,7 +725,8 @@
         "connection": { "$ref": "#/definitions/Connection" },
         "capability": { "oneOf": [{ "$ref": "#/definitions/Capability" }, { "type": "null" }] },
         "creatorOpenId": { "type": "string", "maxLength": 128 },
-        "createdAt": { "$ref": "#/definitions/Timestamp" }
+        "createdAt": { "$ref": "#/definitions/Timestamp" },
+        "pendingPairings": { "type": "integer", "minimum": 0, "maximum": 1000 }
       }
     },
     "Connection": {

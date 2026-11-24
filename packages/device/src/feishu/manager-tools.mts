@@ -150,7 +150,10 @@ export class FeishuManagerTools {
         return {
           inboxId: entry.inboxId,
           status: entry.status,
-          chat: { chatId: entry.chatId, name: chats.record(app.appId, entry.chatId)?.name ?? '' },
+          chat:
+            entry.chatKind === 'p2p'
+              ? { chatId: entry.chatId, direct: true, user: entry.senderOpenId }
+              : { chatId: entry.chatId, name: chats.record(app.appId, entry.chatId)?.name ?? '' },
           sender: {
             openId: entry.senderOpenId,
             ...(entry.senderName ? { name: entry.senderName } : {}),
@@ -209,9 +212,33 @@ export class FeishuManagerTools {
     return refuse(`No accessed chat matches ${value}.`)
   }
 
+  /** 已绑定的人（私聊）：open_id 或名字，重名的拒绝 */
+  private boundUser(
+    app: FeishuAppRecord,
+    value: unknown,
+  ): { openId: string; name: string; chatId: string } {
+    if (typeof value !== 'string' || !value.trim()) return refuse('user is required.')
+    const users = this.feishu.bindings
+      .records(app.appId)
+      .filter((one) => one.state === 'bound' && one.p2pChatId)
+    const byId = users.find((one) => one.openId === value.trim())
+    const named = byId ? [byId] : users.filter((one) => one.name && one.name === value.trim())
+    if (named.length > 1)
+      return refuse(
+        `Several bound users are named ${value}: ${named.map((one) => one.openId).join(', ')}. Use the open_id.`,
+      )
+    const found = named[0]
+    if (!found?.p2pChatId) return refuse(`No bound user matches ${value}.`)
+    return { openId: found.openId, name: found.name, chatId: found.p2pChatId }
+  }
+
   private chats(app: FeishuAppRecord) {
     const { chats, messages } = this.feishu
     return {
+      users: this.feishu.bindings
+        .records(app.appId)
+        .filter((one) => one.state === 'bound')
+        .map((one) => ({ openId: one.openId, name: one.name })),
       chats: chats
         .activeChats(app.appId)
         .filter((chat) => chat.access)
@@ -244,7 +271,14 @@ export class FeishuManagerTools {
   }
 
   private async history(app: FeishuAppRecord, args: Record<string, unknown>) {
-    const chat = this.accessed(app, args.chat)
+    if ((args.chat === undefined) === (args.user === undefined)) refuse('Give either chat or user.')
+    const chat =
+      args.chat !== undefined
+        ? this.accessed(app, args.chat)
+        : (() => {
+            const user = this.boundUser(app, args.user)
+            return { chatId: user.chatId, name: `Direct message with ${user.name || user.openId}` }
+          })()
     const since = time(args.since, 'since')
     const until = time(args.until, 'until')
     if (args.keyword !== undefined && typeof args.keyword !== 'string')
@@ -323,12 +357,7 @@ export class FeishuManagerTools {
     let target: { kind: 'chat'; chatId: string } | { kind: 'user'; openId: string }
     if (args.chat !== undefined)
       target = { kind: 'chat', chatId: this.accessed(app, args.chat).chatId }
-    else {
-      const user = optionalText('user') ?? ''
-      if (!/^ou_[0-9A-Za-z_-]{1,64}$/.test(user))
-        refuse('user must be the open_id of a bound user.')
-      target = { kind: 'user', openId: user }
-    }
+    else target = { kind: 'user', openId: this.boundUser(app, args.user).openId }
     const format = args.format
     if (format !== undefined && !['auto', 'text', 'post', 'card'].includes(String(format)))
       refuse('format must be auto, text, post or card.')

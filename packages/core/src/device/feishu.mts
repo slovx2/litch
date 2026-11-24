@@ -2,6 +2,7 @@
 import {
   FEISHU_NOTIFICATION,
   type FeishuApp,
+  type FeishuBinding,
   type FeishuChat,
   type FeishuInboxEntry,
   type FeishuInboxMessage,
@@ -76,6 +77,8 @@ export function createFeishuDevice(host: FeishuHost) {
   const inboxes = new Map<string, ExternalRead<InboxValue>>()
   type OutboxValue = { entries: FeishuOutboxEntry[]; next?: string }
   const outboxes = new Map<string, ExternalRead<OutboxValue>>()
+  type BindingsValue = { bindings: FeishuBinding[] }
+  const bindings = new Map<string, ExternalRead<BindingsValue>>()
   type ReviewsValue = { reviews: Review[]; pending: number }
   /** 键是 managerId，空串是全部 */
   const reviews = new Map<string, ExternalRead<ReviewsValue>>()
@@ -99,6 +102,18 @@ export function createFeishuDevice(host: FeishuHost) {
         host,
         host.supported,
         () => host.request('litch/feishu/outbox/list', { appId, limit: 100 }),
+        () => read.send(),
+      )
+      return read
+    })
+  }
+
+  function bindingsOf(appId: string) {
+    return cached(bindings, appId, () => {
+      const read: ExternalRead<BindingsValue> = new ExternalRead(
+        host,
+        host.supported,
+        () => host.request('litch/feishu/binding/list', { appId }),
         () => read.send(),
       )
       return read
@@ -217,6 +232,11 @@ export function createFeishuDevice(host: FeishuHost) {
         throw new ChannelError('remote', 'Device returned invalid credential data')
       if (name.startsWith('feishu.inbox.')) {
         // 只读，不用刷新
+      } else if (name.startsWith('feishu.binding.')) {
+        if (name !== 'feishu.binding.list' && name !== 'feishu.binding.lookup') {
+          bindings.get((args as { appId: string }).appId)?.notify()
+          refreshApps()
+        }
       } else if (name.startsWith('feishu.outbox.')) {
         if (name === 'feishu.outbox.cancel')
           outboxes.get((args as { appId: string }).appId)?.notify()
@@ -273,6 +293,7 @@ export function createFeishuDevice(host: FeishuHost) {
       if (topic.kind === 'feishuChats') return chatsOf(topic.appId).open(sink)
       if (topic.kind === 'feishuInbox') return inboxOf(topic.managerId).open(sink)
       if (topic.kind === 'feishuOutbox') return outboxOf(topic.appId).open(sink)
+      if (topic.kind === 'feishuBindings') return bindingsOf(topic.appId).open(sink)
       if (topic.kind === 'reviews') return reviewsOf(topic.managerId ?? '').open(sink)
       const first = deviceSinks.size === 0
       deviceSinks.add(sink)
@@ -296,6 +317,7 @@ export function createFeishuDevice(host: FeishuHost) {
         ...registrations.values(),
         ...inboxes.values(),
         ...outboxes.values(),
+        ...bindings.values(),
         ...reviews.values(),
       ]) {
         read.connectionChanged()
@@ -315,6 +337,11 @@ export function createFeishuDevice(host: FeishuHost) {
         case FEISHU_NOTIFICATION.chatsChanged: {
           const appId = (params as { appId?: unknown } | null)?.appId
           if (typeof appId === 'string') chats.get(appId)?.notify()
+          return true
+        }
+        case FEISHU_NOTIFICATION.bindingsChanged: {
+          const appId = (params as { appId?: unknown } | null)?.appId
+          if (typeof appId === 'string') bindings.get(appId)?.notify()
           return true
         }
         case FEISHU_NOTIFICATION.outboxChanged: {

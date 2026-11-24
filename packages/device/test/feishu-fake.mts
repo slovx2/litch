@@ -255,7 +255,7 @@ export class FakeFeishu {
       service: 1,
       method: 1,
       headers: [
-        { key: 'type', value: eventType === 'card.action.trigger' ? 'card' : 'event' },
+        { key: 'type', value: 'event' },
         { key: 'message_id', value: messageId },
         { key: 'sum', value: '1' },
         { key: 'seq', value: '0' },
