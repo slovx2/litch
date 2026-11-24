@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/sys/windows"
 )
@@ -22,6 +23,17 @@ func autostartPlatformIdentity() (string, string, error) {
 }
 
 func autostartLockContended(err error) bool { return errors.Is(err, windows.ERROR_LOCK_VIOLATION) }
+
+// 受管服务的环境：系统目录加登记的 Node 所在目录。
+func autostartServiceEnv(node string) []string {
+	env := autostartBaseEnv()
+	for index, entry := range env {
+		if strings.HasPrefix(entry, "PATH=") {
+			env[index] = entry + string(os.PathListSeparator) + filepath.Dir(node)
+		}
+	}
+	return env
+}
 
 func autostartBaseEnv() []string {
 	system, err := windows.GetSystemDirectory()

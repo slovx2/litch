@@ -27,6 +27,9 @@ function answer(method) {
   throw new Error(`unknown ask ${method}`)
 }
 
+// 记下服务给设备进程的 PATH：模拟器据此确认自启环境里找得到标准位置（/usr/local/bin）的命令行
+fs.writeFileSync(path.join(state, 'sim-path.txt'), process.env.PATH ?? '')
+
 const control = net.connect(path.join(state, 'ctl.sock'))
 let buffer = ''
 control.on('error', () => {})
