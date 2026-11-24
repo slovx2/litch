@@ -602,6 +602,62 @@ test('执行器在别处等人（hold）：停表，不等了表从头算', asyn
   assert.deepEqual(main?.of('cancel'), [{ type: CLIENT_TOOL, op: 'cancel', id }])
 })
 
+test('UNATTENDED-CORE-001：会话设备标了无人值守，要出卡或停表等人时不出卡，当场以 unattended 失败', async () => {
+  const notice = 'Litch is running this session unattended (test).'
+  for (const op of ['ask', 'hold'] as const) {
+    const { core, main, call, summary } = setup()
+    core.start()
+    await settle()
+    const answer = call({ litchUnattended: { notice } })
+    await settle()
+    const id = main?.of('call')[0]?.invocation.id ?? ''
+    if (op === 'ask')
+      main?.reply({
+        op: 'ask',
+        id,
+        askId: 'k1',
+        ask: { kind: 'site', origin: 'https://example.com', url: 'https://example.com/a' },
+      })
+    else main?.reply({ op: 'hold', id, held: true })
+    const result = resultOf(await answer)
+    assert.equal(result?.success, false)
+    assert.equal(result?.contentItems[0]?.text, `[litch:unattended] ${notice}`)
+    assert.deepEqual(main?.of('cancel'), [{ type: CLIENT_TOOL, op: 'cancel', id }])
+    // 没出卡：侧栏不标等待，卡片按“取消”回给执行器
+    assert.notEqual(summary()?.waitingFor, 'approval')
+    if (op === 'ask')
+      assert.deepEqual(main?.of('answer'), [
+        { type: CLIENT_TOOL, op: 'answer', askId: 'k1', answer: null },
+      ])
+  }
+})
+
+test('UNATTENDED-CORE-002：完全访问照常替浏览器站点卡点“允许一次”，无人值守标记不挡已放行的', async () => {
+  const { core, main, call } = setup({ fullAccess: true, namespaces: ['litch_browser'] })
+  core.start()
+  await settle()
+  const answer = call({
+    namespace: 'litch_browser',
+    tool: 'navigate',
+    litchUnattended: { notice: 'unattended' },
+  })
+  await settle()
+  const id = main?.of('call')[0]?.invocation.id ?? ''
+  main?.reply({
+    op: 'ask',
+    id,
+    askId: 'k1',
+    ask: { kind: 'site', origin: 'https://example.com', url: 'https://example.com/a' },
+  })
+  await settle()
+  assert.deepEqual(main?.of('answer'), [
+    { type: CLIENT_TOOL, op: 'answer', askId: 'k1', answer: 'once' },
+  ])
+  assert.equal(main?.of('cancel').length, 0)
+  main?.reply({ op: 'result', id, response: { success: true, contentItems: [] } })
+  assert.equal(resultOf(await answer)?.success, true)
+})
+
 test('回合结束：正在执行的取消、卡片撤掉并回 null，执行过调用的回合告诉主进程收尾；没调用过的回合不报', async () => {
   const { core, main, call, peer } = setup()
   core.start()

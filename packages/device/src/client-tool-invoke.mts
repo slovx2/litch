@@ -171,6 +171,8 @@ export class ClientToolInvoker {
       turnId,
       harness,
     }
+    const unattended = params.threadId ? this.options.router.unattendedOf(params.threadId) : null
+    if (unattended) call.litchUnattended = unattended
     const frame: Frame = {
       id: `litch:invoke:${this.sequence}`,
       method: CLIENT_TOOL_METHOD.call,

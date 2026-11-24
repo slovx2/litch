@@ -12,6 +12,7 @@ import type { Manager } from '../../../protocol/src/manager.mjs'
 import { ExternalStore } from '../external-store.mjs'
 import type { DeviceManagers } from '../manager.mjs'
 import { managerNow } from '../manager-store.mjs'
+import { externalUnattended } from '../unattended.mjs'
 import { UpstreamRpcError } from '../wire.mjs'
 import { DeviceAgentLaunch } from './device-agent-launch.mjs'
 import { ExternalDeviceConfiguration, externalInput } from './device-configuration.mjs'
@@ -323,6 +324,11 @@ export class DeviceExternalService {
     const ready = this.options.managers.externalReady(manager)
     if (!ready.ready) return ready.reason
     return this.options.managers.tree.canDeliverExternal(manager.threadId) ? null : 'manager_busy'
+  }
+
+  /** 经理处在无人值守（unattended.mts 的 externalUnattended）；服务关了不算 */
+  unattended(managerId: string): boolean {
+    return !this.closed && externalUnattended(this.store.config, managerId)
   }
 
   canDeliver(manager: Manager, sourceId: string): boolean {

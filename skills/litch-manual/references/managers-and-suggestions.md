@@ -371,6 +371,30 @@ or context usage is unavailable. Workline reports and external notices queue dur
 compaction and are delivered afterwards. Each idle period gets at most one attempt. The board
 overview shows the most recent successful compaction and context usage before and after it.
 
+### 无人值守时不等人 / No waiting while unattended
+
+经理分配了 GitHub 仓库，且对应来源的采集和“自动提醒经理”都开着时，Litch 把这位经理和它的整棵子树（工作线、工作线再派的子会话）当作无人值守。只分配仓库、暂停采集或关闭自动提醒时，仍按有人值守处理；经理结束后也不算。
+
+无人值守时，凡是要人当场回答的都不再挂起等人，而是立即返回：
+
+- Agent 自己的提问（Claude 的 AskUserQuestion、Codex 的 request_user_input、其他 harness 的提问和计划确认）每道题都收到无人值守的说明作为答复；计划确认按“未确认”处理。
+- 命令、文件改动和权限申请的审批按拒绝处理。Claude Code、Pi、OpenCode 会把说明一起交给模型；Codex、dsh 和 ACP 类 harness 的协议带不了说明，只收到普通的拒绝。MCP 表单征询按拒绝处理。
+- 内置浏览器和 Chrome 的站点、下载、请人登录，Computer Use 操作 Litch 本身的确认，“操作这台电脑”的开启和审批，配置助手的确认，以及 `litch_sessions` 的 offer 卡，都不出卡，调用当场失败，开头是 `[litch:unattended]`。
+- 已经放行的照常执行：完全访问对浏览器的放行、“本会话都允许”、审批方式“不确认”、harness 自己的权限规则都不受影响。
+
+说明会告诉 Agent 当前没人可等：经理应在看板上提决策（`litch_manager` 的 `add`，`kind=decision`），工作线应提决策或写进给经理的回报，或换一种不需要提问和审批的做法。工作线的这类请求也不会再挂到经理的待答列表里。有人值守的会话行为不变。旧版桌面端收不到无人值守标记，客户端工具的审批卡仍会照常弹出。
+
+When a manager has GitHub repositories assigned and the matching source has collection and **Notify manager automatically** turned on, Litch treats that manager and its whole subtree (worklines and the sessions they start) as unattended. Assigning repositories alone, pausing collection, turning automatic notification off or ending the manager returns to normal behavior.
+
+While unattended, nothing waits for a person:
+
+- Agent questions (Claude AskUserQuestion, Codex request_user_input, other harnesses' questions and plan confirmation) receive the unattended notice as the answer to every question; plan confirmation counts as not confirmed.
+- Command, file-change and permission approvals are declined. Claude Code, Pi and OpenCode pass the notice to the model; the Codex, dsh and ACP-based protocols cannot carry it, so they get a plain decline. MCP form elicitations are declined.
+- Browser and Chrome site, download and sign-in prompts, Computer Use confirmation for Litch itself, Operate this computer enable and approval cards, configuration-assistant confirmations and `litch_sessions` offers show no card; the call fails at once with `[litch:unattended]`.
+- Anything already allowed still runs: full-access browser approvals, “allow for this session”, the **Don't ask** approval mode and the harness's own permission rules are unchanged.
+
+The notice tells the agent that nobody can answer: managers should add a board decision (`litch_manager` `add`, `kind=decision`); worklines should raise a decision or put it in their report to the manager, or use an approach that needs no question or approval. These requests from worklines no longer appear in the manager's pending list. Attended sessions behave as before. Older desktop versions do not receive the unattended marker and still show client-tool approval cards.
+
 ### Commands
 
 Run `scripts/litch status` first; use real device and manager ids returned by these reads:

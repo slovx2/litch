@@ -76,6 +76,7 @@ import {
 } from './manager-validate.mjs'
 import { requireSupportedPermission, supportedPermissions } from './session-permissions.mjs'
 import type { SessionTree } from './session-tree.mjs'
+import type { UnattendedRole } from './unattended.mjs'
 import { DeviceError, isObject } from './wire.mjs'
 
 /** 按实际接收连接过滤；分页摘要、直接应答和广播共用。 */
@@ -820,6 +821,20 @@ export class DeviceManagers {
       this.tree.host.taskCards(manager.harness),
       this.external ? DEVICE_EXTERNAL_MANAGER_TOOLS : undefined,
     )
+  }
+
+  /**
+   * 无人值守（unattended.mts）：会话是某位经理本身或它子树里的会话（工作线、工作线再派的，没脱离的那几层），
+   * 这位经理还没结束，并且外部来源会自己唤醒它。不在任何经理树里、经理已结束、没有生效的来源都是 null
+   */
+  unattended(threadId: string): UnattendedRole | null {
+    const external = this.external
+    if (this.closed || !external) return null
+    const mark = this.lines.mark(threadId)
+    if (!mark) return null
+    const manager = this.store.manager(mark.managerId)
+    if (!manager || manager.status === 'ended' || !external.unattended(manager.id)) return null
+    return mark.role
   }
 
   externalReady(manager: Manager) {

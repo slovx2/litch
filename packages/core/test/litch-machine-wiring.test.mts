@@ -7,6 +7,7 @@ import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/s
 import { withDeveloperInstructions } from '../../protocol/src/codex-developer-instructions.mjs'
 import type { JsonRpcMessage, Thread } from '../../protocol/src/index.mjs'
 import { codexRejects } from '../../shared/test/codex-params.mjs'
+import { approved } from '../src/device/machine/common.mjs'
 import { SENSITIVE_PRESETS, sensitivePresets } from '../src/device/machine/presets.mjs'
 import type {
   MachineApprovalResult,
@@ -750,6 +751,52 @@ test('审批·每个会话确认一次（默认）：执行、读各弹一次，
   await respond(world, cardsOf(session)[0], 'session')
   assert.equal(textOf(await again), 'ok')
   assert.equal(fake.outcomes.length, 4)
+})
+
+test('UNATTENDED-MACHINE-001：无人值守的会话不出开启卡和审批卡，当场 unattended；不用审批的照常执行', async () => {
+  const notice = 'Litch is running this session unattended (test).'
+  const litchUnattended = { notice }
+  const world = await started()
+  const session = watchSession(world.core, 'a', 'box')
+  // 开关关着：不出开启卡
+  const off = textOf(await world.call({ command: 'ls' }, { litchUnattended }))
+  assert.equal(off, `[litch:unattended] ${notice}`)
+  assert.equal(cardsOf(session).length, 0)
+  assert.equal(world.activity.view?.pending.length, 0)
+  assert.equal(world.box()?.machine?.enabled, false)
+  // 命令行调用一样
+  const cli = textOf(await world.detached({ command: 'ls' }, { threadId: 'a', litchUnattended }))
+  assert.equal(cli, `[litch:unattended] ${notice}`)
+  await world.enable()
+  // 要审批的：不出卡，执行器拿到 unattended 的结果（真执行器照 common.mts 回 [litch:unattended] 这句话）
+  await world.call({ command: 'make' }, { litchUnattended })
+  assert.deepEqual(world.fake.outcomes, [{ kind: 'unattended', message: notice }])
+  assert.equal(cardsOf(session).length, 0)
+  // 先在有人的回合里给了“本会话都允许”：无人值守时已放行的照常执行
+  const attended = world.call({ command: 'make' })
+  await settle()
+  await respond(world, cardsOf(session)[0], 'session')
+  assert.equal(textOf(await attended), 'ok')
+  assert.equal(textOf(await world.call({ command: 'make test' }, { litchUnattended })), 'ok')
+  // 审批方式“不确认”：照常执行
+  await world.command('device.machine.set', { deviceId: 'box', approval: 'never' })
+  assert.equal(
+    textOf(await world.call({ path: '/etc/hosts' }, { tool: 'read_file', litchUnattended })),
+    'ok',
+  )
+  assert.equal(cardsOf(session).length, 0)
+  // 真执行器把 unattended 的结果原话交给模型，记成拒绝
+  const outcome = await approved(
+    { context: { approve: async () => ({ kind: 'unattended', message: notice }) } } as never,
+    { class: 'mutate', ask: { kind: 'machine', action: 'exec', flagged: [] } } as never,
+    'make',
+  )
+  assert.equal(outcome?.response.contentItems[0]?.type, 'inputText')
+  assert.deepEqual(outcome?.response.contentItems[0], {
+    type: 'inputText',
+    text: `[litch:unattended] ${notice}`,
+  })
+  assert.equal(outcome?.note.result, 'declined')
 })
 
 test('审批·逐条确认：执行每次都弹，读每个会话一次；不确认：都不弹，命令里提到禁止位置也不弹', async () => {

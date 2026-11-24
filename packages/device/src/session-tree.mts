@@ -57,6 +57,7 @@ import { SessionQuestions } from './session-questions.mjs'
 import type { SessionStore } from './session-store.mjs'
 import { SuggestionInbox } from './suggestion-inbox.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
+import type { UnattendedRole } from './unattended.mjs'
 import { DeviceError, isObject, UpstreamRpcError } from './wire.mjs'
 import type { Workspaces } from './workspaces.mjs'
 import type { Worktrees } from './worktrees.mjs'
@@ -271,6 +272,11 @@ export class SessionTree {
     const settled = host.store.settleOffers()
     if (settled > 0) host.log(`上一次还在等的 ${settled} 张 offer 卡当作在这里做了结`)
     this.scheduleExpiry()
+  }
+
+  /** 这个会话在无人值守经理的树里（unattended.mts）：要人答的东西不等人，当场拒绝 */
+  unattended(threadId: string): UnattendedRole | null {
+    return this.managers?.unattended(threadId) ?? null
   }
 
   /** 经理的线在会话编排总开关关闭时仍有自己的授权。 */

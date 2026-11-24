@@ -121,6 +121,17 @@ export interface ClientToolCallParams {
   arguments: unknown
   /** 会话设备签发，只给声明 chromeTargetRouting 的桌面；与模型 arguments 分开。 */
   litchChromeTargets?: { targetId: string; epoch: string; recover?: true }[]
+  /**
+   * 会话设备判定这次调用的会话没人在看（无人值守经理和它的子树）。带着时执行方不弹卡等人：
+   * 本来要人点头的（审批、开启确认、请人登录）当场以 unattended 失败，说明用 notice 原文
+   */
+  litchUnattended?: ClientToolUnattended
+}
+
+/** item/tool/call、litch/clientTool/call 参数上的无人值守标记 */
+export interface ClientToolUnattended {
+  /** 给模型的那句话：为什么没问人、接下来怎么做 */
+  notice: string
 }
 
 /** 结果里的一项。图片只能是内联的 data: 地址，http(s) 地址会让整个结果作废 */
@@ -157,6 +168,8 @@ export type ClientToolFailureKind =
   | 'blocked'
   /** 不知道交给哪台：命令行调用找不到会话、又连着不止一台桌面端，说明里列出各台的主机名 */
   | 'ambiguous'
+  /** 无人值守的会话里要人点头：没问人，当场失败（说明是设备给的 litchUnattended.notice） */
+  | 'unattended'
 
 /** 拼一个失败答复。文字第一行是 `[litch:<kind>]`，后面是给模型看的说明（说明要告诉模型该怎么办） */
 export function clientToolFailure(
@@ -222,6 +235,8 @@ export interface ClientToolDetachedCallParams {
   turnId: string | null
   /** 调用者是哪个 harness 的进程，设备进程不知道就是 null（只用来显示） */
   harness: string | null
+  /** 同 ClientToolCallParams.litchUnattended */
+  litchUnattended?: ClientToolUnattended
 }
 
 /** 握手时 Litch 连接在 capabilities.litchClientTools 里额外报的：这台桌面端的主机名（ambiguous 时列出、指定交给哪台时用） */
