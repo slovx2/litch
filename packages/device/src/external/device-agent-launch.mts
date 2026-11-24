@@ -8,6 +8,7 @@ import { promisify } from 'node:util'
 import { adapterCliPath } from '../../../shared/src/adapter-cli.mjs'
 import { deviceGithubEnvironmentSocket } from '../../../shared/src/device-github-environment.mjs'
 import type { ExternalStore } from '../external-store.mjs'
+import type { FeishuCliActor, FeishuCliProxy } from '../feishu/cli-proxy.mjs'
 import type { DeviceManagers } from '../manager.mjs'
 import { isObject } from '../wire.mjs'
 import { executableOnPath } from './device-agent-command.mjs'
@@ -40,6 +41,8 @@ export class DeviceAgentLaunch {
   private closed = false
   private unknownUsers = false
   private probes = 0
+  /** 飞书 CLI 的设备代理（设备开了飞书时接上） */
+  feishu: FeishuCliProxy | null = null
 
   constructor(options: DeviceAgentLaunch['options']) {
     this.options = options
@@ -54,7 +57,7 @@ export class DeviceAgentLaunch {
     if (!windows) rmSync(path, { force: true })
     await this.listen(path)
     const files = new ExternalPrivateFiles(join(stateDirectory, 'external-agent-gh', 'command'))
-    for (const tool of ['gh', 'git'] as const) {
+    for (const tool of ['gh', 'git', 'lark-cli'] as const) {
       const name = windows ? `${tool}.cmd` : tool
       files.write(name, agentCommandShim(files.directory, tool, adapter))
       if (!windows) chmodSync(files.path(name), 0o700)
@@ -129,6 +132,12 @@ export class DeviceAgentLaunch {
     }
   }
 
+  /** 飞书代理问：这份租约的会话还是不是这位经理的经理或工作线 */
+  current(actor: FeishuCliActor): boolean {
+    const now = this.actor(actor.threadId)
+    return now?.managerId === actor.managerId && now.kind === actor.kind
+  }
+
   /** 这位经理分了身份、注入也开着（关了注入时租约照样不发，见 resolveGithubAgentLogin） */
   private injects(managerId: string): boolean {
     const assignment = this.options.configuration.assignmentForManager(managerId)
@@ -140,7 +149,18 @@ export class DeviceAgentLaunch {
     if (raw.action === 'release' && typeof raw.lease === 'string') {
       if (raw.uncertain === true && this.leases.has(raw.lease)) this.unknownUsers = true
       this.release(raw.lease)
+      this.feishu?.release(raw.lease)
       return {}
+    }
+    // lark-cli：经理绑了飞书应用的会话拿设备代理的租约；没绑的回空，命令入口交给宿主的 lark-cli
+    if (
+      raw.action === 'feishu' &&
+      typeof raw.threadId === 'string' &&
+      typeof raw.harness === 'string'
+    ) {
+      const actor = this.actor(raw.threadId, raw.harness)
+      const result = actor && this.feishu ? await this.feishu.lease(actor) : null
+      return result ?? {}
     }
     // 只问这个会话是不是已注入（Gemini、Qwen 的工具前钩子据此决定要不要给命令写上会话号），不发租约。
     if (

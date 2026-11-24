@@ -14,6 +14,7 @@ import {
 } from 'node:fs'
 import { basename, isAbsolute, join } from 'node:path'
 import type {
+  FeishuCliRequest,
   FeishuOutboxEntry,
   FeishuOutboxFormat,
   FeishuOutboxState,
@@ -99,6 +100,31 @@ export interface FeishuOutboxOptions {
   gapMs?: number
   /** 到期重试的检查间隔（毫秒） */
   tickMs?: number
+}
+
+/** 解析好的发言目标 */
+export interface OutboxTarget {
+  kind: 'chat' | 'user'
+  id: string
+  name: string
+  chatId: string
+  mode: 'free' | 'approval'
+  reviewTtlHours: number
+}
+
+/** lark-cli 拦下转审批的原始请求 */
+export interface OutboxCliSubmit {
+  app: FeishuAppRecord
+  managerId: string
+  threadId?: string
+  target: OutboxTarget
+  replyTo?: string
+  cli: FeishuCliRequest
+  raw: { method: string; pathAndQuery: string; contentType?: string; body: Buffer }
+  msgType: SpeechPart['msgType']
+  format: FeishuOutboxFormat
+  summary: string
+  preview: ReviewSpeechPart[]
 }
 
 /** 入参或状态不对：消息就是给经理看的原因 */
@@ -198,7 +224,7 @@ export class FeishuOutbox {
     }
     const operationId = input.operationId ?? `fs_${randomBytes(15).toString('base64url')}`
     const { app } = input
-    const target = this.target(app, input)
+    const target = this.resolveTarget(app, input.target)
     const mentions =
       input.mentions?.length && target.kind === 'chat'
         ? await this.resolveMentions(app.appId, target.id, input.mentions)
@@ -211,9 +237,82 @@ export class FeishuOutbox {
         refuse('replyTo must be a recorded message of the same chat.')
     }
     const built = this.build(input, mentions)
-    const now = this.options.now()
     const folder = join(this.directory, operationId)
-    const payloadHash = this.freeze(folder, built.parts, input)
+    const payloadHash = this.freeze(folder, built.parts, input.imagePath ?? input.filePath)
+    return this.persist({
+      operationId,
+      app,
+      managerId: input.managerId,
+      ...(input.threadId ? { threadId: input.threadId } : {}),
+      ...(input.turnId ? { turnId: input.turnId } : {}),
+      target,
+      ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+      format: built.format,
+      summary: built.summary,
+      parts: built.parts.length,
+      mentions,
+      preview: built.preview,
+      payloadHash,
+      folder,
+    })
+  }
+
+  /**
+   * lark-cli 拦下的发言（审批发言的群）：原始请求原样冻结，转审批；批了原样发。
+   * 自由发言的群、私聊由代理直接转发，不进这里。
+   */
+  submitCli(input: OutboxCliSubmit): OutboxRecord {
+    if (input.target.mode !== 'approval') refuse('Only approval chats queue lark-cli requests.')
+    const operationId = `fs_${randomBytes(15).toString('base64url')}`
+    const folder = join(this.directory, operationId)
+    const part: SpeechPart = {
+      msgType: input.msgType,
+      raw: {
+        method: input.raw.method,
+        pathAndQuery: input.raw.pathAndQuery,
+        ...(input.raw.contentType ? { contentType: input.raw.contentType } : {}),
+        file: 'attachment',
+      },
+    }
+    const payloadHash = this.freeze(folder, [part], undefined, input.raw.body)
+    return this.persist({
+      operationId,
+      app: input.app,
+      managerId: input.managerId,
+      ...(input.threadId ? { threadId: input.threadId } : {}),
+      target: input.target,
+      ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+      format: input.format,
+      summary: input.summary.slice(0, SUMMARY_MAX),
+      parts: 1,
+      mentions: [],
+      preview: input.preview,
+      payloadHash,
+      folder,
+      cli: input.cli,
+    })
+  }
+
+  /** 写进库：审批发言的群同时建审批；失败时删掉冻结目录 */
+  private persist(input: {
+    operationId: string
+    app: FeishuAppRecord
+    managerId: string
+    threadId?: string
+    turnId?: string
+    target: OutboxTarget
+    replyTo?: string
+    format: FeishuOutboxFormat
+    summary: string
+    parts: number
+    mentions: FeishuPerson[]
+    preview: ReviewSpeechPart[]
+    payloadHash: string
+    folder: string
+    cli?: FeishuCliRequest
+  }): OutboxRecord {
+    const { operationId, app, target, mentions, payloadHash } = input
+    const now = this.options.now()
     const record: OutboxRecord = {
       operationId,
       appId: app.appId,
@@ -222,9 +321,9 @@ export class FeishuOutbox {
       ...(input.turnId ? { turnId: input.turnId } : {}),
       target: { kind: target.kind, id: target.id, name: target.name },
       ...(input.replyTo ? { replyTo: input.replyTo } : {}),
-      format: built.format,
-      summary: built.summary,
-      parts: built.parts.length,
+      format: input.format,
+      summary: input.summary,
+      parts: input.parts,
       messageIds: [],
       mentions,
       state: 'queued',
@@ -232,6 +331,7 @@ export class FeishuOutbox {
       payloadHash,
       createdAt: now,
       updatedAt: now,
+      ...(input.cli ? { cli: input.cli } : {}),
     }
     let review: Review | null = null
     try {
@@ -263,7 +363,8 @@ export class FeishuOutbox {
               ...(input.replyTo ? { replyTo: this.replyPreview(app.appId, input.replyTo) } : {}),
               actingAs: { type: 'bot' },
               mentions,
-              parts: built.preview,
+              parts: input.preview,
+              ...(input.cli ? { cli: input.cli } : {}),
             },
             payloadHash,
             expiresAt: now + target.reviewTtlHours * 3600,
@@ -281,11 +382,12 @@ export class FeishuOutbox {
             mode: target.mode,
             parts: record.parts,
             reviewId: record.reviewId ?? null,
+            ...(input.cli ? { cli: input.cli.action } : {}),
           },
         })
       })
     } catch (error) {
-      rmSync(folder, { recursive: true, force: true })
+      rmSync(input.folder, { recursive: true, force: true })
       throw error
     }
     if (review) this.options.reviews?.announce(review)
@@ -294,21 +396,22 @@ export class FeishuOutbox {
     return record
   }
 
-  private target(app: FeishuAppRecord, input: OutboxSubmit) {
-    if (input.target.kind === 'user') {
-      const user = this.bound(app.appId, input.target.openId)
+  /** 发言目标：已接入的群（按发言模式）或已绑定用户的私聊（自由发言）；不行就拒绝 */
+  resolveTarget(app: FeishuAppRecord, wanted: OutboxSubmit['target']): OutboxTarget {
+    if (wanted.kind === 'user') {
+      const user = this.bound(app.appId, wanted.openId)
       if (!user?.p2pChatId) return refuse('The user is not bound to this Feishu app.')
       // 私聊只和已绑定的人聊，固定自由发言（D-158）
       return {
         kind: 'user' as const,
-        id: input.target.openId,
+        id: wanted.openId,
         name: user.name,
         chatId: user.p2pChatId,
         mode: 'free' as const,
         reviewTtlHours: 24,
       }
     }
-    const chatId = input.target.chatId
+    const chatId = wanted.chatId
     const chat = this.options.chats.record(app.appId, chatId)
     if (!chat?.access) return refuse('The chat is not accessed in Litch.')
     if (!chat.botPresent) return refuse('The bot is no longer in this chat.')
@@ -402,16 +505,16 @@ export class FeishuOutbox {
     }
   }
 
-  /** 载荷写进私有目录；图片、文件复制一份。返回哈希（载荷加附件的字节） */
-  private freeze(folder: string, parts: SpeechPart[], input: OutboxSubmit): string {
+  /** 载荷写进私有目录；图片、文件复制一份，原始请求体写成附件。返回哈希（载荷加附件的字节） */
+  private freeze(folder: string, parts: SpeechPart[], source?: string, body?: Buffer): string {
     mkdirSync(this.directory, { recursive: true, mode: 0o700 })
     chmodSync(this.directory, 0o700)
     rmSync(folder, { recursive: true, force: true })
     mkdirSync(folder, { mode: 0o700 })
     const payload = Buffer.from(JSON.stringify({ parts }))
     writeFileSync(join(folder, 'payload.json'), payload, { mode: 0o600 })
-    const source = input.imagePath ?? input.filePath
-    if (source !== undefined) {
+    if (body !== undefined) writeFileSync(join(folder, 'attachment'), body, { mode: 0o600 })
+    else if (source !== undefined) {
       const copy = join(folder, 'attachment')
       try {
         copyFileSync(source, copy)
@@ -665,6 +768,19 @@ export class FeishuOutbox {
     try {
       for (let index = current.messageIds.length; index < frozen.parts.length; index++) {
         const part = frozen.parts[index] as SpeechPart
+        if (part.raw) {
+          const item = await this.forwardRaw(api, frozen.folder, part.raw)
+          const messageId = typeof item?.message_id === 'string' ? item.message_id : ''
+          if (messageId) current = { ...current, messageIds: [...current.messageIds, messageId] }
+          this.save(current)
+          if (item && messageId && typeof item.chat_id === 'string')
+            try {
+              this.options.records.storeSent(record.appId, item, chatKind)
+            } catch (error) {
+              this.options.log(`飞书发出的消息记录失败：${(error as Error).message}`)
+            }
+          continue
+        }
         let content = part.content ?? ''
         if (part.upload) {
           const key =
@@ -697,6 +813,15 @@ export class FeishuOutbox {
   private failed(record: OutboxRecord, error: unknown): void {
     const kind = error instanceof FeishuApiError ? error.kind : 'invalid'
     const now = this.options.now()
+    // lark-cli 的原始请求不一定带去重的 uuid：结果不明时不自动重发，停下等人核对
+    if (kind === 'network' && record.cli) {
+      const next: OutboxRecord = { ...record, state: 'unknown', updatedAt: now }
+      delete next.nextAttemptAt
+      next.error = 'unknown_timeout'
+      this.save(next)
+      this.audit(next, 'speech_unknown')
+      return
+    }
     if (kind === 'network') {
       // 结果不明：一小时内带同一个 uuid 重发，飞书去重；之后停下等人核对
       const elapsed = now - (record.firstAttemptAt ?? now)
@@ -758,6 +883,37 @@ export class FeishuOutbox {
       query: { receive_id_type: record.target.kind === 'chat' ? 'chat_id' : 'open_id' },
       body: { receive_id: record.target.id, ...body },
     })
+  }
+
+  /** 原样发冻结的原始请求；返回响应里的 data（发消息类是消息本身） */
+  private async forwardRaw(
+    api: import('./api.mjs').FeishuApi,
+    folder: string,
+    raw: NonNullable<SpeechPart['raw']>,
+  ): Promise<Record<string, unknown> | null> {
+    const body = readFileSync(join(folder, raw.file))
+    const reply = await api.forward(
+      raw.method,
+      raw.pathAndQuery,
+      raw.contentType ? { 'content-type': raw.contentType } : {},
+      body,
+    )
+    if (reply.status === 429) throw new FeishuApiError('rate_limited', { status: 429 })
+    if (!reply.json) {
+      await reply.stream?.cancel()
+      throw new FeishuApiError(reply.status >= 500 ? 'network' : 'platform', {
+        status: reply.status,
+      })
+    }
+    const { code, data } = reply.json
+    if (code !== 0)
+      throw new FeishuApiError(
+        code === undefined && reply.status >= 500 ? 'network' : 'platform',
+        { ...(code === undefined ? {} : { code }), status: reply.status },
+      )
+    return data && typeof data === 'object' && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : null
   }
 
   private async upload(

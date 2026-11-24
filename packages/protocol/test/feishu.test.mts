@@ -227,6 +227,11 @@ const samples: {
           attempts: 1,
           sentAt: 90,
         },
+        {
+          ...outboxEntry,
+          operationId: 'op-sample-3',
+          cli: { method: 'POST', path: '/open-apis/im/v1/messages', action: 'send' },
+        },
       ],
       next: 'op-sample-2',
     },

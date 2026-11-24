@@ -18,6 +18,8 @@ export interface SpeechPart {
   msgType: SpeechMsgType
   content?: string
   upload?: { kind: 'image' | 'file'; file: string; name: string; size: number }
+  /** 经 lark-cli 拦下的原始请求：批了原样发（请求体是冻结目录里的附件文件） */
+  raw?: { method: string; pathAndQuery: string; contentType?: string; file: string }
 }
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/

@@ -275,6 +275,14 @@ export type FeishuOutboxState =
 /** 发出去的样子：纯文本、富文本（Markdown 段落加 @）、卡片（有代码块或表格时）、图片、文件 */
 export type FeishuOutboxFormat = 'text' | 'post' | 'card' | 'image' | 'file'
 
+/** 经 lark-cli 发、被设备代理拦下转审批的原始请求（路径里的 ID 已打码） */
+export interface FeishuCliRequest {
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  path: string
+  /** send、reply、edit、update、forward、urgent、announcement 等 */
+  action: string
+}
+
 export interface FeishuOutboxEntry {
   /** 操作 ID，也是发给飞书的 uuid 前缀 */
   operationId: string
@@ -301,6 +309,8 @@ export interface FeishuOutboxEntry {
   createdAt: number
   updatedAt: number
   sentAt?: number
+  /** 经 lark-cli 发的：原始请求 */
+  cli?: FeishuCliRequest
 }
 
 /** 私聊绑定（D-158）：和经理私聊的人。撤销后保留这一行（私聊记录照保留期清理） */

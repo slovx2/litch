@@ -189,6 +189,17 @@
           "minItems": 1,
           "maxItems": 100,
           "items": { "$ref": "#/definitions/SpeechPart" }
+        },
+        "cli": {
+          "description": "经 lark-cli 发的原始请求：方法、打码后的路径、动作",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "path", "action"],
+          "properties": {
+            "method": { "enum": ["POST", "PUT", "PATCH", "DELETE"] },
+            "path": { "type": "string", "maxLength": 1024 },
+            "action": { "type": "string", "pattern": "^[a-z_]{1,32}$" }
+          }
         }
       }
     },

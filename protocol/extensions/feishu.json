@@ -612,6 +612,17 @@
         "unknown"
       ]
     },
+    "CliRequest": {
+      "description": "经 lark-cli 发的原始请求（设备代理拦下转审批的发言）：方法、打码后的路径、动作",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "path", "action"],
+      "properties": {
+        "method": { "enum": ["POST", "PUT", "PATCH", "DELETE"] },
+        "path": { "type": "string", "maxLength": 1024 },
+        "action": { "type": "string", "pattern": "^[a-z_]{1,32}$" }
+      }
+    },
     "OutboxEntry": {
       "type": "object",
       "additionalProperties": false,
@@ -664,7 +675,8 @@
         "error": { "type": "string", "pattern": "^[a-z_]{1,64}$" },
         "createdAt": { "$ref": "#/definitions/Timestamp" },
         "updatedAt": { "$ref": "#/definitions/Timestamp" },
-        "sentAt": { "$ref": "#/definitions/Timestamp" }
+        "sentAt": { "$ref": "#/definitions/Timestamp" },
+        "cli": { "$ref": "#/definitions/CliRequest" }
       }
     },
     "AppId": { "type": "string", "pattern": "^cli_[0-9a-f]{16}$" },

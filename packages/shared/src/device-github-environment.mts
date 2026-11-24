@@ -127,3 +127,44 @@ export async function deviceGithubEnvironment(
     },
   }
 }
+
+/**
+ * lark-cli 的租约：经理绑了飞书应用的会话拿设备代理的环境（占位令牌、签名钥匙、隔离目录）；
+ * 没绑的交给宿主自己装的 lark-cli。绑了却拿不到（应用停用、凭据失效、设备没回）时只报原因，不回退宿主。
+ */
+export async function deviceFeishuEnvironment(
+  harness: string,
+  threadId: string,
+  env: NodeJS.ProcessEnv,
+): Promise<
+  | { state: 'host' }
+  | { state: 'error'; message: string }
+  | { state: 'lease'; env: NodeJS.ProcessEnv; larkPath: string; release(): void }
+> {
+  const deviceSocket = env.LITCH_DEVICE_SOCKET
+  if (!deviceSocket || !threadId) return { state: 'host' }
+  const path = deviceGithubEnvironmentSocket(deviceSocket)
+  const value = (await request(path, { action: 'feishu', harness, threadId })) as {
+    lease?: unknown
+    env?: Record<string, string>
+    larkPath?: unknown
+    error?: unknown
+  } | null
+  if (!value) return { state: 'error', message: 'the Litch device did not answer' }
+  if (typeof value.error === 'string') return { state: 'error', message: value.error }
+  if (typeof value.lease !== 'string' || typeof value.larkPath !== 'string' || !value.env)
+    return { state: 'host' }
+  // 宿主环境里的 lark-cli 变量（别的应用、令牌、配置目录）一律不带进来
+  const base = Object.fromEntries(
+    Object.entries(env).filter(([key]) => !/^LARKSUITE_CLI_/i.test(key)),
+  )
+  const lease = value.lease
+  return {
+    state: 'lease',
+    env: { ...base, ...value.env },
+    larkPath: value.larkPath,
+    release: () => {
+      void request(path, { action: 'release', lease })
+    },
+  }
+}

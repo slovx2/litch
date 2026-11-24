@@ -47,6 +47,8 @@ export interface ReviewSpeechPreview {
   actingAs: { type: 'bot' } | { type: 'user'; openId: string; name: string }
   mentions: { openId: string; name: string }[]
   parts: ReviewSpeechPart[]
+  /** 经 lark-cli 发的：原始请求的方法、打码后的路径、动作 */
+  cli?: { method: 'POST' | 'PUT' | 'PATCH' | 'DELETE'; path: string; action: string }
 }
 
 export interface Review {

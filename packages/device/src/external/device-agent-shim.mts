@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import { shellQuoteGithubHelper } from './secrets-agent-helper.mjs'
 
-export function agentCommandShim(directory: string, mode: 'git' | 'gh', adapter: string): string {
+export function agentCommandShim(directory: string, mode: 'git' | 'gh' | 'lark-cli', adapter: string): string {
   const cli = fileURLToPath(new URL('./device-agent-command.mjs', import.meta.url))
   const command = [adapter, 'agent-command', directory, process.execPath, cli, mode]
   return process.platform === 'win32'

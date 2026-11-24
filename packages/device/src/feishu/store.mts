@@ -56,6 +56,7 @@ export type FeishuAuditAction =
   | 'review_card_sent'
   | 'review_card_decided'
   | 'review_card_refused'
+  | 'cli_request'
 
 export interface FeishuAuditEntry {
   action: FeishuAuditAction

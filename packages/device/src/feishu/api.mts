@@ -176,6 +176,48 @@ export class FeishuApi {
     return { bytes: await bounded(response, limit), type }
   }
 
+  /**
+   * CLI 代理用：原样转发一个请求（路径带查询，字节不动），只换上应用令牌。
+   * JSON 响应先读完（令牌失效时作废缓存重取一次）；其余的（下载文件等）交回流。
+   */
+  async forward(
+    method: string,
+    pathAndQuery: string,
+    headers: Record<string, string>,
+    body: Buffer | undefined,
+  ): Promise<{
+    status: number
+    headers: Headers
+    json?: { bytes: Buffer; code: number | undefined; data: unknown }
+    stream?: ReadableStream<Uint8Array> | null
+  }> {
+    if (!pathAndQuery.startsWith('/')) throw new FeishuApiError('invalid')
+    for (let attempt = 0; ; attempt++) {
+      const token = await this.token()
+      const response = await this.send(
+        method,
+        `${this.endpoints.open}${pathAndQuery}`,
+        { ...headers, authorization: `Bearer ${token}` },
+        body === undefined || body.length === 0 ? undefined : new Uint8Array(body),
+        120_000,
+      )
+      if (!(response.headers.get('content-type') ?? '').includes('application/json'))
+        return { status: response.status, headers: response.headers, stream: response.body }
+      const bytes = await bounded(response, RESPONSE_LIMIT)
+      const parsed = parse(bytes.toString('utf8'))
+      const code = typeof parsed.code === 'number' ? parsed.code : undefined
+      if (code !== undefined && TOKEN_INVALID.has(code) && attempt === 0) {
+        this.invalidate()
+        continue
+      }
+      return {
+        status: response.status,
+        headers: response.headers,
+        json: { bytes, code, data: parsed.data },
+      }
+    }
+  }
+
   private async raw(
     method: string,
     path: string,

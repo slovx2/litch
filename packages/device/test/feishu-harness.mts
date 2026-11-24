@@ -25,12 +25,15 @@ export class FeishuFakeHarness {
       wakeTickMs?: number
       outboxTickMs?: number
       extensions?: string[]
+      /** lark-cli 用这份（测试不真跑它时随便给个路径） */
+      cliBinary?: string
     } = {},
   ): Promise<FeishuFakeHarness> {
     const fake = new FakeFeishu()
     await fake.start()
     const env = rig(options.upstreams ?? {}, options.upstreams ? { needsUserMs: 60 } : {}, {
       feishu: {
+        ...(options.cliBinary ? { cliBinary: options.cliBinary } : {}),
         fixture: {
           origin: fake.origin,
           registrationIntervalMs: 10,

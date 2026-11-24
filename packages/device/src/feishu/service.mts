@@ -27,6 +27,8 @@ import {
 } from './api.mjs'
 import { bindingView, FeishuBindings } from './bindings.mjs'
 import { checkCapability, upgradeCapability } from './capability.mjs'
+import { ManagedLarkCli } from './cli-binary.mjs'
+import { FeishuCliProxy } from './cli-proxy.mjs'
 import { FEISHU_SPEECH_PROVIDER, FeishuChats } from './chats.mjs'
 import { FeishuConnectionRunner, type FeishuEventHandler } from './connection.mjs'
 import { FeishuCredentials } from './credentials.mjs'
@@ -63,6 +65,8 @@ export interface DeviceFeishuOptions {
     outboxTickMs?: number
     sendGapMs?: number
   }
+  /** 测试与联调：lark-cli 直接用这份（sidecar 版），不下载 */
+  cliBinary?: string
 }
 
 /** 入参不对或状态不允许：消息就是给客户端认的原因代码 */
@@ -95,6 +99,8 @@ export class DeviceFeishuService {
   readonly bindings: FeishuBindings
   /** 飞书里的审批卡片；没有通用审批时为空 */
   readonly cards: FeishuReviewCards | null
+  /** lark-cli 的设备代理（租约经设备的命令入口发出） */
+  readonly cli: FeishuCliProxy
   private readonly credentials: FeishuCredentials
   private readonly endpoints: FeishuEndpoints
   private readonly registrations: FeishuRegistrations
@@ -241,6 +247,13 @@ export class DeviceFeishuService {
       ...(cards ? { changed: (review) => cards.changed(review) } : {}),
     })
     this.on('card.action.trigger', (appId, data) => cards?.action(appId, data) ?? {})
+    const binary = new ManagedLarkCli(options.stateDirectory, options.cliBinary)
+    this.cli = new FeishuCliProxy({
+      feishu: this,
+      stateDirectory: options.stateDirectory,
+      binary: () => binary.ensure(),
+      log: options.log,
+    })
     this.records.onStored((message, source) => this.inbox.stored(message, source))
     this.inbox.onQueued(() => this.wake.tick())
     this.on('im.message.receive_v1', (appId, data) => this.records.received(appId, data))
@@ -433,6 +446,7 @@ export class DeviceFeishuService {
     this.registrations.close()
     this.wake.close()
     this.outbox.close()
+    void this.cli.close()
     this.records.close()
     for (const appId of [...this.running.keys()]) this.stop(appId)
     this.messages.close()
