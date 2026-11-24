@@ -688,6 +688,20 @@ export {
   type SidebarProjections,
 } from './projection/sidebar-groups.mjs'
 export { spanFrom, spanned, spanOf, spanOp } from './projection/span.mjs'
+// 连续的系统回合并成一个收起块
+export {
+  type FoldTurn,
+  foldTurnOf,
+  governedSegments,
+  type RunRole,
+  runOpen,
+  type SystemMessageCount,
+  type SystemMessageKind,
+  type SystemRun,
+  sameRun,
+  systemMessageOf,
+  systemRuns,
+} from './projection/system-fold.mjs'
 export { todoKey } from './projection/todo.mjs'
 // 子代理的状态：对话流的那一行、子代理页、信息卡，和“这个回合里还有没做完的子代理”（回合收起的判定）
 export {

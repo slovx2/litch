@@ -24,11 +24,13 @@ import type {
   PeerView,
   ProcessPart,
   ReasoningItem,
+  RunRole,
   SessionMentionView,
   SessionNoteView,
   SessionProposalView,
   SessionView,
   SpawnedView,
+  SystemMessageCount,
   SystemMessageView,
   Text,
   TodoStep,
@@ -48,14 +50,19 @@ import {
   agentsUnfinished,
   blockInput,
   bucketItems,
+  type FoldTurn,
+  foldTurnOf,
   goalReachedIn,
+  governedSegments,
   processDuration,
   processFolded,
   processSegments,
   processSettled,
   processTally,
+  runOpen,
   spanFrom,
   spanOf,
+  systemRuns,
   thoughtShown,
   turnAddition,
   visibleProcessParts,
@@ -213,6 +220,11 @@ export type Row =
       durationMs: number | null
       /** 整段过程里各条目的标识（空格隔开）：回合结束后单元格拿它对着后台集合数还有几个在跑 */
       ids: string
+      /**
+       * 跨回合收起块（核心的 systemRuns）的标题行才有：块里几种系统消息各几条（“· 4 条回报”）。
+       * 这时 durationMs 是块里各回合用时之和，键是 `第一个回合:run`
+       */
+      messages?: SystemMessageCount[]
     }
   /**
    * 一组过程的摘要。current：正在跑的那一步说的是什么（回合在跑时才有：回合结束后还 inProgress 的是后台命令）。
@@ -356,9 +368,26 @@ export class RowBuilder {
   private readonly processOpen = new Map<string, boolean>()
   /** 上一次给出的过程段开没开着：点那一行时从它翻 */
   private readonly processShown = new Map<string, boolean>()
+  /** 各回合在跨回合收起块里的样子（核心的 foldTurnOf），回合变了、子代理列表换了才重算 */
+  private readonly shapes = new Map<string, { turn: TurnView; shape: FoldTurn }>()
+  private shapeAgents: SessionView['agents'] | undefined
+  /** 上一次排各回合的行时它在收起块里的样子：变了（并进来、块开合）就重排它 */
+  private readonly runSigs = new Map<string, string>()
+  /** 收起块的成员和上一次给出的开合（键是第一个回合）：点标题行时一起翻 */
+  private readonly runMembers = new Map<string, string[]>()
+  private readonly runShown = new Map<string, boolean>()
 
-  /** 展开或收起一样东西。key 是整段过程那一行（`回合:process`）时翻它的开关，别的进出 expanded */
+  /**
+   * 展开或收起一样东西。key 是整段过程那一行（`回合:process`）时翻它的开关；跨回合收起块的标题行（`第一个回合:run`）
+   * 把块里每个回合的开关一起翻（核心的 runOpen）；别的进出 expanded
+   */
   toggle(key: string, turnId: string): void {
+    if (key === `${turnId}:run`) {
+      const next = !(this.runShown.get(turnId) ?? false)
+      for (const id of this.runMembers.get(turnId) ?? [turnId])
+        this.processOpen.set(`${id}:run`, next)
+      return
+    }
     if (key === `${turnId}:process` || key.startsWith(`${turnId}:process:`)) {
       this.processOpen.set(key, !(this.processShown.get(key) ?? false))
       return
@@ -384,21 +413,97 @@ export class RowBuilder {
     if (view.forkedFrom)
       all.push(this.keep({ type: 'forked', key: 'forked', from: view.forkedFrom }))
     const alive = new Set<string>()
+    const dirty = (id: string) => dirtyTurns === 'all' || dirtyTurns.has(id)
+    // 连续的系统回合并成跨回合的收起块（规矩在核心的 systemRuns，和桌面端同一份）
+    const roles = systemRuns(this.foldShapes(view, dirtyTurns))
+    const opens = new Map<string, boolean>()
+    this.runMembers.clear()
+    for (const { run } of roles.values()) {
+      if (opens.has(run.key)) continue
+      // 没点过的照默认：块里哪个回合手动展开过东西就开着，否则收着
+      const touched = run.turnIds.some((id) => this.touchedTurn(view, id))
+      const open = runOpen(
+        run.turnIds.map((id) => this.processOpen.get(`${id}:run`)),
+        touched,
+      )
+      opens.set(run.key, open)
+      this.runShown.set(run.key, open)
+      this.runMembers.set(run.key, run.turnIds)
+    }
     for (const turn of view.turns) {
       alive.add(turn.id)
+      const role = roles.get(turn.id)
+      const open = role ? (opens.get(role.run.key) ?? false) : true
+      const sig = role ? runSig(role, open) : ''
       let rows = this.turnRows.get(turn.id)
-      if (!rows || dirtyTurns === 'all' || dirtyTurns.has(turn.id)) {
-        rows = this.buildTurn(view, turn)
+      if (
+        !rows ||
+        dirty(turn.id) ||
+        this.runSigs.get(turn.id) !== sig ||
+        // 标题行的统计看块里所有回合的条目
+        (role?.head === true && role.run.turnIds.some(dirty))
+      ) {
+        rows = this.buildTurn(view, turn, role, open)
         this.turnRows.set(turn.id, rows)
+        this.runSigs.set(turn.id, sig)
       }
       for (const row of rows) all.push(row)
     }
     for (const id of [...this.turnRows.keys()]) if (!alive.has(id)) this.turnRows.delete(id)
+    for (const id of [...this.runSigs.keys()]) if (!alive.has(id)) this.runSigs.delete(id)
+    for (const id of [...this.shapes.keys()]) if (!alive.has(id)) this.shapes.delete(id)
     return all
   }
 
-  private buildTurn(view: SessionView, turn: TurnView): Row[] {
+  /** 各回合的收起样子：没变的回合用上一次算的 */
+  private foldShapes(view: SessionView, dirtyTurns: Set<string> | 'all'): FoldTurn[] {
+    const agentsChanged = view.agents !== this.shapeAgents
+    this.shapeAgents = view.agents
+    return view.turns.map((turn) => {
+      const cached = this.shapes.get(turn.id)
+      if (
+        cached &&
+        cached.turn === turn &&
+        !agentsChanged &&
+        dirtyTurns !== 'all' &&
+        !dirtyTurns.has(turn.id)
+      )
+        return cached.shape
+      const items = turn.itemIds.flatMap((id) => view.items[id] ?? [])
+      const blocks = bucketItems(
+        items.map((item) => blockInput(item.id, item)),
+        { turnRunning: turn.status === 'running' },
+      )
+      const shape = foldTurnOf(
+        turn,
+        blocks,
+        (id) => view.items[id],
+        agentsUnfinished(items, view.agents),
+      )
+      this.shapes.set(turn.id, { turn, shape })
+      return shape
+    })
+  }
+
+  /** 这个回合里的东西手动展开过没有 */
+  private touchedTurn(view: SessionView, turnId: string): boolean {
+    const turn = view.turns.find((each) => each.id === turnId)
+    if (!turn) return false
+    return this.touchedIn(
+      turn,
+      turn.itemIds.flatMap((id) => view.items[id] ?? []),
+    )
+  }
+
+  /**
+   * 一个回合的行。role：它在跨回合收起块里（核心的 systemRuns），领头（开头的系统消息和过程）归块管；
+   * open：块开没开着。块收着时领头不画，整个都在块里的回合连状态行也不画；标题行画在块里第一个回合的开头
+   */
+  private buildTurn(view: SessionView, turn: TurnView, role?: RunRole, open = true): Row[] {
     const out: Row[] = []
+    const folded = role !== undefined && !open
+    if (folded && role.whole && !role.head) return out
+    if (role?.head) out.push(this.runHead(view, role, open))
     const running = turn.status === 'running'
     const items = turn.itemIds.flatMap((id) => {
       const item = view.items[id]
@@ -414,7 +519,7 @@ export class RowBuilder {
     // 正常状态行不画，只留收尾带出来的卡片和问题；失败仍显示错误与失败状态。
     const remind = first?.kind === 'userMessage' && first.event?.kind === 'remind'
     // 别的会话发来消息、定时任务开的回合：开头那条消息自己写着来源，不再另写一行
-    if (turn.origin && turn.origin !== 'peer' && turn.origin !== 'schedule' && !remind)
+    if (turn.origin && turn.origin !== 'peer' && turn.origin !== 'schedule' && !remind && !folded)
       out.push(
         this.keep({
           type: 'origin',
@@ -438,9 +543,14 @@ export class RowBuilder {
     const divided = items.some((item) => item.kind === 'userMessage' && turnAddition(turn, item.id))
     const touched = this.touchedIn(turn, items)
     const unfinished = agentsUnfinished(items, view.agents)
+    /** 从领头里开始的过程段：没有自己的收起行，开合跟着块走 */
+    const governed = role ? governedSegments(blocks, role.lead) : null
     /** 最后一条回答的末尾在 out 里的位置：目标达成那一句插在这里 */
     let answerEnd = -1
-    blocks.forEach((block) => {
+    blocks.forEach((block, index) => {
+      // 领头归收起块管：块收着时不画
+      const inLead = role !== undefined && index < role.lead
+      if (inLead && folded) return
       switch (block.type) {
         case 'user':
           this.userRows(out, turn, view, view.items[block.itemId])
@@ -499,6 +609,14 @@ export class RowBuilder {
           return
         case 'process': {
           const segment = segments.get(block.key)!
+          // 领头里的块开着就全画；排在正文后面的那部分照收起的规矩（阶段不明时留着工具组摘要）
+          if (governed?.has(segment.key)) {
+            const parts = inLead
+              ? block.parts
+              : visibleProcessParts(block.parts, folded, segment.keepSteps)
+            for (const part of parts) this.part(out, view, turn, part, reportedOf)
+            return
+          }
           const read = (ids: string[]) =>
             ids.map((id) => view.items[id]).filter((item): item is ItemView => item !== undefined)
           const settled = processSettled(
@@ -558,6 +676,8 @@ export class RowBuilder {
       out[index] = this.keep({ ...row, working: index === last && working && !row.running })
     })
     if (remind && turn.status !== 'failed') return out
+    // 整个回合都在收着的块里：回合尾也不画（标题行写了总用时）
+    if (folded && role.whole) return out
     if (turn.status === 'failed' && turn.error)
       out.push(this.keep({ type: 'error', key: `${turn.id}:error`, text: turn.error }))
     out.push(
@@ -693,6 +813,32 @@ export class RowBuilder {
     return [...asks, ...cards]
   }
 
+  /** 跨回合收起块的标题行（照桌面端）：块里各回合用时之和、步数等，末尾几种系统消息各几条 */
+  private runHead(view: SessionView, role: RunRole, open: boolean): Row {
+    const { run } = role
+    const images = imagesOf(view, run.itemIds)
+    const tally = processTally(
+      run.itemIds.flatMap((id) => view.items[id] ?? []),
+      view.agents,
+    )
+    return this.keep({
+      type: 'process',
+      ...(images.length ? { images } : {}),
+      key: `${run.key}:run`,
+      turnId: run.key,
+      expanded: open,
+      notes: tally.notes,
+      steps: tally.steps,
+      agents: tally.agents,
+      declined: tally.declined,
+      agentsFailed: tally.agentsFailed,
+      status: 'completed',
+      durationMs: run.durationMs,
+      ids: run.itemIds.join(' '),
+      messages: run.messages,
+    })
+  }
+
   /** 整段过程告一段落后收成的那一行（照桌面端的收起行）：几段说明、几步、几个子代理，被拒、失败的子代理、回合出错 */
   private process(
     view: SessionView,
@@ -702,16 +848,7 @@ export class RowBuilder {
     ids: string[],
     divided: boolean,
   ): Row {
-    const images = [
-      ...new Map(
-        ids
-          .flatMap((id) => {
-            const item = view.items[id]
-            return item?.kind === 'toolCall' ? (item.images ?? []) : []
-          })
-          .map((image) => [image.id, image]),
-      ).values(),
-    ]
+    const images = imagesOf(view, ids)
     const tally = processTally(
       ids.flatMap((id) => {
         const item = view.items[id]
@@ -971,6 +1108,36 @@ export class RowBuilder {
   }
 }
 
+/** 这些条目里工具调用带的图，同一张只留一份 */
+function imagesOf(view: SessionView, ids: readonly string[]): ToolImage[] {
+  return [
+    ...new Map(
+      ids
+        .flatMap((id) => {
+          const item = view.items[id]
+          return item?.kind === 'toolCall' ? (item.images ?? []) : []
+        })
+        .map((image) => [image.id, image]),
+    ).values(),
+  ]
+}
+
+/** 一个回合在收起块里的样子写成一串字：和上一次不同就重排这个回合 */
+function runSig(role: RunRole, open: boolean): string {
+  const { run } = role
+  return [
+    run.key,
+    role.head,
+    role.lead,
+    role.whole,
+    open,
+    run.turnIds.join(' '),
+    run.itemIds.join(' '),
+    run.durationMs,
+    JSON.stringify(run.messages),
+  ].join('|')
+}
+
 /** 同一种行的各项逐个比：字和数比值，条目、数组比引用（核心换掉条目时它们才换） */
 function sameRow(a: Row, b: Row): boolean {
   if (a.type !== b.type) return false
@@ -981,6 +1148,8 @@ function sameRow(a: Row, b: Row): boolean {
     if (left[key] !== right[key]) {
       const a = left[key],
         b = right[key]
+      // 收起块的消息条数每次重算都是新数组，按内容比
+      if (key === 'messages' && JSON.stringify(a) === JSON.stringify(b)) continue
       if (
         (key === 'images' || key === 'gallery') &&
         Array.isArray(a) &&

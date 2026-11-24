@@ -2,12 +2,14 @@
 // 步骤组收成一行汇总（activity.tsx 的 Steps），启动子代理那一行排在它所在的位置（tree/TreeCards.tsx）。
 // 回合结束后按用户补充的位置分段，各段收成一行“已处理 X · N 段说明 · N 步 · N 个子代理”，点开恢复；
 // 这一轮起的后台任务还在跑的，末尾再加“· N 个在后台运行”。
+// 连续的系统回合（回报、会话间消息、后台任务结束……）收成一个跨回合的块，标题行是 RunHead。
 import {
   type ItemView,
   keys,
   type ProcessPart,
   processDuration,
   processTally,
+  type SystemRun,
   type TurnView,
   taskOfItem,
 } from '@litch/core'
@@ -123,6 +125,84 @@ export const ProcessHead = memo(function ProcessHead({
           ) : null}
           {bad.length > 0 ? <span className="bad">{bad.join(' · ')}</span> : null}
           {/* 这一轮起的后台任务还在跑：末尾一个呼吸点加个数 */}
+          {inBackground > 0 ? (
+            <span className="bgmark" data-background={inBackground}>
+              <i className="pulse" aria-hidden="true" />
+              {t('background.inTurn', { count: inBackground })}
+            </span>
+          ) : null}
+        </button>
+        <ToolImageStrip deviceId={deviceId} hidden={open} />
+      </ToolImageSummary>
+    </ToolImageGroup>
+  )
+})
+
+interface RunHeadProps extends SessionRef {
+  run: SystemRun
+  open: boolean
+  onToggle(next: boolean): void
+}
+
+/**
+ * 跨回合收起块的标题行（核心的 systemRuns）：“已处理 1 分 52 秒 · 16 步 · 4 条回报”。
+ * 用时是各回合用时之和，步数、说明、子代理按块里管着的条目算，末尾是几种系统消息各几条
+ */
+export const RunHead = memo(function RunHead({
+  deviceId,
+  sessionId,
+  run,
+  open,
+  onToggle,
+}: RunHeadProps) {
+  const t = useT()
+  const pin = usePin()
+  const head = useRef<HTMLButtonElement | null>(null)
+  const itemKeys = useMemo(
+    () => run.itemIds.map((itemId) => keys.item(deviceId, sessionId, itemId)),
+    [deviceId, sessionId, run.itemIds],
+  )
+  const values = useKeys<ItemView>(itemKeys)
+  const items = useMemo(
+    () => values.filter((value): value is ItemView => value !== undefined),
+    [values],
+  )
+  const agents = useAgents(deviceId, sessionId)
+  const tally = useMemo(() => processTally(items, agents), [items, agents])
+  const time = run.durationMs ? duration(run.durationMs, t) : null
+  const { plain, bad } = processSummary(tally, time, t, null, run.messages)
+  const background = useSessionBackground(deviceId, sessionId)
+  const inBackground = background
+    ? run.itemIds.filter((id) => taskOfItem(background, id)?.status === 'running').length
+    : 0
+  return (
+    <ToolImageGroup items={items}>
+      <ToolImageSummary
+        active={items.some((item) => item.kind === 'toolCall' && !!item.images?.length)}
+      >
+        <button
+          type="button"
+          className="proc-head"
+          data-anchor={`run:${run.key}`}
+          data-run={run.turnIds.length}
+          ref={head}
+          aria-expanded={open}
+          aria-label={[
+            ...plain,
+            ...bad,
+            ...(inBackground > 0 ? [t('background.inTurn', { count: inBackground })] : []),
+          ].join(' · ')}
+          onClick={() => {
+            pin(head.current)
+            onToggle(!open)
+          }}
+        >
+          <Caret />
+          <span className="proc-title">{plain[0]}</span>
+          {plain.length > 1 ? (
+            <span className="proc-counts">{plain.slice(1).join(' · ')}</span>
+          ) : null}
+          {bad.length > 0 ? <span className="bad">{bad.join(' · ')}</span> : null}
           {inBackground > 0 ? (
             <span className="bgmark" data-background={inBackground}>
               <i className="pulse" aria-hidden="true" />

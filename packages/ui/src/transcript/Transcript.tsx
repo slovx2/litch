@@ -9,6 +9,7 @@ import {
   blockInput,
   bucketItems,
   type DeviceView,
+  governedSegments,
   type ItemView,
   keys,
   type ProcessSegment,
@@ -16,6 +17,7 @@ import {
   processSegments,
   processSettled,
   type RequestView,
+  type RunRole,
   type SessionMeta,
   type SessionSummary,
   type Text,
@@ -66,11 +68,20 @@ import { CommentLayer } from './comments/Layer.tsx'
 import { FileLinksProvider, useSessionFileLinks } from './FileLinks.tsx'
 import { ManagerReferencesScope } from './ManagerReferences.tsx'
 import { AgentAnswer, AnswerCopy, PlanCard, UserMessage } from './messages.tsx'
-import { ProcessHead, ProcessParts } from './process.tsx'
+import { ProcessHead, ProcessParts, RunHead } from './process.tsx'
 import { Recovery } from './Recovery.tsx'
 import { Stamp } from './Stamp.tsx'
 import { PinProvider, savedFindRoom, savedTurns, useTranscriptScroll } from './scroll.ts'
-import { TurnTouch, touchTurn, useFold, useToggle, useTurnTouched } from './state.ts'
+import {
+  TurnTouch,
+  touchTurn,
+  useFold,
+  useRunFold,
+  useToggle,
+  useTurnsTouched,
+  useTurnTouched,
+} from './state.ts'
+import { useSystemRuns } from './system-runs.ts'
 import { TodoCard } from './Todo.tsx'
 import { FIRST_TURNS, growWindow, restoreWindow, WINDOWED_TURNS } from './turn-window.ts'
 import { useTranscriptView } from './view.ts'
@@ -303,7 +314,13 @@ const Turn = memo(function Turn({
   sessionId,
   turnId,
   kept,
-}: SessionRef & { turnId: string; kept: boolean }) {
+  run,
+}: SessionRef & {
+  turnId: string
+  kept: boolean
+  /** 这个回合在跨回合收起块里（核心的 systemRuns）：领头几块归块管，块收着时不画 */
+  run?: RunRole | undefined
+}) {
   const turn = useKey<TurnView>(keys.turn(deviceId, sessionId, turnId))
   const meta = useKey<SessionMeta>(keys.session(deviceId, sessionId))
   const device = useKey<DeviceView>(keys.device(deviceId))
@@ -333,8 +350,28 @@ const Turn = memo(function Turn({
   const hasTail = blocks.some((block) => block.type === 'tail')
   if (running) seen.current = { running: true, tail: seen.current.tail || hasTail }
   const freshTail = !running && seen.current.running && !seen.current.tail
+  // 跨回合收起块：没手动展开过块里任何一个回合的东西就收着；点标题行一起开合
+  const members = run?.run.turnIds ?? NO_ITEMS
+  const [runOpen, setRunOpen] = useRunFold(
+    sessionKey,
+    members,
+    useTurnsTouched(sessionKey, members),
+  )
+  const folded = run !== undefined && !runOpen
+  const governed = useMemo(() => (run ? governedSegments(blocks, run.lead) : null), [run, blocks])
   // 正常提醒收尾只留卡片；失败必须显示错误和失败状态，不能把安全拒答一起隐藏。
   if (!turn || (remind && blocks.length === 0 && turn.status !== 'failed')) return null
+  // 整个回合都在收着的块里、标题行也不在它这里：只留一个空的回合（查找、滚动认得出它），什么都不画
+  if (folded && run.whole && !run.head)
+    return (
+      <section
+        className="turn"
+        hidden
+        data-run-hidden=""
+        data-search-turn={turnId}
+        data-search-keep={kept ? '' : undefined}
+      />
+    )
   // 告一段落之后，每段的第一块过程显示摘要；没告一段落时过程照常摊开。
   const firstSegment = segments.values().next().value
   const divided = blocks.some((block) => block.type === 'user' && turnAddition(turn, block.itemId))
@@ -362,7 +399,13 @@ const Turn = memo(function Turn({
       <section className="turn" data-search-turn={turnId} data-search-keep={kept ? '' : undefined}>
         {/* 后台任务结束后、目标续跑时 harness 自己开的回合：开头一行写怎么来的 */}
         {/* 别的会话发来消息、定时任务开的回合：开头那条消息（来自 X 的消息、定时任务卡片）自己写着来源，不再另写一行 */}
-        {turn.origin && turn.origin !== 'peer' && turn.origin !== 'schedule' && !remind ? (
+        {/* 跨回合收起块的标题行，画在块里第一个回合的开头 */}
+        {run?.head ? <RunHead {...ref} run={run.run} open={runOpen} onToggle={setRunOpen} /> : null}
+        {turn.origin &&
+        turn.origin !== 'peer' &&
+        turn.origin !== 'schedule' &&
+        !remind &&
+        !folded ? (
           <TurnOrigin
             deviceId={deviceId}
             sessionId={sessionId}
@@ -370,6 +413,9 @@ const Turn = memo(function Turn({
           />
         ) : null}
         {blocks.map((block, index) => {
+          // 领头（系统消息和紧跟着的过程）归收起块管：块收着时不画
+          const inLead = run !== undefined && index < run.lead
+          if (inLead && folded) return null
           if (block.type === 'user')
             return (
               <UserMessage
@@ -406,6 +452,21 @@ const Turn = memo(function Turn({
           // 收尾区排在回合最后（下面单独画），这里跳过
           if (block.type === 'tail') return null
           const segment = segments.get(block.key)!
+          // 从领头里开始的过程段没有自己的“已处理”：领头里的块开着就全画；排在正文后面的那部分照收起的规矩
+          if (governed?.has(segment.key)) {
+            const parts = inLead
+              ? block.parts
+              : visibleProcessParts(block.parts, folded, segment.keepSteps)
+            return parts.length === 0 ? null : (
+              <div key={block.key} className="proc" data-run-part="">
+                <div className="proc-body">
+                  <CiteScope {...ref} userId={userBefore[index]}>
+                    <ProcessParts {...ref} parts={parts} live={false} />
+                  </CiteScope>
+                </div>
+              </div>
+            )
+          }
           return (
             <SegmentBlock
               key={block.key}
@@ -437,7 +498,7 @@ const Turn = memo(function Turn({
           <TurnTail {...ref} turnId={turnId} itemIds={tail.itemIds} fresh={freshTail} />
         ) : null}
         {/* 正文出字且没有工作提示时不占行；实际高度变化由对话区的滚动锚点补偿。 */}
-        {remind && turn.status !== 'failed' ? null : running ? (
+        {(remind && turn.status !== 'failed') || (folded && run.whole) ? null : running ? (
           <div
             className="running-line slot"
             data-anchor={`t:${turnId}`}
@@ -736,6 +797,8 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
     }
     return gaps
   }, [finding, turnIds, drawn])
+  // 连续的系统回合并成的收起块（查找时跳过的位置前后不并）
+  const runs = useSystemRuns(deviceId, sessionId, drawn ?? turnIds, searchGaps)
   const { restore } = scroll
   const older = useOlderHistory(
     deviceId,
@@ -863,6 +926,7 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
                             sessionId={sessionId}
                             turnId={turnId}
                             kept={turnId === target?.turnId || turnId === reading}
+                            run={runs.get(turnId)}
                           />
                         </TurnBoundary>
                       </Fragment>

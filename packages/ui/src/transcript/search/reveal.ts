@@ -10,7 +10,7 @@ import {
   type SearchHit,
   type TurnView,
 } from '@litch/core'
-import { expandForSearch } from '../state.ts'
+import { expandForSearch, runFoldId } from '../state.ts'
 
 export function revealSearchParents(
   store: Replica['store'],
@@ -35,8 +35,12 @@ export function revealSearchParents(
     const blocks = bucketItems(items, { turnRunning: turn?.status === 'running' })
     const segments = processSegments(blocks)
     const first = segments.values().next().value
+    // 命中在系统消息或过程里：这个回合要是并进了跨回合收起块，也替块打开（块的开关按回合记）
+    const hitItem = store.get<ItemView>(keys.item(deviceId, sessionId, itemId))
+    if (hitItem?.kind === 'userMessage') ids.add(runFoldId(turnId))
     for (const [key, segment] of segments)
       if (segment.itemIds.includes(itemId)) {
+        ids.add(runFoldId(turnId))
         ids.add(segment === first ? `p:${turnId}` : `p:${turnId}:${segment.key}`)
         const block = blocks.find((b) => b.type === 'process' && b.key === key)
         if (block?.type === 'process')

@@ -198,6 +198,13 @@ export const SCENES: Scene[] = [
     steps: [],
   },
   {
+    id: 'system-runs',
+    group: '对话',
+    name: '系统回合并成一块',
+    note: '连续的回报、会话间消息、后台任务结束并成一个收起块；用户的话和正文把块切开',
+    steps: [open('local', 'd7')],
+  },
+  {
     id: 'collapsed-turn',
     group: '对话',
     name: '回合过程收起',

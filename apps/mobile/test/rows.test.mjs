@@ -412,7 +412,7 @@ test('同回合两段最终回答都显示，父会话插话后的短答不折�
   assert.ok(JSON.stringify(markdown).includes('已知悉'))
 })
 
-test('独立的后台续做回合结束后保留脚注：过程收起、无最终回答都不省略，下一回合用户消息在脚注之后', () => {
+test('独立的后台续做回合结束后：有回答的保留脚注；没写正文的并进收起块，标题行写总用时；下一回合用户消息在其后', () => {
   for (const hasAnswer of [false, true]) {
     const items = [command('bg:c', 'completed', 0)]
     if (hasAnswer) items.push(answer('bg:a', ''))
@@ -435,6 +435,15 @@ test('独立的后台续做回合结束后保留脚注：过程收起、无最�
       ),
       'all',
     )
+    // 没写正文的后台续做回合整个并进跨回合收起块（核心的 systemRuns）：标题行写总用时，代替回合尾
+    if (!hasAnswer) {
+      const head = rows.findIndex((row) => row.key === 'bg:run')
+      assert.equal(rows[head].durationMs, 196000)
+      assert.deepEqual(rows[head].messages, [{ kind: 'background', n: 1 }])
+      assert.equal(rows[head + 1].type, 'user')
+      assert.equal(rows[head + 1].turnId, 'next')
+      continue
+    }
     const footer = rows.findIndex((row) => row.type === 'status' && row.turnId === 'bg')
     assert.ok(footer > 0)
     assert.equal(rows[footer].status, 'completed')
@@ -442,7 +451,7 @@ test('独立的后台续做回合结束后保留脚注：过程收起、无最�
     assert.equal(rows[footer].durationMs, 196000)
     assert.equal(rows[footer + 1].type, 'user')
     assert.equal(rows[footer + 1].turnId, 'next')
-    if (hasAnswer) assert.equal(rows[footer - 1].type, 'process')
+    assert.equal(rows[footer - 1].type, 'process')
   }
 })
 
@@ -1263,6 +1272,17 @@ test('零次、一次、多次补充：每段独立开合，计数、总脚注�
       const builder = new RowBuilder()
       const rows = builder.build(view, 'all')
       const heads = rows.filter((r) => r.type === 'process')
+      if (origin && count === 0) {
+        // 没有补充的后台续做回合是系统回合：开头一行和过程并进跨回合收起块，标题行写回合用时，回答和回合尾在外面
+        assert.deepEqual(
+          rows.map((r) => r.type),
+          ['process', 'md', 'status'],
+        )
+        assert.equal(heads[0].key, 't:run')
+        assert.equal(heads[0].durationMs, 196000)
+        assert.deepEqual([heads[0].notes, heads[0].steps], [1, 1])
+        continue
+      }
       assert.equal(heads.length, count + 1)
       assert.deepEqual(
         heads.map((r) => [r.notes, r.steps]),

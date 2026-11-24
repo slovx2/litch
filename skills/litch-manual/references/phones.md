@@ -280,6 +280,9 @@ messages arrived while you were away. Other board tabs retain their own scroll p
   回合在跑、活动行在最下面时不再另起状态行；步骤之间在活动行末尾显示“正在工作 · N 秒”，用时每秒更新，
   有步骤在跑时用状态图标加命令显示，读屏仍可读到状态。正文接着出来后沿用原有状态行规则。
   回合结束后摘要写“已处理 · N 步”，用时只写在回合尾。
+  Consecutive system turns (reports, messages, finished background tasks) fold into one row that
+  carries the total time and message counts, the same as on desktop.
+  连续的系统回合（回报、消息、后台任务结束）和桌面一样并成一行，摘要写总用时和消息条数。
 - **Comment on this message**: long-press an assistant reply and choose Comment on this message.
   The comment editor opens immediately for the whole message; Add places the comment above the
   input. Long quotes use the same 2,000-character limit and truncation marker as desktop comments,
