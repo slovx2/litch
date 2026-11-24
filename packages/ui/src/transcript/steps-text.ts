@@ -1,6 +1,6 @@
 // 过程区里几行汇总的字：步骤组那一行（“读取 3 个文件，运行 2 条命令”）、正在跑的那一条叫什么、
 // 回合结束后整段过程收成的那一行。不靠浏览器，单测在 test/steps-text.test.mjs。
-import type { ItemView, ProcessTally, StepKind, StepsTally } from '@litch/core'
+import type { ItemView, ProcessTally, StepKind, StepsTally, SystemMessageCount } from '@litch/core'
 import type { Translator } from '../i18n/index.ts'
 
 const COUNT_KEYS = {
@@ -121,20 +121,34 @@ export function suggestTitles(item: ItemView): string {
   return item.spawned?.title ?? ''
 }
 
+/** 跨回合收起块里各种系统消息的写法 */
+const MESSAGE_KEYS = {
+  report: 'activity.messages.report',
+  message: 'activity.messages.message',
+  background: 'activity.messages.background',
+  schedule: 'activity.messages.schedule',
+  board: 'activity.messages.board',
+  goal: 'activity.messages.goal',
+  other: 'activity.messages.other',
+} as const
+
 /**
  * 回合结束后整段过程收成的那一行：前半是“已处理 X · N 段说明 · N 步 · N 个子代理”，后半是标红的几项。
- * 失败的步骤不在这里数（每条命令自己的退出码照写）：被拒、失败的子代理、回合出错或中断才标红
+ * 失败的步骤不在这里数（每条命令自己的退出码照写）：被拒、失败的子代理、回合出错或中断才标红。
+ * 跨回合收起块（核心的 systemRuns）另带 messages，末尾写“· 4 条回报”这样的几种系统消息各几条
  */
 export function processSummary(
   tally: ProcessTally,
   durationMs: string | null,
   t: Translator,
   ended: 'failed' | 'interrupted' | null,
+  messages: readonly SystemMessageCount[] = [],
 ): { plain: string[]; bad: string[] } {
   const plain = [durationMs ? t('activity.done', { time: durationMs }) : t('activity.doneBare')]
   if (tally.notes > 0) plain.push(t('activity.notes', { n: tally.notes }))
   if (tally.steps > 0) plain.push(t('activity.steps', { n: tally.steps }))
   if (tally.agents > 0) plain.push(t('activity.agents', { n: tally.agents }))
+  for (const message of messages) plain.push(t(MESSAGE_KEYS[message.kind], { n: message.n }))
   const bad: string[] = []
   if (tally.declined > 0) bad.push(t('activity.declined', { n: tally.declined }))
   if (tally.agentsFailed > 0) bad.push(t('activity.agentsFailed', { n: tally.agentsFailed }))

@@ -64,6 +64,7 @@ export const ProcessCell = memo(function ProcessCell({ row }: Props<'process'>) 
     ended && row.durationMs ? duration(row.durationMs, t) : null,
     t,
     row.status === 'failed' || row.status === 'interrupted' ? row.status : null,
+    row.messages,
   )
   const backgroundText = inBackground > 0 ? t('background.inTurn', { count: inBackground }) : null
   return (

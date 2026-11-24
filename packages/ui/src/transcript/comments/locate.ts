@@ -1,7 +1,7 @@
 // 跳到评论的原文、闪一下：输入框上的片、原文上的记号、对话里的评论卡片、回答里的 [N] 都走这里。
 // 原文在收起的过程里时先替它打开，等画出来再跳。
 import { type ItemView, keys, type Replica, type TurnView } from '@litch/core'
-import { setToggle } from '../state.ts'
+import { runFoldId, setToggle } from '../state.ts'
 import { findQuote, itemRoot, plainOf, rangeAt, squeeze, textNodes } from './text-range.ts'
 
 type Store = Replica['store']
@@ -114,6 +114,8 @@ export async function revealOrigin(store: Store, target: CommentTarget): Promise
   let root = itemRoot(scope, origin.itemId)
   if (!root) {
     setToggle(`${target.deviceId}:${target.sessionId}`, `p:${origin.turnId}`, true)
+    // 原文在跨回合收起块里（系统回合的过程说明）：块也打开
+    setToggle(`${target.deviceId}:${target.sessionId}`, runFoldId(origin.turnId), true)
     for (let tries = 0; tries < 10 && !root; tries++) {
       await frame()
       root = itemRoot(scope, origin.itemId)

@@ -109,9 +109,10 @@ test('达成那一句：排在达成它的回合最后一条回答下面、收�
   const rows = new RowBuilder().build(view, 'all')
   assert.deepEqual(
     rows.map((row) => row.type),
-    // commentary 是过程说明，回合结束跟着工具过程收起；不能用 final 冒充说明。
-    ['md', 'status', 'origin', 'process', 'md', 'goalReached', 'status'],
+    // 目标续做是系统回合，并进跨回合收起块：开头那一行连同过程收进标题行，只露结尾的回答。
+    ['md', 'status', 'process', 'md', 'goalReached', 'status'],
   )
+  assert.deepEqual(rows[2].messages, [{ kind: 'goal', n: 1 }])
   const line = rows.find((row) => row.type === 'goalReached')
   assert.equal(line.turnId, 't2')
   assert.equal(line.ms, 125_000)
@@ -120,17 +121,17 @@ test('达成那一句：排在达成它的回合最后一条回答下面、收�
     ['a1', 'a3'],
   )
 
-  // 同回合明确标为 final 的结论都应保留；达成提示仍只跟在最后一条回答后面。
-  // 这也覆盖后来补充一条短答时，不能把先前的正式结论降为折叠说明的规则。
+  // 系统回合（目标续做）里前面那段 final 也收进块里，只露结尾那段；达成提示跟在它后面。
+  // 用户发起的回合里多段 final 都保留的规则不变（rows.test.mjs）
   view.items.a2.phase = 'final'
   const finals = new RowBuilder().build(view, 'all')
   assert.deepEqual(
     finals.map((row) => row.type),
-    ['md', 'status', 'origin', 'md', 'process', 'md', 'goalReached', 'status'],
+    ['md', 'status', 'process', 'md', 'goalReached', 'status'],
   )
   assert.deepEqual(
     finals.filter((row) => row.type === 'md').map((row) => row.itemId),
-    ['a1', 'a2', 'a3'],
+    ['a1', 'a3'],
   )
   const reached = finals.findIndex((row) => row.type === 'goalReached')
   assert.equal(finals[reached - 1].itemId, 'a3')
@@ -171,9 +172,10 @@ test('接在模拟核心上：设下目标 meta 里有它，续跑几轮达成�
     rows.slice(0, 3).map((row) => row.type),
     ['status', 'goalReached', 'md'],
   )
+  // 续做的几轮并成一个收起块：标题行写几轮目标续做
   assert.ok(
-    rows.some((row) => row.type === 'origin' && row.origin === 'goal'),
-    '续跑回合开头那一行',
+    rows.some((row) => row.type === 'process' && row.messages?.some((m) => m.kind === 'goal')),
+    '续做回合的收起块',
   )
   assert.equal(rows.filter((row) => row.type === 'goalReached').length, 1)
 })

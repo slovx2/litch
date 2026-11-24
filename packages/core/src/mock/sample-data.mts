@@ -38,6 +38,7 @@ import { BUILTIN_PERMISSIONS } from '../projection/settings.mjs'
 import { sampleHarness, samplePresets, takesNote } from './sample-harness.mjs'
 import { sampleMachineAccess } from './sample-machine.mjs'
 import { sampleLocalService, sampleRemoteService } from './sample-service.mjs'
+import { SYSTEM_RUNS_SESSION, systemRunsHistory } from './sample-system-runs.mjs'
 import {
   SAMPLE_TEXT,
   type SampleLang,
@@ -761,7 +762,10 @@ export function sampleSession(
   }
   const id = summary.id
 
-  if (id === STREAM_SESSION.sessionId && deviceId === STREAM_SESSION.deviceId) {
+  if (id === SYSTEM_RUNS_SESSION.sessionId && deviceId === SYSTEM_RUNS_SESSION.deviceId) {
+    // 一次次被系统消息叫醒的会话：看跨回合收起块
+    for (const [turn, list] of systemRunsHistory(lang, summary.cwd, now)) add(turn, list)
+  } else if (id === STREAM_SESSION.sessionId && deviceId === STREAM_SESSION.deviceId) {
     // 更早的几轮问答，只为了让这个会话够长，能滚起来
     text.history.forEach(([question, answer], index) => {
       const turnId = `s1-h${index}`

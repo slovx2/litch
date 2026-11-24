@@ -68,6 +68,10 @@
   flex-direction: column;
   gap: 12px;
 }
+/* 整个并进收着的跨回合块里的回合：不占位置，也不留回合之间的间距 */
+.turn[hidden] {
+  display: none;
+}
 .tr[data-windowed] > .turn {
   /* 屏外回合保留 DOM 和查找能力，但不排版内部正文；滚到附近再按实际高度展开。 */
   content-visibility: auto;

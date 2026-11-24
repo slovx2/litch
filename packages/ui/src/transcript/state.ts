@@ -1,5 +1,6 @@
 // 对话区里只属于界面的两样状态：条目开没开，以及流式文字放到哪了。
 
+import { runOpen } from '@litch/core'
 import {
   createContext,
   useCallback,
@@ -85,6 +86,53 @@ export function useFold(
   return useToggle(sessionKey, verbose ? VERBOSE + id : id, verbose || fallback)
 }
 
+/** 跨回合收起块里每个回合各自的开关（核心的 runOpen 合起来看）：查找、跳到原文只开命中的那个回合的 */
+export const runFoldId = (turnId: string): string => `r:${turnId}`
+
+/**
+ * 跨回合收起块开没开（核心的 systemRuns 分出来的块）：成员各记一个开关，有一个开着就开，
+ * 点标题行时一起设。精简视图默认收着（fallback），详细视图里一律先开着，和 useFold 一样另记一份
+ */
+export function useRunFold(
+  sessionKey: string,
+  turnIds: readonly string[],
+  fallback: boolean,
+): [open: boolean, set: (next: boolean) => void] {
+  const verbose = useTranscriptView(sessionKey) === 'verbose'
+  const ids = turnIds.map((turnId) => (verbose ? VERBOSE : '') + runFoldId(turnId))
+  const joined = ids.join('\n')
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      const wanted = new Set(joined.split('\n').map((id) => toggleKey(sessionKey, id)))
+      const changed = (which: string) => {
+        if (wanted.has(which)) listener()
+      }
+      toggleListeners.add(changed)
+      return () => {
+        toggleListeners.delete(changed)
+      }
+    },
+    [sessionKey, joined],
+  )
+  const open = useSyncExternalStore(subscribe, () =>
+    runOpen(
+      joined
+        .split('\n')
+        .map((id) =>
+          searchExpanded.get(sessionKey)?.has(id) ? true : toggles.get(sessionKey)?.get(id),
+        ),
+      verbose || fallback,
+    ),
+  )
+  const set = useCallback(
+    (next: boolean) => {
+      for (const id of joined.split('\n')) pickToggle(sessionKey, id, next)
+    },
+    [sessionKey, joined],
+  )
+  return [open, set]
+}
+
 /** 从外面替一个可折叠的东西定开没开：和用户点了一样，正画着的那个跟着变。两档视图都算 */
 export function setToggle(sessionKey: string, id: string, next: boolean): void {
   pickToggle(sessionKey, id, next)
@@ -115,6 +163,13 @@ function subscribeTouch(listener: () => void): () => void {
 /** 这个回合有没有被手动展开过 */
 export function useTurnTouched(sessionKey: string, turnId: string): boolean {
   return useSyncExternalStore(subscribeTouch, () => touched.has(turnKey(sessionKey, turnId)))
+}
+
+/** 这几个回合里有没有哪个被手动展开过（跨回合收起块：有一个展开过就不自动收） */
+export function useTurnsTouched(sessionKey: string, turnIds: readonly string[]): boolean {
+  return useSyncExternalStore(subscribeTouch, () =>
+    turnIds.some((turnId) => touched.has(turnKey(sessionKey, turnId))),
+  )
 }
 
 /** 回合里的东西被手动展开时调它；不在回合里（比如子代理页）时什么都不做 */
