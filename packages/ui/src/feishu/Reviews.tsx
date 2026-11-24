@@ -1,6 +1,7 @@
 // 经理 Console 的“审批”页签（设备有审批扩展 litchReviews 时才有）：这位经理在审批发言的群里要发的话。
 // 列表待批的在前（快过期的在前），每条一行：发到哪、格式、剩余时间或状态、创建时间，下面一行内容开头；
-// 点开就地看详情（回复的哪条、@ 了谁、以谁的身份、每段内容、发起的回合、各个时间、谁在哪批的与理由）。
+// 以用户身份发的在行上标“以 某某 身份发”，经 lark-cli 发的标一个小记号（悬停看方法和路径）；
+// 点开就地看详情（回复的哪条、@ 了谁、以谁的身份、经 lark-cli 的方法与路径、每段内容、发起的回合、各个时间、谁在哪批的与理由）。
 // 待批的可批准或拒绝（理由选填），带 expectedRevision；冲突、已有结果、已过期时提示并重读快照。
 // 写操作只给设备管理员连接：判断沿用飞书设置的 admin。
 import { useCallback, useState } from 'react'
@@ -32,7 +33,14 @@ import {
   type WriteBlock,
   writeBlock,
 } from './model.ts'
-import { actingLabel, mentionNames, targetLabel, timeLeftText } from './speech-text.ts'
+import {
+  actingLabel,
+  actingUserText,
+  cliText,
+  mentionNames,
+  targetLabel,
+  timeLeftText,
+} from './speech-text.ts'
 
 const STATE_TONE: Record<ReviewState, string> = {
   pending: 'pill wait',
@@ -207,6 +215,11 @@ function Detail({
         <span>
           {t('feishu.review.detail.actingAs')} {actingLabel(t, preview)}
         </span>
+        {preview.cli ? (
+          <span className="mono" data-feishu-cli>
+            {cliText(t, preview.cli)}
+          </span>
+        ) : null}
         {preview.parts.length > 1 ? (
           <span>{t('feishu.review.detail.parts', { n: preview.parts.length })}</span>
         ) : null}
@@ -310,6 +323,7 @@ export function Reviews({ manager, online }: { manager: ManagerView; online: boo
             const expanded = open === review.reviewId
             const state = reviewShownState(review, now)
             const left = state === 'pending' ? timeLeft(review.expiresAt, now) : null
+            const acting = actingUserText(t, review.preview.actingAs)
             return (
               <li
                 key={review.reviewId}
@@ -332,6 +346,20 @@ export function Reviews({ manager, online }: { manager: ManagerView; online: boo
                       {t(`feishu.format.${format}`)}
                     </span>
                   ))}
+                  {acting ? (
+                    <span className="pill mute fs-acting ell" data-feishu-acting>
+                      {acting}
+                    </span>
+                  ) : null}
+                  {review.preview.cli ? (
+                    <span
+                      className="pill mute mono fs-nowrap"
+                      data-feishu-cli-mark
+                      title={cliText(t, review.preview.cli)}
+                    >
+                      lark-cli
+                    </span>
+                  ) : null}
                   <span className="grow" />
                   {left ? (
                     <span

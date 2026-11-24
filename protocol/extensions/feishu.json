@@ -517,6 +517,66 @@
       "result": { "$ref": "#/definitions/BindingResult" }
     },
     {
+      "kind": "Method",
+      "name": "litch/feishu/grant/list",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId"],
+        "properties": { "appId": { "$ref": "#/definitions/AppId" } }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["grants"],
+        "properties": {
+          "grants": { "type": "array", "items": { "$ref": "#/definitions/UserGrant" } }
+        }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/grant/invite",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId", "openId", "operationId"],
+        "properties": {
+          "appId": { "$ref": "#/definitions/AppId" },
+          "openId": { "$ref": "#/definitions/OpenId" },
+          "operationId": { "type": "string", "minLength": 1, "maxLength": 128 }
+        }
+      },
+      "result": { "$ref": "#/definitions/UserGrantResult" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/grant/revoke",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId", "openId"],
+        "properties": {
+          "appId": { "$ref": "#/definitions/AppId" },
+          "openId": { "$ref": "#/definitions/OpenId" }
+        }
+      },
+      "result": { "$ref": "#/definitions/UserGrantResult" }
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/feishu/grantsChanged",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId"],
+        "properties": {
+          "appId": { "$ref": "#/definitions/AppId" },
+          "openId": { "$ref": "#/definitions/OpenId" }
+        }
+      }
+    },
+    {
       "kind": "Notification",
       "name": "litch/feishu/outboxChanged",
       "params": {
@@ -565,6 +625,45 @@
         "createdAt": { "$ref": "#/definitions/Timestamp" },
         "expiresAt": { "$ref": "#/definitions/Timestamp" }
       }
+    },
+    "UserGrant": {
+      "description": "已绑定用户的用户身份授权；token 不出设备",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["appId", "openId", "revision", "name", "state", "scopes"],
+      "properties": {
+        "appId": { "$ref": "#/definitions/AppId" },
+        "openId": { "$ref": "#/definitions/OpenId" },
+        "revision": { "$ref": "#/definitions/Revision" },
+        "name": { "type": "string", "maxLength": 256 },
+        "state": { "enum": ["pending", "active", "expired", "revoked", "failed"] },
+        "pending": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verificationUrl", "userCode", "expiresAt"],
+          "properties": {
+            "verificationUrl": { "type": "string", "maxLength": 2048 },
+            "userCode": { "type": "string", "maxLength": 64 },
+            "expiresAt": { "$ref": "#/definitions/Timestamp" }
+          }
+        },
+        "scopes": {
+          "type": "array",
+          "maxItems": 500,
+          "items": { "type": "string", "maxLength": 128 }
+        },
+        "grantedAt": { "$ref": "#/definitions/Timestamp" },
+        "lastUsedAt": { "$ref": "#/definitions/Timestamp" },
+        "refreshedAt": { "$ref": "#/definitions/Timestamp" },
+        "revokedAt": { "$ref": "#/definitions/Timestamp" },
+        "error": { "type": "string", "pattern": "^[a-z_]{1,64}$" }
+      }
+    },
+    "UserGrantResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grant"],
+      "properties": { "grant": { "$ref": "#/definitions/UserGrant" } }
     },
     "Binding": {
       "type": "object",
@@ -676,7 +775,18 @@
         "createdAt": { "$ref": "#/definitions/Timestamp" },
         "updatedAt": { "$ref": "#/definitions/Timestamp" },
         "sentAt": { "$ref": "#/definitions/Timestamp" },
-        "cli": { "$ref": "#/definitions/CliRequest" }
+        "cli": { "$ref": "#/definitions/CliRequest" },
+        "actingAs": {
+          "description": "以用户身份发的；机器人发的不带",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "openId", "name"],
+          "properties": {
+            "type": { "const": "user" },
+            "openId": { "$ref": "#/definitions/OpenId" },
+            "name": { "type": "string", "maxLength": 256 }
+          }
+        }
       }
     },
     "AppId": { "type": "string", "pattern": "^cli_[0-9a-f]{16}$" },
@@ -781,6 +891,15 @@
         "missingScopes": { "type": "array", "items": { "type": "string", "maxLength": 128 } },
         "missingEvents": { "type": "array", "items": { "type": "string", "maxLength": 128 } },
         "missingCallbacks": { "type": "array", "items": { "type": "string", "maxLength": 128 } },
+        "missingUserScopes": {
+          "description": "用户身份要的权限里还没开的",
+          "type": "array",
+          "items": { "type": "string", "maxLength": 128 }
+        },
+        "refreshTokenDisabled": {
+          "description": "应用没开“刷新 user_access_token”，用户身份授权拿不到 refresh token",
+          "type": "boolean"
+        },
         "publish": {
           "type": "object",
           "additionalProperties": false,

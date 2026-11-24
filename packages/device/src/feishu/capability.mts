@@ -14,6 +14,8 @@ interface Snapshot {
   }[]
   onlineVersionId: string
   scopes: Set<string>
+  userScopes: Set<string>
+  allowRefreshToken: boolean
   callbacks: Set<string>
   /** 开着机器人等能力的应用发布时必须带上两端的默认能力，原样取当前值 */
   abilities: { mobile_default_ability?: string; pc_default_ability?: string }
@@ -67,6 +69,12 @@ async function snapshot(api: FeishuApi): Promise<Snapshot> {
         .filter((item) => item.scope_type === 'tenant' && item.grant_status === 1)
         .map((item) => String(item.scope_name)),
     ),
+    userScopes: new Set(
+      (grants.scopes ?? [])
+        .filter((item) => item.scope_type === 'user' && item.grant_status === 1)
+        .map((item) => String(item.scope_name)),
+    ),
+    allowRefreshToken: app.allow_refresh_token === true,
     callbacks: new Set(
       Array.isArray(callbackInfo.subscribed_callbacks)
         ? callbackInfo.subscribed_callbacks.map(String)
@@ -89,7 +97,13 @@ export async function checkCapability(
   now: number,
   previous: FeishuCapability | null,
 ): Promise<FeishuCapability> {
-  const empty = { missingScopes: [], missingEvents: [], missingCallbacks: [] }
+  const empty = {
+    missingScopes: [],
+    missingEvents: [],
+    missingCallbacks: [],
+    missingUserScopes: [],
+    refreshTokenDisabled: false,
+  }
   let shot: Snapshot
   try {
     shot = await snapshot(api)
@@ -100,11 +114,17 @@ export async function checkCapability(
   }
   const diff = diffCapability({
     scopes: shot.scopes,
+    userScopes: shot.userScopes,
     events: onlineEvents(shot),
     callbacks: shot.callbacks,
+    allowRefreshToken: shot.allowRefreshToken,
   })
   const missing =
-    diff.missingScopes.length + diff.missingEvents.length + diff.missingCallbacks.length > 0
+    diff.missingScopes.length +
+      diff.missingEvents.length +
+      diff.missingCallbacks.length +
+      diff.missingUserScopes.length >
+      0 || diff.refreshTokenDisabled
   const result: FeishuCapability = {
     checkedAt: now,
     state: shot.status === 0 ? 'app_disabled' : missing ? 'missing' : 'ok',
@@ -138,12 +158,17 @@ function nextVersion(versions: Snapshot['versions']): string {
   return best.join('.')
 }
 
-export function upgradeBody(diff: CapabilityDiff): Record<string, unknown> {
+export function upgradeBody(
+  diff: Partial<CapabilityDiff> &
+    Pick<CapabilityDiff, 'missingScopes' | 'missingEvents' | 'missingCallbacks'>,
+): Record<string, unknown> {
   const body: Record<string, unknown> = {}
-  if (diff.missingScopes.length > 0)
-    body.scope = {
-      add_scopes: diff.missingScopes.map((scope_name) => ({ scope_name, token_type: 'tenant' })),
-    }
+  const scopes = [
+    ...diff.missingScopes.map((scope_name) => ({ scope_name, token_type: 'tenant' })),
+    ...(diff.missingUserScopes ?? []).map((scope_name) => ({ scope_name, token_type: 'user' })),
+  ]
+  if (scopes.length > 0) body.scope = { add_scopes: scopes }
+  if (diff.refreshTokenDisabled) body.security = { allow_refresh_token: true }
   if (diff.missingEvents.length > 0)
     body.event = { subscription_type: 'websocket', add_events: diff.missingEvents }
   if (diff.missingCallbacks.length > 0) body.callback = { add_callbacks: diff.missingCallbacks }
@@ -170,7 +195,7 @@ export async function upgradeCapability(
       body: {
         ...shot.abilities,
         version: nextVersion(shot.versions),
-        remark: 'Litch 补齐所需的权限、事件和回调',
+        remark: 'Litch 补齐所需的权限、事件、回调和用户身份设置',
         changelog: '补齐 Litch 接入所需的权限、事件订阅和回调',
       },
     },

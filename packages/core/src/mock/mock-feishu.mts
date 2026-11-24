@@ -9,6 +9,7 @@ import type {
   FeishuOutboxEntry,
   FeishuPairing,
   FeishuRegistration,
+  FeishuUserGrant,
 } from '../../../protocol/src/feishu.mjs'
 import type { Review } from '../../../protocol/src/reviews.mjs'
 import { ChannelError, type Clock } from '../channel/protocol.mjs'
@@ -38,6 +39,8 @@ const sampleApp = (now: number, managerId: string | null): FeishuApp => ({
     missingScopes: ['calendar:calendar'],
     missingEvents: [],
     missingCallbacks: [],
+    missingUserScopes: ['task:task:read'],
+    refreshTokenDisabled: true,
   },
   creatorOpenId: 'ou_mock_owner',
   createdAt: now - 86_400 * 3,
@@ -154,6 +157,36 @@ const sampleBindings = (appId: string, now: number): FeishuBinding[] => [
   },
   {
     appId,
+    openId: 'ou_mock_advisor',
+    revision: 1,
+    name: '示例顾问',
+    state: 'bound',
+    approver: false,
+    retentionDays: 90,
+    boundAt: now - 86_400 * 4,
+  },
+  {
+    appId,
+    openId: 'ou_mock_intern',
+    revision: 1,
+    name: '示例实习生',
+    state: 'bound',
+    approver: false,
+    retentionDays: 30,
+    boundAt: now - 86_400 * 6,
+  },
+  {
+    appId,
+    openId: 'ou_mock_guest',
+    revision: 1,
+    name: '示例访客',
+    state: 'bound',
+    approver: false,
+    retentionDays: 30,
+    boundAt: now - 86_400 * 8,
+  },
+  {
+    appId,
     openId: 'ou_mock_former',
     revision: 3,
     name: '示例前同事',
@@ -162,6 +195,55 @@ const sampleBindings = (appId: string, now: number): FeishuBinding[] => [
     retentionDays: 30,
     boundAt: now - 86_400 * 20,
     revokedAt: now - 86_400 * 2,
+  },
+]
+
+/** 样例用户身份授权：负责人已授权，同事的授权在等本人点链接，顾问拒绝了，实习生的已失效；访客没有授权 */
+const sampleGrants = (appId: string, now: number): FeishuUserGrant[] => [
+  {
+    appId,
+    openId: 'ou_mock_owner',
+    revision: 2,
+    name: '示例负责人',
+    state: 'active',
+    scopes: ['docx:document:readonly', 'calendar:calendar:read', 'im:message.send_as_user'],
+    grantedAt: now - 86_400 * 2,
+    refreshedAt: now - 3600,
+    lastUsedAt: now - 600,
+  },
+  {
+    appId,
+    openId: 'ou_mock_member',
+    revision: 1,
+    name: '示例同事',
+    state: 'pending',
+    scopes: [],
+    pending: {
+      verificationUrl: 'https://accounts.feishu.cn/oauth/v1/device/verify?user_code=MOCK-0001',
+      userCode: 'MOCK-0001',
+      expiresAt: now + 240,
+    },
+  },
+  {
+    appId,
+    openId: 'ou_mock_advisor',
+    revision: 2,
+    name: '示例顾问',
+    state: 'failed',
+    scopes: [],
+    error: 'denied',
+  },
+  {
+    appId,
+    openId: 'ou_mock_intern',
+    revision: 4,
+    name: '示例实习生',
+    state: 'expired',
+    scopes: ['docx:document:readonly'],
+    grantedAt: now - 86_400 * 20,
+    lastUsedAt: now - 86_400 * 9,
+    refreshedAt: now - 86_400 * 9,
+    error: 'refresh_rejected',
   },
 ]
 
@@ -175,6 +257,20 @@ const sampleOutbox = (appId: string, managerId: string, now: number): FeishuOutb
     messageIds: [],
   }
   return [
+    {
+      ...base,
+      operationId: 'fs_mock_cli',
+      target: { kind: 'chat', id: 'oc_mock_review', name: '示例审批群' },
+      format: 'text',
+      summary: '我这边确认灰度名单没问题。',
+      parts: 1,
+      state: 'awaiting_approval',
+      reviewId: 'A-4',
+      cli: { method: 'POST', path: '/open-apis/im/v1/messages', action: 'send' },
+      actingAs: { type: 'user', openId: 'ou_mock_owner', name: '示例负责人' },
+      createdAt: now - 120,
+      updatedAt: now - 120,
+    },
     {
       ...base,
       operationId: 'fs_mock_pending',
@@ -229,7 +325,7 @@ const sampleOutbox = (appId: string, managerId: string, now: number): FeishuOutb
   ]
 }
 
-/** 样例审批：两条待批（一条带 @ 和回复、一条图片）、一条已拒 */
+/** 样例审批：三条待批（一条经 lark-cli 以用户身份发、一条带 @ 和回复、一条图片）、一条已拒 */
 const sampleReviews = (appId: string, managerId: string, now: number): Review[] => {
   const base = {
     kind: 'speech' as const,
@@ -248,6 +344,21 @@ const sampleReviews = (appId: string, managerId: string, now: number): Review[] 
     mentions: [],
   }
   return [
+    {
+      ...base,
+      reviewId: 'A-4',
+      revision: 1,
+      subjectRef: 'fs_mock_cli',
+      preview: {
+        ...preview,
+        actingAs: { type: 'user', openId: 'ou_mock_owner', name: '示例负责人' },
+        cli: { method: 'POST', path: '/open-apis/im/v1/messages', action: 'send' },
+        parts: [{ format: 'text', text: '我这边确认灰度名单没问题。' }],
+      },
+      state: 'pending',
+      createdAt: now - 120,
+      expiresAt: now + 86_280,
+    },
     {
       ...base,
       reviewId: 'A-3',
@@ -394,6 +505,7 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
     let outbox: FeishuOutboxEntry[] = managed ? sampleOutbox(sampleAppId, 'm1', now()) : []
     let reviews: Review[] = managed ? sampleReviews(sampleAppId, 'm1', now()) : []
     let bindings: FeishuBinding[] = managed ? sampleBindings(sampleAppId, now()) : []
+    let grants: FeishuUserGrant[] = managed ? sampleGrants(sampleAppId, now()) : []
     let pairingOpen = managed
     const ready = (value: unknown) => ({
       available: true,
@@ -403,7 +515,10 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
       error: null,
     })
     const publishBindings = (appId: string) => {
-      const value = { bindings: bindings.filter((one) => one.appId === appId) }
+      const value = {
+        bindings: bindings.filter((one) => one.appId === appId),
+        grants: grants.filter((one) => one.appId === appId),
+      }
       for (const sink of bindingSinks.get(appId) ?? []) sink.snapshot(ready(value))
     }
     const pairing = (appId: string, code: string): FeishuPairing => {
@@ -714,6 +829,8 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
                 missingScopes: app.capability?.missingScopes ?? [],
                 missingEvents: [],
                 missingCallbacks: [],
+                missingUserScopes: app.capability?.missingUserScopes ?? [],
+                refreshTokenDisabled: app.capability?.refreshTokenDisabled ?? false,
                 publish: { state: 'pending_review', versionId: 'mock-version', at: now() },
               },
             })
@@ -846,6 +963,53 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
           }
           case 'feishu.binding.list':
             return { bindings: bindings.filter((one) => one.appId === args.appId) }
+          case 'feishu.grant.list':
+            return { grants: grants.filter((one) => one.appId === args.appId) }
+          case 'feishu.grant.invite': {
+            const person = bindings.find(
+              (one) =>
+                one.appId === args.appId && one.openId === args.openId && one.state === 'bound',
+            )
+            if (!person) return fail('feishu_user_unbound')
+            const previous = grants.find(
+              (one) => one.appId === person.appId && one.openId === person.openId,
+            )
+            const grant: FeishuUserGrant = {
+              appId: person.appId,
+              openId: person.openId,
+              revision: (previous?.revision ?? 0) + 1,
+              name: person.name,
+              state: previous?.state === 'active' ? 'active' : 'pending',
+              scopes: previous?.scopes ?? [],
+              ...(previous?.grantedAt ? { grantedAt: previous.grantedAt } : {}),
+              pending: {
+                verificationUrl:
+                  'https://accounts.feishu.cn/oauth/v1/device/verify?user_code=MOCK-0002',
+                userCode: 'MOCK-0002',
+                expiresAt: now() + 240,
+              },
+            }
+            grants = [...grants.filter((one) => one !== previous), grant]
+            publishBindings(person.appId)
+            return { grant }
+          }
+          case 'feishu.grant.revoke': {
+            const found = grants.find(
+              (one) => one.appId === args.appId && one.openId === args.openId,
+            )
+            if (!found) return fail('feishu_grant_not_found')
+            const { pending: _pending, ...rest } = found
+            const grant: FeishuUserGrant = {
+              ...rest,
+              revision: found.revision + 1,
+              state: 'revoked',
+              revokedAt: now(),
+              error: 'revoked_by_admin',
+            }
+            grants = grants.map((one) => (one === found ? grant : one))
+            publishBindings(found.appId)
+            return { grant }
+          }
           case 'feishu.binding.lookup':
             return { pairing: pairing(String(args.appId), String(args.code)) }
           case 'feishu.binding.approve': {

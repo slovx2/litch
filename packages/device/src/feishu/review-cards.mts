@@ -199,7 +199,14 @@ export class FeishuReviewCards {
     const api = this.options.api(appId)
     if (!api) return
     const known = new Set(this.notices(review.reviewId).map((one) => one.openId))
-    for (const approver of this.options.bindings.approvers(appId)) {
+    // 审批人，加上以自己名义发的那个人（不管是不是审批人都能批自己的，D-182）
+    const recipients = [...this.options.bindings.approvers(appId)]
+    const acting = review.preview.actingAs
+    if (acting.type === 'user' && !recipients.some((one) => one.openId === acting.openId)) {
+      const owner = this.options.bindings.bound(appId, acting.openId)
+      if (owner) recipients.push(owner)
+    }
+    for (const approver of recipients) {
       if (known.has(approver.openId) || !approver.p2pChatId) continue
       const chatId = approver.p2pChatId
       this.saveNotice(review.reviewId, approver.openId, appId, 'sending', { chatId })
@@ -298,7 +305,9 @@ export class FeishuReviewCards {
     if (!review || review.preview.appId !== appId || !decision)
       return refuse('这条审批不存在。', 'not_found')
     const binding = bindings.bound(appId, openId)
-    if (!binding?.approver)
+    const owner =
+      review.preview.actingAs.type === 'user' && review.preview.actingAs.openId === openId
+    if (!binding || !(binding.approver || owner))
       return refuse('你不是这个应用的审批人，不能批。', 'not_approver', review)
     if (review.state !== 'pending')
       return refuse(`这条审批${STATE_TEXT[review.state]}。`, 'not_pending', review)

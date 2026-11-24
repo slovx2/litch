@@ -31,6 +31,9 @@ export const FEISHU_METHOD = {
   bindingApprove: 'litch/feishu/binding/approve',
   bindingRevoke: 'litch/feishu/binding/revoke',
   bindingUpdate: 'litch/feishu/binding/update',
+  grantList: 'litch/feishu/grant/list',
+  grantInvite: 'litch/feishu/grant/invite',
+  grantRevoke: 'litch/feishu/grant/revoke',
 } as const
 
 export const FEISHU_NOTIFICATION = {
@@ -40,6 +43,7 @@ export const FEISHU_NOTIFICATION = {
   inboxChanged: 'litch/feishu/inboxChanged',
   outboxChanged: 'litch/feishu/outboxChanged',
   bindingsChanged: 'litch/feishu/bindingsChanged',
+  grantsChanged: 'litch/feishu/grantsChanged',
 } as const
 
 /** 只读方法；其余写操作只给设备管理员连接 */
@@ -53,6 +57,7 @@ export const FEISHU_PUBLIC_READS: ReadonlySet<string> = new Set([
   FEISHU_METHOD.inboxGet,
   FEISHU_METHOD.outboxList,
   FEISHU_METHOD.bindingList,
+  FEISHU_METHOD.grantList,
 ])
 
 export const FEISHU_APP_ID = /^cli_[0-9a-f]{16}$/
@@ -111,6 +116,10 @@ export interface FeishuCapability {
   missingScopes: string[]
   missingEvents: string[]
   missingCallbacks: string[]
+  /** 用户身份要的权限里还没开的（D-183）；旧设备不带 */
+  missingUserScopes?: string[]
+  /** 应用没开“刷新 user_access_token”：用户身份授权拿不到 refresh token */
+  refreshTokenDisabled?: boolean
   /** 补申请后提交的版本；审核通过前是 pending_review */
   publish?: { state: 'pending_review' | 'published' | 'unknown'; versionId?: string; at: number }
 }
@@ -311,6 +320,8 @@ export interface FeishuOutboxEntry {
   sentAt?: number
   /** 经 lark-cli 发的：原始请求 */
   cli?: FeishuCliRequest
+  /** 以用户身份发的（D-182）；机器人发的不带 */
+  actingAs?: { type: 'user'; openId: string; name: string }
 }
 
 /** 私聊绑定（D-158）：和经理私聊的人。撤销后保留这一行（私聊记录照保留期清理） */
@@ -329,6 +340,29 @@ export interface FeishuBinding {
   retentionDays: number
   boundAt: number
   revokedAt?: number
+}
+
+/** 用户身份授权的状态（D-179）：等本人点链接、可用、失效（刷新被拒或 30 天没用）、撤销、没授权成（本人拒绝、链接过期、不是本人点的） */
+export type FeishuGrantState = 'pending' | 'active' | 'expired' | 'revoked' | 'failed'
+
+/** 已绑定用户的用户身份授权；token 不出设备 */
+export interface FeishuUserGrant {
+  appId: string
+  openId: string
+  revision: number
+  /** 绑定时的名字 */
+  name: string
+  state: FeishuGrantState
+  /** 进行中的授权：给本人点的链接、用户码、过期时间 */
+  pending?: { verificationUrl: string; userCode: string; expiresAt: number }
+  /** 飞书实际授予的权限 */
+  scopes: string[]
+  grantedAt?: number
+  lastUsedAt?: number
+  refreshedAt?: number
+  revokedAt?: number
+  /** 失效、撤销或上一次授权失败的原因代码 */
+  error?: string
 }
 
 /** 待批的配对请求（按配对码查到的） */
@@ -471,6 +505,18 @@ export interface FeishuRequests {
   [FEISHU_METHOD.bindingApprove]: Request<
     { appId: string; code: string },
     { binding: FeishuBinding }
+  >
+  /** 本应用已绑定用户的用户身份授权 */
+  [FEISHU_METHOD.grantList]: Request<{ appId: string }, { grants: FeishuUserGrant[] }>
+  /** 发起授权（设备码流程）：返回链接和用户码；同一个人再发起就作废上一个 */
+  [FEISHU_METHOD.grantInvite]: Request<
+    { appId: string; openId: string; operationId: string },
+    { grant: FeishuUserGrant }
+  >
+  /** 撤销授权：先在飞书撤销 token（尽力而为），再删设备上的 token */
+  [FEISHU_METHOD.grantRevoke]: Request<
+    { appId: string; openId: string },
+    { grant: FeishuUserGrant }
   >
   [FEISHU_METHOD.bindingRevoke]: Request<
     { appId: string; openId: string; expectedRevision: number },

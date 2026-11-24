@@ -25,6 +25,8 @@ export class FeishuFakeHarness {
       wakeTickMs?: number
       outboxTickMs?: number
       extensions?: string[]
+      /** 用户身份授权的轮询间隔（毫秒） */
+      grantPollMs?: number
       /** lark-cli 用这份（测试不真跑它时随便给个路径） */
       cliBinary?: string
     } = {},
@@ -39,6 +41,7 @@ export class FeishuFakeHarness {
           registrationIntervalMs: 10,
           ...(options.now ? { now: options.now } : {}),
           ...(options.wakeTickMs === undefined ? {} : { wakeTickMs: options.wakeTickMs }),
+          ...(options.grantPollMs === undefined ? {} : { grantPollMs: options.grantPollMs }),
           ...(options.outboxTickMs === undefined
             ? {}
             : { outboxTickMs: options.outboxTickMs, sendGapMs: 0 }),

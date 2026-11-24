@@ -159,7 +159,9 @@ export class DeviceAgentLaunch {
       typeof raw.harness === 'string'
     ) {
       const actor = this.actor(raw.threadId, raw.harness)
-      const result = actor && this.feishu ? await this.feishu.lease(actor) : null
+      const asUser =
+        typeof raw.asUser === 'string' && raw.asUser.length <= 256 ? raw.asUser : undefined
+      const result = actor && this.feishu ? await this.feishu.lease(actor, asUser) : null
       return result ?? {}
     }
     // 只问这个会话是不是已注入（Gemini、Qwen 的工具前钩子据此决定要不要给命令写上会话号），不发租约。

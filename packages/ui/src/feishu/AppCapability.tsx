@@ -1,4 +1,5 @@
-// 应用详情 · 能力自检：上次检查的时间与结果、缺的权限 / 事件 / 回调，“检查”和“补申请”。
+// 应用详情 · 能力自检：上次检查的时间与结果、缺的权限 / 用户身份权限 / 事件 / 回调，
+// 没开“刷新 user_access_token”单列一行，“检查”和“补申请”。用户身份缺的由补申请一并处理。
 // 两样都只在用户点了才做（补申请会给企业管理员发审核通知）；补申请提交后显示待审核。
 import { useT } from '../app/appearance.ts'
 import { stamp } from '../app/format.ts'
@@ -12,6 +13,7 @@ import {
   type FeishuApp,
   missingGroups,
   pendingReview,
+  userIdentityMissing,
   type WriteBlock,
 } from './model.ts'
 
@@ -107,6 +109,16 @@ export function AppCapability({
             </Field>
           ))
         : null}
+      {capability?.refreshTokenDisabled ? (
+        <p className="fs-hint err" data-feishu-refresh-off>
+          {t('feishu.cap.refreshToken')}
+        </p>
+      ) : null}
+      {userIdentityMissing(capability) ? (
+        <p className="fs-hint" data-feishu-user-note>
+          {t('feishu.cap.userNote')}
+        </p>
+      ) : null}
       {canUpgrade(capability) ? (
         <div className="ext-actions">
           <span className="ext-row-meta grow">{t('feishu.cap.upgradeNote')}</span>

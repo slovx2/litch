@@ -40,6 +40,8 @@ interface Lease {
   actor: FeishuCliActor
   appId: string
   at: number
+  /** 以这个已绑定用户的身份（LITCH_FEISHU_AS_USER）；没有就只能用机器人 */
+  user?: { openId: string; name: string }
 }
 
 /** null：这个会话没路由到飞书应用，交给宿主自己装的 lark-cli */
@@ -78,12 +80,20 @@ export class FeishuCliProxy {
   }
 
   /** 给一个命令发租约 */
-  async lease(actor: FeishuCliActor): Promise<FeishuCliLeaseResult> {
+  async lease(actor: FeishuCliActor, asUser?: string): Promise<FeishuCliLeaseResult> {
     const { feishu } = this.options
     const app = feishu.appForManager(actor.managerId)
     if (!app || this.closed) return null
+    let user: Lease['user']
+    if (asUser?.trim()) {
+      const found = this.user(app.appId, asUser.trim())
+      if ('error' in found) return found
+      user = found
+    }
     if (!app.enabled)
-      return { error: 'The Feishu app of this manager is disabled in Litch; lark-cli is unavailable.' }
+      return {
+        error: 'The Feishu app of this manager is disabled in Litch; lark-cli is unavailable.',
+      }
     if (!feishu.api(app.appId))
       return {
         error: 'The Feishu app of this manager is not running; check its credentials in Litch.',
@@ -111,7 +121,14 @@ export class FeishuCliProxy {
       return { error: 'Too many lark-cli commands are running; retry shortly.' }
     const key = randomBytes(32).toString('hex')
     const id = randomUUID()
-    this.leases.set(id, { id, key: Buffer.from(key), actor, appId: app.appId, at: Date.now() })
+    this.leases.set(id, {
+      id,
+      key: Buffer.from(key),
+      actor,
+      appId: app.appId,
+      at: Date.now(),
+      ...(user ? { user } : {}),
+    })
     const root = join(this.options.stateDirectory, FEISHU_CLI_DIRECTORY, app.appId)
     const folder = (name: string) => {
       const path = join(root, name)
@@ -127,8 +144,9 @@ export class FeishuCliProxy {
         LARKSUITE_CLI_PROXY_KEY: key,
         LARKSUITE_CLI_APP_ID: app.appId,
         LARKSUITE_CLI_BRAND: 'feishu',
-        LARKSUITE_CLI_STRICT_MODE: 'bot',
-        LARKSUITE_CLI_DEFAULT_AS: 'bot',
+        // 指定了用户：默认用户身份，也能 --as bot；没指定只能机器人
+        LARKSUITE_CLI_STRICT_MODE: user ? 'off' : 'bot',
+        LARKSUITE_CLI_DEFAULT_AS: user ? 'user' : 'bot',
         LARKSUITE_CLI_NO_UPDATE_NOTIFIER: '1',
         LARKSUITE_CLI_NO_SKILLS_NOTIFIER: '1',
         LARKSUITE_CLI_CONFIG_DIR: folder('config'),
@@ -136,6 +154,29 @@ export class FeishuCliProxy {
         LARKSUITE_CLI_LOG_DIR: folder('logs'),
       },
     }
+  }
+
+  /** LITCH_FEISHU_AS_USER：名字或 open_id，按本应用已绑定的人解析；不唯一就拒绝，不猜；要有可用的授权 */
+  private user(
+    appId: string,
+    wanted: string,
+  ): { openId: string; name: string } | { error: string } {
+    const { feishu } = this.options
+    const bound = feishu.bindings.records(appId).filter((one) => one.state === 'bound')
+    const byId = bound.find((one) => one.openId === wanted)
+    const named = byId ? [byId] : bound.filter((one) => one.name === wanted)
+    if (named.length === 0)
+      return { error: `No user bound to this Feishu app in Litch matches ${wanted}.` }
+    if (named.length > 1)
+      return {
+        error: `Several bound users are named ${wanted}: ${named.map((one) => one.openId).join(', ')}. Use the open_id.`,
+      }
+    const person = named[0] as { openId: string; name: string }
+    if (!feishu.grants.active(appId, person.openId))
+      return {
+        error: `${person.name || person.openId} has not granted user identity (or it expired). Ask them to grant it with feishu_user_grant_request or in Litch.`,
+      }
+    return { openId: person.openId, name: person.name }
   }
 
   release(id: string): void {
@@ -247,7 +288,8 @@ export class FeishuCliProxy {
           managerId: lease.actor.managerId,
           threadId: lease.actor.threadId,
           actor: lease.actor.kind,
-          identity: 'bot',
+          identity,
+          ...(identity === 'user' && lease.user ? { userOpenId: lease.user.openId } : {}),
           method,
           path: auditPath(normalizePath(rawPath) ?? '-'),
           route,
@@ -263,15 +305,19 @@ export class FeishuCliProxy {
     if (authHeader !== 'Authorization')
       return refused(403, 'Only OpenAPI requests are proxied (no MCP).', 'auth_header')
     // CLI 每条命令开头都会用用户身份探一次 user_info：照样拒绝，但不记审计（否则全是这一条）
-    if (identity === 'user' && method === 'GET' && rawPath === '/open-apis/authen/v1/user_info')
-      return reply(res, 401, 'User identity is not available; lark-cli runs as the bot.')
-    if (identity === 'user')
-      return refused(
-        401,
-        'User identity is not available for this command; lark-cli runs as the bot. Use --as bot.',
-        'identity',
-      )
-    if (identity !== 'bot') return refused(403, 'Unknown identity.', 'identity')
+    const hint =
+      'User identity needs a bound user who granted it: run LITCH_FEISHU_AS_USER=<name or open_id> lark-cli ...; otherwise use --as bot.'
+    // CLI 每条命令开头都会用用户身份探一次 user_info：没指定用户时照样拒绝，但不记审计（否则全是这一条）
+    if (
+      identity === 'user' &&
+      !lease.user &&
+      method === 'GET' &&
+      rawPath === '/open-apis/authen/v1/user_info'
+    )
+      return reply(res, 401, hint)
+    if (identity === 'user' && !lease.user) return refused(401, hint, 'identity')
+    if (identity !== 'bot' && identity !== 'user')
+      return refused(403, 'Unknown identity.', 'identity')
     const app = this.options.feishu.appForManager(lease.actor.managerId)
     if (!this.current(lease.actor) || app?.appId !== lease.appId || !app.enabled)
       return refused(401, 'This lark-cli lease is no longer valid.', 'lease')
@@ -286,9 +332,31 @@ export class FeishuCliProxy {
             : 'The request path is not allowed.',
         route.reason,
       )
+    // 用户身份：取这个人的 token（快过期先刷新）；授权失效就拒绝，不改用机器人
+    let userToken: string | undefined
+    if (identity === 'user' && lease.user) {
+      try {
+        userToken = await this.options.feishu.grants.token(lease.appId, lease.user.openId)
+      } catch {
+        return refused(
+          401,
+          `The user identity of ${lease.user.name || lease.user.openId} is no longer valid; ask them to grant it again.`,
+          'user_grant',
+        )
+      }
+    }
     const forwardHeaders = requestHeaders(req)
     if (route.kind === 'pass') {
-      const status = await this.forward(res, app, method, pathAndQuery, forwardHeaders, body)
+      const status = await this.forward(
+        res,
+        app,
+        method,
+        pathAndQuery,
+        forwardHeaders,
+        body,
+        undefined,
+        userToken,
+      )
       return audit(status, 'pass')
     }
     await this.speech(res, {
@@ -302,6 +370,7 @@ export class FeishuCliProxy {
       headers: forwardHeaders,
       body,
       audit,
+      ...(userToken && lease.user ? { user: { ...lease.user, token: userToken } } : {}),
     })
   }
 
@@ -319,6 +388,8 @@ export class FeishuCliProxy {
       headers: Record<string, string>
       body: Buffer
       audit: (status: number, route: string, extra?: Record<string, string>) => void
+      /** 以用户身份发 */
+      user?: { openId: string; name: string; token: string }
     },
   ): Promise<void> {
     const { feishu } = this.options
@@ -350,6 +421,7 @@ export class FeishuCliProxy {
               this.options.log(`飞书 CLI 发出的消息记录失败：${(error as Error).message}`)
             }
           },
+          input.user?.token,
         )
         return audit(status, 'speech_free')
       }
@@ -371,6 +443,11 @@ export class FeishuCliProxy {
         summary: preview.summary,
         preview: preview.parts,
         ...(preview.replyTo ? { replyTo: preview.replyTo } : {}),
+        ...(input.user
+          ? {
+              actingAs: { type: 'user' as const, openId: input.user.openId, name: input.user.name },
+            }
+          : {}),
       })
       const reviewId = record.reviewId ?? ''
       audit(403, 'speech_review', { reviewId, operationId: record.operationId })
@@ -396,6 +473,7 @@ export class FeishuCliProxy {
     headers: Record<string, string>,
     body: Buffer,
     onData?: (data: Record<string, unknown>) => void,
+    userToken?: string,
   ): Promise<number> {
     const api = this.options.feishu.api(app.appId)
     if (!api) {
@@ -404,7 +482,7 @@ export class FeishuCliProxy {
     }
     let answer: Awaited<ReturnType<typeof api.forward>>
     try {
-      answer = await api.forward(method, pathAndQuery, headers, body)
+      answer = await api.forward(method, pathAndQuery, headers, body, userToken)
     } catch (error) {
       const kind = error instanceof FeishuApiError ? error.kind : 'network'
       const status = kind === 'credential_rejected' ? 502 : 504

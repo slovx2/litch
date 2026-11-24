@@ -190,3 +190,11 @@ export const Snippet = glyph('M3.5 2.5h9v11h-9zM5.5 5.5h5M5.5 8h5M5.5 10.5h3')
 export const Spark = glyph('M8 2.5l1.4 4.1 4.1 1.4-4.1 1.4L8 13.5 6.6 9.4 2.5 8l4.1-1.4z')
 /** 评论：一个对话气泡 */
 export const Bubble = glyph('M2.5 3.5h11v7.5h-6l-3 2.5v-2.5h-2zM5 6.5h6M5 8.5h4')
+/** 用户身份授权：一把钥匙（圆头在左上，钥杆斜向右下带两齿） */
+export const Key = glyph(
+  'M6 2.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7zM8.5 8.5l5 5M11 11l-1.5 1.5M12.5 12.5L11 14',
+)
+/** 撤销授权：钥匙上一道斜线 */
+export const KeyOff = glyph(
+  'M6 2.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7zM8.5 8.5l5 5M11 11l-1.5 1.5M2.5 13.5l11-11',
+)

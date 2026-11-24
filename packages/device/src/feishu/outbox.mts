@@ -96,6 +96,8 @@ export interface FeishuOutboxOptions {
   log: (message: string) => void
   /** 发件行变了 */
   changed: (appId: string, operationId: string) => void
+  /** 用户身份的 access token（以用户身份发的 lark-cli 请求批了以后用） */
+  userToken?: (appId: string, openId: string) => Promise<string>
   /** 两次发送之间至少隔多久（毫秒），守飞书单群 5 QPS */
   gapMs?: number
   /** 到期重试的检查间隔（毫秒） */
@@ -125,6 +127,8 @@ export interface OutboxCliSubmit {
   format: FeishuOutboxFormat
   summary: string
   preview: ReviewSpeechPart[]
+  /** 以用户身份发（批了用这个人的 token 发） */
+  actingAs?: { type: 'user'; openId: string; name: string }
 }
 
 /** 入参或状态不对：消息就是给经理看的原因 */
@@ -290,6 +294,7 @@ export class FeishuOutbox {
       payloadHash,
       folder,
       cli: input.cli,
+      ...(input.actingAs ? { actingAs: input.actingAs } : {}),
     })
   }
 
@@ -310,6 +315,7 @@ export class FeishuOutbox {
     payloadHash: string
     folder: string
     cli?: FeishuCliRequest
+    actingAs?: { type: 'user'; openId: string; name: string }
   }): OutboxRecord {
     const { operationId, app, target, mentions, payloadHash } = input
     const now = this.options.now()
@@ -332,6 +338,7 @@ export class FeishuOutbox {
       createdAt: now,
       updatedAt: now,
       ...(input.cli ? { cli: input.cli } : {}),
+      ...(input.actingAs ? { actingAs: input.actingAs } : {}),
     }
     let review: Review | null = null
     try {
@@ -361,7 +368,7 @@ export class FeishuOutbox {
               appName: app.name,
               target: { kind: target.kind, id: target.id, name: target.name },
               ...(input.replyTo ? { replyTo: this.replyPreview(app.appId, input.replyTo) } : {}),
-              actingAs: { type: 'bot' },
+              actingAs: input.actingAs ?? { type: 'bot' },
               mentions,
               parts: input.preview,
               ...(input.cli ? { cli: input.cli } : {}),
@@ -769,7 +776,7 @@ export class FeishuOutbox {
       for (let index = current.messageIds.length; index < frozen.parts.length; index++) {
         const part = frozen.parts[index] as SpeechPart
         if (part.raw) {
-          const item = await this.forwardRaw(api, frozen.folder, part.raw)
+          const item = await this.forwardRaw(api, frozen.folder, part.raw, current.actingAs)
           const messageId = typeof item?.message_id === 'string' ? item.message_id : ''
           if (messageId) current = { ...current, messageIds: [...current.messageIds, messageId] }
           this.save(current)
@@ -890,13 +897,25 @@ export class FeishuOutbox {
     api: import('./api.mjs').FeishuApi,
     folder: string,
     raw: NonNullable<SpeechPart['raw']>,
+    actingAs: OutboxRecord['actingAs'],
   ): Promise<Record<string, unknown> | null> {
     const body = readFileSync(join(folder, raw.file))
+    let userToken: string | undefined
+    if (actingAs) {
+      // 授权失效或撤销了：不发，也不改用机器人
+      try {
+        userToken = await (this.options.userToken?.(api.appId, actingAs.openId) ??
+          Promise.reject(new Error('no user token')))
+      } catch {
+        throw new FeishuApiError('credential_rejected')
+      }
+    }
     const reply = await api.forward(
       raw.method,
       raw.pathAndQuery,
       raw.contentType ? { 'content-type': raw.contentType } : {},
       body,
+      userToken,
     )
     if (reply.status === 429) throw new FeishuApiError('rate_limited', { status: 429 })
     if (!reply.json) {
@@ -907,10 +926,10 @@ export class FeishuOutbox {
     }
     const { code, data } = reply.json
     if (code !== 0)
-      throw new FeishuApiError(
-        code === undefined && reply.status >= 500 ? 'network' : 'platform',
-        { ...(code === undefined ? {} : { code }), status: reply.status },
-      )
+      throw new FeishuApiError(code === undefined && reply.status >= 500 ? 'network' : 'platform', {
+        ...(code === undefined ? {} : { code }),
+        status: reply.status,
+      })
     return data && typeof data === 'object' && !Array.isArray(data)
       ? (data as Record<string, unknown>)
       : null

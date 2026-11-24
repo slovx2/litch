@@ -133,6 +133,16 @@ export class DeviceFeishuRpc {
         const input = args(method)
         return { entry: service.outboxCancel(input.appId, input.operationId) }
       }
+      case M.grantList:
+        return { grants: service.grantList(args(method).appId) }
+      case M.grantInvite: {
+        const input = args(method)
+        return { grant: await service.grantInvite(input.appId, input.openId, input.operationId) }
+      }
+      case M.grantRevoke: {
+        const input = args(method)
+        return { grant: service.grantRevoke(input.appId, input.openId) }
+      }
       case M.bindingList:
         return { bindings: service.bindingList(args(method).appId) }
       case M.bindingLookup: {

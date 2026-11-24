@@ -675,3 +675,147 @@ test('私聊绑定：快照与手里更新的合并', () => {
   assert.equal(m.staleReason('binding_revoked'), true)
   assert.equal(m.staleReason('pairing_not_found'), false)
 })
+
+test('能力自检：用户身份权限单列一组，没开刷新 user_access_token 也算缺', () => {
+  const capability = {
+    checkedAt: 0,
+    state: 'missing',
+    missingScopes: [],
+    missingEvents: [],
+    missingCallbacks: [],
+    missingUserScopes: ['task:task:read'],
+  }
+  assert.deepEqual(
+    m.missingGroups(capability).map((group) => group.kind),
+    ['userScopes'],
+  )
+  assert.equal(m.userIdentityMissing(capability), true)
+  assert.equal(
+    m.userIdentityMissing({ ...capability, missingUserScopes: [], refreshTokenDisabled: true }),
+    true,
+  )
+  // 旧设备不带这两项
+  const { missingUserScopes: _skip, ...old } = capability
+  assert.deepEqual(m.missingGroups(old), [])
+  assert.equal(m.userIdentityMissing(old), false)
+  assert.equal(m.userIdentityMissing(null), false)
+})
+
+const NOW_MS = 1_700_000_000_000
+const grant = (openId, patch = {}) => ({
+  appId: 'cli_0000000000000001',
+  openId,
+  revision: 1,
+  name: openId,
+  state: 'active',
+  scopes: [],
+  ...patch,
+})
+
+test('用户身份授权：状态、能不能发起与撤销', () => {
+  const pending = grant('p', {
+    state: 'pending',
+    pending: { verificationUrl: 'https://x', userCode: 'C', expiresAt: NOW_MS / 1000 + 60 },
+  })
+  const stale = grant('s', {
+    state: 'pending',
+    pending: { verificationUrl: 'https://x', userCode: 'C', expiresAt: NOW_MS / 1000 - 1 },
+  })
+  assert.equal(m.grantShown(null), 'none')
+  assert.equal(m.GRANT_TONE[m.grantShown(grant('a'))], 'ok')
+  assert.equal(m.grantFor([grant('a'), pending], 'p'), pending)
+  assert.equal(m.grantFor([grant('a')], 'x'), null)
+  // 未授权、失效、撤销、失败能发起；已授权不能；待同意的链接过期了才能重新发起
+  for (const one of [null, grant('e', { state: 'expired' }), grant('r', { state: 'revoked' })])
+    assert.equal(m.canInviteGrant(one, NOW_MS), true)
+  assert.equal(m.canInviteGrant(grant('f', { state: 'failed' }), NOW_MS), true)
+  assert.equal(m.canInviteGrant(grant('a'), NOW_MS), false)
+  assert.equal(m.canInviteGrant(pending, NOW_MS), false)
+  assert.equal(m.canInviteGrant(stale, NOW_MS), true)
+  assert.equal(m.grantLinkLive(pending, NOW_MS), true)
+  assert.equal(m.grantLinkLive(stale, NOW_MS), false)
+  // 已授权、待同意能撤销
+  assert.equal(m.canRevokeGrant(grant('a')), true)
+  assert.equal(m.canRevokeGrant(pending), true)
+  assert.equal(m.canRevokeGrant(grant('e', { state: 'expired' })), false)
+  assert.equal(m.canRevokeGrant(null), false)
+})
+
+test('用户身份授权：原因代码、合并、命令失败的原因', () => {
+  assert.equal(m.grantError(grant('f', { state: 'failed', error: 'denied' })), 'denied')
+  assert.equal(
+    m.grantError(grant('e', { state: 'expired', error: 'refresh_rejected' })),
+    'refresh_rejected',
+  )
+  assert.equal(m.grantError(grant('f', { state: 'failed', error: 'brand_new' })), 'other')
+  // 已授权、待同意不说原因（上一次失败的原因不再显示）
+  assert.equal(m.grantError(grant('a', { error: 'denied' })), null)
+  assert.equal(m.grantError(grant('f', { state: 'failed' })), null)
+  assert.equal(m.grantError(null), null)
+
+  const merged = m.mergeGrants(
+    [grant('a', { revision: 2 }), grant('b', { revision: 3 })],
+    [grant('a', { revision: 3, state: 'revoked' }), grant('b', { revision: 2 }), grant('c')],
+  )
+  assert.deepEqual(
+    merged.map((one) => `${one.openId}:${one.revision}:${one.state}`),
+    ['a:3:revoked', 'b:3:active', 'c:1:active'],
+  )
+
+  assert.equal(m.grantFail({ message: 'feishu_user_scopes_missing' }), 'user_scopes_missing')
+  assert.equal(m.grantFail({ message: 'user_scopes_missing' }), null)
+  assert.equal(m.grantFail({ message: 'feishu_app_not_found' }), null)
+  assert.equal(m.grantStale(m.grantFail({ message: 'feishu_grant_not_found' })), true)
+  assert.equal(m.grantStale(m.grantFail({ message: 'feishu_user_unbound' })), true)
+  assert.equal(m.grantStale(m.grantFail({ message: 'feishu_network' })), false)
+})
+
+test('审批与发件的小字：经 lark-cli 一行、以用户身份发', async () => {
+  const s = await import('../src/feishu/speech-text.ts')
+  const t = (key, params = {}) => `${key}${JSON.stringify(params)}`
+  assert.equal(
+    s.cliText(t, { method: 'POST', path: '/open-apis/im/v1/messages', action: 'send' }),
+    'feishu.cli.line{"method":"POST","path":"/open-apis/im/v1/messages","action":"send"}',
+  )
+  assert.equal(s.actingUserText(t, undefined), null)
+  assert.equal(s.actingUserText(t, { type: 'bot' }), null)
+  assert.equal(
+    s.actingUserText(t, { type: 'user', openId: 'ou_x', name: ' ' }),
+    'feishu.actingAsUser{"name":"ou_x"}',
+  )
+})
+
+test('授权的几句：状态、原因、链接有效期、次要信息', async () => {
+  const g = await import('../src/feishu/grant-text.ts')
+  const t = Object.assign((key, params = {}) => `${key}${JSON.stringify(params)}`, {
+    lang: 'zh-CN',
+  })
+  assert.equal(g.grantStateText(t, null), 'feishu.grant.state.none{}')
+  assert.equal(
+    g.grantErrorText(t, grant('f', { state: 'failed', error: 'odd' })),
+    'feishu.grant.error.other{"code":"odd"}',
+  )
+  assert.equal(
+    g.grantLinkLeftText(
+      t,
+      { verificationUrl: '', userCode: '', expiresAt: NOW_MS / 1000 - 1 },
+      NOW_MS,
+    ),
+    'feishu.grant.linkExpired{}',
+  )
+  assert.match(
+    g.grantLinkLeftText(
+      t,
+      { verificationUrl: '', userCode: '', expiresAt: NOW_MS / 1000 + 240 },
+      NOW_MS,
+    ),
+    /^feishu\.grant\.linkLeft\{"left":"feishu\.review\.left\.minute\{\\"n\\":4\}","time":/,
+  )
+  assert.equal(g.grantDetailText(t, null, NOW_MS), '')
+  const detail = g.grantDetailText(
+    t,
+    grant('a', { grantedAt: NOW_MS / 1000 - 60, scopes: ['x', 'y'] }),
+    NOW_MS,
+  )
+  assert.match(detail, /^feishu\.grant\.grantedAt\{"time":".+"\} · feishu\.grant\.scopes\{"n":2\}$/)
+})

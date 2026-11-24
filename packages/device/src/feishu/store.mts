@@ -57,6 +57,12 @@ export type FeishuAuditAction =
   | 'review_card_decided'
   | 'review_card_refused'
   | 'cli_request'
+  | 'grant_invited'
+  | 'grant_granted'
+  | 'grant_mismatch'
+  | 'grant_failed'
+  | 'grant_expired'
+  | 'grant_revoked'
 
 export interface FeishuAuditEntry {
   action: FeishuAuditAction

@@ -6,6 +6,7 @@ import test, { type TestContext } from 'node:test'
 import { FEISHU_METHOD as M } from '../../protocol/src/feishu.mjs'
 import { FEISHU_EVENTS, FEISHU_SCOPES } from '../src/feishu/permissions.mjs'
 import { creationUrl } from '../src/feishu/registration.mjs'
+import { FEISHU_USER_SCOPES } from '../src/feishu/user-oauth.mjs'
 import { FakeFeishu } from './feishu-fake.mjs'
 import { rig, TestClient } from './helpers.mjs'
 
@@ -314,15 +315,25 @@ test('能力自检列出缺项；补申请只追加清单里的并提交发布',
   assert.equal(checked.capability.state, 'needs_self_manage')
   for (const scope of FEISHU_SCOPES) if (scope !== 'im:resource') app.scopes.add(scope)
   for (const event of FEISHU_EVENTS) app.events.add(event)
+  for (const scope of FEISHU_USER_SCOPES) if (scope !== 'im:chat:read') app.userScopes.add(scope)
+  app.allowRefreshToken = false
   checked = (await admin.call(M.appCheck, { appId: APP })).app
   assert.equal(checked.capability.state, 'missing')
   assert.deepEqual(checked.capability.missingScopes, ['im:resource'])
   assert.deepEqual(checked.capability.missingCallbacks, ['card.action.trigger'])
+  assert.deepEqual(checked.capability.missingUserScopes, ['im:chat:read'])
+  assert.equal(checked.capability.refreshTokenDisabled, true)
   const upgraded = (await admin.call(M.appUpgrade, { appId: APP, operationId: 'u' })).app
   assert.equal(upgraded.capability.publish.state, 'pending_review')
   assert.equal(fake.patches.length, 1)
   assert.deepEqual(fake.patches[0]?.body, {
-    scope: { add_scopes: [{ scope_name: 'im:resource', token_type: 'tenant' }] },
+    scope: {
+      add_scopes: [
+        { scope_name: 'im:resource', token_type: 'tenant' },
+        { scope_name: 'im:chat:read', token_type: 'user' },
+      ],
+    },
+    security: { allow_refresh_token: true },
     callback: { add_callbacks: ['card.action.trigger'] },
   })
   assert.equal(fake.publishes.length, 1)

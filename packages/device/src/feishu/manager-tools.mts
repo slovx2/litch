@@ -1,4 +1,6 @@
 // 经理的飞书工具（litch_feishu）：设备执行，按调用的会话认出经理，只能用它绑定的应用、只看已接入的群。
+
+import { randomUUID } from 'node:crypto'
 import {
   type ClientToolCallResponse,
   clientToolFailure,
@@ -120,6 +122,8 @@ export class FeishuManagerTools {
         return this.sendView(manager, args)
       case FEISHU_TOOL.sendCancel:
         return this.sendCancel(manager, args)
+      case FEISHU_TOOL.userGrantRequest:
+        return this.userGrantRequest(app, args)
       default:
         return refuse(`Unknown litch_feishu tool ${tool}.`)
     }
@@ -232,13 +236,45 @@ export class FeishuManagerTools {
     return { openId: found.openId, name: found.name, chatId: found.p2pChatId }
   }
 
+  /** 发起用户身份授权：链接和用户码交给经理转给本人 */
+  private async userGrantRequest(app: FeishuAppRecord, args: Record<string, unknown>) {
+    const user = this.boundUser(app, args.user)
+    const reason = typeof args.reason === 'string' ? args.reason.slice(0, 500) : ''
+    let grant: Awaited<ReturnType<DeviceFeishuService['grants']['invite']>>
+    try {
+      grant = await this.feishu.grants.invite(app.appId, user.openId, `tool-${randomUUID()}`, {
+        via: 'manager_tool',
+        ...(reason ? { reason } : {}),
+      })
+    } catch (error) {
+      const code = (error as Error).message
+      return refuse(
+        code === 'feishu_user_scopes_missing'
+          ? 'The Feishu app has no user-identity permissions yet; an admin must apply for them in Litch (app details, capability check).'
+          : `Could not start the grant (${code}).`,
+      )
+    }
+    return {
+      user: { openId: user.openId, name: user.name },
+      verificationUrl: grant.pending?.verificationUrl,
+      userCode: grant.pending?.userCode,
+      expiresAt: grant.pending?.expiresAt,
+      note: 'Only this person can approve, by opening the link in Feishu. After granting, lark-cli can read all of their Feishu chats. Check the result later with feishu_chats (userIdentity).',
+    }
+  }
+
   private chats(app: FeishuAppRecord) {
     const { chats, messages } = this.feishu
     return {
       users: this.feishu.bindings
         .records(app.appId)
         .filter((one) => one.state === 'bound')
-        .map((one) => ({ openId: one.openId, name: one.name })),
+        .map((one) => ({
+          openId: one.openId,
+          name: one.name,
+          // 能不能用 LITCH_FEISHU_AS_USER 以他的身份
+          userIdentity: this.feishu.grants.get(app.appId, one.openId)?.state ?? 'none',
+        })),
       chats: chats
         .activeChats(app.appId)
         .filter((chat) => chat.access)

@@ -144,7 +144,14 @@ export async function deviceFeishuEnvironment(
   const deviceSocket = env.LITCH_DEVICE_SOCKET
   if (!deviceSocket || !threadId) return { state: 'host' }
   const path = deviceGithubEnvironmentSocket(deviceSocket)
-  const value = (await request(path, { action: 'feishu', harness, threadId })) as {
+  // LITCH_FEISHU_AS_USER=<名字或 open_id>：以这个已绑定用户的身份（设备核对授权）
+  const asUser = env.LITCH_FEISHU_AS_USER
+  const value = (await request(path, {
+    action: 'feishu',
+    harness,
+    threadId,
+    ...(asUser ? { asUser } : {}),
+  })) as {
     lease?: unknown
     env?: Record<string, string>
     larkPath?: unknown

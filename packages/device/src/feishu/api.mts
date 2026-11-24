@@ -185,6 +185,8 @@ export class FeishuApi {
     pathAndQuery: string,
     headers: Record<string, string>,
     body: Buffer | undefined,
+    /** 用户身份：用这个 token，不用应用令牌（失效时由授权那边处理，这里不重试） */
+    userToken?: string,
   ): Promise<{
     status: number
     headers: Headers
@@ -193,7 +195,7 @@ export class FeishuApi {
   }> {
     if (!pathAndQuery.startsWith('/')) throw new FeishuApiError('invalid')
     for (let attempt = 0; ; attempt++) {
-      const token = await this.token()
+      const token = userToken ?? (await this.token())
       const response = await this.send(
         method,
         `${this.endpoints.open}${pathAndQuery}`,
@@ -206,7 +208,7 @@ export class FeishuApi {
       const bytes = await bounded(response, RESPONSE_LIMIT)
       const parsed = parse(bytes.toString('utf8'))
       const code = typeof parsed.code === 'number' ? parsed.code : undefined
-      if (code !== undefined && TOKEN_INVALID.has(code) && attempt === 0) {
+      if (code !== undefined && TOKEN_INVALID.has(code) && attempt === 0 && !userToken) {
         this.invalidate()
         continue
       }
