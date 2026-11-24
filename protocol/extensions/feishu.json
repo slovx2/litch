@@ -20,7 +20,8 @@
     "群只有经 chat/access 明确接入后才收、记、发；机器人只是被拉进群什么都不做。接入必须选发言模式，外部群必须带 confirmExternal: true。",
     "机器人被移出已接入的群时接入设置保留（botPresent=false），重新拉进来自动恢复。",
     "设备只记录已接入群里的消息；接入时补最近 7 天、单次补历史最多 1000 条，进度在群的 records 里。",
-    "收件箱只列 @ 了机器人或回复机器人、且发送人在叫醒名单里的消息；条目不带正文，inbox/get 从设备的消息库读原文。"
+    "收件箱只列 @ 了机器人或回复机器人、且发送人在叫醒名单里的消息；条目不带正文，inbox/get 从设备的消息库读原文。",
+    "发言经发件队列：自由发言的群直接排队发出；审批发言的群先冻结内容、建 litchReviews 审批，批准后按冻结的内容原样发出。outbox/cancel 只撤还没发出的，不撤回飞书上已发的消息。"
   ],
   "parts": [
     {
@@ -350,6 +351,55 @@
       }
     },
     {
+      "kind": "Method",
+      "name": "litch/feishu/outbox/list",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId"],
+        "properties": {
+          "appId": { "$ref": "#/definitions/AppId" },
+          "states": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": { "$ref": "#/definitions/OutboxState" }
+          },
+          "before": { "$ref": "#/definitions/OutboxOperationId" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entries"],
+        "properties": {
+          "entries": { "type": "array", "items": { "$ref": "#/definitions/OutboxEntry" } },
+          "next": { "$ref": "#/definitions/OutboxOperationId" }
+        }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/outbox/cancel",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId", "operationId"],
+        "properties": {
+          "appId": { "$ref": "#/definitions/AppId" },
+          "operationId": { "$ref": "#/definitions/OutboxOperationId" }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entry"],
+        "properties": { "entry": { "$ref": "#/definitions/OutboxEntry" } }
+      }
+    },
+    {
       "kind": "Notification",
       "name": "litch/feishu/appsChanged",
       "params": {
@@ -396,9 +446,90 @@
           "appId": { "$ref": "#/definitions/AppId" }
         }
       }
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/feishu/outboxChanged",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId", "operationId"],
+        "properties": {
+          "appId": { "$ref": "#/definitions/AppId" },
+          "operationId": { "$ref": "#/definitions/OutboxOperationId" }
+        }
+      }
     }
   ],
   "definitions": {
+    "OutboxOperationId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{8,40}$" },
+    "OutboxState": {
+      "enum": [
+        "awaiting_approval",
+        "queued",
+        "sending",
+        "sent",
+        "failed",
+        "rejected",
+        "canceled",
+        "unknown"
+      ]
+    },
+    "OutboxEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operationId",
+        "appId",
+        "managerId",
+        "target",
+        "format",
+        "summary",
+        "parts",
+        "messageIds",
+        "mentions",
+        "state",
+        "attempts",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "operationId": { "$ref": "#/definitions/OutboxOperationId" },
+        "appId": { "$ref": "#/definitions/AppId" },
+        "managerId": { "type": "string", "maxLength": 128 },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "id", "name"],
+          "properties": {
+            "kind": { "enum": ["chat", "user"] },
+            "id": { "type": "string", "maxLength": 128 },
+            "name": { "type": "string", "maxLength": 256 }
+          }
+        },
+        "replyTo": { "type": "string", "maxLength": 128 },
+        "format": { "enum": ["text", "post", "card", "image", "file"] },
+        "summary": { "type": "string", "maxLength": 400 },
+        "parts": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "messageIds": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "type": "string", "maxLength": 128 }
+        },
+        "mentions": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "#/definitions/Person" }
+        },
+        "state": { "$ref": "#/definitions/OutboxState" },
+        "reviewId": { "type": "string", "pattern": "^A-[1-9][0-9]{0,15}$" },
+        "attempts": { "$ref": "#/definitions/Count" },
+        "error": { "type": "string", "pattern": "^[a-z_]{1,64}$" },
+        "createdAt": { "$ref": "#/definitions/Timestamp" },
+        "updatedAt": { "$ref": "#/definitions/Timestamp" },
+        "sentAt": { "$ref": "#/definitions/Timestamp" }
+      }
+    },
     "AppId": { "type": "string", "pattern": "^cli_[0-9a-f]{16}$" },
     "LogicalId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
     "OperationId": { "type": "string", "minLength": 1, "maxLength": 128 },

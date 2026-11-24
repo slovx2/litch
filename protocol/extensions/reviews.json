@@ -1,0 +1,248 @@
+{
+  "extension": "litchReviews",
+  "description": "通用审批：Agent 要做、但得先由人批的动作。设备把要执行的内容冻结下来、算哈希，建一条审批；批准后设备照冻结的内容原样执行。目前只有一种：经理在审批发言的飞书群里发言（kind=speech，provider=feishu）。类型与形状检查在 packages/protocol/src/reviews.mts。",
+  "appliesTo": "设备聚合面。设备通过 runtime/info.device.extensions 声明；客户端按连接在 initialize 中声明。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "litchReviews" }
+    }
+  },
+  "undeclared": "不提供审批方法及通知。",
+  "rules": [
+    "decide 只给设备管理员连接；list、get 给声明了扩展的连接。",
+    "审批批的是冻结的内容：preview 是给人看的样子，payloadHash 是冻结内容的 SHA-256；执行前设备再核一次哈希，对不上就不执行。",
+    "只有 pending 的审批能决定；decide 要带当前 revision，对不上回冲突。过了 expiresAt 设备把它标成 expired。",
+    "飞书里标了审批人的已绑定用户也能在审批卡片上批（decidedBy.via=feishu）；一处批了，其他地方同步成结果。",
+    "时间用 UTC epoch 秒。"
+  ],
+  "parts": [
+    {
+      "kind": "Method",
+      "name": "litch/reviews/list",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "states": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 5,
+            "uniqueItems": true,
+            "items": { "$ref": "#/definitions/ReviewState" }
+          },
+          "managerId": { "$ref": "#/definitions/LogicalId" },
+          "before": { "$ref": "#/definitions/ReviewId" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reviews"],
+        "properties": {
+          "reviews": { "type": "array", "items": { "$ref": "#/definitions/Review" } },
+          "next": { "$ref": "#/definitions/ReviewId" }
+        }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/reviews/get",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reviewId"],
+        "properties": { "reviewId": { "$ref": "#/definitions/ReviewId" } }
+      },
+      "result": { "$ref": "#/definitions/ReviewResult" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/reviews/decide",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reviewId", "decision", "expectedRevision"],
+        "properties": {
+          "reviewId": { "$ref": "#/definitions/ReviewId" },
+          "decision": { "enum": ["approve", "reject"] },
+          "reason": { "type": "string", "maxLength": 500 },
+          "expectedRevision": { "$ref": "#/definitions/Revision" }
+        }
+      },
+      "result": { "$ref": "#/definitions/ReviewResult" }
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/reviews/changed",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reviewId", "revision", "managerId"],
+        "properties": {
+          "reviewId": { "$ref": "#/definitions/ReviewId" },
+          "revision": { "$ref": "#/definitions/Revision" },
+          "managerId": { "$ref": "#/definitions/LogicalId" }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "ReviewId": { "type": "string", "pattern": "^A-[1-9][0-9]{0,15}$" },
+    "LogicalId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+    "Revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "Timestamp": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "ReviewState": { "enum": ["pending", "approved", "rejected", "canceled", "expired"] },
+    "ReviewResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["review"],
+      "properties": { "review": { "$ref": "#/definitions/Review" } }
+    },
+    "Person": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["openId", "name"],
+      "properties": {
+        "openId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 256 }
+      }
+    },
+    "SpeechPart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format"],
+      "properties": {
+        "format": { "enum": ["text", "post", "card", "image", "file"] },
+        "text": { "type": "string", "maxLength": 40000 },
+        "name": { "type": "string", "maxLength": 256 },
+        "size": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+      }
+    },
+    "SpeechPreview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "provider",
+        "appId",
+        "appName",
+        "target",
+        "actingAs",
+        "mentions",
+        "parts"
+      ],
+      "properties": {
+        "kind": { "const": "speech" },
+        "provider": { "const": "feishu" },
+        "appId": { "type": "string", "maxLength": 128 },
+        "appName": { "type": "string", "maxLength": 256 },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "id", "name"],
+          "properties": {
+            "kind": { "enum": ["chat", "user"] },
+            "id": { "type": "string", "maxLength": 128 },
+            "name": { "type": "string", "maxLength": 256 }
+          }
+        },
+        "replyTo": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["messageId"],
+          "properties": {
+            "messageId": { "type": "string", "maxLength": 128 },
+            "text": { "type": "string", "maxLength": 1000 }
+          }
+        },
+        "actingAs": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type"],
+              "properties": { "type": { "const": "bot" } }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "openId", "name"],
+              "properties": {
+                "type": { "const": "user" },
+                "openId": { "type": "string", "maxLength": 128 },
+                "name": { "type": "string", "maxLength": 256 }
+              }
+            }
+          ]
+        },
+        "mentions": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "#/definitions/Person" }
+        },
+        "parts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": { "$ref": "#/definitions/SpeechPart" }
+        }
+      }
+    },
+    "Review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewId",
+        "revision",
+        "kind",
+        "provider",
+        "scope",
+        "subjectRef",
+        "requestedBy",
+        "preview",
+        "payloadHash",
+        "state",
+        "createdAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "reviewId": { "$ref": "#/definitions/ReviewId" },
+        "revision": { "$ref": "#/definitions/Revision" },
+        "kind": { "const": "speech" },
+        "provider": { "type": "string", "maxLength": 64 },
+        "scope": { "type": "string", "maxLength": 300 },
+        "subjectRef": { "type": "string", "maxLength": 128 },
+        "requestedBy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["managerId"],
+          "properties": {
+            "managerId": { "$ref": "#/definitions/LogicalId" },
+            "threadId": { "type": "string", "maxLength": 4096 },
+            "turnId": { "type": "string", "maxLength": 4096 }
+          }
+        },
+        "preview": { "$ref": "#/definitions/SpeechPreview" },
+        "payloadHash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "state": { "$ref": "#/definitions/ReviewState" },
+        "decidedBy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["via"],
+          "properties": {
+            "via": { "enum": ["litch", "feishu"] },
+            "who": { "type": "string", "maxLength": 128 }
+          }
+        },
+        "decidedAt": { "$ref": "#/definitions/Timestamp" },
+        "reason": { "type": "string", "maxLength": 500 },
+        "createdAt": { "$ref": "#/definitions/Timestamp" },
+        "expiresAt": { "$ref": "#/definitions/Timestamp" }
+      }
+    }
+  }
+}

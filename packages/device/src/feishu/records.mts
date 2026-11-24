@@ -594,6 +594,19 @@ export class FeishuRecords {
     return this.messages.get(appId, messageId)
   }
 
+  /**
+   * 经理发出去的消息按 source=sent 记下（发送接口回的就是消息对象），这样“回复机器人的消息”能在本地判断，
+   * 查历史也看得到经理说过什么。群要已接入；私聊（F6 的已绑定用户）照记
+   */
+  storeSent(appId: string, item: Json, chatKind: 'group' | 'p2p'): StoredMessage | null {
+    const incoming = fromHistory(item)
+    if (!incoming) return null
+    if (chatKind === 'group' && !this.options.chats.record(appId, incoming.chatId)?.access)
+      return null
+    this.store(appId, { ...incoming, chatKind }, 'sent')
+    return this.messages.get(appId, incoming.messageId)
+  }
+
   // —— 附件 ——
 
   /** 下载一条已记录消息的附件到私有目录；同一附件只下一次 */

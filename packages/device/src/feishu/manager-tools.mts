@@ -5,11 +5,13 @@ import {
 } from '../../../protocol/src/client-tools.mjs'
 import { FEISHU_TOOL } from '../../../protocol/src/client-tools-feishu.mjs'
 import type { FeishuInboxEntry } from '../../../protocol/src/feishu.mjs'
+import { FEISHU_OPERATION_ID } from '../../../protocol/src/feishu.mjs'
 import type { Manager } from '../../../protocol/src/manager.mjs'
 import type { DeviceToolCall, DeviceToolHandler } from '../device-tools.mjs'
 import { isObject } from '../wire.mjs'
 import type { FeishuChatRecord } from './chats.mjs'
 import { escapeExternal, FEISHU_DATA_NOTE, messageLine } from './format.mjs'
+import { type OutboxRecord, OutboxRefusal } from './outbox.mjs'
 import type { DeviceFeishuService } from './service.mjs'
 import type { FeishuAppRecord } from './store.mjs'
 
@@ -81,9 +83,10 @@ export class FeishuManagerTools {
         refuse('No Feishu app is assigned to this manager.')
       const args = call.arguments === undefined ? {} : call.arguments
       if (!isObject(args)) return refuse('Expected structured arguments.')
-      return ok(await this.run(call.tool, manager, app, args))
+      return ok(await this.run(call.tool, manager, app, args, call))
     } catch (error) {
-      if (error instanceof ToolError) return clientToolFailure('invalid', error.message)
+      if (error instanceof ToolError || error instanceof OutboxRefusal)
+        return clientToolFailure('invalid', error.message)
       const reason = (error as Error).message
       return clientToolFailure('invalid', `Feishu request failed: ${reason}`)
     }
@@ -94,6 +97,7 @@ export class FeishuManagerTools {
     manager: Manager,
     app: FeishuAppRecord,
     args: Record<string, unknown>,
+    call: DeviceToolCall,
   ): Promise<unknown> {
     switch (tool) {
       case FEISHU_TOOL.inboxList:
@@ -110,6 +114,12 @@ export class FeishuManagerTools {
         return this.attachment(app, args)
       case FEISHU_TOOL.messageRef:
         return this.messageRef(app, args)
+      case FEISHU_TOOL.send:
+        return this.send(manager, app, args, call)
+      case FEISHU_TOOL.sendGet:
+        return this.sendView(manager, args)
+      case FEISHU_TOOL.sendCancel:
+        return this.sendCancel(manager, args)
       default:
         return refuse(`Unknown litch_feishu tool ${tool}.`)
     }
@@ -296,5 +306,121 @@ export class FeishuManagerTools {
       refuse('The message is not recorded on this device.')
     this.feishu.messages.pin(app.appId, message.messageId)
     return { messageId: message.messageId, issueId: args.issueId, kept: true }
+  }
+
+  private async send(
+    manager: Manager,
+    app: FeishuAppRecord,
+    args: Record<string, unknown>,
+    call: DeviceToolCall,
+  ) {
+    const optionalText = (field: string): string | undefined => {
+      const value = args[field]
+      if (value === undefined) return undefined
+      return typeof value === 'string' ? value : refuse(`${field} must be a string.`)
+    }
+    if ((args.chat === undefined) === (args.user === undefined)) refuse('Give either chat or user.')
+    let target: { kind: 'chat'; chatId: string } | { kind: 'user'; openId: string }
+    if (args.chat !== undefined)
+      target = { kind: 'chat', chatId: this.accessed(app, args.chat).chatId }
+    else {
+      const user = optionalText('user') ?? ''
+      if (!/^ou_[0-9A-Za-z_-]{1,64}$/.test(user))
+        refuse('user must be the open_id of a bound user.')
+      target = { kind: 'user', openId: user }
+    }
+    const format = args.format
+    if (format !== undefined && !['auto', 'text', 'post', 'card'].includes(String(format)))
+      refuse('format must be auto, text, post or card.')
+    const mentions = args.mentions
+    if (
+      mentions !== undefined &&
+      (!Array.isArray(mentions) || !mentions.every((one) => typeof one === 'string' && one.trim()))
+    )
+      refuse('mentions must be a list of names or open_ids.')
+    const operationId = optionalText('operationId')
+    if (operationId !== undefined && !FEISHU_OPERATION_ID.test(operationId))
+      refuse('operationId must be 8 to 40 letters, digits, _ or -.')
+    const replyTo = optionalText('replyTo')
+    const text = optionalText('text')
+    const title = optionalText('title')
+    const imagePath = optionalText('imagePath')
+    const filePath = optionalText('filePath')
+    const record = await this.feishu.outbox.submit({
+      app,
+      managerId: manager.id,
+      threadId: call.threadId,
+      turnId: call.turnId,
+      target,
+      ...(operationId ? { operationId } : {}),
+      ...(replyTo ? { replyTo } : {}),
+      ...(text !== undefined ? { text } : {}),
+      ...(format !== undefined ? { format: format as 'auto' | 'text' | 'post' | 'card' } : {}),
+      ...(title !== undefined ? { title } : {}),
+      ...(imagePath !== undefined ? { imagePath } : {}),
+      ...(filePath !== undefined ? { filePath } : {}),
+      ...(Array.isArray(mentions) ? { mentions: mentions as string[] } : {}),
+    })
+    return this.describe(record)
+  }
+
+  private owned(manager: Manager, args: Record<string, unknown>): OutboxRecord {
+    const operationId = args.operationId
+    if (typeof operationId !== 'string' || !FEISHU_OPERATION_ID.test(operationId))
+      return refuse('operationId is required.')
+    const record = this.feishu.outbox.get(operationId)
+    if (!record || record.managerId !== manager.id) return refuse('No such send operation.')
+    return record
+  }
+
+  private sendView(manager: Manager, args: Record<string, unknown>) {
+    return this.describe(this.owned(manager, args))
+  }
+
+  private sendCancel(manager: Manager, args: Record<string, unknown>) {
+    const record = this.owned(manager, args)
+    return this.describe(this.feishu.outbox.cancel(record.operationId, 'manager'))
+  }
+
+  /** 给经理看的发件状态：带审批状态和下一步该怎么做 */
+  private describe(record: OutboxRecord) {
+    const review = record.reviewId ? this.feishu.options.reviews?.get(record.reviewId) : null
+    const notes: Record<string, string> = {
+      queued: 'Queued; the device sends it shortly.',
+      sending: 'Being sent now.',
+      awaiting_approval: `Waiting for approval ${record.reviewId}. Do not resend; the result comes in a later delivery or via feishu_send_get.`,
+      sent: 'Sent.',
+      failed: 'Not sent.',
+      rejected: 'The approver rejected it; it was not sent.',
+      canceled: 'Withdrawn or expired before sending; it was not sent.',
+      unknown:
+        record.nextAttemptAt === undefined
+          ? 'Unclear whether it was sent; automatic retries stopped. Check the chat history before sending again.'
+          : 'The last attempt had an unclear result; the device retries with the same ID.',
+    }
+    return {
+      operationId: record.operationId,
+      state: record.state,
+      note: notes[record.state],
+      target: record.target,
+      format: record.format,
+      parts: record.parts,
+      messageIds: record.messageIds,
+      ...(record.replyTo ? { replyTo: record.replyTo } : {}),
+      ...(record.mentions.length ? { mentions: record.mentions } : {}),
+      ...(record.error ? { error: record.error } : {}),
+      ...(review
+        ? {
+            review: {
+              reviewId: review.reviewId,
+              state: review.state,
+              ...(review.reason ? { reason: review.reason } : {}),
+              expiresAt: iso(review.expiresAt),
+            },
+          }
+        : {}),
+      createdAt: iso(record.createdAt),
+      ...(record.sentAt ? { sentAt: iso(record.sentAt) } : {}),
+    }
   }
 }

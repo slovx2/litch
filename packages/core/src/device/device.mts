@@ -88,6 +88,7 @@ import {
   type Turn,
 } from '../../../protocol/src/index.mjs'
 import type { ManagerThreadFields } from '../../../protocol/src/manager.mjs'
+import { REVIEWS_EXTENSION } from '../../../protocol/src/reviews.mjs'
 import { taskCardsSettingKey } from '../../../protocol/src/session-tree.mjs'
 import type { ThreadWorktree, WorktreeFrom } from '../../../protocol/src/worktrees.mjs'
 import { ChannelError, type Clock, type SidebarOp } from '../channel/protocol.mjs'
@@ -706,6 +707,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let schedulable = false
   let externalSourcesSupported = false
   let feishuSupported = false
+  let reviewsSupported = false
   let autostartSupported = false
   let suggestionsOn = false
   let pathsSupported = false
@@ -2078,6 +2080,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         externalSourcesSupported =
           info.device.extensions?.includes(EXTERNAL_SOURCES_EXTENSION) === true
         feishuSupported = info.device.extensions?.includes(FEISHU_EXTENSION) === true
+        reviewsSupported = info.device.extensions?.includes(REVIEWS_EXTENSION) === true
         autostartSupported = info.device.extensions?.includes(DEVICE_AUTOSTART_EXTENSION) === true
         suggestionsOn = info.device.extensions?.includes(EXTENSION.suggestionInbox) === true
         pathsSupported = info.device.extensions?.includes(PATH_PICKER_EXTENSION) === true
@@ -2131,6 +2134,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         schedulable = false
         externalSourcesSupported = false
         feishuSupported = false
+        reviewsSupported = false
         autostartSupported = false
         suggestionsOn = false
         pathsSupported = false
@@ -2921,6 +2925,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     online: () => online,
     now: options.clock.now,
     supported: () => feishuSupported,
+    reviewsSupported: () => reviewsSupported,
     request: (method, params, requestOptions) => link.request(method, params, requestOptions),
     fail,
   })

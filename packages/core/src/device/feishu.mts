@@ -5,24 +5,40 @@ import {
   type FeishuChat,
   type FeishuInboxEntry,
   type FeishuInboxMessage,
+  type FeishuOutboxEntry,
   type FeishuRegistration,
   type FeishuRequests,
 } from '../../../protocol/src/feishu.mjs'
 import { isFeishuMethodParams } from '../../../protocol/src/feishu-validation.mjs'
+import {
+  isReviewsMethodParams,
+  REVIEWS_METHOD,
+  REVIEWS_NOTIFICATION,
+  type Review,
+  type ReviewsRequests,
+} from '../../../protocol/src/reviews.mjs'
 import { type AbortSignalLike, ChannelError } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
 import type { RpcRequestOptions } from '../connection/rpc.mjs'
 import { phrase } from '../phrase.mjs'
-import { FEISHU_COMMAND, type FeishuCommandName, type FeishuTopic } from '../projection/feishu.mjs'
+import {
+  FEISHU_COMMAND,
+  type FeishuCommandName,
+  type FeishuTopic,
+  REVIEWS_COMMAND,
+  type ReviewsCommandName,
+} from '../projection/feishu.mjs'
 import { ExternalRead, type ExternalReadHost } from './external-pages.mjs'
 
 interface FeishuHost extends ExternalReadHost {
   supported(): boolean
-  request<M extends keyof FeishuRequests>(
+  /** 设备有通用审批（litchReviews） */
+  reviewsSupported(): boolean
+  request<M extends keyof FeishuRequests | keyof ReviewsRequests>(
     method: M,
-    params: FeishuRequests[M]['params'],
+    params: (FeishuRequests & ReviewsRequests)[M]['params'],
     options?: RpcRequestOptions,
-  ): Promise<FeishuRequests[M]['result']>
+  ): Promise<(FeishuRequests & ReviewsRequests)[M]['result']>
 }
 
 function contains(value: unknown, secret: string): boolean {
@@ -58,6 +74,62 @@ export function createFeishuDevice(host: FeishuHost) {
     next?: string
   }
   const inboxes = new Map<string, ExternalRead<InboxValue>>()
+  type OutboxValue = { entries: FeishuOutboxEntry[]; next?: string }
+  const outboxes = new Map<string, ExternalRead<OutboxValue>>()
+  type ReviewsValue = { reviews: Review[]; pending: number }
+  /** 键是 managerId，空串是全部 */
+  const reviews = new Map<string, ExternalRead<ReviewsValue>>()
+
+  /** 按键缓存的读取：最多留 8 份，满了先丢没人看的 */
+  function cached<T>(map: Map<string, ExternalRead<T>>, key: string, make: () => ExternalRead<T>) {
+    const found = map.get(key)
+    if (found) return found
+    if (map.size >= 8) {
+      const old = [...map].find(([, read]) => read.sinks.size === 0)
+      if (old) map.delete(old[0])
+    }
+    const read = make()
+    map.set(key, read)
+    return read
+  }
+
+  function outboxOf(appId: string) {
+    return cached(outboxes, appId, () => {
+      const read: ExternalRead<OutboxValue> = new ExternalRead(
+        host,
+        host.supported,
+        () => host.request('litch/feishu/outbox/list', { appId, limit: 100 }),
+        () => read.send(),
+      )
+      return read
+    })
+  }
+
+  function reviewsOf(managerId: string) {
+    return cached(reviews, managerId, () => {
+      const filter = managerId ? { managerId } : {}
+      const read: ExternalRead<ReviewsValue> = new ExternalRead(
+        host,
+        host.reviewsSupported,
+        async () => {
+          const [pending, recent] = await Promise.all([
+            host.request(REVIEWS_METHOD.list, { ...filter, states: ['pending'], limit: 200 }),
+            host.request(REVIEWS_METHOD.list, { ...filter, limit: 50 }),
+          ])
+          const seen = new Set(pending.reviews.map((review) => review.reviewId))
+          return {
+            reviews: [
+              ...pending.reviews,
+              ...recent.reviews.filter((review) => !seen.has(review.reviewId)),
+            ],
+            pending: pending.reviews.length,
+          }
+        },
+        () => read.send(),
+      )
+      return read
+    })
+  }
 
   function view() {
     return { apps: apps.snapshot(), admin }
@@ -145,6 +217,9 @@ export function createFeishuDevice(host: FeishuHost) {
         throw new ChannelError('remote', 'Device returned invalid credential data')
       if (name.startsWith('feishu.inbox.')) {
         // 只读，不用刷新
+      } else if (name.startsWith('feishu.outbox.')) {
+        if (name === 'feishu.outbox.cancel')
+          outboxes.get((args as { appId: string }).appId)?.notify()
       } else if (name.startsWith('feishu.chat.')) {
         if (name !== 'feishu.chat.get' && name !== 'feishu.chat.members')
           chats.get((args as { appId: string }).appId)?.notify()
@@ -166,12 +241,39 @@ export function createFeishuDevice(host: FeishuHost) {
     }
   }
 
+  async function reviewsCommand(
+    name: ReviewsCommandName,
+    args: unknown,
+    signal?: AbortSignalLike,
+  ): Promise<unknown> {
+    const method = REVIEWS_COMMAND[name]
+    if (!host.online())
+      throw new ChannelError('offline', 'Device is offline', phrase('external.offline'))
+    if (!host.reviewsSupported())
+      throw new ChannelError(
+        'unsupported',
+        'Reviews are unavailable',
+        phrase('external.unsupported'),
+      )
+    if (!isReviewsMethodParams(method, args))
+      throw new ChannelError('invalid', 'Invalid review request', phrase('feishu.invalid'))
+    try {
+      const result = await host.request(method, args as never, signal ? { signal } : undefined)
+      if (name === 'reviews.decide') for (const read of reviews.values()) read.notify()
+      return result
+    } catch (error) {
+      throw host.fail(error)
+    }
+  }
+
   return {
     open(topic: FeishuTopic, sink: HostSink): () => void {
       if (topic.kind === 'feishuRegistration')
         return registrationOf(topic.registrationId).open(sink)
       if (topic.kind === 'feishuChats') return chatsOf(topic.appId).open(sink)
       if (topic.kind === 'feishuInbox') return inboxOf(topic.managerId).open(sink)
+      if (topic.kind === 'feishuOutbox') return outboxOf(topic.appId).open(sink)
+      if (topic.kind === 'reviews') return reviewsOf(topic.managerId ?? '').open(sink)
       const first = deviceSinks.size === 0
       deviceSinks.add(sink)
       sink.snapshot(view())
@@ -181,6 +283,7 @@ export function createFeishuDevice(host: FeishuHost) {
       }
     },
     command,
+    reviewsCommand,
     connectionChanged() {
       admin = null
       apps.connectionChanged()
@@ -189,7 +292,12 @@ export function createFeishuDevice(host: FeishuHost) {
         read.connectionChanged()
         read.notify()
       }
-      for (const read of [...registrations.values(), ...inboxes.values()]) {
+      for (const read of [
+        ...registrations.values(),
+        ...inboxes.values(),
+        ...outboxes.values(),
+        ...reviews.values(),
+      ]) {
         read.connectionChanged()
         read.notify()
       }
@@ -207,6 +315,17 @@ export function createFeishuDevice(host: FeishuHost) {
         case FEISHU_NOTIFICATION.chatsChanged: {
           const appId = (params as { appId?: unknown } | null)?.appId
           if (typeof appId === 'string') chats.get(appId)?.notify()
+          return true
+        }
+        case FEISHU_NOTIFICATION.outboxChanged: {
+          const appId = (params as { appId?: unknown } | null)?.appId
+          if (typeof appId === 'string') outboxes.get(appId)?.notify()
+          return true
+        }
+        case REVIEWS_NOTIFICATION.changed: {
+          const managerId = (params as { managerId?: unknown } | null)?.managerId
+          reviews.get('')?.notify()
+          if (typeof managerId === 'string') reviews.get(managerId)?.notify()
           return true
         }
         case FEISHU_NOTIFICATION.inboxChanged: {

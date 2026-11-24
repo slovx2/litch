@@ -5,6 +5,7 @@ import {
   type FeishuApp,
   type FeishuRequests,
 } from '../../protocol/src/feishu.mjs'
+import { REVIEWS_NOTIFICATION } from '../../protocol/src/reviews.mjs'
 import { ChannelError } from '../src/channel/protocol.mjs'
 import type { HostSink } from '../src/channel/server.mjs'
 import { RpcError } from '../src/connection/rpc.mjs'
@@ -42,6 +43,7 @@ test('有人看才读应用列表；收到 appsChanged 重读；离线和不支�
   const device = createFeishuDevice({
     online: () => online,
     supported: () => supported,
+    reviewsSupported: () => false,
     now: () => 42,
     fail: (error) => channelFailure(error),
     async request<M extends keyof FeishuRequests>(method: M): Promise<FeishuRequests[M]['result']> {
@@ -86,6 +88,7 @@ test('带 App Secret 的请求：远端错误不带回原文，回显秘密的�
   const device = createFeishuDevice({
     online: () => true,
     supported: () => true,
+    reviewsSupported: () => false,
     now: () => 42,
     fail: (error) => channelFailure(error),
     async request() {
@@ -103,6 +106,7 @@ test('带 App Secret 的请求：远端错误不带回原文，回显秘密的�
     createFeishuDevice({
       online: () => true,
       supported: () => true,
+      reviewsSupported: () => false,
       now: () => 42,
       fail: (error) => channelFailure(error),
       async request() {
@@ -129,6 +133,7 @@ test('群列表按应用订阅：带管理员标记；chatsChanged 和写命令�
   const device = createFeishuDevice({
     online: () => true,
     supported: () => true,
+    reviewsSupported: () => false,
     now: () => 42,
     fail: (error) => channelFailure(error),
     async request<M extends keyof FeishuRequests>(
@@ -176,6 +181,7 @@ test('收件箱按经理订阅：inboxChanged 只重读那位经理的；读命�
   const device = createFeishuDevice({
     online: () => true,
     supported: () => true,
+    reviewsSupported: () => false,
     now: () => 42,
     fail: (error) => channelFailure(error),
     async request<M extends keyof FeishuRequests>(
@@ -202,4 +208,97 @@ test('收件箱按经理订阅：inboxChanged 只重读那位经理的；读命�
   await flush()
   assert.equal(calls.length, 3)
   assert.equal(calls.at(-1)?.method, 'litch/feishu/inbox/get')
+})
+
+test('发件按应用订阅、审批按经理订阅：各自的通知只重读受影响的；决定后重读审批，撤下后重读发件', async () => {
+  const calls: { method: string; params: unknown }[] = []
+  let reviews = true
+  const device = createFeishuDevice({
+    online: () => true,
+    supported: () => true,
+    reviewsSupported: () => reviews,
+    now: () => 42,
+    fail: (error) => channelFailure(error),
+    async request(method: string, params: unknown): Promise<never> {
+      calls.push({ method, params })
+      if (method === 'litch/reviews/list')
+        return {
+          reviews:
+            (params as { states?: string[] }).states?.[0] === 'pending'
+              ? [{ reviewId: 'A-2', state: 'pending' }]
+              : [
+                  { reviewId: 'A-2', state: 'pending' },
+                  { reviewId: 'A-1', state: 'approved' },
+                ],
+        } as never
+      return { entries: [] } as never
+    },
+  } as never)
+  const outbox: unknown[] = []
+  device.open({ kind: 'feishuOutbox', deviceId: 'd', appId: 'cli_0123456789abcdef' }, sink(outbox))
+  const seen: { value: { reviews: { reviewId: string }[]; pending: number } | null }[] = []
+  device.open({ kind: 'reviews', deviceId: 'd', managerId: 'm1' }, sink(seen))
+  await flush()
+  await flush()
+  assert.deepEqual(
+    calls.map((call) => call.method),
+    ['litch/feishu/outbox/list', 'litch/reviews/list', 'litch/reviews/list'],
+  )
+  const last = seen.at(-1)?.value
+  assert.deepEqual(
+    last?.reviews.map((review) => review.reviewId),
+    ['A-2', 'A-1'],
+    '待批的在前、不重复',
+  )
+  assert.equal(last?.pending, 1)
+
+  calls.length = 0
+  device.notification(FEISHU_NOTIFICATION.outboxChanged, {
+    appId: 'cli_other',
+    operationId: 'op-1',
+  })
+  device.notification(REVIEWS_NOTIFICATION.changed, {
+    reviewId: 'A-9',
+    revision: 2,
+    managerId: 'm2',
+  })
+  await flush()
+  assert.equal(calls.length, 0, '别的应用、别的经理不重读')
+  device.notification(FEISHU_NOTIFICATION.outboxChanged, {
+    appId: 'cli_0123456789abcdef',
+    operationId: 'op-1',
+  })
+  device.notification(REVIEWS_NOTIFICATION.changed, {
+    reviewId: 'A-2',
+    revision: 2,
+    managerId: 'm1',
+  })
+  await flush()
+  assert.equal(calls.length, 3)
+
+  calls.length = 0
+  await device.reviewsCommand('reviews.decide', {
+    reviewId: 'A-2',
+    decision: 'approve',
+    expectedRevision: 1,
+  })
+  await flush()
+  assert.equal(calls[0]?.method, 'litch/reviews/decide')
+  assert.equal(calls.filter((call) => call.method === 'litch/reviews/list').length, 2)
+  calls.length = 0
+  await device.command('feishu.outbox.cancel', {
+    appId: 'cli_0123456789abcdef',
+    operationId: 'op-sample-1',
+  })
+  await flush()
+  assert.deepEqual(
+    calls.map((call) => call.method),
+    ['litch/feishu/outbox/cancel', 'litch/feishu/outbox/list'],
+  )
+
+  reviews = false
+  await assert.rejects(
+    device.reviewsCommand('reviews.get', { reviewId: 'A-1' }),
+    (error: unknown) => error instanceof ChannelError && error.code === 'unsupported',
+  )
 })

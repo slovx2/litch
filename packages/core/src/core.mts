@@ -50,7 +50,7 @@ import {
 } from './organizer/host.mjs'
 import { phrase } from './phrase.mjs'
 import { isExternalCommand } from './projection/external.mjs'
-import { isFeishuCommand } from './projection/feishu.mjs'
+import { isFeishuCommand, isReviewsCommand } from './projection/feishu.mjs'
 import { managerMark } from './projection/manager.mjs'
 import { outgoing } from './projection/outgoing.mjs'
 import { createToolHub } from './tool-hub.mjs'
@@ -508,6 +508,10 @@ export function createCore(options: CoreOptions): Core {
       if (isFeishuCommand(name)) {
         const { deviceId, ...args } = params as { deviceId: string }
         return deviceOf(deviceId).feishu.command(name, args, signal)
+      }
+      if (isReviewsCommand(name)) {
+        const { deviceId, ...args } = params as { deviceId: string }
+        return deviceOf(deviceId).feishu.reviewsCommand(name, args, signal)
       }
       switch (name) {
         case 'external.identity.avatar': {
@@ -2032,7 +2036,9 @@ export function createCore(options: CoreOptions): Core {
         topic.kind === 'feishuDevice' ||
         topic.kind === 'feishuRegistration' ||
         topic.kind === 'feishuChats' ||
-        topic.kind === 'feishuInbox'
+        topic.kind === 'feishuInbox' ||
+        topic.kind === 'feishuOutbox' ||
+        topic.kind === 'reviews'
       )
         return device.feishu.open(topic, sink)
       if (topic.kind === 'tasks') return device.tasks.open(sink)

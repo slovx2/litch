@@ -20,6 +20,7 @@ import {
 } from '../../../protocol/src/index.mjs'
 import type { PathPickerRequests } from '../../../protocol/src/path-picker.mjs'
 import { PATH_PICKER_EXTENSION } from '../../../protocol/src/path-picker.mjs'
+import { REVIEWS_EXTENSION, type ReviewsRequests } from '../../../protocol/src/reviews.mjs'
 import {
   TIMED_APPROVALS_EXTENSION,
   type TimedApprovalRequests,
@@ -104,7 +105,8 @@ export interface Link {
       | keyof TimedApprovalRequests
       | keyof PathPickerRequests
       | keyof ExternalWireRequests
-      | keyof FeishuRequests,
+      | keyof FeishuRequests
+      | keyof ReviewsRequests,
   >(
     method: M,
     params: (ClientRequests &
@@ -113,7 +115,8 @@ export interface Link {
       TimedApprovalRequests &
       PathPickerRequests &
       ExternalWireRequests &
-      FeishuRequests)[M]['params'],
+      FeishuRequests &
+      ReviewsRequests)[M]['params'],
     options?: RpcRequestOptions,
   ): Promise<
     (ClientRequests &
@@ -122,7 +125,8 @@ export interface Link {
       TimedApprovalRequests &
       PathPickerRequests &
       ExternalWireRequests &
-      FeishuRequests)[M]['result']
+      FeishuRequests &
+      ReviewsRequests)[M]['result']
   >
 }
 
@@ -267,6 +271,7 @@ export function createLink(options: LinkOptions): Link {
                 EXTERNAL_SOURCES_EXTENSION,
                 DEVICE_AUTOSTART_EXTENSION,
                 FEISHU_EXTENSION,
+                REVIEWS_EXTENSION,
                 EXTENSION.manager,
                 EXTENSION.managerResetTarget,
                 EXTENSION.managerPaging,

@@ -39,6 +39,15 @@ export type FeishuAuditAction =
   | 'chat_bot_removed'
   | 'chat_bot_returned'
   | 'chat_disbanded'
+  | 'speech_requested'
+  | 'speech_canceled'
+  | 'speech_review_approved'
+  | 'speech_review_rejected'
+  | 'speech_review_canceled'
+  | 'speech_review_expired'
+  | 'speech_sent'
+  | 'speech_failed'
+  | 'speech_unknown'
 
 export interface FeishuAuditEntry {
   action: FeishuAuditAction

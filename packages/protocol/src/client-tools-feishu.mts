@@ -10,6 +10,9 @@ export const FEISHU_TOOL = {
   history: 'feishu_history',
   attachment: 'feishu_attachment',
   messageRef: 'feishu_message_ref',
+  send: 'feishu_send',
+  sendGet: 'feishu_send_get',
+  sendCancel: 'feishu_send_cancel',
 } as const
 
 const text = (description: string) => ({ type: 'string', description })
@@ -29,13 +32,16 @@ export const FEISHU_TOOLS_INSTRUCTIONS =
   'Track follow-up work on the board (open an item when needed). Do not reply only to acknowledge. ' +
   'After handling inbox entries, mark them with feishu_inbox_done. Without inboxIds it marks only the batch last listed or delivered, never entries that arrived later. ' +
   'History, members and attachments come from the device record of accessed chats; chats that are not accessed are not visible. ' +
-  'When an item refers to a Feishu message, call feishu_message_ref so its ID and metadata outlive the retention period.'
+  'When an item refers to a Feishu message, call feishu_message_ref so its ID and metadata outlive the retention period. ' +
+  'feishu_send speaks as the bot: free chats send right away; approval chats wait for a person to approve the frozen content, so do not resend while it is awaiting_approval. ' +
+  'Mention people only through the mentions parameter (names or open_ids resolved against the chat members); "@name" written in the text is not a mention. ' +
+  'Keep the same operationId when retrying a call so it is not sent twice. Results that come back later (rejected, expired, failed) appear in a later Feishu delivery or via feishu_send_get.'
 
 export const FEISHU_TOOLS: ClientToolNamespaceSpec = {
   type: 'namespace',
   name: FEISHU_TOOLS_NAMESPACE,
   description:
-    'Read the Feishu inbox, accessed chats, members, recorded history and attachments of the Feishu app bound to this manager.',
+    'Read the Feishu inbox, accessed chats, members, recorded history and attachments of the Feishu app bound to this manager, and speak in its chats.',
   instructions: FEISHU_TOOLS_INSTRUCTIONS,
   tools: [
     {
@@ -115,6 +121,55 @@ export const FEISHU_TOOLS: ClientToolNamespaceSpec = {
         },
         ['messageId', 'fileKey'],
       ),
+    },
+    {
+      type: 'function',
+      name: FEISHU_TOOL.send,
+      description:
+        'Send a message as the bot to an accessed chat (or a bound user). Give exactly one of text, imagePath or filePath. Text is Markdown: format auto uses a card when it has code blocks or tables, otherwise rich text; long text is split into several messages. Returns the operation ID and state (queued, awaiting_approval with reviewId, sent...).',
+      inputSchema: object({
+        chat,
+        user: text('Bound user to message privately: name or open_id. Use either chat or user.'),
+        text: text('Markdown body, at most 40000 characters.'),
+        format: { type: 'string', enum: ['auto', 'text', 'post', 'card'] },
+        title: text('Optional title for rich text or card.'),
+        imagePath: text('Absolute path of an image on this device (at most 10 MB).'),
+        filePath: text('Absolute path of a file on this device (at most 30 MB).'),
+        mentions: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
+          maxItems: 20,
+          uniqueItems: true,
+          description:
+            'People to @ at the start: chat member names or open_ids. Ambiguous names are rejected.',
+        },
+        replyTo: { type: 'string', pattern: '^om_', description: 'Recorded message to reply to.' },
+        operationId: {
+          type: 'string',
+          pattern: '^[A-Za-z0-9_-]{8,40}$',
+          description:
+            'Idempotency key; the same ID returns the first result instead of sending again.',
+        },
+      }),
+    },
+    {
+      type: 'function',
+      name: FEISHU_TOOL.sendGet,
+      description:
+        'Read a send operation: state, approval state and reason, message IDs of what was sent, error.',
+      inputSchema: object({ operationId: { type: 'string', pattern: '^[A-Za-z0-9_-]{8,40}$' } }, [
+        'operationId',
+      ]),
+    },
+    {
+      type: 'function',
+      name: FEISHU_TOOL.sendCancel,
+      description:
+        'Withdraw a send that has not gone out yet (including one awaiting approval). Messages already sent stay in Feishu.',
+      inputSchema: object({ operationId: { type: 'string', pattern: '^[A-Za-z0-9_-]{8,40}$' } }, [
+        'operationId',
+      ]),
     },
     {
       type: 'function',

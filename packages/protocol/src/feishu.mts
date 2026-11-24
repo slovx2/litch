@@ -24,6 +24,8 @@ export const FEISHU_METHOD = {
   chatBackfill: 'litch/feishu/chat/backfill',
   inboxList: 'litch/feishu/inbox/list',
   inboxGet: 'litch/feishu/inbox/get',
+  outboxList: 'litch/feishu/outbox/list',
+  outboxCancel: 'litch/feishu/outbox/cancel',
 } as const
 
 export const FEISHU_NOTIFICATION = {
@@ -31,6 +33,7 @@ export const FEISHU_NOTIFICATION = {
   registrationChanged: 'litch/feishu/registrationChanged',
   chatsChanged: 'litch/feishu/chatsChanged',
   inboxChanged: 'litch/feishu/inboxChanged',
+  outboxChanged: 'litch/feishu/outboxChanged',
 } as const
 
 /** 只读方法；其余写操作只给设备管理员连接 */
@@ -42,6 +45,7 @@ export const FEISHU_PUBLIC_READS: ReadonlySet<string> = new Set([
   FEISHU_METHOD.chatMembers,
   FEISHU_METHOD.inboxList,
   FEISHU_METHOD.inboxGet,
+  FEISHU_METHOD.outboxList,
 ])
 
 export const FEISHU_APP_ID = /^cli_[0-9a-f]{16}$/
@@ -49,6 +53,8 @@ export const FEISHU_BOT_NAME_MAX = 30
 export const FEISHU_SECRET_MAX = 256
 export const FEISHU_CHAT_ID = /^oc_[0-9A-Za-z_-]{1,64}$/
 export const FEISHU_OPEN_ID = /^ou_[0-9A-Za-z_-]{1,64}$/
+/** 发件的操作 ID：经理给的或设备生成的，拼上分片序号后要放得进飞书 uuid（50 字符） */
+export const FEISHU_OPERATION_ID = /^[A-Za-z0-9_-]{8,40}$/
 /** 群记录的保留天数（D-164） */
 export const FEISHU_RETENTION_DAYS = { min: 1, max: 3650, default: 90 } as const
 /** 审批过期小时数（D-175） */
@@ -241,6 +247,50 @@ export interface FeishuInboxMessage {
   purged: boolean
 }
 
+/**
+ * 发件队列（经理的发言）：awaiting_approval → queued → sending → sent；
+ * unknown 是网络中断等发送结果不明，一小时内自动重发（飞书按 uuid 去重），之后停下等人核对
+ */
+export type FeishuOutboxState =
+  | 'awaiting_approval'
+  | 'queued'
+  | 'sending'
+  | 'sent'
+  | 'failed'
+  | 'rejected'
+  | 'canceled'
+  | 'unknown'
+/** 发出去的样子：纯文本、富文本（Markdown 段落加 @）、卡片（有代码块或表格时）、图片、文件 */
+export type FeishuOutboxFormat = 'text' | 'post' | 'card' | 'image' | 'file'
+
+export interface FeishuOutboxEntry {
+  /** 操作 ID，也是发给飞书的 uuid 前缀 */
+  operationId: string
+  appId: string
+  managerId: string
+  /** chat：已接入的群；user：已绑定用户的私聊 */
+  target: { kind: 'chat' | 'user'; id: string; name: string }
+  /** 回复的消息 ID */
+  replyTo?: string
+  format: FeishuOutboxFormat
+  /** 正文开头（最多 200 字）；图片和文件是文件名 */
+  summary: string
+  /** 分成几条发 */
+  parts: number
+  /** 已发出的各条的消息 ID */
+  messageIds: string[]
+  mentions: FeishuPerson[]
+  state: FeishuOutboxState
+  /** 要审批时的审批 ID（A-n，litchReviews） */
+  reviewId?: string
+  attempts: number
+  /** 没发成的原因代码（failed、rejected、canceled、unknown 时） */
+  error?: string
+  createdAt: number
+  updatedAt: number
+  sentAt?: number
+}
+
 /** 单次补历史最多补多少条 */
 export const FEISHU_BACKFILL_LIMIT = 1000
 
@@ -350,6 +400,16 @@ export interface FeishuRequests {
     { inboxId: string },
     { entry: FeishuInboxEntry; message: FeishuInboxMessage | null }
   >
+  /** 应用的发件队列，新的在前；before 是上一页最后一条的 operationId */
+  [FEISHU_METHOD.outboxList]: Request<
+    { appId: string; states?: FeishuOutboxState[]; before?: string; limit?: number },
+    { entries: FeishuOutboxEntry[]; next?: string }
+  >
+  /** 撤下还没发出的（含待审批的）；已发出的不撤回飞书上的消息 */
+  [FEISHU_METHOD.outboxCancel]: Request<
+    { appId: string; operationId: string },
+    { entry: FeishuOutboxEntry }
+  >
 }
 
 export interface FeishuNotifications {
@@ -357,6 +417,7 @@ export interface FeishuNotifications {
   [FEISHU_NOTIFICATION.registrationChanged]: { registrationId: string; revision: number }
   [FEISHU_NOTIFICATION.chatsChanged]: { appId: string; chatId?: string }
   [FEISHU_NOTIFICATION.inboxChanged]: { managerId: string; appId: string }
+  [FEISHU_NOTIFICATION.outboxChanged]: { appId: string; operationId: string }
 }
 
 export type FeishuMethod = keyof FeishuRequests

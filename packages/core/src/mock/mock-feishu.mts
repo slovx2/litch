@@ -5,15 +5,18 @@ import type {
   FeishuInboxEntry,
   FeishuInboxMessage,
   FeishuMember,
+  FeishuOutboxEntry,
   FeishuRegistration,
 } from '../../../protocol/src/feishu.mjs'
+import type { Review } from '../../../protocol/src/reviews.mjs'
 import { ChannelError, type Clock } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
 import type { DeviceView } from '../model.mjs'
-import { type FeishuTopic, isFeishuCommand } from '../projection/feishu.mjs'
+import { type FeishuTopic, isFeishuCommand, isReviewsCommand } from '../projection/feishu.mjs'
 
+const sampleAppId = 'cli_a1b2c3d4e5f60718'
 const sampleApp = (now: number, managerId: string | null): FeishuApp => ({
-  appId: 'cli_a1b2c3d4e5f60718',
+  appId: sampleAppId,
   revision: 3,
   name: '示例助手',
   botOpenId: 'ou_mock_bot',
@@ -121,6 +124,136 @@ const sampleChats = (appId: string, now: number): FeishuChat[] => [
   },
 ]
 
+/** 样例发件：一条待审批、一条已发出（两段）、一条结果不明停下、一条被拒 */
+const sampleOutbox = (appId: string, managerId: string, now: number): FeishuOutboxEntry[] => {
+  const base = {
+    appId,
+    managerId,
+    target: { kind: 'chat' as const, id: 'oc_mock_review', name: '示例审批群' },
+    mentions: [],
+    attempts: 0,
+    messageIds: [],
+  }
+  return [
+    {
+      ...base,
+      operationId: 'fs_mock_pending',
+      format: 'post',
+      summary: '本周进度：接口联调完成，下周开始灰度。',
+      parts: 1,
+      mentions: [{ openId: 'ou_mock_owner', name: '示例负责人' }],
+      state: 'awaiting_approval',
+      reviewId: 'A-3',
+      createdAt: now - 300,
+      updatedAt: now - 300,
+    },
+    {
+      ...base,
+      operationId: 'fs_mock_sent',
+      target: { kind: 'chat', id: 'oc_mock_project', name: '示例项目群' },
+      format: 'card',
+      summary: '| 模块 | 状态 |',
+      parts: 2,
+      messageIds: ['om_mock_sent_1', 'om_mock_sent_2'],
+      state: 'sent',
+      attempts: 1,
+      createdAt: now - 3600,
+      updatedAt: now - 3590,
+      sentAt: now - 3590,
+    },
+    {
+      ...base,
+      operationId: 'fs_mock_unknown',
+      target: { kind: 'chat', id: 'oc_mock_project', name: '示例项目群' },
+      format: 'file',
+      summary: '周报.pdf',
+      parts: 1,
+      state: 'unknown',
+      attempts: 6,
+      error: 'unknown_timeout',
+      createdAt: now - 7200,
+      updatedAt: now - 3600,
+    },
+    {
+      ...base,
+      operationId: 'fs_mock_rejected',
+      format: 'text',
+      summary: '大家好，明天停机维护两小时。',
+      parts: 1,
+      state: 'rejected',
+      reviewId: 'A-1',
+      error: 'review_rejected',
+      createdAt: now - 86_400,
+      updatedAt: now - 86_000,
+    },
+  ]
+}
+
+/** 样例审批：两条待批（一条带 @ 和回复、一条图片）、一条已拒 */
+const sampleReviews = (appId: string, managerId: string, now: number): Review[] => {
+  const base = {
+    kind: 'speech' as const,
+    provider: 'feishu',
+    scope: `${appId}/oc_mock_review`,
+    requestedBy: { managerId, threadId: 'mock-thread', turnId: 'mock-turn' },
+    payloadHash: '0'.repeat(64),
+  }
+  const preview = {
+    kind: 'speech' as const,
+    provider: 'feishu' as const,
+    appId,
+    appName: '示例机器人',
+    target: { kind: 'chat' as const, id: 'oc_mock_review', name: '示例审批群' },
+    actingAs: { type: 'bot' as const },
+    mentions: [],
+  }
+  return [
+    {
+      ...base,
+      reviewId: 'A-3',
+      revision: 1,
+      subjectRef: 'fs_mock_pending',
+      preview: {
+        ...preview,
+        replyTo: { messageId: 'om_mock_ask', text: '这周进度怎么样？' },
+        mentions: [{ openId: 'ou_mock_owner', name: '示例负责人' }],
+        parts: [
+          {
+            format: 'post',
+            text: '@示例负责人 本周进度：接口联调完成，下周开始灰度。\n\n- 风险：第三方回调偶发超时\n- 需要：确认灰度名单',
+          },
+        ],
+      },
+      state: 'pending',
+      createdAt: now - 300,
+      expiresAt: now + 86_100,
+    },
+    {
+      ...base,
+      reviewId: 'A-2',
+      revision: 1,
+      subjectRef: 'fs_mock_image',
+      preview: { ...preview, parts: [{ format: 'image', name: '架构图.png', size: 182_400 }] },
+      state: 'pending',
+      createdAt: now - 900,
+      expiresAt: now + 2700,
+    },
+    {
+      ...base,
+      reviewId: 'A-1',
+      revision: 2,
+      subjectRef: 'fs_mock_rejected',
+      preview: { ...preview, parts: [{ format: 'text', text: '大家好，明天停机维护两小时。' }] },
+      state: 'rejected',
+      decidedBy: { via: 'litch' },
+      decidedAt: now - 86_000,
+      reason: '时间还没定',
+      createdAt: now - 86_400,
+      expiresAt: now,
+    },
+  ]
+}
+
 /** 样例收件箱：一条刚到（排队）、一条已送进回合、一条已处理、一条过了保留期只剩 ID */
 const sampleInbox = (appId: string, managerId: string, now: number) => {
   const base = {
@@ -214,6 +347,36 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
     const chats = new Map<string, FeishuChat[]>()
     const chatSinks = new Map<string, Set<HostSink>>()
     const inboxSinks = new Map<string, Set<HostSink>>()
+    const outboxSinks = new Map<string, Set<HostSink>>()
+    const reviewSinks = new Map<string, Set<HostSink>>()
+    const managed = filled && deviceId === 'local'
+    let outbox: FeishuOutboxEntry[] = managed ? sampleOutbox(sampleAppId, 'm1', now()) : []
+    let reviews: Review[] = managed ? sampleReviews(sampleAppId, 'm1', now()) : []
+    const ready = (value: unknown) => ({
+      available: true,
+      online: true,
+      value,
+      fetchedAt: clock.now(),
+      error: null,
+    })
+    const publishOutbox = (appId: string) => {
+      const value = { entries: outbox.filter((entry) => entry.appId === appId) }
+      for (const sink of outboxSinks.get(appId) ?? []) sink.snapshot(ready(value))
+    }
+    const reviewsFor = (managerId: string) => {
+      const mine = reviews.filter(
+        (review) => !managerId || review.requestedBy.managerId === managerId,
+      )
+      const pending = mine.filter((review) => review.state === 'pending')
+      return {
+        reviews: [...pending, ...mine.filter((review) => review.state !== 'pending')],
+        pending: pending.length,
+      }
+    }
+    const publishReviews = () => {
+      for (const [managerId, set] of reviewSinks)
+        for (const sink of set) sink.snapshot(ready(reviewsFor(managerId)))
+    }
     const inboxOf = (managerId: string) => {
       const app = apps.find((item) => item.managerId === managerId)
       return app ? sampleInbox(app.appId, managerId, now()) : { entries: [], messages: {} }
@@ -308,6 +471,21 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
           chatSinks.set(topic.appId, set)
           set.add(sink)
           publishChats(topic.appId)
+          return () => set.delete(sink)
+        }
+        if (topic.kind === 'feishuOutbox') {
+          const set = outboxSinks.get(topic.appId) ?? new Set<HostSink>()
+          outboxSinks.set(topic.appId, set)
+          set.add(sink)
+          publishOutbox(topic.appId)
+          return () => set.delete(sink)
+        }
+        if (topic.kind === 'reviews') {
+          const key = topic.managerId ?? ''
+          const set = reviewSinks.get(key) ?? new Set<HostSink>()
+          reviewSinks.set(key, set)
+          set.add(sink)
+          sink.snapshot(ready(reviewsFor(key)))
           return () => set.delete(sink)
         }
         if (topic.kind === 'feishuInbox') {
@@ -582,6 +760,72 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
             }
             return fail('feishu_inbox_not_found')
           }
+          case 'feishu.outbox.list':
+            return { entries: outbox.filter((entry) => entry.appId === args.appId) }
+          case 'feishu.outbox.cancel': {
+            const entry = outbox.find((item) => item.operationId === args.operationId)
+            if (!entry) return fail('feishu_outbox_not_found')
+            if (entry.state === 'sending') return fail('feishu_outbox_sending')
+            const done = ['sent', 'failed', 'rejected', 'canceled'].includes(entry.state)
+            const next: FeishuOutboxEntry = done
+              ? entry
+              : { ...entry, state: 'canceled', error: 'canceled_by_admin', updatedAt: now() }
+            outbox = outbox.map((item) => (item === entry ? next : item))
+            if (entry.reviewId && !done)
+              reviews = reviews.map((review) =>
+                review.reviewId === entry.reviewId && review.state === 'pending'
+                  ? {
+                      ...review,
+                      state: 'canceled',
+                      revision: review.revision + 1,
+                      decidedAt: now(),
+                    }
+                  : review,
+              )
+            publishOutbox(entry.appId)
+            publishReviews()
+            return { entry: next }
+          }
+          case 'reviews.list':
+            return reviewsFor(String(args.managerId ?? ''))
+          case 'reviews.get': {
+            const review = reviews.find((item) => item.reviewId === args.reviewId)
+            return review ? { review } : fail('review_not_found')
+          }
+          case 'reviews.decide': {
+            const review = reviews.find((item) => item.reviewId === args.reviewId)
+            if (!review) return fail('review_not_found')
+            if (review.revision !== args.expectedRevision) return fail('review_revision_conflict')
+            if (review.state !== 'pending') return fail('review_not_pending')
+            const approved = args.decision === 'approve'
+            const reason = typeof args.reason === 'string' ? args.reason.trim() : ''
+            const next: Review = {
+              ...review,
+              state: approved ? 'approved' : 'rejected',
+              revision: review.revision + 1,
+              decidedBy: { via: 'litch' },
+              decidedAt: now(),
+              ...(reason ? { reason } : {}),
+            }
+            reviews = reviews.map((item) => (item === review ? next : item))
+            outbox = outbox.map((entry) =>
+              entry.operationId === review.subjectRef
+                ? approved
+                  ? {
+                      ...entry,
+                      state: 'sent',
+                      attempts: 1,
+                      messageIds: ['om_mock_approved'],
+                      updatedAt: now(),
+                      sentAt: now(),
+                    }
+                  : { ...entry, state: 'rejected', error: 'review_rejected', updatedAt: now() }
+                : entry,
+            )
+            publishReviews()
+            for (const appId of new Set(outbox.map((entry) => entry.appId))) publishOutbox(appId)
+            return { review: next }
+          }
           default:
             throw new ChannelError('unknownCommand', `不认识的命令：${name}`)
         }
@@ -600,7 +844,7 @@ export function createMockFeishu(clock: Clock, devices: () => DeviceView[], fill
   return {
     of,
     command(name: string, params: unknown): Promise<unknown> | null {
-      if (!isFeishuCommand(name)) return null
+      if (!isFeishuCommand(name) && !isReviewsCommand(name)) return null
       const { deviceId, ...args } = params as { deviceId: string } & Record<string, unknown>
       return of(deviceId).command(name, args)
     },

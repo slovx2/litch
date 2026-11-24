@@ -125,6 +125,14 @@ export class DeviceFeishuRpc {
         const entry = service.inbox.entry(args(method).inboxId) ?? fail('feishu_inbox_not_found')
         return { entry, message: service.inboxMessage(entry) }
       }
+      case M.outboxList: {
+        const input = args(method)
+        return service.outboxPage(input.appId, input.states, input.limit ?? 50, input.before)
+      }
+      case M.outboxCancel: {
+        const input = args(method)
+        return { entry: service.outboxCancel(input.appId, input.operationId) }
+      }
     }
   }
 }

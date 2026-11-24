@@ -9,10 +9,13 @@ import {
   type FeishuInboxEntry,
   type FeishuInboxMessage,
   type FeishuInboxStatus,
+  type FeishuOutboxEntry,
+  type FeishuOutboxState,
   type FeishuRegistration,
 } from '../../../protocol/src/feishu.mjs'
 import { ProtocolError } from '../../../shared/src/protocol-contract.mjs'
 import { type ManagerStore, managerNow } from '../manager-store.mjs'
+import type { DeviceReviews } from '../reviews.mjs'
 import {
   FEISHU_PRODUCTION,
   FeishuApi,
@@ -21,11 +24,13 @@ import {
   feishuEndpointsForLoopbackTest,
 } from './api.mjs'
 import { checkCapability, upgradeCapability } from './capability.mjs'
-import { FeishuChats } from './chats.mjs'
+import { FEISHU_SPEECH_PROVIDER, FeishuChats } from './chats.mjs'
 import { FeishuConnectionRunner, type FeishuEventHandler } from './connection.mjs'
 import { FeishuCredentials } from './credentials.mjs'
+import { escapeExternal } from './format.mjs'
 import { FeishuInbox } from './inbox.mjs'
 import { ImMessages, openImMessages } from './messages.mjs'
+import { FeishuOutbox } from './outbox.mjs'
 import { FeishuRecords } from './records.mjs'
 import { FeishuRegistrations } from './registration.mjs'
 import { SpeechPolicies } from './speech-policy.mjs'
@@ -40,6 +45,8 @@ export interface DeviceFeishuOptions {
   managers: ManagerStore
   announce: (method: string, params: unknown) => void
   log: (message: string) => void
+  /** 通用审批（审批发言用）；没有时审批发言的群不能发言 */
+  reviews?: DeviceReviews | null
   /** 测试：飞书地址换成回环假服务端，时间可控（秒） */
   fixture?: {
     origin: string
@@ -48,6 +55,9 @@ export interface DeviceFeishuOptions {
     registrationIntervalMs?: number
     /** 叫醒检查间隔（毫秒） */
     wakeTickMs?: number
+    /** 发件重试检查间隔、两次发送的间隔（毫秒） */
+    outboxTickMs?: number
+    sendGapMs?: number
   }
 }
 
@@ -77,6 +87,7 @@ export class DeviceFeishuService {
   readonly records: FeishuRecords
   readonly inbox: FeishuInbox
   readonly wake: FeishuWake
+  readonly outbox: FeishuOutbox
   private readonly credentials: FeishuCredentials
   private readonly endpoints: FeishuEndpoints
   private readonly registrations: FeishuRegistrations
@@ -169,6 +180,36 @@ export class DeviceFeishuService {
       changed: inboxChanged,
       ...(options.fixture?.wakeTickMs === undefined ? {} : { tickMs: options.fixture.wakeTickMs }),
     })
+    this.outbox = new FeishuOutbox({
+      stateDirectory: options.stateDirectory,
+      store: this.store,
+      chats: this.chats,
+      messages: this.messages,
+      records: this.records,
+      policies: this.policies,
+      reviews: options.reviews ?? null,
+      api: (appId) => this.api(appId),
+      now: this.now,
+      log: options.log,
+      changed: (appId, operationId) =>
+        options.announce(FEISHU_NOTIFICATION.outboxChanged, { appId, operationId }),
+      ...(options.fixture?.outboxTickMs === undefined
+        ? {}
+        : { tickMs: options.fixture.outboxTickMs }),
+      ...(options.fixture?.sendGapMs === undefined ? {} : { gapMs: options.fixture.sendGapMs }),
+    })
+    this.wake.outcomes = {
+      pending: (managerId) =>
+        this.outbox.unreported(managerId).map((record) => ({
+          operationId: record.operationId,
+          line: `${record.operationId} to ${escapeExternal(record.target.name || record.target.id)}: ${record.state}${record.error ? ` (${record.error})` : ''}${record.messageIds.length ? `, ${record.messageIds.length} of ${record.parts} parts were sent` : ''}`,
+        })),
+      mark: (operationIds, reported) => this.outbox.markReported(operationIds, reported),
+    }
+    options.reviews?.register(FEISHU_SPEECH_PROVIDER, {
+      settled: (review) => this.outbox.reviewSettled(review),
+      after: (review) => this.outbox.reviewAfter(review),
+    })
     this.records.onStored((message, source) => this.inbox.stored(message, source))
     this.inbox.onQueued(() => this.wake.tick())
     this.on('im.message.receive_v1', (appId, data) => this.records.received(appId, data))
@@ -233,6 +274,27 @@ export class DeviceFeishuService {
     }
   }
 
+  /** 应用的发件队列：一页（新的在前） */
+  outboxPage(
+    appId: string,
+    states: FeishuOutboxState[] | undefined,
+    limit: number,
+    before?: string,
+  ): { entries: FeishuOutboxEntry[]; next?: string } {
+    if (!this.store.app(appId)) fail('feishu_app_not_found')
+    const page = this.outbox.list(appId, states, limit + 1, before)
+    const entries = page.slice(0, limit).map((record) => this.outbox.view(record))
+    const last = entries.at(-1)
+    return { entries, ...(page.length > limit && last ? { next: last.operationId } : {}) }
+  }
+
+  outboxCancel(appId: string, operationId: string): FeishuOutboxEntry {
+    const record = this.outbox.get(operationId)
+    if (record?.appId !== appId) fail('feishu_outbox_not_found')
+    if (record?.state === 'sending') fail('feishu_outbox_sending')
+    return this.outbox.view(this.outbox.cancel(operationId, 'admin'))
+  }
+
   inboxChanged(managerId: string, appId: string): void {
     this.options.announce(FEISHU_NOTIFICATION.inboxChanged, { managerId, appId })
   }
@@ -259,6 +321,7 @@ export class DeviceFeishuService {
     this.credentials.sweep(new Map(apps.map((app) => [app.appId, app.credential.generation])))
     this.records.start()
     this.wake.start()
+    this.outbox.start()
     for (const app of apps) this.reconcile(app.appId)
   }
 
@@ -266,6 +329,7 @@ export class DeviceFeishuService {
     this.started = false
     this.registrations.close()
     this.wake.close()
+    this.outbox.close()
     this.records.close()
     for (const appId of [...this.running.keys()]) this.stop(appId)
     this.messages.close()

@@ -56,9 +56,17 @@ export interface FeishuWakeOptions {
   tickMs?: number
 }
 
+/** 发言的结果（被拒、过期、失败、结果不明）随下一次投递告诉经理（技术取舍：不单独叫醒） */
+export interface FeishuSendOutcomes {
+  pending(managerId: string): { operationId: string; line: string }[]
+  /** 在投递的事务里标成已告诉；引擎没收时退回 */
+  mark(operationIds: string[], reported: boolean): void
+}
+
 export class FeishuWake {
   private readonly options: FeishuWakeOptions
   host: FeishuWakeHost | null = null
+  outcomes: FeishuSendOutcomes | null = null
   private readonly running = new Set<string>()
   private timer: NodeJS.Timeout | null = null
   private closed = false
@@ -140,7 +148,11 @@ export class FeishuWake {
     const deliveryId = randomUUID()
     const eventId = `feishu-${deliveryId}`
     const tools = host.toolsInstalled(manager)
-    let submitted: { inboxIds: string[]; cursors: Map<string, number> } | null = null
+    let submitted: {
+      inboxIds: string[]
+      cursors: Map<string, number>
+      reported: string[]
+    } | null = null
     const compose = () => {
       const current = this.queued(managerId, app.appId)
       return current.length > 0 ? this.compose(manager, app.appId, current, tools) : null
@@ -178,12 +190,17 @@ export class FeishuWake {
                 sentAt,
                 JSON.stringify({ state: 'sending', inboxIds, threadId: manager.threadId }),
               )
-            submitted = { inboxIds, cursors: previous }
+            this.outcomes?.mark(plan.reported, true)
+            submitted = { inboxIds, cursors: previous, reported: plan.reported }
             return true
           }),
       })
       .catch((): FeishuSendResult => ({ outcome: 'unknown' }))
-    const sent = submitted as { inboxIds: string[]; cursors: Map<string, number> } | null
+    const sent = submitted as {
+      inboxIds: string[]
+      cursors: Map<string, number>
+      reported: string[]
+    } | null
     if (!sent) return
     const body = (state: string, extra: Record<string, unknown> = {}) =>
       JSON.stringify({ state, inboxIds: sent.inboxIds, threadId: manager.threadId, ...extra })
@@ -201,6 +218,7 @@ export class FeishuWake {
           notifiedAt: undefined,
         })
         this.db.prepare('DELETE FROM feishu_deliveries WHERE delivery_id=?').run(deliveryId)
+        this.outcomes?.mark(sent.reported, false)
       })
     } else
       this.db
@@ -227,7 +245,12 @@ export class FeishuWake {
     appId: string,
     entries: FeishuInboxEntry[],
     tools: boolean,
-  ): { text: string; entries: FeishuInboxEntry[]; cursors: Map<string, number> } {
+  ): {
+    text: string
+    entries: FeishuInboxEntry[]
+    cursors: Map<string, number>
+    reported: string[]
+  } {
     const { messages, chats, inbox, store } = this.options
     const app = store.app(appId)
     const byChat = new Map<string, FeishuInboxEntry[]>()
@@ -273,11 +296,18 @@ export class FeishuWake {
       cursors.set(chatId, top)
     }
     const ids = entries.map((entry) => entry.inboxId).join(', ')
+    const outcomes = this.outcomes?.pending(manager.id) ?? []
     const modelText = [
       '<litch-external-data source="feishu">',
       `Feishu app ${escapeExternal(app?.name ?? appId)} (${appId}). New messages in accessed chats since you were last given context. Entries marked [FI-n] asked for you. ${FEISHU_DATA_NOTE}`,
       ...sections,
       '</litch-external-data>',
+      ...(outcomes.length
+        ? [
+            'Results of your earlier feishu_send calls that did not go out:',
+            ...outcomes.map((outcome) => `- ${outcome.line}`),
+          ]
+        : []),
       `Inbox entries: ${ids}. Handle what is needed; do not reply only to acknowledge. Open a board item when follow-up work is needed. When done, mark them with litch_feishu.feishu_inbox_done.`,
       ...(tools
         ? []
@@ -293,6 +323,6 @@ export class FeishuWake {
       },
       modelText,
     )
-    return { text, entries, cursors }
+    return { text, entries, cursors, reported: outcomes.map((outcome) => outcome.operationId) }
   }
 }

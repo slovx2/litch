@@ -45,6 +45,7 @@ import {
   REMOTE_CHROME_CHANGED,
   REMOTE_CHROME_PENDING_PREFIX,
 } from '../../protocol/src/remote-chrome.mjs'
+import { REVIEWS_EXTENSION } from '../../protocol/src/reviews.mjs'
 import { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
 import { SUGGESTION_RETENTION_SETTING } from '../../protocol/src/suggestion-inbox.mjs'
 import { TIMED_APPROVALS_EXTENSION } from '../../protocol/src/timed-approvals.mjs'
@@ -74,6 +75,7 @@ import { deviceInfo, deviceVersion, HarnessCatalog } from './harness-info.mjs'
 import { WorkspaceImporter } from './importer.mjs'
 import { DeviceManagement } from './management.mjs'
 import { DeviceManagers } from './manager.mjs'
+import { managerNow } from './manager-store.mjs'
 import { NativeBackgroundStore } from './native-background-store.mjs'
 import { NativeBackgroundWake } from './native-background-wake.mjs'
 import { dialectFor } from './native-codex.mjs'
@@ -86,6 +88,7 @@ import { DeviceChromeRuntime } from './remote-chrome-runtime.mjs'
 import { RepositoryTools } from './repository-tools.mjs'
 import { RestartResume } from './restart-resume.mjs'
 import { RestartStore } from './restart-store.mjs'
+import { DeviceReviews, DeviceReviewsRpc } from './reviews.mjs'
 import { ACTIVITY_METHOD, type DeviceActivity, serviceInfo } from './service-info.mjs'
 import {
   ClientSession,
@@ -346,6 +349,8 @@ export class DeviceServer {
   readonly managers: DeviceManagers
   readonly external: DeviceExternalService | null
   readonly feishu: DeviceFeishuService | null
+  /** 通用审批：目前只有飞书审批发言用，跟飞书一起开 */
+  readonly reviews: DeviceReviews | null
   private readonly stopAutostartWatch: () => void
   /** 原生 codex 会话的自动起名 */
   readonly titles: CodexTitles
@@ -721,16 +726,25 @@ export class DeviceServer {
       : null
     this.managers.external = this.external
     if (this.external) info.extensions.push(EXTERNAL_SOURCES_EXTENSION)
+    this.reviews = options.feishu
+      ? new DeviceReviews({
+          managers: this.managers.store,
+          now: options.feishu.fixture?.now ?? managerNow,
+          log,
+          announce: (method, params) => this.announce(method, params, REVIEWS_EXTENSION),
+        })
+      : null
     this.feishu = options.feishu
       ? new DeviceFeishuService({
           ...options.feishu,
           stateDirectory: options.stateDir,
           managers: this.managers.store,
+          reviews: this.reviews,
           log,
           announce: (method, params) => this.announce(method, params, FEISHU_EXTENSION),
         })
       : null
-    if (this.feishu) info.extensions.push(FEISHU_EXTENSION)
+    if (this.feishu) info.extensions.push(FEISHU_EXTENSION, REVIEWS_EXTENSION)
     const autostart = new DeviceAutostart(this.control, log)
     if (this.control) info.extensions.push(DEVICE_AUTOSTART_EXTENSION)
     this.stopAutostartWatch = autostart.watch(options.stateDir, (params) =>
@@ -956,6 +970,7 @@ export class DeviceServer {
       managers: this.managers,
       ...(this.external ? { external: new DeviceExternalRpc(this.external, autostart) } : {}),
       ...(this.feishu ? { feishu: new DeviceFeishuRpc(this.feishu) } : {}),
+      ...(this.reviews ? { reviews: new DeviceReviewsRpc(this.reviews) } : {}),
       autostart,
       deviceTools: this.deviceTools,
       ...(this.sessionTree.host.modelRanking ? { modelRanking: this.modelRanking } : {}),
