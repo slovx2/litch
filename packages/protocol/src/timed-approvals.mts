@@ -15,7 +15,6 @@ export const TIMED_APPROVAL = {
  * 审批的类别。一次授权只放行同一会话里的同一类：
  * - command、fileChange、permissions：各 harness 原生的命令、改文件、追加权限审批（设备代答）；
  * - machine：远程会话操作控制端电脑（litch_machine 的命令与文件）；
- * - computer：Computer Use 操作普通应用；
  * - browser：内置浏览器的网站许可；
  * - chrome：Chrome 的网站许可。
  */
@@ -24,7 +23,6 @@ export const TIMED_APPROVAL_CATEGORIES = [
   'fileChange',
   'permissions',
   'machine',
-  'computer',
   'browser',
   'chrome',
 ] as const

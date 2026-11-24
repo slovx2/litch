@@ -1,6 +1,6 @@
 // 限时授权：按“会话 + 类别”记在设备库里，按绝对到期时间判定，设备重启后仍在。
 // 原生审批（命令、改文件、追加权限）由设备在收到请求时直接代答，不再转给客户端；
-// 客户端工具（操作本机、Computer Use、浏览器、Chrome）由执行它的桌面端拿名单自己判定。
+// 客户端工具（操作本机、浏览器、Chrome）由执行它的桌面端拿名单自己判定。
 // 授予、撤销只走客户端请求（用户操作），不给模型任何对应工具。约定见 protocol/extensions/timed-approvals.json。
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'

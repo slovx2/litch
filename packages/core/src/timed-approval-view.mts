@@ -31,8 +31,8 @@ export function timedCategoryOf(request: RequestView): TimedApprovalCategory | n
   return clientAskCategory(ask)
 }
 
-/** 剩余时长，按整分钟向上取：给界面拼“还剩 X 小时 Y 分” */
+/** 剩余时长，按整分钟四舍五入：给界面拼“还剩 X 小时 Y 分”（不足一分钟由界面写成 1 分） */
 export function timedRemaining(expiresAt: number, now: number): { hours: number; minutes: number } {
-  const minutes = Math.max(0, Math.ceil((expiresAt - now) / 60_000))
+  const minutes = Math.max(0, Math.round((expiresAt - now) / 60_000))
   return { hours: Math.floor(minutes / 60), minutes: minutes % 60 }
 }

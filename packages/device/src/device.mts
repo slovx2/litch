@@ -798,7 +798,8 @@ export class DeviceServer {
     })
     const chrome = this.chrome
     const router = new ClientToolRouter({
-      timedApproval: (threadId, category) => this.timedApprovals.active(threadId, category) !== null,
+      timedApproval: (threadId, category) =>
+        this.timedApprovals.active(threadId, category) !== null,
       ...(chrome
         ? {
             remoteChrome: new RemoteChromeRouter(chrome),
