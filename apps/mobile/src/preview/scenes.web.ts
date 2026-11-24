@@ -360,10 +360,25 @@ export const SCENES: Scene[] = [
     ],
   },
   {
+    id: 'feishu-chat-records',
+    group: '设备',
+    name: '飞书 · 有记录与补历史',
+    note: '示例项目群的记录一节：326 条、接入时补历史已完成、最近一次补缺口；下方补更早的消息（两个日期框，模拟核心直接补完）',
+    steps: [
+      nav('DeviceDetail', { deviceId: 'local' }),
+      nav('FeishuApp', { deviceId: 'local', appId: 'cli_a1b2c3d4e5f60718' }),
+      nav('FeishuChat', {
+        deviceId: 'local',
+        appId: 'cli_a1b2c3d4e5f60718',
+        chatId: 'oc_mock_project',
+      }),
+    ],
+  },
+  {
     id: 'feishu-chat-left',
     group: '设备',
     name: '飞书 · 机器人已离开的群',
-    note: '仍接入（审批发言）但机器人已不在群里：成员选择不可用并写明原因，其余设置照样能改',
+    note: '仍接入（审批发言）但机器人已不在群里：41 条记录；成员选择与补更早的消息不可用并写明原因，其余设置照样能改',
     steps: [
       nav('DeviceDetail', { deviceId: 'local' }),
       nav('FeishuApp', { deviceId: 'local', appId: 'cli_a1b2c3d4e5f60718' }),

@@ -7,7 +7,6 @@ export const zhCN = {
   'mfs.manualDesktop': '已有应用请在桌面端填写 App ID 与 App Secret。',
   'mfs.unset': '未选择',
   'mfs.members': '成员',
-  'mfs.records': '记录',
 } satisfies Record<string, Entry>
 
 export const en: Record<keyof typeof zhCN, Entry> = {
@@ -15,5 +14,4 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'mfs.manualDesktop': 'To use an existing app, enter its App ID and App Secret on desktop.',
   'mfs.unset': 'Not chosen',
   'mfs.members': 'Members',
-  'mfs.records': 'Records',
 }

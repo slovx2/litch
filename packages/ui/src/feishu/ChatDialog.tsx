@@ -6,6 +6,7 @@ import { useT } from '../app/appearance.ts'
 import { Close, Icon } from '../app/icons.tsx'
 import { useServices } from '../app/services.tsx'
 import { Switch } from '../external/parts.tsx'
+import { ChatRecords } from './ChatRecords.tsx'
 import { type OnChat, useFeishuRun } from './data.ts'
 import {
   accessParams,
@@ -15,6 +16,7 @@ import {
   chatDraft,
   chatUnavailable,
   draftProblems,
+  FEISHU_BACKFILL_LIMIT,
   FEISHU_RETENTION_DAYS,
   FEISHU_REVIEW_TTL_HOURS,
   FEISHU_WAKERS_MAX,
@@ -227,8 +229,13 @@ export function ChatDialog({
   const writable = block === null && !act.busy
   const problems = draftProblems(draft, chat)
   const changes = access ? chatChanges(draft, access) : null
+  // 机器人不在群里或群已解散：不能新接入（留着记录的群也能打开看）
+  const closed = !access && chatUnavailable(chat) !== null
   const ready =
-    writable && problems.length === 0 && (changes === null || Object.keys(changes).length > 0)
+    writable &&
+    !closed &&
+    problems.length === 0 &&
+    (changes === null || Object.keys(changes).length > 0)
 
   const submit = async () => {
     if (!ready) return
@@ -254,13 +261,15 @@ export function ChatDialog({
   }
 
   // 还不能提交的原因里，表单上看不出来的那几样写在底部
-  const why = problems.includes('speech')
-    ? t('feishu.chat.problem.speech')
-    : problems.includes('external')
-      ? t('feishu.chat.problem.external')
-      : problems.includes('wakers')
-        ? t('feishu.chat.problem.wakers', { max: FEISHU_WAKERS_MAX })
-        : ''
+  const why = closed
+    ? t('feishu.chat.unavailableAccess')
+    : problems.includes('speech')
+      ? t('feishu.chat.problem.speech')
+      : problems.includes('external')
+        ? t('feishu.chat.problem.external')
+        : problems.includes('wakers')
+          ? t('feishu.chat.problem.wakers', { max: FEISHU_WAKERS_MAX })
+          : ''
   return (
     <dialog
       ref={dialog}
@@ -368,6 +377,12 @@ export function ChatDialog({
               />
             ) : null}
           </div>
+          {access ? null : (
+            <span className="fs-hint">
+              {t('feishu.chat.backfillNote', { max: FEISHU_BACKFILL_LIMIT })}
+            </span>
+          )}
+          <ChatRecords deviceId={deviceId} chat={chat} block={block} onChat={onChat} />
           {act.error ? (
             <div className="modal-note err" role="alert" data-feishu-chat-error>
               {act.error}

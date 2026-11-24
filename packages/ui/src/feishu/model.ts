@@ -2,17 +2,21 @@
 // 只认核心给的快照与协议类型；字由各端按这里给出的键拼。设备时间是 UTC 秒。
 import {
   FEISHU_APP_ID,
+  FEISHU_BACKFILL_LIMIT,
   FEISHU_BOT_NAME_MAX,
   FEISHU_RETENTION_DAYS,
   FEISHU_REVIEW_TTL_HOURS,
   FEISHU_WAKERS_MAX,
   type FeishuApp,
+  type FeishuBackfill,
   type FeishuCapability,
   type FeishuChat,
   type FeishuChatAccess,
   type FeishuChatAccessParams,
+  type FeishuChatRecords,
   type FeishuChatUpdateParams,
   type FeishuErrorCode,
+  type FeishuGapFill,
   type FeishuMember,
   type FeishuPerson,
   type FeishuRegistration,
@@ -21,15 +25,24 @@ import {
 
 export type {
   FeishuApp,
+  FeishuBackfill,
   FeishuCapability,
   FeishuChat,
   FeishuChatAccess,
+  FeishuChatRecords,
+  FeishuGapFill,
   FeishuMember,
   FeishuPerson,
   FeishuRegistration,
   FeishuSpeechMode,
 }
-export { FEISHU_BOT_NAME_MAX, FEISHU_RETENTION_DAYS, FEISHU_REVIEW_TTL_HOURS, FEISHU_WAKERS_MAX }
+export {
+  FEISHU_BACKFILL_LIMIT,
+  FEISHU_BOT_NAME_MAX,
+  FEISHU_RETENTION_DAYS,
+  FEISHU_REVIEW_TTL_HOURS,
+  FEISHU_WAKERS_MAX,
+}
 
 /**
  * 写操作为什么不能做：设备离线，或这条连接不是设备管理员（admin 为 false）。
@@ -91,6 +104,8 @@ export const FEISHU_REASONS = [
   'waker_not_member',
   'members_failed',
   'sync_failed',
+  'backfill_running',
+  'backfill_window_invalid',
 ] as const
 export type FeishuReason = (typeof FEISHU_REASONS)[number]
 
@@ -190,10 +205,11 @@ export function secondsLeft(expiresAt: number, nowMs: number): number {
 
 // ---------- 群 ----------
 
-/** 列表上的接入状态：未接入，或已接入的发言模式 */
-export type ChatAccessState = 'none' | FeishuSpeechMode
-export function chatAccessState(chat: Pick<FeishuChat, 'access'>): ChatAccessState {
-  return chat.access?.speech ?? 'none'
+/** 列表上的接入状态：未接入、未接入但设备还留着记录（kept），或已接入的发言模式 */
+export type ChatAccessState = 'none' | 'kept' | FeishuSpeechMode
+export function chatAccessState(chat: Pick<FeishuChat, 'access' | 'records'>): ChatAccessState {
+  if (chat.access) return chat.access.speech
+  return chat.records ? 'kept' : 'none'
 }
 
 /** 群现在用不了（拉不到成员、不能新接入）的原因：已解散优先于机器人不在群里 */
@@ -363,4 +379,92 @@ export function toggleWaker(wakers: readonly FeishuPerson[], person: FeishuPerso
     return wakers.filter((one) => one.openId !== person.openId)
   if (wakers.length >= FEISHU_WAKERS_MAX) return [...wakers]
   return [...wakers, { openId: person.openId, name: person.name }]
+}
+
+// ---------- 记录与补历史 ----------
+
+/** 已接入的群正在补历史 */
+export function backfilling(chat: Pick<FeishuChat, 'access' | 'records'>): boolean {
+  return chat.access !== null && chat.records?.backfill?.state === 'running'
+}
+
+/** 补历史一行用哪句：正在补 / 补完（超过上限时只留了最新的）/ 失败 */
+export type BackfillLine = 'running' | 'done' | 'truncated' | 'failed'
+export function backfillLine(backfill: Pick<FeishuBackfill, 'state' | 'truncated'>): BackfillLine {
+  if (backfill.state === 'done') return backfill.truncated ? 'truncated' : 'done'
+  return backfill.state
+}
+
+/** 手动补历史为什么不能做；按“能不能写 → 群能不能用 → 是否已接入 → 是否正在补”的次序给一个 */
+export type BackfillBlock =
+  | Exclude<WriteBlock, null>
+  | 'dissolved'
+  | 'botLeft'
+  | 'notAccessed'
+  | 'running'
+  | null
+export function backfillBlock(
+  chat: Pick<FeishuChat, 'access' | 'records' | 'status' | 'botPresent'>,
+  block: WriteBlock,
+): BackfillBlock {
+  if (block) return block
+  const unavailable = chatUnavailable(chat)
+  if (unavailable) return unavailable
+  if (!chat.access) return 'notAccessed'
+  return backfilling(chat) ? 'running' : null
+}
+
+const DAY_TEXT = /^(\d{4})-(\d{2})-(\d{2})$/
+
+/** 本地日期 YYYY-MM-DD 那天零点（毫秒）；不是合法日期时是 null */
+function localMidnight(text: string): number | null {
+  const match = DAY_TEXT.exec(text.trim())
+  if (!match) return null
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])]
+  const date = new Date(year, month - 1, day)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day)
+    return null
+  return date.getTime()
+}
+
+/** 某个时刻（毫秒）所在的本地日期，写成 YYYY-MM-DD（日期输入框的格式） */
+export function dayText(ms: number): string {
+  const date = new Date(ms)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+/** 补历史窗口（秒，结束不含）显示成起止日期：结束日期是结束前一秒所在的那天 */
+export function windowDays(start: number, end: number): { from: string; to: string } {
+  return { from: dayText(start * 1000), to: dayText(Math.max(start, end - 1) * 1000) }
+}
+
+/** 手动补历史的初值：结束是今天，开始是最早一条记录（没有就是今天）往前 30 天 */
+export function backfillDefaults(
+  records: Pick<FeishuChatRecords, 'oldestAt'> | undefined,
+  nowMs: number,
+): { from: string; to: string } {
+  const base = records?.oldestAt !== undefined ? records.oldestAt * 1000 : nowMs
+  const before = new Date(base)
+  before.setDate(before.getDate() - 30)
+  return { from: dayText(before.getTime()), to: dayText(nowMs) }
+}
+
+/**
+ * 两个日期换成补历史的窗口（秒）：开始取那天本地零点，结束取结束那天次日零点和现在中较早的那个。
+ * 日期不合法是 format；开始不早于结束（含开始日期在今天之后）是 order
+ */
+export function backfillWindow(
+  from: string,
+  to: string,
+  nowMs: number,
+): { start: number; end: number } | { problem: 'format' | 'order' } {
+  const startMs = localMidnight(from)
+  const toMs = localMidnight(to)
+  if (startMs === null || toMs === null) return { problem: 'format' }
+  const next = new Date(toMs)
+  next.setDate(next.getDate() + 1)
+  const start = Math.floor(startMs / 1000)
+  const end = Math.floor(Math.min(next.getTime(), nowMs) / 1000)
+  return start < end ? { start, end } : { problem: 'order' }
 }

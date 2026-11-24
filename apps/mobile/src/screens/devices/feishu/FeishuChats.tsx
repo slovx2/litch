@@ -5,6 +5,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import { stamp } from '../../../../../../packages/ui/src/app/format.ts'
 import { feishuFailure } from '../../../../../../packages/ui/src/feishu/failure.ts'
 import {
+  backfilling,
   chatAccessState,
   chatUnavailable,
   type FeishuChat,
@@ -106,7 +107,11 @@ export function FeishuChats({
         const unavailable = chatUnavailable(chat)
         // 用不了的群不能新接入；已接入的照样能进设置
         const closed = state === 'none' && unavailable !== null
-        const detail = [...chatMarks(chat, t), t(`feishu.chats.state.${state}`)].join(' · ')
+        const detail = [
+          ...chatMarks(chat, t),
+          t(`feishu.chats.state.${state}`),
+          ...(backfilling(chat) ? [t('feishu.chats.backfilling')] : []),
+        ].join(' · ')
         // 已解散的整行灰掉
         return (
           <View key={chat.chatId} style={unavailable === 'dissolved' ? styles.off : null}>

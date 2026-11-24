@@ -106,3 +106,18 @@
   font-size: 12px;
   color: var(--ink-3);
 }
+
+/* 群设置里的记录一块 */
+.fs-records-line {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.fs-records-more {
+  padding-top: 4px;
+}
+.fs-records-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}

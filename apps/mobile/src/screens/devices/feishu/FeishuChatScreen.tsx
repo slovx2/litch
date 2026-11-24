@@ -1,7 +1,7 @@
 // 飞书的一个群：未接入的是接入页，已接入的是群设置页（同一页）。发言模式（不预选，外部群预选审批并要再勾确认）、
 // 叫醒名单（成员选择单加“包括已绑定用户”）、保留天数、审批过期时间（只在审批发言时出）；已接入的只提交改了的字段，
 // 底部“取消接入”另有确认框（默认同时删除记录）。机器人不在群里或群已解散时成员选择不可用，其余照样能改。
-// 这条连接不是设备管理员时写操作都不可点，页首写明原因。写操作带群的 revision，冲突时重读这一个群并提示重试。
+// 这条连接不是设备管理员时写操作都不可点，页首写明原因。“记录”一节有条数、补历史与补缺口，已接入的群能手动补更早的消息。写操作带群的 revision，冲突时重读这一个群并提示重试。
 import { type DeviceView, keys } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -15,6 +15,7 @@ import {
   chatDraft,
   chatUnavailable,
   draftProblems,
+  FEISHU_BACKFILL_LIMIT,
   FEISHU_RETENTION_DAYS,
   FEISHU_REVIEW_TTL_HOURS,
   FEISHU_WAKERS_MAX,
@@ -33,6 +34,7 @@ import { ChoiceMark } from '../../../ui/kit/marks'
 import { Dialog, Sheet } from '../../../ui/kit/overlays'
 import { Screen } from '../../../ui/kit/Screen'
 import { useTheme } from '../../../ui/theme'
+import { FeishuBackfillForm, FeishuRecordsSummary } from './FeishuChatRecords'
 import { chatMarks } from './FeishuChats'
 import { FeishuMemberSheet } from './FeishuMemberSheet'
 import { useFeishuChats, useFeishuDevice } from './use-feishu'
@@ -139,8 +141,11 @@ export function FeishuChatScreen({ route, navigation }: Props) {
   const locked = block !== null
   const problems = draftProblems(shown, chat)
   const changes = access ? chatChanges(shown, access) : null
+  // 机器人不在群里或群已解散：不能新接入（留着记录的群也能打开看）
+  const closed = !access && unavailable !== null
   const ready =
     !locked &&
+    !closed &&
     busy === null &&
     problems.length === 0 &&
     (changes === null || Object.keys(changes).length > 0)
@@ -184,13 +189,15 @@ export function FeishuChatScreen({ route, navigation }: Props) {
   }
 
   const note = [styles.note, { color: c.ink3, fontSize: font.size.meta }]
-  const why = problems.includes('speech')
-    ? t('feishu.chat.problem.speech')
-    : problems.includes('external')
-      ? t('feishu.chat.problem.external')
-      : problems.includes('wakers')
-        ? t('feishu.chat.problem.wakers', { max: FEISHU_WAKERS_MAX })
-        : ''
+  const why = closed
+    ? t('feishu.chat.unavailableAccess')
+    : problems.includes('speech')
+      ? t('feishu.chat.problem.speech')
+      : problems.includes('external')
+        ? t('feishu.chat.problem.external')
+        : problems.includes('wakers')
+          ? t('feishu.chat.problem.wakers', { max: FEISHU_WAKERS_MAX })
+          : ''
   const retentionBad = boundedInt(shown.retentionDays, FEISHU_RETENTION_DAYS) === null
   const ttlBad = boundedInt(shown.reviewTtlHours, FEISHU_REVIEW_TTL_HOURS) === null
   const marks = chatMarks(chat, t)
@@ -221,6 +228,25 @@ export function FeishuChatScreen({ route, navigation }: Props) {
         />
         {shown.speech ? (
           <Text style={note}>{t(`feishu.chat.speech.${shown.speech}Note`)}</Text>
+        ) : null}
+        {shown.speech === 'approval' ? (
+          <Field
+            label={t('feishu.chat.ttl')}
+            value={shown.reviewTtlHours}
+            onChangeText={(reviewTtlHours) => set({ reviewTtlHours })}
+            keyboardType="number-pad"
+            editable={!locked}
+            testID="feishu:ttl"
+            hint={t('feishu.chat.ttlNote')}
+            {...(ttlBad
+              ? {
+                  error: t('feishu.chat.range', {
+                    min: FEISHU_REVIEW_TTL_HOURS.min,
+                    max: FEISHU_REVIEW_TTL_HOURS.max,
+                  }),
+                }
+              : {})}
+          />
         ) : null}
         {!access && chat.external ? (
           <Row
@@ -270,7 +296,8 @@ export function FeishuChatScreen({ route, navigation }: Props) {
           />
         )}
 
-        <SectionLabel>{t('mfs.records')}</SectionLabel>
+        <SectionLabel>{t('feishu.records.title')}</SectionLabel>
+        <FeishuRecordsSummary chat={chat} />
         <Field
           label={t('feishu.chat.retention')}
           value={shown.retentionDays}
@@ -288,25 +315,11 @@ export function FeishuChatScreen({ route, navigation }: Props) {
               }
             : {})}
         />
-        {shown.speech === 'approval' ? (
-          <Field
-            label={t('feishu.chat.ttl')}
-            value={shown.reviewTtlHours}
-            onChangeText={(reviewTtlHours) => set({ reviewTtlHours })}
-            keyboardType="number-pad"
-            editable={!locked}
-            testID="feishu:ttl"
-            hint={t('feishu.chat.ttlNote')}
-            {...(ttlBad
-              ? {
-                  error: t('feishu.chat.range', {
-                    min: FEISHU_REVIEW_TTL_HOURS.min,
-                    max: FEISHU_REVIEW_TTL_HOURS.max,
-                  }),
-                }
-              : {})}
-          />
-        ) : null}
+
+        <FeishuBackfillForm deviceId={deviceId} chat={chat} block={block} onChat={setFresh} />
+        {access ? null : (
+          <Text style={note}>{t('feishu.chat.backfillNote', { max: FEISHU_BACKFILL_LIMIT })}</Text>
+        )}
 
         {error ? (
           <Text testID="feishu:chat:error" style={[styles.note, { color: c.err }]}>

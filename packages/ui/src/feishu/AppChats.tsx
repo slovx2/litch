@@ -11,6 +11,7 @@ import { ChatDialog, ChatMarks } from './ChatDialog.tsx'
 import { useFeishuChats, useFeishuRun } from './data.ts'
 import { BotAvatar } from './FeishuSection.tsx'
 import {
+  backfilling,
   chatAccessState,
   chatUnavailable,
   type FeishuChat,
@@ -146,7 +147,15 @@ export function AppChats({
                   <b className="ext-row-name ell">{chat.name || chat.chatId}</b>
                   <ChatMarks chat={chat} />
                   <span className="grow" />
-                  <span className="ext-row-meta ell" data-tone={state === 'none' ? 'off' : 'ok'}>
+                  {backfilling(chat) ? (
+                    <span className="pill wait" data-feishu-backfilling>
+                      {t('feishu.chats.backfilling')}
+                    </span>
+                  ) : null}
+                  <span
+                    className="ext-row-meta ell"
+                    data-tone={state === 'none' || state === 'kept' ? 'off' : 'ok'}
+                  >
                     {t(`feishu.chats.state.${state}`)}
                   </span>
                   <Forward />

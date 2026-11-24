@@ -287,3 +287,94 @@ test('成员选择：已选但不在成员里的排前，可搜，到上限不�
     ['wakers'],
   )
 })
+
+test('未接入（有记录）与补历史中', () => {
+  assert.equal(m.chatAccessState(chat({ records: { messages: 41 } })), 'kept')
+  assert.equal(m.chatAccessState(chat()), 'none')
+  assert.equal(m.chatAccessState(chat({ access: access(), records: { messages: 3 } })), 'free')
+  const running = {
+    messages: 3,
+    backfill: {
+      kind: 'access',
+      state: 'running',
+      start: 0,
+      end: 10,
+      fetched: 3,
+      truncated: false,
+      startedAt: 0,
+    },
+  }
+  assert.equal(m.backfilling(chat({ access: access(), records: running })), true)
+  // 取消接入后留着的记录不算正在补
+  assert.equal(m.backfilling(chat({ records: running })), false)
+})
+
+test('补历史的结果用哪句', () => {
+  assert.equal(m.backfillLine({ state: 'running', truncated: false }), 'running')
+  assert.equal(m.backfillLine({ state: 'done', truncated: false }), 'done')
+  assert.equal(m.backfillLine({ state: 'done', truncated: true }), 'truncated')
+  assert.equal(m.backfillLine({ state: 'failed', truncated: true }), 'failed')
+})
+
+test('手动补历史为什么不能做：写权限、群能不能用、接入、正在补依次判断', () => {
+  const on = chat({ access: access() })
+  assert.equal(m.backfillBlock(on, null), null)
+  assert.equal(m.backfillBlock(on, 'readOnly'), 'readOnly')
+  assert.equal(m.backfillBlock(on, 'offline'), 'offline')
+  assert.equal(m.backfillBlock({ ...on, botPresent: false }, null), 'botLeft')
+  assert.equal(m.backfillBlock({ ...on, status: 'dissolved' }, null), 'dissolved')
+  assert.equal(m.backfillBlock(chat({ records: { messages: 2 } }), null), 'notAccessed')
+  const running = {
+    messages: 1,
+    backfill: {
+      kind: 'manual',
+      state: 'running',
+      start: 0,
+      end: 1,
+      fetched: 0,
+      truncated: false,
+      startedAt: 0,
+    },
+  }
+  assert.equal(m.backfillBlock({ ...on, records: running }, null), 'running')
+})
+
+test('补历史窗口：开始取本地零点，结束取次日零点与现在中较早的', () => {
+  const local = (y, mo, d, h = 0) => new Date(y, mo - 1, d, h).getTime()
+  const now = local(2026, 3, 10, 15)
+  assert.deepEqual(m.backfillWindow('2026-03-01', '2026-03-05', now), {
+    start: local(2026, 3, 1) / 1000,
+    end: local(2026, 3, 6) / 1000,
+  })
+  // 结束日期是今天：截到现在
+  assert.deepEqual(m.backfillWindow('2026-03-09', '2026-03-10', now), {
+    start: local(2026, 3, 9) / 1000,
+    end: now / 1000,
+  })
+  // 同一天也行（一整天的窗口）
+  assert.equal('start' in m.backfillWindow('2026-03-05', '2026-03-05', now), true)
+  assert.deepEqual(m.backfillWindow('2026-03-06', '2026-03-05', now), { problem: 'order' })
+  // 开始在今天之后
+  assert.deepEqual(m.backfillWindow('2026-03-11', '2026-03-12', now), { problem: 'order' })
+  assert.deepEqual(m.backfillWindow('2026-02-30', '2026-03-05', now), { problem: 'format' })
+  assert.deepEqual(m.backfillWindow('2026/03/01', '2026-03-05', now), { problem: 'format' })
+  assert.equal(m.dayText(local(2026, 3, 9, 23)), '2026-03-09')
+  // 窗口显示成日期：结束不含，显示前一天
+  assert.deepEqual(m.windowDays(local(2026, 3, 1) / 1000, local(2026, 3, 6) / 1000), {
+    from: '2026-03-01',
+    to: '2026-03-05',
+  })
+  assert.deepEqual(m.backfillDefaults({ oldestAt: local(2026, 3, 1) / 1000 }, now), {
+    from: '2026-01-30',
+    to: '2026-03-10',
+  })
+  assert.deepEqual(m.backfillDefaults(undefined, now), { from: '2026-02-08', to: '2026-03-10' })
+})
+
+test('补历史的两个原因代码认得出', () => {
+  assert.equal(m.feishuReason({ message: 'feishu_backfill_running' }), 'backfill_running')
+  assert.equal(
+    m.feishuReason({ message: 'feishu_backfill_window_invalid' }),
+    'backfill_window_invalid',
+  )
+})
