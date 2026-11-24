@@ -150,6 +150,32 @@ for (const kind of kinds) {
   })
 }
 
+test('完整议题页：D-n 关联 X-n 在讨论区那一行看得到，卡上已有的关联不再重复', () => {
+  const issue = (target) => ({ kind: 'issue', target })
+  const f = threadFixture('mobile', 'decision', {
+    bodyMode: 'folded',
+    relations: [
+      { from: issue('D-42'), to: issue('I-1') },
+      { from: issue('X-3'), to: issue('D-42') },
+    ],
+  })
+  f.render()
+  f.reveal()
+  const text = (tree) =>
+    tree.flatMap((node) => [node.props?.children].flat().filter((part) => typeof part === 'string'))
+  const fold = () => f.render().find((node) => node.props?.testID === 'issue-relations-toggle')
+  assert.ok(fold(), '有关联一行')
+  assert.ok(text(nodes(fold())).includes('manager.relations'))
+  assert.ok(
+    nodes(fold()).some((node) => [node.props?.children].flat().includes(1)),
+    '只数 X-3 一条',
+  )
+  fold().props.onToggle()
+  const shown = text(f.render())
+  assert.ok(shown.includes('X-3'), '展开后看得到 X-3')
+  assert.ok(!shown.includes('I-1'), '卡上已有的 I-1 不重复')
+})
+
 for (const kind of kinds) {
   test(`${kind}：按设备跟进状态显示提示，报告仅显式暂停才提示`, () => {
     for (const state of ['on', 'off']) {
