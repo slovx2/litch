@@ -14,6 +14,7 @@ import * as connection from './messages/connection'
 import * as detail from './messages/detail'
 import * as devices from './messages/devices'
 import * as external from './messages/external'
+import * as feishu from './messages/feishu'
 import * as filePreview from './messages/file-preview'
 import * as hconfig from './messages/hconfig'
 import * as managers from './messages/managers'
@@ -53,6 +54,7 @@ const zhCN = {
   ...managers.zhCN,
   ...organizer.zhCN,
   ...external.zhCN,
+  ...feishu.zhCN,
 }
 type MobileKey = keyof typeof zhCN
 const en: Record<MobileKey, Entry> = {
@@ -78,6 +80,7 @@ const en: Record<MobileKey, Entry> = {
   ...managers.en,
   ...organizer.en,
   ...external.en,
+  ...feishu.en,
 }
 const MOBILE: Record<Lang, Record<MobileKey, Entry>> = { 'zh-CN': zhCN, en }
 

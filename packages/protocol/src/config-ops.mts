@@ -52,6 +52,16 @@ export const CONFIG_OPS: readonly ConfigOp[] = [
   { group: 'device-autostart', action: 'enable', write: true, guarded: true },
   { group: 'device-autostart', action: 'disable', write: true, guarded: true },
 
+  { group: 'feishu-app', action: 'list', write: false },
+  { group: 'feishu-app', action: 'register', write: true },
+  { group: 'feishu-app', action: 'registration', write: false },
+  { group: 'feishu-app', action: 'assign', write: true, guarded: true },
+  { group: 'feishu-app', action: 'enable', write: true },
+  { group: 'feishu-app', action: 'disable', write: true },
+  { group: 'feishu-app', action: 'check', write: false },
+  { group: 'feishu-app', action: 'upgrade', write: true },
+  { group: 'feishu-app', action: 'remove', write: true, irreversible: true },
+
   { group: 'devices', action: 'list', write: false },
   { group: 'devices', action: 'check', write: false },
   { group: 'devices', action: 'add', write: true },

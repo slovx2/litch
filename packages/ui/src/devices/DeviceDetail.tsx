@@ -3,6 +3,7 @@
 // 接着是这台设备上的会话能不能用这台电脑的内置浏览器、Computer Use（ToolSwitches.tsx，两个开关）；
 // 再是它上面在跑的设备服务（ServiceSection.tsx）：哪一版、哪来的，本机另外说这次连接换没换版本；
 // 接着是绑定了哪些手机和“在手机上使用…”（PhonesSection.tsx，扫码绑定手机）；
+// 再是无人值守和飞书（feishu/FeishuSection.tsx，点一个应用进应用详情页）；
 // 下面是它的管理（harness、设置、诊断、日志）——本机和远程是同一套，本机没有改名、改连接和移除。
 // 对面没有设置接口（只有 codex 的机器、旧版的设备服务）时只有上面这一节，不摆空的管理区。
 // 远程设备还说一句对面是哪一种：设备服务，还是只有 codex；只有 codex 的给出装设备服务的办法。
@@ -16,6 +17,8 @@ import { Back, Close } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { UnattendedPage } from '../external/UnattendedPage.tsx'
 import { UnattendedSection } from '../external/UnattendedSection.tsx'
+import { AppPage as FeishuAppPage } from '../feishu/AppPage.tsx'
+import { FeishuSection } from '../feishu/FeishuSection.tsx'
 import { AddDevice } from './AddDevice.tsx'
 import { DeviceChromeSection } from './DeviceChromeSection.tsx'
 import { INSTALL_SERVICE } from './guide.ts'
@@ -59,6 +62,9 @@ export function DeviceDetail({ deviceId, section = null, onBack, onClose }: Devi
   /** 开着无人值守页（盖住设备详情的一页） */
   const [unattended, setUnattended] = useState(section === 'unattended')
   const closeUnattended = useCallback(() => setUnattended(false), [])
+  /** 开着哪个飞书应用的详情（盖住设备详情的一页） */
+  const [feishuApp, setFeishuApp] = useState<string | null>(null)
+  const closeFeishuApp = useCallback(() => setFeishuApp(null), [])
   const field = useRef<HTMLInputElement>(null)
   /** 这一次改名已经有了结果（提交或者放弃）。输入框消失时还会再报一次失焦，不能当成又提交一次 */
   const settled = useRef(true)
@@ -77,7 +83,7 @@ export function DeviceDetail({ deviceId, section = null, onBack, onClose }: Devi
   }, [gone, onBack])
 
   // Esc 回到设备列表。开着确认框的时候 Esc 归确认框，开着详情设置时归那一页
-  const sub = settingsOf !== null || unattended
+  const sub = settingsOf !== null || unattended || feishuApp !== null
   useEffect(() => {
     if (sub) return
     const onKey = (event: KeyboardEvent) => {
@@ -103,6 +109,10 @@ export function DeviceDetail({ deviceId, section = null, onBack, onClose }: Devi
   }
   if (unattended)
     return <UnattendedPage device={device} onBack={closeUnattended} onClose={onClose} />
+  if (feishuApp !== null)
+    return (
+      <FeishuAppPage device={device} appId={feishuApp} onBack={closeFeishuApp} onClose={onClose} />
+    )
   const online = device.connection === 'online'
   const managed = device.manageable && online
   /** 改名、改连接、移除只对加进来的远程设备有：本机就是这台电脑，只能换线色 */
@@ -351,6 +361,7 @@ export function DeviceDetail({ deviceId, section = null, onBack, onClose }: Devi
           <ServiceSection device={device} reveal={section === 'service'} />
           <PhonesSection device={device} />
           <UnattendedSection device={device} onOpen={() => setUnattended(true)} />
+          <FeishuSection device={device} onOpen={setFeishuApp} />
           {managed ? (
             <ManagePanel
               device={device}

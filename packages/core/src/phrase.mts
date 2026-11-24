@@ -13,6 +13,8 @@ export type PhraseKey =
   | 'external.resolveGhFailed'
   | 'external.secretFailed'
   | 'external.unsupported'
+  | 'feishu.invalid'
+  | 'feishu.secretFailed'
   | 'modelRanking.limitExceeded'
   | 'modelRanking.limitUnranked'
   | 'modelRanking.archivedSource'

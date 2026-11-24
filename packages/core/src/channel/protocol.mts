@@ -165,6 +165,12 @@ import type {
   ExternalInboxView,
   ExternalOutboxView,
 } from '../projection/external.mjs'
+import type {
+  FeishuCommands,
+  FeishuDeviceView,
+  FeishuRegistrationView,
+  FeishuTopic,
+} from '../projection/feishu.mjs'
 import type { FileRef } from '../projection/file-refs.mjs'
 import type { SkippingOutput } from '../text/output-cap.mjs'
 
@@ -172,6 +178,7 @@ import type { SkippingOutput } from '../text/output-cap.mjs'
 
 export type Topic =
   | ExternalDeviceTopic
+  | FeishuTopic
   | { kind: 'fileChanges'; deviceId: string; root: string; path: string; directory?: boolean }
   | { kind: 'automationPreview'; deviceId: string; sessionId: string; observeOnly?: boolean }
   | { kind: 'app' }
@@ -271,6 +278,8 @@ export interface TopicData {
   externalIdentityLogin: ExternalIdentityLoginView
   externalInbox: ExternalInboxView
   externalOutbox: ExternalOutboxView
+  feishuDevice: FeishuDeviceView
+  feishuRegistration: FeishuRegistrationView
   fileChanges: { revision: number }
   automationPreview: AutomationPreviewView | null
   app: AppView
@@ -425,6 +434,8 @@ export type WorktreesOp = { op: 'worktrees.set'; view: WorktreesTopicView }
 
 export interface TopicOp {
   externalDevice: never
+  feishuDevice: never
+  feishuRegistration: never
   externalIdentityLogin: never
   externalInbox: never
   externalOutbox: never
@@ -459,7 +470,7 @@ export interface TopicOp {
 
 // ---------- 命令 ----------
 
-export interface Commands extends ExternalCommands {
+export interface Commands extends ExternalCommands, FeishuCommands {
   'managers.issues.list': {
     params: import('../../../protocol/src/manager-issues.mjs').ManagerIssueQuery & {
       deviceId: string

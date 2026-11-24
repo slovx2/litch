@@ -50,6 +50,7 @@ import {
 } from './organizer/host.mjs'
 import { phrase } from './phrase.mjs'
 import { isExternalCommand } from './projection/external.mjs'
+import { isFeishuCommand } from './projection/feishu.mjs'
 import { managerMark } from './projection/manager.mjs'
 import { outgoing } from './projection/outgoing.mjs'
 import { createToolHub } from './tool-hub.mjs'
@@ -503,6 +504,10 @@ export function createCore(options: CoreOptions): Core {
       if (isExternalCommand(name)) {
         const { deviceId, ...args } = params as { deviceId: string }
         return deviceOf(deviceId).external.command(name, args, signal)
+      }
+      if (isFeishuCommand(name)) {
+        const { deviceId, ...args } = params as { deviceId: string }
+        return deviceOf(deviceId).feishu.command(name, args, signal)
       }
       switch (name) {
         case 'external.identity.avatar': {
@@ -2023,6 +2028,8 @@ export function createCore(options: CoreOptions): Core {
         topic.kind === 'externalOutbox'
       )
         return device.external.open(topic, sink)
+      if (topic.kind === 'feishuDevice' || topic.kind === 'feishuRegistration')
+        return device.feishu.open(topic, sink)
       if (topic.kind === 'tasks') return device.tasks.open(sink)
       if (topic.kind === 'pairing') return device.pairing.open(sink)
       // 手机批准：设备不支持时 available 是 false，照样成立

@@ -9,6 +9,8 @@ import { BackgroundScreen } from '../screens/background/BackgroundScreen'
 import { AddDeviceScreen } from '../screens/devices/AddDeviceScreen'
 import { DeviceDetailScreen } from '../screens/devices/DeviceDetailScreen'
 import { DevicesScreen } from '../screens/devices/DevicesScreen'
+import { FeishuAddScreen } from '../screens/devices/feishu/FeishuAddScreen'
+import { FeishuAppScreen } from '../screens/devices/feishu/FeishuAppScreen'
 import { HarnessSettingsScreen } from '../screens/devices/hconfig/HarnessSettingsScreen'
 import { PairDeviceScreen } from '../screens/devices/PairDeviceScreen'
 import { FilesScreen } from '../screens/files/FilesScreen'
@@ -71,6 +73,8 @@ export function Navigator() {
       <Stack.Screen name="PairDevice" component={PairDeviceScreen} />
       <Stack.Screen name="DeviceDetail" component={DeviceDetailScreen} />
       <Stack.Screen name="HarnessSettings" component={HarnessSettingsScreen} />
+      <Stack.Screen name="FeishuAdd" component={FeishuAddScreen} />
+      <Stack.Screen name="FeishuApp" component={FeishuAppScreen} />
       <Stack.Screen
         name="Sessions"
         getId={({ params }) => (tablet ? params.deviceId : undefined)}
