@@ -62,6 +62,7 @@ import {
   type DevicePowerStatus,
 } from '../../../protocol/src/device-power.mjs'
 import { EXTERNAL_SOURCES_EXTENSION } from '../../../protocol/src/external-sources.mjs'
+import { FEISHU_EXTENSION } from '../../../protocol/src/feishu.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../../protocol/src/harness-config.mjs'
 import {
   CLIENT_TOOL_NAMESPACE,
@@ -173,6 +174,7 @@ import { createDiffs, type Diffs } from './diffs.mjs'
 import { createExec } from './exec.mjs'
 import { createExternalDevice, type ExternalDevice } from './external.mjs'
 import { channelFailure, lacksMethod, listNames } from './faults.mjs'
+import { createFeishuDevice, type FeishuDevice } from './feishu.mjs'
 import { createFiles, type Files } from './files.mjs'
 import {
   codexHarness,
@@ -468,6 +470,7 @@ export interface Device {
   /** 这台设备上的定时任务：订阅、建、改、删、立即运行、运行记录（tasks.mts） */
   readonly tasks: Tasks
   readonly external: ExternalDevice
+  readonly feishu: FeishuDevice
   /** 设备上的普通待处理建议。 */
   readonly suggestions: Suggestions
   /** 设备上的经理列表与按需订阅的看板。 */
@@ -702,6 +705,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   /** 对面支不支持定时任务（deviceTasks 扩展）。认出来之前、对面不是设备服务时都是不支持 */
   let schedulable = false
   let externalSourcesSupported = false
+  let feishuSupported = false
   let autostartSupported = false
   let suggestionsOn = false
   let pathsSupported = false
@@ -921,6 +925,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     manageable,
     modelRanking: modelRankingSupported,
     externalSources: externalSourcesSupported,
+    feishu: feishuSupported,
     ...(remoteChrome && online ? { remoteChrome } : {}),
     service,
     upgrade,
@@ -2072,6 +2077,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         schedulable = info.device.extensions?.includes(EXTENSION.deviceTasks) === true
         externalSourcesSupported =
           info.device.extensions?.includes(EXTERNAL_SOURCES_EXTENSION) === true
+        feishuSupported = info.device.extensions?.includes(FEISHU_EXTENSION) === true
         autostartSupported = info.device.extensions?.includes(DEVICE_AUTOSTART_EXTENSION) === true
         suggestionsOn = info.device.extensions?.includes(EXTENSION.suggestionInbox) === true
         pathsSupported = info.device.extensions?.includes(PATH_PICKER_EXTENSION) === true
@@ -2124,6 +2130,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         reattachable = false
         schedulable = false
         externalSourcesSupported = false
+        feishuSupported = false
         autostartSupported = false
         suggestionsOn = false
         pathsSupported = false
@@ -2235,6 +2242,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     diffs.resync()
     tasks.resync()
     external.connectionChanged()
+    feishu.connectionChanged()
     suggestions.resync()
     projectPermissions.resync()
     timedApprovals.resync()
@@ -2289,6 +2297,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       manage.offline()
       tasks.offline()
       external.connectionChanged()
+      feishu.connectionChanged()
       suggestions.offline()
       projectPermissions.resync()
       timedApprovals.resync()
@@ -2381,6 +2390,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (timedApprovals.notification(method, params)) return
       if (managers.notification(method, params)) return
       if (external.notification(method, params)) return
+      if (feishu.notification(method, params)) return
       if (tasks.notification(method, params)) return
       // 扫码绑定手机：配对的状态、已绑定的手机
       if (pairing.notification(method, params)) return
@@ -2904,6 +2914,13 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     now: options.clock.now,
     sourcesSupported: () => externalSourcesSupported,
     autostartSupported: () => autostartSupported,
+    request: (method, params, requestOptions) => link.request(method, params, requestOptions),
+    fail,
+  })
+  const feishu = createFeishuDevice({
+    online: () => online,
+    now: options.clock.now,
+    supported: () => feishuSupported,
     request: (method, params, requestOptions) => link.request(method, params, requestOptions),
     fail,
   })
@@ -3578,6 +3595,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     diffs,
     tasks,
     external,
+    feishu,
     suggestions,
     projectPermissions,
     timedApprovals,

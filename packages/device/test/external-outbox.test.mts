@@ -100,7 +100,7 @@ for (const replied of [false, true])
     const raw = f.store.manager.issue(actor.managerId, f.request.issueId) as Record<string, unknown>
     f.store.manager.saveIssue(actor.managerId, f.request.issueId, { ...raw, status: 'resolved' })
     f.store.manager.db.exec(
-      'DROP TABLE manager_idle_compact; DROP TABLE external_result_replies; PRAGMA user_version=11',
+      'DROP TABLE manager_idle_compact; DROP TABLE external_result_replies; DROP TABLE feishu_apps; DROP TABLE feishu_operations; DROP TABLE feishu_audit; PRAGMA user_version=11',
     )
     const reopened = new ManagerStore(openManagerDatabase(f.dir))
     try {

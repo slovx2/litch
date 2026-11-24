@@ -1,6 +1,7 @@
 import { enPathPicker } from '../path-picker/messages.ts'
 import { enChrome } from './en-chrome.ts'
 import { enExternal } from './en-external.ts'
+import { enFeishu } from './en-feishu.ts'
 import { enManager } from './en-manager.ts'
 import { enManagerIssues } from './en-manager-issues.ts'
 import { enModelRanking } from './en-model-ranking.ts'
@@ -98,6 +99,7 @@ export const en: Record<MessageKey, Entry> = {
   ...enSearch,
   ...enManager,
   ...enExternal,
+  ...enFeishu,
   ...enManagerIssues,
   ...enPathPicker,
   ...enPreviewDocx,
@@ -1264,6 +1266,9 @@ export const en: Record<MessageKey, Entry> = {
   'external.secretFailed':
     'The device did not complete the credential operation. Check the token, repository permissions, and device version.',
   'external.unsupported': 'This device service does not support this feature.',
+  'feishu.invalid': 'Invalid request. Check the values you entered and the device version.',
+  'feishu.secretFailed':
+    'The device could not complete the credential change. Check the App ID, App Secret and device version.',
   'turn.busy': 'A turn is running. Try again when it finishes.',
   'turn.fork': 'Fork from here',
   'turn.fork.done': 'Forked. Now viewing the new conversation.',

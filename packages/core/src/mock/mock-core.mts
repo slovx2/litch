@@ -75,6 +75,7 @@ import { createMockCompose } from './mock-compose.mjs'
 import { createMockConfig, RUNS_CONFIG } from './mock-config.mjs'
 import { createMockDiffs } from './mock-diffs.mjs'
 import { createMockExternal } from './mock-external.mjs'
+import { createMockFeishu } from './mock-feishu.mjs'
 import { createMockFiles } from './mock-files.mjs'
 import { createMockGoal } from './mock-goal.mjs'
 import { createMockHarnessConfig } from './mock-harness-config.mjs'
@@ -484,6 +485,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   const modelRankingEnabled = options.modelRankingEnabled ?? MODEL_RANKING_ENABLED
   const app: AppView = sampleApp(lang, clock.now(), modelRankingEnabled)
   const external = createMockExternal(clock, () => app.devices, options.scene === 'states')
+  const feishu = createMockFeishu(clock, () => app.devices, options.scene !== 'fresh')
   if (options.scene === 'fresh') freshLocal(app)
   if (options.scene === 'states') applyStateDevices(app)
   const sidebars = new Map<string, SidebarView>(
@@ -572,6 +574,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   for (const device of app.devices) {
     if (device.id === 'local' || device.id === 'build')
       device.externalSources = options.scene !== 'fresh'
+    if (device.connection === 'online') device.feishu = true
     if (device.connection === 'online') {
       device.stranded = strandedOf(device.id, device.harnesses)
     }
@@ -3010,6 +3013,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     async command(name, params, signal) {
       const externalCall = external.command(name, params)
       if (externalCall) return externalCall
+      const feishuCall = feishu.command(name, params)
+      if (feishuCall) return feishuCall
       if (name === 'core.info') {
         return { version: options.version ?? '0.0.0', mock: true }
       }
@@ -3847,6 +3852,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         topic.kind === 'externalOutbox'
       )
         return external.of(topic.deviceId).open(topic, sink)
+      if (topic.kind === 'feishuDevice' || topic.kind === 'feishuRegistration')
+        return feishu.of(topic.deviceId).open(topic, sink)
       if (topic.kind === 'organizer') return organizer.subscribe(sink)
       if (topic.kind === 'suggestions') {
         const listeners = suggestionSinks.get(topic.deviceId) ?? new Set<HostSink>()

@@ -31,6 +31,7 @@ import {
   EXTERNAL_SOURCES_EXTENSION,
   projectExternalManagerPayload,
 } from '../../protocol/src/external-sources.mjs'
+import { FEISHU_EXTENSION } from '../../protocol/src/feishu.mjs'
 import {
   ATTACHMENT_STATUS_METHOD,
   ATTACHMENT_WATCH_METHOD,
@@ -82,6 +83,7 @@ import type { DeviceAutostart, DeviceAutostartReply } from './device-autostart.m
 import { DeviceCalls, type DeviceLayer } from './device-layer.mjs'
 import { type DeviceTools, declareDeviceTools } from './device-tools.mjs'
 import type { DeviceExternalRpc } from './external/device-rpc.mjs'
+import type { DeviceFeishuRpc } from './feishu/rpc.mjs'
 import {
   HarnessConfigError,
   type HarnessConfigTranslator,
@@ -226,6 +228,7 @@ export interface SessionHost {
   managers?: DeviceManagers
   autostart?: DeviceAutostart
   external?: DeviceExternalRpc
+  feishu?: DeviceFeishuRpc
   /** 由设备进程自己执行的 litch_ 命名空间：替每条上游连接声明，调用落到哪条上就在那里拦（device-tools.mts） */
   deviceTools: DeviceTools
   /** 会话树（session-tree.mts） */
@@ -709,6 +712,13 @@ export class ClientSession implements ClientToolPeer {
             throw new DeviceError('unsupported', 'External sources are unavailable')
           return this.host.external.call(method, frame.params, {
             declared: this.declared.has(EXTERNAL_SOURCES_EXTENSION),
+            admin: this.deviceAdmin,
+          })
+        }
+        if (method.startsWith('litch/feishu/')) {
+          if (!this.host.feishu) throw new DeviceError('unsupported', 'Feishu is unavailable')
+          return this.host.feishu.call(method, frame.params, {
+            declared: this.declared.has(FEISHU_EXTENSION),
             admin: this.deviceAdmin,
           })
         }

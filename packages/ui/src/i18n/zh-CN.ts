@@ -13,6 +13,7 @@ import { zhBimport } from './zh-CN-bimport.ts'
 import { zhChrome } from './zh-CN-chrome.ts'
 import { zhComments } from './zh-CN-comments.ts'
 import { zhExternal } from './zh-CN-external.ts'
+import { zhFeishu } from './zh-CN-feishu.ts'
 import { zhGoal } from './zh-CN-goal.ts'
 import { zhHconfig } from './zh-CN-hconfig.ts'
 import { zhLimits } from './zh-CN-limits.ts'
@@ -92,6 +93,7 @@ export const zhCN = {
   ...zhSearch,
   ...zhManager,
   ...zhExternal,
+  ...zhFeishu,
   ...zhManagerIssues,
   ...zhCNPathPicker,
   ...zhPreviewDocx,
@@ -1201,6 +1203,8 @@ export const zhCN = {
   'external.resolveGhFailed': '无法读取本机 gh 登录。请确认已安装 gh 并登录 github.com。',
   'external.secretFailed': '设备未完成凭据操作。请核对令牌、仓库权限和设备版本。',
   'external.unsupported': '设备服务不支持此功能。',
+  'feishu.invalid': '请求无效。请核对填写的内容和设备版本。',
+  'feishu.secretFailed': '设备未完成凭据操作。请核对 App ID、App Secret 和设备版本。',
   'turn.busy': '回合进行中，请在结束后再操作',
   'turn.fork': '从此处分叉为新会话',
   'turn.fork.done': '已分叉并切换到新会话',

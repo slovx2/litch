@@ -3,6 +3,7 @@
 
 import { DEVICE_AUTOSTART_EXTENSION } from '../../../protocol/src/device-autostart.mjs'
 import { EXTERNAL_SOURCES_EXTENSION } from '../../../protocol/src/external-sources.mjs'
+import { FEISHU_EXTENSION, type FeishuRequests } from '../../../protocol/src/feishu.mjs'
 import type { ProjectPermissionRequests } from '../../../protocol/src/harness-project-permissions.mjs'
 import {
   CLIENT_TOOLS_CAPABILITY,
@@ -102,7 +103,8 @@ export interface Link {
       | keyof ProjectPermissionRequests
       | keyof TimedApprovalRequests
       | keyof PathPickerRequests
-      | keyof ExternalWireRequests,
+      | keyof ExternalWireRequests
+      | keyof FeishuRequests,
   >(
     method: M,
     params: (ClientRequests &
@@ -110,7 +112,8 @@ export interface Link {
       ProjectPermissionRequests &
       TimedApprovalRequests &
       PathPickerRequests &
-      ExternalWireRequests)[M]['params'],
+      ExternalWireRequests &
+      FeishuRequests)[M]['params'],
     options?: RpcRequestOptions,
   ): Promise<
     (ClientRequests &
@@ -118,7 +121,8 @@ export interface Link {
       ProjectPermissionRequests &
       TimedApprovalRequests &
       PathPickerRequests &
-      ExternalWireRequests)[M]['result']
+      ExternalWireRequests &
+      FeishuRequests)[M]['result']
   >
 }
 
@@ -262,6 +266,7 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.deviceTasks,
                 EXTERNAL_SOURCES_EXTENSION,
                 DEVICE_AUTOSTART_EXTENSION,
+                FEISHU_EXTENSION,
                 EXTENSION.manager,
                 EXTENSION.managerResetTarget,
                 EXTENSION.managerPaging,

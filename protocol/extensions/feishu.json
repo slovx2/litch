@@ -1,0 +1,311 @@
+{
+  "extension": "litchFeishu",
+  "description": "设备接的飞书应用（自建应用的机器人）：凭据、长连接状态、能力自检、分配的经理。",
+  "appliesTo": "设备聚合面。设备通过 runtime/info.device.extensions 声明；客户端按连接在 initialize 中声明。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "litchFeishu" }
+    }
+  },
+  "undeclared": "不提供飞书方法及通知。",
+  "rules": [
+    "写操作（创建向导、手动填写、换 App Secret、改分配、移除、补申请）只给设备管理员连接；读方法给声明了扩展的连接。",
+    "App Secret 只在 configure、rotate 的参数里进来，任何结果、通知、诊断都不回显；飞书的访问令牌不出设备。",
+    "只做国内飞书；创建向导返回 Lark 租户时拒绝。",
+    "一个应用只分配给一个经理，一个经理也最多分配一个应用。",
+    "时间用 UTC epoch 秒；飞书 ID 原样用字符串。"
+  ],
+  "parts": [
+    {
+      "kind": "Method",
+      "name": "litch/feishu/app/list",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["apps"],
+        "properties": { "apps": { "type": "array", "items": { "$ref": "#/definitions/App" } } }
+      }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/app/get",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId"],
+        "properties": { "appId": { "$ref": "#/definitions/AppId" } }
+      },
+      "result": { "$ref": "#/definitions/AppResult" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/app/register/begin",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId", "name"],
+        "properties": {
+          "operationId": { "$ref": "#/definitions/OperationId" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 30 }
+        }
+      },
+      "result": { "$ref": "#/definitions/RegistrationResult" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/app/register/get",
+      "params": { "$ref": "#/definitions/RegistrationRef" },
+      "result": { "$ref": "#/definitions/RegistrationResult" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/app/register/cancel",
+      "params": { "$ref": "#/definitions/RegistrationRef" },
+      "result": { "$ref": "#/definitions/RegistrationResult" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/app/configure",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId", "appId", "appSecret"],
+        "properties": {
+          "operationId": { "$ref": "#/definitions/OperationId" },
+          "appId": { "$ref": "#/definitions/AppId" },
+          "appSecret": { "type": "string", "minLength": 1, "maxLength": 256 }
+        }
+      },
+      "result": { "$ref": "#/definitions/AppResult" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/app/rotate",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId", "appId", "appSecret", "expectedGeneration"],
+        "properties": {
+          "operationId": { "$ref": "#/definitions/OperationId" },
+          "appId": { "$ref": "#/definitions/AppId" },
+          "appSecret": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "expectedGeneration": { "$ref": "#/definitions/Revision" }
+        }
+      },
+      "result": { "$ref": "#/definitions/AppResult" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/app/update",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId", "expectedRevision"],
+        "properties": {
+          "appId": { "$ref": "#/definitions/AppId" },
+          "expectedRevision": { "$ref": "#/definitions/Revision" },
+          "managerId": { "oneOf": [{ "$ref": "#/definitions/LogicalId" }, { "type": "null" }] },
+          "enabled": { "type": "boolean" }
+        }
+      },
+      "result": { "$ref": "#/definitions/AppResult" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/app/remove",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId", "expectedRevision"],
+        "properties": {
+          "appId": { "$ref": "#/definitions/AppId" },
+          "expectedRevision": { "$ref": "#/definitions/Revision" }
+        }
+      },
+      "result": { "type": "object", "additionalProperties": false, "properties": {} }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/app/check",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId"],
+        "properties": { "appId": { "$ref": "#/definitions/AppId" } }
+      },
+      "result": { "$ref": "#/definitions/AppResult" }
+    },
+    {
+      "kind": "Method",
+      "name": "litch/feishu/app/upgrade",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId", "operationId"],
+        "properties": {
+          "appId": { "$ref": "#/definitions/AppId" },
+          "operationId": { "$ref": "#/definitions/OperationId" }
+        }
+      },
+      "result": { "$ref": "#/definitions/AppResult" }
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/feishu/appsChanged",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": { "appId": { "$ref": "#/definitions/AppId" } }
+      }
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/feishu/registrationChanged",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["registrationId", "revision"],
+        "properties": {
+          "registrationId": { "$ref": "#/definitions/LogicalId" },
+          "revision": { "$ref": "#/definitions/Revision" }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "AppId": { "type": "string", "pattern": "^cli_[0-9a-f]{16}$" },
+    "LogicalId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+    "OperationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "Revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "Timestamp": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "Count": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "AppResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["app"],
+      "properties": { "app": { "$ref": "#/definitions/App" } }
+    },
+    "RegistrationRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["registrationId"],
+      "properties": { "registrationId": { "$ref": "#/definitions/LogicalId" } }
+    },
+    "RegistrationResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["registration"],
+      "properties": { "registration": { "$ref": "#/definitions/Registration" } }
+    },
+    "App": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "appId",
+        "revision",
+        "name",
+        "managerId",
+        "enabled",
+        "credential",
+        "connection",
+        "capability",
+        "createdAt"
+      ],
+      "properties": {
+        "appId": { "$ref": "#/definitions/AppId" },
+        "revision": { "$ref": "#/definitions/Revision" },
+        "name": { "type": "string", "maxLength": 256 },
+        "botOpenId": { "type": "string", "maxLength": 128 },
+        "avatar": { "type": "string", "maxLength": 2048 },
+        "managerId": { "oneOf": [{ "$ref": "#/definitions/LogicalId" }, { "type": "null" }] },
+        "enabled": { "type": "boolean" },
+        "credential": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["generation", "updatedAt"],
+          "properties": {
+            "generation": { "$ref": "#/definitions/Revision" },
+            "updatedAt": { "$ref": "#/definitions/Timestamp" }
+          }
+        },
+        "connection": { "$ref": "#/definitions/Connection" },
+        "capability": { "oneOf": [{ "$ref": "#/definitions/Capability" }, { "type": "null" }] },
+        "creatorOpenId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "$ref": "#/definitions/Timestamp" }
+      }
+    },
+    "Connection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "since", "reconnects"],
+      "properties": {
+        "state": { "enum": ["stopped", "connecting", "connected", "reconnecting", "failed"] },
+        "since": { "$ref": "#/definitions/Timestamp" },
+        "lastConnectedAt": { "$ref": "#/definitions/Timestamp" },
+        "lastEventAt": { "$ref": "#/definitions/Timestamp" },
+        "reconnects": { "$ref": "#/definitions/Count" },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "at"],
+          "properties": {
+            "code": {
+              "enum": [
+                "credential_rejected",
+                "app_disabled",
+                "network",
+                "rate_limited",
+                "platform",
+                "connection_limit"
+              ]
+            },
+            "at": { "$ref": "#/definitions/Timestamp" }
+          }
+        }
+      }
+    },
+    "Capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkedAt", "state", "missingScopes", "missingEvents", "missingCallbacks"],
+      "properties": {
+        "checkedAt": { "$ref": "#/definitions/Timestamp" },
+        "state": { "enum": ["ok", "missing", "needs_self_manage", "app_disabled", "unknown"] },
+        "missingScopes": { "type": "array", "items": { "type": "string", "maxLength": 128 } },
+        "missingEvents": { "type": "array", "items": { "type": "string", "maxLength": 128 } },
+        "missingCallbacks": { "type": "array", "items": { "type": "string", "maxLength": 128 } },
+        "publish": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "at"],
+          "properties": {
+            "state": { "enum": ["pending_review", "published", "unknown"] },
+            "versionId": { "type": "string", "maxLength": 128 },
+            "at": { "$ref": "#/definitions/Timestamp" }
+          }
+        }
+      }
+    },
+    "Registration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["registrationId", "revision", "state", "name", "expiresAt"],
+      "properties": {
+        "registrationId": { "$ref": "#/definitions/LogicalId" },
+        "revision": { "$ref": "#/definitions/Revision" },
+        "state": { "enum": ["waiting", "succeeded", "denied", "expired", "canceled", "error"] },
+        "name": { "type": "string", "maxLength": 30 },
+        "url": { "type": "string", "pattern": "^https://(open|accounts)\\.feishu\\.cn/" },
+        "expiresAt": { "$ref": "#/definitions/Timestamp" },
+        "appId": { "$ref": "#/definitions/AppId" },
+        "error": {
+          "enum": ["lark_tenant", "unavailable", "credential_invalid", "already_configured"]
+        }
+      }
+    }
+  }
+}

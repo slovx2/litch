@@ -30,6 +30,7 @@ import { DEVICE_OPS } from './ops-devices.mjs'
 import { EXTERNAL_CONFIG_OPS } from './ops-external.mjs'
 import { EXTERNAL_IDENTITY_CONFIG_OPS } from './ops-external-identities.mjs'
 import { EXTERNAL_LOGIN_CONFIG_OPS } from './ops-external-login.mjs'
+import { FEISHU_CONFIG_OPS } from './ops-feishu.mjs'
 import { HARNESS_OPS } from './ops-harness.mjs'
 import { MANAGER_OPS } from './ops-managers.mjs'
 import { PLACE_OPS } from './ops-places.mjs'
@@ -59,6 +60,7 @@ export const CONFIG_HANDLERS: Record<string, OpSpec> = {
   ...EXTERNAL_CONFIG_OPS,
   ...EXTERNAL_IDENTITY_CONFIG_OPS,
   ...EXTERNAL_LOGIN_CONFIG_OPS,
+  ...FEISHU_CONFIG_OPS,
 }
 
 /** 拿主题快照最多等多久（设备的设置要先向设备取） */

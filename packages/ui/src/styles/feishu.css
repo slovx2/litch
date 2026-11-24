@@ -1,0 +1,37 @@
+/* 飞书：设备详情里的应用列表、添加应用对话框、应用详情。大部分沿用无人值守的 ext-* 小件，只用皮肤变量。 */
+
+/* 应用列表的一行整行可点 */
+.fs-app-row {
+  width: 100%;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.fs-app-row:hover {
+  background: var(--hover);
+}
+.fs-app-row [data-tone="err"] {
+  color: var(--err);
+}
+
+/* 对话框里的一项：名字在上、输入框、提示 */
+.fs-form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.fs-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+.fs-hint.err {
+  color: var(--err);
+}

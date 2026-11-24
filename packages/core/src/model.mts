@@ -214,6 +214,8 @@ export interface ConnectFailureView {
 
 export interface DeviceView {
   externalSources?: boolean
+  /** 设备有飞书来源（litchFeishu） */
+  feishu?: boolean
   remoteChrome?: import('../../protocol/src/remote-chrome.mjs').RemoteChromeStatus
   modelRanking?: boolean
   toolImagesEnabled?: boolean

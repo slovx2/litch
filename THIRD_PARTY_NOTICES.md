@@ -1,5 +1,7 @@
 # 第三方来源与许可
 
+- 设备接飞书的长连接使用飞书官方 Node SDK `@larksuiteoapi/node-sdk 1.77.0`（MIT，Copyright (c) 2022 Lark Technologies Pte. Ltd.），连同它的运行依赖 `axios`、`form-data`、`follow-redirects`、`https-proxy-agent`、`lodash.*`（MIT）、`protobufjs`、`qs`（BSD-3-Clause）、`long`（Apache-2.0）等；原始许可随适配器 node_modules 分发。
+
 - 设备端工具图片缩略图使用 `pngjs 7.0.0`（MIT，Copyright Luke Page、Kuba Niegowski 及贡献者）和 `jpeg-js 0.4.4`（BSD-3-Clause，Copyright Eugene Ware）；纯 JavaScript 解码器及原始许可随适配器 node_modules 分发。
 
 - macOS/Linux 伪终端使用 `github.com/creack/pty v1.1.24`，MIT，Copyright (c) 2011 Keith Rarick。

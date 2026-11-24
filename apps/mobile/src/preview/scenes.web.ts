@@ -313,6 +313,23 @@ export const SCENES: Scene[] = [
     steps: [nav('DeviceDetail', { deviceId: 'local' })],
   },
   {
+    id: 'feishu-app',
+    group: '设备',
+    name: '飞书 · 应用详情',
+    note: '本机的示例应用：连接状态、启用、经理、能力缺项与补申请、移除',
+    steps: [
+      nav('DeviceDetail', { deviceId: 'local' }),
+      nav('FeishuApp', { deviceId: 'local', appId: 'cli_a1b2c3d4e5f60718' }),
+    ],
+  },
+  {
+    id: 'feishu-add',
+    group: '设备',
+    name: '飞书 · 添加应用',
+    note: '创建向导：填机器人名后开始，模拟核心两秒后完成',
+    steps: [nav('DeviceDetail', { deviceId: 'local' }), nav('FeishuAdd', { deviceId: 'local' })],
+  },
+  {
     id: 'external-states',
     group: '设备',
     name: '无人值守 · 受阻',
