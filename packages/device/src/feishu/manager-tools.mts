@@ -259,7 +259,7 @@ export class FeishuManagerTools {
       verificationUrl: grant.pending?.verificationUrl,
       userCode: grant.pending?.userCode,
       expiresAt: grant.pending?.expiresAt,
-      note: 'Only this person can approve, by opening the link in Feishu. After granting, lark-cli can read all of their Feishu chats. Check the result later with feishu_chats (userIdentity).',
+      note: 'Only this person can approve, by opening the link in Feishu. After granting, lark-cli can act as them with every user permission the app has enabled (not only those Litch requests), including reading all of their Feishu chats; sending still goes through the chat approval rules and auth endpoints are refused. Check the result later with feishu_chats (userIdentity).',
     }
   }
 
