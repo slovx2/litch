@@ -137,14 +137,10 @@ func prepareAutostartStart(args []string) (clean []string, marker string, held b
 		// 计划停止位于管理器的失败重试窗口内时，令排队的同一服务干净退出。
 		return nil, "", true, nil
 	}
-	env := autostartBaseEnv()
+	env := autostartServiceEnv(spec.Node)
 	os.Clearenv()
 	for _, entry := range env {
 		key, value, _ := strings.Cut(entry, "=")
-		if key == "PATH" {
-			// 固定保留 Node 所在目录，带 /usr/bin/env node 的已安装入口也能执行。
-			value += string(os.PathListSeparator) + filepath.Dir(spec.Node)
-		}
 		if err := os.Setenv(key, value); err != nil {
 			return nil, "", false, err
 		}

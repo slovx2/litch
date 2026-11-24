@@ -206,6 +206,19 @@ try {
   const unit = `${status.serviceId}.service`
   console.log(`✓ 0.1.0 由 systemd 用户服务 ${unit} 管着（进程 ${first.pid}）`)
 
+  // 登记的是随包带的 Node（libexec/node/bin），自启环境照样找得到装在 /usr/local/bin 的 codex
+  root(
+    'printf "#!/bin/sh\\necho codex-cli 0.0.0\\n" > /usr/local/bin/codex && chmod 755 /usr/local/bin/codex',
+  )
+  const servicePath = sim(`cat ${STATE}/sim-path.txt`).stdout
+  assert.ok(servicePath.split(':').includes('/usr/local/bin'), `自启服务的 PATH：${servicePath}`)
+  assert.equal(
+    sim(`PATH='${servicePath}' command -v codex`).stdout.trim(),
+    '/usr/local/bin/codex',
+    servicePath,
+  )
+  console.log(`✓ 自启服务的 PATH 找得到 /usr/local/bin/codex（${servicePath}）`)
+
   // 装上 0.2.0：current 换了，在跑的还是 0.1.0。探测认得出是自启管着的
   install('0.2.0')
   const probe = remote(probeScript())
@@ -242,6 +255,9 @@ try {
   assert.equal(systemctl(`is-active ${unit}`), 'active')
   assert.equal(autostart().instance.mode, 'managed')
   console.log(`✓ 空闲（只有客户端连着）时换上 0.2.0（进程 ${second.pid}），systemd 单元指向新版`)
+  const swappedPath = sim(`cat ${STATE}/sim-path.txt`).stdout
+  assert.equal(sim(`PATH='${swappedPath}' command -v codex`).stdout.trim(), '/usr/local/bin/codex')
+  console.log('✓ 换版本后重新登记的服务照样找得到 /usr/local/bin/codex')
 
   // 现在重启：装上 0.3.0，有回合在跑也不等；停之前先为续跑做准备
   install('0.3.0')
