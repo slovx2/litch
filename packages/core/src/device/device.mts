@@ -29,6 +29,7 @@ import {
   THREAD_READ_STATE,
   type ThreadReadState,
 } from '../../../protocol/src/thread-read-state.mjs'
+import { TIMED_APPROVALS_EXTENSION } from '../../../protocol/src/timed-approvals.mjs'
 import { assertArchiveChildrenStopped } from '../archive.mjs'
 import type { TitleSearchResult } from '../search/model.mjs'
 import { matchTitles } from '../search/titles.mjs'
@@ -36,6 +37,7 @@ import { createAcpAuth } from './acp-auth.mjs'
 import { abilitiesOf } from './harness.mjs'
 import { createProjectPermissions, type ProjectPermissions } from './project-permissions.mjs'
 import type { SavedToolSwitches, ToolSwitchChange } from './remote.mjs'
+import { createTimedApprovals, type TimedApprovalsStore } from './timed-approvals.mjs'
 import { migrateToolSettings, toolSettingEdits } from './tool-settings.mjs'
 // 一台设备：一条连接，加上连上之后要做的事。
 // 对面有两种：
@@ -470,6 +472,8 @@ export interface Device {
   readonly suggestions: Suggestions
   /** 设备上的经理列表与按需订阅的看板。 */
   readonly projectPermissions: ProjectPermissions
+  /** 限时授权：会话所在设备上生效的名单（timed-approvals.mts） */
+  readonly timedApprovals: TimedApprovalsStore
   readonly managers: Managers
   /** 这台设备上的扫码绑定手机：出码、确认、已绑定的手机（pairing.mts） */
   readonly pairing: Pairing
@@ -702,6 +706,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let suggestionsOn = false
   let pathsSupported = false
   let projectPermissionsOn = false
+  let timedApprovalsOn = false
   /** 对面声明 litchManager 后才读取看板、接受经理通知与会话标记。 */
   let managersOn = false
   /** 设备宣告的后加经理能力；没宣告的是比应用旧的设备服务 */
@@ -2068,6 +2073,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         pathsSupported = info.device.extensions?.includes(PATH_PICKER_EXTENSION) === true
         projectPermissionsOn =
           info.device.extensions?.includes(EXTENSION.harnessProjectPermissions) === true
+        timedApprovalsOn = info.device.extensions?.includes(TIMED_APPROVALS_EXTENSION) === true
         managersOn = info.device.extensions?.includes(EXTENSION.manager) === true
         managerFeatures = {
           resetTarget: info.device.extensions?.includes(EXTENSION.managerResetTarget) === true,
@@ -2118,6 +2124,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         suggestionsOn = false
         pathsSupported = false
         projectPermissionsOn = false
+        timedApprovalsOn = false
         managersOn = false
         managerFeatures = {
           feedback: false,
@@ -2155,6 +2162,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       suggestionsOn = false
       pathsSupported = false
       projectPermissionsOn = false
+      timedApprovalsOn = false
       managersOn = false
       sessionTree = false
       ignoreQuestions = false
@@ -2225,6 +2233,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     external.connectionChanged()
     suggestions.resync()
     projectPermissions.resync()
+    timedApprovals.resync()
     managers.resync()
     pairing.resync()
     approvals.resync()
@@ -2278,6 +2287,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       external.connectionChanged()
       suggestions.offline()
       projectPermissions.resync()
+      timedApprovals.resync()
       managers.offline()
       pairing.offline()
       approvals.offline()
@@ -2364,6 +2374,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       // 定时任务：一样和会话目录是两回事，任务模块自己对账、自己攒
       if (suggestions.notification(method, params)) return
       if (projectPermissions.notification(method)) return
+      if (timedApprovals.notification(method, params)) return
       if (managers.notification(method, params)) return
       if (external.notification(method, params)) return
       if (tasks.notification(method, params)) return
@@ -2597,6 +2608,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         return false
       }
     },
+    timedApproval: (threadId, category) => timedApprovals.active(threadId, category) !== null,
     deviceId: config.id,
     clock: options.clock,
     hub: options.tools ?? {
@@ -2846,6 +2858,16 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     supported: () => projectPermissionsOn,
     request: (method, params) => link.request(method, params),
   })
+  const timedApprovals = createTimedApprovals({
+    deviceId: config.id,
+    online: () => online,
+    supported: () => timedApprovalsOn,
+    now: () => options.clock.now(),
+    request: (method, params) => link.request(method, params),
+    log,
+  })
+  // 名单变了：挂着的、已在授权内的客户端工具卡片当场放行
+  timedApprovals.onChange(() => toolCalls.timedApprovalsChanged())
   const managers = createManagers({
     clock: options.clock,
     deviceId: config.id,
@@ -3554,6 +3576,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     external,
     suggestions,
     projectPermissions,
+    timedApprovals,
     managers,
     pairing,
     approvals,

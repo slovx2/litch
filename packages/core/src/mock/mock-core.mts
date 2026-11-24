@@ -1,6 +1,8 @@
 import { claudeRefusalError, isClaudeRefusalError } from '../../../protocol/src/claude-refusal.mjs'
 import { assertArchiveChildrenStopped } from '../archive.mjs'
 import { matchTitles } from '../search/titles.mjs'
+import { timedCategoryOf } from '../timed-approval-view.mjs'
+import { createMockTimedApprovals } from './mock-timed-approvals.mjs'
 import { OUTSIDE_FILE_REPLY } from './sample-file-links.mjs'
 import { MEDIA_REPLY } from './sample-media.mjs'
 import { SAMPLE_TOOL_IMAGES } from './sample-tool-images.mjs'
@@ -2220,6 +2222,29 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     import('../../../protocol/src/harness-project-permissions.mjs').ProjectPermission
   >()
   const permissionSinks = new Map<string, Set<HostSink>>()
+  // 限时授权：授予时把这个会话里同类挂着的卡片收掉，回合照常往下走
+  const timed = createMockTimedApprovals({
+    now: () => clock.now(),
+    granted(deviceId, grant) {
+      const key = [...sessions.keys()].find((entry) => {
+        const view = sessions.get(entry)
+        return view?.deviceId === deviceId && view.sessionId === grant.threadId
+      })
+      const view = key ? sessions.get(key) : undefined
+      if (!view) return
+      const hit = view.requests.filter((request) => timedCategoryOf(request) === grant.category)
+      if (!hit.length) return
+      machineAsks.forEach((_, id) => {
+        if (hit.some((request) => request.id === id)) machineAsks.delete(id)
+      })
+      applySessionOps(
+        view,
+        hit.map((request) => ({ op: 'request.remove', requestId: request.id }) as const),
+      )
+      if (!view.requests.length)
+        updateSummary(view.deviceId, view.sessionId, { status: 'running', waitingFor: null })
+    },
+  })
   const permissionView = (deviceId: string, cwd: string, harness: string) => ({
     deviceId,
     cwd,
@@ -3010,6 +3035,15 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       const tuned = harnessConfig.command(name, params)
       if (tuned !== undefined) return tuned
       if (name === 'projectPermission.retry') return undefined
+      if (name === 'timedApproval.grant') {
+        const { deviceId, threadId, category, hours } =
+          params as Commands['timedApproval.grant']['params']
+        return timed.grant(deviceId, threadId, category, hours)
+      }
+      if (name === 'timedApproval.revoke') {
+        const { deviceId, id } = params as Commands['timedApproval.revoke']['params']
+        return timed.revoke(deviceId, id)
+      }
       if (name === 'projectPermission.set') {
         const { deviceId, cwd, harness, permission, confirmed } =
           params as Commands['projectPermission.set']['params']
@@ -3832,6 +3866,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       // 08 号：远程会话在这台电脑上的动静（mock-machine.mts）
       if (topic.kind === 'machine') return machine.subscribe(sink)
       // 定时任务（mock-tasks.mts）
+      if (topic.kind === 'timedApprovals') return timed.subscribe(topic.deviceId, sink)
       if (topic.kind === 'projectPermission') {
         const key = JSON.stringify([topic.deviceId, topic.cwd, topic.harness])
         const sinks = permissionSinks.get(key) ?? new Set<HostSink>()

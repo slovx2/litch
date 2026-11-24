@@ -814,6 +814,17 @@ export {
   compareVersions,
   installMethodOf,
 } from './text/versions.mjs'
+export {
+  TIMED_APPROVAL_MAX_HOURS,
+  TIMED_APPROVAL_MIN_HOURS,
+  TIMED_APPROVAL_PRESETS,
+  type TimedApproval,
+  type TimedApprovalCategory,
+  type TimedApprovalsView,
+  timedCategoryOf,
+  timedRemaining,
+  validTimedApprovalHours,
+} from './timed-approval-view.mjs'
 export { createToolHub, type ToolCallHandlers, type ToolHub } from './tool-hub.mjs'
 export { type CoreTrace, type TraceLevel, traceError, traceParams } from './trace.mjs'
 export {

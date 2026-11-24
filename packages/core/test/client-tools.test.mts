@@ -73,6 +73,8 @@ function setup(
     extensions?: string[]
     kind?: 'local' | 'ssh'
     threads?: Thread[]
+    /** 再加的对端方法（覆盖同名的） */
+    handlers?: Record<string, Handler>
   } = {},
 ) {
   const threads = options.threads ?? [
@@ -131,6 +133,7 @@ function setup(
     handlers['runtime/info'] = fake.handlers['runtime/info']!
     Object.assign(handlers, fakeToolSettings(['pi']).handlers)
   }
+  Object.assign(handlers, options.handlers ?? {})
   const time = fakeClock()
   const peer = fakeOpener(handlers)
   const main = options.namespaces === null ? null : fakeMain(options.namespaces ?? ['litch_echo'])
@@ -1018,4 +1021,185 @@ test('设备 Chrome 站点卡在桌面回答，nonce 回给会话设备，撤卡
   await settle()
   assert.equal(session.seen.view?.requests.length, 0)
   core.stop()
+})
+
+// ---------- 限时授权（timedApprovals） ----------
+
+/** 假设备上的限时授权：名单、授予、撤销，和设备一样按 (会话, 类别) 只留一条 */
+function timedDevice(now: () => number) {
+  let grants: {
+    id: string
+    threadId: string
+    category: string
+    grantedAt: number
+    expiresAt: number
+  }[] = []
+  let seq = 0
+  const handlers: Record<string, Handler> = {
+    'litch/timedApproval/list': () => ({ grants }),
+    'litch/timedApproval/grant': (params) => {
+      const { threadId, category, hours } = params as {
+        threadId: string
+        category: string
+        hours: number
+      }
+      const grant = {
+        id: `g${++seq}`,
+        threadId,
+        category,
+        grantedAt: now(),
+        expiresAt: now() + hours * 3_600_000,
+      }
+      grants = [
+        ...grants.filter((g) => !(g.threadId === threadId && g.category === category)),
+        grant,
+      ]
+      return grant
+    },
+    'litch/timedApproval/revoke': (params) => {
+      const before = grants.length
+      grants = grants.filter((g) => g.id !== (params as { id: string }).id)
+      return { revoked: before - grants.length }
+    },
+  }
+  return { handlers, grants: () => grants }
+}
+
+function timedWorld(kind: 'local' | 'ssh', supported = true) {
+  let clockNow = () => 0
+  const fake = timedDevice(() => clockNow())
+  const world = setup({
+    kind,
+    managed: true,
+    namespaces: ['litch_browser', 'litch_computer'],
+    deviceExtensions: supported ? ['timedApprovals'] : [],
+    handlers: fake.handlers,
+    threads: ['a', 'b'].map((id) =>
+      thread({ id, cwd: '/work/app', turns: [turn('t1', [], { status: 'inProgress' })] }),
+    ),
+  })
+  clockNow = () => world.time.clock.now()
+  return { ...world, fake }
+}
+
+const askOnce = async (
+  world: ReturnType<typeof timedWorld>,
+  askId: string,
+  ask: Record<string, unknown>,
+  threadId = 'a',
+) => {
+  void world.call({ threadId, namespace: 'litch_browser', tool: 'navigate', callId: askId })
+  for (
+    let index = 0;
+    index < 10 && !world.main?.of('call').some((c) => c.invocation.callId === askId);
+    index++
+  )
+    await settle()
+  const invocation = world.main?.of('call').find((c) => c.invocation.callId === askId)?.invocation
+  assert.ok(invocation)
+  world.main?.reply({ op: 'ask', id: invocation.id, askId, ask: ask as never })
+  await settle()
+}
+
+const answered = (world: ReturnType<typeof timedWorld>, askId: string) =>
+  world.main?.of('answer').find((entry) => entry.askId === askId)?.answer
+
+for (const kind of ['local', 'ssh'] as const)
+  test(`限时授权（${kind}）：授权内网站与下载不出卡片直接放行；别的会话、Litch 自身访问照常询问；撤销、到期后恢复询问`, async () => {
+    const world = timedWorld(kind)
+    world.core.start()
+    await settle()
+    const grant = (await world.command('timedApproval.grant', {
+      deviceId: 'local',
+      threadId: 'a',
+      category: 'browser',
+      hours: 2,
+    })) as { id: string }
+    await settle()
+    const site = { kind: 'site', origin: 'https://a.example', url: 'https://a.example/' }
+    await askOnce(world, 'k1', site)
+    assert.equal(answered(world, 'k1'), 'once', '授权内的网站直接按这一次允许答')
+    await askOnce(world, 'k2', {
+      kind: 'browserDownload',
+      filename: 'x.zip',
+      origin: 'https://a.example',
+      totalBytes: 1,
+    })
+    assert.equal(answered(world, 'k2'), 'once', '授权内的下载直接放行')
+    // Chrome 是另一类
+    await askOnce(world, 'k3', { ...site, browser: 'chrome' })
+    assert.equal(answered(world, 'k3'), undefined, 'Chrome 网站不在内置浏览器的授权里')
+    // Litch 自身访问不在限时授权里
+    await askOnce(world, 'k4', { kind: 'computerSelf', id: 's1', nonce: 'n', desktopId: null })
+    assert.equal(answered(world, 'k4'), undefined)
+    // 别的会话
+    await askOnce(world, 'k5', site, 'b')
+    assert.equal(answered(world, 'k5'), undefined, '别的会话照常询问')
+
+    await world.command('timedApproval.revoke', { deviceId: 'local', id: grant.id })
+    await settle()
+    await askOnce(world, 'k6', site)
+    assert.equal(answered(world, 'k6'), undefined, '撤销后立即恢复询问')
+
+    await world.command('timedApproval.grant', {
+      deviceId: 'local',
+      threadId: 'a',
+      category: 'browser',
+      hours: 1,
+    })
+    await settle()
+    world.time.advance(3_600_000)
+    await settle()
+    await askOnce(world, 'k7', site)
+    assert.equal(answered(world, 'k7'), undefined, '到期后恢复询问')
+    world.core.stop()
+  })
+
+test('限时授权：卡片挂着时授予（或别的端经设备授予后发来 changed），挂着的同类卡片按这一次允许答掉', async () => {
+  const world = timedWorld('ssh')
+  world.core.start()
+  await settle()
+  await askOnce(world, 'k1', {
+    kind: 'site',
+    origin: 'https://a.example',
+    url: 'https://a.example/',
+  })
+  await askOnce(world, 'k2', { kind: 'chromeTab', url: 'https://b.example/', title: 'b' })
+  const session = watchSession(world.core)
+  await settle()
+  assert.equal(session.seen.view?.requests.length, 2)
+  // 手机在会话所在设备上授予了 Chrome：设备发来整份名单
+  const now = world.time.clock.now()
+  world.peer.last().notify('litch/timedApproval/changed', {
+    grants: [
+      { id: 'g9', threadId: 'a', category: 'chrome', grantedAt: now, expiresAt: now + 3_600_000 },
+    ],
+  })
+  await settle()
+  assert.equal(answered(world, 'k2'), 'once')
+  assert.equal(answered(world, 'k1'), undefined, '内置浏览器的那张还在等')
+  assert.equal(session.seen.view?.requests.length, 1)
+  world.core.stop()
+})
+
+test('限时授权：设备不支持时授予报 unsupported，卡片照常询问', async () => {
+  const world = timedWorld('local', false)
+  world.core.start()
+  await settle()
+  await assert.rejects(
+    world.command('timedApproval.grant', {
+      deviceId: 'local',
+      threadId: 'a',
+      category: 'browser',
+      hours: 1,
+    }),
+    (error: { code?: string }) => error.code === 'unsupported',
+  )
+  await askOnce(world, 'k1', {
+    kind: 'site',
+    origin: 'https://a.example',
+    url: 'https://a.example/',
+  })
+  assert.equal(answered(world, 'k1'), undefined)
+  world.core.stop()
 })

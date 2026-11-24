@@ -27,6 +27,7 @@ import {
   REMOTE_CHROME_APPROVAL,
   type RemoteChromePrompt,
 } from '../../../protocol/src/remote-chrome.mjs'
+import type { TimedApprovalCategory } from '../../../protocol/src/timed-approvals.mjs'
 import { createCancel } from '../channel/cancel.mjs'
 import type { AbortSignalLike, Clock } from '../channel/protocol.mjs'
 import { NO_REPLY } from '../connection/rpc.mjs'
@@ -114,6 +115,8 @@ export interface ToolCallsHost {
    * 返回的函数是“不用了”：撤掉卡片，不再调 answer
    */
   showAsk(place: ToolAskPlace, answer: (answer: ToolAnswer | null) => void): () => void
+  /** 限时授权：这个会话、这一类此刻放行（会话所在设备给的名单，timed-approvals.mts） */
+  timedApproval?(threadId: string, category: TimedApprovalCategory): boolean
   log(line: string): void
 }
 
@@ -132,6 +135,8 @@ export interface ToolCalls {
   offline(): void
   /** litch_machine 的开关关掉了：进行中的调用都以这个答复结束，挂着的卡片撤掉 */
   stopMachine(response: ClientToolCallResponse): void
+  /** 限时授权的名单变了：挂着的、已在授权内的卡片按“这一次允许”答掉 */
+  timedApprovalsChanged(): void
 }
 
 interface Running {
@@ -196,10 +201,26 @@ export const clientAskOptions = (ask: ClientAskView): ApprovalOption[] =>
               { id: 'decline', role: 'decline' },
             ]
 
+/**
+ * 客户端工具的卡片属于哪一类限时授权。内置浏览器的网站与下载归 browser，Chrome 的网站、实例、标签归 chrome；
+ * 登录交接、Computer Use 访问 Litch 自身、litch_machine（另由 machine-wiring 判定）不在这里放行
+ */
+export function clientAskCategory(ask: ClientAskView): TimedApprovalCategory | null {
+  if (ask.kind === 'site') return ask.browser === 'chrome' ? 'chrome' : 'browser'
+  if (ask.kind === 'browserDownload') return 'browser'
+  if (ask.kind === 'chromeInstance' || ask.kind === 'chromeTab') return 'chrome'
+  return null
+}
+
 const turnKey = (threadId: string, turnId: string) => `${threadId}\u0000${turnId}`
 
 export function createToolCalls(host: ToolCallsHost): ToolCalls {
   const running = new Map<string, Running>()
+  /** 挂着的、可以被限时授权放行的卡片：卡片标识 → 会话、类别、按“这一次允许”答掉 */
+  const timedAsks = new Map<
+    string,
+    { threadId: string; category: TimedApprovalCategory; settle(): void }
+  >()
   /** 这台设备上执行过工具调用、还没结束的回合 */
   const turns = new Map<string, { threadId: string; turnId: string }>()
   let seq = 0
@@ -326,6 +347,14 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
               host.hub.answer(askId, 'once')
               return
             }
+            const category = clientAskCategory(ask as ClientAskView)
+            if (category && host.timedApproval?.(params.threadId, category)) {
+              host.log(
+                `客户端工具限时授权放行：会话 ${params.threadId}，卡片 ${askId}，类型 ${ask.kind}`,
+              )
+              host.hub.answer(askId, 'once')
+              return
+            }
             host.log(
               `客户端工具等待审批：会话 ${params.threadId}，调用 ${params.callId}，卡片 ${askId}，类型 ${ask.kind}`,
             )
@@ -341,15 +370,29 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
               tool: params.tool,
               ask,
             }
-            const drop = host.showAsk(place, (answer) => {
+            const settled = (answer: ToolAnswer | null) => {
+              timedAsks.delete(askId)
               host.log(
                 `客户端工具审批已处理：会话 ${params.threadId}，卡片 ${askId}，答复 ${answer ?? 'cancelled'}`,
               )
               entry.asks.delete(askId)
               host.hub.answer(askId, answer)
               resume(entry)
+            }
+            const drop = host.showAsk(place, settled)
+            entry.asks.set(askId, () => {
+              timedAsks.delete(askId)
+              drop()
             })
-            entry.asks.set(askId, drop)
+            if (category)
+              timedAsks.set(askId, {
+                threadId: params.threadId,
+                category,
+                settle: () => {
+                  drop()
+                  settled('once')
+                },
+              })
           },
           askDone(askId) {
             const drop = entry.asks.get(askId)
@@ -576,6 +619,7 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
                     },
             },
             (decision) => {
+              timedAsks.delete(prompt.id)
               resume()
               resolve(
                 decision && !signal.aborted
@@ -584,7 +628,22 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
               )
             },
           )
+          // 网站许可挂着时授予了 Chrome 的限时授权：按“这一次允许”答给设备
+          if (prompt.kind === 'site')
+            timedAsks.set(prompt.id, {
+              threadId: prompt.threadId,
+              category: 'chrome',
+              settle: () => {
+                timedAsks.delete(prompt.id)
+                drop()
+                resume()
+                resolve(
+                  signal.aborted ? null : { id: prompt.id, nonce: prompt.nonce, decision: 'once' },
+                )
+              },
+            })
           signal.addEventListener('abort', () => {
+            timedAsks.delete(prompt.id)
             drop()
             resume()
             resolve(null)
@@ -674,6 +733,14 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
 
     stopMachine(response) {
       for (const entry of [...running.values()]) if (entry.machine) abandon(entry, response)
+    },
+
+    timedApprovalsChanged() {
+      for (const [askId, pending] of [...timedAsks]) {
+        if (!host.timedApproval?.(pending.threadId, pending.category)) continue
+        host.log(`客户端工具限时授权放行挂着的卡片：会话 ${pending.threadId}，卡片 ${askId}`)
+        pending.settle()
+      }
     },
   }
 }
