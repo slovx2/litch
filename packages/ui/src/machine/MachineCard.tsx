@@ -13,7 +13,7 @@ import type {
   SessionSummary,
 } from '@litch/core'
 import { keys } from '@litch/core'
-import { Fragment, useEffect, useId, useRef, useState } from 'react'
+import { Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { requestDevice } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { useElapsed } from '../app/clock.ts'
@@ -23,6 +23,7 @@ import { useKey, useServices } from '../app/services.tsx'
 import { busyWriting, typing } from '../composer/focus.ts'
 import { type CardProps, type Choice, Foot, ownsKey, useRespond } from '../composer/respond.tsx'
 import type { MessageKey } from '../i18n/index.ts'
+import { useTimedAllow } from '../timed/TimedAllow.tsx'
 import { countdown, foldOf } from './logic.ts'
 
 const TITLE: Record<MachineAskView['action'], MessageKey> = {
@@ -53,6 +54,8 @@ interface MachineCardProps {
   waiting: number
   /** 一出现就拿焦点（对话里的卡片）。弹层里的不抢 */
   grab: boolean
+  /** 对话里那张的“限时允许”：按钮排在拒绝前面，展开的一行在按钮行下面 */
+  timed?: { button: ReactNode; panel: ReactNode }
   onChoose(choice: Choice): void
 }
 
@@ -202,6 +205,7 @@ function MachineCard(props: MachineCardProps) {
                 {t('machine.enable.settings')}
               </button>
             ) : null}
+            {option === refuse ? props.timed?.button : null}
             {option === refuse && !noting && !ask.enable ? (
               <button
                 type="button"
@@ -238,6 +242,7 @@ function MachineCard(props: MachineCardProps) {
           </Fragment>
         ))}
       </div>
+      {props.timed?.panel}
       <Foot waiting={waiting} error={error} />
     </section>
   )
@@ -334,8 +339,10 @@ export function MachineSessionCard(props: CardProps<ClientAskRequest> & { ask: M
   const device = useKey<DeviceView>(keys.device(deviceId))
   const summary = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
   const t = useT()
+  const timed = useTimedAllow({ ...props, disabled: busy })
   return (
     <MachineCard
+      timed={timed}
       deviceId={deviceId}
       ask={ask}
       options={request.options}

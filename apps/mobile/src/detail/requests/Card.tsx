@@ -170,7 +170,7 @@ export function CardButton({
   testID,
 }: {
   label: string
-  symbol?: 'check' | 'close'
+  symbol?: 'check' | 'close' | 'clock'
   onPress(): void
   onLongPress?(): void
   kind?: 'primary' | 'plain' | 'danger' | 'ghost'
@@ -203,7 +203,7 @@ export function CardButton({
         },
       ]}
     >
-      {symbol ? <Icon name={symbol === 'check' ? 'check' : 'close'} size={14} color={fg} /> : null}
+      {symbol ? <Icon name={symbol} size={14} color={fg} /> : null}
       <Text style={[styles.buttonText, { color: fg }]}>{label}</Text>
     </Pressable>
   )

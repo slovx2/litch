@@ -1,0 +1,95 @@
+/* 限时允许（timed/）：审批卡上展开的一行选时长，输入框上方的生效授权小条。只用皮肤变量 */
+
+/* 卡片按钮行里的入口：小图标加短字 */
+.btn.timed-open {
+  gap: 4px;
+}
+.btn.timed-open[aria-expanded="true"] {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+/* 展开的一行：快捷时长、自己填的小时数、确认；下面一句写清到什么时候 */
+.req-timed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 12px 12px 14px;
+}
+.timed-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.btn.timed-preset {
+  padding: 0 8px;
+}
+.btn.timed-preset.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--raised));
+  color: var(--ink);
+}
+.timed-hours {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: calc(12px * var(--fs));
+  color: var(--ink-2);
+}
+.timed-hours .req-input {
+  width: calc(64px * var(--fs));
+  height: calc(20px * var(--fs) + 8px);
+}
+.timed-hint {
+  font-size: calc(11px * var(--fs));
+  color: var(--ink-3);
+}
+.timed-hint.err {
+  color: var(--err);
+}
+
+/* 输入框上方：一类一个小条，类别、剩多久、撤销 */
+.timedbar {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6px * var(--fs));
+  height: calc(26px * var(--fs));
+  padding: 0 calc(4px * var(--fs)) 0 calc(8px * var(--fs));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line-2));
+  border-radius: var(--r2);
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel));
+  font-size: calc(12px * var(--fs));
+  color: var(--ink);
+  min-width: 0;
+}
+.timedbar .lead {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.timedbar .left {
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.timedbar .x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(20px * var(--fs));
+  height: calc(20px * var(--fs));
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.timedbar .x:hover {
+  background: var(--sunken);
+  color: var(--ink);
+}
+fieldset.req-timed {
+  margin: 0;
+  border: 0;
+  min-width: 0;
+}

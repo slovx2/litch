@@ -50,6 +50,7 @@ import { SlashGoal } from './goal/SlashGoal'
 import { useGoalSend } from './goal/useGoalSend'
 import { QueuedNotesChip, QueuedNotesPanel } from './proposals/EventCell'
 import { onRefill } from './refill'
+import { TimedChips } from './timed/TimedChips'
 import { TodoChip, TodoPanel } from './todo/TodoViews'
 
 function RestoreComposer({
@@ -319,6 +320,7 @@ export function Composer({
                 旁边是排着的子会话回报（几条合成一个）和待办的小按钮（照桌面端信息栏的待办卡片），排不下就折到下一行 */}
               <View style={styles.chips}>
                 <BackgroundBar store={store} />
+                <TimedChips deviceId={deviceId} sessionId={sessionId} onError={setError} />
                 <QueuedNotesChip
                   deviceId={deviceId}
                   sessionId={sessionId}

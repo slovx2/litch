@@ -2,6 +2,7 @@ import type { ApprovalOption, ApprovalRequest } from '@litch/core'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import type { MessageKey } from '../i18n/index.ts'
+import { useTimedAllow } from '../timed/TimedAllow.tsx'
 import { useHoldAsking } from './asking.ts'
 import { ClientAskCard } from './ClientAskCard.tsx'
 import { FormCard } from './FormCard.tsx'
@@ -34,6 +35,7 @@ function Approval(props: CardProps<ApprovalRequest>) {
   /** 正在写拒绝的说明时输入框里的字。null：没在写 */
   const [note, setNote] = useState<string | null>(null)
   const noting = note !== null && refuse?.note === true
+  const timed = useTimedAllow({ ...props, disabled: busy })
 
   useCardFocus(card)
 
@@ -159,6 +161,8 @@ function Approval(props: CardProps<ApprovalRequest>) {
       <div className="req-actions">
         {request.options.map((option) => (
           <Fragment key={option.id}>
+            {/* 拒绝前面：限时允许（这个会话这一类在设定时长内都不再问） */}
+            {option === refuse ? timed.button : null}
             {/* 能带说明的“拒绝”前面多一个入口：点开写一句为什么 */}
             {option === refuse && option.note && !noting ? (
               <button
@@ -193,6 +197,7 @@ function Approval(props: CardProps<ApprovalRequest>) {
           </Fragment>
         ))}
       </div>
+      {timed.panel}
       <Foot waiting={waiting} error={error} />
     </section>
   )
