@@ -1,8 +1,11 @@
-// 控制台帖子讨论的底部抽屉：卡片上只留讨论入口，点开先占半屏，拖把手或点按钮到全屏，往下拖收回或关掉。
+// 控制台帖子讨论的底部抽屉：卡片上只留讨论入口，点开先占八成屏高，拖把手或点按钮到全屏，往下拖收回或关掉。
+// 背后压一层皮肤的半透明遮罩：遮罩随弹层淡入，抽屉自己从底部滑上来。
 // 内容和桌面看板底部的讨论分屏一致：标题（点了回到卡片）、按时间排的问答、追问输入。草稿和提交仍在卡片组件里。
 // 对话里点 #D-n 拉起的半屏议题卡（IssueSheet）也用它：标题和“在别处打开”图标是“在控制台打开”，内容不自动滚到底。
-import { type ReactNode, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import {
+  Animated,
+  Easing,
   Modal,
   PanResponder,
   Pressable,
@@ -19,9 +22,14 @@ import { IconButton } from '../../ui/kit/Icon'
 import { ModalKeyboardArea } from '../../ui/kit/ModalKeyboardArea'
 import { useTheme } from '../../ui/theme'
 import { BoardActionScrollView } from './CardActions'
+import { motionReduced } from './card-motion'
 
 /** 拖过这么远才换档，免得点把手时误触 */
 const SNAP = 40
+/** 默认档占屏高的比例：只露出一点背景 */
+const RATIO = 0.8
+/** 抽屉滑入的时长（毫秒） */
+const RISE_MS = 260
 
 export function DiscussionDrawer({
   visible,
@@ -65,7 +73,35 @@ export function DiscussionDrawer({
   const [drag, setDrag] = useState(0)
   // 滑入动画结束的次数：卡尾操作栏据此重量位置
   const [shown, setShown] = useState(0)
+  // 抽屉还在往上滑：卡尾操作栏先藏着，到位后重量再出现
+  const [rising, setRising] = useState(false)
   const scroll = useRef<KeyboardAwareScrollViewRef>(null)
+  // 0 在屏幕下方，1 到位；遮罩由弹层淡入，只有抽屉跟着它滑
+  const rise = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    if (!visible) return
+    const done = () => {
+      setRising(false)
+      setShown((value) => value + 1)
+    }
+    if (motionReduced()) {
+      rise.setValue(1)
+      done()
+      return
+    }
+    setRising(true)
+    rise.setValue(0)
+    const motion = Animated.timing(rise, {
+      toValue: 1,
+      duration: RISE_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    })
+    motion.start(({ finished }) => {
+      if (finished) done()
+    })
+    return () => motion.stop()
+  }, [visible, rise])
   // 手势回调只建一次，读最新的档位和关闭函数用 ref
   const state = useRef({ full, onClose })
   state.current = { full, onClose }
@@ -86,7 +122,7 @@ export function DiscussionDrawer({
     }),
   ).current
   const max = height - insets.top - 8
-  const sheet = Math.max(160, Math.min(max, (full ? max : Math.round(height * 0.55)) - drag))
+  const sheet = Math.max(160, Math.min(max, (full ? max : Math.round(height * RATIO)) - drag))
   const close = () => {
     setFull(false)
     onClose()
@@ -95,7 +131,7 @@ export function DiscussionDrawer({
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={close}
       onShow={() => setShown((value) => value + 1)}
     >
@@ -103,15 +139,18 @@ export function DiscussionDrawer({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('manager.discussionClose')}
-          style={StyleSheet.absoluteFill}
+          style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]}
           onPress={close}
           testID="discussion-drawer:scrim"
         />
-        <View
+        <Animated.View
           testID={testID}
           style={[
             styles.sheet,
             {
+              transform: [
+                { translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [height, 0] }) },
+              ],
               height: sheet,
               backgroundColor: c.panel,
               borderColor: c.line3,
@@ -181,6 +220,7 @@ export function DiscussionDrawer({
           <BoardActionScrollView
             ref={scroll}
             settled={`${shown}:${full}:${sheet}`}
+            moving={rising}
             style={styles.fill}
             contentContainerStyle={styles.body}
             keyboardShouldPersistTaps="handled"
@@ -192,7 +232,7 @@ export function DiscussionDrawer({
             {children}
           </BoardActionScrollView>
           {footer ? <View style={[styles.foot, { borderTopColor: c.line1 }]}>{footer}</View> : null}
-        </View>
+        </Animated.View>
       </ModalKeyboardArea>
       <ModalConsentHost active={visible} />
     </Modal>

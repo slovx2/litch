@@ -251,6 +251,9 @@ export function IconButton({
 }
 
 /** 收起展开的一行：箭头加标题，整行都能点（同桌面的 Fold）。right 放在行尾，不参与点击之外的事 */
+/** 紧凑折叠行上下各外扩的点按范围 */
+const DENSE_SLOP = 8
+
 export function Fold({
   open,
   onToggle,
@@ -259,28 +262,33 @@ export function Fold({
   label,
   testID,
   style,
+  dense = false,
 }: {
   open: boolean
   onToggle(): void
   children: ReactNode
   right?: ReactNode
+  /** 紧凑的一行（关联、依据这类附注）：画得矮，点按范围靠上下外扩补足 */
+  dense?: boolean
   /** 读屏名称；不给就读里面的文字 */
   label?: string
   testID?: string
   style?: StyleProp<ViewStyle>
 }) {
   const { c, hit } = useTheme()
+  const slop = dense ? DENSE_SLOP : 0
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ expanded: open }}
+      hitSlop={slop ? { top: slop, bottom: slop } : undefined}
       aria-expanded={open}
       {...(label ? { accessibilityLabel: label } : {})}
       onPress={onToggle}
       testID={testID}
       style={({ pressed }) => [
         styles.fold,
-        { minHeight: hit, backgroundColor: pressed ? c.press : 'transparent' },
+        { minHeight: hit - slop * 2, backgroundColor: pressed ? c.press : 'transparent' },
         style,
       ]}
     >

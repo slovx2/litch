@@ -21,6 +21,12 @@ function watch() {
   })
 }
 
+/** 偏好减少动态：开着时各处过渡直接到位 */
+export function motionReduced(): boolean {
+  watch()
+  return reduced
+}
+
 /** 下一次布局变化做过渡：卡片长高缩短、下方的卡跟着挪，新出现的淡入 */
 export function animateNextLayout() {
   watch()

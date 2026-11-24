@@ -1,6 +1,7 @@
 // 执行真实讨论组件，只替换宿主绘制与 hooks 调度；两端回归共用虚构议题。
 import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
+import { threadRelationTargets } from '../../../apps/mobile/src/screens/managers/relations.ts'
 import { transformSync } from '../../../node_modules/esbuild/lib/main.js'
 
 export const kinds = ['decision', 'suggestion', 'request', 'report', 'ordinary']
@@ -78,6 +79,8 @@ export function threadFixture(platform, kind, options = {}) {
       if (name.endsWith('/IssueDiscussion.tsx')) return { IssueDiscussion: 'discussion' }
       if (name.endsWith('/BoardMarkdown.tsx')) return { BoardMarkdown: 'markdown' }
       if (name.endsWith('/IssueMarkdown')) return { Markdown: 'markdown' }
+      // 手机讨论区关联一行的取舍用真实逻辑
+      if (name === '../relations') return { threadRelationTargets }
       if (name.endsWith('/kit/Icon')) return { Fold: 'fold' }
       return {}
     },
@@ -100,7 +103,7 @@ export function threadFixture(platform, kind, options = {}) {
         comments: [{ id: 'c1', createdAt: 1, author: { kind: 'user' }, body: '虚构讨论消息' }],
         questions: [],
       },
-      relations: [],
+      relations: options.relations ?? [],
       timeline: [],
       followUp: { state: options.followUp ?? 'on' },
     },

@@ -173,12 +173,12 @@ function SuggestionRow({
         >
           <div className="sg-body">
             {meta}
-            <Relations id={id} />
             <BriefSections
               prompt={proposal.prompt}
               background={proposal.background}
               renderText={BoardMarkdown}
             />
+            <Relations id={id} />
             {notes}
             {acts(true)}
           </div>
@@ -294,9 +294,9 @@ export function ManagerSuggestions({
       )}
     >
       <div className="sg-body">
-        <Relations id={post.id} />
         <BriefSections prompt={post.body} renderText={BoardMarkdown} />
         <PostHistory post={post} />
+        <Relations id={post.id} />
       </div>
     </PostCard>
   ))

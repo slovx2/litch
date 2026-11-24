@@ -155,9 +155,9 @@ export function Requests({
             key={request.id}
             tabIndex={-1}
           >
-            <Relations id={request.id} />
             <BoardMarkdown text={request.description} />
             <PostHistory post={post} />
+            <Relations id={request.id} />
             {request.response ? (
               <section className="mg-request-response">
                 <header>

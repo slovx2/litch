@@ -26,7 +26,14 @@ import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { useTheme } from '../../ui/theme'
 import { cardActionOffset } from './card-action-layout'
 
-type Viewport = { top: number; height: number; scroll: SharedValue<number>; revision: number }
+type Viewport = {
+  top: number
+  height: number
+  scroll: SharedValue<number>
+  revision: number
+  /** 外层还在滑入：量到的位置前后不一致，卡尾先藏起来 */
+  moving: boolean
+}
 const Scroll = createContext<Viewport | null>(null)
 
 /** 使用实际滚动视口，键盘缩短、底部批量提交栏和安全区都不占用卡片操作空间。 */
@@ -35,11 +42,14 @@ export function BoardActionScrollView({
   onLayout,
   onContentSizeChange,
   settled,
+  moving = false,
   ...props
 }: KeyboardAwareScrollViewProps & {
   ref?: Ref<KeyboardAwareScrollViewRef>
   /** 外层滑入动画结束时换一个值：动画中量到的窗口位置不准，结束后重量一次 */
   settled?: unknown
+  /** 外层正在滑入：卡尾操作栏先不显示，到位重量后再出现 */
+  moving?: boolean
 }) {
   const box = useRef<View>(null)
   const scroll = useSharedValue(0)
@@ -66,7 +76,10 @@ export function BoardActionScrollView({
     })
     return () => cancelAnimationFrame(frame)
   }, [measure, settled])
-  const value = useMemo(() => ({ ...bounds, scroll, revision }), [bounds, scroll, revision])
+  const value = useMemo(
+    () => ({ ...bounds, scroll, revision, moving }),
+    [bounds, scroll, revision, moving],
+  )
   return (
     <View ref={box} collapsable={false} style={styles.fill} onLayout={measure}>
       <Scroll.Provider value={value}>
@@ -183,6 +196,7 @@ function OwnActionArea({ children, onLayout, ...props }: ViewProps) {
           <Animated.View
             ref={bar}
             testID="board-card-actions"
+            pointerEvents={viewport?.moving ? 'none' : 'auto'}
             onLayout={(event) => {
               footerY.value = event.nativeEvent.layout.y
               size.value = event.nativeEvent.layout.height
@@ -191,6 +205,7 @@ function OwnActionArea({ children, onLayout, ...props }: ViewProps) {
             style={[
               styles.actions,
               { backgroundColor: c.panel, borderTopColor: c.line1 },
+              viewport?.moving ? styles.hidden : null,
               movement,
             ]}
           >
@@ -239,6 +254,7 @@ const RANK: Record<Place, number> = { first: -1, normal: 0, last: 1 }
 
 const styles = StyleSheet.create({
   fill: { flex: 1, minHeight: 0 },
+  hidden: { opacity: 0 },
 
   actions: {
     zIndex: 2,

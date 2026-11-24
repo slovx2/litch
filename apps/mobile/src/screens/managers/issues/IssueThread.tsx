@@ -25,6 +25,7 @@ import { Byline } from '../Byline'
 import { IssueExternal } from '../external/IssueExternal'
 import { MissingResultReply } from '../external/MissingResultReply'
 import { Markdown } from '../IssueMarkdown'
+import { threadRelationTargets } from '../relations'
 import { useBoardFile } from '../use-board-reference'
 import type { IssueCommands } from './data'
 
@@ -205,13 +206,8 @@ export function IssueThread({
       setBusy(false)
     }
   }
-  const targets = issue.relations.flatMap((edge) =>
-    edge.from.kind === 'issue' && edge.from.target === issue.id
-      ? [edge.to]
-      : edge.to.kind === 'issue' && edge.to.target === issue.id
-        ? [edge.from]
-        : [],
-  )
+  // 有议题卡（quick）时卡上已排了看板给的关联，这里只补卡上没有的（和普通议题之间的）
+  const targets = threadRelationTargets(issue.id, issue.relations, Boolean(quick))
   type Row =
     | { kind: 'comment'; id: string; at: number; who: 'user' | 'manager'; body: string }
     | { kind: 'question'; id: string; at: number; body: string; answer: string | null }
@@ -331,6 +327,7 @@ export function IssueThread({
               <Fold
                 open={relationsOpen}
                 onToggle={() => setRelationsOpen(!relationsOpen)}
+                dense
                 testID="issue-relations-toggle"
               >
                 <Text style={{ color: c.ink3, fontSize: font.size.meta }}>

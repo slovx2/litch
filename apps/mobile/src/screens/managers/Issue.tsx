@@ -73,7 +73,7 @@ import {
   replyFile,
 } from './draft-files'
 import { Markdown } from './IssueMarkdown'
-import { IssueContext, IssueRelations } from './IssueRelations'
+import { IssueContext, IssueNotes } from './IssueRelations'
 import { setIssueOrder, useIssueOrder } from './issue-order'
 import { ManagerOverview } from './ManagerOverview'
 import { decisionActions, issueCounts, orderedIssues } from './presentation'
@@ -111,7 +111,8 @@ function OptionChoice({
       style={({ pressed }) => [
         styles.choice,
         {
-          flex: 1,
+          // 不用 flex: 1：竖排的选项按内容定高。网页上它会变成 flex-basis 0，
+          // 几个选项平分高度，长说明压到下一个选项上（手机的 Yoga 不会）
           minHeight: hit,
           borderColor: selected ? c.accent : c.line1,
           borderWidth: selected ? 2 : 1,
@@ -782,11 +783,6 @@ export function Issue({
       {(!reviewFold || unreviewed) && !collapsed ? (
         <>
           {suggestion ? <SuggestionMeta row={suggestion} /> : null}
-          <IssueRelations id={post.id} />
-          {decision?.basis.length ? <IssueRelations id={post.id} basis={decision.basis} /> : null}
-          {decision?.landed.length ? (
-            <IssueRelations id={post.id} landed={decision.landed} />
-          ) : null}
           {post.kind === 'suggestion' ? (
             <SuggestionBrief
               prompt={suggestion?.proposal.prompt ?? post.body}
@@ -818,6 +814,8 @@ export function Issue({
                 : null}
             </>
           ) : null}
+          {/* 关联、依据是正文的附注：排在正文后面，几行紧挨着、默认收起 */}
+          <IssueNotes id={post.id} basis={decision?.basis} landed={decision?.landed} />
           {post.kind === 'report' && post.unread ? (
             <CardActions primary>
               <Button

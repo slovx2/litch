@@ -74,9 +74,9 @@ export function Reports({
           tabIndex={-1}
           key={post.id}
         >
-          <Relations id={post.id} />
           <BoardMarkdown text={post.body} />
           <PostHistory post={post} />
+          <Relations id={post.id} />
           {post.unread ? (
             <CardActions>
               <button
