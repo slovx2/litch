@@ -347,6 +347,28 @@ export class ManagerResets {
     this.owner.changed(id)
     this.tick(id)
   }
+  /**
+   * 设备发现经理缺了该有的工具（如刚绑上飞书应用）时自动排一次原地刷新，和用户手动重置走同一条路：
+   * 等经理空下来再换，不打断在跑的回合。只有原地刷新（Claude）自动做；换新会话接班会丢上下文，
+   * 仍要用户确认后手动重置。pending：刷新在排队或进行中，调用方等它结束再投递。
+   * 上次重置失败的不自动重试，留给用户处理。
+   */
+  autoRefresh(id: string): 'pending' | 'unavailable' {
+    const manager = this.owner.store.manager(id)
+    if (this.closed || !manager || manager.status !== 'active') return 'unavailable'
+    const phase = this.owner.store.reset(id)?.phase ?? 'idle'
+    if (this.held(manager.threadId)) return 'pending'
+    if (manager.harness !== 'claude-code') return 'unavailable'
+    if (phase === 'failed' || phase === 'summaryFailed') return 'unavailable'
+    try {
+      this.request(id, false)
+    } catch (error) {
+      this.owner.tree.host.log(`经理工具自动更新没排上：${String(error)}`)
+      return 'unavailable'
+    }
+    this.owner.tree.host.log(`经理 ${id} 缺工具，已自动排入重置`)
+    return 'pending'
+  }
   tick(id: string): void {
     if (this.closed || this.jobs.has(id)) return
     const record = this.owner.store.reset(id)

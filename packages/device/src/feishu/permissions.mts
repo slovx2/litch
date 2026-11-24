@@ -49,10 +49,13 @@ export const FEISHU_CALLBACKS = ['card.action.trigger'] as const
 export const SELF_MANAGE_SCOPE = 'application:application:self_manage'
 export const PATCH_SCOPE = 'application:application:patch'
 
-/** 创建向导的 addons 参数：清单 JSON 经 gzip 后 base64url，去掉末尾的 = */
+/**
+ * 创建向导的 addons 参数：清单 JSON 经 gzip 后 base64url，去掉末尾的 =。
+ * 权限分 tenant（机器人身份）和 user（用户身份）两组，和飞书 CLI 补权限链接的清单格式一致
+ */
 export function registrationAddons(): string {
   const manifest = {
-    scopes: { tenant: [...FEISHU_SCOPES] },
+    scopes: { tenant: [...FEISHU_SCOPES], user: [...FEISHU_USER_SCOPES] },
     events: { items: { tenant: [...FEISHU_EVENTS] } },
     callbacks: { items: [...FEISHU_CALLBACKS] },
     preset: false,

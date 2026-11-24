@@ -123,6 +123,8 @@ export class DeviceFeishuService {
     (appId: string, data: Record<string, unknown>) => Promise<unknown> | unknown
   > = {}
   private started = false
+  /** 应用绑到（或改绑到）这位经理之后调；设备在这里给经理装上飞书工具 */
+  managerBound: ((managerId: string) => void) | null = null
 
   constructor(options: DeviceFeishuOptions) {
     this.options = options
@@ -615,8 +617,21 @@ export class DeviceFeishuService {
     })
     this.reconcile(appId)
     this.changed(appId)
-    void this.check(appId).catch(() => undefined)
+    void this.inspectNew(appId, !!extra.creatorOpenId).catch((error: Error) =>
+      this.options.log(`飞书应用 ${appId} 自检或补申请没完成：${error.message}`),
+    )
     return this.view(record)
+  }
+
+  /**
+   * 新加的应用先自检一次。向导建的应用是 Litch 刚建的，清单里的权限飞书没开全（比如用户身份权限）时
+   * 直接补申请并提交发布，再自检一次；手动填的应用只自检，补申请由用户在界面上点
+   */
+  private async inspectNew(appId: string, created: boolean): Promise<void> {
+    const app = await this.check(appId)
+    if (!created || app.capability?.state !== 'missing') return
+    await this.upgrade(appId, `registration-${appId}`, 'device')
+    await this.check(appId)
   }
 
   async configure(appId: string, appSecret: string, operationId: string): Promise<FeishuApp> {
@@ -695,6 +710,7 @@ export class DeviceFeishuService {
     })
     this.reconcile(next.appId)
     this.changed(next.appId)
+    if (params.managerId) this.managerBound?.(params.managerId)
     return this.view(next)
   }
 
@@ -722,7 +738,11 @@ export class DeviceFeishuService {
     return this.saveCapability(appId, capability)
   }
 
-  async upgrade(appId: string, operationId: string): Promise<FeishuApp> {
+  async upgrade(
+    appId: string,
+    operationId: string,
+    by: 'admin' | 'device' = 'admin',
+  ): Promise<FeishuApp> {
     const done = this.store.operation<{ appId: string }>('upgrade', operationId)
     if (done) return this.app(done.appId)
     const api = this.api(appId) ?? fail('feishu_app_inactive')
@@ -735,14 +755,17 @@ export class DeviceFeishuService {
         fail('feishu_upgrade_forbidden')
       return fail('feishu_upgrade_failed')
     }
-    const app = this.saveCapability(appId, capability, capability.publish ? operationId : undefined)
-    return app
+    return this.saveCapability(
+      appId,
+      capability,
+      capability.publish ? { operationId, by } : undefined,
+    )
   }
 
   private saveCapability(
     appId: string,
     capability: FeishuAppRecord['capability'],
-    operationId?: string,
+    submitted?: { operationId: string; by: 'admin' | 'device' },
   ): FeishuApp {
     const now = this.now()
     const next = this.store.transaction(() => {
@@ -750,11 +773,11 @@ export class DeviceFeishuService {
       // 自检结果不是用户改的配置，不升版本号，免得和正在进行的修改冲突
       const updated = { ...app, capability }
       this.store.saveApp(updated)
-      if (operationId) {
-        this.store.saveOperation('upgrade', operationId, { appId })
+      if (submitted) {
+        this.store.saveOperation('upgrade', submitted.operationId, { appId })
         this.store.audit(appId, now, {
           action: 'app_upgrade_submitted',
-          by: 'admin',
+          by: submitted.by,
           detail: { versionId: capability?.publish?.versionId ?? null },
         })
       }
