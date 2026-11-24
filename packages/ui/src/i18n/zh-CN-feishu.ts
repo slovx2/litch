@@ -384,7 +384,7 @@ export const zhFeishu = {
   'feishu.grant.invite': '授权用户身份',
   'feishu.grant.invite.title': '授权 {name} 的用户身份？',
   'feishu.grant.invite.note':
-    '授权后，经理和它的工作线能以 {name} 的身份调用飞书，能读到此人在飞书里的所有会话。授权必须由本人在飞书里打开链接并点同意。',
+    '授权后，经理和它的工作线能以 {name} 的身份调用应用已开通的全部用户权限（不只是 Litch 申请的那些），包括读此人在飞书里的所有会话；发言仍按群的发言规则走审批，鉴权类接口一律拒绝。授权必须由本人在飞书里打开链接并点同意。',
   'feishu.grant.invite.yes': '发起授权',
   'feishu.grant.invite.prereq': '应用还缺用户身份的权限或设置，请先在能力自检里补申请。',
   'feishu.grant.revoke': '撤销授权',

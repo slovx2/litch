@@ -178,7 +178,7 @@ export const FEISHU_TOOLS: ClientToolNamespaceSpec = {
       type: 'function',
       name: FEISHU_TOOL.userGrantRequest,
       description:
-        'Start a user-identity grant for a bound user, so lark-cli can act as them (LITCH_FEISHU_AS_USER=<name> lark-cli ...). Returns a link and code that only that person can approve in Feishu; pass them on to that person. Starting again voids the previous link. After granting, lark-cli can read all of their Feishu chats; say so when you ask.',
+        'Start a user-identity grant for a bound user, so lark-cli can act as them (LITCH_FEISHU_AS_USER=<name> lark-cli ...). Returns a link and code that only that person can approve in Feishu; pass them on to that person. Starting again voids the previous link. After granting, lark-cli can act as them with every user permission the app has enabled (not only those Litch requests), including reading all of their Feishu chats; sending still follows the chat approval rules and auth endpoints are refused. Say so when you ask.',
       inputSchema: object(
         {
           user,

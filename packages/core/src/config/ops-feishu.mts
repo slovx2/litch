@@ -525,8 +525,8 @@ const GRANT_OPS: Record<string, OpSpec> = {
         ctx,
         ctx.nameOf(device),
         ctx.say(
-          `给“${target.name || target.openId}”发起用户身份授权；本人同意后，经理能以他的身份调飞书接口，并能读到他在飞书里的所有会话。`,
-          `Start a user-identity grant for “${target.name || target.openId}”; once they approve, the manager can call Feishu as them and read all of their Feishu chats.`,
+          `给“${target.name || target.openId}”发起用户身份授权；本人同意后，经理能以他的身份调用应用已开通的全部用户权限（不只是 Litch 申请的那些），包括读他在飞书里的所有会话；发言仍走审批，鉴权类接口拒绝。`,
+          `Start a user-identity grant for “${target.name || target.openId}”; once they approve, the manager can act as them with every user permission the app has enabled (not only those Litch requests), including reading all of their Feishu chats; sending still goes through approval and auth endpoints are refused.`,
         ),
       )
       const data = await ctx.run('feishu.grant.invite', {

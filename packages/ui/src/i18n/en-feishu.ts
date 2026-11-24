@@ -398,7 +398,7 @@ export const enFeishu: Record<keyof typeof zhFeishu, Entry> = {
   'feishu.grant.invite': 'Grant user identity',
   'feishu.grant.invite.title': 'Request user identity from {name}?',
   'feishu.grant.invite.note':
-    'Once granted, the manager and its worklines can call Feishu as {name} and read all of their Feishu chats. Only they can approve, by opening the link in Feishu.',
+    'Once granted, the manager and its worklines can act as {name} with every user permission the app has enabled (not only the ones Litch requests), including reading all of their Feishu chats. Sending messages still follows each chat’s approval rules, and auth endpoints are always refused. Only they can approve, by opening the link in Feishu.',
   'feishu.grant.invite.yes': 'Request',
   'feishu.grant.invite.prereq':
     'The app is missing user scopes or settings. Request them under Capability check first.',
