@@ -261,6 +261,8 @@ export const enExternal: Record<keyof typeof zhExternal, Entry> = {
   'ext.reason.manual': 'Handled manually',
   'ext.reason.external_closed': 'Closed on GitHub',
   'ext.reason.external_merged': 'Merged on GitHub',
+  'ext.reason.terminal_issue': 'Original issue ended',
+  'ext.reason.trigger_invalid': 'Trigger no longer valid',
   'ext.inbox.tab': 'GitHub',
   'ext.inbox.pending': 'To triage',
   'ext.inbox.processed': 'Processed',

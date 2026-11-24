@@ -256,6 +256,8 @@ export const zhExternal = {
   'ext.reason.manual': '人工处置',
   'ext.reason.external_closed': 'GitHub 已关闭',
   'ext.reason.external_merged': 'GitHub 已合并',
+  'ext.reason.terminal_issue': '原事项已结束',
+  'ext.reason.trigger_invalid': '触发已失效',
   // 经理收件箱
   'ext.inbox.tab': 'GitHub',
   'ext.inbox.pending': '待分拣',

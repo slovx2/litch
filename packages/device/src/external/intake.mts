@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import {
   type ExternalEvent,
   type ExternalInboxEvent,
+  type ExternalIntake,
   type ExternalRepo,
   type ExternalSource,
   externalSubjectKey,
@@ -132,6 +133,26 @@ export function evidenceWithdrawn(
       later.contentVersion !== event.contentVersion
     )
   })
+}
+
+/** 候选里的证据都已失效（编辑、删除、撤销）时设备收尾的原因。 */
+export const INTAKE_TRIGGER_INVALID = 'trigger_invalid'
+const WITHDRAWAL_REASONS = new Set(['trigger_withdrawn', 'edited_content', 'evidence_withdrawn'])
+
+/** 每条证据都已确定失效才收尾；查不到、限流等不确定的情况保留给经理分拣。 */
+export function settleWithdrawnIntake(
+  store: ExternalStore,
+  intake: ExternalIntake,
+  at: number,
+): ExternalIntake {
+  if (intake.status !== 'pending_triage') return intake
+  const withdrawn = intake.eventKeys.every((key) => {
+    const row = store.inboxEvent(key)
+    if (!row || row.intakeId !== intake.intakeId) return false
+    const event = store.routingEvidence(row)?.event
+    return !event || evidenceWithdrawn(store, row, event)
+  })
+  return withdrawn ? store.obsoleteIntake(intake, INTAKE_TRIGGER_INVALID, at) : intake
 }
 
 export class ExternalIntakeService {
@@ -369,7 +390,17 @@ export class ExternalIntakeService {
   process(eventKey: string, at: number): Promise<ExternalInboxEvent | null> {
     const existing = this.inFlight.get(eventKey)
     if (existing) return existing
-    const job = this.classify(eventKey, at).finally(() => this.inFlight.delete(eventKey))
+    const job = this.classify(eventKey, at)
+      .then((row) => {
+        // 编辑、删除或撤销可能让同主题待分拣里的原触发全部失效。
+        if (row && WITHDRAWAL_REASONS.has(row.reason ?? ''))
+          this.store.transaction(() => {
+            for (const intake of this.store.pendingIntakes(row.subjectKey, row.sourceId))
+              settleWithdrawnIntake(this.store, intake, at)
+          })
+        return row
+      })
+      .finally(() => this.inFlight.delete(eventKey))
     this.inFlight.set(eventKey, job)
     return job
   }
@@ -513,8 +544,9 @@ export class ExternalIntakeService {
         const manager = this.store.manager.manager(ref.managerId)
         if (!issue || !routeManagerMatches(manager, repo))
           return this.patch(row, { ...patch, status: 'processed', reason: 'bound_target_inactive' })
+        // 已结束事项上的明确请求回到待分拣并照常提醒，由经理决定重开或另建后续事项。
         if (isTerminalIssue(issue) && trigger)
-          return this.collect(row, { ...patch, reason: 'terminal_issue' }, at, false)
+          return this.collect(row, { ...patch, reason: 'terminal_issue' }, at, true)
         const followUpOff =
           issue.followUp.state !== 'on' ||
           this.store.issueFollowUpOffAt(ref.managerId, ref.issueId, row.observedAt)
@@ -612,8 +644,15 @@ export class ExternalIntakeService {
     const queued = this.store.inboxEvent(row.eventKey) ?? next
     if (intake.status === 'pending_triage' && auto && at < expires) {
       const previous = intake.deliveryId ? this.store.queue.deliveryGroup(intake.deliveryId) : null
-      // 同一待分拣已经送过或发送不明；新证据仍能从原候选读取。
-      if (!previous || previous.state === 'queued' || previous.state === 'blocked') {
+      // 已送达仍未分拣的候选，新加入的有效触发另开一组提醒（只带新事件）；
+      // 正在发送或发送不明时不重复提醒，新证据仍能从原候选读取。
+      const added = row.intakeId !== intake.intakeId
+      if (
+        !previous ||
+        previous.state === 'queued' ||
+        previous.state === 'blocked' ||
+        (previous.state === 'confirmed' && added)
+      ) {
         const group = this.queue(queued, 'triage', at)
         if (intake.deliveryId !== group)
           this.store.updateIntakeDelivery(intake.intakeId, intake.revision, group)

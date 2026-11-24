@@ -954,6 +954,14 @@ After a reminder is delivered, the intake remains pending. When polling confirms
 
 At acceptance, Litch rechecks the original mention it recorded. A bot reply or reaction that only changes the post's update time does not prevent acceptance. If the body differs from the one originally recorded, that mention can no longer authorize the request.
 
+提醒送达后仍未分拣的候选，又加入新的有效触发（例如新的 @ 或催促）时，再提醒经理一次，提醒只带新加入的事件；正在发送或结果不明时不重复提醒。已解决或已关闭的 X-n 上有人明确提出新请求（@、指派、标签等）时，同样回到待分拣并提醒经理，标明原 X-n 及其状态，原因显示“原事项已结束”；经理决定重开原 X-n 后并入，或另建关联原 X-n 的后续议题，原 GitHub 绑定不变。这些提醒都受 24 小时时效和限额约束：触发事件超过 24 小时的只留待人工分拣，不提醒。
+
+原触发被编辑、删除或撤销后，同一候选里后来加入的有效触发仍可作为接单依据。接单失败时，报错逐条写明每个触发为什么不再成立以及怎么办。全部触发都已确定失效时，候选移到“已处理”，原因显示“触发已失效”；请求人需要重新发评论或重新触发，作为新候选进来。原文暂时取不到等不确定的情况保留在待分拣，经理可稍后重试或直接忽略；没有有效触发时忽略照常可用，但不能附带回帖。
+
+If an intake is still pending after its reminder was delivered and a new valid trigger joins it (for example another mention or a nudge), Litch reminds the manager once more with only the new events. It does not remind again while a delivery is sending or its outcome is unknown. An explicit request (mention, assignment, label and so on) on a resolved or closed X-n also returns to triage with a reminder that names the original X-n and its status, shown as **Original issue ended**. The manager can reopen the X-n and merge into it, or create a follow-up issue linked to it; the GitHub binding stays unchanged. These reminders keep the 24-hour limit and rate limits: triggers older than 24 hours wait for manual triage without a reminder.
+
+When the original trigger is edited, deleted or withdrawn, a later valid trigger in the same intake can still authorize acceptance. If acceptance fails, the error lists why each trigger no longer qualifies and what to do. When every trigger is permanently invalid, Litch moves the intake to **Processed** with the reason **Trigger no longer valid**; the requester needs to post a new comment or trigger, which arrives as a new intake. Uncertain cases, such as GitHub temporarily not returning the original, stay pending so the manager can retry or ignore. Ignoring works without a valid trigger but cannot include a reply.
+
 外部议题保留 GitHub 原帖、接单依据和回写回执；来自 GitHub 评论的决策答复保留原评论引用。回写待对账时，应先核对 GitHub 原帖和设备记录。
 
 经理完成已接单的 GitHub 请求或交回人工评审时，应在原 issue 或 PR 回复处理结果，说明改动、相关 PR 或提交、验证情况和剩余事项。自动状态评论和内部看板记录不能替代结果回复。若权限不允许或回复失败，经理应在看板记录原因并告诉用户；排队中的回复不代表已发送，也不因此获得合并、关闭或部署权限。

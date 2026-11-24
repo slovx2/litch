@@ -158,9 +158,32 @@ test('绑定优先；owner 数字 ID 无需提及；暂停、换线程、终态�
   assert.equal(status?.reason, 'terminal_issue')
   assert.equal(ordinary?.status, 'processed')
   assert.equal(explicit?.status, 'pending_triage')
+  assert.equal(explicit?.issueId, issueId)
+  f.clock.at += 35
+  // 已结束事项上的明确请求照普通待分拣提醒，并标明原事项及其状态。
+  assert.equal(await f.dispatch.drain('m1'), true)
+  const reminder = parseSessionEvent(f.sent[1]!.text).event
+  assert.equal(reminder?.kind, 'manager-external-triage')
+  const payload = JSON.parse(reminder?.manager?.text ?? '{}')
+  assert.deepEqual(payload.boundIssue, { issueId, status: 'resolved' })
+  assert.match(payload.note, new RegExp(`relatedIssueId ${issueId}`))
+  assert.equal(f.store.ref(comment.targetEvidence.subject)?.issueId, issueId)
+  // 超过提醒时效的明确请求只留待人工分拣。
+  const intakeId = explicit!.intakeId!
+  f.manager.saveIssue('m1', issueId, {
+    ...(f.manager.issue('m1', issueId) as object),
+    status: 'closed',
+  })
+  const [stale] = await f.collect(
+    f.event('labeled', {
+      at: f.clock.at - NOTIFY_TTL - 1,
+      target: { labelId: '51', labelName: 'litch' },
+    }),
+  )
+  assert.equal(stale?.intakeId, intakeId)
   f.clock.at += 35
   assert.equal(await f.dispatch.drain('m1'), false)
-  assert.equal(f.store.ref(comment.targetEvidence.subject)?.issueId, issueId)
+  assert.equal(f.sent.length, 2)
 })
 
 test('聚合、审批停留和发送前二次准入；过载不丢收件箱', async (t) => {
@@ -334,4 +357,41 @@ test('关跟进期间已采集的事件，恢复后才分拣也不补发', async
   })
   assert.equal(f.store.inboxEvent(event.externalEventKey)?.reason, 'follow_up_off')
   assert.equal(f.store.queue.deliveryGroups('m1', 'queued').length, 0)
+})
+
+test('已提醒仍未分拣的待分拣，新的有效触发再提醒一次，只带新事件', async (t) => {
+  const f = externalFixture(t)
+  const [first] = await f.collect(f.event('assigned', { target: { assigneeUserId: '200' } }))
+  const intakeId = first!.intakeId!
+  f.clock.at += 35
+  assert.equal(await f.dispatch.drain('m1'), true)
+  const firstGroup = f.store.intake(intakeId)!.deliveryId!
+  assert.equal(f.store.queue.deliveryGroup(firstGroup)?.state, 'confirmed')
+  assert.equal(await f.dispatch.drain('m1'), false)
+
+  f.clock.at += 60
+  const mention = { publication: 'published', mentionsBot: true, mentionedBotId: '200' } as const
+  const [nudge, second] = await f.collect(
+    f.event('comment', { target: mention, contentVersion: 'nudge' }),
+    f.event('comment', { target: mention, contentVersion: 'nudge-again' }),
+  )
+  assert.equal(nudge?.intakeId, intakeId)
+  assert.equal(second?.intakeId, intakeId)
+  const renotify = f.store.intake(intakeId)!.deliveryId!
+  assert.notEqual(renotify, firstGroup)
+  assert.deepEqual(f.store.queue.deliveryGroup(renotify)?.eventKeys, [
+    nudge!.eventKey,
+    second!.eventKey,
+  ])
+  f.clock.at += 35
+  assert.equal(await f.dispatch.drain('m1'), true)
+  assert.equal(f.sent.length, 2)
+  const payload = JSON.parse(parseSessionEvent(f.sent[1]!.text).event?.manager?.text ?? '{}')
+  assert.equal(payload.groupId, renotify)
+  assert.equal(payload.count, 2)
+  // 重复处理同一事件不再提醒。
+  await f.intake.process(nudge!.eventKey, f.clock.at)
+  f.clock.at += 35
+  assert.equal(await f.dispatch.drain('m1'), false)
+  assert.equal(f.sent.length, 2)
 })

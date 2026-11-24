@@ -114,6 +114,8 @@ export const KNOWN_REASONS = [
   ...TRIAGE_REASONS,
   'external_closed',
   'external_merged',
+  'terminal_issue',
+  'trigger_invalid',
   'manager_tools_outdated',
   'manager_inactive',
   'manager_unassigned',
