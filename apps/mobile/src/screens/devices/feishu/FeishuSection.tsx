@@ -1,11 +1,12 @@
 // 设备详情的“飞书”一节：每个应用一行（头像、机器人名、分配的经理、连接状态），点进应用详情；
-// 小标题右边的 + 进添加应用。设备服务不支持（没有 litchFeishu）不出这一节。
+// 小标题右边的 + 进添加应用（这条连接不是设备管理员时不可点，写明原因）。设备服务不支持（没有 litchFeishu）不出这一节。
 import type { DeviceView } from '@litch/core'
 import { Image, StyleSheet, Text, View } from 'react-native'
 import {
   connectionReason,
   type FeishuApp,
   shownState,
+  writeBlock,
 } from '../../../../../../packages/ui/src/feishu/model.ts'
 import { type Translator, useT } from '../../../ui/i18n'
 import { Row, SectionLabel } from '../../../ui/kit/controls'
@@ -61,6 +62,7 @@ export function FeishuSection({
   const managers = useDeviceManagers(device.id)
   if (!supported) return null
   const online = device.connection === 'online'
+  const block = writeBlock(online, view?.admin)
   const apps = view?.apps.value ?? null
   const error = view?.apps.error ?? null
   const managerName = (id: string | null) =>
@@ -72,7 +74,7 @@ export function FeishuSection({
           <IconButton
             icon="plus"
             label={t('feishu.add')}
-            disabled={!online}
+            disabled={block !== null}
             testID="feishu:add"
             onPress={onAdd}
           />
@@ -80,6 +82,9 @@ export function FeishuSection({
       >
         {t('feishu.title')}
       </SectionLabel>
+      {block === 'readOnly' ? (
+        <Text style={[styles.note, { color: c.ink3 }]}>{t('feishu.readOnly')}</Text>
+      ) : null}
       {error ? (
         <Text style={[styles.note, { color: c.err }]}>
           {error.text ? t.text(error.text) : error.message}

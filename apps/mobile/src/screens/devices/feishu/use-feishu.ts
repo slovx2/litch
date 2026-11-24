@@ -1,8 +1,9 @@
-// 手机上飞书的数据入口：直接订阅核心的 feishuDevice / feishuRegistration 主题（核心负责断线保留、重连重读），
+// 手机上飞书的数据入口：直接订阅核心的 feishuDevice / feishuRegistration / feishuChats 主题（核心负责断线保留、重连重读），
 // 同设备在用的经理从数据副本取。
 import { keys, type ManagerView } from '@litch/core'
 import { useEffect, useMemo, useState } from 'react'
 import type {
+  FeishuChatsView,
   FeishuDeviceView,
   FeishuRegistrationView,
 } from '../../../../../../packages/core/src/projection/feishu.mts'
@@ -48,6 +49,29 @@ export function useFeishuRegistration(
     )
   }, [channel, deviceId, registrationId])
   return registrationId ? view : undefined
+}
+
+/** 一个应用的机器人所在的群 */
+export function useFeishuChats(
+  deviceId: string,
+  appId: string,
+  enabled: boolean,
+): FeishuChatsView | undefined {
+  const channel = useChannel()
+  const [view, setView] = useState<FeishuChatsView | undefined>()
+  useEffect(() => {
+    setView(undefined)
+    if (!enabled) return
+    return channel.subscribe(
+      { kind: 'feishuChats', deviceId, appId },
+      {
+        snapshot: (value) => setView(value),
+        delta: () => {},
+        error: () => setView(undefined),
+      },
+    )
+  }, [channel, deviceId, appId, enabled])
+  return enabled ? view : undefined
 }
 
 /** 这台设备上在用的经理（选经理用）。经理视图变了跟着重画：订经理列表，名字按需从副本取 */

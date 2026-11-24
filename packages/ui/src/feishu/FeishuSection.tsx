@@ -1,5 +1,5 @@
 // 设备详情里“飞书”一节：每个应用一行（头像、机器人名、分配的经理、连接状态点），点一行进应用详情；
-// 标题行的 + 打开添加向导。设备服务不支持（没有 litchFeishu）不出这一节。
+// 标题行的 + 打开添加向导（这条连接不是设备管理员时不可点，写明原因）。设备服务不支持（没有 litchFeishu）不出这一节。
 import type { DeviceView } from '@litch/core'
 import { useState } from 'react'
 import { useT } from '../app/appearance.ts'
@@ -8,7 +8,7 @@ import { useDeviceManagers } from '../external/data.ts'
 import { Dot } from '../external/parts.tsx'
 import { AddApp } from './AddApp.tsx'
 import { useFeishuDevice } from './data.ts'
-import { connectionReason, type FeishuApp, STATE_TONE, shownState } from './model.ts'
+import { connectionReason, type FeishuApp, STATE_TONE, shownState, writeBlock } from './model.ts'
 
 /** 机器人头像：桌面渲染进程不加载外部图片，画名字首字 */
 export function BotAvatar({ app }: { app: Pick<FeishuApp, 'name' | 'appId'> }) {
@@ -42,6 +42,7 @@ export function FeishuSection({
   const [adding, setAdding] = useState(false)
   if (!supported) return null
   const online = device.connection === 'online'
+  const block = writeBlock(online, view?.admin)
   const apps = view?.apps.value ?? null
   const error = view?.apps.error ?? null
   const managerName = (id: string | null) =>
@@ -56,14 +57,19 @@ export function FeishuSection({
           type="button"
           className="ibtn"
           data-act="feishu-add"
-          title={t('feishu.add')}
+          title={block === 'readOnly' ? t('feishu.readOnly') : t('feishu.add')}
           aria-label={t('feishu.add')}
-          disabled={!online}
+          disabled={block !== null}
           onClick={() => setAdding(true)}
         >
           <Icon name="plus" small />
         </button>
       </div>
+      {block === 'readOnly' ? (
+        <div className="devp-note" data-feishu-read-only>
+          {t('feishu.readOnly')}
+        </div>
+      ) : null}
       {error ? (
         <div className="devp-note err" role="alert">
           {error.text ? t.text(error.text) : error.message}
@@ -105,7 +111,7 @@ export function FeishuSection({
           })}
         </ul>
       )}
-      {adding && online ? (
+      {adding && block === null ? (
         <AddApp
           deviceId={device.id}
           onClose={() => setAdding(false)}

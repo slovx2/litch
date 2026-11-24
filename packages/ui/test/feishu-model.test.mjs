@@ -113,3 +113,177 @@ test('向导结束语：error 带原因时按原因说', () => {
   assert.equal(m.secondsLeft(100, 40_500), 59)
   assert.equal(m.secondsLeft(100, 200_000), 0)
 })
+
+test('写权限：离线优先；admin 为 false 只读，还没读到（null）照常可写', () => {
+  assert.equal(m.writeBlock(false, true), 'offline')
+  assert.equal(m.writeBlock(false, false), 'offline')
+  assert.equal(m.writeBlock(true, false), 'readOnly')
+  assert.equal(m.writeBlock(true, true), null)
+  assert.equal(m.writeBlock(true, null), null)
+  assert.equal(m.writeBlock(true, undefined), null)
+})
+
+test('群的原因代码：认得出、该重读的会重读', () => {
+  for (const code of ['chat_unavailable', 'external_unconfirmed', 'members_failed', 'sync_failed'])
+    assert.equal(m.feishuReason({ message: `feishu_${code}` }), code)
+  assert.equal(m.staleReason('revision_conflict'), true)
+  assert.equal(m.staleReason('chat_accessed'), true)
+  assert.equal(m.staleReason('chat_not_accessed'), true)
+  assert.equal(m.staleReason('chat_unavailable'), false)
+  assert.equal(m.staleReason(null), false)
+})
+
+const access = (patch = {}) => ({
+  speech: 'free',
+  wakeBound: true,
+  wakers: [{ openId: 'ou_a', name: '甲' }],
+  retentionDays: 90,
+  reviewTtlHours: 24,
+  accessAt: 0,
+  ...patch,
+})
+const chat = (patch = {}) => ({
+  appId: 'cli_a',
+  chatId: 'oc_a',
+  revision: 4,
+  name: '项目群',
+  external: false,
+  status: 'normal',
+  botPresent: true,
+  access: null,
+  updatedAt: 0,
+  ...patch,
+})
+
+test('群的状态与排序：可用且已接入的在前，解散、机器人不在的在后', () => {
+  assert.equal(m.chatAccessState(chat()), 'none')
+  assert.equal(m.chatAccessState(chat({ access: access({ speech: 'approval' }) })), 'approval')
+  assert.equal(m.chatUnavailable(chat()), null)
+  assert.equal(m.chatUnavailable(chat({ botPresent: false })), 'botLeft')
+  assert.equal(m.chatUnavailable(chat({ status: 'dissolved', botPresent: false })), 'dissolved')
+  const sorted = m.sortChats([
+    chat({ chatId: 'oc_left', botPresent: false, access: access() }),
+    chat({ chatId: 'oc_new' }),
+    chat({ chatId: 'oc_on', access: access() }),
+    chat({ chatId: 'oc_new2' }),
+  ])
+  assert.deepEqual(
+    sorted.map((one) => one.chatId),
+    ['oc_on', 'oc_new', 'oc_new2', 'oc_left'],
+  )
+})
+
+test('接入初值：不预选发言模式，外部群预选审批；默认值来自协议常量', () => {
+  const plain = m.chatDraft(chat())
+  assert.equal(plain.speech, null)
+  assert.equal(plain.wakeBound, true)
+  assert.equal(plain.retentionDays, '90')
+  assert.equal(plain.reviewTtlHours, '24')
+  assert.deepEqual(m.draftProblems(plain, chat()), ['speech'])
+  const external = chat({ external: true })
+  const draft = m.chatDraft(external)
+  assert.equal(draft.speech, 'approval')
+  // 外部群不勾确认不能提交
+  assert.deepEqual(m.draftProblems(draft, external), ['external'])
+  assert.equal(m.accessParams(draft, external), null)
+  const confirmed = { ...draft, confirmExternal: true }
+  assert.deepEqual(m.draftProblems(confirmed, external), [])
+  assert.deepEqual(m.accessParams(confirmed, external), {
+    appId: 'cli_a',
+    chatId: 'oc_a',
+    expectedRevision: 4,
+    speech: 'approval',
+    confirmExternal: true,
+    wakeBound: true,
+    wakers: [],
+    retentionDays: 90,
+    reviewTtlHours: 24,
+  })
+})
+
+test('数字校验：只认范围内的整数；审批过期时间只在审批发言时校验', () => {
+  const range = { min: 1, max: 168 }
+  assert.equal(m.boundedInt(' 12 ', range), 12)
+  assert.equal(m.boundedInt('0', range), null)
+  assert.equal(m.boundedInt('169', range), null)
+  assert.equal(m.boundedInt('1.5', range), null)
+  assert.equal(m.boundedInt('', range), null)
+  const free = { ...m.chatDraft(chat()), speech: 'free', reviewTtlHours: 'x' }
+  assert.deepEqual(m.draftProblems(free, chat()), [])
+  // 自由发言时填坏的过期时间不进参数，沿用默认值
+  assert.equal(m.accessParams(free, chat()).reviewTtlHours, 24)
+  assert.deepEqual(m.draftProblems({ ...free, speech: 'approval' }, chat()), ['ttl'])
+  assert.deepEqual(m.draftProblems({ ...free, retentionDays: '3651' }, chat()), ['retention'])
+})
+
+test('群设置：只带改了的字段，名单按集合比较', () => {
+  const current = access({
+    wakers: [
+      { openId: 'ou_a', name: '甲' },
+      { openId: 'ou_b', name: '乙' },
+    ],
+  })
+  const draft = m.chatDraft(chat({ access: current }))
+  assert.deepEqual(m.chatChanges(draft, current), {})
+  // 名单只换了顺序：不算改
+  assert.deepEqual(m.chatChanges({ ...draft, wakers: [...draft.wakers].reverse() }, current), {})
+  assert.deepEqual(m.chatChanges({ ...draft, speech: 'approval', retentionDays: '30' }, current), {
+    speech: 'approval',
+    retentionDays: 30,
+  })
+  assert.deepEqual(
+    m.chatChanges(
+      { ...draft, wakeBound: false, wakers: [{ openId: 'ou_c', name: '丙' }] },
+      current,
+    ),
+    { wakeBound: false, wakers: ['ou_c'] },
+  )
+  assert.deepEqual(m.chatChanges({ ...draft, reviewTtlHours: '48' }, current), {
+    reviewTtlHours: 48,
+  })
+})
+
+test('成员选择：已选但不在成员里的排前，可搜，到上限不再加', () => {
+  const members = [
+    { openId: 'ou_a', name: 'Alice' },
+    { openId: 'ou_b', name: '乙' },
+  ]
+  const selected = [
+    { openId: 'ou_gone', name: '旧成员' },
+    { openId: 'ou_a', name: 'Alice' },
+  ]
+  assert.deepEqual(
+    m.memberChoices(members, selected).map((one) => [one.person.openId, one.listed]),
+    [
+      ['ou_gone', false],
+      ['ou_a', true],
+      ['ou_b', true],
+    ],
+  )
+  assert.deepEqual(
+    m.memberChoices(members, selected, 'ALI').map((one) => one.person.openId),
+    ['ou_a'],
+  )
+  // 成员还没读到：只列已选的，不标“不在群成员中”
+  assert.deepEqual(
+    m.memberChoices(null, selected).map((one) => one.listed),
+    [true, true],
+  )
+  assert.deepEqual(
+    m.toggleWaker(selected, members[0]).map((one) => one.openId),
+    ['ou_gone'],
+  )
+  assert.equal(m.toggleWaker(selected, members[1]).length, 3)
+  const full = Array.from({ length: m.FEISHU_WAKERS_MAX }, (_, i) => ({
+    openId: `ou_${i}`,
+    name: `${i}`,
+  }))
+  assert.equal(m.toggleWaker(full, members[1]).length, m.FEISHU_WAKERS_MAX)
+  assert.deepEqual(
+    m.draftProblems(
+      { ...m.chatDraft(chat()), speech: 'free', wakers: [...full, members[1]] },
+      chat(),
+    ),
+    ['wakers'],
+  )
+})

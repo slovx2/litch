@@ -1,6 +1,7 @@
-// 飞书应用详情（盖住设备详情的一页）：概况（连接、启用、经理）→ 能力自检 → App Secret → 移除。
+// 飞书应用详情（盖住设备详情的一页）：概况（连接、启用、经理）→ 能力自检 → 群 → App Secret → 移除。
 // 数据来自这台设备的 feishuDevice 快照；写操作带 expectedRevision，冲突时重读这一个应用并提示重试。
-// 后续里程碑的群、私聊绑定、发件各是一块 ext-block，排在 App Secret 之前。
+// 这条连接不是设备管理员（admin 为 false）时写操作都不可点，页首写明原因。
+// 后续里程碑的私聊绑定、发件各是一块 ext-block，排在 App Secret 之前。
 import type { DeviceView } from '@litch/core'
 import { useCallback, useEffect, useState } from 'react'
 import { useT } from '../app/appearance.ts'
@@ -10,10 +11,17 @@ import { useServices } from '../app/services.tsx'
 import { useDeviceManagers } from '../external/data.ts'
 import { Field, Switch } from '../external/parts.tsx'
 import { AppCapability } from './AppCapability.tsx'
+import { AppChats } from './AppChats.tsx'
 import { AppSecret } from './AppSecret.tsx'
 import { useFeishuDevice, useFeishuRun } from './data.ts'
 import { BotAvatar, StateDot } from './FeishuSection.tsx'
-import { connectionReason, type FeishuApp, managerOptions, shownState } from './model.ts'
+import {
+  connectionReason,
+  type FeishuApp,
+  managerOptions,
+  shownState,
+  writeBlock,
+} from './model.ts'
 
 export function AppPage({
   device,
@@ -83,7 +91,9 @@ export function AppPage({
 
   const options = apps ? managerOptions(apps, managers, appId) : []
   const reason = app ? connectionReason(app) : null
-  const writable = online && !act.busy
+  const block = writeBlock(online, view?.admin)
+  const writable = block === null && !act.busy
+  const denied = block === 'readOnly' ? t('feishu.readOnly') : undefined
   const snapshotError = view?.apps.error ?? null
   return (
     <div className="arch-page devp mng-page ext-page" data-feishu-page={appId}>
@@ -123,6 +133,11 @@ export function AppPage({
               {t(view?.apps.fetchedAt ? 'feishu.offlineCached' : 'feishu.offline')}
             </div>
           ) : null}
+          {block === 'readOnly' ? (
+            <div className="devp-note" data-feishu-read-only>
+              {t('feishu.readOnly')}
+            </div>
+          ) : null}
           {snapshotError ? (
             <div className="devp-note err" role="alert">
               {snapshotError.text ? t.text(snapshotError.text) : snapshotError.message}
@@ -159,6 +174,7 @@ export function AppPage({
                     label={t('feishu.app.enabled')}
                     act="feishu-enabled"
                     disabled={!writable}
+                    title={denied}
                     onChange={(enabled) => void update({ enabled })}
                   />
                   <span className="ext-row-meta">{t('feishu.app.disableNote')}</span>
@@ -169,6 +185,7 @@ export function AppPage({
                     aria-label={t('feishu.app.manager')}
                     data-feishu-manager
                     value={app.managerId ?? ''}
+                    title={denied}
                     disabled={!writable}
                     onChange={(event) => void update({ managerId: event.target.value || null })}
                   >
@@ -186,14 +203,16 @@ export function AppPage({
                   ) : null}
                 </Field>
               </section>
-              <AppCapability deviceId={device.id} app={app} online={online} onApp={setFresh} />
-              <AppSecret deviceId={device.id} app={app} online={online} onApp={setFresh} />
+              <AppCapability deviceId={device.id} app={app} block={block} onApp={setFresh} />
+              <AppChats deviceId={device.id} appId={app.appId} block={block} />
+              <AppSecret deviceId={device.id} app={app} block={block} onApp={setFresh} />
               <section className="ext-block" data-feishu-remove>
                 <div className="ext-actions">
                   <button
                     type="button"
                     className="btn danger"
                     data-act="feishu-remove"
+                    title={denied}
                     disabled={!writable}
                     onClick={() => setRemoving(true)}
                   >

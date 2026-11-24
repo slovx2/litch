@@ -1,6 +1,6 @@
-// 一台设备上一个飞书应用的详情：连接状态、启用、分配经理、能力自检（检查、补申请、待审核）、App Secret 更新时间、移除。
-// 与桌面一致，只少“更换 App Secret”（秘密只在桌面输入，litch config 也不收）。写操作带 expectedRevision，冲突时重读并提示重试。
-// 后续里程碑的群、私聊绑定、发件各加一节，排在 App Secret 之前。
+// 一台设备上一个飞书应用的详情：连接状态、启用、分配经理、能力自检（检查、补申请、待审核）、群、App Secret 更新时间、移除。
+// 与桌面一致，只少“更换 App Secret”（秘密只在桌面输入，litch config 也不收）。写操作带 expectedRevision，冲突时重读并提示重试；
+// 这条连接不是设备管理员时写操作都不可点，页首写明原因。后续里程碑的私聊绑定、发件各加一节，排在 App Secret 之前。
 import { type DeviceView, keys } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useCallback, useState } from 'react'
@@ -15,6 +15,7 @@ import {
   managerOptions,
   missingGroups,
   pendingReview,
+  writeBlock,
 } from '../../../../../../packages/ui/src/feishu/model.ts'
 import type { RootStackParamList } from '../../../nav/routes'
 import { useChannel, useKey } from '../../../shell/services'
@@ -25,6 +26,7 @@ import { Confirm, Sheet } from '../../../ui/kit/overlays'
 import { Screen } from '../../../ui/kit/Screen'
 import { useTheme } from '../../../ui/theme'
 import { InfoLine } from '../parts'
+import { FeishuChats } from './FeishuChats'
 import { BotAvatar, stateColor, stateText } from './FeishuSection'
 import { useDeviceManagers, useFeishuDevice } from './use-feishu'
 
@@ -124,7 +126,8 @@ export function FeishuAppScreen({ route, navigation }: Props) {
     ? (options.find((one) => one.id === app.managerId)?.name ?? app.managerId)
     : t('feishu.unassigned')
   const capability = app.capability
-  const writable = online && busy === null
+  const block = writeBlock(online, view?.admin)
+  const writable = block === null && busy === null
   const note = [styles.note, { color: c.ink3, fontSize: font.size.meta }]
   return (
     <Screen
@@ -140,6 +143,11 @@ export function FeishuAppScreen({ route, navigation }: Props) {
           </Text>
         ) : null}
         {!online ? <Text style={note}>{t('feishu.offlineCached')}</Text> : null}
+        {block === 'readOnly' ? (
+          <Text style={note} testID="feishu:read-only">
+            {t('feishu.readOnly')}
+          </Text>
+        ) : null}
         <SectionLabel>{t('feishu.app.overview')}</SectionLabel>
         <Row
           left={<BotAvatar app={app} />}
@@ -225,6 +233,20 @@ export function FeishuAppScreen({ route, navigation }: Props) {
             </View>
           </View>
         ) : null}
+
+        <FeishuChats
+          deviceId={deviceId}
+          appId={appId}
+          online={online}
+          onOpen={(chat) =>
+            navigation.navigate('FeishuChat', {
+              deviceId,
+              appId,
+              chatId: chat.chatId,
+              title: chat.name || chat.chatId,
+            })
+          }
+        />
 
         <SectionLabel>{t('feishu.secret.title')}</SectionLabel>
         <InfoLine
