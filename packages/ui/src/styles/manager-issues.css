@@ -239,6 +239,15 @@
 .mg-issue[data-unread] .mg-paging-title {
   font-weight: 600;
 }
+.mg-issue-marks {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mg-issue-marks:empty {
+  display: none;
+}
 .mg-issue-dot {
   flex: none;
   width: 8px;
@@ -513,9 +522,6 @@ fieldset.mg-issue-status {
   font-size: calc(12.5px * var(--fs));
   color: var(--ink-2);
 }
-.mg-issue-talk-head .mg-issue-full {
-  margin-inline-start: auto;
-}
 .mg-issue-timeline {
   list-style: none;
   margin: 0;
@@ -638,20 +644,60 @@ fieldset.mg-issue-status {
 }
 
 /* ---------- 完整讨论页、抽屉 ---------- */
+/* 阅读页：占满控制台的筛选栏和列表区，内容按文章宽度居中（跟随对话区宽度，最宽 880） */
+[data-issue-full] {
+  min-height: 100%;
+}
+.mg-issue-thread[data-issue-thread="page"] {
+  width: 100%;
+  margin-top: 0;
+  max-width: min(var(--tr-max), 880px);
+  margin-inline: auto;
+  gap: 16px;
+}
+/* 顶栏吸在滚动区顶上：长正文读到一半也能返回、改状态 */
 .mg-issue-page-head {
-  display: flex;
-  align-items: flex-start;
+  position: sticky;
+  top: calc(-1 * var(--mg-scroll-pad, 0px));
+  z-index: 2;
+  display: grid;
   gap: 6px;
-  padding-bottom: 8px;
+  margin-top: calc(-1 * var(--mg-scroll-pad, 0px));
+  padding: var(--mg-scroll-pad, 0px) 0 10px;
+  background: var(--panel);
   border-bottom: 1px solid var(--line-1);
+}
+.mg-issue-back {
+  justify-self: start;
+  margin-inline-start: -6px;
+}
+.mg-issue-page-title {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
 }
 .mg-issue-page-head h2 {
   margin: 0;
-  font-size: calc(15px * var(--fs));
-  line-height: 1.4;
-}
-.mg-issue-page-head .ibtn {
   font-size: calc(18px * var(--fs));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.mg-issue-page-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.mg-issue-page-bar > .mg-issue-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mg-issue-page-bar > .mg-issue-controls {
+  flex: 0 0 auto;
+}
+[data-issue-thread="page"] .mg-issue-post {
+  font-size: calc(14px * var(--fs));
+  line-height: 1.7;
 }
 .mg-talk-pane [data-issue-thread="pane"] {
   margin-top: 0;

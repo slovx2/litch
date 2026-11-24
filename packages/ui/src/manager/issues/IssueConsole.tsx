@@ -1,5 +1,6 @@
 // 控制台按分类标签列 issue，默认决策；顶上是筛选栏（IssueFilterBar）；普通 issue 页签的新建按钮放在类别分段右端（actionSlot）。
 // 特殊 issue 展开后先是原来的快速处理区；决策草稿的提交条只有一份，固定在列表底部。
+// 普通 issue 不在列表里展开：点开、编号跳转、新建后都进全屏阅读页，占满筛选栏和列表这块区域，返回时筛选和滚动位置不变。
 import { managerBoardPages } from '@litch/core'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -28,7 +29,8 @@ import { clearIssueFilter, issueActiveFilterCount, normalizeIssueFilter } from '
 import { IssueCard } from './IssueCard.tsx'
 import { IssueFilterBar } from './IssueFilterBar.tsx'
 import { IssueQuick } from './IssueQuick.tsx'
-import { IssueThread } from './IssueThread.tsx'
+import { IssueBackButton, IssueThread } from './IssueThread.tsx'
+import { useIssueSeen } from './issue-seen.ts'
 
 /** 底部抽屉用 issue: 前缀的编号，免得旧帖子讨论（同样的 D-n）也往抽屉里放内容 */
 export const ISSUE_PANE_PREFIX = 'issue:'
@@ -42,6 +44,8 @@ const memory = new Map<
     filters: Partial<Record<ManagerIssueKind, ManagerIssueFilter>>
     open: ManagerIssueId | null
     full: ManagerIssueId | null
+    /** 进阅读页前列表的滚动位置，返回时恢复；null 表示不恢复 */
+    scroll: number | null
     /** 已经套用过的概览预设版本 */
     preset: number
   }
@@ -50,7 +54,7 @@ const remembered = (deviceId: string, managerId: string) => {
   const key = JSON.stringify([deviceId, managerId])
   let value = memory.get(key)
   if (!value) {
-    value = { filters: {}, open: null, full: null, preset: 0 }
+    value = { filters: {}, open: null, full: null, scroll: null, preset: 0 }
     memory.set(key, value)
   }
   return value
@@ -128,6 +132,8 @@ export function IssueConsole({
     setFullState(id)
     if (id) pane?.close()
   }
+  /** 看板的滚动容器：阅读页和列表共用 */
+  const scroller = () => root.current?.closest<HTMLElement>('.mg-body') ?? null
   const [error, setError] = useState('')
   const root = useRef<HTMLDivElement>(null)
   // 换页签：底部抽屉里别的类型的讨论、完整讨论页一起收起
@@ -135,10 +141,13 @@ export function IssueConsole({
   useEffect(() => {
     if (shownKind.current === kind) return
     shownKind.current = kind
-    saved.full = null
-    setFullState(null)
     pane?.close()
-  }, [kind, pane, saved])
+    // 编号跳转先开阅读页再切到它的类型，这时保留阅读页
+    if (saved.full && issues.details[saved.full]?.kind === kind) return
+    saved.full = null
+    saved.scroll = null
+    setFullState(null)
+  }, [kind, pane, saved, issues.details])
   const setFilter = useCallback(
     (next: ManagerIssueFilter, one = kind) => {
       saved.filters = { ...saved.filters, [one]: next }
@@ -154,6 +163,28 @@ export function IssueConsole({
     },
     [saved],
   )
+  /** 打开普通 issue 的全屏阅读页；从列表进来时记下滚动位置，返回时恢复 */
+  const openPage = (id: ManagerIssueId, fromList: boolean) => {
+    if (!saved.full) saved.scroll = fromList ? (scroller()?.scrollTop ?? null) : null
+    setFull(id)
+  }
+  const closePage = () => setFull(null)
+  const fullIssue = full ? issues.details[full] : undefined
+  useIssueSeen({ manager, issue: fullIssue, open: Boolean(fullIssue), disabled, commands })
+  // 进出阅读页：进去从顶上读起；回到列表恢复原来的滚动位置
+  const pageShown = Boolean(full)
+  const shownPage = useRef(pageShown)
+  useLayoutEffect(() => {
+    if (shownPage.current === pageShown) return
+    shownPage.current = pageShown
+    const body = scroller()
+    if (!body) return
+    if (pageShown) body.scrollTop = 0
+    else if (saved.scroll !== null) {
+      body.scrollTop = saved.scroll
+      saved.scroll = null
+    }
+  })
   const page = issues.pages[managerIssuePageKey(manager.id, filter)]
   const total = page?.total ?? null
   useEffect(() => {
@@ -177,6 +208,7 @@ export function IssueConsole({
     if (!preset || preset.version === saved.preset) return
     saved.preset = preset.version
     saved.full = null
+    saved.scroll = null
     setFullState(null)
     const next = managerIssuePreset(preset.patch)
     setFilter(next.filter, next.kind)
@@ -206,14 +238,24 @@ export function IssueConsole({
     }
     reading.current = null
     onLocated()
+    if (issue.kind === 'ordinary') {
+      // 普通 issue 直接进阅读页，列表的筛选不动；不是从列表进来的，返回时不恢复滚动
+      if (!saved.full) saved.scroll = null
+      saved.full = issue.id
+      setFullState(issue.id)
+      pane?.close()
+      if (kind !== 'ordinary') onKind('ordinary')
+      return
+    }
     saved.full = null
+    saved.scroll = null
     setFullState(null)
     setFilter(managerIssueLinkFilter(issue, saved.filters[issue.kind]), issue.kind)
     if (issue.kind !== kind) onKind(issue.kind)
     setLinked(issue.id)
     setFollowing(true)
     setOpen(issue.id)
-  }, [target, issues, kind, onKind, onLocated, invoke, commands, setOpen, setFilter, saved])
+  }, [target, issues, kind, onKind, onLocated, invoke, commands, setOpen, setFilter, saved, pane])
   const linkedIssue = linked ? issues.details[linked] : undefined
   // 定位之后状态还可能改变（例如报告标为已阅）；继续按真实状态显示，直到用户主动改过滤。
   useEffect(() => {
@@ -258,16 +300,17 @@ export function IssueConsole({
         open={expanded}
         linked={linked === head.id}
         disabled={disabled}
-        reason={reason}
         commands={commands}
         talking={talkId === head.id}
-        postRevision={postRevision(head.id)}
         onTalk={() =>
           talkId === head.id ? pane?.close() : pane?.open(`${ISSUE_PANE_PREFIX}${head.id}`)
         }
-        onFull={() => setFull(head.id)}
-        onOpenItem={onOpenItem}
         onToggle={() => {
+          if (head.kind === 'ordinary') {
+            openPage(head.id, true)
+            invoke(commands.read(head.id, { manual: true }))
+            return
+          }
           if (head.id !== linked) setLinked(null)
           if (expanded) setOpen(null)
           else {
@@ -338,7 +381,9 @@ export function IssueConsole({
         }
         onFull={mode === 'pane' ? () => setFull(id) : undefined}
         onBack={() => {
-          setFull(null)
+          closePage()
+          // 特殊 issue 的完整讨论从抽屉进来：回到列表展开它
+          if (issue.kind === 'ordinary') return
           setOpen(id)
           setLinked(id)
         }}
@@ -350,10 +395,14 @@ export function IssueConsole({
     talkId && pane?.host && issues.details[talkId]
       ? createPortal(thread(talkId, 'pane'), pane.host)
       : null
-  if (full && issues.details[full])
+  if (full)
     return (
       <div ref={root} className="mg-stack" data-issue-console data-issue-full={full}>
-        {thread(full, 'page')}
+        {fullIssue ? (
+          thread(full, 'page')
+        ) : (
+          <IssuePageLoading id={full} error={error || issues.error || ''} onBack={closePage} />
+        )}
       </div>
     )
   const filtered = issueActiveFilterCount(filter, kind) > 0
@@ -388,8 +437,7 @@ export function IssueConsole({
             setCreating(false)
             if (!id) return
             setFollowing(false)
-            setLinked(id as ManagerIssueId)
-            setOpen(id as ManagerIssueId)
+            openPage(id as ManagerIssueId, true)
           }}
         />
       ) : null}
@@ -463,6 +511,36 @@ export function IssueConsole({
       />
       {paneContent}
     </div>
+  )
+}
+
+/** 阅读页的详情还没读到：返回按钮和编号先出，读到后换成正文 */
+function IssuePageLoading({
+  id,
+  error,
+  onBack,
+}: {
+  id: ManagerIssueId
+  error: string
+  onBack(): void
+}) {
+  const t = useT()
+  return (
+    <section className="mg-issue-thread" data-issue-thread="page" data-issue={id}>
+      <header className="mg-issue-page-head">
+        <IssueBackButton onBack={onBack} />
+        <h2 className="mg-paging-title">
+          <b className="mono mg-issue-id">{id}</b>
+        </h2>
+      </header>
+      {error ? (
+        <p role="alert" className="err">
+          {error}
+        </p>
+      ) : (
+        <p className="dim">{t('manager.loading')}</p>
+      )}
+    </section>
   )
 }
 

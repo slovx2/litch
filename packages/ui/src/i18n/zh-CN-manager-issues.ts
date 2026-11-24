@@ -93,6 +93,7 @@ export const zhManagerIssues = {
   'issue.loadMore': '加载更多',
   'issue.loaded': '已显示 {n} / {total}',
   'issue.full.open': '打开完整讨论',
+  'issue.back': '返回列表',
   'issue.full.title': '完整讨论',
   'issue.mode': '发什么',
   'issue.ask': '问经理',

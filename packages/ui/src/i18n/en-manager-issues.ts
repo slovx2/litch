@@ -96,6 +96,7 @@ export const enManagerIssues = {
   'issue.loadMore': 'Load more',
   'issue.loaded': 'Showing {n} of {total}',
   'issue.full.open': 'Open full discussion',
+  'issue.back': 'Back to list',
   'issue.full.title': 'Full discussion',
   'issue.mode': 'Post as',
   'issue.ask': 'Ask manager',

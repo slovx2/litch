@@ -60,6 +60,7 @@ function sheetFixture(kind, options = {}) {
       if (name === './IssueThread')
         return { IssueThread: 'thread', IssueComposer: 'composer', IssueMetaLine: 'meta' }
       if (name === '../DiscussionDrawer') return { DiscussionDrawer: 'drawer' }
+      if (name === './issue-seen') return { useIssueSeen() {} }
       return {}
     },
   })
