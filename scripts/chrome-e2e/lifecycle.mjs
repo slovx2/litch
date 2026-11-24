@@ -285,7 +285,9 @@ export async function chromeLifecycle({
     await inputChecks({
       targetId: `chrome:${(await connected()).id}`,
       origin: site.origin,
-      run: async (tool, args) => (await send({ op: 'invoke', tool, args })).result,
+      // 与 headless 一组相同：跨来源跳转要断言不可读，必须明确拒绝 b.test，不能由宿主默认批准。
+      run: async (tool, args) =>
+        (await send({ op: 'invoke', tool, args, decline: [site.other] })).result,
       check: async (name, body) =>
         check(`Headed 最小化窗口 / ${name}`, async () => {
           await body()
