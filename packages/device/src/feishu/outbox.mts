@@ -757,6 +757,7 @@ export class FeishuOutbox {
         reason ?? (frozen ? 'app_inactive' : 'payload_changed'),
       )
       this.audit(failed, 'speech_failed')
+      this.reviewFailed(failed)
       this.options.changed(record.appId, record.operationId)
       return
     }
@@ -857,6 +858,17 @@ export class FeishuOutbox {
     }
     const failed = this.finish(record, 'failed', kind)
     this.audit(failed, 'speech_failed')
+    this.reviewFailed(failed)
+  }
+
+  /** 批准后的发言没发出去：审批上也记下，界面和飞书卡片标“已批准 · 发送失败” */
+  private reviewFailed(record: OutboxRecord): void {
+    if (!record.reviewId || !record.error) return
+    try {
+      this.options.reviews?.executionFailed(record.reviewId, record.error)
+    } catch (error) {
+      this.options.log(`飞书审批记发送失败出错：${(error as Error).message}`)
+    }
   }
 
   private async post(

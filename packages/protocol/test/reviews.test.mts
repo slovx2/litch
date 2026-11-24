@@ -67,7 +67,19 @@ const samples: {
     { states: ['pending'], managerId: 'm-1', before: 'A-9', limit: 20 },
     { reviews: [review], next: 'A-1' },
   ],
-  [REVIEWS_METHOD.get]: [{ reviewId: 'A-1' }, { review }],
+  [REVIEWS_METHOD.get]: [
+    { reviewId: 'A-1' },
+    {
+      review: {
+        ...review,
+        revision: 3,
+        state: 'approved',
+        decidedBy: { via: 'feishu', who: 'ou_alice' },
+        decidedAt: 20,
+        execution: { state: 'failed', error: 'not_found', at: 30 },
+      },
+    },
+  ],
   [REVIEWS_METHOD.decide]: [
     { reviewId: 'A-1', decision: 'reject', reason: '措辞不对', expectedRevision: 1 },
     { review: decided },
@@ -119,6 +131,12 @@ test('入站校验拒绝畸形参数', () => {
   assert.equal(isReviewsMethod('litch/reviews/unknown'), false)
   assert.equal(
     wire(REVIEWS_METHOD.get, 'result', { review: { ...review, payloadHash: 'x' } }),
+    false,
+  )
+  assert.equal(
+    wire(REVIEWS_METHOD.get, 'result', {
+      review: { ...review, execution: { state: 'sent', error: 'x', at: 1 } },
+    }),
     false,
   )
 })

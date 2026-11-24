@@ -229,6 +229,25 @@ export class DeviceReviews {
     return next
   }
 
+  /**
+   * 批准后执行方照办失败（比如飞书发送被拒）：在审批上记下原因，revision 加一并通知，
+   * 界面和飞书卡片据此标“已批准 · 发送失败”。状态仍是 approved；不是批准的、已记过的不动
+   */
+  executionFailed(reviewId: string, error: string): void {
+    const next = this.options.managers.transaction(() => {
+      const review = this.get(reviewId)
+      if (review?.state !== 'approved' || review.execution) return null
+      const updated: Review = {
+        ...review,
+        revision: review.revision + 1,
+        execution: { state: 'failed', error: error.slice(0, 128), at: this.options.now() },
+      }
+      this.save(updated)
+      return updated
+    })
+    if (next) this.announce(next)
+  }
+
   /** 把过期的待批审批标成 expired */
   expire(): void {
     const now = this.options.now()

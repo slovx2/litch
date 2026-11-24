@@ -783,6 +783,18 @@ test('审批与发件的小字：经 lark-cli 一行、以用户身份发', asyn
     s.actingUserText(t, { type: 'user', openId: 'ou_x', name: ' ' }),
     'feishu.actingAsUser{"name":"ou_x"}',
   )
+  // 批准后没发出去：原因用发件行的文案，认不出的带原因代码
+  const failed = { state: 'failed', error: 'not_found', at: 1 }
+  assert.equal(s.reviewSendFailureText(t, { state: 'approved' }), null)
+  assert.equal(s.reviewSendFailureText(t, { state: 'rejected', execution: failed }), null)
+  assert.equal(
+    s.reviewSendFailureText(t, { state: 'approved', execution: failed }),
+    'feishu.review.detail.sendFailed{"reason":"feishu.outbox.error.not_found{\\"code\\":\\"not_found\\"}"}',
+  )
+  assert.equal(
+    s.reviewSendFailureText(t, { state: 'approved', execution: { ...failed, error: 'odd' } }),
+    'feishu.review.detail.sendFailed{"reason":"feishu.outbox.error.other{\\"code\\":\\"odd\\"}"}',
+  )
 })
 
 test('授权的几句：状态、原因、链接有效期、次要信息', async () => {
