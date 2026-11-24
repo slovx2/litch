@@ -33,6 +33,14 @@ export async function fixtures() {
       return res.end(
         '<!doctype html><title>Unapproved site</title><h1>UNAPPROVED_CONTENT_MUST_NOT_LEAK</h1>',
       )
+    // 不抢前台验收：页面自己开新标签、弹窗、请求聚焦或弹对话框。
+    if (url.pathname === '/foreground')
+      return res.end(`<!doctype html><title>Foreground fixture</title><h1>Foreground fixture</h1>
+      <a href="/input?blank-link" target="_blank">Blank link</a>
+      <button onclick="window.open('/input?window-open')">Open tab</button>
+      <button onclick="window.open('/input?popup-window','_blank','popup,width=400,height=300')">Open popup window</button>
+      <button onclick="window.focus()">Focus window</button>
+      <button onclick="setTimeout(()=>alert('fixture alert'),0)">Alert</button>`)
     if (url.pathname === '/dynamic-frame-content')
       return res.end(
         '<!doctype html><title>Dynamic editor</title><h1>DYNAMIC_EDITOR_CONTENT</h1><script>parent.postMessage("DYNAMIC_EDITOR_CONTENT", "*")</script>',

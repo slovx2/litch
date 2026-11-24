@@ -5,7 +5,8 @@ import Foundation
 func emit(_ token: String) {
     let application = NSWorkspace.shared.frontmostApplication
     let pid = application?.processIdentifier ?? -1
-    let value: [String: Any] = ["token": token, "pid": pid, "bundle": application?.bundleIdentifier ?? ""]
+    let value: [String: Any] = ["token": token, "pid": pid, "bundle": application?.bundleIdentifier ?? "",
+                                "at": Date().timeIntervalSince1970 * 1000]
     let data = try! JSONSerialization.data(withJSONObject: value)
     FileHandle.standardOutput.write(data + Data([10]))
 }

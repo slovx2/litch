@@ -4,6 +4,7 @@ import type {
   ChromeTabState,
 } from '../../automation-contracts/src/litch/chrome-browser.mjs'
 import { attachFailure, chromeText, restrictedPage, safeAttachError } from './attach-error.mjs'
+import type { ForegroundWatch } from './foreground.mjs'
 import { chromeOrigin } from './origin.mjs'
 import type { TabPresentation } from './presentation.mjs'
 
@@ -20,6 +21,8 @@ export interface ExtensionState {
   keys: { attached: string; stopped: string; pointers: string; instance: string; control: string }
   pointerSource: string
   presentation: TabPresentation
+  /** 识别受控页面自己打开新页面时把 Chrome 拉到前台。 */
+  foreground: ForegroundWatch
   epoch: string
   grants: Map<string, ChromeGrant>
   tabLocks: Map<number, number>

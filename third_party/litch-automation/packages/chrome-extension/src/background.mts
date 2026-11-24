@@ -7,6 +7,7 @@ import {
   type ChromeRequest,
   type ChromeWelcome,
 } from '../../automation-contracts/src/litch/chrome-browser.mjs'
+import { ForegroundWatch } from './foreground.mjs'
 import type { ExtensionOptions } from './options.mjs'
 import { cleanupPointer, disposePointer } from './pointer.mjs'
 import { TabPresentation } from './presentation.mjs'
@@ -74,6 +75,7 @@ export function createExtensionRuntime(options: ExtensionOptions) {
       options.identity.productName,
       `${options.storagePrefix}TabPresentation:`,
     ),
+    foreground: new ForegroundWatch(),
     epoch: crypto.randomUUID(),
     grants: new Map(),
     tabLocks: new Map(),
@@ -182,7 +184,36 @@ export function createExtensionRuntime(options: ExtensionOptions) {
         return false
       },
     )
+    listen(
+      chrome.tabs.onCreated,
+      (tab: { id?: number; openerTabId?: number; windowId?: number }) => {
+        state.foreground.tabCreated(tab)
+      },
+    )
+    listen(chrome.windows.onFocusChanged, (windowId: number) => {
+      // 焦点状态同步记录；只在“确知不在前台 → 获得焦点”时才去查是不是受控页面开的新页面。
+      if (!state.foreground.focus(windowId)) return
+      void (async () => {
+        const [active] = await chrome.tabs.query({ active: true, windowId })
+        const opener = active?.id === undefined ? undefined : state.foreground.openerOf(active.id)
+        if (opener === undefined) return
+        const leased = (
+          await Promise.all(
+            [...state.grants.values()].map(async (grant) => {
+              const tab = await chrome.tabs.get(grant.tabId).catch(() => null)
+              return tab
+                ? { tabId: grant.tabId, leaseId: grant.leaseId, windowId: tab.windowId }
+                : null
+            }),
+          )
+        ).filter((tab) => tab !== null)
+        const openerWindow = (await chrome.tabs.get(opener).catch(() => null))?.windowId
+        const stolen = state.foreground.stolen(active, leased, openerWindow)
+        if (stolen && !state.stopped) state.send({ kind: 'foreground', ...stolen })
+      })().catch(() => {})
+    })
     listen(chrome.tabs.onRemoved, (tabId: number) => {
+      state.foreground.forget(tabId)
       for (const grant of state.grants.values())
         if (grant.tabId === tabId) void state.revoke(grant.leaseId, 'tabClosed')
       state.generations.delete(tabId)
@@ -454,6 +485,16 @@ export function createExtensionRuntime(options: ExtensionOptions) {
       active = true
       const run = ++generation
       register()
+      // 焦点初值：只有确知 Chrome 不在前台，之后的获得焦点才可能是受控页面抢的。
+      void chrome.windows
+        .getLastFocused()
+        .then((window: { focused?: boolean } | undefined) => {
+          if (state.foreground.focused === null) state.foreground.focused = window?.focused === true
+        })
+        .catch(() => {
+          // 没有任何窗口：此后窗口获得焦点时由宿主再核对前台应用是否真的换了。
+          if (state.foreground.focused === null) state.foreground.focused = false
+        })
       const begin = (): Promise<void> =>
         initialize(run).catch(() => {
           if (active && run === generation)

@@ -14,6 +14,7 @@ import {
   ChromeBridgeError,
 } from '../../../third_party/litch-automation/packages/chrome-bridge/src/bridge.mjs'
 import { ChromeExecutor } from '../../../third_party/litch-automation/packages/chrome-bridge/src/executor.mjs'
+import { macForegroundKeeper } from '../../../third_party/litch-automation/packages/chrome-bridge/src/foreground.mjs'
 import { chromeOrigin } from '../../../third_party/litch-automation/packages/chrome-extension/src/origin.mjs'
 import {
   CHROME_STORE_URL,
@@ -180,6 +181,8 @@ export class DeviceChromeRuntime {
       namespace: 'litch_browser',
       productName: 'Litch',
       allowed: () => this.status.enabled && !this.closed && this.install.enabledNow(),
+      // 会话设备上的 Chrome 同样不该因受控页面开新页面而抢走该设备的前台。
+      ...(process.platform === 'darwin' ? { foreground: macForegroundKeeper() } : {}),
       sites: {
         ...book,
         verdict: (key, turn, origin) =>

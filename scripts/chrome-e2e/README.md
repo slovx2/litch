@@ -13,6 +13,8 @@
 
 局部后台输入回归：`node scripts/chrome-e2e/background-input.mjs --expect-fixed`。只构建扩展与原生桥，不跑 Full；默认使用最小化隔离 CFT，检查后台标签、首次认领、导航、登录暂停/交还后重新认领，以及页面 rAF 和指针 world 的 rAF/计时器不回调。每次打印完整回执、页面值及窗口状态，退出清理 profile、浏览器、桥和站点夹具。冻结命令的结果以报告中的 `tab.frozen` 为准，不能把发出了命令等同于 Chrome 真的冻结。
 
+不抢前台验收：`node scripts/chrome-e2e/foreground-steal.mjs --expect-fixed`，只在本机按需跑，不进 CI。隔离 CFT 用普通（不最小化）窗口留在当前前台应用后面，先激活一次再还回原应用：macOS 的协作式激活会拒绝从没被用户激活过的应用，不这样做测不出日用 Chrome 的行为。之后在普通窗口、无窗口、仅最小化窗口三种条件下逐步跑 tabs、claim、snapshot、screenshot、click、type、press、scroll、evaluate、run_actions、navigate（含 newTab）、history、release，每步用 NSWorkspace 监视器和 CGWindowList 叠放顺序（只读 PID）核对前台应用和窗口顺序都没变，同时核对 Chrome 内的活动标签和窗口焦点事件。`page-initiated` 场景点击 `target=_blank` 链接、`window.open` 开标签和弹窗、`window.focus()`，要求系统前台在 600ms 内还回原应用。`show` 作为正对照，必须被测出抢前台。`--only=page,show,tools` 选场景，`--no-keeper` 去掉宿主的交还，用来对照修复前的行为。运行期间不要切换应用。
+
 `--cases=minimized-active-sequence --expect-fixed` 单独运行最小化活动标签回归：连续五轮各用新窗口，fixture 保持活动，依次 navigate、newTab、click、重新 snapshot、type；不重试输入。断言输入回执、字段值及点击计数，每一步核对活动标签未切换、窗口仍最小化，并监听中途激活事件和 NSWorkspace 前台变化。新场景也包含在默认局部验收中。
 
 获准使用隔离可见窗口后，可运行 `LITCH_CHROME_GUI_SLOT=approved node scripts/chrome-e2e/background-input.mjs --shown --expect-fixed`，增加前台和完全遮挡对照；通过 CGWindowList 的顺序和边框包含关系确认覆盖，不读取用户窗口。`LITCH_CHROME_EXTENSION_SOURCE` 可指向历史版本的源码导出目录（保留 `apps/desktop/scripts/build-chrome.mjs` 及其依赖），`LITCH_CHROME_DRIVER_SOURCE` 可指向历史执行器源码；只用于复现前后对照，不修改或安装用户扩展。需要本机 Node 24、Go 和桌面构建依赖。

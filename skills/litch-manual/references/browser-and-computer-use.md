@@ -456,6 +456,10 @@ Sessions can operate separate claimed tabs concurrently; each tab has one owner.
 新标签默认在现有普通窗口的后台创建，不切换当前标签；没有普通窗口时新建不获取焦点的窗口。认领、导航、点击、输入和批量操作不主动激活 Chrome。可自行点开标签组查看，或在对话里明确要求“显示给我看”，代理才调用 `show` 激活对应窗口与标签。后台输入不需要通过 `show` 才能生效。
 
 New tabs open in the background of an existing normal window without switching its active tab. If none exists, Litch creates an unfocused window. Claiming, navigation, clicks, typing and batches do not activate Chrome. Open the `▶ AI · Litch · session title` group yourself, or explicitly ask the agent to show the page; only then should it call `show` to activate that tab and window. Background tabs, fully covered windows and minimized windows support input without `show`. Litch confirms emulated page focus before input and checks that the document responds; missing animation frames only skip the visual wait. If the document itself does not respond, wait for load and take a fresh snapshot, or reload if it remains stuck. A `notDispatched` receipt alone does not diagnose window focus; read its error. Sign-in pauses, revoked leases and site permissions still require their own resolution.
+
+代理点击后，网页自己打开的新标签或弹窗（`target=_blank` 链接、`window.open`）会被 Chrome 显示在前台，这一步无法在不改变网页行为的前提下关掉。macOS 上 Litch 识别到这种情况后，会立即把前台还给原来的应用，Chrome 只会短暂出现在前面（实测约 0.2 秒）。新页面仍是所在窗口的活动标签，也仍属于同一代理。Chrome 本来就在前台，或者用户自己切到 Chrome 时，Litch 不做处理。
+
+After an agent click, a new tab or popup that the page opens itself (`target=_blank` links, `window.open`) is shown in front by Chrome; this cannot be turned off without changing how the page works. On macOS, Litch detects this and immediately returns the foreground to the previous app, so Chrome appears only briefly (about 0.2 s in testing). The new page stays the active tab of its window and remains with the same agent. Litch does nothing when Chrome was already in front or when you switch to Chrome yourself.
 用户标签只临时归组；释放、回合结束、断开或停止控制后，恢复原组、位置和固定状态。原组最后一个标签被临时移走时，恢复会重新创建同名、同色、同折叠状态的组。
 用户控制期间自行移动了窗口或分组时，保留用户的新布局。代理临时标签仍在回合结束关闭；标记保留的标签交还给用户并移出代理组。
 

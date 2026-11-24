@@ -27,6 +27,8 @@ export class ChromePage implements BrowserPage {
   claimEpoch?: string
   paused = false
   scripted = false
+  /** 代理输入派发前调用；宿主借此记下当时的前台应用。 */
+  onInput?: () => void
   private dialogState: DialogInfo | null = null
   private dialogWaiters = new Set<(value: DialogInfo) => void>()
   private bridge: ChromeBridge
@@ -104,6 +106,7 @@ export class ChromePage implements BrowserPage {
     )
   }
   async cdp<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+    if (isInputCommand(method, params)) this.onInput?.()
     if (
       isInputCommand(method, params) &&
       this.bridge.instances().find((instance) => instance.id === this.instanceId)?.inputReceipts

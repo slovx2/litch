@@ -181,6 +181,8 @@ export type ChromeEvent =
   | { kind: 'tab'; tab: ChromeTabState }
   | { kind: 'revoked'; leaseId: string; reason: string }
   | { kind: 'removed'; tabId: number }
+  /** 受控标签因代理输入打开的新页面把 Chrome 拉到了前台；宿主应把前台还给原来的应用。 */
+  | { kind: 'foreground'; tabId: number; leaseId: string }
   | {
       kind: 'fileChooser'
       tabId: number
