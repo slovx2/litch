@@ -43,6 +43,7 @@ import type { IssueLinks } from './issue-links'
 import { IssueLinksContext } from './issue-links-context'
 import { readingMemory } from './reading-position'
 import { ChildRequests, DelegatedHistory } from './requests/ChildRequests'
+import { DeferredMachineCards } from './requests/DeferredMachineCards'
 import { PendingQuestions } from './requests/PendingQuestions'
 import { RequestSlot } from './requests/RequestSlot'
 import { Transcript } from './Transcript'
@@ -387,6 +388,7 @@ export function useSessionPage({
           )}
           <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom - accessory }}>
             <SelectBar hub={comments} />
+            <DeferredMachineCards key={deviceId} deviceId={deviceId} sessionId={sessionId} />
             <RequestSlot
               store={store}
               maxHeight={(meta?.pendingQuestions.length ?? 0) > 0 ? cardMax / 2 : cardMax}
