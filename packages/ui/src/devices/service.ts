@@ -206,7 +206,7 @@ export function remoteNoticeOf(view: RemoteUpgradeView | null): RemoteNotice | n
 
 /**
  * 给不给按钮、叫什么：upgrade 升级；swap 换上新版（装着的已经不旧）。没有按钮是 null：
- * 这一端做不了；正在做；认不出是怎么装的（决 462，只给命令）；只差换上而服务有别的东西管着（决 463）
+ * 这一端做不了；正在做；识别不出安装方式时只给命令；只差切换版本而运行中的服务由外部管理
  */
 export function remoteButtonOf(view: RemoteUpgradeView | null): 'upgrade' | 'swap' | null {
   if (!view?.capable) return null

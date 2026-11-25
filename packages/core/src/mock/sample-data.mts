@@ -552,7 +552,7 @@ export const sampleQuestions = (list: SampleQuestion[], allowOther: boolean): Qu
 
 /** s1 这个会话里还没“说完”的回答。模拟核心会把它一小段一小段地流出来 */
 /**
- * 发消息时能选什么（Claude Code：账号和一个网关供应商都能用，型号带“[供应商] ”前缀，见 33 号设计）。
+ * 发消息时能选什么（Claude Code：账号和一个网关供应商都能用，型号带“[供应商] ”前缀）。
  * 账号的最后一个模型没有强度档，用来看强度控件会不会跟着消失
  */
 export const SAMPLE_OPTIONS: ComposeOptions = {

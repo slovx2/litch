@@ -1,6 +1,6 @@
-// litch config 在界面这一头（config 主题，14 号设计 3.3）：本机 harness 里的模型跑 `litch config …`，
+// 界面通过 config 主题处理配置命令：本机 harness 里的模型跑 `litch config …`，
 // 核心执行器把要界面做的事交给最近订阅的这个窗口（外观、语言、两个本地偏好、打开某一页、出码对话框），
-// 这里照做后用 config.reply 回话；放宽安全的那几项（E6）和撤不回的那几项（E7）出确认卡，每个窗口都有，人点允许或拒绝用 config.confirm 回。
+// 这里照做后用 config.reply 回话；放宽安全限制或不可撤销的操作在每个窗口都弹确认卡，用户选择后用 config.confirm 回话。
 // 卡片写清是哪个会话、哪个 harness、要做什么；两分钟没人理，核心那边当拒绝，卡片自己撤掉。
 import type {
   ConfigConfirmItem,
@@ -162,7 +162,7 @@ function ConfirmCard({
     : harness
       ? t('assist.confirm.harness', { harness })
       : t('assist.confirm.unknown')
-  // 有撤不回的项（E7）时标题换成“删除”，并多一句撤不回
+  // 包含不可撤销的操作时，标题换成“删除”，并提示操作无法撤销
   const erase = card.items.some((item) => item.kind === 'erase')
   const title = t(erase ? 'assist.confirm.titleErase' : 'assist.confirm.title')
   return (

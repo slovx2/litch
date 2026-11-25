@@ -1,5 +1,5 @@
 // 侧栏一行前面的状态记号：普通会话行和经理行共用。回合在跑转圈（run），等人（wait）、出错（err），
-// 回合停了、后台任务还在跑是慢呼吸的空心记号（bg，见 23 号设计），再往后是未读。
+// 回合结束但后台任务仍在运行时，显示慢呼吸的空心记号（bg），优先级高于未读。
 import type { SessionSummary } from '@litch/core'
 
 export type SessionMark = 'run' | 'wait' | 'err' | 'bg' | 'unread' | ''

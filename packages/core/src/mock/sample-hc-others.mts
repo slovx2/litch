@@ -1,4 +1,4 @@
-// 模拟核心里 OpenCode、Pi、dsh 的详情设置示例（15 号设计 2.3–2.5）。
+// 模拟核心里 OpenCode、Pi、dsh 的详情设置示例。
 // OpenCode 没有“当前在用的 provider”（按所选模型定），Pi 和 dsh 有；
 // 登录方式各家都有一两种：OpenCode 的 Copilot 是设备码、OpenAI 要回调；Pi 有粘贴码和设备码；dsh 的官方账号只有回调。
 import {

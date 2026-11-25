@@ -1,6 +1,6 @@
 {
   "extension": "clientApprovals",
-  "status": "已定（2026-10-24，22 号设计第八节、决 415、决 422）",
+  "status": "已定（2026-10-24）",
   "description": "手机上批准：桌面端要人点头的卡片经会话所在设备的设备服务转给绑了这台设备的手机，手机的答复带着批准钥匙（手机另生成的一把 ed25519，和 ssh 钥匙无关）的签名经设备服务交回发卡片的那条连接，由桌面端自己验签。设备服务不可信（代理就跑在那台设备上），只转交、不验签。支持浏览器登录（browserSignIn）和正式版 Litch 自身访问（computerSelf）。类型、签名内容、形状检查在 packages/protocol/src/client-approvals.mts。",
   "appliesTo": "只有聚合面。兼容面上没有这个扩展的任何内容。",
   "declaration": {

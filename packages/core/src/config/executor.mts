@@ -1,7 +1,7 @@
-// litch_config 的执行器（14 号设计 3.3）：本机 harness 里的模型跑 `litch config …`，命令行经设备进程的
+// litch_config 的执行器：本机 harness 里的模型跑 `litch config …`，命令行经设备进程的
 // litch/clientTool/invoke 交给这台桌面端，核心收到 litch/clientTool/call（命名空间 litch_config、工具 run）交到这里。
 // 拆参数、出帮助、执行 config-ops.mts 里的全部操作，回一段给模型读的字（--json 时是 JSON）。
-// 放宽安全的几项先弹确认卡（E6），人点允许才执行；拒绝或两分钟没人理回 declined。
+// 放宽安全限制的操作先弹确认卡，用户允许后才执行；拒绝或两分钟未答复时返回 declined。
 import {
   type ClientToolCallResponse,
   clientToolFailure,

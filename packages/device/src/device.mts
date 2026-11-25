@@ -521,7 +521,7 @@ export class DeviceServer {
       log,
       version: this.version,
       timing: taskTiming,
-      // 对准已有会话的任务回合：带上排着的子会话回报，开始结束告诉会话树（决 657）
+      // 对准已有会话的任务回合：带上排着的子会话回报，并将回合的开始和结束通知会话树
       turnHooks: {
         input: (threadId, input) => this.sessionTree.beforeDeviceTurn(threadId, input),
         started: (harness, threadId, turnId) =>
@@ -811,14 +811,14 @@ export class DeviceServer {
         })
       : null
     this.worktreeLife?.start()
-    // 不等客户端连上：在跑的子会话重新盯上、排着的回报看看要不要唤醒（没人连着也唤醒，决 660）
+    // 重新跟踪还在跑的子会话，并检查排队的回报是否该唤醒父会话；无客户端连接也照常唤醒
     this.sessionTree.restoreSource = (id) => this.archives.unarchive(id)
     this.sessionTree.setSuggestionRetention(
       this.control?.state?.snapshot.values[SUGGESTION_RETENTION_SETTING],
     )
     this.sessionTree.started()
     this.readStates.follow = (threadId) => this.sessionTree.follow(threadId)
-    // 子会话的后台任务跑完了：引擎不会接着做的，会话树补一条回报（决 430）
+    // 子会话的后台任务跑完后，如果引擎不会自行续跑，由会话树补一条回报
     this.background.onSettled((threadId, tasks) =>
       this.sessionTree.backgroundSettled(threadId, tasks),
     )

@@ -1,4 +1,4 @@
-// 决 430：子会话、定时任务的回合结束时还有后台任务在跑——照常算结束、回报里注明；后台跑完以后再报一次：
+// 子会话、定时任务的回合结束时，如果仍有后台任务，回合照常结束并在回报里注明；后台任务完成后再报一次：
 // 引擎会自己接着做的，那一回合结束时报；不会的（原生 codex），跑完时补报。
 import assert from 'node:assert/strict'
 import test from 'node:test'
@@ -126,7 +126,7 @@ test('BG-REPORT-005 子会话：后台任务被用户停了、引擎不会续跑
         notes()[1]?.excerpt,
         'Background tasks finished: npm run dev (stopped by the user)',
       )
-      assert.equal(notes()[1]?.wake, false, '用户停的不唤醒父会话（决 481）')
+      assert.equal(notes()[1]?.wake, false, '用户停的不唤醒父会话')
     } finally {
       await env.close()
     }

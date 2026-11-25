@@ -3,7 +3,7 @@
 //
 // 只认：自己发出去的卡片号、随机数对得上（用一次作废）、没过期、签的源和账号和自己卡片上的一样、
 // 定时任务的卡片才许“以后直接用”、签名能用记下的这台手机的批准钥匙验过。
-// 没记过这个手机号的：验过签名就记下、当次生效（先信任、后核对，决 415），并告诉界面出一条提示。
+// 没记过这个手机号的：验过签名就记下、当次生效（先信任、后核对），并告诉界面出一条提示。
 // 手机远程批准是实验功能、默认关（store.mts 的 enabled）：关着时 approvalDesktopId() 是 null（核心就不把卡片挂到设备上），
 // 答复一律不认。随机数在卡片真答上之后（phoneAnswerLanded）才记作用过。
 import { createHash, createPublicKey, verify } from 'node:crypto'
@@ -277,7 +277,7 @@ export function approvalDesktopId(): string | null {
   return installed?.enabled ? installed.desktopId : null
 }
 
-/** 验手机的答复（22 号设计 12.2 第 3 条；照 browser/passwords/phone-answer.mts 的 VerifyPhoneAnswer） */
+/** 验手机的答复（签名规则见 packages/protocol/src/client-approvals.mts） */
 export function verifyPhoneAnswer(card: PhoneCard, answer: unknown): PhoneVerdict {
   return installed ? installed.verify(card, answer) : { ok: false, why: 'unavailable' }
 }

@@ -1,5 +1,5 @@
-// 模拟核心里 Claude Code 的详情设置示例（15 号设计 2.2）：~/.claude/settings.json 的那些项，
-// 账号（订阅、Console、长期令牌）和用户加的供应商（33 号设计：API key、Anthropic 兼容网关），没有“当前供应商”。
+// 模拟核心里 Claude Code 的详情设置示例：~/.claude/settings.json 的设置项，
+// 账号（订阅、Console、长期令牌）和用户添加的供应商（API key、Anthropic 兼容网关），没有“当前供应商”。
 
 import type { HcConfigView } from '../model-harness-config.mjs'
 import {

@@ -1,4 +1,4 @@
-// 配置助手按钮往输入框里放的那一句（14 号设计第五节）。只有逻辑，测试直接引用（packages/ui/test/assist.test.mjs）。
+// 配置助手按钮预填到输入框里的文字。只有逻辑，测试直接引用（packages/ui/test/assist.test.mjs）。
 import type { MessageExtra, SkillOption } from '@litch/core'
 
 /** 产品手册的技能名 */

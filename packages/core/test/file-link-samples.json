@@ -99,10 +99,10 @@
     "kind": "explicit",
     "cwd": "/work/example/litch-wt/session-perm",
     "entryCwd": "/work/example/litch-wt/session-perm",
-    "value": "/work/example/design/harness-client/47-session-permission.md",
+    "value": "/work/example/docs/reference/session-permissions.md",
     "before": null,
     "beforeEntry": null,
-    "files": ["/work/example/design/harness-client/47-session-permission.md"],
+    "files": ["/work/example/docs/reference/session-permissions.md"],
     "mobileBefore": false
   },
   {
@@ -110,18 +110,18 @@
     "kind": "explicit",
     "cwd": "/work/example",
     "entryCwd": "/work/example",
-    "value": "/work/example/design/harness-client/55-ci-release-gate.md:138",
+    "value": "/work/example/docs/reference/release-checks.md:138",
     "before": {
-      "path": "/work/example/design/harness-client/55-ci-release-gate.md",
+      "path": "/work/example/docs/reference/release-checks.md",
       "alt": null,
       "line": 138
     },
     "beforeEntry": {
-      "path": "/work/example/design/harness-client/55-ci-release-gate.md",
+      "path": "/work/example/docs/reference/release-checks.md",
       "alt": null,
       "line": 138
     },
-    "files": ["/work/example/design/harness-client/55-ci-release-gate.md"],
+    "files": ["/work/example/docs/reference/release-checks.md"],
     "mobileBefore": false
   },
   {
@@ -129,18 +129,18 @@
     "kind": "explicit",
     "cwd": "/work/example",
     "entryCwd": "/work/example",
-    "value": "/work/example/design/harness-client/55-ci-release-gate.md",
+    "value": "/work/example/docs/reference/release-checks.md",
     "before": {
-      "path": "/work/example/design/harness-client/55-ci-release-gate.md",
+      "path": "/work/example/docs/reference/release-checks.md",
       "alt": null,
       "line": null
     },
     "beforeEntry": {
-      "path": "/work/example/design/harness-client/55-ci-release-gate.md",
+      "path": "/work/example/docs/reference/release-checks.md",
       "alt": null,
       "line": null
     },
-    "files": ["/work/example/design/harness-client/55-ci-release-gate.md"],
+    "files": ["/work/example/docs/reference/release-checks.md"],
     "mobileBefore": false
   },
   {

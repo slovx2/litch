@@ -2077,7 +2077,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     installed(deviceId, harness, version) {
       const device = app.devices.find((entry) => entry.id === deviceId)
       if (!device) return
-      // 和真的一样：装好就重探，停用的顺手启用（决 302），然后它就是可用的
+      // 和真的一样：装好就重探，停用的顺手启用，然后它就是可用的
       const ready: HarnessView = { ...sampleHarness(harness), version }
       const had = device.harnesses.some((entry) => entry.id === harness)
       const harnesses = had

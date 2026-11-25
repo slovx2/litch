@@ -1,4 +1,4 @@
-// 一台设备上给 harness 安装（协议扩展 harnessInstall，14 号设计第二节）在客户端这一头的样子。
+// 客户端通过 harnessInstall 协议扩展在设备上安装 harness。
 // 版本探测、下载、跑官方命令、装完重启都在设备上（适配器的 Go 主进程），核心只是转运：
 // - install 主题开着才去问版本（设备详情、新建页“没有可用的 harness”、首启引导）；
 // - 安装任务跟着 litch/device/harness/install/changed 走，任务结束（成或不成）后重新问一次版本；

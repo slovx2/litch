@@ -1522,7 +1522,7 @@ export interface Commands extends ExternalCommands, FeishuCommands, ReviewsComma
     result: Record<string, never>
   }
   /**
-   * 用户在排着的子会话回报上点了“立即处理”：会话在跑就插进去，停着就替它开一个回合，不等别的子会话（决 659）。
+   * 用户在排着的子会话回报上点了“立即处理”：会话在跑就插进去，停着就替它开一个回合，不等别的子会话。
    * delivered 是 none 的：队列已经空了，或者这会儿插不进去（留着照旧）
    */
   'session.queuedNotes.deliver': {

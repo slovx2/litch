@@ -1,4 +1,4 @@
-// 一台设备上各 harness 的详情设置（协议扩展 harnessConfig，15 号设计）在客户端这一头的样子。
+// 客户端通过 harnessConfig 协议扩展读写一台设备上各 harness 的详情设置。
 // 权威在 harness 自己的原生配置里，读写由设备上的引擎（原生 codex 由设备进程翻译）做；核心只是转运：
 // - 每个 harness 一份数据，harnessConfig 主题开着（详情设置页）才去读；四块各读各的，谁读不成不耽误别的；
 //   config 读回来说有模型清单（modelCatalog）才接着读第五块 models，没有就让它空着；
