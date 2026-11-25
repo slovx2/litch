@@ -143,6 +143,8 @@ export type ClientToolContentItem =
 export interface ClientToolCallResponse {
   contentItems: ClientToolContentItem[]
   success: boolean
+  /** 仅在命令行调用的应答中出，提交卡片成功还不代表操作已经执行。 */
+  litchPendingApproval?: true
 }
 
 // 类型也来自公共合同的自包含投影，不给设备包引入 SDK 或 Node 依赖。

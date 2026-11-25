@@ -407,7 +407,8 @@ shows its most recent successful compaction, which also appears in the session.
 
 - Agent 自己的提问（Claude 的 AskUserQuestion、Codex 的 request_user_input、其他 harness 的提问和计划确认）每道题都收到无人值守的说明作为答复；计划确认按“未确认”处理。
 - 命令、文件改动和权限申请的审批按拒绝处理。Claude Code、Pi、OpenCode 会把说明一起交给模型；Codex、dsh 和 ACP 类 harness 的协议带不了说明，只收到普通的拒绝。MCP 表单征询按拒绝处理。
-- 内置浏览器和 Chrome 的站点、下载、请人登录，Computer Use 操作 Litch 本身的确认，“操作这台电脑”的开启和审批，配置助手的确认，以及 `litch_sessions` 的 offer 卡，都不出卡，调用当场失败，开头是 `[litch:unattended]`。
+- 内置浏览器和 Chrome 的站点、下载、请人登录，Computer Use 操作 Litch 本身的确认，开启“操作这台电脑”、配置助手的确认，以及 `litch_sessions` 的 offer 卡，调用当场失败，开头是 `[litch:unattended]`。
+- Mac 上有限的本机操作会在发起会话中显示不阻塞的审批卡，批准后转入后台任务。其他本机操作仍按原策略处理。
 - 已经放行的照常执行：限时授权有效期内的动作、完全访问对浏览器的放行、“本会话都允许”、审批方式“不确认”、harness 自己的权限规则都不受影响。
 
 说明会告诉 Agent 当前没人可等：经理应在看板上提决策（`litch_manager` 的 `add`，`kind=decision`），工作线应提决策或写进给经理的回报，或换一种不需要提问和审批的做法。工作线的这类请求也不会再挂到经理的待答列表里。有人值守的会话行为不变。旧版桌面端收不到无人值守标记，客户端工具的审批卡仍会照常弹出。

@@ -113,6 +113,11 @@ func TestMachineAgainstFakeDevice(t *testing.T) {
 		}
 		switch params["tool"] {
 		case "exec":
+			if args, _ := params["arguments"].(map[string]any); args["command"] == "wait-for-approval" {
+				response := textResult(true, "Submitted for approval. Do not retry.")
+				response["litchPendingApproval"] = true
+				return response, nil
+			}
 			return textResult(true, "status: exited\nexit_code: 7\nduration_ms: 3\nseq: 4\noutput:\nboom\n"), nil
 		case "read_file":
 			return textResult(true, "file text"), nil
@@ -162,6 +167,14 @@ func TestMachineAgainstFakeDevice(t *testing.T) {
 	var whole map[string]any
 	if code != 7 || json.Unmarshal([]byte(stdout), &whole) != nil || whole["success"] != true {
 		t.Fatalf("--json: %d %q", code, stdout)
+	}
+	code, stdout, stderr = runAgainst(t, device, "", "exec", "wait-for-approval")
+	if code != machineExitPendingApproval || stdout != "" || !strings.Contains(stderr, "Submitted for approval") {
+		t.Fatalf("审批未执行：%d %q %q", code, stdout, stderr)
+	}
+	code, stdout, stderr = runAgainst(t, device, "", "exec", "--json", "wait-for-approval")
+	if code != machineExitPendingApproval || !strings.Contains(stdout, "litchPendingApproval") || stderr != "" {
+		t.Fatalf("审批 JSON：%d %q %q", code, stdout, stderr)
 	}
 	code, _, stderr = runAgainst(t, device, "", "cp", "session:/a", "desktop:/b")
 	if code != machineExitUnreachable || !strings.Contains(stderr, "太旧") {

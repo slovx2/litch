@@ -86,6 +86,17 @@ export interface MachinePendingView {
 export interface MachineActivityView {
   running: MachineProcessView[]
   pending: MachinePendingView[]
+  /** 只在实际执行的桌面暴露完整预览和按钮。 */
+  deferred?: MachineDeferredView[]
+}
+
+export interface MachineDeferredView {
+  id: string
+  deviceId: string
+  threadId: string
+  expiresAt: number
+  ask: MachineAskView
+  details: string
 }
 
 /** 主题 machine 的增量：数据量小，整份换 */
@@ -101,7 +112,7 @@ export interface MachineLogEntry {
   tool: string
   /** 命令，或者路径，或者“从哪到哪” */
   summary: string
-  result: 'ok' | 'failed' | 'declined' | 'blocked' | 'expired' | 'disabled'
+  result: 'ok' | 'failed' | 'declined' | 'blocked' | 'expired' | 'disabled' | 'submitted'
   /** 碰到了禁止位置（不确认那档下照样跑了的，在这里标出来） */
   flagged: boolean
 }

@@ -18,6 +18,7 @@ import {
   type JsonRpcId,
   MODEL_RANKING_ENABLED,
 } from '../../../protocol/src/index.mjs'
+import { MACHINE_APPROVALS } from '../../../protocol/src/machine-approvals.mjs'
 import type { PathPickerRequests } from '../../../protocol/src/path-picker.mjs'
 import { PATH_PICKER_EXTENSION } from '../../../protocol/src/path-picker.mjs'
 import { REVIEWS_EXTENSION, type ReviewsRequests } from '../../../protocol/src/reviews.mjs'
@@ -289,6 +290,7 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.devicePairing,
                 // clientApprovals：声明了才能把登录卡片挂到设备上、收到手机的答复（桌面端），收得到卡片变化的通知（手机）
                 EXTENSION.clientApprovals,
+                MACHINE_APPROVALS,
                 EXTENSION.remoteChrome,
                 // harnessInstall：声明了才收得到安装任务的进度通知（litch/device/harness/install/changed）
                 EXTENSION.harnessInstall,

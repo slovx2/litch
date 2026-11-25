@@ -1,0 +1,23 @@
+{
+  "extension": "machineApprovals",
+  "description": "无人值守的本机操作审批卡。设备持有卡片摘要与生命周期，完整操作只冻结在选定的桌面端。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "machineApprovals" } }
+  },
+  "rules": [
+    "只有已被选作工具调用执行方的连接可以 open；卡片不阻塞原回合，有效期最多 24 小时。",
+    "只有发卡桌面可 start 或 finish，其他已声明连接只能列卡和请求停止。",
+    "连接断开时注销该桌面的卡与任务，不转授，也不自动重试。",
+    "后台任务集合沿用 backgroundTasks；未声明 machineApprovals 的连接收不到卡片或停止通知。"
+  ],
+  "parts": [
+    { "kind": "ClientRequest", "method": "litch/machineApproval/list" },
+    { "kind": "ClientRequest", "method": "litch/machineApproval/open" },
+    { "kind": "ClientRequest", "method": "litch/machineApproval/start" },
+    { "kind": "ClientRequest", "method": "litch/machineApproval/finish" },
+    { "kind": "ClientRequest", "method": "litch/machineApproval/stop" },
+    { "kind": "ServerNotification", "method": "litch/machineApproval/changed" },
+    { "kind": "ServerNotification", "method": "litch/machineApproval/stopRequested" }
+  ]
+}

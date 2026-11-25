@@ -40,7 +40,9 @@ function ManagerRow({
   const state = t(key, args)
   const latest = plainLine(manager.latestActivity?.text ?? manager.scope)
   const title = manager.name || t('manager.manager')
-  const detail = [state, latest].filter(Boolean).join(' · ')
+  const detail = [state, summary?.machineApproval ? t('sidebar.waitApproval') : '', latest]
+    .filter(Boolean)
+    .join(' · ')
   const meta = manager.latestActivity ? ago(manager.latestActivity.at, Date.now(), t) : undefined
   return (
     <>

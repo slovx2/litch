@@ -43,7 +43,7 @@ ${REAL}
 x=$1; shift
 real "$x"
 if [ -d "$x" ]; then t=d; s=0
-elif [ -f "$x" ]; then t=f; s=-; if [ -r "$x" ] && v=$(wc -c < "$x" 2>/dev/null); then s=$v; fi
+elif [ -f "$x" ]; then t=f; s=-; if [ -r "$x" ] && v=$(stat -c '%s' "$x" 2>/dev/null || /usr/bin/stat -f '%z' "$x" 2>/dev/null); then s=$v; fi
 elif [ -e "$x" ]; then t=o; s=0
 elif [ -L "$x" ]; then t=l; s=0
 else t=m; s=0; fi

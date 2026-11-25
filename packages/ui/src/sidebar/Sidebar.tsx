@@ -642,6 +642,11 @@ const SessionRow = memo(function SessionRow({
             </span>
           ) : null}
           {summary.task ? <span className="task-mark-slot" aria-hidden="true" /> : null}
+          {summary.machineApproval ? (
+            <span className="pill wait" data-machine-approval>
+              {t('sidebar.waitApproval')}
+            </span>
+          ) : null}
           <span
             className={down ? 'chip off' : 'chip'}
             title={down ? downText(down, 'chip', t) : nameOf(device, summary.harness, t)}

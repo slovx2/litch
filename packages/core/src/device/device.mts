@@ -9,6 +9,14 @@ import type {
   DeviceSettingsSnapshot,
 } from '../../../protocol/src/device-settings.mjs'
 import {
+  MACHINE_APPROVAL_METHOD as MACHINE,
+  MACHINE_APPROVALS,
+  MACHINE_APPROVAL_NOTIFICATION as MACHINE_NOTICE,
+  MACHINE_TASK_PREFIX,
+  type MachineApprovalCard,
+  type MachineApprovalKey,
+} from '../../../protocol/src/machine-approvals.mjs'
+import {
   MODEL_RANKING,
   MODEL_RANKING_ENABLED,
   type ModelRankingSnapshot,
@@ -318,6 +326,7 @@ export interface DeviceMachine {
   turnEnded(threadId: string, turnId: string): void
   /** 连上了、断开了（断开太久执行器会结束这台设备发起的进程） */
   presence(online: boolean): void
+  stopDeferred?(key: MachineApprovalKey): void
   disabled?(): void
 }
 
@@ -483,6 +492,8 @@ export interface Device {
   readonly pairing: Pairing
   /** 这台设备上的手机批准：桌面端挂登录卡片、转回手机的答复，手机取和答（approvals.mts） */
   readonly approvals: Approvals
+  machineApprovalAvailable(): boolean
+  openMachineApprovals(sink: HostSink): () => void
   /** 这台设备上给 harness 安装：版本、安装任务（install.mts） */
   readonly install: Install
   /** 这台设备上设备层建的工作树：列表、分支、删、恢复（worktrees.mts） */
@@ -734,6 +745,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let pairable = false
   /** 对面转不转手机批准（clientApprovals 扩展）。断开之后留着断开前知道的 */
   let approvalsOn = false
+  let machineApprovalsOn = false
+  const machineCardSinks = new Set<HostSink>()
+  const machineCards = new Map<string, MachineApprovalCard[]>()
+  let machineCardVersion = 0
   /** 对面支不支持给 harness 安装（harnessInstall 扩展）。断开之后留着断开前知道的 */
   let installable = false
   /** 对面能不能建工作树（worktrees 扩展）。断开之后留着断开前知道的 */
@@ -1036,6 +1051,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     }
     const at = restarted.get(thread.id)
     if (at !== undefined) summary.restarted = at
+    if (machineCards.has(thread.id)) summary.machineApproval = true
     if (!asking.has(thread.id)) return summary
     return { ...summary, status: 'waiting', waitingFor: 'approval' }
   }
@@ -1061,6 +1077,35 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     else asking.delete(threadId)
     const thread = threads.get(threadId)
     if (thread) hooks.sidebarOps([{ op: 'session.upsert', session: summaryOf(thread) }])
+  }
+  const allMachineCards = () => [...machineCards.values()].flat()
+  const publishMachineCards = (changed: Iterable<string>) => {
+    for (const sink of machineCardSinks) sink.snapshot(allMachineCards())
+    for (const id of changed) {
+      const thread = threads.get(id)
+      if (thread) hooks.sidebarOps([{ op: 'session.upsert', session: summaryOf(thread) }])
+    }
+  }
+  const putMachineCards = (threadId: string, cards: MachineApprovalCard[]) => {
+    if (cards.length) machineCards.set(threadId, cards)
+    else machineCards.delete(threadId)
+  }
+  const resyncMachineCards = async () => {
+    if (!machineApprovalsOn || !online) return
+    const version = machineCardVersion
+    try {
+      const { cards } = await link.request(MACHINE.list, {})
+      if (version !== machineCardVersion) return
+      const changed = new Set(machineCards.keys())
+      machineCards.clear()
+      for (const card of cards) {
+        changed.add(card.threadId)
+        putMachineCards(card.threadId, [...(machineCards.get(card.threadId) ?? []), card])
+      }
+      publishMachineCards(changed)
+    } catch (error) {
+      log(`读取异步本机操作卡失败：${String(error)}`)
+    }
   }
 
   /** 标题搜索区分目录已读、分页截断和入口缺失；离线保留的目录不算完整。 */
@@ -2107,6 +2152,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
           sessionTree && info.device.extensions?.includes(EXTENSION.sessionQuestionIgnore) === true
         pairable = info.device.extensions?.includes(EXTENSION.devicePairing) === true
         approvalsOn = info.device.extensions?.includes(EXTENSION.clientApprovals) === true
+        machineApprovalsOn = info.device.extensions?.includes(MACHINE_APPROVALS) === true
         installable = info.device.extensions?.includes(EXTENSION.harnessInstall) === true
         worktreesOn = info.device.extensions?.includes(EXTENSION.worktrees) === true
         // 在跑的是哪一份服务：握手时声明过才给，旧版的设备服务不报
@@ -2254,6 +2300,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     managers.resync()
     pairing.resync()
     approvals.resync()
+    void resyncMachineCards()
     install.resync()
     worktrees.resync()
     harnessConfig.resync()
@@ -2309,6 +2356,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       managers.offline()
       pairing.offline()
       approvals.offline()
+      machineCardVersion++
+      const removedMachineCards = [...machineCards.keys()]
+      machineCards.clear()
+      publishMachineCards(removedMachineCards)
       install.offline()
       worktrees.offline()
       harnessConfig.offline()
@@ -2406,6 +2457,17 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         return
       }
       if (approvals.notification(method, params)) return
+      if (machineApprovalsOn && method === MACHINE_NOTICE.changed) {
+        const update = params as { threadId: string; cards: MachineApprovalCard[] }
+        machineCardVersion++
+        putMachineCards(update.threadId, update.cards)
+        publishMachineCards([update.threadId])
+        return
+      }
+      if (machineApprovalsOn && method === MACHINE_NOTICE.stop) {
+        options.machine?.stopDeferred?.(params as MachineApprovalKey)
+        return
+      }
       // 给 harness 安装：任务的状态和日志
       if (install.notification(method, params)) return
       // 供应商、登录变了：问过的模型清单作废（Claude 的选单按能用的供应商拼，账号登没登录也算）
@@ -3490,7 +3552,18 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     interrupt: (sessionId) => live.interrupt(sessionId),
     loadOlder: (sessionId) => live.loadOlder(sessionId),
     recover: (sessionId, turnId, text) => live.recover(sessionId, turnId, text),
-    stopBackground: (sessionId, taskId, itemId) => live.stopBackground(sessionId, taskId, itemId),
+    async stopBackground(sessionId, taskId, itemId) {
+      if (taskId.startsWith(MACHINE_TASK_PREFIX) && machineApprovalsOn) {
+        await guarded(() =>
+          link.request(MACHINE.stop, {
+            threadId: sessionId,
+            id: taskId.slice(MACHINE_TASK_PREFIX.length),
+          }),
+        )
+        return
+      }
+      return live.stopBackground(sessionId, taskId, itemId)
+    },
     unqueue: (sessionId, messageId) => live.unqueue(sessionId, messageId),
     respond: (sessionId, requestId, choice) => live.respond(sessionId, requestId, choice),
     fork: (sessionId, turnId, itemId) => live.fork(sessionId, turnId, itemId),
@@ -3608,6 +3681,14 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     managers,
     pairing,
     approvals,
+    machineApprovalAvailable: () => online && machineApprovalsOn,
+    openMachineApprovals(sink) {
+      machineCardSinks.add(sink)
+      sink.snapshot(allMachineCards())
+      return () => {
+        machineCardSinks.delete(sink)
+      }
+    },
     install,
     worktrees,
     acpAuth: createAcpAuth({

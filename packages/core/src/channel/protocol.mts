@@ -242,6 +242,7 @@ export type Topic =
    * 设备没有这项扩展时 available 是 false，照样成立；没连上时 cards 是空的。连上、重连之后再给一份
    */
   | { kind: 'approvals'; deviceId: string }
+  | { kind: 'machineApprovals'; deviceId: string }
   /**
    * 一台设备上给 harness 安装的情况（harnessInstall 扩展）：各 harness 的版本、在跑和刚结束的安装任务。
    * 设备详情、新建页“没有可用的 harness”、首启引导开着时才订阅，有人订阅核心才去问版本。
@@ -309,6 +310,7 @@ export interface TopicData {
   managerBoard: ManagerBoardTopicView
   pairing: PairingTopicView
   approvals: ApprovalsTopicView
+  machineApprovals: import('../../../protocol/src/machine-approvals.mjs').MachineApprovalCard[]
   install: InstallTopicView
   harnessConfig: HarnessConfigTopicView
   accountLimits: AccountLimitsView
@@ -476,6 +478,7 @@ export interface TopicOp {
   managerBoard: ManagerBoardOp
   pairing: PairingOp
   approvals: ApprovalsOp
+  machineApprovals: never
   install: InstallOp
   harnessConfig: HarnessConfigOp
   accountLimits: AccountLimitsOp
@@ -1108,6 +1111,10 @@ export interface Commands extends ExternalCommands, FeishuCommands, ReviewsComma
   /** 答全局待处理里的一张卡片。已经答过、过期了以 notFound 结束 */
   'machine.answer': {
     params: { pendingId: string; optionId: string; note?: string }
+    result: Record<string, never>
+  }
+  'machine.deferredAnswer': {
+    params: { deviceId: string; id: string; decision: 'once' | 'timed' | 'decline'; hours?: number }
     result: Record<string, never>
   }
   /** 结束顶栏弹层里的一个进程 */

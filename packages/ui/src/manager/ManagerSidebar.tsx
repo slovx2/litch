@@ -202,6 +202,11 @@ function ManagerRow({
               {badgeOf(device, manager.harness)}
             </span>
             <small className="mg-sidebar-counts">
+              {summary?.machineApproval ? (
+                <span className="pill wait" data-machine-approval>
+                  {t('sidebar.waitApproval')}
+                </span>
+              ) : null}
               {manager.status === 'ending' ? (
                 <span className="dim">{t('manager.ending')}</span>
               ) : null}

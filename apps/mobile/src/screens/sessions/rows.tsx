@@ -96,7 +96,9 @@ export function SummaryLine({
   const waiting =
     summary.status === 'waiting'
       ? t(summary.waitingFor === 'answer' ? 'sidebar.waitAnswer' : 'sidebar.waitApproval')
-      : null
+      : summary.machineApproval
+        ? t('sidebar.waitApproval')
+        : null
   return (
     <ActionRow
       actionGap={8}
@@ -280,6 +282,11 @@ export function ChildLine({
       >
         {titleOf(summary, t)}
       </Text>
+      {summary.machineApproval ? (
+        <Text testID={`${testID}:machine-approval`} style={[styles.meta, { color: c.ink3 }]}>
+          {t('sidebar.waitApproval')}
+        </Text>
+      ) : null}
       <Text
         accessibilityLabel={t.harness(
           summary.harness,

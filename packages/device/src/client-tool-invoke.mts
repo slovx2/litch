@@ -201,6 +201,16 @@ export class ClientToolInvoker {
     })
   }
 
+  ownsMachineCall(peer: ClientToolPeer, threadId: string, callId: string): boolean {
+    const call = this.pending.get(callId)
+    return (
+      call?.peer === peer &&
+      call.threadId === threadId &&
+      call.namespace === 'litch_machine' &&
+      this.options.router.unattendedOf(threadId) !== null
+    )
+  }
+
   /** 发起调用的连接断开了：它还在等的调用撤回，执行方那边的卡片收掉 */
   callerLeft(caller: InvokeCaller): void {
     for (const [callId, entry] of this.pending) {

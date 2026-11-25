@@ -401,6 +401,8 @@ export interface SectionView {
 export type SessionStatus = 'idle' | 'running' | 'waiting' | 'error'
 
 export interface SessionSummary {
+  /** 有可延后处理的本机操作卡；不改变回合忙闲。 */
+  machineApproval?: boolean
   /** 会话专属后端能力；缺省沿用所属 harness 的声明。 */
   abilities?: HarnessAbilities
   /** 原生子代理与临时会话不参与全局搜索。 */

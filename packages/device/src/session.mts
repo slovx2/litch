@@ -95,6 +95,7 @@ import {
 import { describeHarness, type HarnessCatalog, REQUIRED_EXTENSIONS } from './harness-info.mjs'
 import { instructionsCall } from './instructions.mjs'
 import { listThreads } from './list-threads.mjs'
+import type { DeviceMachineApprovals } from './machine-approvals.mjs'
 import { type DeviceManagement, MANAGEMENT_PREFIX } from './management.mjs'
 import { type DeviceManagers, managerResetProjection } from './manager.mjs'
 import type { NativeBackgroundWake } from './native-background-wake.mjs'
@@ -256,6 +257,7 @@ export interface SessionHost {
   titles: CodexTitles
   /** 每个会话的后台任务（background.mts，各连接共用） */
   background: DeviceBackground
+  machineApprovals: DeviceMachineApprovals
   nativeBackground?: NativeBackgroundWake
   /** 设备层的工作树（worktrees.mts）。这台机器上没有 git 时是 null，设备上就没有这项扩展 */
   worktrees: Worktrees | null
@@ -344,17 +346,16 @@ export class ClientSession implements ClientToolPeer {
       deviceTools: host.deviceTools,
       unattended: (method, params) =>
         unattendedReply((id) => host.sessionTree.unattended(id), method, params),
-      decorateNative: (link, _method, value, threadId) =>
-        link.dialect.clientToolsByDevice === true &&
-        (this.declared.has(EXTENSION.backgroundTasks) ||
-          this.declared.has(EXTENSION.nativeBackgroundWake))
-          ? (host.nativeBackground?.decorate(
-              threadId ?? '',
-              value,
-              this.declared.has(EXTENSION.nativeBackgroundWake),
-              this.declared.has(EXTENSION.backgroundTasks),
-            ) ?? false)
-          : false,
+      decorateNative: (link, _method, value, threadId) => {
+        const background = this.declared.has(EXTENSION.backgroundTasks)
+        const native = this.declared.has(EXTENSION.nativeBackgroundWake)
+        const owned = background && host.machineApprovals.decorate(threadId ?? '', value)
+        const observed =
+          link.dialect.clientToolsByDevice === true && (background || native)
+            ? (host.nativeBackground?.decorate(threadId ?? '', value, native, background) ?? false)
+            : false
+        return owned || observed
+      },
       observe: (link, method, params) => {
         this.host.resumeTools.observe(method, params)
         this.host.attachments?.observe(link.harness, params)
@@ -389,11 +390,12 @@ export class ClientSession implements ClientToolPeer {
         notification: (link, method, params) => {
           if (link.dialect.clientToolsByDevice)
             host.nativeBackground?.observe(link.harness, method, params)
-          if (method === BACKGROUND_TASKS_NOTIFICATION.changed)
+          if (method === BACKGROUND_TASKS_NOTIFICATION.changed) {
             host.background.reportedChanged(params)
-          else if (link.dialect.clientToolsByDevice)
+          } else if (link.dialect.clientToolsByDevice)
             host.background.codexNotification(method, params)
         },
+        mergeDesktop: (threadId, params) => host.background.mergeDesktop(threadId, params),
         decorate: (thread) => this.decorateBackground(thread),
         resumed: (link, thread) => {
           if (!link.dialect.clientToolsByDevice) return
@@ -483,6 +485,7 @@ export class ClientSession implements ClientToolPeer {
     this.host.clientInvoke.callerLeft(this)
     this.host.clientInvoke.peerLeft(this)
     this.host.approvals.left(this)
+    this.host.machineApprovals.left(this)
     this.host.closed(this)
     if (greeted) this.host.log(`${this.tag} 断开`)
     this.host.trace?.('peer.close', {
@@ -725,6 +728,8 @@ export class ClientSession implements ClientToolPeer {
             admin: this.deviceAdmin,
           })
         }
+        if (method.startsWith('litch/machineApproval/'))
+          return this.host.machineApprovals.call(this, this.deviceAdmin, method, frame.params)
         if (method.startsWith('litch/reviews/')) {
           if (!this.host.reviews) throw new DeviceError('unsupported', 'Reviews are unavailable')
           return this.host.reviews.call(method, frame.params, {

@@ -147,6 +147,20 @@ export async function approved(
   const flagged = request.ask.flagged.length > 0
   const answer = await kit.context.approve(request)
   if (answer.kind === 'allowed') return null
+  if (answer.kind === 'submitted') {
+    const queued = done(
+      'Submitted for approval. Once approved, the operation runs in the background and sends its result to this conversation. Do not retry.',
+      summary,
+    )
+    return { ...queued, note: { ...queued.note, result: 'submitted' } }
+  }
+  if (answer.kind === 'changed')
+    return failed(
+      'failed',
+      'The approved operation changed before execution. Nothing was started; submit it again if still needed.',
+      summary,
+      flagged,
+    )
   if (answer.kind === 'declined') {
     const note = answer.note?.trim()
     return failed(
@@ -189,6 +203,50 @@ export interface LookedPath {
   rules: DeniedRule[]
   blocked: DeniedRule | null
   icase: boolean
+}
+
+/** 只读 macOS 路径元数据。文件需对大小、修改时间与变更时间也重核。 */
+export async function deferredFingerprint(
+  kit: ToolKit,
+  target: MachineTarget,
+  facts: MachineFacts,
+  looked: LookedPath,
+  expected: 'd' | 'f' | 'write',
+): Promise<string | undefined> {
+  if (
+    !kit.context.deferred ||
+    target.role !== 'desktop' ||
+    !/^macOS\b/i.test(facts.system) ||
+    looked.blocked ||
+    (expected === 'write'
+      ? looked.probe.type !== 'f' && looked.probe.type !== 'm'
+      : looked.probe.type !== expected)
+  )
+    return undefined
+  const missing = looked.probe.type === 'm'
+  const real = looked.probe.real
+  const inspected = missing ? real.slice(0, real.lastIndexOf('/')) || '/' : real
+  const format = looked.probe.type === 'f' ? '%d:%i:%p:%z:%.9Fm:%.9Fc' : '%d:%i:%p'
+  try {
+    const result = await runScript(kit.runner, target, ['/usr/bin/stat', '-f', format, inspected], {
+      collect: 512,
+      timeoutMs: 5000,
+    })
+    const identity = decodeUtf8(result.stdout).trim()
+    if (result.overflow || !/^\d+:\d+:\d+(?::\d+:-?\d+\.\d+:-?\d+\.\d+)?$/.test(identity))
+      return undefined
+    return JSON.stringify([
+      facts.hostname,
+      facts.shell,
+      looked.path,
+      real,
+      looked.probe.type,
+      identity,
+      looked.rules,
+    ])
+  } catch {
+    return undefined
+  }
 }
 
 /** probe 的输出不大，留这么多够了 */

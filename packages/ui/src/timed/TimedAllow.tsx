@@ -21,19 +21,25 @@ const DEFAULT_HOURS = 4
 interface Props {
   deviceId: string
   sessionId: string
-  request: RequestView
+  request?: RequestView
+  /** 异步操作只有用户选中的这张转入后台；授时和单次批准一起交给执行桌面。 */
+  grantMachine?(hours: number): Promise<unknown>
   /** 卡片正在答复别的选项 */
   disabled: boolean
 }
 
 /** 卡片按钮行里的入口；这张卡片不能限时放行（或设备不支持）时什么都不画 */
-export function useTimedAllow({ deviceId, sessionId, request, disabled }: Props) {
+export function useTimedAllow({ deviceId, sessionId, request, disabled, grantMachine }: Props) {
   const t = useT()
   const { lang } = useAppearance()
   const now = useNow()
   const { channel } = useServices()
   const view = useTimedApprovals(deviceId)
-  const target = timedTargetOf(request)
+  const target = request
+    ? timedTargetOf(request)
+    : grantMachine
+      ? { category: 'machine' as const, scope: '' }
+      : null
   const [open, setOpen] = useState(false)
   const [text, setText] = useState(String(DEFAULT_HOURS))
   const [busy, setBusy] = useState(false)
@@ -47,18 +53,19 @@ export function useTimedAllow({ deviceId, sessionId, request, disabled }: Props)
     if (!valid || busy) return
     setBusy(true)
     setError(null)
-    channel
-      .command('timedApproval.grant', {
-        deviceId,
-        threadId: sessionId,
-        category: target.category,
-        ...(target.scope ? { scope: target.scope } : {}),
-        hours,
-      })
-      .catch((failure: unknown) => {
-        setBusy(false)
-        setError(t('timed.failed', { reason: reasonOf(failure, t) }))
-      })
+    const result = grantMachine
+      ? grantMachine(hours)
+      : channel.command('timedApproval.grant', {
+          deviceId,
+          threadId: sessionId,
+          category: target.category,
+          ...(target.scope ? { scope: target.scope } : {}),
+          hours,
+        })
+    result.catch((failure: unknown) => {
+      setBusy(false)
+      setError(t('timed.failed', { reason: reasonOf(failure, t) }))
+    })
   }
 
   const button = (

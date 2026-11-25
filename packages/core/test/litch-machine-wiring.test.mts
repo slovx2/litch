@@ -2,10 +2,12 @@
 // 同一回合里拒过的不再问、对话里和全局待处理两种卡片、系统通知、关开关时收拾、握手声明、建会话时的说明、
 // 交给执行器的两台机器。执行器是假的（真的那份归执行器那条线，见 machine-*.test.mts），设备是假对端。
 import assert from 'node:assert/strict'
+import { randomUUID } from 'node:crypto'
 import { test } from 'node:test'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import { withDeveloperInstructions } from '../../protocol/src/codex-developer-instructions.mjs'
 import type { JsonRpcMessage, Thread } from '../../protocol/src/index.mjs'
+import { MACHINE_APPROVAL_METHOD as MACHINE } from '../../protocol/src/machine-approvals.mjs'
 import { codexRejects } from '../../shared/test/codex-params.mjs'
 import { approved } from '../src/device/machine/common.mjs'
 import { SENSITIVE_PRESETS, sensitivePresets } from '../src/device/machine/presets.mjs'
@@ -82,6 +84,7 @@ interface Seen {
  * 点头了回 ok，没点头回 declined 并带上结局（expired、cancelled、declined:理由）。machines 回两台机器的情况
  */
 function fakeExecutor() {
+  let fingerprint = 'original'
   const seen: Seen[] = []
   const outcomes: MachineApprovalResult[] = []
   const stopped: (string | undefined)[] = []
@@ -108,8 +111,14 @@ function fakeExecutor() {
         copy: null,
         flagged: Array.isArray(args.flagged) ? (args.flagged as string[]) : [],
       }
-      const result = await context.approve({ class: mutate ? 'mutate' : 'read', ask })
+      const result = await context.approve({
+        class: mutate ? 'mutate' : 'read',
+        ask,
+        ...(context.deferred && ask.flagged.length === 0 ? { fingerprint } : {}),
+      })
       outcomes.push(result)
+      if (result.kind === 'submitted')
+        return { success: true, contentItems: [{ type: 'inputText', text: 'submitted' }] }
       if (result.kind !== 'allowed') {
         const note = result.kind === 'declined' && result.note ? `:${result.note}` : ''
         context.log({
@@ -157,6 +166,9 @@ function fakeExecutor() {
     outcomes,
     stopped,
     presence,
+    replacePath() {
+      fingerprint = 'replacement'
+    },
     /** 假装起了一个进程 */
     start(record: MachineProcessRecord) {
       records = [...records, record]
@@ -166,7 +178,13 @@ function fakeExecutor() {
 }
 
 function setup(
-  options: { threads?: Thread[]; machine?: boolean; desktop?: MachineFacts; timed?: boolean } = {},
+  options: {
+    threads?: Thread[]
+    machine?: boolean
+    desktop?: MachineFacts
+    timed?: boolean
+    deferred?: boolean
+  } = {},
 ) {
   const threads = options.threads ?? [
     thread({
@@ -240,6 +258,16 @@ function setup(
     harness('pi', { threads, declaration: { extensions: ['clientTools'], features: {} as never } }),
   ])
   aggregate.device.extensions.push('deviceSettings')
+  const deferredCalls: { method: string; params: unknown }[] = []
+  if (options.deferred) {
+    aggregate.device.extensions.push('machineApprovals')
+    remoteHandlers[MACHINE.list] = () => ({ cards: [] })
+    for (const method of [MACHINE.open, MACHINE.start, MACHINE.finish])
+      remoteHandlers[method] = (params) => {
+        deferredCalls.push({ method, params })
+        return {}
+      }
+  }
   // 限时授权记在会话所在的远程设备上（timedApprovals）
   let grants: {
     id: string
@@ -304,7 +332,13 @@ function setup(
     clientTools: main.port,
     ...(options.machine === false
       ? {}
-      : { machine: { desktop: options.desktop ?? DESKTOP, executor: () => fake.executor } }),
+      : {
+          machine: {
+            desktop: options.desktop ?? DESKTOP,
+            executor: () => fake.executor,
+            randomApprovalId: randomUUID,
+          },
+        }),
     store: {
       load: () => ({ localWire: null, remotes: [] }),
       save() {},
@@ -406,6 +440,7 @@ function setup(
     command,
     call,
     detached,
+    deferredCalls,
     enable,
     box,
   }
@@ -1171,6 +1206,48 @@ test('UNATTENDED-MACHINE-002：无人值守时限时授权内的操作本机照�
   await call({ command: 'make' }, { threadId: 'b', litchUnattended })
   assert.deepEqual(world.fake.outcomes.at(-1), { kind: 'unattended', message: notice })
   assert.equal(cardsOf(session).length, 0)
+})
+
+test('无人值守：原调用立刻完成，回合结束不收卡；变更路径不执行，限时批准只运行指定的一张', async () => {
+  const world = await started({ deferred: true, timed: true })
+  await world.enable()
+  const source = { litchUnattended: { notice: 'unattended' } }
+  const session = watchSession(world.core, 'a', 'box')
+  assert.equal(textOf(await world.call({ command: 'pwd' }, source)), 'submitted')
+  assert.deepEqual(
+    world.fake.outcomes.map(({ kind }) => kind),
+    ['submitted'],
+  )
+  assert.deepEqual(cardsOf(session), [], '不进阻塞待答区')
+  const first = world.activity.view?.deferred?.[0]
+  assert.ok(first)
+  world.remote.last().notify('turn/completed', { threadId: 'a', turn: turn('t1', []) })
+  await settle()
+  assert.equal(world.activity.view?.deferred?.[0]?.id, first.id)
+  world.fake.replacePath()
+  await world.command('machine.deferredAnswer', { deviceId: 'box', id: first.id, decision: 'once' })
+  await settle()
+  assert.equal(world.fake.outcomes.at(-1)?.kind, 'changed')
+  const report = world.deferredCalls.findLast((entry) => entry.method === MACHINE.finish)
+  assert.equal((report?.params as { outcome: string })?.outcome, 'failed')
+  assert.equal(textOf(await world.call({ command: 'pwd' }, source)), 'submitted')
+  assert.equal(textOf(await world.call({ command: 'true' }, source)), 'submitted')
+  const cards = world.activity.view?.deferred ?? []
+  assert.equal(cards.length, 2)
+  await world.command('machine.deferredAnswer', {
+    deviceId: 'box',
+    id: cards[0]?.id,
+    decision: 'timed',
+    hours: 1,
+  })
+  await settle()
+  assert.equal(world.fake.outcomes.at(-1)?.kind, 'allowed')
+  assert.deepEqual(
+    world.activity.view?.deferred?.map((card) => card.id),
+    [cards[1]?.id],
+  )
+  assert.equal(textOf(await world.call({ command: 'echo again' }, source)), 'ok')
+  assert.equal(world.deferredCalls.filter((entry) => entry.method === MACHINE.start).length, 2)
 })
 
 test('限时授权·操作本机：远程会话授权内（含逐条确认）执行与读都不再弹；提到禁止位置的仍弹；别的会话、撤销、到期后恢复', async () => {

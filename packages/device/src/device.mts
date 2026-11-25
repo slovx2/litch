@@ -36,6 +36,7 @@ import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.
 import { EXTERNAL_SOURCES_EXTENSION } from '../../protocol/src/external-sources.mjs'
 import { FEISHU_EXTENSION } from '../../protocol/src/feishu.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
+import { MACHINE_APPROVALS } from '../../protocol/src/machine-approvals.mjs'
 import { managerInputMethod } from '../../protocol/src/manager-idle-compact.mjs'
 import {
   NATIVE_BACKGROUND_NAMESPACE,
@@ -73,6 +74,7 @@ import { type DeviceFeishuOptions, DeviceFeishuService } from './feishu/service.
 import type { FlowLimits } from './flow.mjs'
 import { deviceInfo, deviceVersion, HarnessCatalog } from './harness-info.mjs'
 import { WorkspaceImporter } from './importer.mjs'
+import { DeviceMachineApprovals } from './machine-approvals.mjs'
 import { DeviceManagement } from './management.mjs'
 import { DeviceManagers } from './manager.mjs'
 import { managerNow } from './manager-store.mjs'
@@ -356,6 +358,7 @@ export class DeviceServer {
   readonly titles: CodexTitles
   /** 每个会话的后台任务（backgroundTasks 扩展） */
   readonly background: DeviceBackground
+  private readonly machineApprovals: DeviceMachineApprovals
   readonly nativeBackground: NativeBackgroundWake
   readonly restart: RestartResume
   /** 上一次看到的“会话编排”开关，变了才动 */
@@ -491,6 +494,7 @@ export class DeviceServer {
       log,
     })
     info.extensions.push(EXTENSION.clientApprovals)
+    info.extensions.push(MACHINE_APPROVALS)
     this.chrome =
       options.chromeBinary && process.platform === 'linux'
         ? new DeviceChromeRuntime(
@@ -884,6 +888,25 @@ export class DeviceServer {
       graceMs: options.timing?.clientToolGraceMs ?? DEFAULT_TIMING.clientToolGraceMs,
       log,
     })
+    const clientInvoke = new ClientToolInvoker({ router, index: this.index, log })
+    this.machineApprovals = new DeviceMachineApprovals({
+      db: this.sessionsDb,
+      source: (peer, threadId, callId) =>
+        router.ownsMachineCall(peer, threadId, callId) ||
+        clientInvoke.ownsMachineCall(peer, threadId, callId),
+      allowed: (threadId) =>
+        !this.index.archived(threadId) &&
+        this.sessionTree.unattended(threadId) !== null &&
+        deviceMachineEnabled(
+          this.control?.state?.snapshot.values ?? this.options.clientToolSettings,
+        ),
+      announce: (method, params, extension) => this.announce(method, params, extension),
+      task: (threadId, task) => this.background.desktopTask(threadId, task),
+      deliver: (threadId, text, id, onDispatch) =>
+        this.sessionTree.deliverMachineResult(threadId, text, id, onDispatch),
+      log,
+    })
+    this.machineApprovals.schedule()
     this.attachments = new AttachmentRetention({
       home: options.attachmentHome ?? homedir(),
       stateDir: options.stateDir,
@@ -966,7 +989,7 @@ export class DeviceServer {
         this.prepareSession(params, harness, runtime, native, chromeRouting),
       resumeTools: this.resumeTools,
       clientTools: router,
-      clientInvoke: new ClientToolInvoker({ router, index: this.index, log }),
+      clientInvoke,
       tasks: this.tasks,
       managers: this.managers,
       ...(this.external ? { external: new DeviceExternalRpc(this.external, autostart) } : {}),
@@ -986,6 +1009,7 @@ export class DeviceServer {
       harnessEnvNames: (harness) => this.harnessEnvNames(harness),
       titles: this.titles,
       background: this.background,
+      machineApprovals: this.machineApprovals,
       nativeBackground: this.nativeBackground,
       worktrees: this.worktrees,
       worktreeLife: this.worktreeLife,
@@ -1601,6 +1625,7 @@ export class DeviceServer {
     this.tasks?.close()
     this.pairing?.close()
     this.approvals.shutdown()
+    this.machineApprovals.shutdown()
     for (const link of [...this.engineLinks]) link.close()
     for (const session of [...this.sessions]) session.close()
     this.sessionTree.close()

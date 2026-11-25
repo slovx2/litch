@@ -77,14 +77,14 @@
       "method": "litch/clientTool/invoke",
       "description": "客户端发给聚合面（设备进程）的请求。调用者是这台机器上的一个进程（适配器的 machine 子命令，短名 litch-machine），不是 Litch，不必声明 clientTools；套接字只有属主能连，不另做认证。设备进程按 threadId 找发起那个回合的、声明了这个命名空间的 Litch 连接；找不到会话时只有一条声明了的就交给它，不止一条回 ambiguous（说明里列出各台的 desktop.hostname）；给了 desktop 就只交给主机名对得上的那条；一条都没有回 noExecutor。交出去用 litch/clientTool/call；调用者断开时设备进程撤回那次调用（serverRequest/resolved）。应答就是执行方的应答。",
       "params": { "$ref": "#/definitions/InvokeParams" },
-      "response": { "$ref": "#/definitions/ToolCallResponse" }
+      "response": { "$ref": "#/definitions/DetachedToolCallResponse" }
     },
     {
       "kind": "ServerRequest",
       "method": "litch/clientTool/call",
       "description": "设备进程发给按 litch/clientTool/invoke 挑出来的那条 Litch 连接，只发给声明了这个命名空间的连接，没声明的连接上不会出现。和 item/tool/call 的区别只是不一定来自某个回合（threadId、turnId 可以是 null）：执行方找不到会话时把卡片放进全局待处理。应答同 item/tool/call；执行方断开时设备进程替它回 failed。",
       "params": { "$ref": "#/definitions/DetachedCallParams" },
-      "response": { "$ref": "#/definitions/ToolCallResponse" }
+      "response": { "$ref": "#/definitions/DetachedToolCallResponse" }
     },
     {
       "kind": "Method",
@@ -254,6 +254,16 @@
       "properties": {
         "contentItems": { "type": "array", "items": { "$ref": "#/definitions/ContentItem" } },
         "success": { "type": "boolean" }
+      }
+    },
+    "DetachedToolCallResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contentItems", "success"],
+      "properties": {
+        "contentItems": { "type": "array", "items": { "$ref": "#/definitions/ContentItem" } },
+        "success": { "type": "boolean" },
+        "litchPendingApproval": { "const": true, "description": "已提交会话里的异步本机审批，尚未实际执行。" }
       }
     },
     "FailureKind": {

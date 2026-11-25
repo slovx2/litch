@@ -1,6 +1,7 @@
 // 工具进程的入口：核心就住在这个进程里。主进程每给一个端口，就在上面开一条通道。
 // 平台能力（定时器、端口、传输）在这里做成核心要的接口再交进去，核心自己不碰 Node 和 Electron。
 import { execFileSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { arch, homedir, hostname, release, userInfo } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -226,7 +227,7 @@ function createHost(): Core | MockCore {
     },
     clientTools: toolPort,
     forward: authForward(),
-    machine: { desktop },
+    machine: { desktop, randomApprovalId: randomUUID },
     // 扫码绑定手机：一次性私钥的临时文件放在用户数据目录下；本机给手机看的名字用电脑名称。
     // 扫码时核对过的批准公钥、撤销的手机交给主进程（批准钥匙只由它读写，approvals/main.mts）
     pairing: {

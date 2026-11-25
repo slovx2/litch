@@ -18,6 +18,7 @@ import { useKey, useServices } from '../app/services.tsx'
 import { ArchiveBar } from '../archived/ArchiveBar.tsx'
 import { BackgroundBar } from '../background/BackgroundBar.tsx'
 import { GoalBar } from '../goal/GoalBar.tsx'
+import { DeferredMachineCards } from '../machine/DeferredMachineCards.tsx'
 import { TimedBar } from '../timed/TimedBar.tsx'
 import { QueuedNotesChip } from '../tree/EventBar.tsx'
 import { SessionComposer } from './Composer.tsx'
@@ -62,6 +63,7 @@ export function Dock({ deviceId, sessionId }: DockProps) {
   } else {
     body = (
       <>
+        <DeferredMachineCards key={deviceId} deviceId={deviceId} sessionId={sessionId} />
         {meta.note ? <div className="cmp-hint err">{t.text(meta.note)}</div> : null}
         {/* 摆着的是上次留下的内容（meta.stale）：照样能发，核心先排着，最新的载入完再发 */}
         {meta.stale && !blocked ? <div className="cmp-hint">{t('composer.syncing')}</div> : null}

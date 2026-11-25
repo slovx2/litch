@@ -3904,6 +3904,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (topic.kind === 'pairing') return pairing.subscribe(topic.deviceId, sink)
       // 手机批准（mock-approvals.mts）
       if (topic.kind === 'approvals') return approvals.subscribe(topic.deviceId, sink)
+      if (topic.kind === 'machineApprovals') {
+        sink.snapshot([])
+        return () => {}
+      }
       // 给设备装 harness（mock-install.mts）、litch config（mock-config.mts）
       if (topic.kind === 'install') return install.subscribe(topic.deviceId, sink)
       // 工作树（mock-worktrees.mts）

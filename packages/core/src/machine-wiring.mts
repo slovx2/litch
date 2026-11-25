@@ -22,6 +22,7 @@ import type {
 } from './device/machine/types.mjs'
 import type { MachineLogStore } from './device/remote.mjs'
 import type { MachineCallInput } from './device/tool-calls.mjs'
+import { createMachineDeferred } from './machine-deferred.mjs'
 import type { ApprovalOption } from './model.mjs'
 import type { MachineNotice, ToolAnswer } from './model-client-tools.mjs'
 import type {
@@ -95,6 +96,9 @@ export interface MachineWiringHost {
   logStore?(deviceId: string): MachineLogStore | null
   /** 限时授权：会话所在设备上，这个会话的“操作本机”此刻放行（命令里提到禁止位置的仍要问） */
   timedApproval?(deviceId: string, threadId: string): boolean
+  deferredAvailable?(deviceId: string): boolean
+  grantDeferred?(deviceId: string, threadId: string, hours: number): Promise<unknown>
+  randomDeferredId?(): string
   log(line: string): void
 }
 
@@ -117,6 +121,14 @@ export interface MachineWiring {
   subscribe(sink: HostSink): () => void
   /** 答全局待处理里的一张卡片。已经不在了返回 false */
   answer(pendingId: string, optionId: string, note: string | null): boolean
+  answerDeferred(
+    deviceId: string,
+    id: string,
+    decision: 'once' | 'timed' | 'decline',
+    hours?: number,
+  ): Promise<boolean>
+  stopDeferred(deviceId: string, id: string, threadId: string): void
+  policyChanged(deviceId: string): void
   kill(processId: string): boolean
   /** 全部停：结束进程、撤掉待处理卡片。给了设备只停它的 */
   stopAll(deviceId?: string): void
@@ -146,6 +158,7 @@ interface Pending {
 }
 
 const LOG_RESULTS = new Set<MachineLogEntry['result']>([
+  'submitted',
   'ok',
   'failed',
   'declined',
@@ -216,6 +229,8 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
   let pendingSeq = 0
   /** “本会话都允许”：设备、会话（找不到会话的是空串）、类别 */
   const grants = new Set<string>()
+  const policyRevisions = new Map<string, number>()
+  const policyRevision = (deviceId: string) => policyRevisions.get(deviceId) ?? 0
   /** 挂着、可被限时授权放行的卡片（命令里没提到禁止位置的）：设备、会话、答掉它 */
   const timedWaiting = new Set<{ deviceId: string; threadId: string; allow(): void }>()
   /** 同一回合里被拒的：键 → 用户附的那句话 */
@@ -245,6 +260,7 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
       }))
       .sort((a, b) => a.startedAt - b.startedAt),
     pending: [...pending.values()].map((entry) => entry.view),
+    ...(deferred.views().length ? { deferred: deferred.views() } : {}),
   })
 
   const push = () => {
@@ -252,6 +268,28 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
     const op: MachineOp = { op: 'machine.set', view: activity() }
     for (const sink of sinks) sink.delta([op])
   }
+  const deferred = createMachineDeferred({
+    clock,
+    desktop: host.desktop.name,
+    ...(host.randomDeferredId ? { randomId: host.randomDeferredId } : {}),
+    changed: push,
+    grant: async (deviceId, threadId, hours) => {
+      if (!host.grantDeferred) throw new Error('Timed approval is unavailable')
+      return host.grantDeferred(deviceId, threadId, hours)
+    },
+    notify(view) {
+      const device = host.device(view.deviceId)
+      host.notify({
+        pendingId: view.id,
+        deviceName:
+          typeof device?.name === 'string' ? device.name : (device?.host ?? view.deviceId),
+        host: device?.host ?? '',
+        action: view.ask.action,
+        summary: view.ask.command ?? view.ask.path ?? '',
+      })
+    },
+    log: host.log,
+  })
   const unlisten = executor.onProcessesChanged(push)
 
   // —— 操作记录 ——
@@ -550,8 +588,63 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
         log: (note: MachineLogNote) => addLog(deviceId, owner, note),
         signal: input.signal,
       }
+      const source = host.device(deviceId)?.link
+      let submitted = false
+      const revision = policyRevision(deviceId)
+      if (
+        input.unattended &&
+        input.threadId &&
+        source &&
+        host.deferredAvailable?.(deviceId) &&
+        /^macOS\b/i.test(host.desktop.system)
+      ) {
+        const threadId = input.threadId
+        const check = context.approve
+        context.deferred = true
+        context.approve = async (request) => {
+          const result = await check(request)
+          if (result.kind !== 'unattended' || !request.fingerprint) return result
+          const argsText = JSON.stringify(input.arguments)
+          if (typeof argsText !== 'string') return result
+          const args: unknown = JSON.parse(argsText)
+          const frozen = request.fingerprint
+          const policy = JSON.stringify(settings)
+          const matches = () =>
+            revision === policyRevision(deviceId) &&
+            JSON.stringify(host.settings(deviceId)) === policy
+          if (!matches()) return { kind: 'changed' }
+          const details = JSON.stringify(args, null, 2)
+          if (typeof details !== 'string' || details.length > 28_000) return result
+          const accepted = await deferred.submit(
+            deviceId,
+            source,
+            { ...input, threadId },
+            request,
+            details,
+            async (signal) => {
+              if (!matches() || signal.aborted)
+                return clientToolFailure(
+                  'failed',
+                  'The approval policy changed or the operation was stopped. Nothing was started.',
+                )
+              return executor.call(input.tool, args, {
+                ...context,
+                signal,
+                deferredExecution: true,
+                approve: async (current) =>
+                  matches() && !signal.aborted && current.fingerprint === frozen
+                    ? { kind: 'allowed' }
+                    : { kind: 'changed' },
+              })
+            },
+          )
+          submitted = accepted
+          return accepted ? { kind: 'submitted' } : result
+        }
+      }
       try {
-        return await executor.call(input.tool, input.arguments, context)
+        const response = await executor.call(input.tool, input.arguments, context)
+        return submitted && input.detached ? { ...response, litchPendingApproval: true } : response
       } catch (error) {
         // 执行器说好了不抛错；真抛了也不能让引擎那头干等
         host.log(`litch_machine 执行器出错：${String(error)}`)
@@ -565,16 +658,19 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
     },
 
     disabled(deviceId) {
+      deferred.stopAll(deviceId)
       executor.stopAll(deviceId)
       dropPending(deviceId)
       forgetGrants(deviceId)
     },
 
     presence(deviceId, online) {
+      if (!online) deferred.stopAll(deviceId, true)
       executor.ownerPresence(deviceId, online)
     },
 
     forget(deviceId) {
+      deferred.stopAll(deviceId)
       executor.stopAll(deviceId)
       dropPending(deviceId)
       forgetGrants(deviceId)
@@ -604,9 +700,16 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
       return true
     },
 
+    answerDeferred: deferred.answer,
+    stopDeferred: deferred.stop,
+    policyChanged(deviceId) {
+      policyRevisions.set(deviceId, policyRevision(deviceId) + 1)
+    },
+
     kill: (processId) => executor.kill(processId),
 
     stopAll(deviceId) {
+      deferred.stopAll(deviceId)
       executor.stopAll(deviceId)
       dropPending(deviceId)
     },
@@ -629,6 +732,7 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
     },
 
     dispose() {
+      deferred.stopAll(undefined, true)
       unlisten()
       dropPending()
       sinks.clear()

@@ -1,0 +1,341 @@
+// 真实 Electron、设备进程、SSH 与 Mac 命令；模型与状态目录均为隔离夹具。
+import './require-ui-build.mjs'
+import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { ExternalStore } from '../../../packages/device/dist/packages/device/src/external-store.mjs'
+import {
+  ManagerStore,
+  openManagerDatabase,
+} from '../../../packages/device/dist/packages/device/src/manager-store.mjs'
+import {
+  MANAGER_DEFAULT_CONTACT,
+  MANAGER_DEFAULT_DISPATCH,
+} from '../../../packages/device/dist/packages/protocol/src/manager.mjs'
+import {
+  managerClient,
+  startManagerFixture,
+  until,
+} from '../../../scripts/client-fixture-manager-check.mjs'
+import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
+
+const require = createRequire(import.meta.url)
+const repo = fileURLToPath(new URL('../../..', import.meta.url))
+const cleanup = []
+let desktopLog
+const t = { after: (fn) => cleanup.push(fn) }
+const watch = (child) => {
+  let output = ''
+  for (const stream of [child.stdout, child.stderr])
+    stream.on('data', (chunk) => {
+      output += chunk
+    })
+  t.after(async () => {
+    if (child.exitCode !== null || child.signalCode !== null) return
+    const exited = new Promise((done) => child.once('exit', done))
+    child.kill('SIGTERM')
+    await exited
+  })
+  return () => output
+}
+const line = (log, prefix) =>
+  log()
+    .split('\n')
+    .find((value) => value.startsWith(prefix))
+    ?.slice(prefix.length) ?? ''
+
+// 只驱动自己创建的隐藏窗口；按钮用正式页面的事件处理。
+async function runPage(config) {
+  const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+  const wait = async (label, test) => {
+    const deadline = Date.now() + 25_000
+    while (Date.now() < deadline) {
+      const value = test()
+      if (value) return value
+      await pause(50)
+    }
+    throw new Error(`${label}: ${document.body.innerText.slice(-4000)}`)
+  }
+  const port = await new Promise((resolve) => {
+    const opened = (event) => {
+      if (event.data?.type !== 'litch:core-port' || !event.ports[0]) return
+      window.removeEventListener('message', opened)
+      resolve(event.ports[0])
+    }
+    window.addEventListener('message', opened)
+    window.litchShell.requestCorePort()
+  })
+  let serial = 2
+  const pending = new Map()
+  const devices = new Map()
+  let live
+  port.onmessage = ({ data }) => {
+    if (data.t === 'snap') {
+      if (data.data.sessionId) live = data.data
+      else for (const device of data.data.devices ?? []) devices.set(device.id, device)
+    }
+    if (data.t === 'delta')
+      for (const op of data.ops) if (op.op === 'device.upsert') devices.set(op.device.id, op.device)
+    if (data.t !== 'res') return
+    const entry = pending.get(data.id)
+    pending.delete(data.id)
+    if (data.ok) entry?.resolve(data.result)
+    else entry?.reject(new Error(JSON.stringify(data.error)))
+  }
+  port.start()
+  port.postMessage({ t: 'sub', id: 1, topic: { kind: 'app' } })
+  const command = (name, params) =>
+    new Promise((resolve, reject) => {
+      const id = ++serial
+      pending.set(id, { resolve, reject })
+      port.postMessage({ t: 'cmd', id, name, params })
+    })
+  const deviceId = 'approval-fixture'
+  await wait('Mac 和 SSH 都在线', () =>
+    ['local', deviceId].every((id) => devices.get(id)?.connection === 'online'),
+  )
+  await command('device.tools.set', { deviceId, machine: true })
+  console.log('MACHINE_READY')
+  window.machineCheck = async (sessionId) => {
+    const selector = `[data-session="${sessionId}"] .ss-row`
+    ;(await wait('经理行', () => document.querySelector(selector)))?.click()
+    port.postMessage({ t: 'sub', id: ++serial, topic: { kind: 'session', deviceId, sessionId } })
+    await wait(
+      '会话输入区就绪',
+      () =>
+        live?.sessionId === sessionId &&
+        live.live &&
+        document.querySelector('.mg-chat textarea.cmp-text:not([disabled])'),
+    )
+    const send = (text) => command('session.send', { deviceId, sessionId, text })
+    const card = '[data-machine-deferred="true"]'
+    const execute = (value, filename, sleep = '') =>
+      `本机：exec ${JSON.stringify({ command: `${sleep}printf '%s' ${value} > ${filename}; printf '%s' ${value}`, cwd: config.cwd })}`
+    await send(execute('MACHINE_FIRST', config.first, 'sleep 3; '))
+    await wait('对话卡', () => document.querySelector(card))
+    await wait(
+      '原回合结束且卡仍在',
+      () =>
+        document.body.innerText.includes('Submitted for approval') && document.querySelector(card),
+    )
+    if (!document.querySelector('[data-machine-approval]')) throw new Error('侧栏无待批准记号')
+    console.log('MACHINE_PENDING')
+    await wait('确认原回合已结束', () => window.machinePermit)
+    document.querySelector(`${card} .timed-open`).click()
+    ;(
+      await wait('限时允许确认', () => document.querySelector(`${card} .req-timed .primary`))
+    ).click()
+    await wait('卡消失', () => !document.querySelector(card))
+    await wait('本机操作限时条', () => document.querySelector('[data-timed="machine"]'))
+    await wait('后台任务运行', () => document.querySelector('.bgbar'))
+    await wait(
+      '后台结果进入原会话',
+      () =>
+        document.querySelector('.turn [data-origin="backgroundTask"]') ||
+        document.body.innerText.includes('The approved operation finished'),
+    )
+    await send(execute('MACHINE_SECOND', config.second))
+    await wait(
+      '授权内直接完成',
+      () =>
+        /output:\s+MACHINE_SECOND/.test(document.body.innerText) && !document.querySelector(card),
+    )
+    document.querySelector('.timedbar[data-timed="machine"] .x').click()
+    await wait('撤销限时授权', () => !document.querySelector('[data-timed="machine"]'))
+    await send(execute('MACHINE_STOPPED', config.stopped, 'sleep 15; '))
+    ;(
+      await wait('撤销后回到审批', () => document.querySelector(`${card} [data-option="once"]`))
+    ).click()
+    ;(await wait('单次批准进入后台', () => document.querySelector('.bgbar'))).click()
+    ;(
+      await wait('停止后台命令', () => document.querySelector('[data-status="running"] .bg-stop'))
+    ).click()
+    await wait('后台命令已停止', () => document.querySelector('[data-status="stopped"]'))
+    if (document.querySelector('[data-timed="machine"]'))
+      throw new Error('单次批准不能注册限时授权')
+    console.log('MACHINE_DONE')
+  }
+}
+
+try {
+  const local = await startManagerFixture(t, {})
+  const child = spawn(process.execPath, [join(repo, 'scripts/client-ssh-fixture.mjs')], {
+    cwd: repo,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  const sshLog = watch(child)
+  const ssh = JSON.parse(await until('SSH 夹具', () => line(sshLog, 'LITCH_SSH_FIXTURE '), Boolean))
+  const profile = join(local.root, 'approval-profile')
+  mkdirSync(profile)
+  writeFileSync(
+    join(profile, 'devices.json'),
+    JSON.stringify({
+      localWire: null,
+      remotes: [
+        {
+          id: 'approval-fixture',
+          name: '审批 SSH 夹具',
+          target: { kind: 'alias', alias: ssh.aliases.svc },
+          wire: 'blue',
+        },
+      ],
+    }),
+  )
+  const config = {
+    cwd: local.root,
+    first: join(local.root, 'approved'),
+    second: join(local.root, 'timed'),
+    stopped: join(local.root, 'stopped'),
+  }
+  const threadFile = join(profile, 'thread-id')
+  const permissionFile = join(profile, 'click-approve')
+  const bootstrap = join(profile, 'bootstrap.mjs')
+  writeFileSync(
+    bootstrap,
+    `
+import { app } from 'electron';
+import { existsSync, readFileSync } from 'node:fs';
+process.on('SIGTERM', () => app.quit());
+app.on('browser-window-created', (_event, win) => {
+  win.show = () => {}; app.dock?.hide();
+  win.webContents.setBackgroundThrottling(false);
+  win.webContents.on('console-message', (entry) => console.log(entry.message));
+  win.webContents.once('did-finish-load', async () => {
+    try {
+      if (win.isVisible()) throw new Error('测试窗口没有保持隐藏');
+      await win.webContents.executeJavaScript(${JSON.stringify(`(${runPage.toString()})(${JSON.stringify(config)})`)});
+      const file = ${JSON.stringify(threadFile)};
+      while (!existsSync(file)) await new Promise((done) => setTimeout(done, 50));
+      const run = win.webContents.executeJavaScript('window.machineCheck(' + JSON.stringify(readFileSync(file, 'utf8')) + ')');
+      run.catch(() => {});
+      const approval = ${JSON.stringify(permissionFile)};
+      while (!existsSync(approval)) await Promise.race([run, new Promise((done) => setTimeout(done, 50))]);
+      await win.webContents.executeJavaScript('window.machinePermit = true');
+      await run;
+    } catch (error) { console.error(error); app.exit(1); }
+  });
+});
+await import(${JSON.stringify(pathToFileURL(join(repo, 'apps/desktop/dist/main.mjs')).href)});
+`,
+  )
+  const desktop = spawn(require('electron'), withChromiumTestArgs([bootstrap]), {
+    cwd: repo,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      PATH: process.env.PATH,
+      HOME: join(local.root, 'home'),
+      TMPDIR: local.root,
+      CODEX_HOME: join(local.root, 'cx'),
+      LITCH_PROFILE: profile,
+      LITCH_ENTRY: local.socket,
+      LITCH_SSH_CONFIG: ssh.config,
+      LITCH_REMOTE_CODEX: ssh.codex,
+      LITCH_REMOTE_ADAPTER: ssh.adapter,
+      LITCH_LANG: 'zh-CN',
+    },
+  })
+  const log = watch(desktop)
+  desktopLog = log
+  await until('真实桌面连接', log, (output) => output.includes('MACHINE_READY'))
+  const state = join(ssh.states.svc, 'device')
+  const service = JSON.parse(readFileSync(join(state, 'service.json'), 'utf8'))
+  const client = await managerClient(t, service.socket, [], ['machineApprovals', 'backgroundTasks'])
+  const { data: models } = await client.call('model/list', { harness: 'pi' })
+  const model = models.find((item) => item.isDefault) ?? models[0]
+  assert.ok(model, '夹具没有 Pi 模型')
+  const { manager, threadId } = await client.call('litch/manager/create', {
+    cwd: ssh.work,
+    harness: 'pi',
+    name: '无人值守本机审批验收',
+    scope: '',
+    rules: '',
+    model: model.id,
+    effort: model.defaultReasoningEffort ?? 'low',
+    template: 'blank',
+    firstTask: '',
+    dispatch: { ...MANAGER_DEFAULT_DISPATCH, worktree: false },
+    contact: MANAGER_DEFAULT_CONTACT,
+  })
+  const store = new ManagerStore(openManagerDatabase(state))
+  try {
+    const external = new ExternalStore(store)
+    external.config.saveSource(
+      {
+        sourceId: 'machine-fixture',
+        provider: 'github',
+        enabled: true,
+        credentialRef: 'missing',
+        botUserId: '12',
+        minRole: 'triage',
+        interval: 3600,
+        triggers: {
+          mention: true,
+          assignment: true,
+          reviewRequest: false,
+          label: false,
+          labelIds: [],
+        },
+        repos: [
+          {
+            repoId: '42',
+            owner: 'fixture',
+            name: 'machine',
+            url: 'https://github.com/fixture/machine',
+            localRoot: ssh.work,
+            allowedBase: ['main'],
+            headNamespace: 'litch/',
+          },
+        ],
+        routes: [],
+        writePolicy: { comment: false, draftPr: false, status: false, managedPush: false },
+        unattended: { autoNotify: true },
+      },
+      0,
+      'setup-source',
+      'fixture',
+    )
+    external.config.saveAssignment(
+      { managerId: manager.id, identityId: null, repoIds: ['42'] },
+      0,
+      'setup-assignment',
+      () => {},
+    )
+  } finally {
+    store.close()
+  }
+  writeFileSync(threadFile, threadId)
+  await until(
+    '发起回合结束仍待批',
+    log,
+    (output) => output.includes('MACHINE_PENDING') || desktop.exitCode !== null,
+  )
+  assert.match(log(), /MACHINE_PENDING/)
+  assert.equal(existsSync(config.first), false, '批准前不能写入')
+  await until(
+    '审批卡不阻塞原回合',
+    () => client.call('thread/read', { threadId, includeTurns: true }),
+    ({ thread }) => thread.turns.at(-1)?.status === 'completed',
+  )
+  writeFileSync(permissionFile, '')
+  await until(
+    '后台执行、唤醒与限时直通',
+    log,
+    (output) => output.includes('MACHINE_DONE') || desktop.exitCode !== null,
+  )
+  assert.match(log(), /MACHINE_DONE/)
+  await until('授权内实际执行', () => existsSync(config.second), Boolean)
+  assert.equal(readFileSync(config.first, 'utf8'), 'MACHINE_FIRST')
+  assert.equal(readFileSync(config.second, 'utf8'), 'MACHINE_SECOND')
+  assert.equal(existsSync(config.stopped), false, '停止后命令未写入')
+  console.log(
+    '真实隐藏 Mac：SSH 经理对话卡不阻塞、限时批准、后台执行与唤醒、下一次直接执行、撤销、单次批准和停止均通过',
+  )
+} catch (error) {
+  if (desktopLog) console.error(desktopLog().slice(-10000))
+  throw error
+} finally {
+  for (const finish of cleanup.reverse()) await finish()
+}

@@ -2,6 +2,7 @@
 // 它和模拟核心实现的是同一个接口，界面分不出对面是哪一个。
 import { clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import type { ClientInfo } from '../../protocol/src/index.mjs'
+import { validTimedApprovalHours } from '../../protocol/src/timed-approvals.mjs'
 import { ChannelError, type Clock, type Commands } from './channel/protocol.mjs'
 import type { CoreHost, HostSink } from './channel/server.mjs'
 import { createConfigBridge } from './config/bridge.mjs'
@@ -96,6 +97,7 @@ export interface CoreConfigOptions {
 export interface CoreMachineOptions {
   /** 这台桌面端自己的情况，外壳现查的（核心就住在这台电脑上） */
   desktop: MachineFacts
+  randomApprovalId?(): string
   /** 造执行器。不给就用真的（device/machine/executor.mts）；测试里换成假的 */
   executor?(options: MachineExecutorOptions): MachineExecutor
 }
@@ -285,6 +287,12 @@ export function createCore(options: CoreOptions): Core {
           : {}),
         timedApproval: (deviceId, threadId) =>
           devices.get(deviceId)?.timedApprovals.active(threadId, 'machine') != null,
+        deferredAvailable: (deviceId) => devices.get(deviceId)?.machineApprovalAvailable() === true,
+        ...(machineOptions.randomApprovalId
+          ? { randomDeferredId: machineOptions.randomApprovalId }
+          : {}),
+        grantDeferred: (deviceId, threadId, hours) =>
+          deviceOf(deviceId).timedApprovals.grant(threadId, 'machine', hours),
         log: (line) => options.log?.(line),
       })
     : null
@@ -342,6 +350,7 @@ export function createCore(options: CoreOptions): Core {
               desktop: desktopInfo,
               call: (input, session) => wiring.call(config.id, input, session),
               turnEnded: (threadId, turnId) => wiring.turnEnded(config.id, threadId, turnId),
+              stopDeferred: ({ id, threadId }) => wiring.stopDeferred(config.id, id, threadId),
               presence(online) {
                 if (current()) wiring.presence(config.id, online)
               },
@@ -1152,6 +1161,7 @@ export function createCore(options: CoreOptions): Core {
             }
           }
           saved = { ...saved, machine: { ...(saved.machine ?? {}), [deviceId]: next } }
+          wiring?.policyChanged(deviceId)
           persist()
           device.update({})
           return {}
@@ -1161,6 +1171,17 @@ export function createCore(options: CoreOptions): Core {
           if (!wiring?.answer(String(pendingId), String(optionId), note ?? null)) {
             throw new ChannelError('notFound', '该卡片已不存在')
           }
+          return {}
+        }
+        case 'machine.deferredAnswer': {
+          const { deviceId, id, decision, hours } =
+            params as Commands['machine.deferredAnswer']['params']
+          if (decision !== 'once' && decision !== 'timed' && decision !== 'decline')
+            throw new ChannelError('invalid', 'Invalid machine approval decision')
+          if (decision === 'timed' && !validTimedApprovalHours(hours))
+            throw new ChannelError('invalid', 'Invalid approval duration')
+          if (!(await wiring?.answerDeferred(deviceId, id, decision, hours)))
+            throw new ChannelError('notFound', '该卡片已不存在')
           return {}
         }
         case 'machine.process.kill': {
@@ -2023,6 +2044,7 @@ export function createCore(options: CoreOptions): Core {
       if (topic.kind === 'projectPermission')
         return device.projectPermissions.open(topic.cwd, topic.harness, sink)
       if (topic.kind === 'timedApprovals') return device.timedApprovals.open(sink)
+      if (topic.kind === 'machineApprovals') return device.openMachineApprovals(sink)
       if (topic.kind === 'managers') return device.managers.open(sink)
       if (topic.kind === 'managerBoard') return device.managers.openBoard(topic.managerId, sink)
       if (
