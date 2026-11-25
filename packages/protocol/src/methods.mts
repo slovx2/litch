@@ -255,6 +255,11 @@ import type {
   HarnessProvidersWriteResponse,
 } from './harness-config.mjs'
 import type {
+  MachineApprovalCard,
+  MachineApprovalFinish,
+  MachineApprovalKey,
+} from './machine-approvals.mjs'
+import type {
   ManagerIssueActivityNotification,
   ManagerIssueChangedNotification,
   ManagerIssueRequests,
@@ -558,6 +563,17 @@ export interface ClientRequests extends AcpControlsRequests {
   'litch/approval/close': { params: ApprovalCloseParams; result: ApprovalCloseResponse }
   'litch/approval/list': { params: ApprovalListParams; result: ApprovalListResponse }
   'litch/approval/answer': { params: ApprovalAnswerParams; result: ApprovalAnswerResponse }
+  'litch/machineApproval/list': {
+    params: Record<string, never>
+    result: { cards: MachineApprovalCard[] }
+  }
+  'litch/machineApproval/open': {
+    params: MachineApprovalCard & { callId: string }
+    result: Record<string, never>
+  }
+  'litch/machineApproval/start': { params: MachineApprovalKey; result: Record<string, never> }
+  'litch/machineApproval/finish': { params: MachineApprovalFinish; result: Record<string, never> }
+  'litch/machineApproval/stop': { params: MachineApprovalKey; result: Record<string, never> }
   // 以下是给设备装 harness（扩展 harnessInstall，见 device-harness-install.mts）：只有聚合面有，
   // 设备信息的 `extensions` 里列了 harnessInstall 才能用
   'litch/device/harness/versions': {
@@ -822,6 +838,8 @@ export interface ServerNotifications {
   'litch/remoteChrome/cardsChanged': ApprovalChangedNotification
   /** 扩展，只发给发卡片的那条连接：手机答了一张卡片（原样转交，没验签） */
   'litch/approval/answered': ApprovalAnsweredNotification
+  'litch/machineApproval/changed': { threadId: string; cards: MachineApprovalCard[] }
+  'litch/machineApproval/stopRequested': MachineApprovalKey
   /** 扩展，只发给握手时声明过 harnessInstall 的连接：一个安装任务的状态或日志变了 */
   'litch/device/harness/install/changed': HarnessInstallChangedNotification
   'litch/harness/config/changed': HarnessConfigChangedNotification
