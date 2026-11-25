@@ -6,7 +6,7 @@ import { DshServer } from '../src/server.mjs'
 import { client, isolate, violations } from './client.mjs'
 import { scripted } from './mock-model.mjs'
 
-// dsh 的后台作业（backgroundTasks 扩展，决 434）：job/list 的名单进集合，后台作业结束后 dsh 叫醒会话开的那一轮
+// dsh 的后台作业（backgroundTasks 扩展）：job/list 的名单进集合，后台作业结束后 dsh 叫醒会话开的那一轮
 // 记来历 backgroundTask。只给声明了扩展的连接
 
 test('BG-DSH-001 名单：只算自己名下的，子代理不算，状态照搬，消失的记 stopped', () => {

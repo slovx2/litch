@@ -1,4 +1,4 @@
-// 经理 issue 列表的过滤条件：桌面与手机共用（60 号设计 5.6）。过滤、排序、分页都在设备上做，
+// 经理 issue 列表的过滤条件由桌面端和手机端共用。过滤、排序、分页都在设备上做，
 // 这里只把界面上的条件换成 ManagerIssueQuery；缓存按 managerIssueQueryKey(query) 分页，所以数组按固定次序给。
 
 import type {

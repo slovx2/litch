@@ -1,4 +1,4 @@
-// litch config 的执行器（14 号设计 3.3–3.5）：拆参数、帮助、操作清单和 config-ops.mts 一一对上、
+// litch config 的执行器：拆参数、帮助、操作清单和 config-ops.mts 一一对上、
 // 代表性的读写、要界面做的事（交给最近订阅的窗口、窗口回话）、放宽安全的确认卡（允许、拒绝、两分钟没人理、没有窗口）。
 // 执行器对着模拟核心跑（和真的核心走同一套命令和主题）；接线（握手声明、命令行调用的路由）对着真的核心和假设备。
 import assert from 'node:assert/strict'
@@ -379,7 +379,7 @@ test('tools set --harness：只改这个 harness 的浏览器、Computer Use；-
   assert.match(machine.text, /not per harness/)
 })
 
-test('放宽安全（E6）：确认卡写清是哪一项，每个窗口都看得到；允许才执行，拒绝不执行', async () => {
+test('放宽安全限制：确认卡写清是哪一项，每个窗口都看得到；允许才执行，拒绝不执行', async () => {
   const m = mock()
   const a = m.window()
   const b = m.window()
@@ -442,7 +442,7 @@ test('信任所有网站：打开要确认、关掉不用；黑名单加不用�
   assert.match((await m.run(['browser', 'blocked'], { lang: 'en' })).text, /^Trust all sites: off/)
 })
 
-test('放宽安全（E6）：两分钟没人理算拒绝；一个窗口都没开着当场拒绝', async () => {
+test('放宽安全限制：两分钟没人理算拒绝；一个窗口都没开着当场拒绝', async () => {
   const m = mock()
   const nobody = await m.run(['tools', 'set', 'local', '--computer', 'on'], { lang: 'en' })
   assert.equal(nobody.ok, false)
@@ -460,7 +460,7 @@ test('放宽安全（E6）：两分钟没人理算拒绝；一个窗口都没开
   assert.equal((await m.app()).devices.find((d) => d.id === 'local')?.tools.computer, false)
 })
 
-test('撤不回（E7）：删任务、撤手机、移除设备、清浏览器数据、清操作记录都先出确认卡；拒绝不动，允许才删', async () => {
+test('不可撤销的操作：删任务、撤手机、移除设备、清浏览器数据、清操作记录都先出确认卡；拒绝不动，允许才删', async () => {
   const m = mock()
   const win = m.window()
   // 模拟的设备命令要等时钟走一步才应答：边推时钟边等，等到出卡或者有结果

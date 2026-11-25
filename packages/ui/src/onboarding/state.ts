@@ -1,4 +1,4 @@
-// 首启引导出不出（14 号设计第四节）：只出一次，记在这台电脑的界面里（localStorage 的 litch.onboarding）；
+// 首启引导只显示一次，状态保存在这台电脑的 localStorage（litch.onboarding）；
 // 点了“打开配置助手”“以后再说”或者右上角的关闭都算完成。设置页“配置助手”一节可以重新打开。
 // 自检和截图（地址里带 onboarding=off）一律不自己出，免得盖住它们要点的东西；重新打开照样能开。
 // 判断“该不该出”的那几样只有逻辑，测试直接引用（packages/ui/test/onboarding.test.mjs）。

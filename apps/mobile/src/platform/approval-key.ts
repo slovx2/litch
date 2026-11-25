@@ -2,7 +2,7 @@
 // 和登录设备用的 ssh 钥匙（keys.ts）无关：一台手机一把，绑了几台设备都用它。种子只放在系统的安全存储里
 // （WHEN_UNLOCKED_THIS_DEVICE_ONLY），公钥和指纹不是秘密，记在 approval-key.json 里给设置页显示。
 // 签名前要过系统的指纹、面容或锁屏密码（expo-local-authentication）。没有用 SecureStore 的 requireAuthentication：
-// 换了指纹 Keystore 会作废那把钥匙，手机就得重新扫码绑定，太麻烦（22 号设计“先不做太安全”）。
+// 否则更换指纹会让 Keystore 作废钥匙，手机需要重新扫码绑定。
 // 第一次要用（扫码时设备认批准公钥、第一次批准）时才生成。
 import { authenticateAsync, getEnrolledLevelAsync, SecurityLevel } from 'expo-local-authentication'
 import * as SecureStore from 'expo-secure-store'

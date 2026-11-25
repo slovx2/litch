@@ -27,12 +27,12 @@ import type {
 import { compareVersions, installMethodOf } from '../text/versions.mjs'
 import type { RemoteUpgradePlatform } from './remote.mjs'
 
-/** 等它闲下来时，连着的时候多久再请一次（决 466） */
+/** 等待服务空闲时，保持连接期间发起重试的间隔 */
 export const SWAP_RETRY_MS = 5 * 60_000
 
 export interface ServiceUpgraderOptions {
   clock: Clock
-  /** 应用的版本：要装的就是这一版（决 461） */
+  /** 当前应用的版本，也是要安装的设备服务版本 */
   version: string
   target: RemoteTarget
   /** 外壳给的那份能力。没有（手机端）就只显示“比应用旧” */
@@ -131,7 +131,7 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
   const supervised = (): boolean =>
     seen.service !== null && !seen.service.detached && facts?.autostart === true
 
-  /** 在跑的服务有别的东西管着：只装，不换（决 463） */
+  /** 正在运行的服务由外部管理：只安装新版本，不替换运行中的服务 */
   const managed = (): boolean => seen.service !== null && !seen.service.detached && !supervised()
 
   const view = (): RemoteUpgradeView | null => {

@@ -9,7 +9,7 @@ import { DshServer } from '../src/server.mjs'
 import { client, isolate, violations } from './client.mjs'
 import { type MockBlock, scripted } from './mock-model.mjs'
 
-// 客户端工具（决 276）：thread/start.dynamicTools 记到会话上，经适配器插进 dsh 的插件交给模型（client-tools.mts），
+// 客户端工具：thread/start.dynamicTools 记到会话上，经适配器插进 dsh 的插件交给模型（client-tools.mts），
 // 模型调用时照 client-tools.json 的规矩向执行方发标准的 item/tool/call。真实的 dsh（0.2.0-rc.2）加回环假模型。
 
 const text = (value: string) => [{ type: 'text', text: value, text_elements: [] }]

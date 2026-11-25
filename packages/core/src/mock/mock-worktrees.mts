@@ -1,5 +1,5 @@
-// 模拟核心的工作树（32 号设计）：列表从示例会话里带着 worktree 的那几个起头；新建会话可以要一个新工作树
-// （建要一会儿，工作区根之外的目录不算 git 仓库）；删、恢复改状态，主人会话上的 worktree 跟着变。
+// 模拟核心的工作树：列表从带有 worktree 的示例会话生成；新建会话可以请求创建工作树
+// （模拟创建延迟，工作区根之外的目录不算 git 仓库）。删除或恢复时，工作树状态和所属会话的 worktree 字段都会更新。
 // 行为照真的核心和设备服务：没声明 worktrees 的设备以 unsupported 结束、没连上的以 offline 结束。
 import { ChannelError, type Clock, type Commands, type WorktreesOp } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'

@@ -3,7 +3,7 @@ package main
 // pair：用户 ssh 进这台机器后运行，不用桌面端就能把它绑到手机上。设备服务没在跑先拉起来；
 // 调 litch/pair/start 拿一次性钥匙，在终端里画二维码、打印配对文本；用 litch/pair/wait 长轮询，
 // 有手机来登记时打印手机名和确认码、问 y/N，按回答调 litch/pair/decide。Ctrl-C 调 litch/pair/cancel 删掉一次性钥匙行。
-// 标准输入关了（没人能回 y）也取消。二维码过期了自动换一张新的（和桌面端一样，决 292），最多换 pairMaxRenewals 次，免得没人管的终端一直挂着。
+// 标准输入关了（没人能回 y）也取消。二维码过期了自动换一张新的（和桌面端一样），最多换 pairMaxRenewals 次，免得没人管的终端一直挂着。
 // 这台机器开着 Tailscale SSH（tailscale debug prefs 里 RunSSH 为 true）时先问手机是不是走 Tailscale 地址，
 // 是就出 Tailscale 方式的码：设备服务不写一次性钥匙行，自检改成用临时钥匙经本机 ssh 连 --host 给的地址执行登记命令。
 

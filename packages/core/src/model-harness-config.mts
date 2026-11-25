@@ -1,4 +1,4 @@
-// harness 详情设置在界面这一头的样子（设备的 harnessConfig 扩展投影过来的，15 号设计）。
+// 设备的 harnessConfig 扩展投影到界面后的 harness 详情设置。
 // 一台设备上一个 harness 一份：配置项、账号与 provider、MCP、用户级指令文件，外加进行中的登录。
 // 结构都是对面声明的，核心不认识哪一项是干什么的，只做转运和校形；形状和协议的差不多是一对一的，差别是：
 // - 给人看的字一律是两种语言的 Bilingual（对面给的 HarnessText 同形），可选的都补成 null；

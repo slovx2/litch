@@ -1195,7 +1195,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
     ])
   }
 
-  /** 唤醒的条件都满足了就替父会话开一个回合（决 271） */
+  /** 唤醒条件全部满足时为父会话开启一个回合 */
   const tryWake = (deviceId: string, parentId: string) => {
     const key = sameKey(deviceId, parentId)
     const notes = pending.get(key) ?? []

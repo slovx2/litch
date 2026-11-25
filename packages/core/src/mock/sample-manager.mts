@@ -518,7 +518,7 @@ export function sampleManagers(
       d16.checked = { commit: null, at: ago(180) }
     }
     if (d17) {
-      d17.basis = [{ kind: 'file', target: 'dev-notes/engine-pi.md', label: null }]
+      d17.basis = [{ kind: 'file', target: 'docs/engine-pi.md', label: null }]
       d17.checked = { commit: null, at: ago(1440) }
     }
     for (const [entry, text, file] of [

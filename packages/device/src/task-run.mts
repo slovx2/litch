@@ -62,7 +62,7 @@ export interface RunOutcome {
   status: 'succeeded' | 'failed'
   summary: string | null
   error: TaskError | null
-  /** 回合结束时会话里还有几个后台任务在跑（决 430：照常算结束，回报里注明）。0 不带 */
+  /** 回合结束时仍在运行的后台任务数。回合照常结束，回报注明该数量；为 0 时省略此字段 */
   backgroundTasks?: number
   /** 有后台任务在跑时留下来的连接：调度器记完结果后接着盯（task-follow.mts），不用了由它关 */
   follow?: { threadId: string; link: EngineLink }

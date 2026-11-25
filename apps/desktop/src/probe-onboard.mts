@@ -166,7 +166,7 @@ export async function onboardProbe(): Promise<OnboardProbe> {
       .map((item) => text(item))
       .find((line) => line.includes('litch config')),
   ).catch(() => '')
-  // 撤不回的也出卡（E7）：点拒绝，什么都不删
+  // 不可撤销的操作也出卡：点拒绝，什么都不删
   await send('配置：browser clear-data')
   const erase = await until('删除的确认卡', () => {
     const element = one('[data-config-confirm]')

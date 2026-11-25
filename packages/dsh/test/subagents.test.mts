@@ -5,7 +5,7 @@ import { DshServer } from '../src/server.mjs'
 import { client, isolate, violations } from './client.mjs'
 import { scripted } from './mock-model.mjs'
 
-// dsh 的子代理（决 274）：subagent 工具映射成子代理条目（collabAgentToolCall，spawnAgent），接收方是子代理的会话号；
+// dsh 的子代理：subagent 工具映射成子代理条目（collabAgentToolCall，spawnAgent），接收方是子代理的会话号；
 // 子代理的会话按派它的会话的地址打开（普通地址 dsh 报 session/agent-busy），后台可继续的能经 subagents/prompt
 // 接着发消息，跑完就结束的不能；dsh 自己分叉出来的会话记 forkedFromId，不当子代理藏起来。
 // 这几处的前提是对着 dsh 0.2.0-rc.2 实测的：subagent 默认后台、可继续，结果是“started subagent <号>”，

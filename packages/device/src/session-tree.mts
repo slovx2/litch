@@ -1024,7 +1024,7 @@ export class SessionTree {
       userStopped = 'archived'
       wakeable = false
     }
-    // 决 430：有后台任务还在跑也照常算这一回合结束，回报里注明；后台跑完、引擎自己续跑的那一回合结束时再报一次
+    // 后台任务还在跑时，仍算这一回合结束，并在回报里注明；后台跑完、引擎自己续跑的那一回合结束时再报一次
     const background = this.host.backgroundRunning(threadId)
     const note: SessionEventNote = {
       threadId,
@@ -1065,7 +1065,7 @@ export class SessionTree {
   /**
    * 子会话的后台任务全部结束了（background.mts 的 onSettled）。引擎会自己接着做、也真有任务是自己跑完的，
    * 等那一回合结束照常回报；不会接着做的（原生 codex），或者一个都不是自己跑完的（都被停了，引擎不续跑），
-   * 这里补一条回报，摘录写各任务的结局。全是用户停的（决 481）：写明是用户停的，只进队列、不唤醒父会话
+   * 这里补一条回报，摘录写各任务的结局。全是用户停的任务时，注明由用户停止，回报只进队列，不唤醒父会话
    */
   backgroundSettled(threadId: string, tasks: LitchBackgroundTask[]): void {
     // 跟着它（follow）只为了后台任务的：跑完了，引擎接着做的那一回合结束时也会退订

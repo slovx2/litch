@@ -1,9 +1,9 @@
 import type { ChromeSettingsRequest } from '../../protocol/src/chrome-browser.mjs'
 import type { ExternalOwnerIdentity } from '../../protocol/src/external-sources.mjs'
 import type { ExternalOwnerInput } from './projection/external.mjs'
-// 配置 Litch（litch_config 执行器，14 号设计 3.3、3.4、3.5）在核心和界面、核心和主进程之间的约定。
+// litch_config 执行器在核心与界面、核心与主进程之间的约定。
 // 执行器在核心里（config/）：属于界面的几项（外观、语言、两个本地偏好、打开某一页、出码对话框）由核心经 config 主题
-// 发给界面，界面照做并用 config.reply 回话；放宽安全的那几项（E6）在界面上弹确认卡，人点了才执行（config.confirm）。
+// 发给界面，界面照做并用 config.reply 回话；放宽安全限制的操作先弹确认卡，用户允许后才执行（config.confirm）。
 // 属于主进程的几项（浏览器网站、Computer Use）经核心↔主进程的客户端工具消息（model-client-tools.mts）。
 // 核心不认识语言：卡片上只给结构，字由界面按当前语言拼。
 
@@ -49,7 +49,7 @@ export type ConfigUiRequest =
   /** 改其中几项（和设置页上点是一回事）。回改完的 ConfigPrefs */
   | { kind: 'prefs.set'; patch: Partial<ConfigPrefs> }
   | { kind: 'open'; place: ConfigOpenPlace }
-  /** 打开这台设备的出码对话框，地址可以预填几项。扫码、核对确认码、允许由人做（E2） */
+  /** 打开这台设备的出码对话框，可预填部分地址信息。扫码、核对确认码和允许配对由用户完成 */
   | {
       kind: 'pair'
       deviceId: string
@@ -93,7 +93,7 @@ export type ConfigConfirmItem =
   | { kind: 'trustAllSites' }
   /** 从内置浏览器的黑名单里去掉一项；host 是 null 是清空 */
   | { kind: 'unblock'; host: string | null }
-  /** 撤不回的事（E7）：移除远程设备、撤掉手机钥匙、删定时任务、清内置浏览器数据、清“操作这台电脑”的记录。
+  /** 不可撤销的操作：移除远程设备、撤掉手机钥匙、删定时任务、清内置浏览器数据、清“操作这台电脑”的记录。
    * device 是设备的显示名（浏览器数据不属于哪台设备，是 null）；name 是被删的那样东西的名字，设备本身和整份数据是 null */
   | {
       kind: 'erase'
@@ -102,7 +102,7 @@ export type ConfigConfirmItem =
       name: string | null
     }
 
-/** E6、E7 的确认卡：哪个会话、哪个 harness 要做什么 */
+/** 放宽安全限制或执行不可撤销操作前的确认卡：说明哪个会话、哪个 harness 要做什么 */
 export interface ConfigConfirmView {
   id: string
   /** 调用者所在的会话（本机设备上的）；命令行找不到会话是 null */

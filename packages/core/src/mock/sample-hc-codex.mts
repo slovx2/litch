@@ -1,4 +1,4 @@
-// 模拟核心里 Codex 的详情设置示例：照官方桌面端的那几组（15 号设计 2.1）。
+// 模拟核心里 Codex 的详情设置示例：按官方桌面端的设置分组组织。
 // ChatGPT 登录和一个只认环境变量的自定义 provider 并存；浏览器登录要回调到设备上的 1455 端口。
 import type { HcModelBase, HcModelsView } from '../model-harness-config.mjs'
 import {

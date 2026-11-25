@@ -6,7 +6,7 @@ package main
 // 约定（方法名、二维码格式、一行进一行出的格式、错误码）在 packages/protocol/src/device-pairing.mts，
 // 这里照着写，改形状要两边一起改。两个子命令都直连 device.sock，不握手（方法不要求声明，通知收不到，用长轮询）。
 // 这台机器开着 Tailscale SSH 时 pair 可以出 Tailscale 方式的码（不写一次性钥匙行，二维码里带登记命令，
-// 手机登进来后自己执行 pair-enroll），见 12 号设计第七之四节。
+// 手机登进来后自己执行 pair-enroll）。
 
 import (
 	"context"
