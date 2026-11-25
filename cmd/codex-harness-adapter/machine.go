@@ -38,16 +38,17 @@ func isMachineThreadVariable(name string) bool {
 
 // 退出码。exec 成功拿到结果时是命令自己的退出码，下面这些只在没拿到结果时用（照 sysexits 的取值，少和命令撞）
 const (
-	machineExitUsage       = 64 // 参数不对（这边查出来的，或者桌面端说参数不对：invalid）
-	machineExitUnreachable = 69 // 连不上本机的设备服务
-	machineExitFailed      = 70 // 桌面端执行出错、超时、被打断（failed），别的说不清的错误
-	machineExitPermission  = 71 // 桌面端缺系统权限（permission）
-	machineExitNoDesktop   = 75 // 没有 Litch 桌面端连着这台设备（noExecutor）
-	machineExitAmbiguous   = 76 // 连着不止一台 Litch，不知道交给哪台（ambiguous）
-	machineExitDeclined    = 77 // 用户在桌面端拒绝了，或者没有答复（declined）
-	machineExitDisabled    = 78 // 桌面端的设备设置里没打开“操作这台电脑”（disabled）
-	machineExitBlocked     = 79 // 访问范围挡住了（blocked）
-	machineExitRunning     = 80 // exec 到了 --yield-ms 还没结束，进程留着
+	machineExitUsage           = 64 // 参数不对（这边查出来的，或者桌面端说参数不对：invalid）
+	machineExitUnreachable     = 69 // 连不上本机的设备服务
+	machineExitFailed          = 70 // 桌面端执行出错、超时、被打断（failed），别的说不清的错误
+	machineExitPermission      = 71 // 桌面端缺系统权限（permission）
+	machineExitNoDesktop       = 75 // 没有 Litch 桌面端连着这台设备（noExecutor）
+	machineExitAmbiguous       = 76 // 连着不止一台 Litch，不知道交给哪台（ambiguous）
+	machineExitDeclined        = 77 // 用户在桌面端拒绝了，或者没有答复（declined）
+	machineExitDisabled        = 78 // 桌面端的设备设置里没打开“操作这台电脑”（disabled）
+	machineExitBlocked         = 79 // 访问范围挡住了（blocked）
+	machineExitRunning         = 80 // exec 到了 --yield-ms 还没结束，进程留着
+	machineExitPendingApproval = 81 // 操作尚未执行，已挂不阻塞的卡片
 )
 
 // 动作名到工具名

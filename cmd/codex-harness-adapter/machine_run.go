@@ -28,8 +28,9 @@ type machineIO struct {
 
 // 桌面端执行的结果（ClientToolCallResponse）
 type machineResponse struct {
-	Success      bool `json:"success"`
-	ContentItems []struct {
+	Success         bool `json:"success"`
+	PendingApproval bool `json:"litchPendingApproval"`
+	ContentItems    []struct {
 		Type     string `json:"type"`
 		Text     string `json:"text,omitempty"`
 		ImageURL string `json:"imageUrl,omitempty"`
@@ -116,6 +117,9 @@ func machineMain(ctx context.Context, argv []string, io machineIO) int {
 		_ = json.Unmarshal(raw, &pretty)
 		encoded, _ := json.MarshalIndent(pretty, "", "  ")
 		fmt.Fprintln(io.stdout, string(encoded))
+		if response.PendingApproval {
+			return machineExitPendingApproval
+		}
 		if !response.Success {
 			return failureExit(response)
 		}
@@ -168,6 +172,10 @@ func failureExit(response machineResponse) int {
 
 func renderMachine(command machineCommand, response machineResponse, io machineIO) int {
 	text := response.text()
+	if response.PendingApproval {
+		fmt.Fprintln(io.stderr, text)
+		return machineExitPendingApproval
+	}
 	if !response.Success {
 		fmt.Fprintln(io.stderr, text)
 		return failureExit(response)

@@ -60,6 +60,8 @@ export interface MachineCallInput {
   harness: string | null
   tool: string
   arguments: unknown
+  /** 命令行入口可以收到结构化的待批准状态。 */
+  detached?: true
   /** 超时、撤回、打断、断线、开关关掉时中止 */
   signal: AbortSignalLike
   /** 有卡片挂着的时候调：停表（等人答不算在 120 秒里）。返回“卡片没了”，表从头算 */
@@ -610,6 +612,7 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
         harness,
         tool: raw.tool,
         arguments: raw.arguments,
+        detached: true,
         unattended: raw.litchUnattended?.notice ?? null,
       },
       rpcId,

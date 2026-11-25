@@ -10,6 +10,7 @@ import {
   askView,
   asObject,
   blockedMessage,
+  deferredFingerprint,
   done,
   errorText,
   failed,
@@ -113,11 +114,19 @@ export async function readFileTool(kit: ToolKit, raw: unknown): Promise<Outcome>
     if (looked.blocked) return failed('blocked', blockedMessage(looked), summary)
     const refused = await approved(
       kit,
-      { class: 'read', ask: askView({ action: 'read', path: looked.path }) },
+      {
+        class: 'read',
+        ask: askView({ action: 'read', path: looked.path }),
+        ...((length <= 8192 || (looked.probe.size ?? Infinity) <= 8192) &&
+        !IMAGE_TYPES[extensionOf(looked.path).toLowerCase()]
+          ? { fingerprint: await deferredFingerprint(kit, target, facts, looked, 'f') }
+          : {}),
+      },
       summary,
     )
     if (refused) return refused
     const { probe } = looked
+    const executionPath = kit.context.deferredExecution ? probe.real : looked.path
     if (probe.type === 'm' || probe.type === 'l')
       return failed('failed', `${looked.path} does not exist.`, summary)
     if (probe.type === 'd')
@@ -135,7 +144,11 @@ export async function readFileTool(kit: ToolKit, raw: unknown): Promise<Outcome>
           `${looked.path}: ${image}, ${sizeText(size)}: too large to show as an image (at most ${sizeText(IMAGE_MAX)}). Use copy to move it.`,
           summary,
         )
-      const read = await target.request('fs/readFile', { path: looked.path }, { timeoutMs: 60_000 })
+      const read = await target.request(
+        'fs/readFile',
+        { path: executionPath },
+        { timeoutMs: 60_000 },
+      )
       return done(`${looked.path}: ${image}, ${sizeText(size)}`, summary, false, [
         { type: 'inputImage', imageUrl: `data:${image};base64,${read.dataBase64}` },
       ])
@@ -150,13 +163,17 @@ export async function readFileTool(kit: ToolKit, raw: unknown): Promise<Outcome>
       )
     let bytes: Uint8Array
     if (size <= WHOLE_READ_MAX) {
-      const read = await target.request('fs/readFile', { path: looked.path }, { timeoutMs: 60_000 })
+      const read = await target.request(
+        'fs/readFile',
+        { path: executionPath },
+        { timeoutMs: 60_000 },
+      )
       bytes = decodeBase64(read.dataBase64).subarray(offset, offset + length)
     } else {
       const result = await runScript(
         kit.runner,
         target,
-        scriptsFor(looked.path).readRange(looked.path, offset, length),
+        scriptsFor(executionPath).readRange(executionPath, offset, length),
         {
           collect: length,
         },
@@ -207,11 +224,18 @@ export async function writeFileTool(kit: ToolKit, raw: unknown): Promise<Outcome
     if (looked.path === '/') throw new ArgumentError('path must be a file')
     const refused = await approved(
       kit,
-      { class: 'mutate', ask: askView({ action: 'write', path: looked.path }) },
+      {
+        class: 'mutate',
+        ask: askView({ action: 'write', path: looked.path }),
+        ...(bytes.length <= 4096 && (mode !== 'create' || looked.probe.type === 'm')
+          ? { fingerprint: await deferredFingerprint(kit, target, facts, looked, 'write') }
+          : {}),
+      },
       summary,
     )
     if (refused) return refused
     const { probe } = looked
+    const executionPath = kit.context.deferredExecution ? probe.real : looked.path
     const exists = probe.type !== 'm'
     if (probe.type === 'd') return failed('invalid', `${looked.path} is a folder.`, summary)
     if (mode === 'create' && exists)
@@ -220,17 +244,18 @@ export async function writeFileTool(kit: ToolKit, raw: unknown): Promise<Outcome
         `${looked.path} already exists; use mode overwrite or append.`,
         summary,
       )
-    const parent = parentOf(looked.path)
-    if (!exists) await target.request('fs/createDirectory', { path: parent, recursive: true })
+    const parent = parentOf(executionPath)
+    if (!exists && !kit.context.deferredExecution)
+      await target.request('fs/createDirectory', { path: parent, recursive: true })
     if (mode === 'append' && exists) {
-      await runScript(kit.runner, target, scriptsFor(looked.path).append(looked.path), {
+      await runScript(kit.runner, target, scriptsFor(executionPath).append(executionPath), {
         collect: 1024,
         stdin: bytes,
       })
     } else {
       await target.request(
         'fs/writeFile',
-        { path: looked.path, dataBase64: encodeBase64(bytes) },
+        { path: executionPath, dataBase64: encodeBase64(bytes) },
         { timeoutMs: 60_000 },
       )
     }
@@ -258,7 +283,11 @@ export async function listDirTool(kit: ToolKit, raw: unknown): Promise<Outcome> 
     if (looked.blocked) return failed('blocked', blockedMessage(looked), summary)
     const refused = await approved(
       kit,
-      { class: 'read', ask: askView({ action: 'list', path: looked.path }) },
+      {
+        class: 'read',
+        ask: askView({ action: 'list', path: looked.path }),
+        fingerprint: await deferredFingerprint(kit, target, facts, looked, 'd'),
+      },
       summary,
     )
     if (refused) return refused

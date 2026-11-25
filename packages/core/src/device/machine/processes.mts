@@ -13,6 +13,7 @@ import {
   approved,
   askView,
   asObject,
+  deferredFingerprint,
   done,
   errorText,
   failed,
@@ -329,7 +330,7 @@ export async function execTool(kit: ToolKit, table: ProcessTable, raw: unknown):
     summary = command
     const timeoutMs =
       optionalInt(args, 'timeout_ms', 1000, MACHINE_LIMITS.execTimeoutMaxMs) ??
-      MACHINE_LIMITS.execTimeoutDefaultMs
+      (kit.context.deferredExecution ? 60_000 : MACHINE_LIMITS.execTimeoutDefaultMs)
     const yieldMs = optionalInt(args, 'yield_ms', 0, MACHINE_LIMITS.yieldMaxMs)
     const stdin = optionalString(args, 'stdin')
     const target = targetOf(kit.context, args.machine)
@@ -342,7 +343,16 @@ export async function execTool(kit: ToolKit, table: ProcessTable, raw: unknown):
     if (looked.blocked && !flagged.includes(looked.blocked.rule)) flagged.push(looked.blocked.rule)
     const refused = await approved(
       kit,
-      { class: 'mutate', ask: askView({ action: 'exec', command, cwd: looked.path, flagged }) },
+      {
+        class: 'mutate',
+        ask: askView({ action: 'exec', command, cwd: looked.path, flagged }),
+        ...(flagged.length === 0 &&
+        yieldMs === undefined &&
+        stdin === undefined &&
+        (args.timeout_ms === undefined || timeoutMs <= 100_000)
+          ? { fingerprint: await deferredFingerprint(kit, target, facts, looked, 'd') }
+          : {}),
+      },
       summary,
     )
     if (refused) return refused
@@ -353,7 +363,7 @@ export async function execTool(kit: ToolKit, table: ProcessTable, raw: unknown):
       kit.context.owner,
       facts.shell || SHELL_FALLBACK,
       command,
-      looked.path,
+      kit.context.deferredExecution ? looked.probe.real : looked.path,
       timeoutMs,
       keepStdin,
     )
@@ -364,7 +374,9 @@ export async function execTool(kit: ToolKit, table: ProcessTable, raw: unknown):
       })
     }
     // 不给 yield_ms 就等到超时（多等一点收它的退出）；但一次调用最多等 yieldMaxMs
-    const waitMs = Math.min(yieldMs ?? timeoutMs + EXIT_SLACK_MS, MACHINE_LIMITS.yieldMaxMs)
+    const waitMs = kit.context.deferredExecution
+      ? timeoutMs + EXIT_SLACK_MS
+      : Math.min(yieldMs ?? timeoutMs + EXIT_SLACK_MS, MACHINE_LIMITS.yieldMaxMs)
     await table.wait(proc, waitMs, kit.context.signal, true)
     if (kit.context.signal.aborted && !proc.exit) {
       table.kill(proc.record.id)
@@ -382,6 +394,14 @@ export async function execTool(kit: ToolKit, table: ProcessTable, raw: unknown):
         `${exitLine(proc)}\nduration_ms: ${elapsed}\nseq: ${part.seq}\n${outputBlock('output', part)}`,
         summary,
         flagged.length > 0,
+      )
+    }
+    if (kit.context.deferredExecution) {
+      table.kill(proc.record.id)
+      return failed(
+        'failed',
+        'The background command did not confirm its exit. Litch requested a stop.',
+        summary,
       )
     }
     return done(

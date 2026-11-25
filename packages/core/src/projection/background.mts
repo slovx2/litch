@@ -7,6 +7,7 @@ import {
   type LitchBackground,
   type LitchTurnOrigin,
 } from '../../../protocol/src/background-tasks.mjs'
+import { MACHINE_TASK_PREFIX } from '../../../protocol/src/machine-approvals.mjs'
 import {
   NATIVE_BACKGROUND_STATES,
   type NativeBackgroundState,
@@ -250,6 +251,12 @@ export function backgroundStoppable(
   abilities: HarnessAbilities | null | undefined,
 ): boolean {
   if (entry.status !== 'running') return false
+  if (
+    entry.source === 'task' &&
+    entry.kind === 'remote' &&
+    entry.id.startsWith(MACHINE_TASK_PREFIX)
+  )
+    return true
   if (entry.source === 'task')
     return abilities?.stopBackground === true && STOPPABLE_KINDS.includes(entry.kind)
   return abilities?.stopAgent === true

@@ -60,6 +60,8 @@ export interface MachinePolicy {
 export interface MachineApprovalRequest {
   class: 'mutate' | 'read'
   ask: MachineAskView
+  /** 桌面路径和文件身份的冻结值，重新跑预检时必须一致。 */
+  fingerprint?: string | undefined
 }
 
 export type MachineApprovalResult =
@@ -72,6 +74,8 @@ export type MachineApprovalResult =
   | { kind: 'cancelled' }
   /** 会话无人值守，没出卡：message 是给模型的说明 */
   | { kind: 'unattended'; message: string }
+  | { kind: 'submitted' }
+  | { kind: 'changed' }
 
 /** 谁发起的：进程归它，会话所在设备断开、开关关掉时按它收拾 */
 export interface MachineOwner {
@@ -86,7 +90,7 @@ export interface MachineOwner {
 export interface MachineLogNote {
   tool: string
   summary: string
-  result: 'ok' | 'failed' | 'declined' | 'blocked' | 'expired'
+  result: 'ok' | 'failed' | 'declined' | 'blocked' | 'expired' | 'submitted'
   flagged: boolean
 }
 
@@ -106,6 +110,9 @@ export interface MachineCallContext {
   log(note: MachineLogNote): void
   /** 回合被打断、连接断开、超时时被中止 */
   signal: AbortSignalLike
+  /** 只为异步路径核验文件身份；常规调用不增加探测。 */
+  deferred?: boolean
+  deferredExecution?: boolean
 }
 
 /** 执行器记着的一个进程（接线那边拼成 MachineProcessView 给界面） */
