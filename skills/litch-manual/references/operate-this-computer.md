@@ -28,7 +28,7 @@ this enables access with sensitive places blocked and every command/write requir
 continues the same call through its normal operation approval. **Open settings** opens that device's
 settings without enabling access. Declining or leaving the card unanswered for 10 minutes keeps access
 off; the model must not retry repeatedly or bypass this restriction. This enable card is desktop-only;
-the phone's signed approval channel currently supports browser sign-in, not this setting.
+the phone cannot approve enabling this setting.
 
 - Turn it on or off with `scripts/litch tools set <device> …` (see `scripts/litch tools --help`).
   Turning it on is **guarded** (the user confirms in Litch). Turning it off ends every process that
@@ -49,13 +49,16 @@ is no "always allow". A card unanswered for 10 minutes counts as declined.
 
 无人值守经理或子会话需要审批时，Mac 上的有限读写、列目录和非交互命令可在会话里显示「不阻塞 · 等你批准」。
 会话可以继续，24 小时内可在执行操作的 Mac 上选择「仅允许本次」「限时允许」或「拒绝」。批准后同一份请求进入
-会话的后台任务，可在那里停止；完成、拒绝和到期结果送回原会话。手机和其他桌面能看到卡片，批准须在执行操作的 Mac 上完成。
+会话的后台任务，可在那里停止；完成、拒绝和到期结果送回原会话。已与这台 Mac 核对确认码并绑定到该设备的手机，
+可在支持手机审批的连接上直接使用同样三个选项，无需再次验证。撤销手机后，该手机不能再答卡。其他桌面、未配对的手机
+或不支持手机审批的连接只能看卡片，请在执行操作的 Mac 上处理。
 访问范围不变；涉及禁止位置的命令、交互命令或复制不进入异步审批。
 
 **Allow for…** on the card grants this session N hours (0.25–168) of every action, including in
 "Every action" mode; commands that mention a blocked location still ask. The grant is kept on the
-session's device and shown above the composer, where × revokes it (see "Timed approvals" in
-`sessions-and-projects.md`).
+session's device and shown above the composer, where × revokes it. Permission to operate this Mac
+only applies on the desktop that approved it and ends if its connection closes (see
+"Timed approvals" in `sessions-and-projects.md`).
 
 **Access** (UI "Access"):
 

@@ -25,6 +25,7 @@ import {
   utilityProcess,
 } from 'electron'
 import { openLicenses } from './about.mjs'
+import { MACHINE_APPROVAL_AUTH, type MachineApprovalAuth } from './approvals/ipc.mjs'
 import { startApprovalsMain } from './approvals/main.mjs'
 import { AUTOMATION_PREVIEW, createAutomationPreviewHost } from './automation-preview/host.mjs'
 import { type InstalledBrowser, installBrowser } from './browser/install.mjs'
@@ -355,6 +356,7 @@ function startCore(): void {
       LITCH_VERSION: app.getVersion(),
       // 设备配置和侧栏快照存在用户数据目录里
       LITCH_DATA_DIR: app.getPath('userData'),
+      LITCH_MACHINE_APPROVAL_DESKTOP_ID: approvalsMain.machineDesktopId,
       LITCH_ADAPTER_ROOT: adapterRoot,
       // 核心进程的日志（core.jsonl）和主进程的放在一起
       [DESKTOP_LOG_DIR]: logsDir,
@@ -394,6 +396,22 @@ function startCore(): void {
     }
     // 扫码时核对过的批准钥匙、撤销的手机（approvals/main.mts）
     if (core === child && approvalsMain.message(message)) return
+    const approval = message as MachineApprovalAuth | null
+    if (core === child && approval?.type === MACHINE_APPROVAL_AUTH && approval.op === 'verify') {
+      let accepted = false
+      try {
+        accepted = approvalsMain.verifyMachine(approval)
+      } catch {
+        // 主进程验签出错时拒绝，不能退回到相信设备的答复。
+      }
+      child.postMessage({
+        type: MACHINE_APPROVAL_AUTH,
+        op: 'result',
+        requestId: approval.requestId,
+        accepted,
+      })
+      return
+    }
     if ((message as { type?: unknown } | null)?.type === CLIENT_TOOL) {
       if (core !== child) return
       const tool = message as ClientToolToMain

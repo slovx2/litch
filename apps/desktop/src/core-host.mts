@@ -1,7 +1,7 @@
 // 工具进程的入口：核心就住在这个进程里。主进程每给一个端口，就在上面开一条通道。
 // 平台能力（定时器、端口、传输）在这里做成核心要的接口再交进去，核心自己不碰 Node 和 Electron。
 import { execFileSync } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { arch, homedir, hostname, release, userInfo } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -21,7 +21,12 @@ import {
   withAutomationPreview,
 } from '@litch/core'
 import type { MessagePortMain } from 'electron'
-import { APPROVAL_KEYS, type ApprovalKeysMessage } from './approvals/ipc.mjs'
+import {
+  APPROVAL_KEYS,
+  type ApprovalKeysMessage,
+  MACHINE_APPROVAL_AUTH,
+  type MachineApprovalAuth,
+} from './approvals/ipc.mjs'
 import { automationPreviewPort } from './automation-preview/core-port.mjs'
 import { CLIENT_TOOL, type ClientToolToCore, type ClientToolToMain } from './client-tools/types.mjs'
 import { fileDeviceStore } from './device-store.mjs'
@@ -111,6 +116,36 @@ const toolPort: ClientToolPort = {
   listen(handler) {
     toolInbox = handler
   },
+}
+
+const signingDesktopId =
+  process.platform === 'darwin' ? process.env.LITCH_MACHINE_APPROVAL_DESKTOP_ID : undefined
+let approvalSequence = 0
+const approvalChecks = new Map<number, (accepted: boolean) => void>()
+
+function checkPhoneApproval(
+  request: Omit<Extract<MachineApprovalAuth, { op: 'verify' }>, 'type' | 'op' | 'requestId'>,
+) {
+  return new Promise<boolean>((resolve) => {
+    const requestId = ++approvalSequence
+    const timer = setTimeout(() => approvalChecks.get(requestId)?.(false), 2500).unref()
+    const finish = (accepted: boolean) => {
+      clearTimeout(timer)
+      approvalChecks.delete(requestId)
+      resolve(accepted)
+    }
+    approvalChecks.set(requestId, finish)
+    try {
+      process.parentPort.postMessage({
+        ...request,
+        type: MACHINE_APPROVAL_AUTH,
+        op: 'verify',
+        requestId,
+      } satisfies MachineApprovalAuth)
+    } catch {
+      finish(false)
+    }
+  })
 }
 
 const postApprovalKeys = (message: ApprovalKeysMessage) => process.parentPort.postMessage(message)
@@ -227,7 +262,19 @@ function createHost(): Core | MockCore {
     },
     clientTools: toolPort,
     forward: authForward(),
-    machine: { desktop, randomApprovalId: randomUUID },
+    machine: {
+      desktop,
+      randomApprovalId: randomUUID,
+      ...(signingDesktopId
+        ? {
+            signing: {
+              desktopId: signingDesktopId,
+              hash: (text) => createHash('sha256').update(text, 'utf8').digest('hex'),
+              verify: (deviceId, card, answer) => checkPhoneApproval({ deviceId, card, answer }),
+            },
+          }
+        : {}),
+    },
     // 扫码绑定手机：一次性私钥的临时文件放在用户数据目录下；本机给手机看的名字用电脑名称。
     // 扫码时核对过的批准公钥、撤销的手机交给主进程（批准钥匙只由它读写，approvals/main.mts）
     pairing: {
@@ -288,6 +335,11 @@ const fileSaves = createFileSaveCore(core, (progress) =>
 process.once('exit', () => fileSaves.dispose())
 
 process.parentPort.on('message', (event) => {
+  const approval = event.data as MachineApprovalAuth | null
+  if (approval?.type === MACHINE_APPROVAL_AUTH && approval.op === 'result') {
+    approvalChecks.get(approval.requestId)?.(approval.accepted === true)
+    return
+  }
   if (event.data?.type === 'file-reveal') {
     const { id, source } = event.data
     void core.command('files.localSource', source, new AbortController().signal).then(

@@ -7,7 +7,23 @@
  * 工具进程 → 主进程：扫码绑定时人核对过确认码、点了允许，手机带了批准公钥（trust）；
  * 撤销了一部手机（forget）。只有这两种，记下的钥匙只由主进程读写
  */
+import type {
+  MachineApprovalCard,
+  MachinePhoneAnswer,
+} from '../../../../packages/protocol/src/machine-approvals.mjs'
+
 export const APPROVAL_KEYS = 'approvalKeys'
+export const MACHINE_APPROVAL_AUTH = 'machineApprovalAuth'
+export type MachineApprovalAuth =
+  | {
+      type: typeof MACHINE_APPROVAL_AUTH
+      op: 'verify'
+      requestId: number
+      deviceId: string
+      card: MachineApprovalCard
+      answer: MachinePhoneAnswer
+    }
+  | { type: typeof MACHINE_APPROVAL_AUTH; op: 'result'; requestId: number; accepted: boolean }
 export type ApprovalKeysMessage =
   | {
       type: typeof APPROVAL_KEYS

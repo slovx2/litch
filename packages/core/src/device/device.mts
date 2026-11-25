@@ -9,12 +9,16 @@ import type {
   DeviceSettingsSnapshot,
 } from '../../../protocol/src/device-settings.mjs'
 import {
+  isMachinePhoneAnswer,
   MACHINE_APPROVAL_METHOD as MACHINE,
+  MACHINE_APPROVAL_SIGNING,
   MACHINE_APPROVALS,
   MACHINE_APPROVAL_NOTIFICATION as MACHINE_NOTICE,
   MACHINE_TASK_PREFIX,
   type MachineApprovalCard,
   type MachineApprovalKey,
+  type MachinePhoneAnswer,
+  type MachinePhoneReceipt,
 } from '../../../protocol/src/machine-approvals.mjs'
 import {
   MODEL_RANKING,
@@ -326,6 +330,7 @@ export interface DeviceMachine {
   turnEnded(threadId: string, turnId: string): void
   /** 连上了、断开了（断开太久执行器会结束这台设备发起的进程） */
   presence(online: boolean): void
+  verifyDeferred?(answer: unknown): Promise<boolean>
   stopDeferred?(key: MachineApprovalKey): void
   disabled?(): void
 }
@@ -493,6 +498,8 @@ export interface Device {
   /** 这台设备上的手机批准：桌面端挂登录卡片、转回手机的答复，手机取和答（approvals.mts） */
   readonly approvals: Approvals
   machineApprovalAvailable(): boolean
+  machineApprovalSigningAvailable(): boolean
+  answerMachineApproval(answer: MachinePhoneAnswer): Promise<MachinePhoneReceipt>
   openMachineApprovals(sink: HostSink): () => void
   /** 这台设备上给 harness 安装：版本、安装任务（install.mts） */
   readonly install: Install
@@ -746,6 +753,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   /** 对面转不转手机批准（clientApprovals 扩展）。断开之后留着断开前知道的 */
   let approvalsOn = false
   let machineApprovalsOn = false
+  let machineApprovalSigningOn = false
   const machineCardSinks = new Set<HostSink>()
   const machineCards = new Map<string, MachineApprovalCard[]>()
   let machineCardVersion = 0
@@ -2153,6 +2161,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         pairable = info.device.extensions?.includes(EXTENSION.devicePairing) === true
         approvalsOn = info.device.extensions?.includes(EXTENSION.clientApprovals) === true
         machineApprovalsOn = info.device.extensions?.includes(MACHINE_APPROVALS) === true
+        machineApprovalSigningOn =
+          machineApprovalsOn && info.device.extensions?.includes(MACHINE_APPROVAL_SIGNING) === true
         installable = info.device.extensions?.includes(EXTENSION.harnessInstall) === true
         worktreesOn = info.device.extensions?.includes(EXTENSION.worktrees) === true
         // 在跑的是哪一份服务：握手时声明过才给，旧版的设备服务不报
@@ -2457,7 +2467,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         return
       }
       if (approvals.notification(method, params)) return
-      if (machineApprovalsOn && method === MACHINE_NOTICE.changed) {
+      if (
+        machineApprovalsOn &&
+        method ===
+          (machineApprovalSigningOn ? MACHINE_NOTICE.changedSigned : MACHINE_NOTICE.changed)
+      ) {
         const update = params as { threadId: string; cards: MachineApprovalCard[] }
         machineCardVersion++
         putMachineCards(update.threadId, update.cards)
@@ -2493,10 +2507,14 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (held && method in routes) held.push({ method, params })
       else route(method, params)
     },
-    request: (method, params, id) =>
-      method === REMOTE_CHROME_APPROVAL && !remoteChromeSupported
-        ? undefined
-        : (toolCalls.serverRequest(method, params, id) ?? live.serverRequest(method, params, id)),
+    request(method, params, id) {
+      if (method === MACHINE.verify)
+        return machineApprovalSigningOn && online && options.machine?.verifyDeferred
+          ? options.machine.verifyDeferred(params).then((accepted) => ({ accepted }))
+          : undefined
+      if (method === REMOTE_CHROME_APPROVAL && !remoteChromeSupported) return undefined
+      return toolCalls.serverRequest(method, params, id) ?? live.serverRequest(method, params, id)
+    },
     log,
     ...(trace ? { trace } : {}),
   })
@@ -3682,6 +3700,12 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     pairing,
     approvals,
     machineApprovalAvailable: () => online && machineApprovalsOn,
+    machineApprovalSigningAvailable: () => online && machineApprovalSigningOn,
+    async answerMachineApproval(answer) {
+      if (!online || !machineApprovalSigningOn || !isMachinePhoneAnswer(answer))
+        return { accepted: false }
+      return link.request(MACHINE.answer, answer)
+    },
     openMachineApprovals(sink) {
       machineCardSinks.add(sink)
       sink.snapshot(allMachineCards())

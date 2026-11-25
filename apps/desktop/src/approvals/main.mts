@@ -12,6 +12,7 @@ import {
   APPROVALS_NOTICE,
   APPROVALS_SET_ENABLED,
   type ApprovalKeysMessage,
+  type MachineApprovalAuth,
   type TrustedPhoneEntry,
 } from './ipc.mjs'
 import { TrustedPhones } from './store.mjs'
@@ -27,6 +28,8 @@ export interface ApprovalsMainOptions {
 }
 
 export interface ApprovalsMain {
+  machineDesktopId: string
+  verifyMachine(request: Extract<MachineApprovalAuth, { op: 'verify' }>): boolean
   /** 工具进程发来的一条。是批准钥匙的消息就处理掉并回 true */
   message(message: unknown): boolean
 }
@@ -71,6 +74,8 @@ export function startApprovalsMain(options: ApprovalsMainOptions): ApprovalsMain
   })
 
   return {
+    machineDesktopId: approvals.desktopId,
+    verifyMachine: ({ deviceId, card, answer }) => approvals.verifyMachine(deviceId, card, answer),
     message(raw) {
       const message = raw as Partial<ApprovalKeysMessage> | null
       if (message?.type !== APPROVAL_KEYS) return false

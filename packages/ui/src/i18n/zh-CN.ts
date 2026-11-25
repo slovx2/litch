@@ -1879,6 +1879,9 @@ export const zhCN = {
   'machine.ask.expires': '{time} 后失效',
   'machine.deferred.waiting': '不阻塞 · 等你批准',
   'machine.deferred.onMac': '请在执行此操作的 Mac（{name}）上批准。',
+  'machine.deferred.phoneFailed':
+    'Mac 未接受这次答复。请确认配对仍有效，或在执行此操作的 Mac 上处理。',
+  'machine.deferred.timedScope': '在设定的时长内允许本会话在这台 Mac 上操作，不再逐条询问。',
   'machine.option.once': '仅允许本次',
   'machine.option.session': '本会话内允许',
   'machine.option.cli': '允许该设备的所有命令行调用',

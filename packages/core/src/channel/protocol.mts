@@ -1117,6 +1117,13 @@ export interface Commands extends ExternalCommands, FeishuCommands, ReviewsComma
     params: { deviceId: string; id: string; decision: 'once' | 'timed' | 'decline'; hours?: number }
     result: Record<string, never>
   }
+  'machine.deferredAnswerSigned': {
+    params: {
+      deviceId: string
+      answer: import('../../../protocol/src/machine-approvals.mjs').MachinePhoneAnswer
+    }
+    result: import('../../../protocol/src/machine-approvals.mjs').MachinePhoneReceipt
+  }
   /** 结束顶栏弹层里的一个进程 */
   'machine.process.kill': { params: { processId: string }; result: Record<string, never> }
   /** 全部停：结束远程会话在这台电脑上起的所有进程、撤掉所有待处理卡片。给了 deviceId 只停这台设备的 */
