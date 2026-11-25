@@ -1185,6 +1185,27 @@ export class SessionTree {
     this.checks.set(parentId, next)
   }
 
+  /** 本机操作结果复用后台完成格式与自动唤醒；期限独立于子会话回报的空闲时长。 */
+  async deliverMachineResult(
+    threadId: string,
+    text: string,
+    eventId: string,
+    onDispatch: () => void,
+  ): Promise<boolean> {
+    const eligible = () =>
+      this.canAutoContinue(threadId) &&
+      !this.userStops.has(threadId) &&
+      !this.host.index.archived(threadId)
+    if (!eligible()) return false
+    return this.deliverManagerEvent(threadId, text, eventId, {
+      automatic: true,
+      startOnly: true,
+      backgroundResult: true,
+      prepare: () => (eligible() ? { text, eventId } : null),
+      onDispatch,
+    })
+  }
+
   /** 经理持久事件与普通唤醒共用串行队列；投递成功才由经理库出队。 */
   async deliverManagerEvent(
     threadId: string,
@@ -1193,6 +1214,7 @@ export class SessionTree {
     options: {
       startOnly?: boolean
       automatic?: boolean
+      backgroundResult?: boolean
       /** 确认事件所在回合：新建回合或成功插话后调用。 */
       onStarted?: (turnId: string) => void
       onDispatch?: () => void
@@ -1269,7 +1291,8 @@ export class SessionTree {
           if (
             options.automatic &&
             !options.external &&
-            (!this.canAutoWake(threadId) || (await this.longIdle(threadId)))
+            (!this.canAutoWake(threadId) ||
+              (!options.backgroundResult && (await this.longIdle(threadId))))
           )
             return
           // 恢复只负责装载线程。起回合时沿用引擎的最新设置，不能把恢复应答里的旧快照再写回去：

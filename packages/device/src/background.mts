@@ -37,6 +37,8 @@ export class DeviceBackground {
   private readonly host: BackgroundHost
   /** 适配器的引擎报的：会话 → 最近一份集合 */
   private readonly reported = new Map<string, LitchBackground>()
+  /** 在控制端执行、由设备投影的后台操作。 */
+  private readonly desktop = new Map<string, Map<string, LitchBackgroundTask>>()
   /** 原生 codex：回合里开始了、还没结束的命令，会话 → 条目 → 命令 */
   private readonly inTurn = new Map<string, Map<string, RunningCommand>>()
   /** 原生 codex 派生出来的集合：会话 → 任务（键是命令条目的标识） */
@@ -98,7 +100,7 @@ export class DeviceBackground {
     if (before === 0 && running > 0) for (const listener of [...this.busy]) listener(threadId)
     if (before === 0 || running > 0) return
     this.userStops.delete(threadId)
-    const tasks = this.derivedOf(threadId)?.tasks ?? this.reported.get(threadId)?.tasks ?? []
+    const tasks = this.tasks(threadId)
     for (const listener of [...this.settled]) listener(threadId, tasks)
   }
 
@@ -244,6 +246,7 @@ export class DeviceBackground {
     this.reported.delete(threadId)
     this.inTurn.delete(threadId)
     this.derived.delete(threadId)
+    this.desktop.delete(threadId)
   }
 
   /** 原生 codex 派生的那一份。没有是 null */
@@ -271,7 +274,7 @@ export class DeviceBackground {
   }
 
   refresh(threadId: string): void {
-    const background = this.derivedOf(threadId) ?? { tasks: [], wakesOnFinish: false }
+    const background = this.combined(threadId)
     this.host.announce(
       BACKGROUND_TASKS_NOTIFICATION.changed,
       { threadId, ...background },
@@ -279,11 +282,37 @@ export class DeviceBackground {
     )
   }
 
+  desktopTask(threadId: string, task: LitchBackgroundTask): void {
+    const tasks = this.desktop.get(threadId) ?? new Map<string, LitchBackgroundTask>()
+    tasks.set(task.id, task)
+    const kept = orderBackgroundTasks(tasks.values())
+    this.desktop.set(threadId, new Map(kept.map((value) => [value.id, value])))
+    this.refresh(threadId)
+    this.settle(threadId)
+  }
+
+  mergeDesktop(threadId: string, frame: Record<string, unknown>): boolean {
+    if (!this.desktop.has(threadId)) return false
+    Object.assign(frame, this.combined(threadId))
+    return true
+  }
+
+  private combined(threadId: string): LitchBackground {
+    const base = this.derivedOf(threadId) ?? this.reported.get(threadId)
+    const jobs = this.desktop.get(threadId)
+    return {
+      tasks: jobs
+        ? orderBackgroundTasks([...(base?.tasks ?? []), ...jobs.values()])
+        : (base?.tasks ?? []),
+      wakesOnFinish: base?.wakesOnFinish === true || !!jobs?.size,
+    }
+  }
+
   /** 原生 codex 的会话对象经过、这条连接声明了扩展：挂上派生的集合 */
   decorate(thread: Record<string, unknown>): boolean {
     if (typeof thread.id !== 'string') return false
-    const background = this.derivedOf(thread.id)
-    if (!background) return false
+    if (!this.derived.has(thread.id) && !this.desktop.has(thread.id)) return false
+    const background = this.combined(thread.id)
     thread.litchBackground = structuredClone(background)
     return true
   }
@@ -298,15 +327,12 @@ export class DeviceBackground {
 
   /** 这个会话的集合（会话树记下回报时哪几个在跑）。没有是空的 */
   tasks(threadId: string): LitchBackgroundTask[] {
-    return this.derivedOf(threadId)?.tasks ?? this.reported.get(threadId)?.tasks ?? []
+    return this.combined(threadId).tasks
   }
 
   /** 这个会话还有几个后台任务在跑（会话树、定时任务的回报里写） */
   running(threadId: string): number {
-    const derived = this.derivedOf(threadId)
-    if (derived) return runningBackgroundTasks(derived.tasks)
-    const reported = this.reported.get(threadId)
-    return reported ? runningBackgroundTasks(reported.tasks) : 0
+    return runningBackgroundTasks(this.tasks(threadId))
   }
 }
 

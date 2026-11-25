@@ -64,6 +64,7 @@ export interface RelayHost {
 export interface RelayBackground {
   /** 上游的每条通知都给看一眼（在会话树之前：回报里要数还有几个后台任务在跑） */
   notification(link: UpstreamLink, method: string, params: Record<string, unknown>): void
+  mergeDesktop?(threadId: string, params: Record<string, unknown>): boolean
   /** 会话对象经过、这条连接声明了 backgroundTasks：原生 codex 的挂上派生的集合 */
   decorate(thread: Record<string, unknown>): void
   /** thread/resume 成功应答（带着历史）：原生 codex 的从历史里补集合 */
@@ -406,7 +407,15 @@ export class Relay {
         changed = true
       }
     }
-    if (fields) this.host.background.notification(link, method, fields)
+    if (fields) {
+      this.host.background.notification(link, method, fields)
+      if (
+        method === 'litch/thread/background/changed' &&
+        threadId &&
+        this.host.background.mergeDesktop?.(threadId, fields)
+      )
+        changed = true
+    }
     if (method === 'turn/started' || method === 'turn/completed') {
       const turn = isObject(fields?.turn) ? fields.turn : null
       if (typeof turn?.id === 'string' && method === 'turn/completed') {
