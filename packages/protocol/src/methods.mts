@@ -258,6 +258,8 @@ import type {
   MachineApprovalCard,
   MachineApprovalFinish,
   MachineApprovalKey,
+  MachinePhoneAnswer,
+  MachinePhoneReceipt,
 } from './machine-approvals.mjs'
 import type {
   ManagerIssueActivityNotification,
@@ -574,6 +576,7 @@ export interface ClientRequests extends AcpControlsRequests {
   'litch/machineApproval/start': { params: MachineApprovalKey; result: Record<string, never> }
   'litch/machineApproval/finish': { params: MachineApprovalFinish; result: Record<string, never> }
   'litch/machineApproval/stop': { params: MachineApprovalKey; result: Record<string, never> }
+  'litch/machineApproval/answerSigned': { params: MachinePhoneAnswer; result: MachinePhoneReceipt }
   // 以下是给设备装 harness（扩展 harnessInstall，见 device-harness-install.mts）：只有聚合面有，
   // 设备信息的 `extensions` 里列了 harnessInstall 才能用
   'litch/device/harness/versions': {
@@ -839,6 +842,7 @@ export interface ServerNotifications {
   /** 扩展，只发给发卡片的那条连接：手机答了一张卡片（原样转交，没验签） */
   'litch/approval/answered': ApprovalAnsweredNotification
   'litch/machineApproval/changed': { threadId: string; cards: MachineApprovalCard[] }
+  'litch/machineApproval/signedChanged': { threadId: string; cards: MachineApprovalCard[] }
   'litch/machineApproval/stopRequested': MachineApprovalKey
   /** 扩展，只发给握手时声明过 harnessInstall 的连接：一个安装任务的状态或日志变了 */
   'litch/device/harness/install/changed': HarnessInstallChangedNotification
@@ -898,6 +902,7 @@ export type ServerNotificationMethod = keyof ServerNotifications
  * 对面发来、要客户端答复的请求。没列在这里的一律回“方法不存在”，对面的回合不会因此挂住。
  */
 export interface ServerRequests {
+  'litch/machineApproval/verifySigned': { params: MachinePhoneAnswer; result: MachinePhoneReceipt }
   'litch/remoteChrome/approval': {
     params: import('./remote-chrome.mjs').RemoteChromePrompt
     result: import('./remote-chrome.mjs').RemoteChromeAnswer | null

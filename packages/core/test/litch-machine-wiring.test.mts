@@ -2,12 +2,17 @@
 // 同一回合里拒过的不再问、对话里和全局待处理两种卡片、系统通知、关开关时收拾、握手声明、建会话时的说明、
 // 交给执行器的两台机器。执行器是假的（真的那份归执行器那条线，见 machine-*.test.mts），设备是假对端。
 import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { test } from 'node:test'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import { withDeveloperInstructions } from '../../protocol/src/codex-developer-instructions.mjs'
 import type { JsonRpcMessage, Thread } from '../../protocol/src/index.mjs'
-import { MACHINE_APPROVAL_METHOD as MACHINE } from '../../protocol/src/machine-approvals.mjs'
+import {
+  MACHINE_APPROVAL_METHOD as MACHINE,
+  MACHINE_APPROVAL_SIGNING,
+  type MachineApprovalCard,
+  type MachinePhoneAnswer,
+} from '../../protocol/src/machine-approvals.mjs'
 import { codexRejects } from '../../shared/test/codex-params.mjs'
 import { approved } from '../src/device/machine/common.mjs'
 import { SENSITIVE_PRESETS, sensitivePresets } from '../src/device/machine/presets.mjs'
@@ -28,6 +33,7 @@ import {
   type ToolToCore,
   type ToolToMain,
 } from '../src/index.mjs'
+import type { MachineApprovalSigner } from '../src/machine-deferred.mjs'
 import { MACHINE_ASK_EXPIRES_MS } from '../src/machine-wiring.mjs'
 import type {
   MachineActivityView,
@@ -184,6 +190,7 @@ function setup(
     desktop?: MachineFacts
     timed?: boolean
     deferred?: boolean
+    signing?: MachineApprovalSigner
   } = {},
 ) {
   const threads = options.threads ?? [
@@ -261,6 +268,7 @@ function setup(
   const deferredCalls: { method: string; params: unknown }[] = []
   if (options.deferred) {
     aggregate.device.extensions.push('machineApprovals')
+    if (options.signing) aggregate.device.extensions.push(MACHINE_APPROVAL_SIGNING)
     remoteHandlers[MACHINE.list] = () => ({ cards: [] })
     for (const method of [MACHINE.open, MACHINE.start, MACHINE.finish])
       remoteHandlers[method] = (params) => {
@@ -337,6 +345,7 @@ function setup(
             desktop: options.desktop ?? DESKTOP,
             executor: () => fake.executor,
             randomApprovalId: randomUUID,
+            ...(options.signing ? { signing: options.signing } : {}),
           },
         }),
     store: {
@@ -1318,4 +1327,69 @@ test('限时授权·操作本机：远程会话授权内（含逐条确认）执
   assert.equal(cardsOf(session).length, 1, '到期后恢复询问')
   await respond(world, cardsOf(session)[0], 'once')
   await expired
+})
+
+test('远程答卡必须经过 Mac 核对；设备名单不能自己授予本机执行权限', async () => {
+  const mark = 'A'.repeat(86) + '=='
+  const hashes: string[] = []
+  const world = await started({
+    deferred: true,
+    timed: true,
+    signing: {
+      desktopId: randomUUID(),
+      hash: (payload) => {
+        hashes.push(payload)
+        return createHash('sha256').update(payload).digest('hex')
+      },
+      verify: async (_device, _card, answer) => answer.signature === mark,
+    },
+  })
+  await world.enable()
+  const remote = world.remote.last()
+  const source = { litchUnattended: { notice: 'unattended' } }
+  remote.notify('litch/timedApproval/changed', {
+    grants: [
+      {
+        id: 'forwarder-claim',
+        threadId: 'a',
+        category: 'machine',
+        scope: '',
+        expiresAt: world.time.clock.now() + 3_600_000,
+      },
+    ],
+  })
+  await settle()
+  assert.equal(textOf(await world.call({ command: 'pwd' }, source)), 'submitted')
+  const opened = world.deferredCalls.find(({ method }) => method === MACHINE.open)
+    ?.params as MachineApprovalCard
+  assert.ok(opened?.review)
+  assert.ok(hashes[0]?.includes('pwd'))
+  const { desktopId, nonce, version, payloadHash } = opened.review
+  const proof: MachinePhoneAnswer = {
+    id: opened.id,
+    threadId: opened.threadId,
+    expiresAt: opened.expiresAt,
+    desktopId,
+    nonce,
+    version,
+    payloadHash,
+    phoneId: 'f83898df0bef57a4',
+    decision: 'timed',
+    hours: 1,
+    signature: mark,
+  }
+  const check = async (wire: unknown, accepted: boolean) => {
+    const reply = await remote.ask(MACHINE.verify, wire)
+    assert.ok('result' in reply)
+    assert.deepEqual(reply.result, { accepted })
+  }
+  await check({ ...proof, signature: undefined }, false)
+  await check({ ...proof, signature: 'B'.repeat(86) + '==' }, false)
+  await check({ ...proof, nonce: randomUUID() }, false)
+  await check({ ...proof, expiresAt: proof.expiresAt - 1 }, false)
+  assert.equal(world.deferredCalls.filter(({ method }) => method === MACHINE.start).length, 0)
+  await check(proof, true)
+  await check(proof, false)
+  assert.equal(textOf(await world.call({ command: 'echo allowed' }, source)), 'ok')
+  assert.equal(world.deferredCalls.filter(({ method }) => method === MACHINE.start).length, 1)
 })

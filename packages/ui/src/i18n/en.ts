@@ -1967,6 +1967,10 @@ export const en: Record<MessageKey, Entry> = {
   'machine.ask.expires': 'Expires in {time}',
   'machine.deferred.waiting': 'Nonblocking · Waiting for your approval',
   'machine.deferred.onMac': 'Approve on the Mac running this operation: {name}.',
+  'machine.deferred.phoneFailed':
+    'The Mac did not accept this response. Check that your phone is still paired, or respond on the Mac.',
+  'machine.deferred.timedScope':
+    'Allow this session to operate this Mac without asking again for the selected duration.',
   'machine.option.once': 'Allow once',
   'machine.option.session': 'Allow for this session',
   'machine.option.cli': 'Allow all command-line calls from this device',

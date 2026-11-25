@@ -32,6 +32,7 @@ import {
   WIRES,
 } from './device/remote.mjs'
 import { createRemoteSetup } from './device/remote-setup.mjs'
+import type { MachineApprovalSigner } from './machine-deferred.mjs'
 import {
   createMachineWiring,
   MACHINE_DISABLED,
@@ -98,6 +99,7 @@ export interface CoreMachineOptions {
   /** 这台桌面端自己的情况，外壳现查的（核心就住在这台电脑上） */
   desktop: MachineFacts
   randomApprovalId?(): string
+  signing?: MachineApprovalSigner
   /** 造执行器。不给就用真的（device/machine/executor.mts）；测试里换成假的 */
   executor?(options: MachineExecutorOptions): MachineExecutor
 }
@@ -245,6 +247,40 @@ export function createCore(options: CoreOptions): Core {
       presets: [...sensitivePresets(options.machine?.desktop)],
     }
   }
+  // 远程名单可用于同步显示和撤销，但不能凭自己增加在这台 Mac 上的执行权限。
+  const localMachineGrants = new Map<string, Map<string, { threadId: string; expiresAt: number }>>()
+  const machineGrant = async (
+    deviceId: string,
+    threadId: string,
+    hours: number,
+    valid: () => boolean = () => true,
+  ) => {
+    if (!wiring || !validTimedApprovalHours(hours))
+      throw new ChannelError('invalid', 'Machine approval must be granted on the executing desktop')
+    const limit = options.clock.now() + hours * 3_600_000
+    const device = deviceOf(deviceId)
+    const grant = await device.timedApprovals.grant(threadId, 'machine', hours)
+    if (
+      grant.threadId !== threadId ||
+      grant.category !== 'machine' ||
+      grant.scope !== '' ||
+      typeof grant.id !== 'string' ||
+      !Number.isSafeInteger(grant.expiresAt)
+    )
+      throw new ChannelError('rejected', 'Invalid machine approval grant')
+    if (devices.get(deviceId) !== device || !valid()) {
+      void device.timedApprovals.revoke(grant.id).catch(() => {})
+      throw new ChannelError('rejected', 'Machine approval is no longer valid')
+    }
+    const now = options.clock.now()
+    const grants = localMachineGrants.get(deviceId) ?? new Map()
+    for (const [id, saved] of grants)
+      if (saved.threadId === threadId || saved.expiresAt <= now) grants.delete(id)
+    grants.set(grant.id, { threadId, expiresAt: Math.min(limit, grant.expiresAt) })
+    localMachineGrants.set(deviceId, grants)
+    wiring.timedApprovalsChanged(deviceId)
+    return grant
+  }
   const machineOptions = options.machine
   const wiring: MachineWiring | null = machineOptions
     ? createMachineWiring({
@@ -285,14 +321,19 @@ export function createCore(options: CoreOptions): Core {
         ...(store?.machineLog
           ? { logStore: (deviceId: string) => store.machineLog?.(deviceId) ?? null }
           : {}),
-        timedApproval: (deviceId, threadId) =>
-          devices.get(deviceId)?.timedApprovals.active(threadId, 'machine') != null,
+        timedApproval: (deviceId, threadId) => {
+          const active = devices.get(deviceId)?.timedApprovals.active(threadId, 'machine')
+          const local = active && localMachineGrants.get(deviceId)?.get(active.id)
+          return !!local && local.threadId === threadId && local.expiresAt > options.clock.now()
+        },
+        ...(machineOptions.signing ? { signing: machineOptions.signing } : {}),
+        signingAvailable: (deviceId) =>
+          devices.get(deviceId)?.machineApprovalSigningAvailable() === true,
         deferredAvailable: (deviceId) => devices.get(deviceId)?.machineApprovalAvailable() === true,
         ...(machineOptions.randomApprovalId
           ? { randomDeferredId: machineOptions.randomApprovalId }
           : {}),
-        grantDeferred: (deviceId, threadId, hours) =>
-          deviceOf(deviceId).timedApprovals.grant(threadId, 'machine', hours),
+        grantDeferred: machineGrant,
         log: (line) => options.log?.(line),
       })
     : null
@@ -350,6 +391,7 @@ export function createCore(options: CoreOptions): Core {
               desktop: desktopInfo,
               call: (input, session) => wiring.call(config.id, input, session),
               turnEnded: (threadId, turnId) => wiring.turnEnded(config.id, threadId, turnId),
+              verifyDeferred: (answer) => wiring.answerDeferredSigned(config.id, answer),
               stopDeferred: ({ id, threadId }) => wiring.stopDeferred(config.id, id, threadId),
               presence(online) {
                 if (current()) wiring.presence(config.id, online)
@@ -374,8 +416,23 @@ export function createCore(options: CoreOptions): Core {
     })
     if (connectionsPaused && config.kind === 'ssh') device.setConnectionPaused(true)
     // 会话所在设备的限时授权名单变了：litch_machine 挂着的、已在授权内的卡片当场放行
-    device.timedApprovals.onChange(() => {
-      if (current()) wiring?.timedApprovalsChanged(config.id)
+    device.timedApprovals.onChange((grants) => {
+      if (!current()) return
+      const local = localMachineGrants.get(config.id)
+      if (local) {
+        for (const [id, entry] of local)
+          if (
+            !grants.some(
+              (grant) =>
+                grant.id === id &&
+                grant.threadId === entry.threadId &&
+                grant.category === 'machine' &&
+                grant.scope === '',
+            )
+          )
+            local.delete(id)
+      }
+      wiring?.timedApprovalsChanged(config.id)
     })
     return device
   }
@@ -1101,6 +1158,7 @@ export function createCore(options: CoreOptions): Core {
           // 换了一台机器：原来那条连接和它的侧栏都不要了，按新的配置重新来；
           // 原来那台在这台电脑上起的进程、挂着的卡片、操作记录也不要了
           device.stopMachine(clientToolFailure('disabled', MACHINE_DISABLED))
+          localMachineGrants.delete(deviceId)
           wiring?.forget(deviceId)
           device.stop()
           device.terminals.dispose()
@@ -1184,6 +1242,10 @@ export function createCore(options: CoreOptions): Core {
             throw new ChannelError('notFound', '该卡片已不存在')
           return {}
         }
+        case 'machine.deferredAnswerSigned': {
+          const { deviceId, answer } = params as Commands['machine.deferredAnswerSigned']['params']
+          return deviceOf(deviceId).answerMachineApproval(answer)
+        }
         case 'machine.process.kill': {
           const { processId } = params as Commands['machine.process.kill']['params']
           if (!wiring?.kill(String(processId))) {
@@ -1229,6 +1291,7 @@ export function createCore(options: CoreOptions): Core {
           persist()
           devices.delete(deviceId)
           device.stopMachine(clientToolFailure('disabled', MACHINE_DISABLED))
+          localMachineGrants.delete(deviceId)
           wiring?.forget(deviceId)
           device.stop()
           device.terminals.dispose()
@@ -1500,10 +1563,12 @@ export function createCore(options: CoreOptions): Core {
         case 'timedApproval.grant': {
           const { deviceId, threadId, category, hours, scope } =
             params as Commands['timedApproval.grant']['params']
+          if (category === 'machine') return machineGrant(deviceId, threadId, hours)
           return deviceOf(deviceId).timedApprovals.grant(threadId, category, hours, scope)
         }
         case 'timedApproval.revoke': {
           const { deviceId, id } = params as Commands['timedApproval.revoke']['params']
+          localMachineGrants.get(deviceId)?.delete(id)
           return deviceOf(deviceId).timedApprovals.revoke(id)
         }
         case 'managers.create': {

@@ -1,7 +1,7 @@
-// 批准钥匙：手机批准电脑上的代理登录时签名用的 ed25519 钥匙（算法见 packages/protocol/src/client-approvals.mts 开头）。
+// 批准钥匙：手机扫码配对时登记的 Ed25519 钥匙，用于签署电脑上的审批答复。
 // 和登录设备用的 ssh 钥匙（keys.ts）无关：一台手机一把，绑了几台设备都用它。种子只放在系统的安全存储里
 // （WHEN_UNLOCKED_THIS_DEVICE_ONLY），公钥和指纹不是秘密，记在 approval-key.json 里给设置页显示。
-// 签名前要过系统的指纹、面容或锁屏密码（expo-local-authentication）。没有用 SecureStore 的 requireAuthentication：
+// 自身访问批准额外校验系统指纹、面容或锁屏密码；本机操作卡上的决定直接签名。未使用 SecureStore 的 requireAuthentication：
 // 否则更换指纹会让 Keystore 作废钥匙，手机需要重新扫码绑定。
 // 第一次要用（扫码时设备认批准公钥、第一次批准）时才生成。
 import { authenticateAsync, getEnrolledLevelAsync, SecurityLevel } from 'expo-local-authentication'
@@ -96,7 +96,7 @@ export async function unlockForApproval(
   }
 }
 
-/** 用批准钥匙签一段文字（调用方先过 unlockForApproval）。钥匙没了抛错 */
+/** 用已登记的批准钥匙签一段文字。钥匙不可用时抛错。 */
 export async function signWithApprovalKey(text: string): Promise<string> {
   const seed = await readSeed()
   if (!seed) throw new Error('批准钥匙读不出来')

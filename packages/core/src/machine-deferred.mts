@@ -1,8 +1,15 @@
 import type { ClientToolCallResponse } from '../../protocol/src/client-tools.mjs'
 import {
+  isMachineApprovalReview,
+  isMachinePhoneAnswer,
   MACHINE_APPROVAL_METHOD as M,
+  MACHINE_APPROVAL_DETAILS_MAX,
+  MACHINE_APPROVAL_REVIEW_VERSION,
   MACHINE_APPROVAL_TTL_MS,
   type MachineApprovalCard,
+  type MachinePhoneAnswer,
+  machineApprovalPayload,
+  matchesMachinePhoneAnswer,
 } from '../../protocol/src/machine-approvals.mjs'
 import { type Cancel, createCancel } from './channel/cancel.mjs'
 import type { AbortSignalLike, Clock } from './channel/protocol.mjs'
@@ -14,6 +21,7 @@ import type { MachineDeferredView } from './model-machine.mjs'
 type Decision = 'once' | 'timed' | 'decline'
 
 interface Held {
+  card: MachineApprovalCard
   view: MachineDeferredView
   link: MachineDeviceLink
   timer: ReturnType<Clock['setTimer']>
@@ -23,17 +31,25 @@ interface Held {
   busy: boolean
 }
 
+export interface MachineApprovalSigner {
+  desktopId: string
+  hash(text: string): string
+  verify(deviceId: string, card: MachineApprovalCard, answer: MachinePhoneAnswer): Promise<boolean>
+}
+
 interface Options {
   clock: Clock
   desktop: string
   randomId?(): string
+  signing?: MachineApprovalSigner
+  signingAvailable?(deviceId: string): boolean
   changed(): void
-  grant(device: string, thread: string, hours: number): Promise<unknown>
+  grant(device: string, thread: string, hours: number, valid: () => boolean): Promise<unknown>
   notify(view: MachineDeferredView): void
   log(line: string): void
 }
 
-/** 审批与执行在控制端；设备即使能造出通知，也没有批准的入口。 */
+/** 审批与执行在控制端；远端答复只能由本机核对签名后进入答卡流程。 */
 export function createMachineDeferred(host: Options) {
   const held = new Map<string, Held>()
   const remove = (entry: Held) => {
@@ -75,6 +91,67 @@ export function createMachineDeferred(host: Options) {
       text,
     )
   }
+  const answer = async (
+    deviceId: string,
+    id: string,
+    decision: Decision,
+    hours?: number,
+    proof?: MachinePhoneAnswer,
+  ): Promise<boolean> => {
+    const entry = held.get(id)
+    if (
+      !entry ||
+      entry.view.deviceId !== deviceId ||
+      entry.busy ||
+      entry.started ||
+      entry.view.expiresAt <= host.clock.now() ||
+      !entry.link.online()
+    )
+      return false
+    entry.busy = true
+    const { threadId } = entry.view
+    const current = () =>
+      held.get(id) === entry && entry.link.online() && entry.view.expiresAt > host.clock.now()
+    try {
+      if (
+        proof &&
+        (!matchesMachinePhoneAnswer(entry.card, proof) ||
+          !(await host.signing?.verify(deviceId, entry.card, proof)))
+      )
+        return false
+      if (!current()) return false
+      if (decision === 'decline') {
+        await finish(entry, 'rejected')
+        return true
+      }
+      await entry.link.request(M.start, { id, threadId })
+      if (!current()) {
+        if (held.get(id) === entry) await finish(entry, 'lost')
+        return false
+      }
+      entry.started = true
+      entry.timer()
+      host.changed()
+      if (decision === 'timed' && hours !== undefined) {
+        // 授时失败明确结束任务，避免界面误报授时成功。
+        try {
+          await host.grant(deviceId, threadId, hours, current)
+        } catch (error) {
+          await finish(entry, 'failed', 'Could not grant timed approval. Nothing was started.')
+          host.log(`本机操作限时授权失败：${String(error)}`)
+          return false
+        }
+      }
+      if (!current()) {
+        if (held.get(id) === entry) await finish(entry, 'lost')
+        return false
+      }
+      void run(entry)
+      return true
+    } finally {
+      entry.busy = false
+    }
+  }
   return {
     views(): MachineDeferredView[] {
       return [...held.values()].flatMap((entry) => (entry.started ? [] : [entry.view]))
@@ -85,6 +162,7 @@ export function createMachineDeferred(host: Options) {
       input: MachineCallInput & { threadId: string },
       request: MachineApprovalRequest,
       details: string,
+      snapshot: string,
       execute: Held['execute'],
     ): Promise<boolean> {
       const { action, command, path, cwd } = request.ask
@@ -105,6 +183,28 @@ export function createMachineDeferred(host: Options) {
         desktop: host.desktop.slice(0, 200),
         expiresAt,
       }
+      const signing = host.signing
+      if (
+        signing &&
+        host.signingAvailable?.(deviceId) &&
+        details.length <= MACHINE_APPROVAL_DETAILS_MAX
+      ) {
+        const nonce = host.randomId?.()
+        if (nonce) {
+          const review = {
+            desktopId: signing.desktopId,
+            nonce,
+            version: MACHINE_APPROVAL_REVIEW_VERSION,
+            details,
+            snapshotHash: signing.hash(snapshot),
+          } as const
+          const signedReview = {
+            ...review,
+            payloadHash: signing.hash(machineApprovalPayload(card, review)),
+          }
+          if (isMachineApprovalReview(signedReview)) card.review = signedReview
+        }
+      }
       try {
         await link.request(M.open, { ...card, callId: input.callId })
       } catch (error) {
@@ -120,6 +220,7 @@ export function createMachineDeferred(host: Options) {
         expiresAt,
       }
       const entry: Held = {
+        card,
         view,
         link,
         execute,
@@ -139,40 +240,10 @@ export function createMachineDeferred(host: Options) {
       host.notify(view)
       return true
     },
-    async answer(
-      deviceId: string,
-      id: string,
-      decision: Decision,
-      hours?: number,
-    ): Promise<boolean> {
-      const entry = held.get(id)
-      if (
-        !entry ||
-        entry.view.deviceId !== deviceId ||
-        entry.busy ||
-        entry.started ||
-        entry.view.expiresAt <= host.clock.now()
-      )
-        return false
-      entry.busy = true
-      const { threadId } = entry.view
-      try {
-        if (decision === 'decline') {
-          await finish(entry, 'rejected')
-          return true
-        }
-        if (decision === 'timed' && hours !== undefined) await host.grant(deviceId, threadId, hours)
-        if (held.get(id) !== entry || entry.view.expiresAt <= host.clock.now()) return false
-        await entry.link.request(M.start, { id, threadId })
-        if (held.get(id) !== entry || !entry.link.online()) return false
-        entry.started = true
-        entry.timer()
-        host.changed()
-        void run(entry)
-        return true
-      } finally {
-        entry.busy = false
-      }
+    answer,
+    answerSigned(deviceId: string, proof: unknown): Promise<boolean> {
+      if (!isMachinePhoneAnswer(proof)) return Promise.resolve(false)
+      return answer(deviceId, proof.id, proof.decision, proof.hours, proof)
     },
     stop(deviceId: string, id: string, threadId: string): void {
       const entry = held.get(id)

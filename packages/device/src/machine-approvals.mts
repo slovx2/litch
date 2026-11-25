@@ -1,15 +1,22 @@
+import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { LitchBackgroundTask } from '../../protocol/src/background-tasks.mjs'
 import {
   isMachineApprovalId,
+  isMachineApprovalReview,
+  isMachinePhoneAnswer,
   MACHINE_APPROVAL_METHOD as M,
   MACHINE_APPROVAL_MAX_PER_EXECUTOR,
   MACHINE_APPROVAL_MAX_TEXT,
+  MACHINE_APPROVAL_SIGNING,
   MACHINE_APPROVAL_TTL_MS,
   MACHINE_APPROVALS,
   MACHINE_TASK_PREFIX,
   type MachineApprovalCard,
   type MachineApprovalOutcome,
+  type MachinePhoneAnswer,
+  type MachinePhoneReceipt,
+  matchesMachinePhoneAnswer,
   MACHINE_APPROVAL_NOTIFICATION as N,
 } from '../../protocol/src/machine-approvals.mjs'
 import {
@@ -32,6 +39,7 @@ interface Entry {
   timer: NodeJS.Timeout
   startedAt: number | null
   stopAsked: boolean
+  answering: boolean
 }
 
 interface Host {
@@ -70,13 +78,26 @@ export class DeviceMachineApprovals {
         -32601,
         'Machine approvals require a declared administrator connection',
       )
-    if (method === M.list) return { cards: this.cards() }
+    if (method === M.list) return { cards: this.cards(peer.declares(MACHINE_APPROVAL_SIGNING)) }
     const data = isObject(input) ? input : {}
     if (!isMachineApprovalId(data.id) || typeof data.threadId !== 'string')
       return invalid('Invalid machine approval identifier')
     if (method === M.open) return this.open(peer, data)
     const entry = this.entries.get(data.id)
     if (entry?.card.threadId !== data.threadId) return invalid('Machine approval is no longer open')
+    if (method === M.answer) {
+      if (
+        !peer.declares(MACHINE_APPROVAL_SIGNING) ||
+        !isMachinePhoneAnswer(data) ||
+        !matchesMachinePhoneAnswer(entry.card, data) ||
+        entry.startedAt !== null ||
+        entry.card.expiresAt <= Date.now() ||
+        !entry.peer.ready ||
+        !entry.peer.declares(MACHINE_APPROVAL_SIGNING)
+      )
+        return { accepted: false }
+      return this.forward(entry, data)
+    }
     if (method === M.stop) {
       if (entry.startedAt === null) return invalid('Machine approval has not started')
       if (!entry.stopAsked) {
@@ -123,7 +144,7 @@ export class DeviceMachineApprovals {
   }
 
   private open(peer: Peer, data: Record<string, unknown>): object {
-    const { id, threadId, turnId, action, target, cwd, desktop, expiresAt, callId } = data
+    const { id, threadId, turnId, action, target, cwd, desktop, expiresAt, callId, review } = data
     const now = Date.now()
     if (
       !isMachineApprovalId(id) ||
@@ -141,6 +162,8 @@ export class DeviceMachineApprovals {
       expiresAt <= now ||
       expiresAt > now + MACHINE_APPROVAL_TTL_MS ||
       typeof callId !== 'string' ||
+      (review !== undefined &&
+        (!peer.declares(MACHINE_APPROVAL_SIGNING) || !isMachineApprovalReview(review))) ||
       !this.host.source(peer, threadId, callId) ||
       !this.host.allowed(threadId)
     )
@@ -161,24 +184,93 @@ export class DeviceMachineApprovals {
       cwd,
       desktop,
       expiresAt,
+      ...(isMachineApprovalReview(review)
+        ? {
+            review: {
+              desktopId: review.desktopId,
+              nonce: review.nonce,
+              version: review.version,
+              details: review.details,
+              snapshotHash: review.snapshotHash,
+              payloadHash: review.payloadHash,
+            },
+          }
+        : {}),
     }
     const timer = setTimeout(() => {
       const entry = this.entries.get(id)
       if (entry) this.end(entry, 'expired')
     }, expiresAt - now).unref()
-    this.entries.set(id, { peer, card, callId, startedAt: null, stopAsked: false, timer })
+    this.entries.set(id, {
+      peer,
+      card,
+      callId,
+      startedAt: null,
+      stopAsked: false,
+      answering: false,
+      timer,
+    })
     this.changed(threadId)
     return {}
   }
 
-  private cards(threadId?: string): MachineApprovalCard[] {
-    return [...this.entries.values()].flatMap(({ card, startedAt }) =>
-      startedAt === null && (threadId === undefined || threadId === card.threadId) ? [card] : [],
-    )
+  private forward(entry: Entry, answer: MachinePhoneAnswer): Promise<MachinePhoneReceipt> {
+    if (entry.answering) return Promise.resolve({ accepted: false })
+    entry.answering = true
+    return new Promise((resolve) => {
+      const settle = (accepted: boolean) => {
+        clearTimeout(timer)
+        entry.answering = false
+        resolve({ accepted })
+      }
+      const timer = setTimeout(() => {
+        entry.peer.withdrawClientTool(facing, answer.threadId)
+        settle(false)
+      }, 10_000).unref()
+      const facing = entry.peer.deliverClientTool(
+        'machineApproval',
+        {
+          id: `litch:machine-answer:${randomUUID()}`,
+          method: M.verify,
+          // 签名交给 Mac；这里既没有批准钥匙，也不会改成 start / finish。
+          params: {
+            id: answer.id,
+            threadId: answer.threadId,
+            desktopId: answer.desktopId,
+            nonce: answer.nonce,
+            version: answer.version,
+            payloadHash: answer.payloadHash,
+            expiresAt: answer.expiresAt,
+            phoneId: answer.phoneId,
+            signature: answer.signature,
+            decision: answer.decision,
+            ...(answer.decision === 'timed' ? { hours: answer.hours } : {}),
+          },
+        },
+        (reply) => settle(isObject(reply.result) && reply.result.accepted === true),
+      )
+    })
+  }
+
+  private cards(signed: boolean, threadId?: string): MachineApprovalCard[] {
+    return [...this.entries.values()].flatMap(({ card, startedAt }) => {
+      if (startedAt !== null || (threadId !== undefined && threadId !== card.threadId)) return []
+      const { review, ...base } = card
+      return [signed && review ? card : base]
+    })
   }
 
   private changed(threadId: string): void {
-    this.host.announce(N.changed, { threadId, cards: this.cards(threadId) }, MACHINE_APPROVALS)
+    this.host.announce(
+      N.changed,
+      { threadId, cards: this.cards(false, threadId) },
+      MACHINE_APPROVALS,
+    )
+    this.host.announce(
+      N.changedSigned,
+      { threadId, cards: this.cards(true, threadId) },
+      MACHINE_APPROVAL_SIGNING,
+    )
   }
 
   private task(entry: Entry, status: LitchBackgroundTask['status']): LitchBackgroundTask {

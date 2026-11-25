@@ -12,6 +12,11 @@ import {
   type ApprovalAnswer,
   approvalSignedText,
 } from '../../../../packages/protocol/src/client-approvals.mjs'
+import {
+  type MachineApprovalCard,
+  type MachinePhoneAnswer,
+  machineApprovalSignedText,
+} from '../../../../packages/protocol/src/machine-approvals.mjs'
 import { approvalKeyFingerprint, TrustedPhones } from '../approvals/store.mjs'
 import {
   approvalDesktopId,
@@ -350,4 +355,85 @@ test('手机远程批准默认关：关着时没有桌面端号（卡片不发�
     installPhoneApprovals(null)
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test('本机操作只认当前设备的配对钥匙与原卡片，拒绝伪造、重放、撤销和过期', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'litch-machine-approval-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const store = new TrustedPhones(join(dir, 'trusted-phones.json'))
+  let now = Date.now()
+  const approvals = new PhoneApprovals({ store, now: () => now })
+  const phone = {
+    phoneId: PHONE_ID,
+    name: 'Phone',
+    approvalKey: PHONE.approvalKey,
+    deviceId: 'box',
+  }
+  const card: MachineApprovalCard = {
+    id: randomUUID(),
+    threadId: 'line',
+    turnId: 'turn',
+    action: 'write',
+    target: '/work/file',
+    cwd: null,
+    desktop: 'Mac',
+    expiresAt: now + 60_000,
+    review: {
+      desktopId: approvals.desktopId,
+      version: 1,
+      nonce: randomUUID(),
+      details: 'write content',
+      snapshotHash: 'd'.repeat(64),
+      payloadHash: 'e'.repeat(64),
+    },
+  }
+  const proof = (target = card, key = PHONE.privateKey): MachinePhoneAnswer => {
+    assert.ok(target.review)
+    const { desktopId, nonce, version, payloadHash } = target.review
+    const body = {
+      id: target.id,
+      threadId: target.threadId,
+      expiresAt: target.expiresAt,
+      desktopId,
+      nonce,
+      version,
+      payloadHash,
+      phoneId: phone.phoneId,
+      decision: 'timed',
+      hours: 1,
+    } as const
+    return {
+      ...body,
+      signature: sign(null, Buffer.from(machineApprovalSignedText(body)), key).toString('base64'),
+    }
+  }
+  const signed = proof()
+  assert.equal(approvals.verifyMachine('box', card, signed), false, '首次信任不能授权')
+  approvals.trustFromPairing(phone)
+  assert.equal(approvals.verifyMachine('other', card, signed), false)
+  assert.equal(approvals.verifyMachine('box', card, { ...signed, signature: undefined }), false)
+  assert.equal(approvals.verifyMachine('box', card, proof(card, AGENT.privateKey)), false)
+  assert.equal(approvals.verifyMachine('box', card, { ...signed, hours: 24 }), false)
+  assert.equal(approvals.verifyMachine('box', card, { ...signed, threadId: 'other' }), false)
+  assert.equal(
+    approvals.verifyMachine('box', card, { ...signed, payloadHash: 'f'.repeat(64) }),
+    false,
+  )
+  // 发给另一台 Mac 的卡：手机签名本身有效，这台也不认
+  assert.ok(card.review)
+  const elsewhere = { ...card, review: { ...card.review, desktopId: randomUUID() } }
+  assert.equal(
+    approvals.verifyMachine('box', elsewhere, proof(elsewhere)),
+    false,
+    '只认发给本机的卡',
+  )
+  assert.equal(approvals.verifyMachine('box', card, signed), true)
+  assert.equal(approvals.verifyMachine('box', card, signed), false, '同一签名不能重放')
+  assert.ok(card.review)
+  const next = { ...card, id: randomUUID(), review: { ...card.review, nonce: randomUUID() } }
+  approvals.forget(phone.phoneId)
+  assert.equal(approvals.verifyMachine('box', next, proof(next)), false)
+  approvals.trustFromPairing(phone)
+  now = next.expiresAt
+  assert.equal(approvals.verifyMachine('box', next, proof(next)), false)
 })

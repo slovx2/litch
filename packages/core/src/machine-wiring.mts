@@ -22,7 +22,7 @@ import type {
 } from './device/machine/types.mjs'
 import type { MachineLogStore } from './device/remote.mjs'
 import type { MachineCallInput } from './device/tool-calls.mjs'
-import { createMachineDeferred } from './machine-deferred.mjs'
+import { createMachineDeferred, type MachineApprovalSigner } from './machine-deferred.mjs'
 import type { ApprovalOption } from './model.mjs'
 import type { MachineNotice, ToolAnswer } from './model-client-tools.mjs'
 import type {
@@ -97,7 +97,14 @@ export interface MachineWiringHost {
   /** 限时授权：会话所在设备上，这个会话的“操作本机”此刻放行（命令里提到禁止位置的仍要问） */
   timedApproval?(deviceId: string, threadId: string): boolean
   deferredAvailable?(deviceId: string): boolean
-  grantDeferred?(deviceId: string, threadId: string, hours: number): Promise<unknown>
+  signing?: MachineApprovalSigner
+  signingAvailable?(deviceId: string): boolean
+  grantDeferred?(
+    deviceId: string,
+    threadId: string,
+    hours: number,
+    valid: () => boolean,
+  ): Promise<unknown>
   randomDeferredId?(): string
   log(line: string): void
 }
@@ -127,6 +134,7 @@ export interface MachineWiring {
     decision: 'once' | 'timed' | 'decline',
     hours?: number,
   ): Promise<boolean>
+  answerDeferredSigned(deviceId: string, proof: unknown): Promise<boolean>
   stopDeferred(deviceId: string, id: string, threadId: string): void
   policyChanged(deviceId: string): void
   kill(processId: string): boolean
@@ -272,10 +280,12 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
     clock,
     desktop: host.desktop.name,
     ...(host.randomDeferredId ? { randomId: host.randomDeferredId } : {}),
+    ...(host.signing ? { signing: host.signing } : {}),
+    ...(host.signingAvailable ? { signingAvailable: host.signingAvailable } : {}),
     changed: push,
-    grant: async (deviceId, threadId, hours) => {
+    grant: async (deviceId, threadId, hours, valid) => {
       if (!host.grantDeferred) throw new Error('Timed approval is unavailable')
-      return host.grantDeferred(deviceId, threadId, hours)
+      return host.grantDeferred(deviceId, threadId, hours, valid)
     },
     notify(view) {
       const device = host.device(view.deviceId)
@@ -621,6 +631,7 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
             { ...input, threadId },
             request,
             details,
+            JSON.stringify([input.tool, argsText, frozen, policy, revision]),
             async (signal) => {
               if (!matches() || signal.aborted)
                 return clientToolFailure(
@@ -701,6 +712,7 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
     },
 
     answerDeferred: deferred.answer,
+    answerDeferredSigned: deferred.answerSigned,
     stopDeferred: deferred.stop,
     policyChanged(deviceId) {
       policyRevisions.set(deviceId, policyRevision(deviceId) + 1)

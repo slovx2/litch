@@ -36,7 +36,10 @@ import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.
 import { EXTERNAL_SOURCES_EXTENSION } from '../../protocol/src/external-sources.mjs'
 import { FEISHU_EXTENSION } from '../../protocol/src/feishu.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
-import { MACHINE_APPROVALS } from '../../protocol/src/machine-approvals.mjs'
+import {
+  MACHINE_APPROVAL_SIGNING,
+  MACHINE_APPROVALS,
+} from '../../protocol/src/machine-approvals.mjs'
 import { managerInputMethod } from '../../protocol/src/manager-idle-compact.mjs'
 import {
   NATIVE_BACKGROUND_NAMESPACE,
@@ -494,7 +497,7 @@ export class DeviceServer {
       log,
     })
     info.extensions.push(EXTENSION.clientApprovals)
-    info.extensions.push(MACHINE_APPROVALS)
+    info.extensions.push(MACHINE_APPROVALS, MACHINE_APPROVAL_SIGNING)
     this.chrome =
       options.chromeBinary && process.platform === 'linux'
         ? new DeviceChromeRuntime(

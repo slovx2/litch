@@ -13,6 +13,12 @@ import {
   isApprovalAnswer,
   isApprovalKey,
 } from '../../../../packages/protocol/src/client-approvals.mjs'
+import {
+  isMachinePhoneAnswer,
+  type MachineApprovalCard,
+  machineApprovalSignedText,
+  matchesMachinePhoneAnswer,
+} from '../../../../packages/protocol/src/machine-approvals.mjs'
 import type { ApprovalNotice } from './ipc.mjs'
 import { approvalKeyFingerprint, type TrustedPhone, type TrustedPhones } from './store.mjs'
 
@@ -90,22 +96,25 @@ export interface PhoneApprovalsOptions {
 /** ed25519 的 SPKI 前缀，后面接 32 字节原始公钥 */
 const ED25519_SPKI = Buffer.from('302a300506032b6570032100', 'hex')
 
-function signatureOk(answer: ApprovalAnswer, card: PhoneCard, desktopId: string): boolean {
+function signedBy(approvalKey: string, text: string, signature: string): boolean {
   try {
     const key = createPublicKey({
-      key: Buffer.concat([ED25519_SPKI, Buffer.from(answer.approvalKey, 'base64')]),
+      key: Buffer.concat([ED25519_SPKI, Buffer.from(approvalKey, 'base64')]),
       format: 'der',
       type: 'spki',
     })
-    const text = approvalSignedText(
-      { id: card.id, nonce: card.nonce, desktopId, origin: card.origin },
-      answer,
-    )
-    return verify(null, Buffer.from(text, 'utf8'), key, Buffer.from(answer.signature, 'base64'))
+    return verify(null, Buffer.from(text, 'utf8'), key, Buffer.from(signature, 'base64'))
   } catch {
     return false
   }
 }
+
+const signatureOk = (answer: ApprovalAnswer, card: PhoneCard, desktopId: string) =>
+  signedBy(
+    answer.approvalKey,
+    approvalSignedText({ id: card.id, nonce: card.nonce, desktopId, origin: card.origin }, answer),
+    answer.signature,
+  )
 
 /** 手机名：去掉控制字符，截到 64 个字；没有就用手机号 */
 const nameOf = (answer: ApprovalAnswer): string => {
@@ -119,6 +128,7 @@ export class PhoneApprovals {
   private readonly options: PhoneApprovalsOptions
   /** 用过的随机数（成功验过的那张卡片的）。只在内存：卡片本来就活不过这个进程 */
   private readonly used = new Set<string>()
+  private readonly machineUsed = new Map<string, number>()
 
   constructor(options: PhoneApprovalsOptions) {
     this.store = options.store
@@ -129,6 +139,30 @@ export class PhoneApprovals {
   /** 这台桌面端的标识：发到手机的卡片带上它，手机签进去 */
   get desktopId(): string {
     return this.store.desktopId
+  }
+
+  /** 只用本机核对过的公钥；不接受答复携带公钥，也不沿用首次信任或浏览器开关。 */
+  verifyMachine(deviceId: string, card: MachineApprovalCard, answer: unknown): boolean {
+    if (
+      !isMachinePhoneAnswer(answer) ||
+      !matchesMachinePhoneAnswer(card, answer) ||
+      answer.desktopId !== this.desktopId ||
+      card.expiresAt <= this.now()
+    )
+      return false
+    if (this.machineUsed.has(answer.nonce)) return false
+    const known = this.store.get(answer.phoneId)
+    if (
+      known?.source !== 'pairing' ||
+      known.conflict ||
+      known.deviceId !== deviceId ||
+      !signedBy(known.approvalKey, machineApprovalSignedText(answer), answer.signature)
+    )
+      return false
+    for (const [nonce, expiresAt] of this.machineUsed)
+      if (expiresAt <= this.now()) this.machineUsed.delete(nonce)
+    this.machineUsed.set(answer.nonce, card.expiresAt)
+    return true
   }
 
   verify(card: PhoneCard, answer: unknown): PhoneVerdict {

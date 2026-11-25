@@ -22,6 +22,8 @@ import {
 } from '../../../scripts/client-fixture-manager-check.mjs'
 import { withChromiumTestArgs } from '../../../third_party/litch-automation/scripts/chromium-test-args.mjs'
 
+import { checkSignedMachine, seedFixturePhone } from './machine-phone-acceptance.mjs'
+
 const require = createRequire(import.meta.url)
 const repo = fileURLToPath(new URL('../../..', import.meta.url))
 const cleanup = []
@@ -93,6 +95,10 @@ async function runPage(config) {
       pending.set(id, { resolve, reject })
       port.postMessage({ t: 'cmd', id, name, params })
     })
+  window.machineCommand = (name, params) =>
+    name === 'forgetFixturePhone'
+      ? window.litchApprovals.forget(params.phoneId)
+      : command(name, params)
   const deviceId = 'approval-fixture'
   await wait('Mac 和 SSH 都在线', () =>
     ['local', deviceId].every((id) => devices.get(id)?.connection === 'online'),
@@ -110,7 +116,18 @@ async function runPage(config) {
         live.live &&
         document.querySelector('.mg-chat textarea.cmp-text:not([disabled])'),
     )
-    const send = (text) => command('session.send', { deviceId, sessionId, text })
+    const send = async (text) => {
+      const deadline = Date.now() + 25_000
+      while (true) {
+        try {
+          return await command('session.send', { deviceId, sessionId, text })
+        } catch (error) {
+          // 唤醒回合刚显示结果时仍可能在收尾；只有设备明确拒绝的回合才重新提交。
+          if (!String(error).includes('会话已有活动回合') || Date.now() >= deadline) throw error
+          await pause(100)
+        }
+      }
+    }
     const card = '[data-machine-deferred="true"]'
     const execute = (value, filename, sleep = '') =>
       `本机：exec ${JSON.stringify({ command: `${sleep}printf '%s' ${value} > ${filename}; printf '%s' ${value}`, cwd: config.cwd })}`
@@ -156,6 +173,26 @@ async function runPage(config) {
     await wait('后台命令已停止', () => document.querySelector('[data-status="stopped"]'))
     if (document.querySelector('[data-timed="machine"]'))
       throw new Error('单次批准不能注册限时授权')
+    const fileOperation = async (tool, args, output) => {
+      await send(`本机：${tool} ${JSON.stringify(args)}`)
+      ;(
+        await wait(`文件卡 ${tool}`, () => document.querySelector(`${card} [data-option="once"]`))
+      ).click()
+      await wait(
+        `后台结果 ${tool}`,
+        () => !document.querySelector(card) && document.body.innerText.includes(output),
+      )
+    }
+    await fileOperation(
+      'write_file',
+      {
+        path: config.write,
+        content: 'DEFERRED_FILE_CONTENT',
+      },
+      'Wrote',
+    )
+    await fileOperation('read_file', { path: config.read, length: 64 }, 'DEFERRED_READ_PROOF')
+    await fileOperation('list_dir', { path: config.files }, 'DEFERRED_LIST_PROOF')
     console.log('MACHINE_DONE')
   }
 }
@@ -170,6 +207,7 @@ try {
   const ssh = JSON.parse(await until('SSH 夹具', () => line(sshLog, 'LITCH_SSH_FIXTURE '), Boolean))
   const profile = join(local.root, 'approval-profile')
   mkdirSync(profile)
+  seedFixturePhone(profile)
   writeFileSync(
     join(profile, 'devices.json'),
     JSON.stringify({
@@ -189,15 +227,23 @@ try {
     first: join(local.root, 'approved'),
     second: join(local.root, 'timed'),
     stopped: join(local.root, 'stopped'),
+    write: join(local.root, 'created-by-approval.txt'),
+    read: join(local.root, 'read-test.txt'),
+    files: join(local.root, 'list-test'),
   }
+  writeFileSync(config.read, 'DEFERRED_READ_PROOF')
+  mkdirSync(config.files)
+  writeFileSync(join(config.files, 'DEFERRED_LIST_PROOF'), '')
   const threadFile = join(profile, 'thread-id')
   const permissionFile = join(profile, 'click-approve')
+  const commands = join(profile, 'commands')
+  mkdirSync(commands)
   const bootstrap = join(profile, 'bootstrap.mjs')
   writeFileSync(
     bootstrap,
     `
 import { app } from 'electron';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 process.on('SIGTERM', () => app.quit());
 app.on('browser-window-created', (_event, win) => {
   win.show = () => {}; app.dock?.hide();
@@ -215,6 +261,18 @@ app.on('browser-window-created', (_event, win) => {
       while (!existsSync(approval)) await Promise.race([run, new Promise((done) => setTimeout(done, 50))]);
       await win.webContents.executeJavaScript('window.machinePermit = true');
       await run;
+      let sequence = 0;
+      while (!win.isDestroyed()) {
+        const id = ++sequence;
+        const request = ${JSON.stringify(join(profile, 'commands'))} + '/' + id + '.json';
+        while (!existsSync(request)) await new Promise((done) => setTimeout(done, 50));
+        const { name, params } = JSON.parse(readFileSync(request, 'utf8'));
+        const code = 'window.machineCommand(' + JSON.stringify(name) + ',' + JSON.stringify(params) + ')';
+        let response;
+        try { response = { result: await win.webContents.executeJavaScript(code) }; }
+        catch (error) { response = { error: String(error) }; }
+        writeFileSync(request + '.result', JSON.stringify(response));
+      }
     } catch (error) { console.error(error); app.exit(1); }
   });
 });
@@ -242,7 +300,12 @@ await import(${JSON.stringify(pathToFileURL(join(repo, 'apps/desktop/dist/main.m
   await until('真实桌面连接', log, (output) => output.includes('MACHINE_READY'))
   const state = join(ssh.states.svc, 'device')
   const service = JSON.parse(readFileSync(join(state, 'service.json'), 'utf8'))
-  const client = await managerClient(t, service.socket, [], ['machineApprovals', 'backgroundTasks'])
+  const client = await managerClient(
+    t,
+    service.socket,
+    [],
+    ['machineApprovals', 'machineApprovalSigning', 'backgroundTasks', 'timedApprovals'],
+  )
   const { data: models } = await client.call('model/list', { harness: 'pi' })
   const model = models.find((item) => item.isDefault) ?? models[0]
   assert.ok(model, '夹具没有 Pi 模型')
@@ -330,9 +393,25 @@ await import(${JSON.stringify(pathToFileURL(join(repo, 'apps/desktop/dist/main.m
   assert.equal(readFileSync(config.first, 'utf8'), 'MACHINE_FIRST')
   assert.equal(readFileSync(config.second, 'utf8'), 'MACHINE_SECOND')
   assert.equal(existsSync(config.stopped), false, '停止后命令未写入')
+  assert.equal(readFileSync(config.write, 'utf8'), 'DEFERRED_FILE_CONTENT')
   console.log(
-    '真实隐藏 Mac：SSH 经理对话卡不阻塞、限时批准、后台执行与唤醒、下一次直接执行、撤销、单次批准和停止均通过',
+    '真实隐藏 Mac：SSH 经理对话卡不阻塞、限时批准、后台执行与唤醒、下一次直接执行、撤销、单次批准、停止及异步读写和列目录均通过',
   )
+  let sequence = 0
+  const onMac = async (name, params) => {
+    const path = join(commands, `${++sequence}.json`)
+    writeFileSync(path, JSON.stringify({ name, params }), { mode: 0o600 })
+    const result = `${path}.result`
+    const reply = await until(
+      `Mac ${name}`,
+      () => (existsSync(result) ? JSON.parse(readFileSync(result, 'utf8')) : null),
+      Boolean,
+      30_000,
+    )
+    if (reply.error) throw new Error(reply.error)
+    return reply.result
+  }
+  await checkSignedMachine({ client, threadId, cwd: config.cwd, ssh, profile, onMac })
 } catch (error) {
   if (desktopLog) console.error(desktopLog().slice(-10000))
   throw error

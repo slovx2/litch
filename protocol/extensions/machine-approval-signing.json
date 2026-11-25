@@ -1,0 +1,19 @@
+{
+  "extension": "machineApprovalSigning",
+  "description": "已配对手机为无人值守的本机操作卡签名，由发卡 Mac 验证；设备仅转发。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "machineApprovalSigning" } }
+  },
+  "rules": [
+    "在 machineApprovals 上增量声明。open 可带 review；仅声明双方可列出 review、收 signedChanged、提交和转发签名。基础 changed 通知不带 review。",
+    "review 包含执行 Mac、随机数、版本、冻结内容的摘要、完整实质输入的预览，以及覆盖卡片和预览的 payloadHash。",
+    "手机重算 payloadHash，用配对批准钥匙对卡片、会话、执行 Mac、随机数、版本、payloadHash、截止时间、手机、决定和授时时数签名。",
+    "verifySigned 仅送至发卡连接。Mac 使用保存的配对钥匙和冻结卡验签；单次消费。设备不得代答或以收到消息作为批准。"
+  ],
+  "parts": [
+    { "kind": "ClientRequest", "method": "litch/machineApproval/answerSigned" },
+    { "kind": "ServerRequest", "method": "litch/machineApproval/verifySigned" },
+    { "kind": "ServerNotification", "method": "litch/machineApproval/signedChanged" }
+  ]
+}
