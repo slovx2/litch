@@ -47,6 +47,11 @@ the phone's signed approval channel currently supports browser sign-in, not this
 Cards offer Allow once / Allow for this session / Decline (with an optional note to the model). There
 is no "always allow". A card unanswered for 10 minutes counts as declined.
 
+无人值守经理或子会话需要审批时，Mac 上的有限读写、列目录和非交互命令可在会话里显示「不阻塞 · 等你批准」。
+会话可以继续，24 小时内可在执行操作的 Mac 上选择「仅允许本次」「限时允许」或「拒绝」。批准后同一份请求进入
+会话的后台任务，可在那里停止；完成、拒绝和到期结果送回原会话。手机和其他桌面能看到卡片，批准须在执行操作的 Mac 上完成。
+访问范围不变；涉及禁止位置的命令、交互命令或复制不进入异步审批。
+
 **Allow for…** on the card grants this session N hours (0.25–168) of every action, including in
 "Every action" mode; commands that mention a blocked location still ask. The grant is kept on the
 session's device and shown above the composer, where × revokes it (see "Timed approvals" in
@@ -116,7 +121,7 @@ reported, even when the destination root itself is allowed.
 - Exit codes of `litch-machine` on the remote side: 64 bad arguments, 69 cannot reach the device service
   or blocked by a sandbox, 75 no Litch desktop connected, 76 several Litch desktops connected, 77
   declined or unanswered, 78 switch is off, 79 blocked by access scope, 80 still running at the time
-  limit.
+  limit, 81 submitted for approval and not yet executed.
 - 69 from inside Codex's default sandbox or Claude Code's "In project" / "Read only" modes: use the
   built-in tools of that session instead, or Full access.
 - OpenCode's and Claude Code's command tools time out after 120 seconds by default, which can kill a

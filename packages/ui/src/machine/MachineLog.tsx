@@ -15,6 +15,7 @@ import type { MessageKey } from '../i18n/index.ts'
 import { resultTone } from './logic.ts'
 
 const RESULT_TEXT: Record<MachineLogEntry['result'], MessageKey> = {
+  submitted: 'machine.result.submitted',
   ok: 'machine.result.ok',
   failed: 'machine.result.failed',
   declined: 'machine.result.declined',

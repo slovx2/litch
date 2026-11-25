@@ -9,6 +9,7 @@ import type {
   ClientAskRequest,
   DeviceView,
   MachineAskView,
+  MachineDeferredView,
   MachinePendingView,
   SessionSummary,
 } from '@litch/core'
@@ -56,6 +57,7 @@ interface MachineCardProps {
   grab: boolean
   /** 对话里那张的“限时允许”：按钮排在拒绝前面，展开的一行在按钮行下面 */
   timed?: { button: ReactNode; panel: ReactNode }
+  deferred?: string
   onChoose(choice: Choice): void
 }
 
@@ -89,6 +91,8 @@ function MachineCard(props: MachineCardProps) {
 
   // 回车允许这一次，Esc 拒绝；正在写理由时按键归输入框
   useEffect(() => {
+    // 多张异步卡能同时显示；只响应按钮自身的键盘事件，不能一次批准多张。
+    if (props.deferred !== undefined) return
     const onKey = (event: KeyboardEvent) => {
       if (!ownsKey(event, card.current)) return
       if (typing(event.target)) return
@@ -111,6 +115,7 @@ function MachineCard(props: MachineCardProps) {
       aria-label={title}
       data-client-ask="machine"
       data-action={ask.action}
+      data-machine-deferred={props.deferred !== undefined || undefined}
       data-remote={from.remote}
       data-flagged={flagged || undefined}
     >
@@ -120,6 +125,7 @@ function MachineCard(props: MachineCardProps) {
         {props.expiresAt !== null ? <Expires at={props.expiresAt} /> : null}
       </div>
       <div className="req-body">
+        {props.deferred !== undefined ? <p>{t('machine.deferred.waiting')}</p> : null}
         {ask.enable ? <p>{t('machine.enable.body')}</p> : null}
         <div className={from.remote ? 'mach-from remote' : 'mach-from'} data-from>
           {from.remote ? t('machine.ask.fromRemote') : t('machine.ask.fromLocal')}{' '}
@@ -142,6 +148,7 @@ function MachineCard(props: MachineCardProps) {
           </span>
         </div>
         <What ask={ask} />
+        {props.deferred ? <pre>{props.deferred}</pre> : null}
         {flagged ? (
           <div className="mach-flagged" role="alert">
             <span>{t('machine.ask.flagged')}</span>
@@ -206,7 +213,7 @@ function MachineCard(props: MachineCardProps) {
               </button>
             ) : null}
             {option === refuse ? props.timed?.button : null}
-            {option === refuse && !noting && !ask.enable ? (
+            {option === refuse && !noting && !ask.enable && props.deferred === undefined ? (
               <button
                 type="button"
                 className="btn ghost note-open"
@@ -236,8 +243,12 @@ function MachineCard(props: MachineCardProps) {
                     : 'machine.enable.decline'
                   : optionText(option, props.sessionText),
               )}
-              {option === primary && !ask.enable ? <span className="kbd">↵</span> : null}
-              {option === refuse ? <span className="kbd">Esc</span> : null}
+              {option === primary && !ask.enable && props.deferred === undefined ? (
+                <span className="kbd">↵</span>
+              ) : null}
+              {option === refuse && props.deferred === undefined ? (
+                <span className="kbd">Esc</span>
+              ) : null}
             </button>
           </Fragment>
         ))}
@@ -360,6 +371,72 @@ export function MachineSessionCard(props: CardProps<ClientAskRequest> & { ask: M
       waiting={waiting}
       grab={!ask.enable}
       onChoose={respond}
+    />
+  )
+}
+
+export function MachineDeferredCard({ entry }: { entry: MachineDeferredView }) {
+  const { deviceId, threadId, ask, id } = entry
+  const t = useT()
+  const { channel } = useServices()
+  const device = useKey<DeviceView>(keys.device(deviceId))
+  const summary = useKey<SessionSummary>(keys.summary(deviceId, threadId))
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const sending = useRef(false)
+  const answer = async (decision: 'once' | 'timed' | 'decline', hours?: number) => {
+    if (sending.current) return
+    sending.current = true
+    setBusy(true)
+    setError(null)
+    try {
+      await channel.command('machine.deferredAnswer', {
+        deviceId,
+        id,
+        decision,
+        ...(hours === undefined ? {} : { hours }),
+      })
+    } catch (failure) {
+      setError(t('request.failed', { reason: reasonOf(failure, t) }))
+      throw failure
+    } finally {
+      sending.current = false
+      setBusy(false)
+    }
+  }
+  const timed = useTimedAllow({
+    deviceId,
+    sessionId: threadId,
+    disabled: busy,
+    grantMachine: (hours) => answer('timed', hours),
+  })
+  return (
+    <MachineCard
+      timed={timed}
+      deviceId={deviceId}
+      ask={ask}
+      deferred={entry.details}
+      options={[
+        { id: 'once', role: 'accept' },
+        { id: 'decline', role: 'decline' },
+      ]}
+      from={{
+        name: device ? t.text(device.name) : deviceId,
+        host: device?.host ?? '',
+        remote: true,
+      }}
+      harness={summary ? nameOf(device, summary.harness, t) : null}
+      session="here"
+      expiresAt={entry.expiresAt}
+      sessionText="machine.option.session"
+      busy={busy}
+      error={error}
+      waiting={0}
+      grab={false}
+      onChoose={({ optionId }) => {
+        if (!optionId) return
+        void answer(optionId === 'once' ? 'once' : 'decline').catch(() => {})
+      }}
     />
   )
 }
