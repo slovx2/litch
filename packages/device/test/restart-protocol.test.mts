@@ -145,6 +145,115 @@ for (const harness of ['claude-code', 'pi', 'opencode', 'acp', 'dsh', 'agy']) {
   })
 }
 
+test('在后台唤醒的回合里插话后，空闲看护仍能随设备重启恢复一次', async () => {
+  const harness = 'claude-code'
+  const engine = new FakeEngine(harness)
+  const ctl = control(1, harness)
+  let env = rig({ [harness]: engine }, {}, { control: ctl, wrapUpReminder: false })
+  try {
+    const client = env.connect()
+    await client.initialize(['harness', 'backgroundTasks'])
+    const { thread } = await client.call('thread/start', { harness, cwd: env.stateDir })
+    const reportWatch = () =>
+      engine.notify('litch/thread/background/changed', {
+        threadId: thread.id,
+        tasks: [{ id: 'watcher', kind: 'shell', title: 'watch --events', status: 'running' }],
+        wakesOnFinish: true,
+      })
+    await client.call('turn/start', {
+      threadId: thread.id,
+      input: [{ type: 'text', text: '开始看护' }],
+    })
+    reportWatch()
+    engine.end(thread.id)
+    const wake = Object.assign(engine.selfTurn(thread.id), { litchOrigin: 'backgroundTask' })
+    const input = [{ type: 'text', text: '继续看护' }]
+    assert.equal(
+      (await client.call('turn/steer', { threadId: thread.id, expectedTurnId: wake.id, input }))
+        .turnId,
+      wake.id,
+    )
+    engine.end(thread.id)
+    Object.assign(engine.selfTurn(thread.id), { litchOrigin: 'backgroundTask' })
+    engine.end(thread.id)
+    await settle()
+    assert.deepEqual(await ctl.onAsk?.('restart.prepare'), { prepared: 1 })
+    assert.equal(
+      engine.seen.some((frame) => frame.method === 'turn/interrupt'),
+      false,
+    )
+
+    await env.device.close()
+    const next = control(2, harness)
+    env = rig(
+      { [harness]: engine },
+      {},
+      { stateDir: env.stateDir, control: next, wrapUpReminder: false },
+    )
+    await env.device.restart.recover()
+    await env.device.restart.recover()
+    const starts = engine.seen.filter((frame) => frame.method === 'turn/start')
+    assert.equal(starts.length, 2)
+    assert.equal(parseSystemMessage(starts[1]?.params.input[0].text)?.kind, 'restart')
+    assert.match(starts[1]?.params.input[0].text, /shell watcher: watch --events/)
+    assert.deepEqual(
+      engine.turns.get(thread.id)?.map((turn) => turn.status),
+      ['completed', 'completed', 'completed', 'inProgress'],
+    )
+    const reconnected = env.connect()
+    await reconnected.initialize(['harness', 'backgroundTasks'])
+    const restored = engine.current(thread.id)
+    assert.ok(restored)
+    reportWatch()
+    await reconnected.call('turn/steer', {
+      threadId: thread.id,
+      expectedTurnId: restored.id,
+      input,
+    })
+    engine.end(thread.id)
+    await settle()
+    assert.deepEqual(await next.onAsk?.('restart.prepare'), { prepared: 0 })
+  } finally {
+    await env.close()
+  }
+})
+
+test('自动恢复发出前手动继续，换代后不再消费旧票', async () => {
+  const engine = new FakeEngine('pi')
+  const ctl = control(1)
+  let env = rig({ pi: engine }, {}, { control: ctl, wrapUpReminder: false })
+  try {
+    const client = env.connect()
+    await client.initialize()
+    const { thread } = await client.call('thread/start', { harness: 'pi', cwd: env.stateDir })
+    await client.call('turn/start', {
+      threadId: thread.id,
+      input: [{ type: 'text', text: '原任务' }],
+    })
+    assert.deepEqual(await ctl.onAsk?.('restart.prepare'), { prepared: 1 })
+    await env.device.close()
+    const next = control(1)
+    env = rig({ pi: engine }, {}, { stateDir: env.stateDir, control: next, wrapUpReminder: false })
+    const reconnected = env.connect()
+    await reconnected.initialize()
+    await assert.rejects(reconnected.call('thread/resume', { threadId: thread.id }), {
+      code: -32051,
+    })
+    const manual = [{ type: 'text', text: '手动继续' }]
+    await reconnected.call('turn/start', { threadId: thread.id, input: manual })
+    engine.end(thread.id)
+
+    next.service = control(2).service
+    next.push()
+    await env.device.restart.recover()
+    const starts = engine.seen.filter((frame) => frame.method === 'turn/start')
+    assert.equal(starts.length, 2)
+    assert.deepEqual(starts[1]?.params.input, manual)
+  } finally {
+    await env.close()
+  }
+})
+
 test('恢复占用时订阅和插话返回明确的暂态标记，释放后原会话仍能订阅', async () => {
   const engine = new FakeEngine('pi')
   const ctl = control(1)
