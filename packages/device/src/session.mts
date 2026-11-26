@@ -1120,12 +1120,12 @@ export class ClientSession implements ClientToolPeer {
     // 回合里插话、打断：模型在等用户选的 offer 卡当作在这里做
     if (params && method === 'turn/steer' && typeof params.threadId === 'string')
       this.host.sessionTree.userSpoke(params.threadId)
+    // 插话属于正在运行的工作，保留原恢复资格和次数；重启准备和恢复期间的插话由发送屏障拦截。
     if (
       params &&
       typeof params.threadId === 'string' &&
       [
         'turn/interrupt',
-        'turn/steer',
         'thread/archive',
         'thread/delete',
         'thread/rollback',

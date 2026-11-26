@@ -463,7 +463,7 @@ for (const unknown of [false, true]) {
   })
 }
 
-test('恢复回合中的插话只撤销后续恢复资格，不擅自中断正在执行的回合', async () => {
+test('仅撤销恢复资格时，不中断正在执行的恢复回合', async () => {
   const f = fixture()
   try {
     f.userTurn()
