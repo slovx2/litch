@@ -395,7 +395,7 @@ test('经理所用 harness 不支持自身压缩时设置照样可改，只压�
   }
 })
 
-test('不唤醒父会话的子线留下的回报不挡父工作线压缩；会唤醒的仍挡', async () => {
+test('不唤醒父会话的子线留下的回报不挡父工作线压缩', async () => {
   const f = await setup()
   try {
     f.busy.add(f.grandchild)
@@ -417,11 +417,6 @@ test('不唤醒父会话的子线留下的回报不挡父工作线压缩；会�
     f.claude.end(quiet.threadId)
     await until(() => f.tree.store.notes(f.line).length > 0, '回报排在工作线上')
     assert.equal(f.claude.running(f.line), false, '不唤醒工作线')
-    assert.equal(f.tree.canIdleCompact(f.line), false, '经理的规则：有排队回报就不压')
-    assert.equal(f.tree.canIdleCompact(f.line, true), true)
-    f.tree.store.setWakeParent(quiet.threadId, true)
-    assert.equal(f.tree.canIdleCompact(f.line, true), false, '会唤醒的回报仍挡住')
-    f.tree.store.setWakeParent(quiet.threadId, false)
     f.advance(51 * minute)
     f.start()
     await until(() => f.attempts.length === 1, '工作线照常压缩')

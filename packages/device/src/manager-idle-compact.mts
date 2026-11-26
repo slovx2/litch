@@ -50,6 +50,7 @@ export class ManagerIdleCompact {
   private readonly now: () => number
   private readonly nextProbe = new Map<string, number>()
   private readonly nextLog = new Map<string, number>()
+  private readonly skipped = new Map<string, string>()
   private readonly activityAt = new Map<string, number>()
   /** 已对本段空闲试过的子会话：本机见到新的回合活动前不再探测引擎，免得每条闲置工作线反复读。 */
   private readonly settled = new Set<string>()
@@ -74,31 +75,39 @@ export class ManagerIdleCompact {
   }
 
   /** 经理一级的条件：经理本身和它的子会话共用。 */
-  private enabledFor(manager: Manager): boolean {
-    return (
-      !this.closed &&
-      manager.status === 'active' &&
-      (manager.idleCompact ?? DEFAULT_MANAGER_IDLE_COMPACT).enabled &&
-      (this.owner.external?.store.config.assignment(manager.id).repoIds.length ?? 0) > 0
-    )
+  private managerBlock(manager: Manager): string | null {
+    if (this.closed) return 'closed'
+    if (manager.status !== 'active') return 'managerInactive'
+    if (!(manager.idleCompact ?? DEFAULT_MANAGER_IDLE_COMPACT).enabled) return 'disabled'
+    if (!this.owner.external?.store.config.assignment(manager.id).repoIds.length)
+      return 'noRepository'
+    return null
   }
 
-  private candidate(manager: Manager, threadId: string): boolean {
+  private candidateBlock(manager: Manager, threadId: string): string | null {
     const { external, store, tree, lines } = this.owner
-    if (!this.enabledFor(manager)) return false
-    if (threadId === manager.threadId)
-      return (
-        idleCompactSupports(manager.harness) &&
-        tree.canIdleCompact(threadId) &&
-        !external?.store.queue.hasPendingDelivery(manager.id) &&
-        !store.hasDelivery(manager.id)
+    const block = this.managerBlock(manager) ?? tree.idleCompactBlock(threadId)
+    if (block) return block
+    if (threadId === manager.threadId) {
+      if (!idleCompactSupports(manager.harness)) return 'unsupportedHarness'
+      if (external?.store.queue.hasPendingDelivery(manager.id)) return 'externalDeliveryPending'
+      if (store.hasDelivery(manager.id)) return 'managerDeliveryPending'
+    } else {
+      if (lines.managerFor(threadId)?.id !== manager.id) return 'managerChanged'
+      if (!idleCompactSupports(tree.store.parentOf(threadId)?.harness ?? ''))
+        return 'unsupportedHarness'
+    }
+    return null
+  }
+
+  private skip(managerId: string, threadId: string, reason: string): undefined {
+    if (this.skipped.get(threadId) !== reason) {
+      this.skipped.set(threadId, reason)
+      this.owner.tree.host.log(
+        `manager.idleCompact.skipped ${JSON.stringify({ managerId, threadId, reason })}`,
       )
-    // 子会话：不叫醒父会话的子线（wakeParent: false）留下的回报不挡压缩，压缩期间投递照样排队。
-    return (
-      tree.canIdleCompact(threadId, true) &&
-      idleCompactSupports(tree.store.parentOf(threadId)?.harness ?? '') &&
-      lines.managerFor(threadId)?.id === manager.id
-    )
+    }
+    return undefined
   }
 
   /** 经理本身在前，其后是各层没脱离、引擎支持的子会话（广度优先）。 */
@@ -137,9 +146,12 @@ export class ManagerIdleCompact {
   tick(only?: string): void {
     if (this.closed || !this.owner.external) return
     const one = only ? this.owner.store.manager(only) : null
-    const managers = (only ? (one ? [one] : []) : this.owner.store.managers()).filter((manager) =>
-      this.enabledFor(manager),
-    )
+    const managers = (only ? (one ? [one] : []) : this.owner.store.managers()).filter((manager) => {
+      const block = this.managerBlock(manager)
+      if (!block) return true
+      this.skip(manager.id, manager.threadId, block)
+      return false
+    })
     if (!managers.length) return
     const byParent = new Map<string, LineageRow[]>()
     for (const row of this.owner.tree.store.children()) {
@@ -157,14 +169,22 @@ export class ManagerIdleCompact {
         const now = this.now()
         if ((this.nextProbe.get(threadId) ?? 0) > now || this.settled.has(threadId)) continue
         const localAt = Math.max(since, this.activityAt.get(threadId) ?? 0)
-        if (now - localAt < idleMinutes * 60_000 || !this.candidate(manager, threadId)) continue
-        if (line && this.running.size >= LINE_RUNNING_LIMIT) continue
+        const block =
+          now - localAt < idleMinutes * 60_000
+            ? 'recentActivity'
+            : (this.candidateBlock(manager, threadId) ??
+              (line && this.running.size >= LINE_RUNNING_LIMIT ? 'lineLimit' : null))
+        if (block) {
+          this.skip(manager.id, threadId, block)
+          continue
+        }
         this.nextProbe.set(threadId, now + PROBE_MS)
         const began = this.owner.tree.runIdleCompact(threadId, (started) =>
           this.run(manager.id, threadId, harness, line, now, started).finally(() =>
             this.running.delete(threadId),
           ),
         )
+        if (!began) this.skip(manager.id, threadId, 'serialQueueBusy')
         if (began && line) this.running.add(threadId)
       }
     }
@@ -179,48 +199,61 @@ export class ManagerIdleCompact {
     started: (turnId: string) => void,
   ): Promise<void> {
     const { store, tree } = this.owner
+    const skip = (reason: string) => this.skip(id, threadId, reason)
     const ready = (sample: IdleCompactSnapshot) => {
       const current = store.manager(id)
-      if (!current || !sample.idle || !this.candidate(current, threadId)) return null
+      if (!current) return skip('managerChanged')
+      const block = this.candidateBlock(current, threadId)
+      if (block) return skip(block)
+      if (!sample.idle) return skip('engineBusy')
       const settings = current.idleCompact ?? DEFAULT_MANAGER_IDLE_COMPACT
       const state = store.idleCompact(threadId)
       const engineAt = sample.lastTurnActivityAt
       if (!sample.lastTurnId || typeof engineAt !== 'number' || !Number.isFinite(engineAt))
-        return null
+        return skip('lastTurnUnknown')
       const at = Math.max(engineAt, this.activityAt.get(threadId) ?? 0)
       const key = JSON.stringify([sample.lastTurnId, engineAt])
       const before = usage(sample)
       // 空闲着的子会话这几项不会自己变：已试过、用量未知或未过阈值，等本机见到新活动或改设置再探测。
       if (line && (state.attempted === key || before === null || before <= settings.contextPercent))
         this.settled.add(threadId)
-      return this.now() - at >= settings.idleMinutes * 60_000 &&
-        state.attempted !== key &&
-        before !== null &&
-        before > settings.contextPercent
-        ? { state, key, before, at }
-        : null
+      if (this.now() - at < settings.idleMinutes * 60_000) return skip('recentActivity')
+      if (state.attempted === key) return skip('alreadyAttempted')
+      if (before === null) return skip('usageUnknown')
+      if (before <= settings.contextPercent) return skip('belowThreshold')
+      return { state, key, before, at }
     }
     let link: EngineLink | undefined
     let committing = false
+    let invalidated = false
     let dispatchedAt = 0
     try {
-      link = await tree.link(harness)
+      const engine = await tree.link(harness)
+      link = engine
       const read = () =>
-        link!.request(
+        engine.request(
           IDLE_COMPACT_READ,
           { threadId },
           { timeoutMs: PREFLIGHT_MS },
         ) as Promise<IdleCompactSnapshot>
       const snapshot = await read()
-      if (!isObject(snapshot) || !ready(snapshot)) return
+      if (!isObject(snapshot)) return skip('snapshotUnavailable')
+      if (!ready(snapshot)) return
       // 子会话还有没答的提问（收尾时的 ask 等）也算在等用户，不压缩。
-      if (line && (await tree.awaitingAnswer(threadId))) return
-      if (this.now() - probedAt > PREFLIGHT_MS) return
+      if (line && (await tree.awaitingAnswer(threadId))) return skip('awaitingAnswer')
+      if (this.now() - probedAt > PREFLIGHT_MS) return skip('preflightExpired')
+      // 在同一串行锁内先投能立即投的回报。暂时唤醒不了的仍留队；新来的交给正常回报检查。
+      const reports = tree.wakeNoteVersion(threadId)
+      if (reports && (await tree.wakeBeforeIdleCompact(threadId))) return skip('reportDelivered')
+      if (tree.wakeNoteVersion(threadId) !== reports) return skip('reportsChanged')
+      if (this.now() - probedAt > PREFLIGHT_MS) return skip('preflightExpired')
       await tree.watch(harness, threadId)
       // 恢复、调度或订阅的等待期间可能收到新输入，因此在启动前再查一次。
       const current = await read()
+      if (!isObject(current)) return skip('snapshotUnavailable')
       const plan = ready(current)
       if (!plan) return
+      if (tree.wakeNoteVersion(threadId) !== reports) return skip('reportsChanged')
       const watch = watchTurn(link, threadId)
       try {
         const response = await link.request(
@@ -229,10 +262,22 @@ export class ManagerIdleCompact {
           {
             beforeSend: () => {
               const latest = ready(current)
-              if (!latest || latest.key !== plan.key || this.now() - probedAt > PREFLIGHT_MS)
+              const reason =
+                tree.wakeNoteVersion(threadId) !== reports
+                  ? 'reportsChanged'
+                  : this.now() - probedAt > PREFLIGHT_MS
+                    ? 'preflightExpired'
+                    : latest && latest.key !== plan.key
+                      ? 'workChanged'
+                      : null
+              if (!latest || reason) {
+                if (reason) skip(reason)
+                invalidated = true
                 throw new Error('压缩前状态已改变或检查已过期')
+              }
               // 先记本轮尝试。连接断开、应答不明或设备重启也不会在同一轮反复压。
               store.saveIdleCompact(threadId, { ...latest.state, attempted: latest.key })
+              this.skipped.delete(threadId)
               committing = true
               dispatchedAt = this.now()
             },
@@ -266,10 +311,11 @@ export class ManagerIdleCompact {
         watch.dispose()
       }
     } catch (error) {
-      if (this.closed) return
+      if (this.closed || invalidated) return
       // 旧引擎不支持探测，视作用量未知。其它失败留下线索，不循环尝试。
       if (error instanceof UpstreamRpcError && error.code === -32601 && !committing) {
         this.nextProbe.set(threadId, this.now() + RETRY_MS)
+        skip('engineUnsupported')
       } else if (committing || (this.nextLog.get(threadId) ?? 0) <= this.now()) {
         this.nextLog.set(threadId, this.now() + RETRY_MS)
         tree.host.log(
@@ -287,6 +333,7 @@ export class ManagerIdleCompact {
     this.running.clear()
     this.nextProbe.clear()
     this.nextLog.clear()
+    this.skipped.clear()
     this.activityAt.clear()
   }
 }

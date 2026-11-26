@@ -1524,7 +1524,10 @@ export class DeviceServer {
       const threadId =
         isObject(params) && typeof params.threadId === 'string' ? params.threadId : null
       if (threadId && managerInputMethod(method)) {
-        const wait = this.sessionTree.idleCompactWait(threadId)
+        const wait = this.sessionTree.idleCompactWait(
+          threadId,
+          isObject(params) ? params.input : null,
+        )
         if (wait) await wait
         this.managers.resets.checkInternalInput(method, params)
       }
