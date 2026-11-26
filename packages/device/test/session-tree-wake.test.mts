@@ -116,6 +116,54 @@ test('SESSION-WAKE-003 子会话回合结束时还有后台任务在跑：算还
   }
 })
 
+test('最后一条忙碌工作线的压缩回合结束，不产生新回报也重新唤醒父会话', async () => {
+  const env = treeRig()
+  const tree = env.device.sessionTree
+  let finish = () => {}
+  const done = new Promise<void>((resolve) => {
+    finish = resolve
+  })
+  try {
+    const client = await litch(env)
+    const { threadId } = await parent(client)
+    const maintenance = await child(env, threadId, '整理上下文的工作线')
+    const first = await child(env, threadId, '第一条回报')
+    const second = await child(env, threadId, '第二条回报')
+    // 已完成的工作线还可以被自动维护，但它的维护回合不新增父回报。
+    tree.setReportParent(maintenance, false)
+    env.claude.end(maintenance)
+    await until(() => !tree.isActive(maintenance), '工作线普通回合结束')
+    tree.setReportParent(maintenance, true)
+    env.pi.end(threadId)
+    await until(() => !tree.isActive(threadId), '父会话闲置')
+
+    assert.ok(
+      tree.runIdleCompact(maintenance, async (started) => {
+        const turn = env.claude.selfTurn(maintenance)
+        started(turn.id)
+        await done
+      }),
+    )
+    await until(() => tree.isActive(maintenance), '维护回合已开始')
+    env.claude.end(first, 'completed', '第一条完成')
+    env.claude.end(second, 'completed', '第二条完成')
+    await until(() => tree.store.notes(threadId).length === 2, '两条报告排队')
+    await tree.settleManagerQueue(threadId)
+    assert.equal(wakesOf(env, threadId).length, 0, '工作线仍在维护，先等它停下')
+
+    env.claude.end(maintenance)
+    await until(() => !tree.isActive(maintenance), '维护回合已结束')
+    finish()
+    await tree.settleIdleCompacts()
+    await until(() => wakesOf(env, threadId).length === 1, '最后的工作线停下后投递')
+    assert.equal(wakesOf(env, threadId)[0]?.notes.length, 2)
+    assert.equal(tree.store.notes(threadId).length, 0)
+  } finally {
+    finish()
+    await env.close()
+  }
+})
+
 test('SESSION-WAKE-008 父会话最后一个回合结束超过时限：不再主动唤醒，立即处理照样交出去', async () => {
   const env = treeRig({ wakeIdleMs: 50 })
   try {

@@ -243,6 +243,7 @@ export class SessionTree {
   private readonly listeners = new Set<(threadId: string) => void>()
   /** 每个父会话的唤醒检查排成一条，免得一次结束触发两个唤醒 */
   private readonly checks = new Map<string, Promise<void>>()
+  private readonly wakeSkips = new Map<string, string>()
   private readonly idleCompacts = new Map<
     string,
     { wait: Promise<void>; turnId: string | null; inputWaiting: boolean }
@@ -573,6 +574,7 @@ export class SessionTree {
 
   // 只认可设备实际装入的回报，用户消息中自行写的标签不参与去重。
   private readonly reportInputs = new WeakSet<unknown[]>()
+  private readonly compactWakeInputs = new WeakMap<unknown[], string>()
 
   private reportInput(input: unknown[]): unknown[] {
     this.reportInputs.add(input)
@@ -851,9 +853,11 @@ export class SessionTree {
         turn,
         !userDriven && !userStopped && !this.host.taskTurn(threadId, turn.id),
         userStopped,
-      ).catch((error: unknown) =>
-        this.host.log(`子会话 ${threadId} 的回报没取到：${String(error)}`),
-      )
+      ).catch((error: unknown) => {
+        this.host.log(`子会话 ${threadId} 的回报没取到：${String(error)}`)
+        this.recheckParentReports(threadId)
+      })
+    else this.recheckParentReports(threadId)
     // 父会话自己的回合结束了：它的子会话也许早就停了，看看要不要唤醒；有提醒、“在这里做”在等的，现在可以发了
     if (
       this.store.childrenOf(threadId).length ||
@@ -1138,7 +1142,17 @@ export class SessionTree {
   }
 
   private hasWakeNote(parentId: string): boolean {
-    return this.store.notes(parentId).some((note) => this.wakesParent(note, parentId))
+    return this.wakeNoteVersion(parentId) !== 0
+  }
+
+  wakeNoteVersion(parentId: string): number {
+    return this.store.notes(parentId).findLast((note) => this.wakesParent(note, parentId))?.seq ?? 0
+  }
+
+  private recheckParentReports(threadId: string): void {
+    if (this.closed) return
+    const parent = this.store.parentOf(threadId)
+    if (parent && this.hasWakeNote(parent.parentThreadId)) this.check(parent.parentThreadId)
   }
 
   private wakesParent(note: QueuedNote, parentId: string): boolean {
@@ -1157,9 +1171,11 @@ export class SessionTree {
    * 再提醒，最后唤醒：前一样开出回合之后会话就不闲了，后面的等它结束（turnEvent 再查）
    */
   check(parentId: string): void {
-    if (this.host.restarting?.(parentId)) return
-    if (this.managers?.resets.handoverPending(parentId)) return
-    if (this.managers?.resets.held(parentId) || this.managers?.resets.refusal(parentId)) return
+    const blocked = this.managerTurnBlock(parentId)
+    if (blocked) {
+      if (this.store.notes(parentId).length) this.skipWake(parentId, blocked)
+      return
+    }
     const previous = this.checks.get(parentId) ?? Promise.resolve()
     const next = previous
       .then(() =>
@@ -1177,7 +1193,9 @@ export class SessionTree {
           this.host.log(`提醒 ${parentId} 收尾没成：${String(error)}`),
         ),
       )
-      .then(() => this.wake(parentId))
+      .then(async () => {
+        await this.wake(parentId)
+      })
       .catch((error: unknown) => this.host.log(`唤醒 ${parentId} 没成：${String(error)}`))
       .finally(() => {
         if (this.checks.get(parentId) === next) this.checks.delete(parentId)
@@ -1401,35 +1419,79 @@ export class SessionTree {
    * 回报等它跑完：引擎接着做的那一回合开始时插进去，不接着做的跑完时再查（backgroundSettled）；
    * 父会话最后一个回合结束超过 wakeIdleMs（24 小时）的不再主动唤醒。这几种都等用户发话、定时任务回合或“立即处理”带上
    */
-  private async wake(parentId: string): Promise<void> {
-    if (!this.canAutoWake(parentId)) return
-    if (!this.hasWakeNote(parentId)) return
-    // 子会话都停下了（在等用户答的挂满一阵也算，有后台任务在跑的不算），父会话自己闲着（等着用户答请求的也是在跑）
-    if ((await this.working(parentId)) > 0) return
-    if (!(await this.idle(parentId))) return
-    if (await this.longIdle(parentId)) return
-    // 上面那几步要等应答，这期间可能有用户发了话（回报已经跟着交出去了）
-    if (!this.hasWakeNote(parentId) || this.active.has(parentId)) return
-    if (await this.startWake(parentId, 0, true))
-      this.store.setWakes(parentId, this.store.wakes(parentId) + 1)
+  private async wake(parentId: string, beforeCompact = false): Promise<boolean> {
+    if (!this.store.notes(parentId).length) {
+      this.wakeSkips.delete(parentId)
+      return false
+    }
+    const block = this.autoWakeBlock(parentId)
+    if (block) return this.skipWake(parentId, block)
+    if (!this.hasWakeNote(parentId)) return this.skipWake(parentId, 'noWakeableReport')
+    const workers = await this.workingChildren(parentId)
+    if (workers.length) return this.skipWake(parentId, 'childrenWorking', workers)
+    const parentBusy = await this.idleBlock(parentId)
+    if (parentBusy) return this.skipWake(parentId, parentBusy)
+    if (await this.longIdle(parentId)) return this.skipWake(parentId, 'pastWakeDeadline')
+    // 等引擎应答时，用户可能已经带走回报或开启了新回合。
+    if (!this.hasWakeNote(parentId)) return this.skipWake(parentId, 'reportsChanged')
+    if (this.active.has(parentId)) return this.skipWake(parentId, 'turnStartedDuringRead')
+    const changed = this.autoWakeBlock(parentId)
+    if (changed) return this.skipWake(parentId, changed)
+    if (!(await this.startWake(parentId, 0, true, undefined, beforeCompact)))
+      return this.skipWake(parentId, 'dispatchChanged')
+    this.wakeSkips.delete(parentId)
+    this.store.setWakes(parentId, this.store.wakes(parentId) + 1)
+    return true
+  }
+
+  private skipWake(
+    threadId: string,
+    reason: string,
+    workers: { threadId: string; reason: string }[] = [],
+  ): false {
+    const details = workers.length
+      ? { workerCount: workers.length, workers: workers.slice(0, 8) }
+      : {}
+    const key = JSON.stringify({ reason, ...details })
+    if (this.wakeSkips.get(threadId) !== key) {
+      this.wakeSkips.set(threadId, key)
+      this.host.log(`sessionTree.wake.skipped ${JSON.stringify({ threadId, reason, ...details })}`)
+    }
+    return false
+  }
+
+  /** 已占用父会话串行队列时，先试着投递能立即投递的回报。不能自动投递的原样保留。 */
+  wakeBeforeIdleCompact(threadId: string): Promise<boolean> {
+    return this.wake(threadId, true)
+  }
+
+  private managerTurnBlock(threadId: string): string | null {
+    if (this.host.restarting?.(threadId)) return 'restarting'
+    if (this.managers?.resets.held(threadId)) return 'managerReset'
+    if (this.managers?.resets.refusal(threadId)) return 'readOnly'
+    if (this.managers?.resets.handoverPending(threadId)) return 'handoverPending'
+    return null
   }
 
   /** 自动回合共用的保护；用户答复等有明确授权的经理事件不套此限制。 */
   private canAutoWake(threadId: string, external = false): boolean {
+    return this.autoWakeBlock(threadId, external) === null
+  }
+
+  private autoWakeBlock(threadId: string, external = false): string | null {
     const manager = this.managers?.store.forThread(threadId)
-    return (
-      !this.closed &&
-      this.enabledFor(threadId) &&
-      (!manager || manager.status === 'active') &&
-      !this.host.index.archived(threadId) &&
-      !this.host.restarting?.(threadId) &&
-      !this.managers?.resets.held(threadId) &&
-      !this.managers?.resets.handoverPending(threadId) &&
-      !this.managers?.resets.refusal(threadId) &&
-      (external || this.store.wakes(threadId) < SESSION_TREE_LIMITS.wakesPerUserMessage) &&
-      !this.cutShort.has(threadId) &&
-      (this.host.backgroundWorking?.(threadId) ?? this.host.backgroundRunning(threadId)) === 0
-    )
+    if (this.closed) return 'closed'
+    if (!this.enabledFor(threadId)) return 'sessionTreeDisabled'
+    if (manager && manager.status !== 'active') return 'managerInactive'
+    if (this.host.index.archived(threadId)) return 'archived'
+    const block = this.managerTurnBlock(threadId)
+    if (block) return block
+    if (!external && this.store.wakes(threadId) >= SESSION_TREE_LIMITS.wakesPerUserMessage)
+      return 'wakeBudget'
+    if (this.cutShort.has(threadId)) return 'previousTurnCutShort'
+    if ((this.host.backgroundWorking?.(threadId) ?? this.host.backgroundRunning(threadId)) > 0)
+      return 'parentBackgroundWorking'
+    return null
   }
 
   canDeliverExternal(threadId: string): boolean {
@@ -1442,29 +1504,27 @@ export class SessionTree {
     )
   }
 
-  idleCompactWait(threadId: string): Promise<void> | undefined {
+  idleCompactWait(threadId: string, input?: unknown): Promise<void> | undefined {
+    // 仅持锁预检自己生成的这次投递不等待锁；用户、外部事件和其他内部回合仍需等待。
+    if (Array.isArray(input) && this.compactWakeInputs.get(input) === threadId) return undefined
     const lock = this.idleCompacts.get(threadId)
     if (lock) lock.inputWaiting = true
     return lock?.wait
   }
 
-  /** quietNotes：不会叫醒这个会话的回报（如 wakeParent: false 的子线留下的）不算挡着。 */
-  canIdleCompact(threadId: string, quietNotes = false): boolean {
-    return (
-      !this.closed &&
-      !this.host.index.archived(threadId) &&
-      !this.host.restarting?.(threadId) &&
-      !this.managers?.resets.held(threadId) &&
-      !this.managers?.resets.refusal(threadId) &&
-      !this.managers?.resets.handoverPending(threadId) &&
-      !this.idleCompacts.get(threadId)?.inputWaiting &&
-      this.pendingRequests(threadId).length === 0 &&
-      this.host.backgroundRunning(threadId) === 0 &&
-      !this.host.continuationPending?.(threadId) &&
-      !this.reminders.has(threadId) &&
-      !this.heres.has(threadId) &&
-      !this.store.notes(threadId).some((note) => !quietNotes || this.wakesParent(note, threadId))
-    )
+  /** 回报由串行队列先尝试唤醒，等工作线或用户的回报不算当前活动。 */
+  idleCompactBlock(threadId: string): string | null {
+    if (this.closed) return 'closed'
+    if (this.host.index.archived(threadId)) return 'archived'
+    const block = this.managerTurnBlock(threadId)
+    if (block) return block
+    if (this.idleCompacts.get(threadId)?.inputWaiting) return 'inputWaiting'
+    if (this.pendingRequests(threadId).length) return 'pendingRequest'
+    if (this.host.backgroundRunning(threadId) > 0) return 'backgroundRunning'
+    if (this.host.continuationPending?.(threadId)) return 'continuationPending'
+    if (this.reminders.has(threadId)) return 'reminderPending'
+    if (this.heres.has(threadId)) return 'herePending'
+    return null
   }
 
   /** 与经理事件、工作线回报共用队列。先占位再查引擎，检查期间进来的事件仍可持久入队。 */
@@ -1484,7 +1544,11 @@ export class SessionTree {
       .finally(() => {
         this.idleCompacts.delete(threadId)
         if (this.checks.get(threadId) === lock.wait) this.checks.delete(threadId)
-        if (!this.closed && this.store.notes(threadId).length) this.check(threadId)
+        if (!this.closed) {
+          if (this.store.notes(threadId).length) this.check(threadId)
+          // 维护回合不新增回报，但它刚解除一条工作线的忙碌状态。
+          if (lock.turnId !== null) this.recheckParentReports(threadId)
+        }
       })
     this.idleCompacts.set(threadId, lock)
     this.checks.set(threadId, lock.wait)
@@ -1536,23 +1600,30 @@ export class SessionTree {
 
   /** 直接子会话里还在干活的有几个（在等用户答、挂满一阵的不算；回合停了、后台任务还在跑的算） */
   private async working(parentId: string): Promise<number> {
-    let count = 0
+    return (await this.workingChildren(parentId)).length
+  }
+
+  private async workingChildren(parentId: string): Promise<{ threadId: string; reason: string }[]> {
+    const workers: { threadId: string; reason: string }[] = []
     const children = this.store.childrenOf(parentId)[Symbol.iterator]()
     // 只读元数据，最多四个在途请求；子线多时不串行累加往返，也不一次压满引擎。
     await Promise.all(
       Array.from({ length: 4 }, async () => {
         for (const child of children) {
           if (!child.reportParent || this.waitingOnUser(child.threadId)) continue
+          const threadId = child.threadId
           if (
-            (this.host.backgroundWorking?.(child.threadId) ??
-              this.host.backgroundRunning(child.threadId)) > 0 ||
-            !(await this.idle(child.threadId))
+            (this.host.backgroundWorking?.(threadId) ?? this.host.backgroundRunning(threadId)) > 0
           )
-            count++
+            workers.push({ threadId, reason: 'backgroundWorking' })
+          else {
+            const reason = await this.idleBlock(threadId)
+            if (reason) workers.push({ threadId, reason })
+          }
         }
       }),
     )
-    return count
+    return workers.sort((a, b) => a.threadId.localeCompare(b.threadId))
   }
 
   /** 会话最后一个回合结束超过 wakeIdleMs 了。设备进程没见过它的回合结束的，看引擎报的会话更新时刻（秒） */
@@ -1562,11 +1633,7 @@ export class SessionTree {
       const { thread } = await this.read(threadId, false).catch(() => ({ thread: null }))
       if (typeof thread?.updatedAt === 'number') at = thread.updatedAt * 1000
     }
-    if (at === undefined || Date.now() - at <= this.host.wakeIdleMs) return false
-    this.host.log(
-      `会话 ${threadId} 最后一个回合结束已超过 ${this.host.wakeIdleMs / 3600_000} 小时，回报不主动唤醒它`,
-    )
-    return true
+    return at !== undefined && Date.now() - at > this.host.wakeIdleMs
   }
 
   /** 替父会话开一个唤醒回合，带着排着的全部回报。working 是还在干活的子会话数，写进给模型的话里 */
@@ -1575,6 +1642,7 @@ export class SessionTree {
     working: number,
     automatic = false,
     mark: (stage: string) => void = () => {},
+    beforeCompact = false,
   ): Promise<boolean> {
     const harness = await this.owner(parentId)
     await this.watch(harness, parentId)
@@ -1602,10 +1670,34 @@ export class SessionTree {
       notes: current,
       ...(working > 0 ? { working } : {}),
     })
-    const result = await link.request('turn/start', {
-      threadId: parentId,
-      input: this.reportInput([{ type: 'text', text, text_elements: [] }]),
-    })
+    const input = this.reportInput([{ type: 'text', text, text_elements: [] }])
+    if (beforeCompact) this.compactWakeInputs.set(input, parentId)
+    let deferred = false
+    const result = await link
+      .request(
+        'turn/start',
+        { threadId: parentId, input },
+        beforeCompact
+          ? {
+              beforeSend: () => {
+                if (
+                  !this.idleCompactBlock(parentId) &&
+                  !this.active.has(parentId) &&
+                  !this.autoWakeBlock(parentId) &&
+                  this.hasWakeNote(parentId)
+                )
+                  return
+                deferred = true
+                throw new Error('回报优先投递前状态已改变')
+              },
+            }
+          : undefined,
+      )
+      .catch((error: unknown) => {
+        if (!deferred) throw error
+        return null
+      })
+    if (deferred) return false
     mark('startAck')
     const turn = isObject(result) && isObject(result.turn) ? result.turn : null
     if (typeof turn?.id === 'string' && !this.active.has(parentId))
@@ -1680,14 +1772,18 @@ export class SessionTree {
    * （设备进程的连接断过、重启过），以引擎为准。读不到的只看通知
    */
   async idle(threadId: string): Promise<boolean> {
-    if (this.managers?.resets.held(threadId) || this.managers?.resets.refusal(threadId))
-      return false
+    return (await this.idleBlock(threadId)) === null
+  }
+
+  private async idleBlock(threadId: string): Promise<string | null> {
+    if (this.managers?.resets.held(threadId)) return 'managerReset'
+    if (this.managers?.resets.refusal(threadId)) return 'readOnly'
     const before = this.active.get(threadId)
     const { thread } = await this.read(threadId, false).catch(() => ({ thread: null }))
-    if (thread === null) return before === undefined
-    if (busy(thread)) return false
+    if (thread === null) return before !== undefined ? 'activeThreadReadFailed' : null
+    if (busy(thread)) return 'activeTurn'
     if (before !== undefined && this.active.get(threadId) === before) this.active.delete(threadId)
-    return !this.active.has(threadId)
+    return this.active.has(threadId) ? 'turnStartedDuringRead' : null
   }
   async settleManagerQueue(threadId: string): Promise<void> {
     await this.checks.get(threadId)
@@ -2305,6 +2401,7 @@ export class SessionTree {
   close(): void {
     this.suggestions.close()
     this.closed = true
+    this.wakeSkips.clear()
     if (this.expiry) clearTimeout(this.expiry)
     for (const timer of this.timers) clearTimeout(timer)
     this.timers.clear()
