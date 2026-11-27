@@ -550,7 +550,7 @@ export const zhCN = {
   'session.markAllRead': '全部标为已读',
   'service.batch.none': '不升级',
   'service.batch.idle': '空闲时自动升级',
-  'service.batch.force': '强制升级',
+  'service.batch.force': '立即升级',
   'service.batch.unknown': '忙闲未知；执行前由设备检查。',
   'service.batch.idleState': '空闲',
   'service.batch.forceNote':

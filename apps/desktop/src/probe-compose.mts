@@ -990,7 +990,13 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     })
     await frame()
     const declined = !approval.isConnected
-    const toolAsked = document.activeElement === toolCard && all('.req-actions .btn').length === 5
+    const toolActions = [...toolCard.querySelectorAll<HTMLElement>('.req-actions .btn')].map(
+      (button) =>
+        button.dataset.option ?? (button.classList.contains('timed-open') ? 'timed' : '?'),
+    )
+    const toolAsked =
+      document.activeElement === toolCard &&
+      toolActions.join(',') === 'accept,acceptSession,acceptAlways,timed,decline,cancel'
     press(toolCard, 'Enter')
     await until('审批卡片消失', () => !one('.req'))
     await frame()

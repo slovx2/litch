@@ -14,12 +14,53 @@ app.whenReady().then(async () => {
     webPreferences: { backgroundThrottling: false },
   })
   const read = (expression) => window.webContents.executeJavaScript(expression)
+  const cdp = window.webContents.debugger
+  cdp.attach('1.3')
   const wait = async (expression) => {
     const until = Date.now() + 25000
     while (!(await read(expression))) {
       if (Date.now() > until) throw new Error(expression)
       await new Promise((resolve) => setTimeout(resolve, 100))
     }
+  }
+  const click = async (selector) => {
+    const point = await read(`(() => {
+      const element = document.querySelector(${JSON.stringify(selector)});
+      if (!element) return null;
+      const rect = element.getBoundingClientRect();
+      if (!rect.width || !rect.height) return null;
+      return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+    })()`)
+    assert.ok(point, `可点击的 ${selector}`)
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await cdp.sendCommand('Input.dispatchMouseEvent', {
+        type,
+        ...point,
+        button: 'left',
+        clickCount: 1,
+      })
+    }
+  }
+  const key = async (key, windowsVirtualKeyCode) => {
+    for (const type of ['keyDown', 'keyUp']) {
+      await cdp.sendCommand('Input.dispatchKeyEvent', {
+        type,
+        key,
+        code: key,
+        windowsVirtualKeyCode,
+      })
+    }
+  }
+  const select = (id) => `[data-upgrade-device="${id}"] select`
+  const openSelect = async (id) => {
+    const selector = select(id)
+    await click(selector)
+    await wait(`document.querySelector('${selector}').matches(':open')`)
+  }
+  const choose = async (id, value) => {
+    await openSelect(id)
+    await click(`${select(id)} option[value="${value}"]`)
+    await wait(`document.querySelector('${select(id)}').value === '${value}'`)
   }
   try {
     await window.loadURL(process.env.LITCH_UPGRADE_URL)
@@ -74,9 +115,10 @@ app.whenReady().then(async () => {
           true,
         )
       }
-    await read(
-      `for (const id of ['local', 'remote-idle']) { const select = document.querySelector('[data-upgrade-device="' + id + '"] select'); select.value = id === 'local' ? 'none' : 'force'; select.dispatchEvent(new Event('change', { bubbles: true })) }`,
-    )
+    await choose('local', 'none')
+    await openSelect('remote-idle')
+    await key('ArrowDown', 40)
+    await key('Enter', 13)
     await wait(
       'document.querySelector("[data-upgrade-device=remote-idle]").textContent.includes("终止已检测到的 0 个后台任务")',
     )
@@ -142,6 +184,27 @@ app.whenReady().then(async () => {
     await read('window.upgradeFixture.setOnline(true)')
     await new Promise((resolve) => setTimeout(resolve, 500))
     assert.equal(await read('document.querySelectorAll("[data-upgrade-device]").length'), 0)
+
+    await read('localStorage.removeItem("litch.device-upgrade.prompt-version")')
+    await window.loadURL(`${process.env.LITCH_UPGRADE_URL}&applyOne=1`)
+    await wait('document.querySelectorAll("[data-upgrade-device]").length === 4')
+    // 已入弹窗的本机变空闲时，仍等用户应用选择。
+    await wait(
+      'document.querySelector("[data-upgrade-device=local] .upgrade-state").textContent === "空闲"',
+    )
+    const calls = () =>
+      read(
+        'window.upgradeFixture.calls.filter(c => ["device.upgradeService", "device.restartService"].includes(c.name))',
+      )
+    assert.deepEqual(await calls(), [])
+    for (const id of ['local', 'remote-busy', 'remote-fail']) await choose(id, 'none')
+    await choose('remote-idle', 'force')
+    await choose('remote-idle', 'idle')
+    await click('.confirm-yes')
+    await wait('window.upgradeFixture.calls.some(c => c.name === "device.upgradeService")')
+    assert.deepEqual(await calls(), [
+      { name: 'device.upgradeService', params: { deviceId: 'remote-idle', mode: 'start' } },
+    ])
     console.log(
       'PASS: 隐藏 Electron，三皮肤、选项、后台摘要、失败隔离、取消、同版本不重复提示、连接超时后汇总',
     )

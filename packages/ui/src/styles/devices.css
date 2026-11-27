@@ -666,10 +666,21 @@
 .upgrade-device-row > .set-note {
   flex: none;
 }
+/* 让菜单在对话框所在的 WebContents 里绘制并收取输入。 */
+.upgrade-device-row select,
+.upgrade-device-row select::picker(select) {
+  appearance: base-select;
+}
 .upgrade-device-row select {
   margin-left: auto;
   color: var(--ink);
   background: var(--sunken);
   border: 1px solid var(--line-2);
   border-radius: var(--r1);
+}
+.upgrade-device-row select::picker(select) {
+  color: var(--ink);
+  background: var(--overlay);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
 }
