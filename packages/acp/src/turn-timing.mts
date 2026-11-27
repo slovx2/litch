@@ -1,12 +1,36 @@
 import { basename, join } from 'node:path'
 import { createJsonlLog, type JsonlLog, takeLogDir } from '../../shared/src/log-file.mjs'
-import type { RequestOutcome, RequestTiming } from './connection.mjs'
+import type { PermissionOutcome, RequestOutcome, RequestTiming } from './connection.mjs'
 
 // 与协议摘要共用设备的 logs/<harness>/rpc.jsonl，沿用轮转和 logs.tail 的 rpc 入口。
 const directory = takeLogDir()
 export const turnTimingLog: JsonlLog | null = directory
   ? createJsonlLog(join(directory, 'rpc.jsonl'), { source: basename(directory) })
   : null
+
+interface AgentRequest {
+  requestId: string | number
+  method: string
+  generation?: number
+  toolCallId?: string
+}
+
+/** 回合内外的反向请求使用同样的事件和时钟；只记录白名单字段。 */
+export function timeAgentRequest(
+  mark: (event: string, fields: Record<string, unknown>) => void,
+  request: AgentRequest,
+  now: () => number = () => performance.now(),
+): (outcome: RequestOutcome, permissionOutcome?: PermissionOutcome) => void {
+  const at = now()
+  mark('request.started', { ...request })
+  return (outcome, permissionOutcome) =>
+    mark('request.ended', {
+      ...request,
+      outcome,
+      permissionOutcome,
+      durationMs: now() - at,
+    })
+}
 
 /** 只观察 ACP 边界；首块时间不是模型服务端的真实首 token 时间。 */
 export class TurnTiming {
@@ -50,11 +74,17 @@ export class TurnTiming {
         requestId = id
         this.sent = this.now()
         this.prompting = true
-        this.mark('prompt.sent', { generation, requestId })
+        this.mark('prompt.sent', { method: 'session/prompt', generation, requestId })
       },
-      ended: (outcome) => {
+      ended: (outcome, stopReason) => {
         this.prompting = false
-        this.mark('prompt.ended', { generation, requestId, outcome })
+        this.mark('prompt.ended', {
+          method: 'session/prompt',
+          generation,
+          requestId,
+          outcome,
+          stopReason,
+        })
       },
     }
   }
@@ -96,20 +126,9 @@ export class TurnTiming {
     }
   }
 
-  request(
-    requestId: string | number,
-    method: string,
-  ): ((outcome: RequestOutcome) => void) | undefined {
-    if (!this.prompting || this.ended) return undefined
-    const at = this.now()
-    this.mark('request.started', { requestId, method })
-    return (outcome) =>
-      this.mark('request.ended', {
-        requestId,
-        method,
-        outcome,
-        durationMs: this.now() - at,
-      })
+  request(request: AgentRequest) {
+    if (this.prompting && !this.ended)
+      return timeAgentRequest((event, fields) => this.mark(event, fields), request, this.now)
   }
 
   finish(outcome: string): void {

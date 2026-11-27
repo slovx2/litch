@@ -103,20 +103,17 @@ export function createRpcTrace(log: JsonlLog, now: () => number = Date.now): Rpc
   }
 }
 
-let trace: RpcTrace | null | undefined
+// 模块一加载就取走日志目录，子进程不会继承它。其他协议事件可共用记录器与写入顺序。
+const directory = takeLogDir()
+export const rpcEventLog = directory
+  ? createJsonlLog(join(directory, 'rpc.jsonl'), { source: basename(directory) })
+  : null
+const trace = rpcEventLog ? createRpcTrace(rpcEventLog) : null
 
 /**
- * 这个进程的协议请求摘要。头一次调用时取命令行给的日志目录（并从环境里拿掉）；没给就是 null。
+ * 这个进程的协议请求摘要。命令行没给日志目录就是 null。
  * 来源名用日志目录的名字：命令行给每个入口的是 logs/<harness>
  */
 export function rpcTrace(): RpcTrace | null {
-  if (trace !== undefined) return trace
-  const directory = takeLogDir()
-  trace = directory
-    ? createRpcTrace(createJsonlLog(join(directory, 'rpc.jsonl'), { source: basename(directory) }))
-    : null
   return trace
 }
-
-// 模块一加载就取走日志目录：入口起任何子进程之前，变量就已经不在环境里了
-rpcTrace()

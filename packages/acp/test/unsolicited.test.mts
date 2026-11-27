@@ -139,7 +139,12 @@ test('agy 完全访问的后台请求只允许本次且无卡片；用户停止�
   const isolated = await isolate({ CHA_ACP_AGENT: 'agy', FAKE_ACP_LATE_PERMISSION: '1' })
   isolated.env.CHA_AGY_CLI = isolated.env.CHA_ACP_CLI
   isolated.env.CHA_AGY_ARGS = isolated.env.CHA_ACP_ARGS
-  const server = new AcpServer(isolated.home, isolated.env)
+  const events: Array<Record<string, unknown>> = []
+  const server = new AcpServer(isolated.home, isolated.env, {
+    path: '',
+    flush() {},
+    write: (event, fields) => events.push({ event, ...fields }),
+  })
   const desktop = client(server)
   const s = { ...isolated, server, desktop }
   try {
@@ -159,6 +164,25 @@ test('agy 完全访问的后台请求只允许本次且无卡片；用户停止�
     assert.deepEqual(await ask(), { outcome: { outcome: 'cancelled' } })
     await turn(s, thread.id, text('hello'))
     assert.deepEqual(await ask(), { outcome: { outcome: 'selected', optionId: 'once' } })
+    await desktop.call('thread/settings/update', {
+      threadId: thread.id,
+      permissions: 'acp:mode:default',
+    })
+    assert.deepEqual(await ask(), { outcome: { outcome: 'cancelled' } })
+    assert.equal(desktop.requests.length, 0)
+
+    const approvals = events.filter((row) => row.method === 'session/request_permission')
+    const arrivals = approvals.filter((row) => row.event === 'acp.request.started')
+    const replies = approvals.filter((row) => row.event === 'acp.request.ended')
+    assert.deepEqual(
+      arrivals.map((row) => row.requestId),
+      replies.map((row) => row.requestId),
+    )
+    assert.ok(approvals.every((row) => row.turnId === null && row.threadId === thread.id))
+    assert.deepEqual(
+      replies.map((row) => row.permissionOutcome),
+      ['selected', 'cancelled', 'selected', 'cancelled'],
+    )
   } finally {
     await dispose(s)
   }

@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import type { JsonlLog } from '../../shared/src/log-file.mjs'
 import type { RpcPeer, WireMessage } from '../../shared/src/types.mjs'
 
 export interface Backend {
@@ -19,15 +20,17 @@ export function subscriptionEnv(environment: NodeJS.ProcessEnv): NodeJS.ProcessE
 export async function loadAcp(
   home: string,
   environment: NodeJS.ProcessEnv,
+  timingLog?: JsonlLog | null,
   moduleUrl = acpModuleUrl(),
 ): Promise<Backend> {
   const module = (await import(moduleUrl.href)) as {
-    AcpServer: new (home: string, env: NodeJS.ProcessEnv) => Backend
+    AcpServer: new (home: string, env: NodeJS.ProcessEnv, timingLog?: JsonlLog | null) => Backend
   }
   const env: NodeJS.ProcessEnv = {
     ...subscriptionEnv(environment),
     CHA_ACP_AGENT: 'agy',
     CHA_ACP_HOME: join(home, 'acp'),
   }
-  return new module.AcpServer(join(home, 'acp'), env)
+  delete env.LITCH_LOG_DIR
+  return new module.AcpServer(join(home, 'acp'), env, timingLog)
 }

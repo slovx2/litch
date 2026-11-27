@@ -30,12 +30,12 @@ export class HandlerError extends Error {
 }
 
 export interface ConnectionHandlers {
-  /** params 仅供定位会话；回调在应答写入或连接关闭时结束，不交应答正文。 */
+  /** 回调在应答写入或连接关闭时结束；只传协议状态，避免把应答正文交给日志。 */
   requestTiming?(
     id: string | number,
     method: string,
     params: any,
-  ): ((outcome: RequestOutcome) => void) | undefined
+  ): ((outcome: RequestOutcome, permissionOutcome?: PermissionOutcome) => void) | undefined
   /** agent 发来的请求。返回值就是应答的 result */
   request(method: string, params: any, signal: AbortSignal): Promise<unknown>
   /** agent 发来的通知（session/update 等）。同步处理：同一行之后的消息要等它处理完 */
@@ -43,10 +43,19 @@ export interface ConnectionHandlers {
 }
 
 export type RequestOutcome = 'ok' | 'error' | 'closed' | 'timeout'
+export type PermissionOutcome = 'selected' | 'cancelled'
 export interface RequestTiming {
   sent(id: number): void
-  ended(outcome: RequestOutcome): void
+  ended(outcome: RequestOutcome, stopReason?: string): void
 }
+
+const STOP_REASONS = new Set([
+  'end_turn',
+  'max_tokens',
+  'max_turn_requests',
+  'refusal',
+  'cancelled',
+])
 
 interface Waiting {
   method: string
@@ -62,7 +71,10 @@ export class AcpConnection {
   private readonly waiting = new Map<number, Waiting>()
   private readonly incoming = new Map<
     unknown,
-    { controller: AbortController; end: ((outcome: RequestOutcome) => void) | undefined }
+    {
+      controller: AbortController
+      end: ((outcome: RequestOutcome, permissionOutcome?: PermissionOutcome) => void) | undefined
+    }
   >()
   private sequence = 0
   private buffer = ''
@@ -175,7 +187,11 @@ export class AcpConnection {
     if (!entry) return
     this.waiting.delete(Number(message.id))
     if (entry.timer) clearTimeout(entry.timer)
-    entry.timing?.ended(message.error ? 'error' : 'ok')
+    const stopReason = entry.method === 'session/prompt' ? message.result?.stopReason : undefined
+    entry.timing?.ended(
+      message.error ? 'error' : 'ok',
+      STOP_REASONS.has(stopReason) ? stopReason : undefined,
+    )
     if (message.error)
       entry.reject(
         new AcpError(
@@ -200,7 +216,9 @@ export class AcpConnection {
     try {
       const result = await this.handlers.request(method, params ?? {}, controller.signal)
       this.write({ jsonrpc: '2.0', id, result: result ?? null })
-      entry.end?.('ok')
+      const state =
+        method === 'session/request_permission' ? (result as any)?.outcome?.outcome : undefined
+      entry.end?.('ok', state === 'selected' || state === 'cancelled' ? state : undefined)
     } catch (error) {
       const code = error instanceof HandlerError ? error.code : -32603
       const message = error instanceof Error ? error.message : String(error)

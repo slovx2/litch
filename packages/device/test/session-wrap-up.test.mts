@@ -11,8 +11,8 @@ import {
 } from '../../protocol/src/client-tools-sessions.mjs'
 import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
 import { parseArgs } from '../src/args.mjs'
-import { failureOf, resultOf } from './fake-engine.mjs'
-import type { TestClient } from './helpers.mjs'
+import { FakeEngine, failureOf, resultOf } from './fake-engine.mjs'
+import { rig, type TestClient } from './helpers.mjs'
 import {
   brief,
   ECHO_SPEC,
@@ -20,6 +20,7 @@ import {
   parent,
   refuseSteer,
   SESSIONS,
+  TREE,
   type TreeEnv,
   text,
   treeRig,
@@ -229,6 +230,66 @@ test('WRAP-UP-004：用户回合正常结束、没调 wrap_up：开一个 kind=r
     await client.call('turn/start', { threadId, input: text('还有') })
     env.pi.end(threadId)
     await until(() => injected(env, threadId, 'remind').length === 2, '新的用户消息之后又提醒')
+  } finally {
+    await env.close()
+  }
+})
+
+test('Antigravity 订阅：用户回合结束后保持空闲，不开可能发审批的收尾提醒回合', async () => {
+  const agy = new FakeEngine('agy:acp:fixture')
+  agy.engine = 'agy'
+  const env = rig({ agy })
+  try {
+    const client = env.connect()
+    await client.initialize(TREE)
+    const { thread } = await client.call('thread/start', {
+      harness: 'agy',
+      cwd: env.stateDir,
+      dynamicTools: [SESSION_TOOLS],
+    })
+    const threadId = thread.id as string
+    assert.match(threadId, /^agy:acp:/)
+    assert.equal(env.device.sessionTree.hasWrapUp(threadId), true)
+
+    const approval = 'item/commandExecution/requestApproval'
+    const start = agy.handlers['turn/start']
+    assert.ok(start)
+    agy.handlers['turn/start'] = (params, connection) => {
+      const result = start(params, connection) as { turn: { id: string } }
+      const reminder = parseSessionEvent(String(params.input?.[0]?.text ?? '')).event?.kind
+      if (reminder === 'remind' || params.input?.[0]?.text === '运行测试命令') {
+        const target = agy.subscribers.get(threadId)?.[0] ?? connection
+        target.send({
+          id: result.turn.id,
+          method: approval,
+          params: { threadId, turnId: result.turn.id, itemId: 'fixture-command' },
+        })
+      }
+      return result
+    }
+
+    const { turn } = await client.call('turn/start', { threadId, input: text('你好') })
+    agy.end(threadId, 'completed', '你好')
+    await client.waitFor(
+      (frame) =>
+        frame.method === 'turn/completed' &&
+        (frame.params as { turn: { id: string } }).turn.id === turn.id,
+    )
+    await settle(80)
+    assert.equal(agy.sent('turn/start').length, 1, '原回合结束后不再发 session prompt')
+    assert.equal(agy.running(threadId), false)
+    assert.equal(env.device.sessionTree.isActive(threadId), false)
+    assert.equal(client.requests.filter((request) => request.method === approval).length, 0)
+
+    const next = await client.call('turn/start', { threadId, input: text('运行测试命令') })
+    const request = await client.waitFor((frame) => frame.method === approval)
+    assert.equal(
+      (request.params as { turnId: string }).turnId,
+      next.turn.id,
+      '用户回合的真实审批照常投递',
+    )
+    client.answer(request.id, { decision: 'decline' })
+    agy.end(threadId)
   } finally {
     await env.close()
   }

@@ -64,7 +64,7 @@ import { sessionOptions } from './session-options.mjs'
 import { AcpStore } from './store.mjs'
 import { TerminalLogin } from './terminal-login.mjs'
 import { echoContent, promptContent, withStopNoticeBlocks } from './turn.mjs'
-import { TurnTiming, turnTimingLog } from './turn-timing.mjs'
+import { TurnTiming, timeAgentRequest, turnTimingLog } from './turn-timing.mjs'
 
 // 调试用：CHA_ACP_TRACE 指向文件时逐行记录与客户端往来的协议消息，默认关闭。
 const tracePath = process.env.CHA_ACP_TRACE
@@ -299,10 +299,29 @@ export class AcpServer {
     // own：会话自己的进程，退出时只收它那几个会话的终端
     const events = (own: boolean) => ({
       requestTiming: (id: string | number, method: string, params: any, agent: AgentHandle) => {
-        const live = this.live.get(params?.sessionId)
-        return live?.generation === agent.generation
-          ? live.running?.timing.request(id, method)
-          : undefined
+        const threadId = params?.sessionId
+        const live = this.live.get(threadId)
+        const permission = method === 'session/request_permission'
+        const toolCallId = permission ? params?.toolCall?.toolCallId : undefined
+        const fields = {
+          requestId: id,
+          method,
+          generation: agent.generation,
+          ...(typeof toolCallId === 'string' ? { toolCallId } : {}),
+        }
+        const timing =
+          live?.generation === agent.generation ? live.running?.timing.request(fields) : undefined
+        if (timing) return timing
+        const log = this.timingLog
+        if (!log || this.agentId !== 'agy' || !permission || typeof threadId !== 'string') return
+        // 自发的审批也有记录，但已经收到 prompt 应答时不再归到原回合。
+        const turnId =
+          live?.generation === agent.generation && !live.running
+            ? (live.projection.active?.id ?? null)
+            : null
+        return timeAgentRequest((event, details) => {
+          log.write(`acp.${event}`, { harness: this.agentId, threadId, turnId, ...details })
+        }, fields)
       },
       request: (method: string, params: any, agent: AgentHandle, signal: AbortSignal) =>
         this.agentRequest(method, params, agent, signal),
