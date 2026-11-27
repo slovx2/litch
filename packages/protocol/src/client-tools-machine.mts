@@ -45,6 +45,10 @@ export const MACHINE_LIMITS = {
   listEntries: 2000,
   /** copy 一次最多搬多少 */
   copyBytes: 2 * 1024 * 1024 * 1024,
+  /** 待批准的单个二进制或文本文件 */
+  deferredCopyBytes: 100 * 1024 * 1024,
+  /** 足够覆盖下限 128 KiB/s 加 100 秒余量。 */
+  deferredCopyMaxMs: 900_000,
 } as const
 
 // —— 各工具的参数（和下面的 inputSchema 一致；执行器收到后自己校验，不信任这里） ——
@@ -133,7 +137,7 @@ const machine = {
   description: 'Machine id from machines. Omit for the desktop.',
 }
 
-const GUIDE = `Run commands and read/write files on the user's machines through Litch. If access is off, Litch shows an enable card: direct the user to it and wait. Only the user may enable access. Do not retry repeatedly or bypass restrictions with other tools. A declined or blocked call says why.
+const GUIDE = `Run commands and read/write files through Litch. In unattended sessions, supported operations that need permission submit a card and run in the background after approval. If submitted, wait for the result; don't retry or use another route. If disabled, ask the user to enable it in Litch.
 - Use paths and commands that fit the target machine's system.
 - Long commands: set yield_ms, then poll with process.
 - Ask the user before anything irreversible or sensitive: deleting data, changing system or account settings, sending messages, payments.
@@ -240,7 +244,7 @@ export function machineToolsSpec(context: MachineSpecContext | null): ClientTool
         type: 'function',
         name: MACHINE_TOOL.writeFile,
         description:
-          'Write a text file on a machine. mode create (default) fails if it exists; overwrite replaces it; append adds to the end. Missing parent folders are created.',
+          'Write a text file. mode create (default) fails if it exists; overwrite replaces it; append adds to the end. Deferred approval supports at most 4 KiB of text. For binary files use copy.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -273,7 +277,7 @@ export function machineToolsSpec(context: MachineSpecContext | null): ClientTool
         type: 'function',
         name: MACHINE_TOOL.copy,
         description:
-          'Copy a file or folder from one machine to another (or within one), e.g. a build output from "session" to "desktop". Existing files at the destination are replaced.',
+          'Copy a file or folder between machines, including binary files. Existing destination files are replaced. If unattended and approval is needed, submit a card for one file up to 100 MiB; wait for the background result. Do not retry or send the file by another route.',
         inputSchema: {
           type: 'object',
           properties: {

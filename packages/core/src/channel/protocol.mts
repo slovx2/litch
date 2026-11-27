@@ -1114,7 +1114,12 @@ export interface Commands extends ExternalCommands, FeishuCommands, ReviewsComma
     result: Record<string, never>
   }
   'machine.deferredAnswer': {
-    params: { deviceId: string; id: string; decision: 'once' | 'timed' | 'decline'; hours?: number }
+    params: {
+      deviceId: string
+      id: string
+      decision: 'once' | 'timed' | 'always' | 'decline'
+      hours?: number
+    }
     result: Record<string, never>
   }
   'machine.deferredAnswerSigned': {

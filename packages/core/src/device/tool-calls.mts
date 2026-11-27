@@ -20,6 +20,7 @@ import {
   type ClientToolDetachedCallParams,
   clientToolFailure,
   isClientToolNamespace,
+  UNATTENDED_COMPUTER_SELF,
 } from '../../../protocol/src/client-tools.mjs'
 import { CONFIG_NAMESPACE, CONFIG_TOOL } from '../../../protocol/src/client-tools-config.mjs'
 import type { JsonRpcId } from '../../../protocol/src/index.mjs'
@@ -31,6 +32,12 @@ import type { TimedApprovalCategory } from '../../../protocol/src/timed-approval
 import { createCancel } from '../channel/cancel.mjs'
 import type { AbortSignalLike, Clock } from '../channel/protocol.mjs'
 import { NO_REPLY } from '../connection/rpc.mjs'
+import {
+  type AccessSubject,
+  accessSubject,
+  accessSubmitted,
+  type DeferredAccessRequest,
+} from '../deferred-access.mjs'
 import type { ApprovalOption, ClientAskView } from '../model.mjs'
 import type { ToolAnswer, ToolInvocation } from '../model-client-tools.mjs'
 import type { ToolHub } from '../tool-hub.mjs'
@@ -97,6 +104,12 @@ export interface ToolCallsHost {
   /** 仅供浏览器读取会话实际权限；未知配置绝不免审。 */
   uploadRead?(params: UploadReadParams): Promise<UploadReadResult>
   fullAccess?(threadId: string): Promise<boolean>
+  deferredAccess?: {
+    available(): boolean
+    submit(request: DeferredAccessRequest): Promise<boolean>
+    use(threadId: string, subject: AccessSubject): boolean
+    clear(threadId?: string): void
+  }
   deviceId: string
   clock: Clock
   hub: ToolHub
@@ -290,11 +303,34 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
       )
     }
     const id = `${host.deviceId}:${++seq}`
-    // 无人值守：执行方要人点头（出卡、请人登录停表）时不等，整次调用当场以 unattended 失败
+    // 登录须本人完成；只给协商了新卡的连接异步提交站点授权。
     const unattended = params.litchUnattended?.notice || null
+    const deferred = host.deferredAccess?.available() ? host.deferredAccess : undefined
+    if (
+      unattended &&
+      deferred &&
+      namespace === CLIENT_TOOL_NAMESPACE.browser &&
+      params.tool === 'request_sign_in'
+    )
+      return Promise.resolve(
+        clientToolFailure(
+          'blocked',
+          'A user must sign in directly. Ask the user to sign in, then wait for confirmation. Do not bypass login.',
+        ),
+      )
     const refuse = (entry: Running, what: string) => {
       host.log(`客户端工具调用 ${id} 要等人（${what}），会话 ${params.threadId} 无人值守，当场失败`)
-      abandon(entry, clientToolFailure('unattended', unattended ?? ''))
+      abandon(
+        entry,
+        clientToolFailure(
+          'unattended',
+          what === 'computerSelf'
+            ? UNATTENDED_COMPUTER_SELF
+            : !deferred && unattended
+              ? unattended
+              : 'Litch could not submit an unattended approval for this action. Ask the user to resolve the restriction in Litch. Do not retry repeatedly or use another route.',
+        ),
+      )
     }
     const invocation: ToolInvocation = {
       threadId: params.threadId,
@@ -309,12 +345,15 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
       harness,
       cwd,
       sessionTitle: sessionTitle ?? null,
+      ...(unattended ? { unattended: true } : {}),
     }
     turns.set(turnKey(params.threadId, params.turnId), {
       threadId: params.threadId,
       turnId: params.turnId,
     })
     return new Promise<unknown>((resolve) => {
+      const cancellation = createCancel()
+      let submitting = false
       const entry: Running = {
         id,
         rpcId,
@@ -322,7 +361,10 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
         turnId: params.turnId,
         machine: false,
         resolve,
-        stop: () => host.hub.cancel(id),
+        stop: () => {
+          cancellation.abort()
+          host.hub.cancel(id)
+        },
         stopTimer: null,
         asks: new Map(),
         holds: 0,
@@ -352,6 +394,10 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
           result: (response) => finish(entry, response),
           ask(askId, ask) {
             if (running.get(id) !== entry) return
+            if (unattended && ask.kind === 'computerSelf') {
+              refuse(entry, ask.kind)
+              return
+            }
             if (
               namespace === CLIENT_TOOL_NAMESPACE.browser &&
               invocation.fullAccess &&
@@ -369,8 +415,29 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
               return
             }
             if (unattended) {
-              refuse(entry, ask.kind)
-              host.hub.answer(askId, null)
+              const subject = accessSubject(ask, params.tool, params.arguments)
+              if (subject?.namespace === namespace && deferred) {
+                if (deferred.use(params.threadId, subject)) {
+                  host.hub.answer(askId, 'once')
+                  return
+                }
+                if (submitting) return
+                submitting = true
+                void deferred
+                  .submit({
+                    threadId: params.threadId,
+                    turnId: params.turnId,
+                    callId: params.callId,
+                    signal: cancellation.signal,
+                    subject,
+                    valid: () => host.allowed(namespace, harness),
+                  })
+                  .then((accepted) => {
+                    if (accepted) abandon(entry, accessSubmitted)
+                    else refuse(entry, ask.kind)
+                  })
+                  .catch(() => refuse(entry, ask.kind))
+              } else refuse(entry, ask.kind)
               return
             }
             host.log(
@@ -753,6 +820,7 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
     },
 
     interrupted(threadId) {
+      host.deferredAccess?.clear(threadId)
       for (const entry of [...running.values()]) {
         if (entry.threadId === threadId)
           abandon(entry, clientToolFailure('failed', 'The user interrupted this turn.'))
@@ -772,6 +840,7 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
     },
 
     offline() {
+      host.deferredAccess?.clear()
       // 连接已经没了，回什么对面都收不到
       for (const entry of [...running.values()]) abandon(entry, NO_REPLY)
       for (const { threadId, turnId } of turns.values()) {

@@ -11,6 +11,11 @@
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import type { Clock } from './channel/protocol.mjs'
 import type { HostSink } from './channel/server.mjs'
+import {
+  accessApproved,
+  createScopedAccess,
+  type DeferredAccessRequest,
+} from './deferred-access.mjs'
 import { sensitivePresets } from './device/machine/presets.mjs'
 import type {
   MachineCallContext,
@@ -97,6 +102,9 @@ export interface MachineWiringHost {
   /** 限时授权：会话所在设备上，这个会话的“操作本机”此刻放行（命令里提到禁止位置的仍要问） */
   timedApproval?(deviceId: string, threadId: string): boolean
   deferredAvailable?(deviceId: string): boolean
+  extendedAvailable?(deviceId: string): boolean
+  hashBytes?(bytes: Uint8Array): string
+  accessLink?(deviceId: string): MachineDeviceLink | null
   signing?: MachineApprovalSigner
   signingAvailable?(deviceId: string): boolean
   grantDeferred?(
@@ -131,10 +139,13 @@ export interface MachineWiring {
   answerDeferred(
     deviceId: string,
     id: string,
-    decision: 'once' | 'timed' | 'decline',
+    decision: 'once' | 'timed' | 'always' | 'decline',
     hours?: number,
   ): Promise<boolean>
   answerDeferredSigned(deviceId: string, proof: unknown): Promise<boolean>
+  submitAccess(deviceId: string, request: DeferredAccessRequest): Promise<boolean>
+  useAccess(deviceId: string, threadId: string, subject: DeferredAccessRequest['subject']): boolean
+  clearAccess(deviceId: string, threadId?: string): void
   stopDeferred(deviceId: string, id: string, threadId: string): void
   policyChanged(deviceId: string): void
   kill(processId: string): boolean
@@ -239,6 +250,7 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
   const grants = new Set<string>()
   const policyRevisions = new Map<string, number>()
   const policyRevision = (deviceId: string) => policyRevisions.get(deviceId) ?? 0
+  const scoped = createScopedAccess(() => clock.now())
   /** 挂着、可被限时授权放行的卡片（命令里没提到禁止位置的）：设备、会话、答掉它 */
   const timedWaiting = new Set<{ deviceId: string; threadId: string; allow(): void }>()
   /** 同一回合里被拒的：键 → 用户附的那句话 */
@@ -510,15 +522,55 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
   }
 
   const forgetGrants = (deviceId: string) => {
+    scoped.clear(deviceId)
     const prefix = `${deviceId}\u0000`
     for (const key of [...grants]) if (key.startsWith(prefix)) grants.delete(key)
     for (const key of [...declined.keys()]) if (key.startsWith(prefix)) declined.delete(key)
   }
 
   return {
+    useAccess: scoped.use,
+    clearAccess: scoped.clear,
+    async submitAccess(deviceId, request) {
+      const link = host.accessLink?.(deviceId) ?? host.device(deviceId)?.link
+      if (!link || !host.extendedAvailable?.(deviceId) || !request.valid()) return false
+      const { subject } = request
+      return deferred.submit(
+        deviceId,
+        link,
+        request,
+        {
+          class: 'read',
+          ask: {
+            kind: 'machine',
+            action: 'access',
+            path: subject.target,
+            command: null,
+            cwd: null,
+            copy: null,
+            flagged: [],
+          },
+        },
+        subject.details,
+        JSON.stringify([deviceId, request.threadId, subject]),
+        async (signal, choice, hours) => {
+          if (signal.aborted || !request.valid())
+            return clientToolFailure('disabled', 'Access settings changed. No access was granted.')
+          scoped.grant(
+            deviceId,
+            request.threadId,
+            subject,
+            choice === 'always' ? 'always' : choice === 'timed' ? (hours ?? null) : null,
+          )
+          return accessApproved
+        },
+        { namespace: subject.namespace, always: subject.always },
+      )
+    },
     async call(deviceId, input, session) {
       const owner = { deviceId, threadId: input.threadId, harness: input.harness }
       let settings = host.settings(deviceId)
+      const extended = host.extendedAvailable?.(deviceId) === true
       if (!settings.enabled && host.device(deviceId) && !input.signal.aborted && input.unattended) {
         // 开启确认也是等人答：无人值守时不出卡，按没开启记一笔，回给模型无人值守的说明
         addLog(deviceId, owner, {
@@ -527,7 +579,9 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
           result: 'disabled',
           flagged: false,
         })
-        return clientToolFailure('unattended', input.unattended)
+        return extended
+          ? clientToolFailure('disabled', MACHINE_DISABLED)
+          : clientToolFailure('unattended', input.unattended)
       }
       if (!settings.enabled && host.device(deviceId) && !input.signal.aborted) {
         const key =
@@ -581,6 +635,7 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
         })
         return clientToolFailure('disabled', MACHINE_DISABLED)
       }
+      const policy = policyOf(settings)
       const context: MachineCallContext = {
         owner,
         target(id) {
@@ -592,11 +647,19 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
           [desktopTarget(), sessionTarget(deviceId)].filter(
             (target): target is MachineTarget => target !== null,
           ),
-        policy: policyOf(settings),
+        policy:
+          input.unattended && extended
+            ? {
+                ...policy,
+                denied: [...new Set([...sensitivePresets(host.desktop), ...policy.denied])],
+              }
+            : policy,
         settings: { approval: settings.approval, access: settings.access.mode },
         approve: approver(deviceId, input, session),
         log: (note: MachineLogNote) => addLog(deviceId, owner, note),
         signal: input.signal,
+        unattended: !!input.unattended && extended,
+        ...(host.hashBytes ? { hashBytes: host.hashBytes } : {}),
       }
       const source = host.device(deviceId)?.link
       let submitted = false
@@ -613,25 +676,46 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
         context.deferred = true
         context.approve = async (request) => {
           const result = await check(request)
-          if (result.kind !== 'unattended' || !request.fingerprint) return result
+          if (result.kind !== 'unattended') return result
+          if (request.ask.action === 'copy' && !extended) return result
+          const prepared = await request.prepare?.()
+          const frozen = prepared?.fingerprint ?? request.fingerprint
+          if (!frozen) return result
           const argsText = JSON.stringify(input.arguments)
           if (typeof argsText !== 'string') return result
           const args: unknown = JSON.parse(argsText)
-          const frozen = request.fingerprint
           const policy = JSON.stringify(settings)
           const matches = () =>
             revision === policyRevision(deviceId) &&
             JSON.stringify(host.settings(deviceId)) === policy
           if (!matches()) return { kind: 'changed' }
-          const details = JSON.stringify(args, null, 2)
+          const details = prepared?.details ?? JSON.stringify(args, null, 2)
           if (typeof details !== 'string' || details.length > 28_000) return result
+          const snapshot = JSON.stringify([input.tool, argsText, frozen, policy, revision])
+          if (request.retry) {
+            const subject = {
+              namespace: 'litch_machine' as const,
+              key: snapshot,
+              target: request.ask.command ?? input.tool,
+              details,
+              always: false,
+            }
+            if (scoped.use(deviceId, threadId, subject)) return { kind: 'allowed' }
+            submitted = await this.submitAccess(deviceId, {
+              ...input,
+              threadId,
+              subject,
+              valid: matches,
+            })
+            return submitted ? { kind: 'submitted', retry: true } : result
+          }
           const accepted = await deferred.submit(
             deviceId,
             source,
             { ...input, threadId },
             request,
             details,
-            JSON.stringify([input.tool, argsText, frozen, policy, revision]),
+            snapshot,
             async (signal) => {
               if (!matches() || signal.aborted)
                 return clientToolFailure(
@@ -642,10 +726,15 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
                 ...context,
                 signal,
                 deferredExecution: true,
-                approve: async (current) =>
-                  matches() && !signal.aborted && current.fingerprint === frozen
+                approve: async (current) => {
+                  if (!matches() || signal.aborted) return { kind: 'changed' }
+                  const checked = await current.prepare?.()
+                  return matches() &&
+                    !signal.aborted &&
+                    (checked?.fingerprint ?? current.fingerprint) === frozen
                     ? { kind: 'allowed' }
-                    : { kind: 'changed' },
+                    : { kind: 'changed' }
+                },
               })
             },
           )
@@ -676,7 +765,10 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
     },
 
     presence(deviceId, online) {
-      if (!online) deferred.stopAll(deviceId, true)
+      if (!online) {
+        scoped.clear(deviceId)
+        deferred.stopAll(deviceId, true)
+      }
       executor.ownerPresence(deviceId, online)
     },
 

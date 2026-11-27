@@ -16,6 +16,8 @@ export interface RunOptions {
   stdin: boolean
   /** 到点对面结束它（退出码 124）。null 是不限 */
   timeoutMs: number | null
+  /** 有大量标准输入的传输可按链路速度另设写请求超时。 */
+  writeTimeoutMs?: number
   /** 每来一段输出 */
   onOutput?(stream: 'stdout' | 'stderr', bytes: Uint8Array): void
   /** 攒下标准输出，最多这么多字节；超了就结束进程，结果里 overflow 为真。不给就不攒 */
@@ -190,11 +192,17 @@ export function createRunner(clock: Clock, random: () => number): Runner {
         done,
         async write(bytes, close = false) {
           if (settled) throw new RpcError(-32600, 'process has exited')
-          await target.request('process/writeStdin', {
-            processHandle: handle,
-            deltaBase64: bytes.length ? encodeBase64(bytes) : null,
-            closeStdin: close,
-          })
+          await target.request(
+            'process/writeStdin',
+            {
+              processHandle: handle,
+              deltaBase64: bytes.length ? encodeBase64(bytes) : null,
+              closeStdin: close,
+            },
+            options.writeTimeoutMs === undefined
+              ? undefined
+              : { timeoutMs: options.writeTimeoutMs },
+          )
         },
         kill,
       }

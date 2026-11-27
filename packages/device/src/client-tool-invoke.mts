@@ -201,12 +201,17 @@ export class ClientToolInvoker {
     })
   }
 
-  ownsMachineCall(peer: ClientToolPeer, threadId: string, callId: string): boolean {
+  ownsApprovalCall(
+    peer: ClientToolPeer,
+    threadId: string,
+    callId: string,
+    namespace: string,
+  ): boolean {
     const call = this.pending.get(callId)
     return (
       call?.peer === peer &&
       call.threadId === threadId &&
-      call.namespace === 'litch_machine' &&
+      call.namespace === namespace &&
       this.options.router.unattendedOf(threadId) !== null
     )
   }

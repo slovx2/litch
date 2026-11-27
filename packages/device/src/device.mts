@@ -37,6 +37,7 @@ import { EXTERNAL_SOURCES_EXTENSION } from '../../protocol/src/external-sources.
 import { FEISHU_EXTENSION } from '../../protocol/src/feishu.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
 import {
+  MACHINE_APPROVAL_CONTROLS,
   MACHINE_APPROVAL_SIGNING,
   MACHINE_APPROVALS,
 } from '../../protocol/src/machine-approvals.mjs'
@@ -497,7 +498,7 @@ export class DeviceServer {
       log,
     })
     info.extensions.push(EXTENSION.clientApprovals)
-    info.extensions.push(MACHINE_APPROVALS, MACHINE_APPROVAL_SIGNING)
+    info.extensions.push(MACHINE_APPROVALS, MACHINE_APPROVAL_SIGNING, MACHINE_APPROVAL_CONTROLS)
     this.chrome =
       options.chromeBinary && process.platform === 'linux'
         ? new DeviceChromeRuntime(
@@ -894,15 +895,16 @@ export class DeviceServer {
     const clientInvoke = new ClientToolInvoker({ router, index: this.index, log })
     this.machineApprovals = new DeviceMachineApprovals({
       db: this.sessionsDb,
-      source: (peer, threadId, callId) =>
-        router.ownsMachineCall(peer, threadId, callId) ||
-        clientInvoke.ownsMachineCall(peer, threadId, callId),
-      allowed: (threadId) =>
+      source: (peer, threadId, callId, namespace) =>
+        router.ownsApprovalCall(peer, threadId, callId, namespace) ||
+        clientInvoke.ownsApprovalCall(peer, threadId, callId, namespace),
+      allowed: (threadId, namespace) =>
         !this.index.archived(threadId) &&
         this.sessionTree.unattended(threadId) !== null &&
-        deviceMachineEnabled(
-          this.control?.state?.snapshot.values ?? this.options.clientToolSettings,
-        ),
+        (namespace !== 'litch_machine' ||
+          deviceMachineEnabled(
+            this.control?.state?.snapshot.values ?? this.options.clientToolSettings,
+          )),
       announce: (method, params, extension) => this.announce(method, params, extension),
       task: (threadId, task) => this.background.desktopTask(threadId, task),
       deliver: (threadId, text, id, onDispatch) =>

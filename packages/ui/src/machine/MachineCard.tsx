@@ -34,6 +34,7 @@ const TITLE: Record<MachineAskView['action'], MessageKey> = {
   list: 'machine.ask.list',
   copy: 'machine.ask.copy',
   process: 'machine.ask.process',
+  access: 'machine.ask.access',
 }
 
 interface MachineCardProps {
@@ -125,7 +126,12 @@ function MachineCard(props: MachineCardProps) {
         {props.expiresAt !== null ? <Expires at={props.expiresAt} /> : null}
       </div>
       <div className="req-body">
-        {props.deferred !== undefined ? <p>{t('machine.deferred.waiting')}</p> : null}
+        {props.deferred !== undefined ? (
+          <p>
+            {t(ask.action === 'access' ? 'machine.deferred.retry' : 'machine.deferred.waiting')}
+          </p>
+        ) : null}
+        {ask.action === 'access' ? <p>{t('machine.deferred.retryScope')}</p> : null}
         {ask.enable ? <p>{t('machine.enable.body')}</p> : null}
         <div className={from.remote ? 'mach-from remote' : 'mach-from'} data-from>
           {from.remote ? t('machine.ask.fromRemote') : t('machine.ask.fromLocal')}{' '}
@@ -241,7 +247,9 @@ function MachineCard(props: MachineCardProps) {
                   ? option === primary
                     ? 'machine.enable.allow'
                     : 'machine.enable.decline'
-                  : optionText(option, props.sessionText),
+                  : option.role === 'acceptAlways' && ask.action === 'access'
+                    ? 'machine.deferred.alwaysInSession'
+                    : optionText(option, props.sessionText),
               )}
               {option === primary && !ask.enable && props.deferred === undefined ? (
                 <span className="kbd">↵</span>
@@ -384,7 +392,7 @@ export function MachineDeferredCard({ entry }: { entry: MachineDeferredView }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const sending = useRef(false)
-  const answer = async (decision: 'once' | 'timed' | 'decline', hours?: number) => {
+  const answer = async (decision: 'once' | 'timed' | 'always' | 'decline', hours?: number) => {
     if (sending.current) return
     sending.current = true
     setBusy(true)
@@ -409,6 +417,7 @@ export function MachineDeferredCard({ entry }: { entry: MachineDeferredView }) {
     sessionId: threadId,
     disabled: busy,
     grantMachine: (hours) => answer('timed', hours),
+    scopedTarget: !!entry.retry,
   })
   return (
     <MachineCard
@@ -418,6 +427,7 @@ export function MachineDeferredCard({ entry }: { entry: MachineDeferredView }) {
       deferred={entry.details}
       options={[
         { id: 'once', role: 'accept' },
+        ...(entry.retry?.always ? [{ id: 'always', role: 'acceptAlways' } as const] : []),
         { id: 'decline', role: 'decline' },
       ]}
       from={{
@@ -434,8 +444,8 @@ export function MachineDeferredCard({ entry }: { entry: MachineDeferredView }) {
       waiting={0}
       grab={false}
       onChoose={({ optionId }) => {
-        if (!optionId) return
-        void answer(optionId === 'once' ? 'once' : 'decline').catch(() => {})
+        if (optionId !== 'once' && optionId !== 'always' && optionId !== 'decline') return
+        void answer(optionId).catch(() => {})
       }}
     />
   )

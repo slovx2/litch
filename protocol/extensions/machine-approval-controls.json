@@ -1,0 +1,16 @@
+{
+  "extension": "machineApprovalControls",
+  "description": "无人值守的文件复制与限定对象的重试授权，沿用本机审批卡与手机验签。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "machineApprovalControls" } }
+  },
+  "rules": [
+    "双方声明 machineApprovals、machineApprovalSigning 和 machineApprovalControls 才能发送新卡片。",
+    "copy 是冻结文件复制；access 仅授权原会话重试，retry 指定原工具命名空间与是否可长期允许。",
+    "手机答复必须验证预览摘要与签名。仅可长期允许的卡可用 always。"
+  ],
+  "parts": [
+    { "kind": "ServerNotification", "method": "litch/machineApproval/controlsChanged" }
+  ]
+}

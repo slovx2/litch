@@ -265,6 +265,7 @@ function createHost(): Core | MockCore {
     machine: {
       desktop,
       randomApprovalId: randomUUID,
+      hashBytes: (bytes) => createHash('sha256').update(bytes).digest('hex'),
       ...(signingDesktopId
         ? {
             signing: {

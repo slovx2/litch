@@ -145,12 +145,17 @@ export class ClientToolRouter {
   }
 
   /** 只有实际接到仍在途调用的桌面可以代它挂卡。 */
-  ownsMachineCall(peer: ClientToolPeer, threadId: string, callId: string): boolean {
+  ownsApprovalCall(
+    peer: ClientToolPeer,
+    threadId: string,
+    callId: string,
+    namespace: string,
+  ): boolean {
     for (const call of this.calls.values())
       if (
         call.executor === peer &&
         call.threadId === threadId &&
-        call.namespace === 'litch_machine' &&
+        call.namespace === namespace &&
         isObject(call.frame.params) &&
         call.frame.params.callId === callId
       )
@@ -313,6 +318,7 @@ export class ClientToolRouter {
             hostLabel: desktop.desktop?.name || desktop.desktop?.hostname || 'Litch desktop',
             ready: () => desktop.ready,
             call: async (params, signal) => {
+              call.executor = desktop
               const unattended = this.unattendedOf(call.threadId)
               const result = await this.callDesktop(
                 desktop,

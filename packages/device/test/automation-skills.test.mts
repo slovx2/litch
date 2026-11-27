@@ -146,7 +146,7 @@ test('Codex 使用原生发现结果，禁用/失败用 guide，不改 CODEX_HOM
     rmSync(home, { recursive: true, force: true })
   }
 })
-test('设备 guide 完整返回同份正文，不记录先读状态', async () => {
+test('设备 guide 保留同份正文并补充产品的异步审批用法，不记录先读状态', async () => {
   let handler: DeviceToolHandler | undefined
   registerAutomationGuide({
     register(ns, fn) {
@@ -169,9 +169,10 @@ test('设备 guide 完整返回同份正文，不记录先读状态', async () =
       },
       { signal: new AbortController().signal },
     )
-    assert.deepEqual(result, {
-      success: true,
-      contentItems: [{ type: 'inputText', text: automationGuide(topic) }],
-    })
+    assert.equal(result.success, true)
+    const item = result.contentItems[0]
+    assert.equal(item?.type, 'inputText')
+    assert.ok(item.text.startsWith(automationGuide(topic)))
+    assert.match(item.text, /non-blocking card.+Do not retry a pending request/)
   }
 })

@@ -30,7 +30,7 @@ export interface MachineAccessView {
 }
 
 /** 调用要做的事，卡片按它拼文字 */
-export type MachineAction = 'exec' | 'write' | 'read' | 'list' | 'copy' | 'process'
+export type MachineAction = 'exec' | 'write' | 'read' | 'list' | 'copy' | 'process' | 'access'
 
 /** 卡片里 litch_machine 那一种（ClientAskView 的一员） */
 export interface MachineAskView {
@@ -97,6 +97,7 @@ export interface MachineDeferredView {
   expiresAt: number
   ask: MachineAskView
   details: string
+  retry?: { always: boolean }
 }
 
 /** 主题 machine 的增量：数据量小，整份换 */

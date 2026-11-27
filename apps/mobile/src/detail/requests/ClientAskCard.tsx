@@ -23,6 +23,7 @@ const MACHINE_TITLE: Record<MachineAskView['action'], Key> = {
   list: 'machine.ask.list',
   copy: 'machine.ask.copy',
   process: 'machine.ask.process',
+  access: 'machine.ask.access',
 }
 
 const MACHINE_OPTION_TEXT: Record<ApprovalOption['role'], Key> = {

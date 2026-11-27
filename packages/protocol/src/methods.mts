@@ -843,6 +843,7 @@ export interface ServerNotifications {
   'litch/approval/answered': ApprovalAnsweredNotification
   'litch/machineApproval/changed': { threadId: string; cards: MachineApprovalCard[] }
   'litch/machineApproval/signedChanged': { threadId: string; cards: MachineApprovalCard[] }
+  'litch/machineApproval/controlsChanged': { threadId: string; cards: MachineApprovalCard[] }
   'litch/machineApproval/stopRequested': MachineApprovalKey
   /** 扩展，只发给握手时声明过 harnessInstall 的连接：一个安装任务的状态或日志变了 */
   'litch/device/harness/install/changed': HarnessInstallChangedNotification

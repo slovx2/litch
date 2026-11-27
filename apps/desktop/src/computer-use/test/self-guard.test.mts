@@ -127,6 +127,38 @@ test('自身每种输入与观察都先问；拒绝不读窗口不发送输入�
   assert.equal(f.asks.length, 8)
 })
 
+test('无人值守普通应用仍直接执行；已有授权和完全访问都不能操作 Litch 自身', async () => {
+  const f = fixture()
+  const app = { ...invocation('get_app_state', 'TextEdit'), unattended: true }
+  f.setAnswer(null)
+  assert.equal((await f.run(app)).success, true)
+  assert.deepEqual(f.asks, [])
+  assert.equal(f.inputs()[0]?.params.targetPid, 42)
+  f.setAnswer('always')
+  await f.run()
+  const selfAsked = f.asks.length
+  const inputs = f.inputs().length
+  for (const fullAccess of [false, true]) {
+    const refusal = await f.run({ ...invocation(), unattended: true, fullAccess })
+    assert.equal(refusal.success, false)
+    assert.match(JSON.stringify(refusal), /\[litch:unattended\].*requires the user to be present/)
+  }
+  const batch = await f.run({
+    ...invocation('run_actions'),
+    unattended: true,
+    arguments: {
+      actions: [
+        { tool: 'click', arguments: { app: 'TextEdit', x: 10, y: 10 } },
+        { tool: 'click', arguments: { app: 'Litch', x: 10, y: 10 } },
+      ],
+    },
+  })
+  assert.equal(batch.success, false)
+  assert.match(JSON.stringify(batch), /\[litch:unattended\].*requires the user to be present/)
+  assert.equal(f.inputs().length, inputs, '硬拒绝发生在批次的首个动作之前')
+  assert.equal(f.asks.length, selfAsked)
+})
+
 test('本次只覆盖一调用；本对话跨回合保留但不同设备或会话仍问', async () => {
   const f = fixture()
   await f.run()

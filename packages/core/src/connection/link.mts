@@ -19,6 +19,7 @@ import {
   MODEL_RANKING_ENABLED,
 } from '../../../protocol/src/index.mjs'
 import {
+  MACHINE_APPROVAL_CONTROLS,
   MACHINE_APPROVAL_SIGNING,
   MACHINE_APPROVALS,
 } from '../../../protocol/src/machine-approvals.mjs'
@@ -295,6 +296,7 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.clientApprovals,
                 MACHINE_APPROVALS,
                 MACHINE_APPROVAL_SIGNING,
+                MACHINE_APPROVAL_CONTROLS,
                 EXTENSION.remoteChrome,
                 // harnessInstall：声明了才收得到安装任务的进度通知（litch/device/harness/install/changed）
                 EXTENSION.harnessInstall,

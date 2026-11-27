@@ -19,6 +19,7 @@ import {
   type Outcome,
   type ToolKit,
 } from './common.mjs'
+import { freezeCopy, runFrozenCopy } from './copy-frozen.mjs'
 import { inside, lastPart, parentOf } from './paths.mjs'
 import { type ListedEntry, parseListed, runScript, scriptsFor, splitBytes } from './scripts.mjs'
 import type { MachineFacts, MachineTarget } from './types.mjs'
@@ -125,6 +126,7 @@ export async function copyTool(kit: ToolKit, raw: unknown): Promise<Outcome> {
         : source.target.role === 'desktop'
           ? 'read'
           : 'mutate'
+    let frozen: Awaited<ReturnType<typeof freezeCopy>> | undefined
     const refused = await approved(
       kit,
       {
@@ -136,10 +138,27 @@ export async function copyTool(kit: ToolKit, raw: unknown): Promise<Outcome> {
             to: { machine: dest.facts.name, path: dest.looked.path },
           },
         }),
+        ...(kit.context.deferred
+          ? {
+              prepare: async () => {
+                frozen = await freezeCopy(kit, source, dest, COPY_CHUNK)
+                return frozen
+              },
+            }
+          : {}),
       },
       summary,
     )
     if (refused) return refused
+
+    if (kit.context.deferredExecution) {
+      if (!frozen) return failed('failed', 'The approved copy could not be verified.', summary)
+      const count = await runFrozenCopy(kit, source, dest, frozen, COPY_CHUNK)
+      return done(
+        `Copied 1 file (${count} bytes) from ${source.label}:${source.looked.path} to ${dest.label}:${dest.looked.path}.`,
+        summary,
+      )
+    }
 
     const plan =
       kind === 'f' ? filePlan(source.looked.probe.size ?? 0) : await treePlan(kit, source, dest)

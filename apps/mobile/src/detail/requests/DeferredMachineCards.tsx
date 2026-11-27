@@ -102,6 +102,15 @@ function DeferredMachineCard({
               disabled={busy}
               onPress={() => void submit({ decision: 'once' })}
             />
+            {card.retry?.always ? (
+              <CardButton
+                kind="ghost"
+                label={t('machine.deferred.alwaysInSession')}
+                testID="machine-deferred:always"
+                disabled={busy}
+                onPress={() => void submit({ decision: 'always' })}
+              />
+            ) : null}
             <CardButton
               kind="ghost"
               symbol="clock"
@@ -121,7 +130,7 @@ function DeferredMachineCard({
         ) : null
       }
     >
-      <Why>{t('machine.deferred.waiting')}</Why>
+      <Why>{t(card.retry ? 'machine.deferred.retry' : 'machine.deferred.waiting')}</Why>
       <Why>
         {canAnswer
           ? visible(card.desktop)
@@ -149,7 +158,7 @@ function DeferredMachineCard({
             testID="machine-deferred:hours"
             style={{ color: theme.c.ink, borderColor: theme.c.line2, borderWidth: 1, padding: 8 }}
           />
-          <Why>{t('machine.deferred.timedScope')}</Why>
+          <Why>{t(card.retry ? 'machine.deferred.retryScope' : 'machine.deferred.timedScope')}</Why>
         </View>
       ) : null}
       <Text selectable style={{ color: theme.c.ink, fontFamily: theme.font.mono }}>

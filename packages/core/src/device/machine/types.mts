@@ -62,6 +62,9 @@ export interface MachineApprovalRequest {
   ask: MachineAskView
   /** 桌面路径和文件身份的冻结值，重新跑预检时必须一致。 */
   fingerprint?: string | undefined
+  /** 大文件只在已确定需要异步审批或执行复核时求摘要。 */
+  prepare?(): Promise<{ fingerprint: string; details: string }>
+  retry?: boolean
 }
 
 export type MachineApprovalResult =
@@ -74,7 +77,7 @@ export type MachineApprovalResult =
   | { kind: 'cancelled' }
   /** 会话无人值守，没出卡：message 是给模型的说明 */
   | { kind: 'unattended'; message: string }
-  | { kind: 'submitted' }
+  | { kind: 'submitted'; retry?: boolean }
   | { kind: 'changed' }
 
 /** 谁发起的：进程归它，会话所在设备断开、开关关掉时按它收拾 */
@@ -113,6 +116,8 @@ export interface MachineCallContext {
   /** 只为异步路径核验文件身份；常规调用不增加探测。 */
   deferred?: boolean
   deferredExecution?: boolean
+  unattended?: boolean
+  hashBytes?(bytes: Uint8Array): string
 }
 
 /** 执行器记着的一个进程（接线那边拼成 MachineProcessView 给界面） */

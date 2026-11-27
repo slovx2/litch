@@ -341,16 +341,27 @@ export async function execTool(kit: ToolKit, table: ProcessTable, raw: unknown):
       return failed('invalid', `cwd ${looked.path} is not an existing folder`, summary)
     flagged = flaggedIn(command, looked.path, facts.home, looked.rules, looked.icase, facts)
     if (looked.blocked && !flagged.includes(looked.blocked.rule)) flagged.push(looked.blocked.rule)
+    if (flagged.length && kit.context.unattended)
+      return failed(
+        'blocked',
+        'The command refers to a blocked location. Use permitted locations and do not bypass this restriction.',
+        summary,
+        true,
+      )
+    const needsHandle =
+      yieldMs !== undefined ||
+      stdin !== undefined ||
+      (timeoutMs > 100_000 && args.timeout_ms !== undefined)
     const refused = await approved(
       kit,
       {
         class: 'mutate',
         ask: askView({ action: 'exec', command, cwd: looked.path, flagged }),
-        ...(flagged.length === 0 &&
-        yieldMs === undefined &&
-        stdin === undefined &&
-        (args.timeout_ms === undefined || timeoutMs <= 100_000)
-          ? { fingerprint: await deferredFingerprint(kit, target, facts, looked, 'd') }
+        ...(flagged.length === 0
+          ? {
+              fingerprint: await deferredFingerprint(kit, target, facts, looked, 'd'),
+              retry: needsHandle,
+            }
           : {}),
       },
       summary,
