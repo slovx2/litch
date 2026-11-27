@@ -71,6 +71,11 @@ export function stamp(timestamp: number, now: number, lang: string): string {
   return dateFormat(lang, options).format(timestamp)
 }
 
+/** 按月分组时的组名：2026年10月、October 2026 */
+export function monthLabel(year: number, month: number, lang: string): string {
+  return dateFormat(lang, { year: 'numeric', month: 'long' }).format(new Date(year, month - 1, 1))
+}
+
 /** 悬停时看的完整时刻：年月日加时分 */
 export function stampFull(timestamp: number, lang: string): string {
   return dateFormat(lang, {

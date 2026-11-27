@@ -398,6 +398,81 @@ export function sampleArchived(now: number, lang: SampleLang): Map<string, Sessi
   return new Map([['local', summaries(SAMPLE_TEXT[lang], now, roots, rows)]])
 }
 
+const BULK_TOPICS: Record<SampleLang, string[]> = {
+  'zh-CN': [
+    '修复侧栏拖拽排序',
+    '整理发布说明',
+    '排查设备重连后会话丢失',
+    '给设置页加搜索',
+    '优化长对话滚动性能',
+    '补齐英文文案',
+    '重写安装脚本',
+    '调研 OpenCode 接入',
+    'Windows 上的路径处理',
+    '迁移日志轮转',
+    '手机端扫码绑定',
+    '浏览器导入 Cookie',
+  ],
+  en: [
+    'Fix sidebar drag sorting',
+    'Draft release notes',
+    'Debug sessions lost after reconnect',
+    'Add search to settings',
+    'Speed up long transcript scrolling',
+    'Fill in missing translations',
+    'Rewrite the install script',
+    'Research OpenCode integration',
+    'Path handling on Windows',
+    'Migrate log rotation',
+    'Phone pairing by QR code',
+    'Import cookies into the browser',
+  ],
+}
+
+/** 预览场景 archive：本机和 build-01 上各一大批已归档的会话，看分组、搜索和懒加载 */
+export function bulkArchived(now: number, lang: SampleLang): Map<string, SessionSummary[]> {
+  const topics = BULK_TOPICS[lang]
+  const harnessIds = ['claude-code', 'codex', 'pi', 'dsh']
+  const build = (count: number, places: [id: string, root: string][], step: number) => {
+    const roots = new Map(places)
+    const rows: Row[] = Array.from({ length: count }, (_, n) => [
+      `bulk-${n}`,
+      places[n % places.length]?.[0] ?? null,
+      harnessIds[n % harnessIds.length] ?? 'claude-code',
+      'idle',
+      n * step + 20 * MINUTE,
+    ])
+    const titles = Object.fromEntries(
+      rows.map(([id], n) => [id, `${topics[n % topics.length]} #${n + 1}`]),
+    )
+    return summaries({ ...SAMPLE_TEXT[lang], titles }, now, roots, rows)
+  }
+  return new Map([
+    [
+      'local',
+      build(
+        160,
+        [
+          ['litch', '~/work/litch'],
+          ['docs', '~/work/docs-site'],
+        ],
+        9 * HOUR,
+      ),
+    ],
+    [
+      'build',
+      build(
+        14,
+        [
+          ['litch2', '/srv/work/litch'],
+          ['infra', '/srv/work/infra'],
+        ],
+        2 * 24 * HOUR,
+      ),
+    ],
+  ])
+}
+
 export function sampleSidebars(now: number, lang: SampleLang): SidebarView[] {
   const text = SAMPLE_TEXT[lang]
   return [
