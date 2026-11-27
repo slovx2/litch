@@ -861,10 +861,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   const archived =
     !one('.sb-scroll')?.textContent?.includes(newName) &&
     Boolean(one('.crumb')?.textContent?.includes('已归档对话'))
-  const restore = [...shelved.querySelectorAll('button')].find((button) =>
-    button.textContent?.includes('恢复'),
-  )
-  restore?.click()
+  shelved.querySelector<HTMLButtonElement>('.arch-restore')?.click()
   const restoredRow = await until('恢复的会话回到侧栏里', () => rowOf(newName))
   await until('已归档对话里不再有它', () => !shelvedOf(newName))
   restoredRow.click()

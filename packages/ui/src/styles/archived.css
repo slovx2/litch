@@ -1,4 +1,4 @@
-/* 已归档对话：占着对话区的一整页，按设备分开列 */
+/* 整页的骨架：已归档对话首创，任务、经理、建议、设备等页面也用这几个类 */
 .arch-page {
   flex: 1 1 0;
   min-height: 0;
@@ -116,6 +116,200 @@
 .arch-open:hover {
   color: var(--accent);
   text-decoration: underline;
+}
+/* 已归档对话这一页自己的样子：顶上标题、搜索和设备切换，下面一次列一台设备的 */
+.arch-shelf .arch-head {
+  align-items: center;
+  padding-block: 20px 10px;
+}
+.arch-shelf .arch-head h1 {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.arch-devs,
+.arch-col {
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+  padding-inline: 24px;
+}
+/* 搜索框：放大镜在框里左边，有字时右边一个清除 */
+.arch-search {
+  flex: 0 1 300px;
+  min-width: 160px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 4px 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--win);
+  color: var(--ink-3);
+}
+.arch-search:focus-within {
+  border-color: var(--accent);
+}
+.arch-search input {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.arch-search input::placeholder {
+  color: var(--ink-3);
+}
+.arch-search .ibtn {
+  width: 22px;
+  height: 22px;
+}
+/* 设备切换：一排标签，名字后面是数量（搜索时是匹配数） */
+.arch-devs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-block: 0 4px;
+}
+.arch-dev-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: var(--r1);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.arch-dev-tab:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.arch-dev-tab[aria-selected="true"] {
+  background: var(--sel);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.arch-count {
+  flex: none;
+  font: 11px / 1 var(--mono);
+  color: var(--ink-3);
+}
+.arch-count.hit {
+  color: var(--ink-2);
+}
+.arch-col {
+  padding-block: 4px 24px;
+}
+.arch-group-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 12px 0 4px;
+  background: var(--panel);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--line-2);
+}
+.arch-shelf .arch-note {
+  padding-top: 12px;
+}
+.arch-shelf .arch-item .arch-note {
+  padding: 0 0 6px;
+}
+/* 空的、没搜到：列表的位置上居中一块 */
+.arch-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 64px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.arch-empty > svg {
+  width: 28px;
+  height: 28px;
+}
+.arch-empty > b {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.arch-empty > .btn {
+  margin-top: 4px;
+}
+.arch-elsewhere {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.arch-elsewhere .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.arch-shelf .arch-item {
+  padding: 0;
+}
+.arch-shelf .arch-line {
+  position: relative;
+  min-height: 34px;
+}
+.arch-shelf .arch-title {
+  font-size: 13px;
+}
+.arch-shelf .arch-where {
+  flex-basis: 160px;
+}
+.arch-shelf .arch-time {
+  width: 52px;
+}
+.arch-shelf mark {
+  background: var(--find);
+  color: var(--on-find);
+  border-radius: 2px;
+}
+/* 行尾的操作：悬停、聚焦或菜单开着才出，盖在时间上 */
+.arch-acts {
+  position: absolute;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 8px;
+  background: var(--panel);
+  opacity: 0;
+}
+.arch-item:hover .arch-acts,
+.arch-acts:focus-within,
+.arch-acts:has(.row-more.on) {
+  opacity: 1;
+}
+.arch-acts .ibtn {
+  background: var(--panel);
+}
+.arch-acts .ibtn:not(:disabled):hover {
+  background: linear-gradient(var(--hover), var(--hover)) var(--panel);
+  color: var(--ink);
+}
+.arch-acts > .row-more {
+  position: static;
+  opacity: 1;
+}
+.arch-tail {
+  height: 1px;
 }
 /* 只读地看一个已归档的对话：输入区的位置上是一条说明，右边是“回到列表”和“恢复” */
 .arch-bar {

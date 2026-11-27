@@ -146,7 +146,17 @@ Tasks grouped by device, **New task**, a detail view with runs. See `scheduled-t
 
 ### Archived sessions
 
-Archived sessions per device: Restore, Open (read-only), Delete.
+One device at a time: with several devices, tabs at the top switch between them and show each
+device's count (the last device viewed is remembered). The search box filters by title or project as
+you type and highlights matches; tab counts then show matches, and if this device has none, the other
+devices with matches are listed. Sessions are grouped by date (today, yesterday, previous 7 and 30 days,
+then by month), newest first. Click a title to open it read-only; hover a row for Restore and a menu
+with Open (read-only), Restore and Delete. Esc clears the search first, then leaves the page.
+
+一次看一台设备：多台设备时顶上一排标签切换，标签上写各台的数量，记住上次看的设备。搜索框按标题或项目
+即时筛选并高亮匹配；搜索时标签上是匹配数，本设备没有匹配时列出有匹配的其他设备。按日期分组（今天、昨天、
+7 天内、30 天内，更早按月），新的在前。点标题只读打开；悬停一行出现“恢复”和菜单（打开、恢复、删除）。
+Esc 先清搜索，再离开这一页。
 
 ## Status overview
 

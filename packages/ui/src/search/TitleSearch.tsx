@@ -1,7 +1,6 @@
 import {
   type DeviceView,
   keys,
-  originalRanges,
   type TitleHit,
   type TitleSearchResult,
   type WorkspaceView,
@@ -16,24 +15,10 @@ import { currentPlatform } from '../app/platform.ts'
 import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { onSearch } from './actions.ts'
 import { focusSearchSession } from './focus.ts'
+import { Highlighted } from './Highlighted.tsx'
 import '../styles/search.css'
 
 const EMPTY_IDS: string[] = []
-function Highlighted({ text, query }: { text: string; query: string }) {
-  const spans = originalRanges(text, query)
-  let end = 0
-  const content = spans.flatMap((span) => {
-    const before = text.slice(end, span.start)
-    end = span.end
-    return [before, <mark key={span.start}>{text.slice(span.start, span.end)}</mark>]
-  })
-  return (
-    <>
-      {content}
-      {text.slice(end)}
-    </>
-  )
-}
 
 export function TitleSearch({ onOpen }: { onOpen(selection: Selection, archived: boolean): void }) {
   const [open, setOpen] = useState(false)

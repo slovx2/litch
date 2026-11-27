@@ -10,6 +10,7 @@ import { keys, managerMark, openSessionWhenKnown, type SessionSummary } from '@l
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArchivedPage } from '../archived/ArchivedPage.tsx'
 import { ArchivedSession } from '../archived/ArchivedSession.tsx'
+import { rememberShelfDevice } from '../archived/shelf.ts'
 import { ConfigAgent } from '../assist/ConfigAgent.tsx'
 import { nextAssistSeq } from '../assist/useAssistant.ts'
 import { NewSession } from '../composer/NewSession.tsx'
@@ -485,6 +486,8 @@ export function App() {
         onOpen={(next, archived) => {
           if (archived)
             leaveThen(() => {
+              // 看完回到列表时，列表停在这一台设备上
+              rememberShelfDevice(next.deviceId)
               openPage('archived', next)
             })
           else select(next)
@@ -538,7 +541,11 @@ export function App() {
               onRestored={select}
             />
           ) : page === 'archived' ? (
-            <ArchivedPage onClose={closePage} onOpen={setPeek} />
+            <ArchivedPage
+              current={picked?.deviceId ?? draft?.deviceId ?? null}
+              onClose={closePage}
+              onOpen={setPeek}
+            />
           ) : page === 'managers' ? (
             <ManagersPage
               key={JSON.stringify(managersAt)}

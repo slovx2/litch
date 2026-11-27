@@ -105,6 +105,7 @@ import {
 import { ASKS_COMMENTABLE, commentSample, commentsReply } from './sample-comments.mjs'
 import { PI_PLAN_QUESTION, samplePlan } from './sample-compose.mjs'
 import {
+  bulkArchived,
   SAMPLE_HOSTS,
   STREAM_SESSION,
   sampleApp,
@@ -149,9 +150,10 @@ export interface MockCoreOptions {
   /**
    * 演哪一种开局。fresh：刚装好 Litch 的电脑，本机一个 harness 都没装（试首启引导、一键安装）。
    * states：平常示例加上各种提示与异常状态（mock-states.mts），给界面打磨和截图用。
+   * archive：平常示例，已归档的换成两台设备上的一大批（看已归档对话页的分组、搜索和懒加载）。
    * 不给是平常那一套示例
    */
-  scene?: 'fresh' | 'states'
+  scene?: 'fresh' | 'states' | 'archive'
   /**
    * 设备是否宣告经理 issue（litchManagerIssues），默认宣告。false 时控制台照旧是四类，
    * 给按四类写的验收（经理冒烟）用；比应用旧的设备服务本来就没有这项
@@ -492,7 +494,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     sampleSidebars(clock.now(), lang).map((view) => [view.deviceId, view]),
   )
   /** 各设备上已归档的会话。界面要了才放进侧栏的数据里 */
-  const shelved = sampleArchived(clock.now(), lang)
+  const shelved =
+    options.scene === 'archive'
+      ? bulkArchived(clock.now(), lang)
+      : sampleArchived(clock.now(), lang)
   const sessions = new Map<string, SessionView>()
   const suggestionSinks = new Map<string, Set<HostSink>>()
   const suggestionsView = (

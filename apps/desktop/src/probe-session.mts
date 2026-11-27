@@ -435,9 +435,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
       const shelved = await until('已归档对话里的这个会话', () =>
         all('.arch-item').find((element) => element.textContent?.includes(other)),
       )
-      ;[...shelved.querySelectorAll('button')]
-        .find((button) => button.textContent?.includes('恢复'))
-        ?.click()
+      shelved.querySelector<HTMLButtonElement>('.arch-restore')?.click()
       await until('恢复的会话回到侧栏里', () => rowOf(other))
     }
     await restoreFromPage()
