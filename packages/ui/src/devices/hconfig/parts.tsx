@@ -169,7 +169,7 @@ export function AuthFields({
             {field.options.length > 0 ? (
               <select
                 id={id}
-                className="req-input mng-select"
+                className="req-input mng-select modal-select"
                 value={value}
                 disabled={disabled}
                 onChange={(event) => set(event.target.value)}

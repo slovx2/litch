@@ -17,6 +17,7 @@ export interface HcControlProps {
   disabled: boolean
   wrong: boolean
   label?: string
+  modalSelect?: boolean
   onDraft(draft: HcDraft): void
 }
 
@@ -92,7 +93,9 @@ export function HcControl(props: HcControlProps) {
       return (
         <select
           id={id}
-          className="req-input mng-select"
+          className={
+            props.modalSelect ? 'req-input mng-select modal-select' : 'req-input mng-select'
+          }
           value={text}
           disabled={off}
           onChange={(event) => set(event.target.value)}

@@ -182,7 +182,7 @@ export function AppPage({
                 </Field>
                 <Field label={t('feishu.app.manager')}>
                   <select
-                    className="ext-select"
+                    className="ext-select modal-select"
                     aria-label={t('feishu.app.manager')}
                     data-feishu-manager
                     value={app.managerId ?? ''}

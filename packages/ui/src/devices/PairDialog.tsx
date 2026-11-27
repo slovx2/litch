@@ -422,6 +422,7 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
                             <span className="btn ghost pair-host-picker">
                               <Icon name="globe" small />
                               <select
+                                className="modal-select"
                                 data-act="pick-host"
                                 aria-describedby={hintId}
                                 aria-label={t('pairing.host.choose')}

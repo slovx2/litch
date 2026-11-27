@@ -199,7 +199,7 @@ export function SpawnDialog({
             </label>
             <select
               id="spawn-harness"
-              className="req-input"
+              className="req-input modal-select"
               value={fields.harness}
               onChange={(event) =>
                 set({ harness: event.target.value, model: '', effort: '', modelSelected: false })
@@ -234,7 +234,7 @@ export function SpawnDialog({
               </label>
               <select
                 id="spawn-model"
-                className="req-input"
+                className="req-input modal-select"
                 value={fields.model}
                 onChange={(event) =>
                   set({
@@ -266,7 +266,7 @@ export function SpawnDialog({
               </label>
               <select
                 id="spawn-effort"
-                className="req-input"
+                className="req-input modal-select"
                 value={fields.effort}
                 disabled={!model || model.efforts.length === 0}
                 onChange={(event) => set({ effort: event.target.value })}
@@ -290,7 +290,7 @@ export function SpawnDialog({
               </label>
               <select
                 id="spawn-workspace"
-                className="req-input"
+                className="req-input modal-select"
                 value={fields.workspaceId}
                 onChange={(event) => set({ workspaceId: event.target.value })}
               >
@@ -331,7 +331,7 @@ export function SpawnDialog({
             </label>
             <select
               id="spawn-sandbox"
-              className="req-input"
+              className="req-input modal-select"
               value={fields.sandbox}
               onChange={(event) => set({ sandbox: event.target.value as SpawnFields['sandbox'] })}
             >

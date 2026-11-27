@@ -340,7 +340,7 @@ function PickForm({
           </label>
           <select
             id="bimp-profile"
-            className="req-input"
+            className="req-input modal-select"
             value={draft.profileId}
             onChange={(event) => onChange(draftFor(source, event.target.value, draft))}
           >

@@ -73,6 +73,7 @@ function UpgradeRow({
             .join(t('list.comma'))}
         </span>
         <select
+          className="modal-select"
           value={choice}
           onChange={(event) => choose(event.target.value as UpgradeChoice)}
           aria-label={t.text(device.name)}

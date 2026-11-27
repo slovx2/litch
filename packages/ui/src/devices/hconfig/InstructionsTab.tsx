@@ -385,7 +385,7 @@ function UnifyDialog({
         </label>
         <select
           id="hc-unify-source"
-          className="req-input mng-select"
+          className="req-input mng-select modal-select"
           value={source}
           disabled={busy}
           onChange={(event) => {
