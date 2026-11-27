@@ -26,7 +26,7 @@ export function SuggestionMeta({ row }: { row: SuggestionView }) {
       {' · '}
       {folder}
       {' · '}
-      {agoLong(proposal.createdAt, Date.now(), t.lang)}
+      {agoLong(proposal.createdAt, Date.now(), t)}
     </Text>
   )
 }

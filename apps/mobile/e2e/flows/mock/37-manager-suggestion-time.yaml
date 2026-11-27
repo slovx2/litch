@@ -1,0 +1,34 @@
+appId: dev.litch.app
+name: mock-展开近期经理建议显示时间
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      CONTROLLED: "1"
+      READY: device:local
+- scrollUntilVisible:
+    element:
+      id: devices:managers
+    direction: UP
+- tapOn:
+    id: devices:managers
+- tapOn:
+    id: manager:m1
+- openLink: 'litch://test-send?device=local&session=m1&text=propose%20a%20sub-session'
+- tapOn:
+    id: manager-tab:console
+- tapOn:
+    id: issue-capsule:suggestion
+- scrollUntilVisible:
+    element:
+      id: issue-card:S-e2e-pr1
+    timeout: 20000
+- tapOn:
+    id: issue-card:S-e2e-pr1
+- extendedWaitUntil:
+    visible:
+      id: suggestion-meta:e2e-pr1
+      text: '.*(?:现在|now|[0-9]+分钟前|[0-9]+ minutes? ago).*'
+    timeout: 10000

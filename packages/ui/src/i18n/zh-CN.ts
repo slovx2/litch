@@ -1173,6 +1173,9 @@ export const zhCN = {
   'keys.renameDrop': '重命名输入框：取消',
 
   'time.now': '现在',
+  'time.long.minutes': '{n}分钟前',
+  'time.long.hours': '{n}小时前',
+  'time.long.days': ({ n }) => (n === 1 ? '昨天' : n === 2 ? '前天' : `${n}天前`),
   'time.minutes': '{n}分',
   'time.hours': '{n}时',
   'time.days': '{n}天',

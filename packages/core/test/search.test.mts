@@ -39,6 +39,16 @@ test('Unicode 大小写扩长、emoji 与连续空白映射回原文，不把正
   assert.equal(searchQuery('  ABC\nDef '), 'abc def')
 })
 
+test('没有 Segmenter 时省略字素高亮，文本仍能按规范化规则匹配', (context) => {
+  const descriptor = Object.getOwnPropertyDescriptor(Intl, 'Segmenter')
+  assert.ok(descriptor)
+  context.after(() => Object.defineProperty(Intl, 'Segmenter', descriptor))
+  Reflect.deleteProperty(Intl, 'Segmenter')
+
+  assert.ok(searchText('Ａ 👩‍💻').includes(searchQuery('a 👩‍💻')))
+  assert.deepEqual(originalRanges('Ａ 👩‍💻', 'a 👩‍💻'), [])
+})
+
 test('思考、计划、问答卡可搜；工具参数、输出、命令、差异与子代理不可搜', () => {
   assert.equal(
     plain({ id: 'r', kind: 'reasoning', text: '思考摘要', status: 'completed' }),

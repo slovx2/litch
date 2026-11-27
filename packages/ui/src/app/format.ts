@@ -1,6 +1,7 @@
 // 给人看的时间和时长。侧栏的行很窄，所以用最短的写法。
 import type { TurnRetryView, TurnView } from '@litch/core'
 import type { Translator } from '../i18n/index.ts'
+import { formattingLocale } from '../i18n/locale.ts'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -12,7 +13,7 @@ function dateFormat(lang: string, options: Intl.DateTimeFormatOptions): Intl.Dat
   const key = `${lang}:${JSON.stringify(options)}`
   let format = formats.get(key)
   if (!format) {
-    format = new Intl.DateTimeFormat(lang, options)
+    format = new Intl.DateTimeFormat(formattingLocale(lang), options)
     formats.set(key, format)
   }
   return format
@@ -30,23 +31,14 @@ export function ago(timestamp: number, now: number, t: Translator): string {
 }
 
 /** 卡片上不那么挤的“多久以前”：刚刚、7 分钟前、3 小时前、2 天前；一周以上写日期时刻 */
-export function agoLong(timestamp: number, now: number, lang: string): string {
+export function agoLong(timestamp: number, now: number, t: Translator): string {
   const diff = Math.max(0, now - timestamp)
-  if (diff >= 7 * DAY) return stamp(timestamp, now, lang)
-  const relative = relativeFormat(lang)
-  if (diff < MINUTE) return relative.format(0, 'second')
-  if (diff < HOUR) return relative.format(-Math.floor(diff / MINUTE), 'minute')
-  if (diff < DAY) return relative.format(-Math.floor(diff / HOUR), 'hour')
-  return relative.format(-Math.floor(diff / DAY), 'day')
-}
-const relatives = new Map<string, Intl.RelativeTimeFormat>()
-function relativeFormat(lang: string): Intl.RelativeTimeFormat {
-  let format = relatives.get(lang)
-  if (!format) {
-    format = new Intl.RelativeTimeFormat(lang, { numeric: 'auto' })
-    relatives.set(lang, format)
-  }
-  return format
+  if (diff >= 7 * DAY) return stamp(timestamp, now, t.lang)
+  // 安卓 Hermes 没有 Intl.RelativeTimeFormat；由两端共用的词条负责相对时间。
+  if (diff < MINUTE) return t('time.now')
+  if (diff < HOUR) return t('time.long.minutes', { n: Math.floor(diff / MINUTE) })
+  if (diff < DAY) return t('time.long.hours', { n: Math.floor(diff / HOUR) })
+  return t('time.long.days', { n: Math.floor(diff / DAY) })
 }
 
 /** 两个时刻差几个自然日（按本地时间，0 是同一天） */

@@ -1231,6 +1231,9 @@ export const en: Record<MessageKey, Entry> = {
   'keys.renameDrop': 'Rename field: cancel',
 
   'time.now': 'now',
+  'time.long.minutes': ({ n }) => (n === 1 ? '1 minute ago' : `${n} minutes ago`),
+  'time.long.hours': ({ n }) => (n === 1 ? '1 hour ago' : `${n} hours ago`),
+  'time.long.days': ({ n }) => (n === 1 ? 'yesterday' : `${n} days ago`),
   'time.minutes': '{n}m',
   'time.hours': '{n}h',
   'time.days': '{n}d',

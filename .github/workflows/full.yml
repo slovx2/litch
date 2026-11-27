@@ -594,6 +594,8 @@ jobs:
         env:
           EXPO_PUBLIC_LITCH_E2E: '1'
         run: npm run android:release -- --build-cache --max-workers=4 -PreactNativeArchitectures=x86_64
+      - name: 检查 Android 包内的 Intl 用法
+        run: node apps/mobile/scripts/check-android-intl.mjs apps/mobile/android/app/build/intermediates/sourcemaps/react/release/index.android.bundle.packager.map
       - name: 封存唯一 APK
         id: apk
         run: node scripts/ci/apk.mjs seal "${RUNNER_TEMP}/mobile-apk" apps/mobile/android/app/build/outputs/apk/release/app-release.apk

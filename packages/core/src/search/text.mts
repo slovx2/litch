@@ -52,14 +52,18 @@ export function occurrences(
 
 /** 只在需要画高亮的消息上建坐标表，不给每份历史都保留逐字位置。 */
 export function originalRanges(text: string, query: string, limit = SEARCH_LIMIT): SearchRange[] {
+  // 缺少字素分段时只省略高亮。搜索匹配不依赖它，也不在组合字符中间截取原文。
+  const segmenter =
+    typeof Intl.Segmenter === 'function'
+      ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+      : null
+  if (!segmenter) return []
   const starts: number[] = [],
     ends: number[] = []
   let normalized = '',
     offset = 0,
     space = false
-  for (const { segment: char } of new Intl.Segmenter(undefined, {
-    granularity: 'grapheme',
-  }).segment(text)) {
+  for (const { segment: char } of segmenter.segment(text)) {
     const end = offset + char.length
     if (/\s/u.test(char)) {
       if (space) ends[ends.length - 1] = end

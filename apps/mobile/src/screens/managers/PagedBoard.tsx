@@ -35,6 +35,7 @@ import type {
   ManagerObjectHead,
   ManagerPageKind,
 } from '../../../../../packages/protocol/src/manager-paging.mts'
+import { stampFull } from '../../../../../packages/ui/src/app/format.ts'
 import {
   proposalSummary,
   shortObjectId,
@@ -367,7 +368,7 @@ export function PagedBoard({
           <View key={change.id}>
             <Text style={style}>
               {snapshot?.revision ? `v${snapshot.revision} · ` : ''}
-              {snapshot?.title} · {new Date(change.at).toLocaleString()}
+              {snapshot?.title} · {stampFull(change.at, t.lang)}
             </Text>
             <Markdown text={change.why} />
             {snapshot ? <Markdown text={snapshot.body} /> : null}
@@ -415,7 +416,7 @@ export function PagedBoard({
             <Text style={[styles.meta, { color: c.ink3, fontSize: font.size.meta }]}>
               {lines.checkedAt === null
                 ? t('manager.paging.unchecked')
-                : `${t('manager.paging.checked')} ${new Date(lines.checkedAt).toLocaleString()}`}
+                : `${t('manager.paging.checked')} ${stampFull(lines.checkedAt, t.lang)}`}
             </Text>
             <IconButton
               icon="reload"
