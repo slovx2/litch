@@ -237,15 +237,16 @@ ACP（含 agy 订阅后端）回合慢时，设备日志目录的 `<harness>/rpc
 
 Antigravity 的订阅入口运行用户安装的官方 `agy acp`。在详情设置的“账号”页点击“登录 Google 账号”，本机和远程设备均运行 `agy acp --login`，不检测或打开目标设备的浏览器；可在同页查看状态、退出登录。
 账号页始终提供登录链接。在桌面或手机复制链接，或点击“打开浏览器”在当前客户端打开；完成授权后粘贴授权码或完整回调 URL 并提交。支持取消，成功后自动刷新状态。此入口只提供官方终端登录支持的 Google 账号授权，不再提供 ACP 的 Gemini Enterprise 浏览器登录分支。
-每次打开新建页都会向设备上的官方 ACP 查询当前账号的模型和思考强度。更新 agy 或切换账号后，重新打开新建页即可刷新选项；查询不会发送模型消息。
+打开新建页时，设备向官方 ACP 查询当前账号的模型和思考强度。设备可在一分钟内复用查询结果；更新 agy 或在 Litch 中登录、退出会清除缓存。查询不会发送模型消息，也不会在会话历史中留下空会话。
 
 Accounts always uses `agy acp --login` for both local and remote devices, without checking for a browser
 on the target device. Copy the link or open it in a browser on the current desktop or phone, then paste
 the authorization code or callback URL and submit. You can cancel; success refreshes the status automatically.
 This entry supports Google account terminal authorization, not ACP's Gemini Enterprise browser sign-in.
 The new conversation page queries the device's official ACP agent for the current account's models
-and reasoning options. Reopen the page after updating agy or switching accounts to refresh the
-options. The lookup does not send a model message.
+and reasoning options. The device can reuse the result for up to a minute. Updating agy or signing
+in or out in Litch clears that cache. The lookup neither sends a model message nor leaves an empty
+conversation in your history.
 订阅额度显示在桌面输入区的用量圆环弹层、手机的“用量与额度”页：按模型组列出 5 小时／每周
 已用百分比和重置时间（剩余量为 100% 减去已用量）。数据来自官方 `agy -p /usage --output-format json`，
 不会启动模型回合或消耗额度。查看时才查询，30 秒内复用缓存；已查到额度后在回合结束时按相同间隔刷新。

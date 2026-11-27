@@ -8,7 +8,16 @@
 // 建会话、接回会话时带了 stdio 的 MCP 服务就起起来，握手、列工具（记一行 { mcp: … } 到 FAKE_ACP_LOG），
 // 回合里按“tool…”那几句调它的工具（见 callTool）。
 import { type ChildProcess, spawn } from 'node:child_process'
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 
 const log = (entry: object) => {
@@ -34,7 +43,13 @@ interface Session {
   history: Array<{ role: 'user' | 'agent'; text: string }>
 }
 
-const statePath = process.env.FAKE_ACP_STATE ?? ''
+const scratchIndex = process.argv.lastIndexOf('--app-data-dir')
+const scratchName = scratchIndex < 0 ? undefined : process.argv[scratchIndex + 1]
+const probeDir =
+  !scratchName || process.env.FAKE_ACP_IGNORE_PROBE_DIR
+    ? null
+    : join(homedir(), '.gemini', scratchName)
+const statePath = probeDir ? join(probeDir, 'fake-state.json') : (process.env.FAKE_ACP_STATE ?? '')
 // 同一个状态文件可能有几个进程在用（Gemini 的会话进程，见 session-agents.mts）：写的时候和盘上的合起来，
 // 不认识的会话号再读一次盘
 const onDisk = (): Record<string, Session> =>
@@ -606,6 +621,23 @@ async function handle(method: string, params: any): Promise<unknown> {
     case 'session/new': {
       if (process.env.FAKE_ACP_NEW_ERROR) throw { code: -32603, message: 'catalog offline' }
       const created = create(String(params?.cwd ?? '/'))
+      if (probeDir) {
+        mkdirSync(join(probeDir, 'conversations'))
+        writeFileSync(join(probeDir, 'conversations', `${created.sessionId}.db`), 'fake probe')
+        writeFileSync(join(probeDir, 'jetbox_summaries_proto.pb'), created.sessionId)
+        const auth = join(probeDir, 'cache', 'acp-auth-state.json')
+        const token = 'antigravity-oauth-token'
+        const probeToken = statSync(join(probeDir, token), { throwIfNoEntry: false })
+        const accountToken = statSync(join(homedir(), '.gemini', 'antigravity-cli', token), {
+          throwIfNoEntry: false,
+        })
+        log({
+          probeRecord: created.sessionId,
+          probeDir,
+          auth: existsSync(auth) ? JSON.parse(readFileSync(auth, 'utf8')) : null,
+          sameToken: !!probeToken && probeToken.ino === accountToken?.ino,
+        })
+      }
       await mountMcp(created.sessionId, params?.mcpServers)
       return { sessionId: created.sessionId, ...settings(created) }
     }
@@ -645,6 +677,7 @@ async function handle(method: string, params: any): Promise<unknown> {
       return settings(found)
     }
     case 'session/list':
+      if (probeDir) writeFileSync(join(probeDir, 'conversation_summaries.db'), 'fake summaries')
       if (process.env.FAKE_ACP_LIST_ERROR) throw { code: -32603, message: 'connection failed' }
       if (process.env.FAKE_ACP_AUTH_REQUIRED === '1')
         throw { code: -32000, message: 'Authentication required' }

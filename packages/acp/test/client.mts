@@ -97,6 +97,7 @@ export async function isolate(extra: Record<string, string> = {}): Promise<Isola
   const env: NodeJS.ProcessEnv = {
     PATH: process.env.PATH,
     HOME: root,
+    USERPROFILE: root,
     CHA_ACP_AGENT: 'acp',
     CHA_ACP_CLI: process.execPath,
     CHA_ACP_ARGS: `"${FAKE_AGENT}"`,
