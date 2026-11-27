@@ -3,8 +3,10 @@ import { join } from 'node:path'
 import type { HarnessDeclaration } from '../../protocol/src/harness-capabilities.mjs'
 import { HARNESS_IDENTITY } from '../../protocol/src/harness-identity.mjs'
 import { declaredExtensions } from '../../shared/src/harness-declaration.mjs'
+import type { JsonlLog } from '../../shared/src/log-file.mjs'
 import { applyNotificationOptOut } from '../../shared/src/notification-opt-out.mjs'
 import { ProtocolError, pageRecords } from '../../shared/src/protocol-contract.mjs'
+import { rpcEventLog } from '../../shared/src/rpc-log.mjs'
 import {
   CODEX_PROTOCOL_VERSION,
   codexUserAgent,
@@ -49,6 +51,22 @@ const capabilityKeys = [
   'features',
   'permissionPresets',
 ] as const
+
+// 动态加载的 ACP 构建有自己的日志模块，读不到这一层已经取走的环境变量。
+// 显式传记录器，且使用设备和客户端认得的会话 ID。
+const log = rpcEventLog
+const acpTimingLog: JsonlLog | null = log && {
+  ...log,
+  write(event, fields, level) {
+    const id = fields?.threadId
+    log.write(
+      event,
+      typeof id === 'string' ? { ...fields, threadId: encodeThread('acp', id) } : fields,
+      level,
+    )
+  },
+}
+
 export class AntigravityRouter implements Backend {
   readonly settings: RouterSettings
   private readonly options: RouterOptions
@@ -90,7 +108,8 @@ export class AntigravityRouter implements Backend {
       return Promise.resolve(this.sdk)
     }
     this.acp ??= (
-      this.options.acp?.() ?? loadAcp(this.settings.home, this.options.env ?? process.env)
+      this.options.acp?.() ??
+      loadAcp(this.settings.home, this.options.env ?? process.env, acpTimingLog)
     ).catch(() => {
       this.acp = undefined
       throw new ProtocolError(

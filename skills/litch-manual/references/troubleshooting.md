@@ -124,6 +124,9 @@ network-share folders are not supported in the files panel.
   this). Claude Code's `debug.jsonl` rotates at 50 MB and keeps 3 older files instead
   (`CHA_CLAUDE_DEBUG_LOG_MAX_BYTES`, `CHA_CLAUDE_DEBUG_LOG_KEEP`); the 7-day rule applies to it too. Logs left in the old places (`device/*.log`, `<harness>/*.log`, `claude-code/debug.jsonl`) by
   versions before this layout are no longer written.
+- For Antigravity subscription sessions, find the session ID in `logs/agy/rpc.jsonl`. The `acp.prompt.*`,
+  `acp.turn.ended` and `acp.request.*` entries show when a prompt and permission request started,
+  when they were answered, and how long they waited. These entries omit prompts, tool arguments and results.
 - The desktop app's own logs (`main.jsonl`, `core.jsonl`: requests to devices, connection changes, UI
   commands): `~/Library/Logs/Litch` on macOS, the app's logs folder elsewhere, same limits. On the
   local device, Settings → the device → Logs has buttons that open this folder and the device's log

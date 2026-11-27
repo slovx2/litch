@@ -4,7 +4,12 @@ import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { takeLogDir } from '../../shared/src/log-file.mjs'
 import { type ResolvedAgent, resolveAgent } from './agent.mjs'
-import { AcpConnection, AcpError, type RequestOutcome } from './connection.mjs'
+import {
+  AcpConnection,
+  AcpError,
+  type PermissionOutcome,
+  type RequestOutcome,
+} from './connection.mjs'
 import { type AgentCapabilities, capabilitiesOf } from './declaration.mjs'
 import { threadHookEnv } from './thread-hook-settings.mjs'
 import { versions } from './versions.mjs'
@@ -24,7 +29,7 @@ export interface RuntimeEvents {
     method: string,
     params: any,
     agent: AgentHandle,
-  ): ((outcome: RequestOutcome) => void) | undefined
+  ): ((outcome: RequestOutcome, permissionOutcome?: PermissionOutcome) => void) | undefined
   /** agent 反过来问我们（权限、文件、终端） */
   request(method: string, params: any, agent: AgentHandle, signal: AbortSignal): Promise<unknown>
   /** agent 发来的通知（session/update） */

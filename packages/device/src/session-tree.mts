@@ -16,6 +16,7 @@
 // 设置里“每回合收尾”和提醒都开着，设备进程替它再开一个 kind=remind 的回合。提醒回合、唤醒回合、定时任务的回合都不是用户发起的，
 // 不会再引出提醒，所以一条用户消息之后最多一次。提醒和唤醒排在同一条检查队列里（check），先提醒、后唤醒：
 // 会话有回合在跑时谁都不发，那个回合结束时再查一遍；提醒发出之前用户又说了话、或者别的回合里调了 wrap_up，提醒作废。
+// Antigravity 订阅会话不另开提醒回合；官方 ACP 会把提醒按普通提示处理，模型可能为找收尾工具而触发本地工具审批。
 // offer 卡（litch_sessions.start 的 initiation offer）：模型那次调用一直等着（offers），用户在卡上选了（answerOffer）、
 // 又发了话（turn/start、turn/steer）、打断了回合、回合结束了，都让它了结；选了新会话的（chosen）等模型 accept 补简报，
 // 回合结束还没补的当作在这里做。设备进程重启时上一次还在等的一律当作在这里做。
@@ -843,7 +844,7 @@ export class SessionTree {
         : undefined
     const wrapped = this.wrapped.delete(key)
     this.offersEnded(threadId, turn.id)
-    this.noteRemind(threadId, turn, userDriven, wrapped)
+    this.noteRemind(harness, threadId, turn, userDriven, wrapped)
     for (const listener of [...this.listeners]) listener(threadId)
     const lineage = this.store.parentOf(threadId)
     if (lineage && this.enabledFor(threadId) && this.store.markReported(threadId, turn.id))
@@ -937,6 +938,7 @@ export class SessionTree {
 
   /** 一个回合结束了：用户发起的、正常结束、没调 wrap_up 的，记下要提醒 */
   private noteRemind(
+    harness: string,
     threadId: string,
     turn: Record<string, unknown>,
     userDriven: boolean,
@@ -946,6 +948,8 @@ export class SessionTree {
     if (!userDriven) return
     // 新的用户回合结束了：之前没发出去的提醒由这一回合的结果取代
     this.reminders.delete(threadId)
+    // 收尾工具仍可在原回合里调用，避免只为提醒再跑一次可能需要人工审批的 ACP prompt。
+    if (harness === 'agy' && threadId.startsWith('agy:acp:')) return
     if (!wrapped && this.remindable(threadId, turn)) this.reminders.set(threadId, String(turn.id))
   }
 

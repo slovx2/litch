@@ -268,6 +268,9 @@ Antigravity 的 ACP 入口默认按 agy 配置审批。选择“完全访问”�
 模式后恢复 agy 的审批规则。没有一次性允许选项的请求仍显示审批卡，避免扩大为永久授权。
 不提供只读或工作区沙箱。命令审批的理由与命令相同时只显示一次。
 
+Antigravity 订阅会话可在用户回合里调用收尾工具。模型没调用时，Litch 不再追加“提醒收尾”回合，
+避免模型为了查找收尾工具而额外运行工具、请求审批。
+
 ACP 在回合外推来的正文会显示为“后台续跑”，不再等下一条用户消息。Antigravity 1.5.x 的
 ACP 入口可能在父回合结束后停止推送子智能体结果；Litch 只在观察到 `invoke_subagent`
 且父回合正常结束后，显示“子智能体可能仍在运行”，并在空闲期间回读历史。回读间隔从
@@ -283,6 +286,9 @@ configuration nor process flags. Switching between Full access and native modes 
 the next request, even during a turn. Requests without an allow-once option still ask; Litch never
 silently chooses a persistent grant. No read-only or workspace sandbox is provided. Duplicate
 command titles are omitted from approval reasons on desktop and mobile.
+
+Antigravity subscription sessions can use the wrap-up tool during the user turn. If the model skips
+it, Litch does not start a reminder turn that could trigger extra tool approvals.
 
 ACP output received between turns appears as a background continuation. Antigravity 1.5.x may
 stop forwarding subagent output after the parent turn ends. After an observed `invoke_subagent`

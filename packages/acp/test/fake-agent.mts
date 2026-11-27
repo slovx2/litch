@@ -16,7 +16,11 @@ const log = (entry: object) => {
   if (path) appendFileSync(path, `${JSON.stringify({ pid: process.pid, ...entry })}\n`)
 }
 // 进程起来时记一行：它环境里的会话号文件（Gemini 会话自己的进程才有，见 session-agents.mts）
-log({ started: true, threadFile: process.env.LITCH_THREAD_ID_FILE ?? null })
+log({
+  started: true,
+  threadFile: process.env.LITCH_THREAD_ID_FILE ?? null,
+  hasLogDir: 'LITCH_LOG_DIR' in process.env,
+})
 
 interface Session {
   sessionId: string

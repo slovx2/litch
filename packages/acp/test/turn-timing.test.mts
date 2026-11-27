@@ -176,7 +176,7 @@ test('传输边界：同批通知早于 prompt 应答，反向请求记录实际
         release = resolve
       }),
     notification: (_method, params) => timing.update(params.update),
-    requestTiming: (id, method) => timing.request(id, method),
+    requestTiming: (requestId, method) => timing.request({ requestId, method }),
   })
   set(10)
   const prompt = connection.request('session/prompt', {}, undefined, timing.prompt(1))
@@ -215,6 +215,7 @@ test('传输边界：同批通知早于 prompt 应答，反向请求记录实际
   )
   assert.equal(rows.find((r) => r.event === 'acp.request.ended').durationMs, 30)
   assert.equal(rows.find((r) => r.event === 'acp.first_text').promptMs, 90)
+  assert.equal(rows.at(-1).stopReason, 'end_turn')
   const second = connection.request('session/prompt', {}, undefined, timing.prompt(1))
   input.write('{"id":"pending","method":"terminal/wait_for_exit"}\n')
   connection.close(new Error('秘密错误'))
@@ -250,11 +251,12 @@ test('错误、超时及本地停止后迟到的 prompt 应答不丢失也不冒
     if (mode === 'error') input.write('{"id":1,"error":{"code":-32603,"message":"秘密"}}\n')
     if (mode === 'late') {
       timing.finish('interrupted')
-      input.write('{"id":1,"result":{}}\n')
+      input.write('{"id":1,"result":{"stopReason":"秘密"}}\n')
       await response
     } else await assert.rejects(response)
     assert.equal(rows.filter((r) => r.event === 'acp.prompt.ended').length, 1)
     assert.equal(rows.at(-1).outcome, mode === 'late' ? 'ok' : mode)
+    assert.equal(rows.at(-1).stopReason, undefined)
     connection.close(new Error('结束'))
   }
 })
