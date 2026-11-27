@@ -94,9 +94,9 @@ export class AcpRuntime {
   }
 
   /** 要用 agent：没起就起一个，等握手完 */
-  agent(): Promise<AgentHandle> {
+  agent(resolved?: ResolvedAgent): Promise<AgentHandle> {
     if (this.running && !this.running.connection.closed) return Promise.resolve(this.running)
-    this.starting ??= this.start().finally(() => {
+    this.starting ??= this.start(resolved).finally(() => {
       this.starting = null
     })
     return this.starting
@@ -116,8 +116,7 @@ export class AcpRuntime {
     } catch {}
   }
 
-  private async start(): Promise<AgentHandle> {
-    const resolved = resolveAgent(this.env)
+  private async start(resolved = resolveAgent(this.env)): Promise<AgentHandle> {
     mkdirSync(this.home, { recursive: true, mode: 0o700 })
     const [command, ...args] = resolved.argv as [string, ...string[]]
     this.log(`\n[${new Date().toISOString()}] 启动 ${resolved.argv.join(' ')}\n`)

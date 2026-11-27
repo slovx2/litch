@@ -61,6 +61,7 @@ export async function control(s: AcpServer, method: string, params: any): Promis
   if (method === 'litch/acp/auth/logout') {
     if (!agent.caps.logout) throw new ProtocolError(-32601, 'agent 没有声明 logout')
     await s.ask(agent, 'logout', {})
+    s.invalidateAgyCatalog()
     return {}
   }
   if (!['litch/acp/config/read', 'litch/acp/config/set'].includes(method))
