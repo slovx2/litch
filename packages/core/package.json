@@ -1,6 +1,6 @@
 {
   "name": "@litch/core",
-  "version": "0.51.2",
+  "version": "0.51.3",
   "private": true,
   "type": "module",
   "license": "MIT",
