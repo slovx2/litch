@@ -81,7 +81,7 @@ function SuggestionMeta({
           dateTime={new Date(proposal.createdAt).toISOString()}
           title={stampFull(proposal.createdAt, t.lang)}
         >
-          {agoLong(proposal.createdAt, now, t.lang)}
+          {agoLong(proposal.createdAt, now, t)}
         </time>
       </span>
     </div>

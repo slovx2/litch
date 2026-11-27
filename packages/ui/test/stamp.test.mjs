@@ -2,8 +2,9 @@
 // 不是今年再带年；回合结束的时刻是开始加用时。时刻都按本地时间建，换时区跑结果一样。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { translator } from '../src/i18n/index.ts'
 
-const { stamp, stampFull, turnEnded } = await import('../src/app/format.ts')
+const { agoLong, stamp, stampFull, turnEnded } = await import('../src/app/format.ts')
 
 const at = (y, m, d, h = 14, min = 32) => new Date(y, m - 1, d, h, min).getTime()
 const now = at(2026, 10, 27, 20, 0)
@@ -35,12 +36,21 @@ test('回合结束的时刻：开始加用时；在跑的、缺一样的是 null
   assert.equal(turnEnded({ status: 'completed', startedAt: start, durationMs: null }), null)
 })
 
-test('卡片上的多久以前写全：分钟前、小时前、天前，一周以上换成日期时刻', async () => {
-  const { agoLong } = await import('../src/app/format.ts')
+test('没有 RelativeTimeFormat 时仍能显示近期建议的创建时间', (context) => {
+  const descriptor = Object.getOwnPropertyDescriptor(Intl, 'RelativeTimeFormat')
+  context.after(() => Object.defineProperty(Intl, 'RelativeTimeFormat', descriptor))
+  delete Intl.RelativeTimeFormat
+  const zh = translator('zh-CN')
+  const en = translator('en')
   const minute = 60_000
-  assert.equal(agoLong(now - 7 * minute, now, 'zh-CN'), '7分钟前')
-  assert.equal(agoLong(now - 7 * minute, now, 'en'), '7 minutes ago')
-  assert.equal(agoLong(now - 3 * 60 * minute, now, 'zh-CN'), '3小时前')
-  assert.equal(agoLong(now - 10_000, now, 'en'), 'now')
-  assert.equal(agoLong(at(2026, 10, 20), now, 'zh-CN'), stamp(at(2026, 10, 20), now, 'zh-CN'))
+  const day = 24 * 60 * minute
+  const proposal = { createdAt: now - 7 * minute }
+  assert.equal(agoLong(proposal.createdAt, now, zh), '7分钟前')
+  assert.equal(agoLong(proposal.createdAt, now, en), '7 minutes ago')
+  assert.equal(agoLong(now - minute, now, en), '1 minute ago')
+  assert.equal(agoLong(now - (6 * 60 + 16) * minute, now, zh), '6小时前')
+  assert.equal(agoLong(now - 10_000, now, en), 'now')
+  assert.equal(agoLong(now - day, now, en), 'yesterday')
+  assert.equal(agoLong(now - 2 * day, now, zh), '前天')
+  assert.equal(agoLong(now - 7 * day, now, zh), stamp(now - 7 * day, now, zh.lang))
 })
