@@ -20,6 +20,7 @@ import {
   type ClientToolDetachedCallParams,
   clientToolFailure,
   isClientToolNamespace,
+  UNATTENDED_COMPUTER_SELF,
 } from '../../../protocol/src/client-tools.mjs'
 import { CONFIG_NAMESPACE, CONFIG_TOOL } from '../../../protocol/src/client-tools-config.mjs'
 import type { JsonRpcId } from '../../../protocol/src/index.mjs'
@@ -104,6 +105,7 @@ export interface ToolCallsHost {
   uploadRead?(params: UploadReadParams): Promise<UploadReadResult>
   fullAccess?(threadId: string): Promise<boolean>
   deferredAccess?: {
+    available(): boolean
     submit(request: DeferredAccessRequest): Promise<boolean>
     use(threadId: string, subject: AccessSubject): boolean
     clear(threadId?: string): void
@@ -301,10 +303,12 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
       )
     }
     const id = `${host.deviceId}:${++seq}`
-    // 登录须本人完成，站点与应用授权可以脱离当前回合。
+    // 登录须本人完成；只给协商了新卡的连接异步提交站点授权。
     const unattended = params.litchUnattended?.notice || null
+    const deferred = host.deferredAccess?.available() ? host.deferredAccess : undefined
     if (
       unattended &&
+      deferred &&
       namespace === CLIENT_TOOL_NAMESPACE.browser &&
       params.tool === 'request_sign_in'
     )
@@ -320,7 +324,11 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
         entry,
         clientToolFailure(
           'unattended',
-          'Litch could not submit an unattended approval for this action. Ask the user to resolve the restriction in Litch. Do not retry repeatedly or use another route.',
+          what === 'computerSelf'
+            ? UNATTENDED_COMPUTER_SELF
+            : !deferred && unattended
+              ? unattended
+              : 'Litch could not submit an unattended approval for this action. Ask the user to resolve the restriction in Litch. Do not retry repeatedly or use another route.',
         ),
       )
     }
@@ -386,6 +394,10 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
           result: (response) => finish(entry, response),
           ask(askId, ask) {
             if (running.get(id) !== entry) return
+            if (unattended && ask.kind === 'computerSelf') {
+              refuse(entry, ask.kind)
+              return
+            }
             if (
               namespace === CLIENT_TOOL_NAMESPACE.browser &&
               invocation.fullAccess &&
@@ -404,14 +416,14 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
             }
             if (unattended) {
               const subject = accessSubject(ask, params.tool, params.arguments)
-              if (subject?.namespace === namespace && host.deferredAccess) {
-                if (host.deferredAccess.use(params.threadId, subject)) {
+              if (subject?.namespace === namespace && deferred) {
+                if (deferred.use(params.threadId, subject)) {
                   host.hub.answer(askId, 'once')
                   return
                 }
                 if (submitting) return
                 submitting = true
-                void host.deferredAccess
+                void deferred
                   .submit({
                     threadId: params.threadId,
                     turnId: params.turnId,
@@ -491,11 +503,7 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
           },
         })
       }
-      if (
-        (namespace === CLIENT_TOOL_NAMESPACE.browser ||
-          (namespace === CLIENT_TOOL_NAMESPACE.computer && !!unattended)) &&
-        host.fullAccess
-      ) {
+      if (namespace === CLIENT_TOOL_NAMESPACE.browser && host.fullAccess) {
         void host
           .fullAccess(params.threadId)
           .catch(() => false)

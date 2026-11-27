@@ -2,13 +2,16 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
   renameSync,
+  statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -16,7 +19,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { MACHINE_LIMITS } from '../../protocol/src/client-tools-machine.mjs'
 import type { LookedPath, ToolKit } from '../src/device/machine/common.mjs'
-import { freezeCopy, runFrozenCopy } from '../src/device/machine/copy-frozen.mjs'
+import { copyTimeoutMs, freezeCopy, runFrozenCopy } from '../src/device/machine/copy-frozen.mjs'
 import type { RunExit, Runner } from '../src/device/machine/runner.mjs'
 import type { MachineTarget } from '../src/device/machine/types.mjs'
 import { fakeClock } from './helpers.mjs'
@@ -34,8 +37,10 @@ test('冻结复制拒绝超限、文件内容和目标替换；成功时只发�
   })
   const dir = join(root, 'dest')
   mkdirSync(dir)
+  const sourceDir = join(root, 'source')
+  mkdirSync(sourceDir)
   const data = Buffer.from([0, 9, 15, 22, 167, 1, 0, 86, 255, 75])
-  const source = join(root, 'source.bin')
+  const source = join(sourceDir, 'source.bin')
   const dest = join(dir, 'dest.bin')
   writeFileSync(source, data)
   let subprocesses = 0
@@ -69,6 +74,7 @@ test('冻结复制拒绝超限、文件内容和目标替换；成功时只发�
           })
         }),
         kill: () => {
+          child.stdin.destroy()
           child.kill('SIGTERM')
         },
         write: (bytes, end) =>
@@ -120,6 +126,14 @@ test('冻结复制拒绝超限、文件内容和目标替换；成功时只发�
   await assert.rejects(runFrozenCopy(kit, from, to, frozen, 8), /approved source changed/)
   assert.equal(existsSync(dest), false)
   writeFileSync(source, data)
+  const movedSource = join(root, 'moved-source')
+  renameSync(sourceDir, movedSource)
+  symlinkSync(movedSource, sourceDir)
+  // 即使旧 inode 和 SHA-256 都相同，也不能通过被换成链接的父目录读取。
+  await assert.rejects(freezeCopy(kit, from, to, 8))
+  await assert.rejects(runFrozenCopy(kit, from, to, frozen, 8), /approved source changed/)
+  renameSync(sourceDir, join(root, 'replaced-source'))
+  renameSync(movedSource, sourceDir)
   renameSync(dir, join(root, 'previous'))
   mkdirSync(dir)
   assert.notEqual((await freezeCopy(kit, from, to, 8)).fingerprint, frozen.fingerprint)
@@ -129,9 +143,46 @@ test('冻结复制拒绝超限、文件内容和目标替换；成功时只发�
   await assert.rejects(freezeCopy(kit, from, endpoint('desktop', dest, 'f', data.length), 8))
   const final = join(dir, 'final.bin')
   const valid = endpoint('desktop', final, 'm', 0)
+  const stage = (suffix: string, marker: string, expired: boolean) => {
+    const path = join(dir, `.litch-copy.v1.${suffix}`)
+    mkdirSync(path, { mode: 0o700 })
+    writeFileSync(join(path, 'part'), 'residue')
+    writeFileSync(join(path, 'owner'), marker)
+    if (expired) {
+      const time = new Date(Date.now() - 25 * 3_600_000)
+      utimesSync(join(path, 'owner'), time, time)
+    }
+    return path
+  }
+  const expired = stage('OLDABC0001', 'Litch deferred copy v1', true)
+  const ongoing = stage('CURABC0001', 'Litch deferred copy v1', false)
+  const unrelated = stage('USRABC0001', 'user file', true)
+  const legacy = join(dir, '.litch-copy.legacy')
+  writeFileSync(legacy, 'unmarked')
   assert.equal(
     await runFrozenCopy(kit, from, valid, await freezeCopy(kit, from, valid, 8), 8),
     data.length,
   )
   assert.deepEqual(readFileSync(final), data)
+  assert.equal(statSync(final).mode & 0o777, 0o666 & ~process.umask())
+  assert.equal(existsSync(expired), false)
+  assert.equal(readFileSync(join(ongoing, 'part'), 'utf8'), 'residue')
+  assert.equal(readFileSync(join(unrelated, 'part'), 'utf8'), 'residue')
+  assert.equal(readFileSync(legacy, 'utf8'), 'unmarked')
+
+  writeFileSync(final, 'old')
+  chmodSync(final, 0o751)
+  const overwrite = endpoint('desktop', final, 'f', 3)
+  assert.equal(
+    await runFrozenCopy(kit, from, overwrite, await freezeCopy(kit, from, overwrite, 8), 8),
+    data.length,
+  )
+  assert.deepEqual(readFileSync(final), data)
+  assert.equal(statSync(final).mode & 0o777, 0o751)
+})
+
+test('复制运行时间随文件增长，100 MiB 留出 128 KiB/s 与 100 秒固定余量', () => {
+  assert.equal(copyTimeoutMs(0), 100_000)
+  assert.equal(copyTimeoutMs(MACHINE_LIMITS.deferredCopyBytes), 900_000)
+  assert.ok(copyTimeoutMs(64 * 1024) < copyTimeoutMs(8 * 1024 ** 2))
 })

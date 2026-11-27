@@ -67,7 +67,6 @@ export interface ClientToolSignInAccount {
 export type ClientToolAsk =
   | { kind: 'browserDownload'; filename: string; origin: string; totalBytes: number | null }
   | { kind: 'computerSelf'; id: string; nonce: string; desktopId: string | null }
-  | { kind: 'computerApp'; app: string; pid: number }
   | {
       kind: 'site'
       /** 要访问的网站来源，比如 https://example.com */

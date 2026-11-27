@@ -86,11 +86,7 @@ export function locateHelper(where: {
 }
 
 export function createComputerUse(options: ComputerUseOptions) {
-  const selfGuard = new ComputerSelfGuard(
-    join(options.userData, 'computer-self-approval.json'),
-    Date.now,
-    options.platform,
-  )
+  const selfGuard = new ComputerSelfGuard(join(options.userData, 'computer-self-approval.json'))
   let lang = options.lang
   const windows = options.platform === 'win32'
   const launcher: HelperLauncher = windows

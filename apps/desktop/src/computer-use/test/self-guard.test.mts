@@ -52,8 +52,7 @@ function fixture(
       calls.push({ method, params })
       if (method === 'inspectTarget') return { self: protectedTarget(params.app), pid: 42 }
       if (method === 'permissions') return { accessibility: true, screenRecording: true }
-      if (method === 'listApps')
-        return { apps: [{ name: 'TextEdit', bundleId: 'com.apple.TextEdit', pid: 42 }] }
+      if (method === 'listApps') return { apps: [] }
       if (method === 'getAppState')
         return {
           app: { name: 'Litch', bundleId: 'io.github.slovx2.litch' },
@@ -128,24 +127,35 @@ test('自身每种输入与观察都先问；拒绝不读窗口不发送输入�
   assert.equal(f.asks.length, 8)
 })
 
-test('无人值守的普通应用在观察前询问已解析的身份；完全访问与已有自身授权直接通过', async () => {
+test('无人值守普通应用仍直接执行；已有授权和完全访问都不能操作 Litch 自身', async () => {
   const f = fixture()
   const app = { ...invocation('get_app_state', 'TextEdit'), unattended: true }
   f.setAnswer(null)
-  assert.equal((await f.run(app)).success, false)
-  assert.deepEqual(f.asks, [{ kind: 'computerApp', app: 'TextEdit (com.apple.TextEdit)', pid: 42 }])
-  assert.deepEqual(f.inputs(), [], '尚未授权，不读取任何窗口')
-  f.setAnswer('once')
   assert.equal((await f.run(app)).success, true)
+  assert.deepEqual(f.asks, [])
   assert.equal(f.inputs()[0]?.params.targetPid, 42)
-  const asked = f.asks.length
-  assert.equal((await f.run({ ...app, fullAccess: true })).success, true)
-  assert.equal(f.asks.length, asked)
   f.setAnswer('always')
   await f.run()
   const selfAsked = f.asks.length
-  f.setAnswer(null)
-  assert.equal((await f.run({ ...invocation(), unattended: true })).success, true)
+  const inputs = f.inputs().length
+  for (const fullAccess of [false, true]) {
+    const refusal = await f.run({ ...invocation(), unattended: true, fullAccess })
+    assert.equal(refusal.success, false)
+    assert.match(JSON.stringify(refusal), /\[litch:unattended\].*requires the user to be present/)
+  }
+  const batch = await f.run({
+    ...invocation('run_actions'),
+    unattended: true,
+    arguments: {
+      actions: [
+        { tool: 'click', arguments: { app: 'TextEdit', x: 10, y: 10 } },
+        { tool: 'click', arguments: { app: 'Litch', x: 10, y: 10 } },
+      ],
+    },
+  })
+  assert.equal(batch.success, false)
+  assert.match(JSON.stringify(batch), /\[litch:unattended\].*requires the user to be present/)
+  assert.equal(f.inputs().length, inputs, '硬拒绝发生在批次的首个动作之前')
   assert.equal(f.asks.length, selfAsked)
 })
 

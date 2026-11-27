@@ -602,7 +602,7 @@ test('执行器在别处等人（hold）：停表，不等了表从头算', asyn
   assert.deepEqual(main?.of('cancel'), [{ type: CLIENT_TOOL, op: 'cancel', id }])
 })
 
-test('UNATTENDED-CORE-001：无法提交异步授权的工具明确拒绝，不停表等人', async () => {
+test('UNATTENDED-CORE-001：旧设备未协商异步授权，沿用原拒绝说明且不等人', async () => {
   const notice = 'Litch is running this session unattended (test).'
   for (const op of ['ask', 'hold'] as const) {
     const { core, main, call, summary } = setup()
@@ -621,7 +621,7 @@ test('UNATTENDED-CORE-001：无法提交异步授权的工具明确拒绝，不�
     else main?.reply({ op: 'hold', id, held: true })
     const result = resultOf(await answer)
     assert.equal(result?.success, false)
-    assert.match(result?.contentItems[0]?.text ?? '', /^\[litch:unattended\].*Do not retry/)
+    assert.equal(result?.contentItems[0]?.text, `[litch:unattended] ${notice}`)
     assert.deepEqual(main?.of('cancel'), [{ type: CLIENT_TOOL, op: 'cancel', id }])
     // 没出卡：侧栏不标等待，卡片按“取消”回给执行器
     assert.notEqual(summary()?.waitingFor, 'approval')

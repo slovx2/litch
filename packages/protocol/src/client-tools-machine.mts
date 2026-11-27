@@ -47,6 +47,8 @@ export const MACHINE_LIMITS = {
   copyBytes: 2 * 1024 * 1024 * 1024,
   /** 待批准的单个二进制或文本文件 */
   deferredCopyBytes: 100 * 1024 * 1024,
+  /** 足够覆盖下限 128 KiB/s 加 100 秒余量。 */
+  deferredCopyMaxMs: 900_000,
 } as const
 
 // —— 各工具的参数（和下面的 inputSchema 一致；执行器收到后自己校验，不信任这里） ——

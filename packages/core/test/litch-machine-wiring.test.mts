@@ -9,6 +9,7 @@ import { withDeveloperInstructions } from '../../protocol/src/codex-developer-in
 import type { JsonRpcMessage, Thread } from '../../protocol/src/index.mjs'
 import {
   MACHINE_APPROVAL_METHOD as MACHINE,
+  MACHINE_APPROVAL_CONTROLS,
   MACHINE_APPROVAL_SIGNING,
   type MachineApprovalCard,
   type MachinePhoneAnswer,
@@ -190,6 +191,7 @@ function setup(
     desktop?: MachineFacts
     timed?: boolean
     deferred?: boolean
+    extended?: boolean
     signing?: MachineApprovalSigner
   } = {},
 ) {
@@ -268,7 +270,9 @@ function setup(
   const deferredCalls: { method: string; params: unknown }[] = []
   if (options.deferred) {
     aggregate.device.extensions.push('machineApprovals')
-    if (options.signing) aggregate.device.extensions.push(MACHINE_APPROVAL_SIGNING)
+    if (options.signing || options.extended)
+      aggregate.device.extensions.push(MACHINE_APPROVAL_SIGNING)
+    if (options.extended) aggregate.device.extensions.push(MACHINE_APPROVAL_CONTROLS)
     remoteHandlers[MACHINE.list] = () => ({ cards: [] })
     for (const method of [MACHINE.open, MACHINE.start, MACHINE.finish])
       remoteHandlers[method] = (params) => {
@@ -810,7 +814,16 @@ test('审批·每个会话确认一次（默认）：执行、读各弹一次，
 test('UNATTENDED-MACHINE-001：关闭时提示用户启用；已有授权照常执行', async () => {
   const notice = 'Litch is running this session unattended (test).'
   const litchUnattended = { notice }
-  const world = await started()
+  const older = await started()
+  assert.equal(
+    textOf(await older.call({ command: 'ls' }, { litchUnattended })),
+    `[litch:unattended] ${notice}`,
+  )
+  await older.enable()
+  await older.call({ command: 'make' }, { litchUnattended })
+  assert.deepEqual(older.fake.outcomes, [{ kind: 'unattended', message: notice }])
+  assert.equal(older.activity.view?.deferred?.length ?? 0, 0)
+  const world = await started({ deferred: true, extended: true })
   const session = watchSession(world.core, 'a', 'box')
   // 开关关着：不出开启卡
   const off = textOf(await world.call({ command: 'ls' }, { litchUnattended }))
@@ -822,9 +835,6 @@ test('UNATTENDED-MACHINE-001：关闭时提示用户启用；已有授权照常�
   const cli = textOf(await world.detached({ command: 'ls' }, { threadId: 'a', litchUnattended }))
   assert.match(cli, /^\[litch:disabled\].*Only the user can enable/)
   await world.enable()
-  // 要审批的：不出卡，执行器拿到 unattended 的结果（真执行器照 common.mts 回 [litch:unattended] 这句话）
-  await world.call({ command: 'make' }, { litchUnattended })
-  assert.deepEqual(world.fake.outcomes, [{ kind: 'unattended', message: notice }])
   assert.equal(cardsOf(session).length, 0)
   // 先在有人的回合里给了“本会话都允许”：无人值守时已放行的照常执行
   const attended = world.call({ command: 'make' })

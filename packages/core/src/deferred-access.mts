@@ -59,18 +59,6 @@ export function accessSubject(
     always,
   })
   switch (ask.kind) {
-    case 'computerSelf':
-      return subject(
-        'litch_computer',
-        { app: 'Litch', access: 'Can read from and interact with Litch itself.' },
-        'Litch',
-        true,
-      )
-    case 'computerApp':
-      return {
-        ...subject('litch_computer', { app: ask.app, pid: ask.pid }, ask.app, true),
-        key: ask.app,
-      }
     case 'site':
       return subject(
         'litch_browser',

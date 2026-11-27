@@ -570,6 +570,7 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
     async call(deviceId, input, session) {
       const owner = { deviceId, threadId: input.threadId, harness: input.harness }
       let settings = host.settings(deviceId)
+      const extended = host.extendedAvailable?.(deviceId) === true
       if (!settings.enabled && host.device(deviceId) && !input.signal.aborted && input.unattended) {
         // 开启确认也是等人答：无人值守时不出卡，按没开启记一笔，回给模型无人值守的说明
         addLog(deviceId, owner, {
@@ -578,7 +579,9 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
           result: 'disabled',
           flagged: false,
         })
-        return clientToolFailure('disabled', MACHINE_DISABLED)
+        return extended
+          ? clientToolFailure('disabled', MACHINE_DISABLED)
+          : clientToolFailure('unattended', input.unattended)
       }
       if (!settings.enabled && host.device(deviceId) && !input.signal.aborted) {
         const key =
@@ -644,17 +647,18 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
           [desktopTarget(), sessionTarget(deviceId)].filter(
             (target): target is MachineTarget => target !== null,
           ),
-        policy: input.unattended
-          ? {
-              ...policy,
-              denied: [...new Set([...sensitivePresets(host.desktop), ...policy.denied])],
-            }
-          : policy,
+        policy:
+          input.unattended && extended
+            ? {
+                ...policy,
+                denied: [...new Set([...sensitivePresets(host.desktop), ...policy.denied])],
+              }
+            : policy,
         settings: { approval: settings.approval, access: settings.access.mode },
         approve: approver(deviceId, input, session),
         log: (note: MachineLogNote) => addLog(deviceId, owner, note),
         signal: input.signal,
-        unattended: !!input.unattended,
+        unattended: !!input.unattended && extended,
         ...(host.hashBytes ? { hashBytes: host.hashBytes } : {}),
       }
       const source = host.device(deviceId)?.link
@@ -673,7 +677,7 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
         context.approve = async (request) => {
           const result = await check(request)
           if (result.kind !== 'unattended') return result
-          if (request.ask.action === 'copy' && !host.extendedAvailable?.(deviceId)) return result
+          if (request.ask.action === 'copy' && !extended) return result
           const prepared = await request.prepare?.()
           const frozen = prepared?.fingerprint ?? request.fingerprint
           if (!frozen) return result

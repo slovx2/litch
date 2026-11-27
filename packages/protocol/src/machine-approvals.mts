@@ -45,7 +45,7 @@ export interface MachineApprovalCard {
   retry?: { namespace: MachineAccessNamespace; always: boolean }
 }
 
-export type MachineAccessNamespace = 'litch_machine' | 'litch_computer' | 'litch_browser'
+export type MachineAccessNamespace = 'litch_machine' | 'litch_browser'
 
 export const isExtendedMachineApproval = (action: MachineApprovalCard['action']) =>
   action === 'copy' || action === 'access'
@@ -53,9 +53,7 @@ export const isExtendedMachineApproval = (action: MachineApprovalCard['action'])
 export function isMachineRetry(value: unknown): value is NonNullable<MachineApprovalCard['retry']> {
   return (
     isRecord(value) &&
-    (value.namespace === 'litch_machine' ||
-      value.namespace === 'litch_computer' ||
-      value.namespace === 'litch_browser') &&
+    (value.namespace === 'litch_machine' || value.namespace === 'litch_browser') &&
     typeof value.always === 'boolean'
   )
 }

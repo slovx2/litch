@@ -2,8 +2,14 @@
 import { MACHINE_LIMITS } from '../../../../protocol/src/client-tools-machine.mjs'
 import { decodeUtf8 } from '../../text/bytes.mjs'
 import { ArgumentError, type LookedPath, type ToolKit } from './common.mjs'
+import {
+  copyDestProbe,
+  copyDestWrite,
+  copySourceProbe,
+  copySourceRead,
+} from './copy-frozen-scripts.mjs'
 import { lastPart, parentOf } from './paths.mjs'
-import { runScript, scriptsFor } from './scripts.mjs'
+import { runScript } from './scripts.mjs'
 import type { MachineFacts, MachineTarget } from './types.mjs'
 
 interface Endpoint {
@@ -14,82 +20,10 @@ interface Endpoint {
 }
 
 const sh = (script: string, ...args: string[]) => ['/bin/sh', '-c', script, 'litch', ...args]
-const stat = `file_id() {
-  if [ -x /usr/bin/sha256sum ]; then
-    /usr/bin/stat -c '%d:%i:%f:%s:%y:%z' -- "$1"
-  else
-    /usr/bin/stat -f '%d:%i:%p:%z:%.9Fm:%.9Fc' -- "$1"
-  fi
-}
-dir_id() {
-  if [ -x /usr/bin/sha256sum ]; then
-    /usr/bin/stat -c '%d:%i:%f' -- "$1"
-  else
-    /usr/bin/stat -f '%d:%i:%p' -- "$1"
-  fi
-}
-file_hash() {
-  if [ -x /usr/bin/sha256sum ]; then /usr/bin/sha256sum; else /usr/bin/shasum -a 256; fi
-}`
-
-const sourceProbe = `set -eu
-${stat}
-[ -f "$1" ] && [ ! -L "$1" ] || exit 1
-before=$(file_id "$1")
-hash=$(/usr/bin/head -c "$2" "$1" | file_hash)
-printf '%s\n%s\n' "$before" "\${hash%% *}"
-i=0
-while [ "$i" -lt "$4" ]; do
-  hash=$(/bin/dd if="$1" bs="$3" skip="$i" count=1 2>/dev/null | file_hash)
-  printf '%s\n' "\${hash%% *}"
-  i=$((i+1))
-done
-[ -f "$1" ] && [ ! -L "$1" ] && [ "$(file_id "$1")" = "$before" ] || exit 1`
-
-const destination = `destination_id() {
-  if [ ! -e "$1" ] && [ ! -L "$1" ]; then printf absent
-  elif [ -f "$1" ] && [ ! -L "$1" ]; then file_id "$1"
-  else return 1
-  fi
-}`
-
-const destProbe = `set -eu
-${stat}
-${destination}
-cd -P -- "$1"
-[ "$(pwd -P)" = "$1" ]
-[ ! -L "$3" ]
-parent=$(dir_id .)
-dest=$(destination_id "./$2")
-printf '%s\n%s\n' "$parent" "$dest"`
-
-const write = `set -eu
-${stat}
-${destination}
-cd -P -- "$1"
-name=./$2
-check_dest() {
-  [ "$(pwd -P)" = "$1" ] && [ "$(dir_id .)" = "$3" ] &&
-  [ "$(dir_id "$1")" = "$3" ] && [ "$(destination_id "$name")" = "$4" ]
-}
-check_dest "$@"
-temp=$(/usr/bin/mktemp ./.litch-copy.XXXXXXXXXX)
-trap '/bin/rm -f -- "$temp"' EXIT
-trap 'exit 1' HUP INT TERM
-/bin/cat > "$temp"
-[ "$(/usr/bin/wc -c < "$temp" | /usr/bin/tr -d '[:space:]')" = "$5" ]
-hash=$(file_hash < "$temp")
-[ "\${hash%% *}" = "$6" ]
-check_dest "$@"
-if [ -x /usr/bin/sha256sum ]; then
-  if [ "$4" = absent ]; then /bin/ln -T -- "$temp" "$name"; else /bin/mv -fT -- "$temp" "$name"; fi
-else
-  # BSD ln/mv 会把突然出现的目录当成容器。直接用系统调用发布确切文件名。
-  /usr/bin/perl -e 'exit(($ARGV[0] eq "absent" ? link($ARGV[1], $ARGV[2]) : rename($ARGV[1], $ARGV[2])) ? 0 : 1)' "$4" "$temp" "$name"
-fi`
-
 interface FrozenCopy {
   source: string
+  sourceParentIdentity: string
+  sourceIdentity: string
   directory: string
   name: string
   parentIdentity: string
@@ -100,6 +34,10 @@ interface FrozenCopy {
   fingerprint: string
   details: string
 }
+
+const atTransferRateMs = (bytes: number) => Math.ceil((bytes / (128 * 1024)) * 1000)
+export const copyTimeoutMs = (bytes: number) =>
+  Math.min(100_000 + atTransferRateMs(bytes), MACHINE_LIMITS.deferredCopyMaxMs)
 
 export async function freezeCopy(
   kit: ToolKit,
@@ -136,21 +74,31 @@ export async function freezeCopy(
     runScript(
       kit.runner,
       from.target,
-      sh(sourceProbe, source, String(size + 1), String(chunkBytes), String(chunks)),
+      sh(
+        copySourceProbe,
+        parentOf(source),
+        lastPart(source),
+        String(size + 1),
+        String(chunkBytes),
+        String(chunks),
+      ),
       {
         collect: 4096,
         timeoutMs: 30_000,
       },
     ),
-    runScript(kit.runner, to.target, sh(destProbe, directory, name, to.looked.path), {
+    runScript(kit.runner, to.target, sh(copyDestProbe, directory, name, to.looked.path), {
       collect: 1024,
     }),
   ])
-  const [sourceIdentity, hash, ...chunkHashes] = decodeUtf8(src.stdout).trim().split('\n')
+  const [sourceParentIdentity, sourceIdentity, hash, ...chunkHashes] = decodeUtf8(src.stdout)
+    .trim()
+    .split('\n')
   const [parentIdentity, destinationIdentity] = decodeUtf8(dst.stdout).trim().split('\n')
   if (
     src.overflow ||
     dst.overflow ||
+    !sourceParentIdentity ||
     !sourceIdentity ||
     !hash ||
     !/^[0-9a-f]{64}$/.test(hash) ||
@@ -178,6 +126,7 @@ export async function freezeCopy(
     from.facts.hostname,
     from.looked.path,
     from.looked.rules,
+    sourceParentIdentity,
     sourceIdentity,
     to.target.id,
     to.facts.hostname,
@@ -190,6 +139,8 @@ export async function freezeCopy(
   ])
   return {
     source,
+    sourceParentIdentity,
+    sourceIdentity,
     directory,
     name,
     parentIdentity,
@@ -215,7 +166,7 @@ export async function runFrozenCopy(
   const writer = await kit.runner.run(
     to.target,
     sh(
-      write,
+      copyDestWrite,
       copy.directory,
       copy.name,
       copy.parentIdentity,
@@ -223,7 +174,12 @@ export async function runFrozenCopy(
       String(copy.size),
       copy.hash,
     ),
-    { cwd: to.facts.home, stdin: true, timeoutMs: 100_000 },
+    {
+      cwd: to.facts.home,
+      stdin: true,
+      timeoutMs: copyTimeoutMs(copy.size),
+      writeTimeoutMs: 20_000 + atTransferRateMs(chunkBytes),
+    },
   )
   let running = true
   const stop = () => {
@@ -237,9 +193,19 @@ export async function runFrozenCopy(
       const chunk = await runScript(
         kit.runner,
         from.target,
-        scriptsFor(copy.source).readRange(copy.source, offset, length),
-        { collect: length, timeoutMs: 20_000 },
-      )
+        sh(
+          copySourceRead,
+          parentOf(copy.source),
+          lastPart(copy.source),
+          copy.sourceParentIdentity,
+          copy.sourceIdentity,
+          String(offset),
+          String(length),
+        ),
+        { collect: length, timeoutMs: 20_000 + atTransferRateMs(length) },
+      ).catch(() => {
+        throw new ArgumentError('The approved source changed or could not be read.')
+      })
       if (
         chunk.overflow ||
         chunk.stdout.length !== length ||

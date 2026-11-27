@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { LitchBackgroundTask } from '../../protocol/src/background-tasks.mjs'
+import { MACHINE_LIMITS } from '../../protocol/src/client-tools-machine.mjs'
 import {
   isExtendedMachineApproval,
   isMachineApprovalId,
@@ -135,7 +136,9 @@ export class DeviceMachineApprovals {
         return invalid('Machine approval can no longer be started')
       clearTimeout(entry.timer)
       entry.startedAt = Date.now()
-      entry.timer = setTimeout(() => this.end(entry, 'lost'), 120_000).unref()
+      const timeout =
+        entry.card.action === 'copy' ? MACHINE_LIMITS.deferredCopyMaxMs + 60_000 : 120_000
+      entry.timer = setTimeout(() => this.end(entry, 'lost'), timeout).unref()
       this.changed(entry.card.threadId)
       this.host.task(entry.card.threadId, this.task(entry, 'running'))
       return {}

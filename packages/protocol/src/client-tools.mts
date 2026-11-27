@@ -247,3 +247,5 @@ export interface ClientToolsDesktopInfo {
   /** 给人看的名字，比如“开发者的 MacBook”。没有就用主机名 */
   name?: string
 }
+export const UNATTENDED_COMPUTER_SELF =
+  'Using Computer Use on Litch itself requires the user to be present. No approval was requested. Do not use another tool or route to bypass this restriction.'

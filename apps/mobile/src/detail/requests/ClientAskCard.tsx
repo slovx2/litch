@@ -143,8 +143,6 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
           {ask.reason ? <Well>{ask.reason}</Well> : null}
           <Why>{t('chrome.signInNote')}</Why>
         </>
-      ) : ask.kind === 'computerApp' ? (
-        <Well>{ask.app}</Well>
       ) : (
         <>
           <Meta label={t('clientAsk.origin')} value={ask.origin} />

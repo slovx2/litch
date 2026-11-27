@@ -8,17 +8,12 @@ test('重试授权只覆盖发卡会话、执行的浏览器和目标；一次�
   const site = { kind: 'site' as const, origin: 'https://one.example', url: 'https://one.example/' }
   const builtin = accessSubject(site, 'navigate', {})
   const chrome = accessSubject({ ...site, browser: 'chrome' }, 'navigate', {})
-  const app = accessSubject(
-    { kind: 'computerApp', app: 'Fixture (test.one)', pid: 41 },
-    'get_app_state',
-    {},
+  const differentSite = accessSubject({ ...site, origin: 'https://other.example' }, 'navigate', {})
+  assert.ok(builtin && chrome && differentSite)
+  assert.equal(
+    accessSubject({ kind: 'computerSelf', id: '1', nonce: '2', desktopId: null }, 'click', {}),
+    null,
   )
-  const differentApp = accessSubject(
-    { kind: 'computerApp', app: 'Other (test.other)', pid: 41 },
-    'get_app_state',
-    {},
-  )
-  assert.ok(builtin && chrome && app && differentApp)
   allowed.grant('device', 'first', builtin, null)
   assert.equal(allowed.use('device', 'second', builtin), false)
   assert.equal(allowed.use('different', 'first', builtin), false)
@@ -29,10 +24,10 @@ test('重试授权只覆盖发卡会话、执行的浏览器和目标；一次�
   assert.equal(allowed.use('device', 'first', chrome), true)
   now += 2 * 3_600_000
   assert.equal(allowed.use('device', 'first', chrome), false)
-  allowed.grant('device', 'first', app, 'always')
-  assert.equal(allowed.use('device', 'first', app), true)
-  assert.equal(allowed.use('device', 'first', app), true)
-  assert.equal(allowed.use('device', 'first', differentApp), false)
+  allowed.grant('device', 'first', builtin, 'always')
+  assert.equal(allowed.use('device', 'first', builtin), true)
+  assert.equal(allowed.use('device', 'first', builtin), true)
+  assert.equal(allowed.use('device', 'first', differentSite), false)
   allowed.clear('device', 'first')
-  assert.equal(allowed.use('device', 'first', app), false)
+  assert.equal(allowed.use('device', 'first', builtin), false)
 })

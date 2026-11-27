@@ -75,14 +75,26 @@ async function runPage(config) {
   let serial = 2
   const pending = new Map()
   const devices = new Map()
+  const turns = new Map()
+  let sessionSub
   let live
   port.onmessage = ({ data }) => {
     if (data.t === 'snap') {
-      if (data.data.sessionId) live = data.data
-      else for (const device of data.data.devices ?? []) devices.set(device.id, device)
+      if (data.id === sessionSub) {
+        live = data.data
+        turns.clear()
+        for (const turn of live.turns) turns.set(turn.id, turn.status)
+      } else for (const device of data.data.devices ?? []) devices.set(device.id, device)
     }
-    if (data.t === 'delta')
-      for (const op of data.ops) if (op.op === 'device.upsert') devices.set(op.device.id, op.device)
+    if (data.t === 'delta') {
+      for (const op of data.ops) {
+        if (op.op === 'device.upsert') devices.set(op.device.id, op.device)
+        if (data.id !== sessionSub) continue
+        if (op.op === 'turn.add') turns.set(op.turn.id, op.turn.status)
+        if (op.op === 'turn.status') turns.set(op.turnId, op.status)
+        if (op.op === 'turn.remove') turns.delete(op.turnId)
+      }
+    }
     if (data.t !== 'res') return
     const entry = pending.get(data.id)
     pending.delete(data.id)
@@ -117,7 +129,8 @@ async function runPage(config) {
   window.machineCheck = async (sessionId, fixtureApp) => {
     const selector = `[data-session="${sessionId}"] .ss-row`
     ;(await wait('经理行', () => document.querySelector(selector)))?.click()
-    port.postMessage({ t: 'sub', id: ++serial, topic: { kind: 'session', deviceId, sessionId } })
+    sessionSub = ++serial
+    port.postMessage({ t: 'sub', id: sessionSub, topic: { kind: 'session', deviceId, sessionId } })
     await wait(
       '会话输入区就绪',
       () =>
@@ -137,10 +150,22 @@ async function runPage(config) {
         }
       }
     }
+    // 工具结果可能先于回合完成。等到新回合结束再发下一条，避免夹具消息被保留为待发。
+    const afterTurn = async (label, existing) =>
+      wait(
+        label,
+        () =>
+          [...turns].some(([id, status]) => !existing.has(id) && status === 'completed') &&
+          ![...turns.values()].includes('running'),
+      )
     const card = '[data-machine-deferred="true"]'
     if (config.site) {
       const access = `${card}[data-action="access"]`
-      const request = (path) => send(`本机网页：${config.site}/${path}`)
+      const request = async (path) => {
+        const existing = new Set(turns.keys())
+        await send(`本机网页：${config.site}/${path}`)
+        return existing
+      }
       // Claude Code 的夹具模型会原样回显收到的唤醒事件。
       const background = () => document.body.innerText.split('<litch-background-completed>').length
       const approve = async (choice) => {
@@ -151,7 +176,7 @@ async function runPage(config) {
           throw new Error('卡片没有显示正确的来源')
         button.click()
       }
-      await request('once')
+      const first = await request('once')
       await wait(
         '原回合收到提交说明',
         () =>
@@ -160,7 +185,9 @@ async function runPage(config) {
       )
       console.log('BROWSER_PENDING')
       await wait('确认原回合已经结束且没有网站流量', () => window.machinePermit)
+      await afterTurn('首次申请回合完成', first)
       const before = background()
+      const beforeWake = new Set(turns.keys())
       await approve('once')
       await wait(
         '单次批准唤醒原会话',
@@ -168,15 +195,20 @@ async function runPage(config) {
           background() > before &&
           document.body.innerText.includes('You may now retry the same operation.'),
       )
-      await request('once')
+      await afterTurn('单次批准的唤醒回合完成', beforeWake)
+      const retry = await request('once')
       await wait('重试确实加载测试网站', () =>
         document.body.innerText.includes('DEFERRED_SITE_ONCE'),
       )
       if (document.querySelector(access)) throw new Error('单次授权的重试仍然出卡')
-      await request('always')
+      await afterTurn('重试回合完成', retry)
+      const always = await request('always')
       const prior = background()
+      await afterTurn('总是允许的申请回合完成', always)
+      const beforeAlwaysWake = new Set(turns.keys())
       await approve('always')
       await wait('总是允许生效', () => background() > prior)
+      await afterTurn('总是允许的唤醒回合完成', beforeAlwaysWake)
       await request('trusted')
       await wait('总是允许后一条直接加载', () =>
         document.body.innerText.includes('DEFERRED_SITE_TRUSTED'),
@@ -187,30 +219,26 @@ async function runPage(config) {
     }
     if (fixtureApp) {
       const access = `${card}[data-action="access"]`
-      const request = (index) => send(`本机应用：${fixtureApp} ${index}`)
-      const counts = () =>
-        document.body.innerText.match(/Accessibility (?:tree|changes)/g)?.length ?? 0
-      await request(1)
-      ;(
-        await wait('CU 单次批准卡', () => document.querySelector(`${access} [data-option="once"]`))
-      ).click()
-      await wait('CU 批准结果唤醒', () =>
-        document.body.innerText.includes('You may now retry the same operation.'),
-      )
-      const before = counts()
-      await request(2)
-      await wait('CU 重试确实读取测试应用', () => counts() > before)
-      await request(3)
-      ;(
-        await wait('单次授权已用，重新出 CU 卡', () =>
-          document.querySelector(`${access} [data-option="always"]`),
+      let asked = false
+      const observer = new MutationObserver(() => {
+        if (document.querySelector(access)) asked = true
+      })
+      observer.observe(document.body, { childList: true, subtree: true })
+      try {
+        await send(`本机应用：${fixtureApp} 1`)
+        await wait('CU 普通应用直接返回无障碍树', () =>
+          /Accessibility (?:tree|changes)/.test(document.body.innerText),
         )
-      ).click()
-      await wait('长期授权已落下', () => !document.querySelector(access))
-      const prior = counts()
-      await request(4)
-      await wait('CU 长期授权无需再次批准', () => counts() > prior)
-      if (document.querySelector(access)) throw new Error('长期授权后重复出卡')
+        await send(`本机应用：${config.cuSelf} 2`)
+        await wait('Litch 自身直接拒绝且说明须用户在场', () =>
+          document.body.innerText.includes(
+            '[litch:unattended] Using Computer Use on Litch itself requires the user to be present.',
+          ),
+        )
+        if (asked || document.querySelector(access)) throw new Error('CU 不应出现异步审批卡')
+      } finally {
+        observer.disconnect()
+      }
       console.log('CU_DONE')
       return
     }
@@ -301,6 +329,7 @@ async function runPage(config) {
 try {
   const browserOnly = process.argv.includes('--browser-only')
   const cu = browserOnly ? undefined : process.env.LITCH_TEST_COMPUTER_APP
+  const cuSelf = cu ? process.env.LITCH_TEST_COMPUTER_SELF_APP : undefined
   const wantsClaude = browserOnly || !!cu
   if (browserOnly) assert.ok(process.env.CHA_CLAUDE_CLI, '浏览器验收需要隔离 Claude CLI')
   let site = null
@@ -323,8 +352,8 @@ try {
   }
   if (cu)
     assert.ok(
-      process.env.CHA_CLAUDE_CLI && process.env.LITCH_COMPUTER_USE_APP,
-      'CU 验收需要隔离 Claude CLI 和已授权的原生助手',
+      process.env.CHA_CLAUDE_CLI && process.env.LITCH_COMPUTER_USE_APP && cuSelf,
+      'CU 验收需要隔离 Claude CLI、已授权的助手和带 Litch 包标识的隔离目标',
     )
   const local = await startManagerFixture(t, {})
   const child = spawn(
@@ -366,6 +395,7 @@ try {
     sshDest: join(ssh.work, 'copy-back.bin'),
     macDest: join(local.root, 'copy-on-mac.bin'),
     cu: !!cu,
+    cuSelf,
     site,
   }
   const bytes = randomBytes(6_400_000)
@@ -622,7 +652,9 @@ await import(${JSON.stringify(pathToFileURL(join(repo, 'apps/desktop/dist/main.m
       }
       await onMac('checkComputerFixture', { threadId: created.threadId, app: cu })
       assert.match(log(), /CU_DONE/)
-      console.log('真实隐藏 Mac：CU 测试应用出卡，单次批准后唤醒并重试成功，总是允许后下一次直通')
+      console.log(
+        '真实隐藏 Mac：项目内权限的无人值守 CU 直接读取普通应用，Litch 自身直接拒绝，均无审批卡',
+      )
     }
   }
 } catch (error) {

@@ -368,6 +368,7 @@ export function createCore(options: CoreOptions): Core {
       ...(wiring
         ? {
             deferredTools: {
+              available: () => devices.get(config.id)?.machineApprovalControlsAvailable() === true,
               submit: (request) => wiring.submitAccess(config.id, request),
               use: (threadId, subject) => wiring.useAccess(config.id, threadId, subject),
               clear: (threadId) => wiring.clearAccess(config.id, threadId),
