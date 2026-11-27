@@ -50,7 +50,7 @@ jobs:
         with:
           path: ${{ github.workspace }}/.artifacts/npm-cache
           key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5
         id: stage-4
         with:
           go-version: 1.26.10
@@ -149,7 +149,7 @@ jobs:
         with:
           path: ${{ github.workspace }}/.artifacts/npm-cache
           key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5
         id: stage-4
         with:
           go-version: 1.26.10
@@ -251,7 +251,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 24.21.0
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5
         with:
           go-version-file: mobile/go.mod
           cache-dependency-path: mobile/go.sum
