@@ -72,6 +72,7 @@ export function useComposeOptions(
   const device = useKey<DeviceView>(keys.device(deviceId))
   // 能问的时候才问：设备连着，要问的那个 harness 也没有掉线
   const reachable = device?.connection === 'online' && !downHarness(device, harness)
+  const freshAgy = harness === 'agy' && !sessionId
   const meta = useKey<SessionMeta>(sessionId ? keys.session(deviceId, sessionId) : '')
   const settings = useKey<SessionSettings>(sessionId ? keys.settings(deviceId, sessionId) : '')
   const key = composeOptionsKey(deviceId, harness, sessionId, settings, meta)
@@ -87,18 +88,25 @@ export function useComposeOptions(
         { signal: controller.signal },
       )
       .then((value) => {
-        known.set(key, value)
-        lastKnown.set(source, value)
+        if (controller.signal.aborted) return
+        if (!freshAgy) {
+          known.set(key, value)
+          lastKnown.set(source, value)
+        }
         setAsked({ key, value })
       })
       // 问不到就不显示选择器，发消息不受影响
-      .catch(() => {})
+      .catch(() => {
+        if (freshAgy && !controller.signal.aborted) setAsked(null)
+      })
     return () => controller.abort()
-  }, [channel, deviceId, harness, sessionId, key, source, reachable])
+  }, [channel, deviceId, harness, sessionId, key, source, reachable, freshAgy])
   // 刚换了 harness、新的那份还没问回来：不拿上一个 harness 的清单顶着
   return asked?.key === key
     ? asked.value
-    : (known.get(key) ?? (!reachable ? lastKnown.get(source) : null) ?? null)
+    : freshAgy
+      ? null
+      : (known.get(key) ?? (!reachable ? lastKnown.get(source) : null) ?? null)
 }
 
 /**

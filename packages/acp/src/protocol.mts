@@ -42,12 +42,15 @@ const NOT_APPLICABLE: Record<string, string> = {
 }
 
 /** agent 报的模型换成 Codex 的模型清单；还没见过 agent 报的（一个会话都没建过）是空的 */
-export function models(s: AcpServer, catalog: Catalog | null = s.latestCatalog()): any[] {
+export function models(
+  s: AcpServer,
+  catalog: Catalog | null = s.latestCatalog(),
+  image = s.runtime.known?.image === true,
+): any[] {
   if (!catalog) return []
   const current = currentModel(catalog)
   const levels = efforts(catalog)
   const effort = currentEffort(catalog) ?? levels[0]?.value ?? 'none'
-  const image = s.runtime.known?.image === true
   return modelChoices(catalog).map((choice) => ({
     id: choice.value,
     model: choice.value,
@@ -219,7 +222,10 @@ export async function dispatch(s: AcpServer, peer: RpcPeer, method: string, p: a
       // 只有一档（declaration.mts），和 Pi 一样不列可选的档
       return { data: [], nextCursor: null }
     case 'collaborationMode/list': {
-      const catalog = s.latestCatalog()
+      const catalog =
+        s.agentId === 'agy'
+          ? (await s.freshAgyCatalog().catch(() => null))?.catalog
+          : s.latestCatalog()
       const plan = catalog ? planMode(catalog) : null
       const mode = (name: string) => ({
         name,
@@ -230,11 +236,19 @@ export async function dispatch(s: AcpServer, peer: RpcPeer, method: string, p: a
       })
       return { data: [mode('default'), ...(plan ? [mode('plan')] : [])] }
     }
-    case 'model/list':
+    case 'model/list': {
+      if (s.agentId === 'agy') {
+        const { catalog, image } = await s.freshAgyCatalog()
+        return { data: models(s, catalog, image), nextCursor: null }
+      }
       if (!s.latestCatalog()) await s.warmCatalog()
       return { data: models(s), nextCursor: null }
+    }
     case 'config/read': {
-      const catalog: Catalog | null = s.latestCatalog()
+      const catalog =
+        s.agentId === 'agy'
+          ? (await s.freshAgyCatalog().catch(() => null))?.catalog
+          : s.latestCatalog()
       const saved = s.store.getMeta('config', 'defaults') ?? {}
       return {
         config: {

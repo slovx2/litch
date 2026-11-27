@@ -24,6 +24,7 @@ export function useComposeOptions(
   const channel = useChannel()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const reachable = device?.connection === 'online' && !downHarness(device, harness)
+  const freshAgy = harness === 'agy' && !sessionId
   const meta = useKey<SessionMeta>(sessionId ? keys.session(deviceId, sessionId) : '')
   const settings = useKey<SessionSettings>(sessionId ? keys.settings(deviceId, sessionId) : '')
   const revision = JSON.stringify([settings, meta?.can])
@@ -40,20 +41,26 @@ export function useComposeOptions(
         ...(sessionId ? { sessionId } : {}),
       })
       .then((value) => {
-        known.set(key, value)
-        lastKnown.set(source, value)
+        if (!freshAgy) {
+          known.set(key, value)
+          lastKnown.set(source, value)
+        }
         if (live) setAsked({ key, value })
       })
       // 问不到就不显示选择器，发消息不受影响
-      .catch(() => {})
+      .catch(() => {
+        if (freshAgy && live) setAsked(null)
+      })
     return () => {
       live = false
     }
-  }, [channel, deviceId, harness, sessionId, key, source, reachable])
+  }, [channel, deviceId, harness, sessionId, key, source, reachable, freshAgy])
   // 刚换了 harness、新的那份还没问回来：不拿上一个 harness 的清单顶着
   return asked?.key === key
     ? asked.value
-    : (known.get(key) ?? (!reachable ? lastKnown.get(source) : null) ?? null)
+    : freshAgy
+      ? null
+      : (known.get(key) ?? (!reachable ? lastKnown.get(source) : null) ?? null)
 }
 
 /** 不带设置新建会话时对面会用的模型、强度、权限档。不记着，每次现问；还没问到、问不到是 null */

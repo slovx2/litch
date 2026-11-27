@@ -52,6 +52,7 @@ export class AcpRuntime {
   private readonly home: string
   private readonly events: RuntimeEvents
   private readonly env: NodeJS.ProcessEnv
+  private readonly catalogOnly: boolean
   private starting: Promise<AgentHandle> | null = null
   private running: AgentHandle | null = null
   /** 进程编号的来源：同一个入口里几个运行时共用一份，编号不重（会话按编号认自己在哪个进程里接上） */
@@ -66,10 +67,12 @@ export class AcpRuntime {
     events: RuntimeEvents,
     env: NodeJS.ProcessEnv = process.env,
     generations = { value: 0 },
+    catalogOnly = false,
   ) {
     this.home = home
     this.events = events
     this.env = env
+    this.catalogOnly = catalogOnly
     this.generations = generations
   }
 
@@ -170,15 +173,17 @@ export class AcpRuntime {
           {
             protocolVersion: versions.acpProtocol,
             clientCapabilities: {
-              fs: { readTextFile: true, writeTextFile: true },
-              terminal: true,
-              elicitation: { form: {} },
-              subagents: {},
+              ...(!this.catalogOnly && {
+                fs: { readTextFile: true, writeTextFile: true },
+                terminal: true,
+                elicitation: { form: {} },
+                subagents: {},
+              }),
               session: { configOptions: { boolean: {} } },
             },
             clientInfo: { name: 'litch', title: 'Litch', version: versions.adapter },
           },
-          INITIALIZE_TIMEOUT_MS,
+          this.catalogOnly ? 12_000 : INITIALIZE_TIMEOUT_MS,
         ),
         ended.then((error) => {
           throw error
