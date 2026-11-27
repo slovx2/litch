@@ -15,6 +15,7 @@ export const nightlyChecks = [
   ['terminal', `${desktop}check-terminal.mjs`],
   ['files', `${desktop}check-files.mjs`],
   ['settings', `${desktop}check-settings.mjs`],
+  ['modal-selects', 'scripts/check-modal-selects.mjs'],
   ['navigation', `${desktop}smoke.mjs`, '--navigation'],
   ['manager-issues', `${desktop}smoke.mjs`, '--manager-issues'],
   ['text-scale', `${desktop}check-text-scale.mjs`],

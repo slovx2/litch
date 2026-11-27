@@ -558,7 +558,7 @@ function CustomDialog({
           </label>
           <select
             id="hc-template"
-            className="req-input mng-select"
+            className="req-input mng-select modal-select"
             value={templateId}
             onChange={(event) => {
               setTemplateId(event.target.value)
@@ -598,6 +598,7 @@ function CustomDialog({
               {t.said(field.title)}
             </label>
             <HcControl
+              modalSelect
               deviceId={device.id}
               id={`hc-def-${field.key}`}
               spec={field}

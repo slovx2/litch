@@ -68,6 +68,9 @@ export function PageWindow({
         event.stopPropagation()
         // 一按键就恢复焦点框
         delete event.currentTarget.dataset.quietFocus
+        // 下拉菜单由窗口自己绘制：先让浏览器用 Esc 收起菜单，再允许关窗口。
+        if (event.key === 'Escape' && (event.target as Element).closest('select.modal-select:open'))
+          return
         if (event.key === 'Tab' && !event.defaultPrevented) {
           const controls = [
             ...event.currentTarget.querySelectorAll<HTMLElement>(

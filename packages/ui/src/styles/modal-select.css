@@ -1,0 +1,12 @@
+/* 原生弹出菜单由操作系统接管，部分 Electron 输入到不了选项。
+   带标记的下拉框仍用 select 保留键盘和读屏语义，菜单由当前 WebContents 绘制。 */
+dialog:modal select.modal-select,
+dialog:modal select.modal-select::picker(select) {
+  appearance: base-select;
+}
+dialog:modal select.modal-select::picker(select) {
+  color: var(--ink);
+  background: var(--overlay);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+}

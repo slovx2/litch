@@ -260,6 +260,7 @@ function TitleDialog({
             onChange={(e) => setQuery(e.target.value)}
           />
           <select
+            className="modal-select"
             value={chosen}
             onChange={(e) => {
               setChosen(e.target.value)

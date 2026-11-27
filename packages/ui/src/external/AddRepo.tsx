@@ -154,7 +154,7 @@ export function AddRepo({
               <label className="ext-field">
                 <span className="ext-field-label">{t('ext.repo.poll')}</span>
                 <select
-                  className="ext-select"
+                  className="ext-select modal-select"
                   value={poll}
                   onChange={(event) => {
                     setPoll(event.target.value)
