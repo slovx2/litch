@@ -144,6 +144,8 @@ export class AcpServer {
   // 临时线程（客户端生成标题、摘要时用）：只在内存里，没有 agent 会话，无人订阅即卸载。
   readonly ephemeral = new Map<string, LiveThread>()
   readonly runtime: AcpRuntime
+  private readonly agyCatalogRuntime: AcpRuntime | null
+  private agyCatalogPending: Promise<{ catalog: Catalog; image: boolean }> | null = null
   /** 会话自己的 agent 进程（只用于 Gemini：新会话的第一回合和已注入的会话，见 session-agents.mts） */
   readonly agents: SessionAgents
   readonly terminals: Terminals
@@ -331,6 +333,22 @@ export class AcpServer {
     })
     const generations = { value: 0 }
     this.runtime = new AcpRuntime(home, events(false), env, generations)
+    this.agyCatalogRuntime =
+      this.agentId === 'agy'
+        ? new AcpRuntime(
+            home,
+            {
+              request: async () => {
+                throw new AcpError(-32601, '模型目录查询不提供客户端工具')
+              },
+              notification() {},
+              closed() {},
+            },
+            env,
+            generations,
+            true,
+          )
+        : null
     this.agents = new SessionAgents(this.runtime, {
       enabled: this.agentId === 'gemini',
       directory: join(home, 'session-agents'),
@@ -1035,6 +1053,44 @@ export class AcpServer {
     return opened?.projection ?? this.store.getMeta('catalog', '') ?? null
   }
 
+  /** 订阅的新建页跟随当前 CLI 和账号，不用任何已有会话的目录。并发查询共用一次探测。 */
+  freshAgyCatalog(): Promise<{ catalog: Catalog; image: boolean }> {
+    const runtime = this.agyCatalogRuntime
+    if (!runtime || this.closed) throw new ProtocolError(-32603, '模型目录查询不可用')
+    this.agyCatalogPending ??= this.probeAgyCatalog(runtime).finally(() => {
+      this.agyCatalogPending = null
+    })
+    return this.agyCatalogPending
+  }
+
+  private async probeAgyCatalog(
+    runtime: AcpRuntime,
+  ): Promise<{ catalog: Catalog; image: boolean }> {
+    try {
+      const agent = await runtime.agent()
+      const response = await agent.connection
+        .request('session/new', { cwd: process.cwd(), mcpServers: [] }, 10_000)
+        .catch((error) => {
+          throw this.failure(agent, error)
+        })
+      const sessionId = response?.sessionId
+      if (typeof sessionId !== 'string')
+        throw new ProtocolError(-32603, 'Antigravity 查询模型时没有返回会话号')
+      if (agent.caps.close)
+        await agent.connection.request('session/close', { sessionId }, 1_000).catch(() => null)
+      return {
+        catalog: {
+          configOptions: Array.isArray(response.configOptions) ? response.configOptions : null,
+          models: Array.isArray(response.models?.availableModels) ? response.models : null,
+          modes: Array.isArray(response.modes?.availableModes) ? response.modes : null,
+        },
+        image: agent.caps.image,
+      }
+    } finally {
+      await runtime.close(true)
+    }
+  }
+
   /** 首次还没有真实会话时，用一个临时 ACP 会话取得模型与强度目录。 */
   async warmCatalog(): Promise<void> {
     if (this.latestCatalog()) return
@@ -1710,7 +1766,11 @@ export class AcpServer {
         this.saveTurns(live)
       }
     }
-    await Promise.all([this.agents.close(signalled), this.runtime.close(signalled)])
+    await Promise.all([
+      this.agents.close(signalled),
+      this.runtime.close(signalled),
+      this.agyCatalogRuntime?.close(signalled),
+    ])
     await this.clientTools.close()
     await this.terminals.closeAll()
     this.files.close()

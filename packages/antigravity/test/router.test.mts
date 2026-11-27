@@ -45,6 +45,8 @@ class FakeBackend implements Backend {
       result = { thread }
     if (message.method === 'thread/list') result = { data: [thread], nextCursor: null }
     if (message.method === 'thread/loaded/list') result = { data: ['same'], nextCursor: null }
+    if (message.method === 'model/list')
+      result = { data: [{ id: this.backendId }], nextCursor: null }
     if (message.method === 'litch/harness/config/read')
       result = { groups: [], settings: [], values: {}, files: [], actions: [], version: '1' }
     peer.send({ jsonrpc: '2.0', id: message.id, result })
@@ -96,6 +98,7 @@ test('同名后端会话隔离、切换鉴权只影响新建、合并分页和�
   const f = await setup()
   try {
     f.router.settings.write('apiKey')
+    assert.deepEqual((await f.call('model/list')).data, [{ id: 'sdk' }])
     const sdk = await f.call('thread/start')
     assert.equal(sdk.thread.id, 'agy:sdk:same')
     const config = await f.call('litch/harness/config/read')
@@ -104,6 +107,7 @@ test('同名后端会话隔离、切换鉴权只影响新建、合并分页和�
       edits: [{ key: 'authenticationMode', value: 'subscription' }],
     })
     const acp = await f.call('thread/start')
+    assert.deepEqual((await f.call('model/list')).data, [{ id: 'acp' }])
     assert.equal(acp.thread.id, 'agy:acp:same')
     await f.call('thread/resume', { threadId: sdk.thread.id })
     assert.ok(

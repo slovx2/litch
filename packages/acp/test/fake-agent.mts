@@ -62,10 +62,12 @@ const configOptions = (session: Session) => [
     category: 'model',
     type: 'select',
     currentValue: session.model,
-    options: [
-      { value: 'fake-small', name: '小模型' },
-      { value: 'fake-large', name: '大模型', description: '慢一些' },
-    ],
+    options: process.env.FAKE_ACP_MODELS
+      ? JSON.parse(process.env.FAKE_ACP_MODELS)
+      : [
+          { value: 'fake-small', name: '小模型' },
+          { value: 'fake-large', name: '大模型', description: '慢一些' },
+        ],
   },
   {
     id: 'effort',
@@ -200,7 +202,7 @@ function create(cwd: string): Session {
     cwd,
     title: null,
     updatedAt: new Date().toISOString(),
-    model: 'fake-small',
+    model: process.env.FAKE_ACP_DEFAULT_MODEL ?? 'fake-small',
     effort: 'low',
     mode: 'default',
     history: [],
@@ -602,6 +604,7 @@ async function handle(method: string, params: any): Promise<unknown> {
         agentInfo: { name: 'fake-acp', title: 'Fake ACP', version: '9.9.9' },
       }
     case 'session/new': {
+      if (process.env.FAKE_ACP_NEW_ERROR) throw { code: -32603, message: 'catalog offline' }
       const created = create(String(params?.cwd ?? '/'))
       await mountMcp(created.sessionId, params?.mcpServers)
       return { sessionId: created.sessionId, ...settings(created) }

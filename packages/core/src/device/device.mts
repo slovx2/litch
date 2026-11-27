@@ -3515,11 +3515,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (!online) throw new ChannelError('offline', '设备未连接')
       const target = mode === 'full' ? pickHarness(harness) : null
       const key = target ?? ''
+      const owner = target ?? harnesses[0]?.id ?? ''
       // 换了一次连接就重新问：对面可能升级过，或者刚登录完。某个 harness 掉线再回来也一样（见 recover）
       const cached = composeCache.get(key)
       if (cached?.session === session) return cached.value
       // 权限预设：这个 harness 声明了就用它的，没有声明用内置的三档
-      const owner = target ?? harnesses[0]?.id ?? ''
       const presets = terms.get(owner)?.presets ?? null
       const value = Promise.all([
         guarded(() => listModels(target)),
@@ -3531,7 +3531,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         if (composeCache.get(key)?.value === value) composeCache.delete(key)
       }
       value.then((options) => {
-        if (options.models.length === 0) drop()
+        // agy 的新建页每次查询当前 CLI 与账号，只合并在途请求。
+        if (owner === 'agy' || options.models.length === 0) drop()
       }, drop)
       composeCache.set(key, { session, value })
       return value

@@ -10,7 +10,7 @@ import { abilitiesOf } from '../src/device/harness.mjs'
 import type { ChannelError, UserMessageItem } from '../src/index.mjs'
 import { ALL_ABLE } from '../src/projection/session.mjs'
 import { declaredPreset, deviceWorld, features } from './device-world.mjs'
-import { harness } from './fake-device.mjs'
+import { harness, model } from './fake-device.mjs'
 import { RpcFailure } from './fake-server.mjs'
 import { thread, turn, userText } from './fixtures.mjs'
 import { settle } from './helpers.mjs'
@@ -188,6 +188,22 @@ test('同一 harness 的会话能力独立：后端声明完整覆盖，模型�
   assert.notDeepEqual(a, b)
   assert.equal(JSON.stringify(a).includes('sdk-only'), true)
   assert.equal(JSON.stringify(b).includes('acp:mode:plan'), true)
+})
+
+test('agy 新建页在同一连接上重新取模型，共用并发查询', async () => {
+  const agy = harness('agy', { models: [] })
+  agy.models = [model('argon')]
+  const { core, command, sent } = deviceWorld([agy])
+  core.start()
+  await settle()
+  const models = async () =>
+    (
+      (await command('device.composeOptions', { deviceId: 'local', harness: 'agy' })) as any
+    ).models.map((entry: { id: string }) => entry.id)
+  assert.deepEqual(await models(), ['argon'])
+  agy.models = [model('neon')]
+  assert.deepEqual(await Promise.all([models(), models()]), [['neon'], ['neon']])
+  assert.equal(sent('model/list').length, 2)
 })
 
 test('声明说会、对面却说不支持：照实际的来。聚合面替原生 codex 说的“不支持”带着是哪个 harness', async () => {
