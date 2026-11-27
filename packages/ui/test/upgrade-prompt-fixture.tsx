@@ -19,6 +19,8 @@ import { UpgradeDevices } from '../src/devices/UpgradeDevices.tsx'
 import '../src/app/appearance.ts'
 
 const core = createMockCore({ clock: browserClock, lang: 'zh-CN' })
+const applyOne = new URLSearchParams(location.search).has('applyOne')
+let localChecks = 0
 const calls: { name: string; params: unknown }[] = []
 let devices: DeviceView[] = []
 core.subscribe(
@@ -97,9 +99,11 @@ core.command = async (name, given) => {
   if (!device) throw new Error('模拟设备不存在')
   if (name === 'device.serviceActivity')
     return {
-      busy: params.deviceId.includes('idle')
-        ? []
-        : [{ reason: 'backgroundTasks', harnesses: [], count: 1, details: ['npm run dev'] }],
+      busy:
+        params.deviceId.includes('idle') ||
+        (applyOne && params.deviceId === 'local' && ++localChecks > 1)
+          ? []
+          : [{ reason: 'backgroundTasks', harnesses: [], count: 1, details: ['npm run dev'] }],
     }
   if (name === 'device.upgradeService') {
     const phase =

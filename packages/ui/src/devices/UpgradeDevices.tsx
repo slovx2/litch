@@ -38,10 +38,6 @@ function UpgradeRow({
         (result) => {
           if (closed) return
           setBusy(result.busy)
-          if (device.kind === 'local' && result.busy?.length === 0)
-            void channel
-              .command('device.restartService', { deviceId: device.id, mode: 'auto' })
-              .catch(() => {})
         },
         () => {
           if (!closed) setBusy(null)
@@ -53,7 +49,7 @@ function UpgradeRow({
       closed = true
       window.clearInterval(timer)
     }
-  }, [channel, device.id, device.kind])
+  }, [channel, device.id])
   const reasons = busy ?? device.upgrade?.busy ?? []
   return (
     <div className="upgrade-device-row" data-upgrade-device={device.id}>

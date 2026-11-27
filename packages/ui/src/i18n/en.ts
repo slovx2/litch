@@ -577,7 +577,7 @@ export const en: Record<MessageKey, Entry> = {
   'session.markAllRead': 'Mark all as read',
   'service.batch.none': 'Do not upgrade',
   'service.batch.idle': 'Upgrade when idle',
-  'service.batch.force': 'Force upgrade',
+  'service.batch.force': 'Upgrade now',
   'service.batch.unknown': 'Activity unknown; the device will check before switching. ',
   'service.batch.idleState': 'Idle',
   'service.batch.forceNote':
