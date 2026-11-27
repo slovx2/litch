@@ -1,6 +1,7 @@
 // 限时授权的说法（不依赖界面框架）：类别的名字、到期时刻。桌面与手机共用。
 import type { TimedApprovalCategory } from '@litch/core'
 import type { MessageKey, Translator } from '../i18n/index.ts'
+import { formattingLocale } from '../i18n/locale.ts'
 
 const CATEGORY_TEXT: Record<Exclude<TimedApprovalCategory, 'mcp'>, MessageKey> = {
   command: 'timed.category.command',
@@ -27,7 +28,7 @@ const format = (lang: string, sameDay: boolean) => {
   const key = `${lang}:${sameDay}`
   let found = formats.get(key)
   if (!found) {
-    found = new Intl.DateTimeFormat(lang, {
+    found = new Intl.DateTimeFormat(formattingLocale(lang), {
       hour: 'numeric',
       minute: '2-digit',
       ...(sameDay ? {} : { month: 'short', day: 'numeric' }),

@@ -1,6 +1,7 @@
 // 给人看的时间和时长。侧栏的行很窄，所以用最短的写法。
 import type { TurnRetryView, TurnView } from '@litch/core'
 import type { Translator } from '../i18n/index.ts'
+import { formattingLocale } from '../i18n/locale.ts'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -12,7 +13,7 @@ function dateFormat(lang: string, options: Intl.DateTimeFormatOptions): Intl.Dat
   const key = `${lang}:${JSON.stringify(options)}`
   let format = formats.get(key)
   if (!format) {
-    format = new Intl.DateTimeFormat(lang, options)
+    format = new Intl.DateTimeFormat(formattingLocale(lang), options)
     formats.set(key, format)
   }
   return format
