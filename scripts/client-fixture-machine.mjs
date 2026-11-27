@@ -94,9 +94,9 @@ export function machineReply(body, lastUserText) {
 
 // ---------- Anthropic Messages：Claude Code、dsh ----------
 /** Claude Code 里动态工具的名字（packages/claude/src/dynamic-tools.mts 的 dynamicToolName，经 MCP 服务 codex_harness_adapter） */
-const claudeName = (tool) =>
+const claudeName = (tool, namespace = NAMESPACE) =>
   `mcp__codex_harness_adapter__t_${createHash('sha256')
-    .update(JSON.stringify([NAMESPACE, tool]))
+    .update(JSON.stringify([namespace, tool]))
     .digest('hex')
     .slice(0, 40)}`
 const SHELLS = { 'claude-code': 'Bash', dsh: 'bash' }
@@ -119,6 +119,14 @@ export function machineAnthropic(harness, body, said) {
     .flatMap(blocksOf)
     .filter((block) => block.type === 'tool_result')
     .map((block) => textOf(block.content))
+  const app = /^本机应用：([^\s]+)(?:\s+\d+)?$/.exec(said)?.[1]
+  if (app && harness === 'claude-code') {
+    if (results.length) return [{ text: `应用结果：\n${results.join('\n')}` }]
+    const tool = claudeName('get_app_state', 'litch_computer')
+    return offered.has(tool)
+      ? [{ tool, input: { app } }]
+      : [{ text: '没有 litch_computer 这个工具' }]
+  }
   const system = typeof body.system === 'string' ? body.system : textOf(body.system)
   const step = machineStep(said, {
     nameOf: (tool) =>

@@ -4,6 +4,7 @@ import { validTimedApprovalHours } from './timed-approvals.mjs'
 
 export const MACHINE_APPROVALS = 'machineApprovals'
 export const MACHINE_APPROVAL_SIGNING = 'machineApprovalSigning'
+export const MACHINE_APPROVAL_CONTROLS = 'machineApprovalControls'
 export const MACHINE_APPROVAL_REVIEW_VERSION = 1
 export const MACHINE_APPROVAL_DETAILS_MAX = 28_000
 export const MACHINE_APPROVAL_TTL_MS = 24 * 60 * 60 * 1000
@@ -25,13 +26,14 @@ export const MACHINE_APPROVAL_NOTIFICATION = {
   changed: 'litch/machineApproval/changed',
   stop: 'litch/machineApproval/stopRequested',
   changedSigned: 'litch/machineApproval/signedChanged',
+  changedControls: 'litch/machineApproval/controlsChanged',
 } as const
 
 export interface MachineApprovalCard {
   id: string
   threadId: string
   turnId: string | null
-  action: 'exec' | 'read' | 'write' | 'list'
+  action: 'exec' | 'read' | 'write' | 'list' | 'copy' | 'access'
   /** 命令或展开的路径。手机仅浏览，完整冻结内容留在执行桌面。 */
   target: string
   cwd: string | null
@@ -39,6 +41,23 @@ export interface MachineApprovalCard {
   expiresAt: number
   /** 仅两端声明签名能力时发。发卡 Mac 才能核对冻结对象。 */
   review?: MachineApprovalReview
+  /** 只授权同一会话重新发起，不执行原工具调用。 */
+  retry?: { namespace: MachineAccessNamespace; always: boolean }
+}
+
+export type MachineAccessNamespace = 'litch_machine' | 'litch_computer' | 'litch_browser'
+
+export const isExtendedMachineApproval = (action: MachineApprovalCard['action']) =>
+  action === 'copy' || action === 'access'
+
+export function isMachineRetry(value: unknown): value is NonNullable<MachineApprovalCard['retry']> {
+  return (
+    isRecord(value) &&
+    (value.namespace === 'litch_machine' ||
+      value.namespace === 'litch_computer' ||
+      value.namespace === 'litch_browser') &&
+    typeof value.always === 'boolean'
+  )
 }
 
 export interface MachineApprovalReview {
@@ -53,7 +72,7 @@ export interface MachineApprovalReview {
 }
 
 export type MachinePhoneDecision =
-  | { decision: 'once' | 'decline'; hours?: never }
+  | { decision: 'once' | 'always' | 'decline'; hours?: never }
   | { decision: 'timed'; hours: number }
 
 export type MachinePhoneAnswer = MachineApprovalKey &
@@ -90,6 +109,7 @@ export function machineApprovalPayload(
       review.version,
       review.snapshotHash,
       review.details,
+      ...(card.retry ? [card.retry.namespace, card.retry.always] : []),
     ])
   )
 }
@@ -151,7 +171,8 @@ export function isMachinePhoneAnswer(value: unknown): value is MachinePhoneAnswe
     return false
   return value.decision === 'timed'
     ? validTimedApprovalHours(value.hours)
-    : (value.decision === 'once' || value.decision === 'decline') && !Object.hasOwn(value, 'hours')
+    : (value.decision === 'once' || value.decision === 'always' || value.decision === 'decline') &&
+        !Object.hasOwn(value, 'hours')
 }
 
 export function matchesMachinePhoneAnswer(
@@ -161,6 +182,7 @@ export function matchesMachinePhoneAnswer(
   const review = card.review
   return (
     !!review &&
+    (answer.decision !== 'always' || card.retry?.always === true) &&
     card.id === answer.id &&
     card.threadId === answer.threadId &&
     card.expiresAt === answer.expiresAt &&

@@ -11,6 +11,7 @@ import type {
 import {
   isMachinePhoneAnswer,
   MACHINE_APPROVAL_METHOD as MACHINE,
+  MACHINE_APPROVAL_CONTROLS,
   MACHINE_APPROVAL_SIGNING,
   MACHINE_APPROVALS,
   MACHINE_APPROVAL_NOTIFICATION as MACHINE_NOTICE,
@@ -238,6 +239,7 @@ import {
   createToolCalls,
   type MachineCallInput,
   type ToolAskPlace,
+  type ToolCallsHost,
 } from './tool-calls.mjs'
 import type { ViewStore } from './view-store.mjs'
 import { projectWorkspaces, resolveWorkspace } from './workspaces.mjs'
@@ -298,6 +300,11 @@ export interface DeviceOptions {
   clearLegacyToolSwitches?(): void
   /** litch_machine：远程设备上的会话操作这台电脑。只有远程设备、核心有执行器时给 */
   machine?: DeviceMachine
+  deferredTools?: NonNullable<ToolCallsHost['deferredAccess']> & {
+    verify(answer: unknown): Promise<boolean>
+    stop(key: MachineApprovalKey): void
+    disconnect(): void
+  }
   /** 扫码绑定手机要碰 ssh、文件、端口的那几样（外壳给）。不给就出不了码，已绑定的手机照样能看、能撤 */
   pairing?: PairingPlatform
   /** harness 登录的回调要经 ssh 转到远程设备时用（外壳给）。不给就转不了，界面照实说 */
@@ -499,6 +506,7 @@ export interface Device {
   readonly approvals: Approvals
   machineApprovalAvailable(): boolean
   machineApprovalSigningAvailable(): boolean
+  machineApprovalControlsAvailable(): boolean
   answerMachineApproval(answer: MachinePhoneAnswer): Promise<MachinePhoneReceipt>
   openMachineApprovals(sink: HostSink): () => void
   /** 这台设备上给 harness 安装：版本、安装任务（install.mts） */
@@ -754,6 +762,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let approvalsOn = false
   let machineApprovalsOn = false
   let machineApprovalSigningOn = false
+  let machineApprovalControlsOn = false
   const machineCardSinks = new Set<HostSink>()
   const machineCards = new Map<string, MachineApprovalCard[]>()
   let machineCardVersion = 0
@@ -1860,8 +1869,12 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     },
     'thread/name/updated': ({ threadId, threadName }) =>
       patchThread(threadId, { name: threadName ?? null }),
-    'thread/archived': ({ threadId }) => shelve(threadId),
+    'thread/archived': ({ threadId }) => {
+      options.deferredTools?.clear(threadId)
+      shelve(threadId)
+    },
     'thread/deleted': ({ threadId }) => {
+      options.deferredTools?.clear(threadId)
       toolCalls.closed(threadId)
       removeThread(threadId)
       live.forget(threadId, true)
@@ -2163,6 +2176,9 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         machineApprovalsOn = info.device.extensions?.includes(MACHINE_APPROVALS) === true
         machineApprovalSigningOn =
           machineApprovalsOn && info.device.extensions?.includes(MACHINE_APPROVAL_SIGNING) === true
+        machineApprovalControlsOn =
+          machineApprovalSigningOn &&
+          info.device.extensions?.includes(MACHINE_APPROVAL_CONTROLS) === true
         installable = info.device.extensions?.includes(EXTENSION.harnessInstall) === true
         worktreesOn = info.device.extensions?.includes(EXTENSION.worktrees) === true
         // 在跑的是哪一份服务：握手时声明过才给，旧版的设备服务不报
@@ -2351,7 +2367,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (dropped) peeks.clear()
       if (dropped) machineExec.offline()
       if (dropped) machineFactsCache = null
-      if (dropped) options.machine?.presence(false)
+      if (dropped) {
+        if (options.deferredTools) options.deferredTools.disconnect()
+        else options.machine?.presence(false)
+      }
       if (dropped) live.offline()
       if (dropped) terminals.offline()
       if (dropped) files.offline()
@@ -2469,9 +2488,16 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (approvals.notification(method, params)) return
       if (
         machineApprovalsOn &&
-        method ===
-          (machineApprovalSigningOn ? MACHINE_NOTICE.changedSigned : MACHINE_NOTICE.changed)
+        (method === MACHINE_NOTICE.changed ||
+          method === MACHINE_NOTICE.changedSigned ||
+          method === MACHINE_NOTICE.changedControls)
       ) {
+        const expected = machineApprovalControlsOn
+          ? MACHINE_NOTICE.changedControls
+          : machineApprovalSigningOn
+            ? MACHINE_NOTICE.changedSigned
+            : MACHINE_NOTICE.changed
+        if (method !== expected) return
         const update = params as { threadId: string; cards: MachineApprovalCard[] }
         machineCardVersion++
         putMachineCards(update.threadId, update.cards)
@@ -2479,7 +2505,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         return
       }
       if (machineApprovalsOn && method === MACHINE_NOTICE.stop) {
-        options.machine?.stopDeferred?.(params as MachineApprovalKey)
+        if (options.deferredTools) options.deferredTools.stop(params as MachineApprovalKey)
+        else options.machine?.stopDeferred?.(params as MachineApprovalKey)
         return
       }
       // 给 harness 安装：任务的状态和日志
@@ -2509,9 +2536,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     },
     request(method, params, id) {
       if (method === MACHINE.verify)
-        return machineApprovalSigningOn && online && options.machine?.verifyDeferred
-          ? options.machine.verifyDeferred(params).then((accepted) => ({ accepted }))
-          : undefined
+        return machineApprovalSigningOn && online && options.deferredTools
+          ? options.deferredTools.verify(params).then((accepted) => ({ accepted }))
+          : machineApprovalSigningOn && online && options.machine?.verifyDeferred
+            ? options.machine.verifyDeferred(params).then((accepted) => ({ accepted }))
+            : undefined
       if (method === REMOTE_CHROME_APPROVAL && !remoteChromeSupported) return undefined
       return toolCalls.serverRequest(method, params, id) ?? live.serverRequest(method, params, id)
     },
@@ -2755,6 +2784,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       }
     },
     ...(options.machine ? { machine: machineCalls(options.machine) } : {}),
+    ...(options.deferredTools ? { deferredAccess: options.deferredTools } : {}),
     ...(options.config ? { config: options.config } : {}),
     log,
   })
@@ -3701,6 +3731,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     approvals,
     machineApprovalAvailable: () => online && machineApprovalsOn,
     machineApprovalSigningAvailable: () => online && machineApprovalSigningOn,
+    machineApprovalControlsAvailable: () => online && machineApprovalControlsOn,
     async answerMachineApproval(answer) {
       if (!online || !machineApprovalSigningOn || !isMachinePhoneAnswer(answer))
         return { accepted: false }

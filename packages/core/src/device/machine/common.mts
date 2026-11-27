@@ -149,7 +149,9 @@ export async function approved(
   if (answer.kind === 'allowed') return null
   if (answer.kind === 'submitted') {
     const queued = done(
-      'Submitted for approval. Once approved, the operation runs in the background and sends its result to this conversation. Do not retry.',
+      answer.retry
+        ? 'Submitted for approval. Once approved, Litch will tell this conversation it may retry. Do not retry or use another route while waiting.'
+        : 'Submitted for approval. Once approved, the operation runs in the background and sends its result to this conversation. Do not retry or use another route.',
       summary,
     )
     return { ...queued, note: { ...queued.note, result: 'submitted' } }

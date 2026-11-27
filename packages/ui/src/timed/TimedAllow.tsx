@@ -24,12 +24,20 @@ interface Props {
   request?: RequestView
   /** 异步操作只有用户选中的这张转入后台；授时和单次批准一起交给执行桌面。 */
   grantMachine?(hours: number): Promise<unknown>
+  scopedTarget?: boolean
   /** 卡片正在答复别的选项 */
   disabled: boolean
 }
 
 /** 卡片按钮行里的入口；这张卡片不能限时放行（或设备不支持）时什么都不画 */
-export function useTimedAllow({ deviceId, sessionId, request, disabled, grantMachine }: Props) {
+export function useTimedAllow({
+  deviceId,
+  sessionId,
+  request,
+  disabled,
+  grantMachine,
+  scopedTarget,
+}: Props) {
   const t = useT()
   const { lang } = useAppearance()
   const now = useNow()
@@ -44,8 +52,12 @@ export function useTimedAllow({ deviceId, sessionId, request, disabled, grantMac
   const [text, setText] = useState(String(DEFAULT_HOURS))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const what = target ? timedWhat(t, target) : null
-  if (!target || !what || !view?.available) return { button: null, panel: null }
+  const what = scopedTarget
+    ? t('machine.deferred.thisTarget')
+    : target
+      ? timedWhat(t, target)
+      : null
+  if (!target || !what || (!scopedTarget && !view?.available)) return { button: null, panel: null }
 
   const hours = Number(text)
   const valid = text.trim() !== '' && validTimedApprovalHours(hours)

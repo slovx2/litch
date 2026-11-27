@@ -602,7 +602,7 @@ test('执行器在别处等人（hold）：停表，不等了表从头算', asyn
   assert.deepEqual(main?.of('cancel'), [{ type: CLIENT_TOOL, op: 'cancel', id }])
 })
 
-test('UNATTENDED-CORE-001：会话设备标了无人值守，要出卡或停表等人时不出卡，当场以 unattended 失败', async () => {
+test('UNATTENDED-CORE-001：无法提交异步授权的工具明确拒绝，不停表等人', async () => {
   const notice = 'Litch is running this session unattended (test).'
   for (const op of ['ask', 'hold'] as const) {
     const { core, main, call, summary } = setup()
@@ -621,14 +621,11 @@ test('UNATTENDED-CORE-001：会话设备标了无人值守，要出卡或停表�
     else main?.reply({ op: 'hold', id, held: true })
     const result = resultOf(await answer)
     assert.equal(result?.success, false)
-    assert.equal(result?.contentItems[0]?.text, `[litch:unattended] ${notice}`)
+    assert.match(result?.contentItems[0]?.text ?? '', /^\[litch:unattended\].*Do not retry/)
     assert.deepEqual(main?.of('cancel'), [{ type: CLIENT_TOOL, op: 'cancel', id }])
     // 没出卡：侧栏不标等待，卡片按“取消”回给执行器
     assert.notEqual(summary()?.waitingFor, 'approval')
-    if (op === 'ask')
-      assert.deepEqual(main?.of('answer'), [
-        { type: CLIENT_TOOL, op: 'answer', askId: 'k1', answer: null },
-      ])
+    assert.deepEqual(main?.of('answer'), [])
   }
 })
 
@@ -1268,11 +1265,8 @@ test('UNATTENDED-CORE-003：无人值守时限时授权内的卡片照常按这�
   assert.equal(resultOf(await allowed.result)?.success, true)
   // Chrome 不在内置浏览器的授权里：本来要出卡，无人值守时当场失败
   const refused = await ask('u2', { ...site, browser: 'chrome' })
-  assert.equal(answered(world, 'u2'), null)
-  assert.equal(
-    resultOf(await refused.result)?.contentItems[0]?.text,
-    `[litch:unattended] ${notice}`,
-  )
+  assert.equal(answered(world, 'u2'), undefined)
+  assert.match(resultOf(await refused.result)?.contentItems[0]?.text ?? '', /^\[litch:unattended\]/)
   world.core.stop()
 })
 

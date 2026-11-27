@@ -2,6 +2,7 @@
 import './require-ui-build.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
+import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -98,14 +99,20 @@ async function runPage(config) {
   window.machineCommand = (name, params) =>
     name === 'forgetFixturePhone'
       ? window.litchApprovals.forget(params.phoneId)
-      : command(name, params)
+      : name === 'checkComputerFixture'
+        ? window.machineCheck(params.threadId, params.app)
+        : command(name, params)
   const deviceId = 'approval-fixture'
   await wait('Mac 和 SSH 都在线', () =>
     ['local', deviceId].every((id) => devices.get(id)?.connection === 'online'),
   )
-  await command('device.tools.set', { deviceId, machine: true })
+  await command('device.tools.set', {
+    deviceId,
+    machine: true,
+    ...(config.cu ? { computer: true } : {}),
+  })
   console.log('MACHINE_READY')
-  window.machineCheck = async (sessionId) => {
+  window.machineCheck = async (sessionId, fixtureApp) => {
     const selector = `[data-session="${sessionId}"] .ss-row`
     ;(await wait('经理行', () => document.querySelector(selector)))?.click()
     port.postMessage({ t: 'sub', id: ++serial, topic: { kind: 'session', deviceId, sessionId } })
@@ -129,6 +136,35 @@ async function runPage(config) {
       }
     }
     const card = '[data-machine-deferred="true"]'
+    if (fixtureApp) {
+      const access = `${card}[data-action="access"]`
+      const request = (index) => send(`本机应用：${fixtureApp} ${index}`)
+      const counts = () =>
+        document.body.innerText.match(/Accessibility (?:tree|changes)/g)?.length ?? 0
+      await request(1)
+      ;(
+        await wait('CU 单次批准卡', () => document.querySelector(`${access} [data-option="once"]`))
+      ).click()
+      await wait('CU 批准结果唤醒', () =>
+        document.body.innerText.includes('You may now retry the same operation.'),
+      )
+      const before = counts()
+      await request(2)
+      await wait('CU 重试确实读取测试应用', () => counts() > before)
+      await request(3)
+      ;(
+        await wait('单次授权已用，重新出 CU 卡', () =>
+          document.querySelector(`${access} [data-option="always"]`),
+        )
+      ).click()
+      await wait('长期授权已落下', () => !document.querySelector(access))
+      const prior = counts()
+      await request(4)
+      await wait('CU 长期授权无需再次批准', () => counts() > prior)
+      if (document.querySelector(access)) throw new Error('长期授权后重复出卡')
+      console.log('CU_DONE')
+      return
+    }
     const execute = (value, filename, sleep = '') =>
       `本机：exec ${JSON.stringify({ command: `${sleep}printf '%s' ${value} > ${filename}; printf '%s' ${value}`, cwd: config.cwd })}`
     await send(execute('MACHINE_FIRST', config.first, 'sleep 3; '))
@@ -193,16 +229,42 @@ async function runPage(config) {
     )
     await fileOperation('read_file', { path: config.read, length: 64 }, 'DEFERRED_READ_PROOF')
     await fileOperation('list_dir', { path: config.files }, 'DEFERRED_LIST_PROOF')
+    await fileOperation(
+      'copy',
+      {
+        from: { machine: 'session', path: config.sshSource },
+        to: { machine: 'desktop', path: config.macDest },
+      },
+      'Copied 1 file',
+    )
+    await fileOperation(
+      'copy',
+      {
+        from: { machine: 'desktop', path: config.macDest },
+        to: { machine: 'session', path: config.sshDest },
+      },
+      `to session:${config.sshDest}.`,
+    )
     console.log('MACHINE_DONE')
   }
 }
 
 try {
+  const cu = process.env.LITCH_TEST_COMPUTER_APP
+  if (cu)
+    assert.ok(
+      process.env.CHA_CLAUDE_CLI && process.env.LITCH_COMPUTER_USE_APP,
+      'CU 验收需要隔离 Claude CLI 和已授权的原生助手',
+    )
   const local = await startManagerFixture(t, {})
-  const child = spawn(process.execPath, [join(repo, 'scripts/client-ssh-fixture.mjs')], {
-    cwd: repo,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+  const child = spawn(
+    process.execPath,
+    [join(repo, 'scripts/client-ssh-fixture.mjs'), ...(cu ? ['--engines', 'claude'] : [])],
+    {
+      cwd: repo,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  )
   const sshLog = watch(child)
   const ssh = JSON.parse(await until('SSH 夹具', () => line(sshLog, 'LITCH_SSH_FIXTURE '), Boolean))
   const profile = join(local.root, 'approval-profile')
@@ -230,7 +292,14 @@ try {
     write: join(local.root, 'created-by-approval.txt'),
     read: join(local.root, 'read-test.txt'),
     files: join(local.root, 'list-test'),
+    sshSource: join(ssh.work, 'copy-source.bin'),
+    sshDest: join(ssh.work, 'copy-back.bin'),
+    macDest: join(local.root, 'copy-on-mac.bin'),
+    cu: !!cu,
   }
+  const bytes = randomBytes(6_400_000)
+  const digest = (value) => createHash('sha256').update(value).digest('hex')
+  writeFileSync(config.sshSource, bytes)
   writeFileSync(config.read, 'DEFERRED_READ_PROOF')
   mkdirSync(config.files)
   writeFileSync(join(config.files, 'DEFERRED_LIST_PROOF'), '')
@@ -279,22 +348,29 @@ app.on('browser-window-created', (_event, win) => {
 await import(${JSON.stringify(pathToFileURL(join(repo, 'apps/desktop/dist/main.mjs')).href)});
 `,
   )
-  const desktop = spawn(require('electron'), withChromiumTestArgs([bootstrap]), {
-    cwd: repo,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: {
-      PATH: process.env.PATH,
-      HOME: join(local.root, 'home'),
-      TMPDIR: local.root,
-      CODEX_HOME: join(local.root, 'cx'),
-      LITCH_PROFILE: profile,
-      LITCH_ENTRY: local.socket,
-      LITCH_SSH_CONFIG: ssh.config,
-      LITCH_REMOTE_CODEX: ssh.codex,
-      LITCH_REMOTE_ADAPTER: ssh.adapter,
-      LITCH_LANG: 'zh-CN',
+  const desktop = spawn(
+    process.env.LITCH_TEST_ELECTRON ?? require('electron'),
+    withChromiumTestArgs([bootstrap]),
+    {
+      cwd: repo,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        PATH: process.env.PATH,
+        HOME: join(local.root, 'home'),
+        TMPDIR: local.root,
+        CODEX_HOME: join(local.root, 'cx'),
+        LITCH_PROFILE: profile,
+        LITCH_ENTRY: local.socket,
+        LITCH_SSH_CONFIG: ssh.config,
+        LITCH_REMOTE_CODEX: ssh.codex,
+        LITCH_REMOTE_ADAPTER: ssh.adapter,
+        LITCH_LANG: 'zh-CN',
+        ...(process.env.LITCH_COMPUTER_USE_APP
+          ? { LITCH_COMPUTER_USE_APP: process.env.LITCH_COMPUTER_USE_APP }
+          : {}),
+      },
     },
-  })
+  )
   const log = watch(desktop)
   desktopLog = log
   await until('真实桌面连接', log, (output) => output.includes('MACHINE_READY'))
@@ -304,7 +380,13 @@ await import(${JSON.stringify(pathToFileURL(join(repo, 'apps/desktop/dist/main.m
     t,
     service.socket,
     [],
-    ['machineApprovals', 'machineApprovalSigning', 'backgroundTasks', 'timedApprovals'],
+    [
+      'machineApprovals',
+      'machineApprovalSigning',
+      'machineApprovalControls',
+      'backgroundTasks',
+      'timedApprovals',
+    ],
   )
   const { data: models } = await client.call('model/list', { harness: 'pi' })
   const model = models.find((item) => item.isDefault) ?? models[0]
@@ -394,8 +476,10 @@ await import(${JSON.stringify(pathToFileURL(join(repo, 'apps/desktop/dist/main.m
   assert.equal(readFileSync(config.second, 'utf8'), 'MACHINE_SECOND')
   assert.equal(existsSync(config.stopped), false, '停止后命令未写入')
   assert.equal(readFileSync(config.write, 'utf8'), 'DEFERRED_FILE_CONTENT')
+  assert.equal(digest(readFileSync(config.macDest)), digest(bytes))
+  assert.equal(digest(readFileSync(config.sshDest)), digest(bytes))
   console.log(
-    '真实隐藏 Mac：SSH 经理对话卡不阻塞、限时批准、后台执行与唤醒、下一次直接执行、撤销、单次批准、停止及异步读写和列目录均通过',
+    '真实隐藏 Mac：审批不阻塞，单次与限时批准、后台执行与唤醒、撤销和停止均通过；两向复制 6.4 MB 文件，SHA-256 一致',
   )
   let sequence = 0
   const onMac = async (name, params) => {
@@ -406,12 +490,52 @@ await import(${JSON.stringify(pathToFileURL(join(repo, 'apps/desktop/dist/main.m
       `Mac ${name}`,
       () => (existsSync(result) ? JSON.parse(readFileSync(result, 'utf8')) : null),
       Boolean,
-      30_000,
+      name === 'checkComputerFixture' ? 110_000 : 30_000,
     )
     if (reply.error) throw new Error(reply.error)
     return reply.result
   }
-  await checkSignedMachine({ client, threadId, cwd: config.cwd, ssh, profile, onMac })
+  await checkSignedMachine({
+    client,
+    threadId,
+    cwd: config.cwd,
+    ssh,
+    profile,
+    onMac,
+    copySource: config.sshSource,
+  })
+  if (cu) {
+    const { data } = await client.call('model/list', { harness: 'claude-code' })
+    const claude = data.find((entry) => entry.isDefault) ?? data[0]
+    const created = await client.call('litch/manager/create', {
+      cwd: ssh.work,
+      harness: 'claude-code',
+      name: '无人值守 CU 验收',
+      scope: '',
+      rules: '',
+      model: claude.id,
+      effort: claude.defaultReasoningEffort ?? 'low',
+      permission: ':workspace',
+      template: 'blank',
+      firstTask: '',
+      dispatch: { ...MANAGER_DEFAULT_DISPATCH, worktree: false },
+      contact: MANAGER_DEFAULT_CONTACT,
+    })
+    const board = new ManagerStore(openManagerDatabase(state))
+    try {
+      new ExternalStore(board).config.saveAssignment(
+        { managerId: created.manager.id, identityId: null, repoIds: ['42'] },
+        0,
+        'setup-cu-assignment',
+        () => {},
+      )
+    } finally {
+      board.close()
+    }
+    await onMac('checkComputerFixture', { threadId: created.threadId, app: cu })
+    assert.match(log(), /CU_DONE/)
+    console.log('真实隐藏 Mac：CU 测试应用出卡，单次批准后唤醒并重试成功，总是允许后下一次直通')
+  }
 } catch (error) {
   if (desktopLog) console.error(desktopLog().slice(-10000))
   throw error

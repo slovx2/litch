@@ -41,12 +41,40 @@ export function seedFixturePhone(profile) {
   )
 }
 
-export async function checkSignedMachine({ client, threadId, cwd, onMac, ssh, profile }) {
-  const cardFor = async (filename) => {
+export async function checkSignedMachine({
+  client,
+  threadId,
+  cwd,
+  onMac,
+  ssh,
+  profile,
+  copySource,
+}) {
+  const cardFor = async (filename, action = 'write') => {
     const path = join(cwd, filename)
-    const args = { path, content: filename }
-    const prompt = `本机：write_file ${JSON.stringify(args)}`
-    await onMac('session.send', { deviceId: 'approval-fixture', sessionId: threadId, text: prompt })
+    const args =
+      action === 'copy'
+        ? { from: { machine: 'session', path: copySource }, to: { machine: 'desktop', path } }
+        : { path, content: filename }
+    const prompt = `本机：${action === 'copy' ? 'copy' : 'write_file'} ${JSON.stringify(args)}`
+    await until(
+      '原会话可发起下一条验收请求',
+      async () => {
+        try {
+          await onMac('session.send', {
+            deviceId: 'approval-fixture',
+            sessionId: threadId,
+            text: prompt,
+          })
+          return true
+        } catch (error) {
+          if (!String(error).includes('会话已有活动回合')) throw error
+          return false
+        }
+      },
+      Boolean,
+      25_000,
+    )
     const card = await until(
       '设备转发签名卡',
       async () =>
@@ -54,8 +82,10 @@ export async function checkSignedMachine({ client, threadId, cwd, onMac, ssh, pr
       Boolean,
       20_000,
     )
-    assert.equal(card.action, 'write')
-    assert.equal(JSON.parse(card.review.details).content, filename)
+    assert.equal(card.action, action)
+    if (action === 'copy')
+      assert.equal(JSON.parse(card.review.details).to.path.endsWith(filename), true)
+    else assert.equal(JSON.parse(card.review.details).content, filename)
     assert.equal(existsSync(path), false, '待批时未写入')
     return { card, path }
   }
@@ -103,6 +133,15 @@ export async function checkSignedMachine({ client, threadId, cwd, onMac, ssh, pr
   await until('真实 Mac 写入', () => existsSync(first.path), Boolean, 10_000)
   assert.equal(readFileSync(first.path, 'utf8'), 'signed-first')
   await idle()
+  const copy = await cardFor('signed-copy.bin', 'copy')
+  const copyProof = replyFor(copy.card)
+  await reject({ ...copyProof, decision: 'always' })
+  assert.equal(existsSync(copy.path), false)
+  assert.deepEqual(await client.call(M.answer, copyProof), { accepted: true })
+  await reject(copyProof, true)
+  await until('签名批准后完成复制', () => existsSync(copy.path), Boolean, 20_000)
+  assert.deepEqual(readFileSync(copy.path), readFileSync(copySource))
+  await idle()
   const second = await cardFor('signed-revoked')
   assert.equal(await onMac('forgetFixturePhone', { phoneId }), true)
   await reject(replyFor(second.card))
@@ -114,7 +153,9 @@ export async function checkSignedMachine({ client, threadId, cwd, onMac, ssh, pr
     decision: 'decline',
   })
   await idle()
-  console.log('SSH → 真实 Mac：无签名、伪造、过期签名、重放和撤销均不执行，正确签名只执行一次')
+  console.log(
+    'SSH → 真实 Mac：签名批准写入及二进制复制均只执行一次；无签名、伪造、过期、重放和撤销均被拒绝',
+  )
 
   const serial = process.env.LITCH_MACHINE_ANDROID_SERIAL
   if (serial) await checkAndroid({ serial, onMac, ssh, profile, client, threadId, cardFor })

@@ -132,7 +132,7 @@ test('签名扩展按连接投影，只转给发卡 Mac，设备自身不会批�
     review,
   }
   jobs.call(executor, true, M.open, card)
-  assert.deepEqual(methods, [N.changed, N.changedSigned])
+  assert.deepEqual(methods, [N.changed, N.changedSigned, N.changedControls])
   const viewer = (capabilities: typeof legacy) => capabilities as unknown as typeof executor
   const list = (peer: typeof legacy) =>
     jobs.call(viewer(peer), true, M.list, {}) as { cards: Array<{ review?: unknown }> }

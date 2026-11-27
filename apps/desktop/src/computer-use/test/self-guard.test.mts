@@ -52,7 +52,8 @@ function fixture(
       calls.push({ method, params })
       if (method === 'inspectTarget') return { self: protectedTarget(params.app), pid: 42 }
       if (method === 'permissions') return { accessibility: true, screenRecording: true }
-      if (method === 'listApps') return { apps: [] }
+      if (method === 'listApps')
+        return { apps: [{ name: 'TextEdit', bundleId: 'com.apple.TextEdit', pid: 42 }] }
       if (method === 'getAppState')
         return {
           app: { name: 'Litch', bundleId: 'io.github.slovx2.litch' },
@@ -125,6 +126,27 @@ test('自身每种输入与观察都先问；拒绝不读窗口不发送输入�
   assert.equal((await f.run(invocation('click', 'TextEdit'))).success, true)
   assert.equal((await f.run(invocation('list_apps'))).success, true)
   assert.equal(f.asks.length, 8)
+})
+
+test('无人值守的普通应用在观察前询问已解析的身份；完全访问与已有自身授权直接通过', async () => {
+  const f = fixture()
+  const app = { ...invocation('get_app_state', 'TextEdit'), unattended: true }
+  f.setAnswer(null)
+  assert.equal((await f.run(app)).success, false)
+  assert.deepEqual(f.asks, [{ kind: 'computerApp', app: 'TextEdit (com.apple.TextEdit)', pid: 42 }])
+  assert.deepEqual(f.inputs(), [], '尚未授权，不读取任何窗口')
+  f.setAnswer('once')
+  assert.equal((await f.run(app)).success, true)
+  assert.equal(f.inputs()[0]?.params.targetPid, 42)
+  const asked = f.asks.length
+  assert.equal((await f.run({ ...app, fullAccess: true })).success, true)
+  assert.equal(f.asks.length, asked)
+  f.setAnswer('always')
+  await f.run()
+  const selfAsked = f.asks.length
+  f.setAnswer(null)
+  assert.equal((await f.run({ ...invocation(), unattended: true })).success, true)
+  assert.equal(f.asks.length, selfAsked)
 })
 
 test('本次只覆盖一调用；本对话跨回合保留但不同设备或会话仍问', async () => {

@@ -2,16 +2,20 @@ import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { LitchBackgroundTask } from '../../protocol/src/background-tasks.mjs'
 import {
+  isExtendedMachineApproval,
   isMachineApprovalId,
   isMachineApprovalReview,
   isMachinePhoneAnswer,
+  isMachineRetry,
   MACHINE_APPROVAL_METHOD as M,
+  MACHINE_APPROVAL_CONTROLS,
   MACHINE_APPROVAL_MAX_PER_EXECUTOR,
   MACHINE_APPROVAL_MAX_TEXT,
   MACHINE_APPROVAL_SIGNING,
   MACHINE_APPROVAL_TTL_MS,
   MACHINE_APPROVALS,
   MACHINE_TASK_PREFIX,
+  type MachineAccessNamespace,
   type MachineApprovalCard,
   type MachineApprovalOutcome,
   type MachinePhoneAnswer,
@@ -44,8 +48,13 @@ interface Entry {
 
 interface Host {
   db: DatabaseSync
-  source(peer: ClientToolPeer, threadId: string, callId: string): boolean
-  allowed(threadId: string): boolean
+  source(
+    peer: ClientToolPeer,
+    threadId: string,
+    callId: string,
+    namespace: MachineAccessNamespace,
+  ): boolean
+  allowed(threadId: string, namespace: MachineAccessNamespace): boolean
   announce(method: string, params: unknown, extension: string): void
   task(threadId: string, task: LitchBackgroundTask): void
   deliver(threadId: string, text: string, id: string, onDispatch: () => void): Promise<boolean>
@@ -78,7 +87,13 @@ export class DeviceMachineApprovals {
         -32601,
         'Machine approvals require a declared administrator connection',
       )
-    if (method === M.list) return { cards: this.cards(peer.declares(MACHINE_APPROVAL_SIGNING)) }
+    if (method === M.list)
+      return {
+        cards: this.cards(
+          peer.declares(MACHINE_APPROVAL_SIGNING),
+          peer.declares(MACHINE_APPROVAL_CONTROLS),
+        ),
+      }
     const data = isObject(input) ? input : {}
     if (!isMachineApprovalId(data.id) || typeof data.threadId !== 'string')
       return invalid('Invalid machine approval identifier')
@@ -115,7 +130,7 @@ export class DeviceMachineApprovals {
       if (
         entry.startedAt !== null ||
         entry.card.expiresAt <= Date.now() ||
-        !this.host.allowed(entry.card.threadId)
+        !this.host.allowed(entry.card.threadId, entry.card.retry?.namespace ?? 'litch_machine')
       )
         return invalid('Machine approval can no longer be started')
       clearTimeout(entry.timer)
@@ -145,12 +160,22 @@ export class DeviceMachineApprovals {
 
   private open(peer: Peer, data: Record<string, unknown>): object {
     const { id, threadId, turnId, action, target, cwd, desktop, expiresAt, callId, review } = data
+    const retry = isMachineRetry(data.retry) ? data.retry : undefined
+    const namespace = retry?.namespace ?? 'litch_machine'
     const now = Date.now()
     if (
       !isMachineApprovalId(id) ||
       typeof threadId !== 'string' ||
       !(turnId === null || typeof turnId === 'string') ||
-      (action !== 'exec' && action !== 'read' && action !== 'write' && action !== 'list') ||
+      (action !== 'exec' &&
+        action !== 'read' &&
+        action !== 'write' &&
+        action !== 'list' &&
+        action !== 'copy' &&
+        action !== 'access') ||
+      (isExtendedMachineApproval(action) &&
+        (!peer.declares(MACHINE_APPROVAL_CONTROLS) || !peer.declares(MACHINE_APPROVAL_SIGNING))) ||
+      (action === 'access' ? !retry : data.retry !== undefined) ||
       typeof target !== 'string' ||
       !target ||
       target.length > 4096 ||
@@ -164,8 +189,8 @@ export class DeviceMachineApprovals {
       typeof callId !== 'string' ||
       (review !== undefined &&
         (!peer.declares(MACHINE_APPROVAL_SIGNING) || !isMachineApprovalReview(review))) ||
-      !this.host.source(peer, threadId, callId) ||
-      !this.host.allowed(threadId)
+      !this.host.source(peer, threadId, callId, namespace) ||
+      !this.host.allowed(threadId, namespace)
     )
       return invalid('Invalid or unauthorized machine approval')
     if (this.entries.has(id)) return invalid('Duplicate machine approval')
@@ -184,6 +209,7 @@ export class DeviceMachineApprovals {
       cwd,
       desktop,
       expiresAt,
+      ...(retry ? { retry: { namespace: retry.namespace, always: retry.always } } : {}),
       ...(isMachineApprovalReview(review)
         ? {
             review: {
@@ -252,9 +278,10 @@ export class DeviceMachineApprovals {
     })
   }
 
-  private cards(signed: boolean, threadId?: string): MachineApprovalCard[] {
+  private cards(signed: boolean, extended: boolean, threadId?: string): MachineApprovalCard[] {
     return [...this.entries.values()].flatMap(({ card, startedAt }) => {
       if (startedAt !== null || (threadId !== undefined && threadId !== card.threadId)) return []
+      if (!extended && isExtendedMachineApproval(card.action)) return []
       const { review, ...base } = card
       return [signed && review ? card : base]
     })
@@ -263,13 +290,18 @@ export class DeviceMachineApprovals {
   private changed(threadId: string): void {
     this.host.announce(
       N.changed,
-      { threadId, cards: this.cards(false, threadId) },
+      { threadId, cards: this.cards(false, false, threadId) },
       MACHINE_APPROVALS,
     )
     this.host.announce(
       N.changedSigned,
-      { threadId, cards: this.cards(true, threadId) },
+      { threadId, cards: this.cards(true, false, threadId) },
       MACHINE_APPROVAL_SIGNING,
+    )
+    this.host.announce(
+      N.changedControls,
+      { threadId, cards: this.cards(true, true, threadId) },
+      MACHINE_APPROVAL_CONTROLS,
     )
   }
 

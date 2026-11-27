@@ -409,9 +409,9 @@ shows its most recent successful compaction, which also appears in the session.
 
 - Agent 自己的提问（Claude 的 AskUserQuestion、Codex 的 request_user_input、其他 harness 的提问和计划确认）每道题都收到无人值守的说明作为答复；计划确认按“未确认”处理。
 - 命令、文件改动和权限申请的审批按拒绝处理。Claude Code、Pi、OpenCode 会把说明一起交给模型；Codex、dsh 和 ACP 类 harness 的协议带不了说明，只收到普通的拒绝。MCP 表单征询按拒绝处理。
-- 内置浏览器和 Chrome 的站点、下载、请人登录，Computer Use 操作 Litch 本身的确认，开启“操作这台电脑”、配置助手的确认，以及 `litch_sessions` 的 offer 卡，调用当场失败，开头是 `[litch:unattended]`。
-- Mac 上有限的本机操作会在发起会话中显示不阻塞的审批卡，批准后转入后台任务。其他本机操作仍按原策略处理。
-- 已经放行的照常执行：限时授权有效期内的动作、完全访问对浏览器的放行、“本会话都允许”、审批方式“不确认”、harness 自己的权限规则都不受影响。
+- Mac 上符合条件的命令、文件读写和复制会在发起会话里显示不阻塞的卡片；批准后转为后台任务。异步复制支持两向，限一个不超过 100 MiB 的文件，目标目录须存在。原会话会收到结果。
+- Computer Use（Mac 和 Windows）、桌面浏览器和 Chrome 的站点等访问需要批准时，卡片只给本会话授权访问所示目标；批准后会话收到消息，可以重试。已受信的站点、已批准的应用和已有本机操作授权照常通过。已配对手机可签名批准；其他桌面可查看。
+- 开关关闭、访问受保护位置和需要本人登录时，按提示由用户处理。配置确认和 `litch_sessions` 的 offer 仍返回 `[litch:unattended]`。
 
 说明会告诉 Agent 当前没人可等：经理应在看板上提决策（`litch_manager` 的 `add`，`kind=decision`），工作线应提决策或写进给经理的回报，或换一种不需要提问和审批的做法。工作线的这类请求也不会再挂到经理的待答列表里。有人值守的会话行为不变。旧版桌面端收不到无人值守标记，客户端工具的审批卡仍会照常弹出。
 
@@ -421,8 +421,9 @@ While unattended, nothing waits for a person:
 
 - Agent questions (Claude AskUserQuestion, Codex request_user_input, other harnesses' questions and plan confirmation) receive the unattended notice as the answer to every question; plan confirmation counts as not confirmed.
 - Command, file-change and permission approvals are declined. Claude Code, Pi and OpenCode pass the notice to the model; the Codex, dsh and ACP-based protocols cannot carry it, so they get a plain decline. MCP form elicitations are declined.
-- Browser and Chrome site, download and sign-in prompts, Computer Use confirmation for Litch itself, Operate this computer enable and approval cards, configuration-assistant confirmations and `litch_sessions` offers show no card; the call fails at once with `[litch:unattended]`.
-- Anything already allowed still runs: actions covered by an active timed approval, full-access browser approvals, “allow for this session”, the **Don't ask** approval mode and the harness's own permission rules are unchanged.
+- Approved Mac commands and file operations run in the background. Deferred copy works in both directions for a single file up to 100 MiB, with an existing destination folder. Litch delivers the result to the conversation.
+- Computer Use on macOS and Windows, the desktop browser and Chrome can request access to a specific target. Approving grants access to this conversation and lets it retry. Existing permissions still apply. A paired phone can sign approvals; other desktops can view them.
+- Disabled features, blocked locations and manual sign-in require the user's intervention. Configuration confirmations and `litch_sessions` offers still fail with `[litch:unattended]`.
 
 The notice tells the agent that nobody can answer: managers should add a board decision (`litch_manager` `add`, `kind=decision`); worklines should raise a decision or put it in their report to the manager, or use an approach that needs no question or approval. These requests from worklines no longer appear in the manager's pending list. Attended sessions behave as before. Older desktop versions do not receive the unattended marker and still show client-tool approval cards.
 

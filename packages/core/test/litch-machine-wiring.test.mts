@@ -807,20 +807,20 @@ test('审批·每个会话确认一次（默认）：执行、读各弹一次，
   assert.equal(fake.outcomes.length, 4)
 })
 
-test('UNATTENDED-MACHINE-001：无人值守的会话不出开启卡和审批卡，当场 unattended；不用审批的照常执行', async () => {
+test('UNATTENDED-MACHINE-001：关闭时提示用户启用；已有授权照常执行', async () => {
   const notice = 'Litch is running this session unattended (test).'
   const litchUnattended = { notice }
   const world = await started()
   const session = watchSession(world.core, 'a', 'box')
   // 开关关着：不出开启卡
   const off = textOf(await world.call({ command: 'ls' }, { litchUnattended }))
-  assert.equal(off, `[litch:unattended] ${notice}`)
+  assert.match(off, /^\[litch:disabled\].*Only the user can enable/)
   assert.equal(cardsOf(session).length, 0)
   assert.equal(world.activity.view?.pending.length, 0)
   assert.equal(world.box()?.machine?.enabled, false)
   // 命令行调用一样
   const cli = textOf(await world.detached({ command: 'ls' }, { threadId: 'a', litchUnattended }))
-  assert.equal(cli, `[litch:unattended] ${notice}`)
+  assert.match(cli, /^\[litch:disabled\].*Only the user can enable/)
   await world.enable()
   // 要审批的：不出卡，执行器拿到 unattended 的结果（真执行器照 common.mts 回 [litch:unattended] 这句话）
   await world.call({ command: 'make' }, { litchUnattended })

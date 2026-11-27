@@ -53,6 +53,18 @@ test('exec：跑完回退出码和合并的输出，进程号那一行摘掉，�
   assert.equal(desktop.listeners, 0)
 })
 
+test('无人值守命令提到禁止位置即使不确认也硬拒绝，且不挂卡', async () => {
+  const { context, desktop, executor, asks } = world(['~/.ssh'])
+  context.unattended = true
+  context.settings.approval = 'never'
+  desktop.fs.mkdirp('/Users/dev/.ssh')
+  const response = await executor.call('exec', { command: 'cat ~/.ssh/fixture' }, context)
+  assert.equal(response.success, false)
+  assert.match(textOf(response), /^\[litch:blocked\]/)
+  assert.deepEqual(asks, [])
+  assert.deepEqual(desktop.execs, [])
+})
+
 test('exec：输出超过上限掐掉中间，留头留尾并写明省了多少字节', async () => {
   const { desktop, executor, context } = world()
   const big = `HEAD${'x'.repeat(100_000)}TAIL`

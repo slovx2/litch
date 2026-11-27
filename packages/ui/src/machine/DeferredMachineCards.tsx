@@ -55,9 +55,14 @@ export function DeferredMachineCards({
       ))}
       {remote.map((entry) => (
         <section className="req mach-card" key={entry.id} data-machine-deferred-readonly>
-          <div className="req-head">{t('machine.deferred.waiting')}</div>
+          <div className="req-head">
+            {t(entry.retry ? 'machine.deferred.retry' : 'machine.deferred.waiting')}
+          </div>
           <div className="req-body">
             <code>{entry.target}</code>
+            {entry.review && (entry.action === 'copy' || entry.retry) ? (
+              <pre>{entry.review.details}</pre>
+            ) : null}
             <p>{t('machine.deferred.onMac', { name: entry.desktop })}</p>
           </div>
         </section>

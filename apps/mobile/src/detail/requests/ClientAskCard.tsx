@@ -23,6 +23,7 @@ const MACHINE_TITLE: Record<MachineAskView['action'], Key> = {
   list: 'machine.ask.list',
   copy: 'machine.ask.copy',
   process: 'machine.ask.process',
+  access: 'machine.ask.access',
 }
 
 const MACHINE_OPTION_TEXT: Record<ApprovalOption['role'], Key> = {
@@ -142,6 +143,8 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
           {ask.reason ? <Well>{ask.reason}</Well> : null}
           <Why>{t('chrome.signInNote')}</Why>
         </>
+      ) : ask.kind === 'computerApp' ? (
+        <Well>{ask.app}</Well>
       ) : (
         <>
           <Meta label={t('clientAsk.origin')} value={ask.origin} />

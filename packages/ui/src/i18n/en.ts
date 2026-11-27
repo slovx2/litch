@@ -1970,6 +1970,11 @@ export const en: Record<MessageKey, Entry> = {
   'machine.ask.list': 'Approval needed: list a folder on this computer',
   'machine.ask.copy': 'Approval needed: copy files between devices',
   'machine.ask.process': 'Approval needed: control a process on this computer',
+  'machine.ask.access': 'Approval needed: access this target',
+  'machine.deferred.retry': 'Non-blocking · The conversation can retry after approval',
+  'machine.deferred.retryScope': 'Applies only to this conversation and the target shown here.',
+  'machine.deferred.thisTarget': 'Access to this target',
+  'machine.deferred.alwaysInSession': 'Always allow in this conversation',
   'machine.ask.fromRemote': 'From remote device',
   'machine.ask.fromLocal': 'From',
   'machine.ask.harnessUnknown': 'Unknown',
@@ -1984,7 +1989,7 @@ export const en: Record<MessageKey, Entry> = {
   'machine.ask.flagged': 'The command mentions blocked places',
   'machine.ask.expires': 'Expires in {time}',
   'machine.deferred.waiting': 'Nonblocking · Waiting for your approval',
-  'machine.deferred.onMac': 'Approve on the Mac running this operation: {name}.',
+  'machine.deferred.onMac': 'Approve on the desktop running this operation: {name}.',
   'machine.deferred.phoneFailed':
     'The Mac did not accept this response. Check that your phone is still paired, or respond on the Mac.',
   'machine.deferred.timedScope':

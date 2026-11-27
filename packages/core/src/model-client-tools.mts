@@ -20,6 +20,8 @@ export const CLIENT_TOOL = 'clientTool'
 export interface ToolInvocation extends ClientToolCallParams {
   /** 仅供浏览器使用的会话完全访问标志；从实际配置读取，不接受模型传参。 */
   fullAccess?: boolean
+  /** 由设备标记；用于给无人值守的应用目标申请授权。 */
+  unattended?: boolean
   /** 本地投影的会话标题，只用于显示。 */
   sessionTitle?: string | null
   /** 核心给的标识，取消、答复都按它对 */

@@ -33,6 +33,7 @@ export interface ClientToolDevice {
 export interface ClientToolInvocation extends ClientToolCallParams {
   /** 仅供浏览器使用的会话完全访问标志；从实际配置读取，不接受模型传参。 */
   fullAccess?: boolean
+  unattended?: boolean
   /** 桌面批量编排的内部子调用，沿用批次开始前的观察。 */
   browserBatch?: boolean
   /** 会话标题，仅供浏览器标签组显示；尚未命名时为空。 */
@@ -66,6 +67,7 @@ export interface ClientToolSignInAccount {
 export type ClientToolAsk =
   | { kind: 'browserDownload'; filename: string; origin: string; totalBytes: number | null }
   | { kind: 'computerSelf'; id: string; nonce: string; desktopId: string | null }
+  | { kind: 'computerApp'; app: string; pid: number }
   | {
       kind: 'site'
       /** 要访问的网站来源，比如 https://example.com */
@@ -158,7 +160,7 @@ export interface MachineNotice {
   /** 调用来自哪台设备 */
   deviceName: string
   host: string
-  action: 'exec' | 'write' | 'read' | 'list' | 'copy' | 'process'
+  action: 'exec' | 'write' | 'read' | 'list' | 'copy' | 'process' | 'access'
   /** 命令，或者路径，或者“从哪到哪” */
   summary: string
 }

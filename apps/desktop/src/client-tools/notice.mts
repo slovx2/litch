@@ -22,6 +22,7 @@ const ACTIONS: Record<NoticeLang, Record<MachineNotice['action'], string>> = {
     list: '请求查看本机目录',
     copy: '请求在设备之间复制文件',
     process: '请求操作本机进程',
+    access: '请求访问指定目标',
   },
   en: {
     exec: 'wants to run a command on this computer',
@@ -30,6 +31,7 @@ const ACTIONS: Record<NoticeLang, Record<MachineNotice['action'], string>> = {
     list: 'wants to list a folder on this computer',
     copy: 'wants to copy files between machines',
     process: 'wants to control a process on this computer',
+    access: 'wants to access a specific target',
   },
 }
 

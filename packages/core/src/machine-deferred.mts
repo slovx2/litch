@@ -14,11 +14,10 @@ import {
 import { type Cancel, createCancel } from './channel/cancel.mjs'
 import type { AbortSignalLike, Clock } from './channel/protocol.mjs'
 import type { MachineApprovalRequest } from './device/machine/types.mjs'
-import type { MachineCallInput } from './device/tool-calls.mjs'
 import type { MachineDeviceLink } from './machine-wiring.mjs'
 import type { MachineDeferredView } from './model-machine.mjs'
 
-type Decision = 'once' | 'timed' | 'decline'
+type Decision = 'once' | 'timed' | 'always' | 'decline'
 
 interface Held {
   card: MachineApprovalCard
@@ -26,7 +25,11 @@ interface Held {
   link: MachineDeviceLink
   timer: ReturnType<Clock['setTimer']>
   abort: Cancel
-  execute(signal: AbortSignalLike): Promise<ClientToolCallResponse>
+  execute(
+    signal: AbortSignalLike,
+    decision: Decision,
+    hours?: number,
+  ): Promise<ClientToolCallResponse>
   started: boolean
   busy: boolean
 }
@@ -71,10 +74,10 @@ export function createMachineDeferred(host: Options) {
       })
       .catch((error: unknown) => host.log(`异步本机操作结果未确认：${String(error)}`))
   }
-  const run = async (entry: Held) => {
+  const run = async (entry: Held, decision: Decision, hours?: number) => {
     let response: ClientToolCallResponse
     try {
-      response = await entry.execute(entry.abort.signal)
+      response = await entry.execute(entry.abort.signal, decision, hours)
     } catch {
       await finish(entry, 'failed', 'The executing desktop could not finish the operation.')
       return
@@ -101,6 +104,7 @@ export function createMachineDeferred(host: Options) {
     const entry = held.get(id)
     if (
       !entry ||
+      (decision === 'always' && entry.card.retry?.always !== true) ||
       entry.view.deviceId !== deviceId ||
       entry.busy ||
       entry.started ||
@@ -132,7 +136,7 @@ export function createMachineDeferred(host: Options) {
       entry.started = true
       entry.timer()
       host.changed()
-      if (decision === 'timed' && hours !== undefined) {
+      if (decision === 'timed' && hours !== undefined && !entry.card.retry) {
         // 授时失败明确结束任务，避免界面误报授时成功。
         try {
           await host.grant(deviceId, threadId, hours, current)
@@ -146,7 +150,7 @@ export function createMachineDeferred(host: Options) {
         if (held.get(id) === entry) await finish(entry, 'lost')
         return false
       }
-      void run(entry)
+      void run(entry, decision, hours)
       return true
     } finally {
       entry.busy = false
@@ -159,16 +163,16 @@ export function createMachineDeferred(host: Options) {
     async submit(
       deviceId: string,
       link: MachineDeviceLink,
-      input: MachineCallInput & { threadId: string },
+      input: { threadId: string; turnId: string | null; callId: string; signal: AbortSignalLike },
       request: MachineApprovalRequest,
       details: string,
       snapshot: string,
       execute: Held['execute'],
+      retry?: MachineApprovalCard['retry'],
     ): Promise<boolean> {
       const { action, command, path, cwd } = request.ask
-      if (action !== 'exec' && action !== 'read' && action !== 'write' && action !== 'list')
-        return false
-      const target = command ?? path
+      if (action === 'process' || (action === 'access') !== !!retry) return false
+      const target = command ?? path ?? request.ask.copy?.to.path
       if (!target || target.length > 4096 || input.signal.aborted) return false
       const id = host.randomId?.()
       if (!id) return false
@@ -182,6 +186,7 @@ export function createMachineDeferred(host: Options) {
         cwd,
         desktop: host.desktop.slice(0, 200),
         expiresAt,
+        ...(retry ? { retry } : {}),
       }
       const signing = host.signing
       if (
@@ -218,6 +223,7 @@ export function createMachineDeferred(host: Options) {
         ask: request.ask,
         details,
         expiresAt,
+        ...(retry ? { retry: { always: retry.always } } : {}),
       }
       const entry: Held = {
         card,

@@ -1006,6 +1006,7 @@ export interface FormRequest {
 export type ClientAskView =
   | { kind: 'browserDownload'; filename: string; origin: string; totalBytes: number | null }
   | { kind: 'computerSelf'; id: string; nonce: string; desktopId: string | null }
+  | { kind: 'computerApp'; app: string; pid: number }
   | { kind: 'chromeSignIn'; origin: string; reason: string; remoteHost?: string }
   | { kind: 'chromeInstance'; instanceId: string; name: string }
   | { kind: 'chromeTab'; url: string; title: string }

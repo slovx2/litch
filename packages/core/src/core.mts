@@ -99,6 +99,7 @@ export interface CoreMachineOptions {
   /** 这台桌面端自己的情况，外壳现查的（核心就住在这台电脑上） */
   desktop: MachineFacts
   randomApprovalId?(): string
+  hashBytes?(bytes: Uint8Array): string
   signing?: MachineApprovalSigner
   /** 造执行器。不给就用真的（device/machine/executor.mts）；测试里换成假的 */
   executor?(options: MachineExecutorOptions): MachineExecutor
@@ -327,9 +328,13 @@ export function createCore(options: CoreOptions): Core {
           return !!local && local.threadId === threadId && local.expiresAt > options.clock.now()
         },
         ...(machineOptions.signing ? { signing: machineOptions.signing } : {}),
+        ...(machineOptions.hashBytes ? { hashBytes: machineOptions.hashBytes } : {}),
         signingAvailable: (deviceId) =>
           devices.get(deviceId)?.machineApprovalSigningAvailable() === true,
         deferredAvailable: (deviceId) => devices.get(deviceId)?.machineApprovalAvailable() === true,
+        extendedAvailable: (deviceId) =>
+          devices.get(deviceId)?.machineApprovalControlsAvailable() === true,
+        accessLink: (deviceId) => devices.get(deviceId)?.machineLink ?? null,
         ...(machineOptions.randomApprovalId
           ? { randomDeferredId: machineOptions.randomApprovalId }
           : {}),
@@ -360,6 +365,20 @@ export function createCore(options: CoreOptions): Core {
       ...(store?.views ? { views: store.views(config.id) } : {}),
       ...(store?.pendingInputs ? { pendingInputs: store.pendingInputs(config.id) } : {}),
       tools: hub,
+      ...(wiring
+        ? {
+            deferredTools: {
+              submit: (request) => wiring.submitAccess(config.id, request),
+              use: (threadId, subject) => wiring.useAccess(config.id, threadId, subject),
+              clear: (threadId) => wiring.clearAccess(config.id, threadId),
+              verify: (answer) => wiring.answerDeferredSigned(config.id, answer),
+              stop: ({ id, threadId }) => wiring.stopDeferred(config.id, id, threadId),
+              disconnect: () => {
+                if (current()) wiring.presence(config.id, false)
+              },
+            },
+          }
+        : {}),
       legacyToolSwitches: () => saved.tools?.[config.id],
       clearLegacyToolSwitches() {
         const tools = { ...saved.tools }
@@ -1234,7 +1253,12 @@ export function createCore(options: CoreOptions): Core {
         case 'machine.deferredAnswer': {
           const { deviceId, id, decision, hours } =
             params as Commands['machine.deferredAnswer']['params']
-          if (decision !== 'once' && decision !== 'timed' && decision !== 'decline')
+          if (
+            decision !== 'once' &&
+            decision !== 'timed' &&
+            decision !== 'always' &&
+            decision !== 'decline'
+          )
             throw new ChannelError('invalid', 'Invalid machine approval decision')
           if (decision === 'timed' && !validTimedApprovalHours(hours))
             throw new ChannelError('invalid', 'Invalid approval duration')
