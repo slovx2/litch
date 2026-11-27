@@ -127,6 +127,14 @@ export function machineAnthropic(harness, body, said) {
       ? [{ tool, input: { app } }]
       : [{ text: '没有 litch_computer 这个工具' }]
   }
+  const url = /^本机网页：([^\s]+)$/.exec(said)?.[1]
+  if (url && harness === 'claude-code') {
+    if (results.length) return [{ text: `网页结果：\n${results.join('\n')}` }]
+    const tool = claudeName('navigate', 'litch_browser')
+    return offered.has(tool)
+      ? [{ tool, input: { url } }]
+      : [{ text: '没有 litch_browser 这个工具' }]
+  }
   const system = typeof body.system === 'string' ? body.system : textOf(body.system)
   const step = machineStep(said, {
     nameOf: (tool) =>

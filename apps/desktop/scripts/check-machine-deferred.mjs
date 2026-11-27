@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -110,6 +111,7 @@ async function runPage(config) {
     deviceId,
     machine: true,
     ...(config.cu ? { computer: true } : {}),
+    ...(config.site ? { browser: true } : {}),
   })
   console.log('MACHINE_READY')
   window.machineCheck = async (sessionId, fixtureApp) => {
@@ -136,6 +138,53 @@ async function runPage(config) {
       }
     }
     const card = '[data-machine-deferred="true"]'
+    if (config.site) {
+      const access = `${card}[data-action="access"]`
+      const request = (path) => send(`本机网页：${config.site}/${path}`)
+      // Claude Code 的夹具模型会原样回显收到的唤醒事件。
+      const background = () => document.body.innerText.split('<litch-background-completed>').length
+      const approve = async (choice) => {
+        const button = await wait('内置浏览器站点卡', () =>
+          document.querySelector(`${access} [data-option="${choice}"]`),
+        )
+        if (!button.closest(access).innerText.includes(config.site))
+          throw new Error('卡片没有显示正确的来源')
+        button.click()
+      }
+      await request('once')
+      await wait(
+        '原回合收到提交说明',
+        () =>
+          document.body.innerText.includes('Submitted an approval card for this target.') &&
+          document.querySelector(access),
+      )
+      console.log('BROWSER_PENDING')
+      await wait('确认原回合已经结束且没有网站流量', () => window.machinePermit)
+      const before = background()
+      await approve('once')
+      await wait(
+        '单次批准唤醒原会话',
+        () =>
+          background() > before &&
+          document.body.innerText.includes('You may now retry the same operation.'),
+      )
+      await request('once')
+      await wait('重试确实加载测试网站', () =>
+        document.body.innerText.includes('DEFERRED_SITE_ONCE'),
+      )
+      if (document.querySelector(access)) throw new Error('单次授权的重试仍然出卡')
+      await request('always')
+      const prior = background()
+      await approve('always')
+      await wait('总是允许生效', () => background() > prior)
+      await request('trusted')
+      await wait('总是允许后一条直接加载', () =>
+        document.body.innerText.includes('DEFERRED_SITE_TRUSTED'),
+      )
+      if (document.querySelector(access)) throw new Error('总是允许后仍然出卡')
+      console.log('BROWSER_DONE')
+      return
+    }
     if (fixtureApp) {
       const access = `${card}[data-action="access"]`
       const request = (index) => send(`本机应用：${fixtureApp} ${index}`)
@@ -250,7 +299,28 @@ async function runPage(config) {
 }
 
 try {
-  const cu = process.env.LITCH_TEST_COMPUTER_APP
+  const browserOnly = process.argv.includes('--browser-only')
+  const cu = browserOnly ? undefined : process.env.LITCH_TEST_COMPUTER_APP
+  const wantsClaude = browserOnly || !!cu
+  if (browserOnly) assert.ok(process.env.CHA_CLAUDE_CLI, '浏览器验收需要隔离 Claude CLI')
+  let site = null
+  const siteHits = []
+  if (browserOnly) {
+    const server = createServer((request, response) => {
+      if (request.url !== '/once' && request.url !== '/trusted' && request.url !== '/always') {
+        response.writeHead(404)
+        response.end()
+        return
+      }
+      siteHits.push(request.url)
+      const title = `DEFERRED_SITE_${request.url.slice(1).toUpperCase()}`
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+      response.end(`<!doctype html><title>${title}</title><h1>${title}</h1>`)
+    })
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    cleanup.push(() => new Promise((resolve) => server.close(resolve)))
+    site = `http://unattended-approval.test:${server.address().port}`
+  }
   if (cu)
     assert.ok(
       process.env.CHA_CLAUDE_CLI && process.env.LITCH_COMPUTER_USE_APP,
@@ -259,7 +329,7 @@ try {
   const local = await startManagerFixture(t, {})
   const child = spawn(
     process.execPath,
-    [join(repo, 'scripts/client-ssh-fixture.mjs'), ...(cu ? ['--engines', 'claude'] : [])],
+    [join(repo, 'scripts/client-ssh-fixture.mjs'), ...(wantsClaude ? ['--engines', 'claude'] : [])],
     {
       cwd: repo,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -296,6 +366,7 @@ try {
     sshDest: join(ssh.work, 'copy-back.bin'),
     macDest: join(local.root, 'copy-on-mac.bin'),
     cu: !!cu,
+    site,
   }
   const bytes = randomBytes(6_400_000)
   const digest = (value) => createHash('sha256').update(value).digest('hex')
@@ -313,6 +384,7 @@ try {
     `
 import { app } from 'electron';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+${site ? "app.commandLine.appendSwitch('host-resolver-rules', 'MAP unattended-approval.test 127.0.0.1'); app.commandLine.appendSwitch('no-proxy-server');" : ''}
 process.on('SIGTERM', () => app.quit());
 app.on('browser-window-created', (_event, win) => {
   win.show = () => {}; app.dock?.hide();
@@ -388,13 +460,15 @@ await import(${JSON.stringify(pathToFileURL(join(repo, 'apps/desktop/dist/main.m
       'timedApprovals',
     ],
   )
-  const { data: models } = await client.call('model/list', { harness: 'pi' })
+  const harness = browserOnly ? 'claude-code' : 'pi'
+  const { data: models } = await client.call('model/list', { harness })
   const model = models.find((item) => item.isDefault) ?? models[0]
-  assert.ok(model, '夹具没有 Pi 模型')
+  assert.ok(model, '夹具没有模型')
   const { manager, threadId } = await client.call('litch/manager/create', {
     cwd: ssh.work,
-    harness: 'pi',
-    name: '无人值守本机审批验收',
+    harness,
+    name: browserOnly ? '无人值守内置浏览器验收' : '无人值守本机审批验收',
+    ...(browserOnly ? { permission: ':workspace' } : {}),
     scope: '',
     rules: '',
     model: model.id,
@@ -452,89 +526,104 @@ await import(${JSON.stringify(pathToFileURL(join(repo, 'apps/desktop/dist/main.m
     store.close()
   }
   writeFileSync(threadFile, threadId)
+  const pendingMarker = browserOnly ? 'BROWSER_PENDING' : 'MACHINE_PENDING'
   await until(
     '发起回合结束仍待批',
     log,
-    (output) => output.includes('MACHINE_PENDING') || desktop.exitCode !== null,
+    (output) => output.includes(pendingMarker) || desktop.exitCode !== null,
   )
-  assert.match(log(), /MACHINE_PENDING/)
-  assert.equal(existsSync(config.first), false, '批准前不能写入')
+  assert.ok(log().includes(pendingMarker))
+  if (browserOnly) assert.deepEqual(siteHits, [], '批准前不能访问测试站点')
+  else assert.equal(existsSync(config.first), false, '批准前不能写入')
   await until(
     '审批卡不阻塞原回合',
     () => client.call('thread/read', { threadId, includeTurns: true }),
     ({ thread }) => thread.turns.at(-1)?.status === 'completed',
   )
   writeFileSync(permissionFile, '')
-  await until(
-    '后台执行、唤醒与限时直通',
-    log,
-    (output) => output.includes('MACHINE_DONE') || desktop.exitCode !== null,
-  )
-  assert.match(log(), /MACHINE_DONE/)
-  await until('授权内实际执行', () => existsSync(config.second), Boolean)
-  assert.equal(readFileSync(config.first, 'utf8'), 'MACHINE_FIRST')
-  assert.equal(readFileSync(config.second, 'utf8'), 'MACHINE_SECOND')
-  assert.equal(existsSync(config.stopped), false, '停止后命令未写入')
-  assert.equal(readFileSync(config.write, 'utf8'), 'DEFERRED_FILE_CONTENT')
-  assert.equal(digest(readFileSync(config.macDest)), digest(bytes))
-  assert.equal(digest(readFileSync(config.sshDest)), digest(bytes))
-  console.log(
-    '真实隐藏 Mac：审批不阻塞，单次与限时批准、后台执行与唤醒、撤销和停止均通过；两向复制 6.4 MB 文件，SHA-256 一致',
-  )
-  let sequence = 0
-  const onMac = async (name, params) => {
-    const path = join(commands, `${++sequence}.json`)
-    writeFileSync(path, JSON.stringify({ name, params }), { mode: 0o600 })
-    const result = `${path}.result`
-    const reply = await until(
-      `Mac ${name}`,
-      () => (existsSync(result) ? JSON.parse(readFileSync(result, 'utf8')) : null),
-      Boolean,
-      name === 'checkComputerFixture' ? 110_000 : 30_000,
+  if (browserOnly) {
+    await until(
+      '站点批准、唤醒和总是允许',
+      log,
+      (output) => output.includes('BROWSER_DONE') || desktop.exitCode !== null,
     )
-    if (reply.error) throw new Error(reply.error)
-    return reply.result
-  }
-  await checkSignedMachine({
-    client,
-    threadId,
-    cwd: config.cwd,
-    ssh,
-    profile,
-    onMac,
-    copySource: config.sshSource,
-  })
-  if (cu) {
-    const { data } = await client.call('model/list', { harness: 'claude-code' })
-    const claude = data.find((entry) => entry.isDefault) ?? data[0]
-    const created = await client.call('litch/manager/create', {
-      cwd: ssh.work,
-      harness: 'claude-code',
-      name: '无人值守 CU 验收',
-      scope: '',
-      rules: '',
-      model: claude.id,
-      effort: claude.defaultReasoningEffort ?? 'low',
-      permission: ':workspace',
-      template: 'blank',
-      firstTask: '',
-      dispatch: { ...MANAGER_DEFAULT_DISPATCH, worktree: false },
-      contact: MANAGER_DEFAULT_CONTACT,
-    })
-    const board = new ManagerStore(openManagerDatabase(state))
-    try {
-      new ExternalStore(board).config.saveAssignment(
-        { managerId: created.manager.id, identityId: null, repoIds: ['42'] },
-        0,
-        'setup-cu-assignment',
-        () => {},
+    assert.match(log(), /BROWSER_DONE/)
+    assert.deepEqual(siteHits, ['/once', '/trusted'], '批准授予重试权，不回放被拦下的访问')
+    console.log(
+      '真实隐藏 Mac：内置浏览器出站点卡时原回合已结束，站点没有流量；单次批准后唤醒并重试成功，本会话总是允许后直接访问。',
+    )
+  } else {
+    await until(
+      '后台执行、唤醒与限时直通',
+      log,
+      (output) => output.includes('MACHINE_DONE') || desktop.exitCode !== null,
+    )
+    assert.match(log(), /MACHINE_DONE/)
+    await until('授权内实际执行', () => existsSync(config.second), Boolean)
+    assert.equal(readFileSync(config.first, 'utf8'), 'MACHINE_FIRST')
+    assert.equal(readFileSync(config.second, 'utf8'), 'MACHINE_SECOND')
+    assert.equal(existsSync(config.stopped), false, '停止后命令未写入')
+    assert.equal(readFileSync(config.write, 'utf8'), 'DEFERRED_FILE_CONTENT')
+    assert.equal(digest(readFileSync(config.macDest)), digest(bytes))
+    assert.equal(digest(readFileSync(config.sshDest)), digest(bytes))
+    console.log(
+      '真实隐藏 Mac：审批不阻塞，单次与限时批准、后台执行与唤醒、撤销和停止均通过；两向复制 6.4 MB 文件，SHA-256 一致',
+    )
+    let sequence = 0
+    const onMac = async (name, params) => {
+      const path = join(commands, `${++sequence}.json`)
+      writeFileSync(path, JSON.stringify({ name, params }), { mode: 0o600 })
+      const result = `${path}.result`
+      const reply = await until(
+        `Mac ${name}`,
+        () => (existsSync(result) ? JSON.parse(readFileSync(result, 'utf8')) : null),
+        Boolean,
+        name === 'checkComputerFixture' ? 110_000 : 30_000,
       )
-    } finally {
-      board.close()
+      if (reply.error) throw new Error(reply.error)
+      return reply.result
     }
-    await onMac('checkComputerFixture', { threadId: created.threadId, app: cu })
-    assert.match(log(), /CU_DONE/)
-    console.log('真实隐藏 Mac：CU 测试应用出卡，单次批准后唤醒并重试成功，总是允许后下一次直通')
+    await checkSignedMachine({
+      client,
+      threadId,
+      cwd: config.cwd,
+      ssh,
+      profile,
+      onMac,
+      copySource: config.sshSource,
+    })
+    if (cu) {
+      const { data } = await client.call('model/list', { harness: 'claude-code' })
+      const claude = data.find((entry) => entry.isDefault) ?? data[0]
+      const created = await client.call('litch/manager/create', {
+        cwd: ssh.work,
+        harness: 'claude-code',
+        name: '无人值守 CU 验收',
+        scope: '',
+        rules: '',
+        model: claude.id,
+        effort: claude.defaultReasoningEffort ?? 'low',
+        permission: ':workspace',
+        template: 'blank',
+        firstTask: '',
+        dispatch: { ...MANAGER_DEFAULT_DISPATCH, worktree: false },
+        contact: MANAGER_DEFAULT_CONTACT,
+      })
+      const board = new ManagerStore(openManagerDatabase(state))
+      try {
+        new ExternalStore(board).config.saveAssignment(
+          { managerId: created.manager.id, identityId: null, repoIds: ['42'] },
+          0,
+          'setup-cu-assignment',
+          () => {},
+        )
+      } finally {
+        board.close()
+      }
+      await onMac('checkComputerFixture', { threadId: created.threadId, app: cu })
+      assert.match(log(), /CU_DONE/)
+      console.log('真实隐藏 Mac：CU 测试应用出卡，单次批准后唤醒并重试成功，总是允许后下一次直通')
+    }
   }
 } catch (error) {
   if (desktopLog) console.error(desktopLog().slice(-10000))
