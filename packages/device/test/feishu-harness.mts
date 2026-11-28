@@ -22,6 +22,8 @@ export class FeishuFakeHarness {
       upstreams?: Parameters<typeof rig>[0]
       /** 设备时钟（秒） */
       now?: () => number
+      /** 经理空闲压缩时钟（毫秒） */
+      managerIdleCompactClock?: () => number
       wakeTickMs?: number
       outboxTickMs?: number
       extensions?: string[]
@@ -34,6 +36,9 @@ export class FeishuFakeHarness {
     const fake = new FakeFeishu()
     await fake.start()
     const env = rig(options.upstreams ?? {}, options.upstreams ? { needsUserMs: 60 } : {}, {
+      ...(options.managerIdleCompactClock
+        ? { managerIdleCompactClock: options.managerIdleCompactClock }
+        : {}),
       feishu: {
         ...(options.cliBinary ? { cliBinary: options.cliBinary } : {}),
         fixture: {

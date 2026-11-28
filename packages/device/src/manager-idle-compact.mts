@@ -79,8 +79,6 @@ export class ManagerIdleCompact {
     if (this.closed) return 'closed'
     if (manager.status !== 'active') return 'managerInactive'
     if (!(manager.idleCompact ?? DEFAULT_MANAGER_IDLE_COMPACT).enabled) return 'disabled'
-    if (!this.owner.external?.store.config.assignment(manager.id).repoIds.length)
-      return 'noRepository'
     return null
   }
 
@@ -142,9 +140,9 @@ export class ManagerIdleCompact {
     return found
   }
 
-  /** 不为每秒一轮的经理投递定时器另开连接；活跃、未分配和未到期的会话不查询引擎。 */
+  /** 沿用经理投递的定时器；空闲未到期或已知受阻的会话不查询引擎。 */
   tick(only?: string): void {
-    if (this.closed || !this.owner.external) return
+    if (this.closed) return
     const one = only ? this.owner.store.manager(only) : null
     const managers = (only ? (one ? [one] : []) : this.owner.store.managers()).filter((manager) => {
       const block = this.managerBlock(manager)

@@ -15,6 +15,7 @@ interface Fixture {
 }
 interface PageState {
   managerId: string
+  managerThreadId: string
   lineId: string
   pending: number
 }
@@ -41,7 +42,12 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
   }
   const { one, all, text, write, frame } = page.__filesKit
   const kit = page.__enginesKit
-  const state = (page.__managerReal ??= { managerId: '', lineId: '', pending: 0 })
+  const state = (page.__managerReal ??= {
+    managerId: '',
+    managerThreadId: '',
+    lineId: '',
+    pending: 0,
+  })
   const wait = async <T,>(what: string, read: () => T | null | false | undefined): Promise<T> => {
     const end = Date.now() + 90_000
     while (Date.now() < end) {
@@ -73,11 +79,25 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
   }
   const row = () => one(`.mg-sidebar-manager[data-manager-id="${CSS.escape(state.managerId)}"]`)
   const pending = () => Number(text(one('[data-sidebar-mode="manager"] .pill')) || 0)
+  const decisionCard = '.mg-issue[data-issue-type="decision"]'
+  const decisionToggle = `${decisionCard} [data-act="issue-toggle"]`
+  const expandDecision = async () => {
+    const toggle = await wait('列表里的决策', () => one<HTMLButtonElement>(decisionToggle))
+    if (toggle.getAttribute('aria-expanded') !== 'true') await click(decisionToggle)
+  }
   // 经理设定在概览页末尾的卡片里；不在概览页时先切过去
   const rulesText = () => {
     const card = one('[data-manager-rules]')
     if (!card) one('[data-board-tab="overview"]')?.click()
     return text(card)
+  }
+  // 已完成的系统回合默认收起，按界面操作展开后再检查事件卡。
+  const revealSystemRun = () =>
+    one<HTMLButtonElement>('.mg-chat button[data-run][aria-expanded="false"]')?.click()
+  const findEvent = (kind: string) => {
+    const card = one(`.mg-chat [data-event="${kind}"]`)
+    if (!card) revealSystemRun()
+    return card
   }
   const reply = async (expected: string, event?: string) => {
     await wait(expected, () =>
@@ -85,7 +105,7 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     )
     await kit.idle()
     assert(kit.foot().includes('完成'), `回合未完成：${kit.where()}`)
-    if (event) assert(one(`[data-event="${event}"]`), `未显示 ${event} 事件卡`)
+    if (event) await wait(`${event} 事件卡`, () => findEvent(event))
   }
   if (step === '01-open') {
     page.__litchLook.set({ lang: 'zh-CN' })
@@ -124,6 +144,9 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     state.managerId = manager.dataset.managerId ?? ''
     assert(state.managerId, '经理页没有标识')
     await reply('经理已就绪，等待开始。', 'manager-open')
+    const session = one('.mg-chat [data-composer-session]')?.getAttribute('data-composer-session')
+    state.managerThreadId = JSON.parse(session ?? '[]')[1] ?? ''
+    assert(state.managerThreadId, '经理对话没有会话标识')
     const actualHarness = one('.crumb .chip')?.getAttribute('title')
     assert(
       actualHarness === (harness === 'codex' ? 'Codex' : 'Claude Code'),
@@ -152,15 +175,16 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     )
     await reply('经理结果：')
     await click('[data-board-tab="decisions"]')
+    await expandDecision()
     await wait(
       '决策与依据',
       () =>
-        text(one('.mg-decision')).includes('是否开始真实界面验收工作线？') &&
-        text(one('.mg-basis')).includes('夹具 main 分支'),
+        text(one(decisionToggle)).includes('是否开始真实界面验收工作线？') &&
+        text(one(`${decisionCard} [data-evidence]`)).includes('夹具 main 分支'),
     )
     await wait(
       '两个待定数增加',
-      () => text(one('small', row())).includes('1 待定') && pending() === state.pending + 1,
+      () => text(one('small', row())).includes('1 待处理') && pending() === state.pending + 1,
     )
     return { sidebar: text(row()), pending: pending(), decision: text(one('.mg-decision')) }
   }
@@ -179,13 +203,17 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     )
     await click('[data-act="manager-submit"]')
     await reply('收到答复：', 'manager-answers')
+    assert(one('[data-issue-filter-status="todo"][aria-checked="true"]'), '提交后切走了待处理')
+    await click('[data-issue-filter-status="done"]')
+    await expandDecision()
     await wait(
       '决策已答',
       () =>
-        text(one('.mg-decision-filter [aria-pressed="true"]')).includes('已答') &&
-        text(one('.mg-decision')).includes('开始验收 按此方案执行，只验隔离目录。'),
+        one('[data-issue-filter-status="done"][aria-checked="true"]') &&
+        text(one('.mg-decision')).includes('开始验收') &&
+        text(one('.mg-decision')).includes('按此方案执行，只验隔离目录。'),
     )
-    assert(!one('.mg-decision textarea') && !one('.mg-send'), '答复未提交')
+    assert(!one('.mg-decision textarea') && !one('.mg-send:not([data-sent])'), '答复未提交')
     await wait('待定数恢复', () => pending() === state.pending)
     return { answer: text(one('.mg-decision')), reply: kit.lastAnswer(), pending: pending() }
   }
@@ -198,16 +226,16 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
         kind: 'fresh',
         initiation: 'user_asked',
         background:
-          '这是经理真实桌面界面的隔离验收。用户已经在决策看板选择开始并提交自由文字，经理现在开一条工作线，检查回报是否能显示在工作线页和侧栏，不修改真实项目、不访问个人配置、不执行发布。',
+          '这是经理真实桌面界面的隔离验收。用户已经在决策看板选择开始并提交自由文字，经理现在开一条工作线，检查回报是否送达经理、工作线是否出现在经理侧栏，不修改真实项目、不访问个人配置、不执行发布。',
         prompt: `${report}：请核对隔离验收背景，汇报完成情况和检查结果。所有操作限定在当前夹具仓库，使用回环假模型，不访问真实项目或个人配置，不发布内容。\n没验：真实模型质量不在本次回环夹具范围内。`,
       })}`,
     )
     await reply('会话结果：')
-    await click('[data-board-tab="lines"]')
-    const card = await wait('工作线完成及最近回报', () =>
-      all('.mg-body .mg-card').find(
-        (entry) => text(entry).includes(report) && text(one('.pill', entry)) === '空闲',
+    assert(
+      all('.mg-chat .agent-message > .md').some((entry) =>
+        text(entry).includes('Started sub-session'),
       ),
+      '会话工具未成功派出工作线',
     )
     const line = await wait('侧栏经理的工作线', () => {
       // 经理行默认收起，下面一行“› N 个子会话”：先展开
@@ -218,28 +246,33 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     })
     state.lineId = line.dataset.session ?? ''
     assert(state.lineId, '侧栏工作线没有会话标识')
-    const shown = text(card)
+    const shown = await wait('工作线回报送达经理对话', () => {
+      const note = one(`.mg-chat .sev-note[data-child="${CSS.escape(state.lineId)}"]`)
+      if (text(note).includes(report)) return text(note)
+      const toggle = one<HTMLButtonElement>(
+        '.mg-chat :is([data-event="wake"],[data-event="notes"]) button.compact-message[aria-expanded="false"]',
+      )
+      if (toggle) toggle.click()
+      else revealSystemRun()
+      return null
+    })
     await click('[data-sidebar-mode="chat"]')
-    await wait('普通对话侧栏', () => !one('.mg-sidebar-group'))
-    assert(
-      !one(`.sb-scroll [data-session="${CSS.escape(state.lineId)}"]:not(.projection-group *)`),
-      '工作线漏入普通对话',
+    await wait(
+      '普通对话侧栏',
+      () => one('[data-sidebar-mode="chat"][aria-pressed="true"]') && !one('.mg-sidebar-group'),
     )
-    assert(!text(one('.sb-scroll')).includes(`${harness} 真实界面经理`), '经理漏入普通对话')
+    const ordinaryRow = (id: string) =>
+      one(`.sb-scroll [data-session="${CSS.escape(id)}"]:not(.projection-group *)`)
+    assert(!ordinaryRow(state.lineId), '工作线漏入普通对话')
+    assert(!ordinaryRow(state.managerThreadId), '经理漏入普通对话')
     await click('[data-sidebar-mode="manager"]')
     await click(`.mg-sidebar-manager[data-manager-id="${CSS.escape(state.managerId)}"] .mg-pick`)
-    await click('[data-board-tab="lines"]')
-    await wait('返回经理后工作线看板重新读完', () =>
-      all('.mg-body .mg-card').some(
-        (entry) => text(entry).includes(report) && text(one('.pill', entry)) === '空闲',
-      ),
-    )
-    one('.mg-body')?.scrollTo({ top: 0 })
-    await frame()
     return { lineId: state.lineId, report: shown, ordinaryChatsExcludeLine: true }
   }
   if (step === '05-origin') {
-    await click('.mg-body .mg-card button')
+    await click(
+      `.mg-tree [data-session="${CSS.escape(state.lineId)}"]:not(.projection-group *) .ss-row`,
+    )
     await wait('来源条', () => text(one('.mg-origin')).includes('由经理创建'))
     await wait('工作线对话读完', () => kit.lastAnswer().includes(`${harness} 真实界面工作线回报`))
     await kit.idle()
@@ -269,7 +302,8 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     const rules = await wait('可编辑的经理设定', () =>
       field('经理设定')?.querySelector<HTMLTextAreaElement>('textarea'),
     )
-    const updated = `${rules.value}\n仅在隔离仓库执行 ${harness} 设置验收，完成后等待用户确认。`
+    const addition = `仅在隔离仓库执行 ${harness} 设置验收，完成后等待用户确认。`
+    const updated = `${rules.value}\n${addition}`
     write(rules, updated)
     await frame()
     await click('[data-form-tab="dispatch"]')
@@ -277,10 +311,9 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     await click('[data-form-tab="basic"]')
     assert(rules.value === updated, '任务分配选项覆盖了经理设定')
     await click('.mg-form button[type="submit"]')
-    await wait('保存后经理设定更新', () => rulesText().includes(updated))
-    const event = await wait('规则事件卡', () => one('[data-event="manager-rules"]'))
+    await wait('保存后经理设定更新', () => rulesText().includes(addition))
     await wait('规则回合完成', () => {
-      const turn = event.closest('.turn')
+      const turn = findEvent('manager-rules')?.closest('.turn')
       return (
         turn?.querySelector('.md') && text(turn.querySelector('.turn-foot span')).includes('完成')
       )
@@ -298,7 +331,7 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
       '保存的经理设定不符',
     )
     await click('.mg-form-foot button[type="button"]')
-    const card = await wait('返回后规则事件卡', () => one('[data-event="manager-rules"]'))
+    const card = await wait('返回后规则事件卡', () => findEvent('manager-rules'))
     card.scrollIntoView({ block: 'center' })
     await frame()
     return { event: text(card), prompt: rulesText(), maxRunningLines: 2, rules: updated }
@@ -308,7 +341,9 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     await click('.mg-end button:last-child')
     await wait('结束中', () => one('[data-manager-status="ending"]'))
     assert(
-      !one('.mg-chat textarea') && !one('.mg-title button') && one('.mg-readonly'),
+      !one('.mg-chat textarea') &&
+        !one('.mg-title button:not([data-act="manager-board-toggle"])') &&
+        one('.mg-readonly'),
       '结束中仍可写入',
     )
     assert(text(row()).includes('结束中'), '侧栏没有结束中状态')
@@ -320,10 +355,12 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
       '结束回复与事件',
       () =>
         text(one('.mg-chat')).includes('经理已结束，未完成事项与决策保留在只读看板。') &&
-        one('[data-event="manager-end"]'),
+        findEvent('manager-end'),
     )
     assert(
-      !one('.mg-chat textarea') && !one('.mg-title button') && one('.mg-readonly'),
+      !one('.mg-chat textarea') &&
+        !one('.mg-title button:not([data-act="manager-board-toggle"])') &&
+        one('.mg-readonly'),
       '已结束仍可写入',
     )
     const toggle = one<HTMLButtonElement>('.mg-sidebar-group:last-child .head-toggle')

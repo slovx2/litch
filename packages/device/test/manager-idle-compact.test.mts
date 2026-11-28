@@ -12,12 +12,13 @@ import {
   type ManagerIdleCompactSettings,
 } from '../../protocol/src/manager-idle-compact.mjs'
 import { startChild } from '../src/session-start.mjs'
+import { intervalTask } from './task-kit.mjs'
 import { treeRig, until } from './tree-kit.mjs'
 
 const minute = 60_000
 const rules = '规则夹具：保留固定说明和外部工具。'
 
-async function setup() {
+async function setup(github = true) {
   let now = Date.now()
   let queued = false
   let engineBusy = false
@@ -27,15 +28,14 @@ async function setup() {
     {},
     {
       managerIdleCompactClock: () => now,
-      external: {},
+      ...(github ? { external: {} } : {}),
       log: (line) => logs.push(line),
     },
   )
   const client = env.connect()
   const { managers, sessionTree: tree, external } = env.device
-  assert.ok(external)
   const { claude } = env
-  await client.initialize(['harness', 'litchManager', 'sessionTree'])
+  await client.initialize(['harness', 'litchManager', 'sessionTree', 'deviceTasks'])
   const { manager, threadId } = await client.call(MANAGER_METHOD.create, {
     cwd: env.stateDir,
     harness: 'claude-code',
@@ -52,6 +52,7 @@ async function setup() {
   await until(() => claude.running(threadId), '经理开场')
   const end = claude.end(threadId)
   await until(() => !tree.isActive(threadId), '经理闲置')
+  now = Date.now()
   const sample: IdleCompactSnapshot = {
     idle: true,
     lastTurnId: end.id,
@@ -72,7 +73,8 @@ async function setup() {
     return { turnId: turn.id }
   }
   function assign() {
-    external!.store.config.saveAssignment(
+    assert.ok(external)
+    external.store.config.saveAssignment(
       { managerId: manager.id, identityId: 'identity', repoIds: ['r1'] },
       0,
       'idle-compact-assignment',
@@ -115,26 +117,30 @@ async function setup() {
   }
 }
 
-test('按严格阈值和最后活动判断；无分配、用量未知、引擎队列、待投递和活动回合均不压缩', async () => {
+test('分配 GitHub 仓库的经理沿用严格阈值；用量未知、引擎队列、待投递和活动回合均不压缩', async () => {
   const f = await setup()
   try {
     assert.deepEqual(f.managers.manager(f.id).idleCompact, DEFAULT_MANAGER_IDLE_COMPACT)
-    f.advance(50 * minute - 1)
-    await f.scan()
     f.assign()
+    f.advance(50 * minute - 1)
     await f.scan()
     assert.equal(f.attempts(), 0)
     f.advance(1)
     f.sample.usedTokens = 70_000
     await f.scan()
     await f.scan()
-    assert.equal(f.logs.filter((line) => line.includes('"reason":"belowThreshold"')).length, 1)
+    assert.equal(
+      f.logs.filter((line) => line.includes('"reason":"belowThreshold"')).length,
+      1,
+      f.logs.join('\n'),
+    )
     f.sample.usedTokens = null
     await f.scan()
     f.sample.usedTokens = 80_000
     f.queued(true)
     await f.scan()
     f.queued(false)
+    assert.ok(f.external)
     const waiting = f.external.store.queue.queueDeliveryGroup({
       groupId: 'queued-external',
       sourceId: 'fixture',
@@ -175,10 +181,56 @@ test('按严格阈值和最后活动判断；无分配、用量未知、引擎�
   }
 })
 
+for (const scheduled of [false, true]) {
+  test(`${scheduled ? '只跑定时任务' : '没有外部来源'}的经理：忙时跳过，空闲后默认压缩`, async () => {
+    const f = await setup(false)
+    try {
+      assert.equal(f.external, null)
+      assert.deepEqual(f.managers.manager(f.id).idleCompact, DEFAULT_MANAGER_IDLE_COMPACT)
+      if (scheduled) {
+        const { task } = await f.client.call(
+          'litch/task/create',
+          intervalTask(f.env.stateDir, 5, {
+            target: { kind: 'thread', harness: 'claude-code', threadId: f.threadId },
+          }),
+        )
+        await f.client.call('litch/task/runNow', { id: task.id })
+        await until(() => f.claude.running(f.threadId), '定时任务启动')
+        assert.match(JSON.stringify(f.claude.current(f.threadId)?.items), /Scheduled task run/)
+      } else {
+        // 模拟漏掉回合开始通知：设备仍须以引擎实时状态为准。
+        f.engineBusy(true)
+      }
+      f.advance(51 * minute)
+      await f.scan()
+      assert.equal(f.attempts(), 0, '忙时不压缩')
+      if (scheduled) {
+        const ended = f.claude.end(f.threadId)
+        await until(() => !f.tree.isActive(f.threadId), '定时任务回合结束')
+        f.sample.lastTurnId = ended.id
+        f.sample.lastTurnActivityAt = f.now()
+        await f.scan()
+        assert.equal(f.attempts(), 0, '结束后重新计时')
+        f.advance(51 * minute)
+      } else {
+        assert.ok(f.logs.some((line) => line.includes('"reason":"engineBusy"')))
+        f.engineBusy(false)
+        f.advance(minute)
+      }
+      f.managers.idleCompact.tick()
+      await until(() => f.attempts() === 1, '全设备定时扫描启动压缩')
+      f.finish('completed', 25_000)
+      await f.tree.settleIdleCompacts()
+      assert.equal(f.managers.manager(f.id).idleCompactLast?.after, 25)
+    } finally {
+      await f.env.close()
+    }
+  })
+}
+
 test('改阈值立即生效；关闭不运行；失败留日志并在同一轮不重试', async () => {
-  const f = await setup()
+  const f = await setup(false)
   try {
-    f.assign()
     f.advance(10 * minute)
     await f.config({ enabled: false, idleMinutes: 5, contextPercent: 75 })
     await f.scan()

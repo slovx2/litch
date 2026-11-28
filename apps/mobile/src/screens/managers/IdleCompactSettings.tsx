@@ -1,6 +1,5 @@
-// 手机上的经理设置：无人值守 · 空闲自动压缩。开关与名称同一行，两个短数值并排；只提交 idleCompact。
+// 手机上的经理设置：空闲自动压缩。开关与名称同一行，两个短数值并排；只提交 idleCompact。
 import {
-  type DeviceView,
   IDLE_COMPACT_MINUTES,
   IDLE_COMPACT_PERCENT,
   idleCompactSupports,
@@ -19,17 +18,14 @@ import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
 import { Dialog } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
-import { useExternalDevice } from './external/use-external'
 
 export function IdleCompactSettings({
   manager,
-  device,
   saved,
   disabled,
   onClose,
 }: {
   manager: ManagerView
-  device: DeviceView | undefined
   saved: ManagerIdleCompactSettings
   disabled: boolean
   onClose(): void
@@ -41,14 +37,8 @@ export function IdleCompactSettings({
   const [draft, setDraft] = useState(() => idleCompactDraft(saved))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const config = useExternalDevice(manager.deviceId, device?.externalSources === true)
-    ?.configuration?.value
-  // 还没给经理分配仓库时不会运行：整节禁用并说明原因（配置未读到前不提前下结论）。
-  const unavailable = Boolean(
-    config && !config.assignments.find((one) => one.managerId === manager.id)?.repoIds.length,
-  )
   const check = checkIdleCompact(draft, saved)
-  const locked = disabled || busy || unavailable
+  const locked = disabled || busy
   async function submit() {
     if (locked || !check.changed || !check.value) return
     setBusy(true)
@@ -122,13 +112,11 @@ export function IdleCompactSettings({
     >
       <View style={styles.body} testID="manager-idle-compact">
         <Text style={{ color: c.ink, fontSize: font.size.body, fontWeight: '600' }}>
-          {t('manager.unattended')}
+          {t('manager.idleCompact.title')}
         </Text>
         <View>
           <View style={styles.switchRow}>
-            <Text
-              style={{ flex: 1, color: unavailable ? c.ink3 : c.ink, fontSize: font.size.body }}
-            >
+            <Text style={{ flex: 1, color: c.ink, fontSize: font.size.body }}>
               {t('manager.idleCompact.enabled')}
             </Text>
             <Switch
@@ -139,10 +127,8 @@ export function IdleCompactSettings({
               testID="manager-idle-enabled"
             />
           </View>
-          <Text style={[styles.note, { color: c.ink3 }]}>
-            {t(unavailable ? 'manager.idleCompact.unavailable' : 'manager.idleCompact.hint')}
-          </Text>
-          {!unavailable && !idleCompactSupports(manager.harness) ? (
+          <Text style={[styles.note, { color: c.ink3 }]}>{t('manager.idleCompact.hint')}</Text>
+          {!idleCompactSupports(manager.harness) ? (
             <Text style={[styles.note, { color: c.ink3 }]} testID="manager-idle-lines-only">
               {t('manager.idleCompact.linesOnly')}
             </Text>
