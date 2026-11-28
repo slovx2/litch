@@ -5,9 +5,14 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
-## 未发布
+## 0.52.0（2026-11-29）
 
-- 所有经理默认启用空闲自动压缩，无需分配 GitHub 仓库。桌面和手机都可调整空闲时长和上下文占用阈值。
+- 无人值守的会话控制本机时不再卡住：文件复制（双向，最大 100 MiB）、Computer Use、执行桌面的内置浏览器和 Chrome 操作，会在对话里出现不阻塞的审批卡，批准后在后台执行或唤醒会话重试；已选过“总是允许”的直接放行。Litch 自身、敏感位置和登录照旧直接拒绝。
+- 所有经理默认启用空闲自动压缩，不再要求绑定 GitHub 仓库。桌面和手机都可调整空闲时长和上下文占用阈值。
+- 修复弹窗里的下拉框点不动的问题（共 14 处，包括新建子会话、配对、浏览器导入、harness 设置、飞书设置等）。
+- 升级设备服务的弹窗可以按设备分别选择“不升级”“空闲时自动升级”或“立即升级”；本机进了弹窗后也等你点“应用选择”才升级。
+- Antigravity 查询模型清单时不再在 agy 数据目录里留下空会话。
+- 修复手机上展开经理建议卡时长简报来回闪烁的问题。
 
 ## 0.51.3（2026-11-27）
 
