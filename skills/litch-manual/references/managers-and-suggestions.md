@@ -59,9 +59,9 @@ issue 页签默认只勾类型“issue”（X-n）；类型是多选，带勾的
 手机的类别胶囊和底部筛选抽屉采用相同规则：胶囊行右侧的筛选按钮显示生效数，抽屉里依次是类型、状态（含细分）、只看和排序，底部有“清除筛选”。设备不支持 issue 时仍显示原来的四类控制台，并提示升级设备服务。
 手机控制台在胶囊行下方始终显示状态分组的分段，可直接切换。列表读取中、无匹配条目或读取失败时显示对应提示，失败可重试。切换类别或从对话返回时，按各自条件恢复阅读位置。
 
-手机点开建议会读取完整简报和操作，包括工作线提出、经理已推荐的建议。详情按界面语言显示创建时间：七天以内显示距今多久，更早显示日期和时刻。分页加载期间显示加载状态，读取失败时显示原因；开始和忽略沿用建议卡的入口。
+手机点开建议会读取完整简报和操作，包括工作线提出、经理已推荐的建议。较长的背景和任务各自折叠，点“展开全文”可查看。详情按界面语言显示创建时间：七天以内显示距今多久，停留时会自动更新；更早显示日期和时刻。分页加载期间显示加载状态，读取失败时显示原因；开始和忽略沿用建议卡的入口。
 
-Opening a suggestion on the phone loads its full brief and actions, including workline suggestions endorsed by the manager. The detail shows how long ago it was created if it is less than seven days old, or the date and time otherwise, in the app's language. Loading and errors are shown while fetching the detail; Start and Dismiss use the existing suggestion actions.
+Opening a suggestion on the phone loads its full brief and actions, including workline suggestions endorsed by the manager. Long background and task sections are folded separately; tap **Show all** to read a section in full. The detail shows how long ago the suggestion was created if it is less than seven days old and updates that time while open. Older suggestions show the date and time. Loading and errors are shown while fetching the detail; Start and Dismiss use the existing suggestion actions.
 
 The Console tabs are Decisions, Suggestions, For you, Reports and Issues. Decisions remains the default.
 The Issues tab initially checks only the Issue type (X-n). Types are checkboxes, with a selected count and **Select all**.

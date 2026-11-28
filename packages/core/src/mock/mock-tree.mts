@@ -66,7 +66,7 @@ const SPAWNS = /派子会话|spawn sub-sessions/i
 const CHILD_BLOCKED = /子会话待审批|child needs approval/i
 /** 这个会话上有两条“由主会话代答”的记录（审批一条、问题一条） */
 const DELEGATED = /代答记录|delegated history/i
-const PROPOSES = /提个子会话|propose a sub-session/i
+const PROPOSES = /提个子会话|propose a (?:long )?sub-session/i
 const WITHDRAWS = /撤回提案|withdraw a proposal/i
 const WRAPS = /收尾建议|suggest follow-ups/i
 const FORGETS = /忘了收尾|forget the wrap-up/i
@@ -643,10 +643,30 @@ export function createMockTree(host: MockTreeHost): MockTree {
     host.reply(view, turnId, text.forgetReply)
   }
 
-  const proposeDemo = (view: SessionView, turnId: string) => {
+  const proposeDemo = (view: SessionView, turnId: string, long = false) => {
     const now = host.now()
     const made = text.proposals.map((sample, index) =>
-      newProposal(sample, turnId, host.nextId('ls'), now + index, inWorktree(view, sample)),
+      newProposal(
+        long && index === 0
+          ? {
+              ...sample,
+              background: Array(8)
+                .fill(
+                  '这是一段模拟背景，包含中英文和文件名 settings.json，用来在 Android 上验证建议卡文案折叠。',
+                )
+                .join('\n\n'),
+              prompt: Array(7)
+                .fill(
+                  '核对建议卡的正文、操作和验证结果。Check that a long brief stays folded until expanded.',
+                )
+                .join('\n\n'),
+            }
+          : sample,
+        turnId,
+        host.nextId('ls'),
+        now + index,
+        inWorktree(view, sample),
+      ),
     )
     host.apply(view, [
       ...made.map((proposal) =>
@@ -1330,7 +1350,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
         return true
       }
       if (PROPOSES.test(message.text)) {
-        proposeDemo(view, turnId)
+        proposeDemo(view, turnId, /propose a long sub-session/i.test(message.text))
         return true
       }
       if (WITHDRAWS.test(message.text)) {
