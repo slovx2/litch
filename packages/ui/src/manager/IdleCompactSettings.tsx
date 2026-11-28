@@ -1,4 +1,4 @@
-// 经理设置“运行环境”页签里的无人值守一节：空闲自动压缩。受控字段，随表单原有的“保存”一起提交。
+// 经理设置“运行环境”页签里的空闲自动压缩，随表单原有的“保存”一起提交。
 import { IDLE_COMPACT_MINUTES, IDLE_COMPACT_PERCENT } from '@litch/core'
 import { useT } from '../app/appearance.ts'
 import type { IdleCompactCheck, IdleCompactDraft } from './idle-compact-draft.ts'
@@ -6,20 +6,17 @@ import type { IdleCompactCheck, IdleCompactDraft } from './idle-compact-draft.ts
 export function IdleCompactFields({
   draft,
   check,
-  unavailable,
   linesOnly,
   onChange,
 }: {
   draft: IdleCompactDraft
   check: IdleCompactCheck
-  /** 还没分配外部来源：整节禁用，并说明原因。 */
-  unavailable: boolean
   /** 经理所用 harness 不支持自身压缩：设置只作用于子会话。 */
   linesOnly: boolean
   onChange(next: IdleCompactDraft): void
 }) {
   const t = useT()
-  const valuesOff = unavailable || !draft.enabled
+  const valuesOff = !draft.enabled
   const number = (
     field: 'minutes' | 'percent',
     label: string,
@@ -58,13 +55,12 @@ export function IdleCompactFields({
   }
   return (
     <section className="mng-sec mg-idle" data-manager-idle-compact>
-      <h2>{t('manager.unattended')}</h2>
+      <h2>{t('manager.idleCompact.title')}</h2>
       <label className="form-check">
         <input
           type="checkbox"
           data-manager-field="idleCompact"
           checked={draft.enabled}
-          disabled={unavailable}
           aria-describedby="manager-idle-note"
           onChange={(event) => onChange({ ...draft, enabled: event.target.checked })}
         />
@@ -72,8 +68,8 @@ export function IdleCompactFields({
           {t('manager.idleCompact.enabled')}
           <br />
           <small id="manager-idle-note" className="form-note">
-            {t(unavailable ? 'manager.idleCompact.unavailable' : 'manager.idleCompact.hint')}
-            {!unavailable && linesOnly ? (
+            {t('manager.idleCompact.hint')}
+            {linesOnly ? (
               <>
                 <br />
                 <span data-manager-idle-lines-only>{t('manager.idleCompact.linesOnly')}</span>

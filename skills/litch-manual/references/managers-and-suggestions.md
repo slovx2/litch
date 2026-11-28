@@ -347,14 +347,12 @@ concurrency selects the dispatch tab; a failed save keeps the form. Cancel disca
 ended managers are read-only. Instruction changes leave a “Manager settings updated” event in the
 conversation. Creation, board answers and ending have their own event labels as well.
 
-### 无人值守空闲压缩 / Unattended idle compaction
+### 空闲自动压缩 / Automatic idle compaction
 
-桌面经理设置的“运行环境”页签下方有“无人值守”一节，和其他设置一起由页面的“保存”提交；
-手机上点经理页右上角的设置。所有经理都有这一节；设备不支持外部来源时不显示，
-还没给经理分配 GitHub 仓库时整节禁用并说明原因。默认开启；关闭后两个数值保留但不可改。
-只有分配了外部来源，且实际占用超过 70% 时才运行。空闲默认 50 分钟，可设 5–55 分钟；
-占用阈值可设 1–99%。空闲时长应短于提示缓存有效期；例如缓存有效期为一小时，可用默认值，
-让压缩尽量在缓存失效前发起。
+桌面经理设置的“运行环境”页签下方有“上下文维护”一节，和其他设置一起由页面的“保存”提交；
+手机上点经理页右上角的设置。所有活动经理默认开启空闲压缩；关闭后两个数值保留但不可改。
+默认空闲满 50 分钟且占用超过 70% 时运行。空闲时长可设 5–55 分钟，占用阈值可设 1–99%。
+空闲时长应短于提示缓存有效期；例如缓存有效期为一小时，可用默认值，让压缩尽量在缓存失效前发起。
 
 普通回合的开始和结束都会重置计时，回合来源不限。引擎忙、被另一个进程占用、状态或用量未知、
 有输入或经理事件（如外部提醒）待投递时不压缩。能立即投递的子会话回报先送；要等工作线结束
@@ -372,13 +370,12 @@ harness 不支持自身压缩，仅对子会话生效”。
 Pi 自己判断有没有可压的内容，会话太小或刚压过时这次不压，同一段空闲不再重试。
 工作线页签的卡片上显示该子会话最近一次成功的压缩，会话里也有这次压缩的记录。
 
-On desktop, open a manager’s Settings → Environment; the Unattended section is saved with the page’s Save
-button. On a phone, tap the settings button on the manager page. Every manager has this section on
-devices with external sources; it stays disabled with a reason until GitHub repositories are assigned
-to the manager. Turning it off keeps both values visible but read-only. It is enabled by default and
-runs only for managers assigned to an external source. The default is 50 idle minutes and usage above
-70%. Set 5–55 minutes and a 1–99% threshold. Set the delay below your prompt cache lifetime; with a
-one-hour cache, the default aims to compact before the cache expires.
+On desktop, open a manager’s Settings → Environment; the Context maintenance section is saved with
+the page’s Save button. On a phone, tap the settings button on the manager page. Idle compaction is
+enabled by default for all active managers. Turning it off keeps both values visible but read-only.
+The default is 50 idle minutes and usage above 70%. Set 5–55 minutes and a 1–99% threshold. Set the
+delay below your prompt cache lifetime; with a one-hour cache, the default aims to compact before
+the cache expires.
 
 Each ordinary turn resets the clock when it starts and when it ends, regardless of its source.
 Compaction waits if the engine is busy or owned elsewhere, an input or manager event such as an

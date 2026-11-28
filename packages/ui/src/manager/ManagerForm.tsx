@@ -26,7 +26,6 @@ import { EFFORT_TEXT } from '../composer/efforts.ts'
 import { useProjectPermission } from '../composer/project-permission.ts'
 import { SettingsBar, useComposeOptions, useNewSessionDefaults } from '../composer/SettingsBar.tsx'
 import { ManagerGithub } from '../external/Assignments.tsx'
-import { useExternalDevice } from '../external/data.ts'
 import { PathPicker } from '../path-picker/PathPicker.tsx'
 import {
   MANAGER_FORM_STEPS,
@@ -91,14 +90,6 @@ export function ManagerForm({
   const [step, setStep] = useState<ManagerFormStep>('basic')
   const [compact, setCompact] = useState(() =>
     manager?.idleCompact ? idleCompactDraft(manager.idleCompact) : null,
-  )
-  // 空闲压缩只对分配了外部来源的经理生效：设备不支持外部来源时不显示，未分配仓库时禁用。
-  const externalSources = Boolean(manager?.idleCompact) && device?.externalSources === true
-  const external = useExternalDevice(deviceId, externalSources)
-  const externalConfig = external?.configuration?.value
-  const compactUnavailable = Boolean(
-    externalConfig &&
-      !externalConfig.assignments.find((one) => one.managerId === manager?.id)?.repoIds.length,
   )
   const compactCheck =
     manager?.idleCompact && compact ? checkIdleCompact(compact, manager.idleCompact) : null
@@ -187,7 +178,7 @@ export function ManagerForm({
       )
       return
     }
-    if (externalSources && compactCheck && !compactCheck.value) {
+    if (compactCheck && !compactCheck.value) {
       const minutes = !compactCheck.minutesOk
       showError(
         t('manager.idleCompact.range', minutes ? IDLE_COMPACT_MINUTES : IDLE_COMPACT_PERCENT),
@@ -240,13 +231,7 @@ export function ManagerForm({
         await channel.command('managers.update', {
           deviceId,
           managerId: manager.id,
-          patch: managerEditPatch(
-            manager,
-            form,
-            externalSources && !compactUnavailable && compactCheck?.changed
-              ? compactCheck.value
-              : null,
-          ),
+          patch: managerEditPatch(manager, form, compactCheck?.changed ? compactCheck.value : null),
         })
         onCreated({ deviceId, sessionId: manager.threadId, managerId: manager.id })
         return
@@ -403,12 +388,11 @@ export function ManagerForm({
                     ),
                   )}
               </div>
-              {externalSources && compact && compactCheck ? (
+              {compact && compactCheck ? (
                 <IdleCompactFields
                   draft={compact}
                   check={compactCheck}
-                  unavailable={compactUnavailable}
-                  linesOnly={!idleCompactSupports(manager?.harness ?? '')}
+                  linesOnly={!idleCompactSupports(manager.harness)}
                   onChange={(next) => {
                     setCompact(next)
                     setError('')

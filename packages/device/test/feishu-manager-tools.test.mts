@@ -9,6 +9,11 @@ import {
   MANAGER_DEFAULT_DISPATCH,
   MANAGER_METHOD,
 } from '../../protocol/src/manager.mjs'
+import {
+  DEFAULT_MANAGER_IDLE_COMPACT,
+  IDLE_COMPACT_READ,
+  type IdleCompactSnapshot,
+} from '../../protocol/src/manager-idle-compact.mjs'
 import { FakeEngine } from './fake-engine.mjs'
 import { FeishuFakeHarness } from './feishu-harness.mjs'
 import { until } from './tree-kit.mjs'
@@ -24,6 +29,7 @@ async function setup(t: TestContext, harness: 'claude-code' | 'pi') {
   const h = await FeishuFakeHarness.start(t, {
     upstreams: { [harness]: engine },
     now: () => clock,
+    managerIdleCompactClock: () => clock * 1000,
     wakeTickMs: 10,
   })
   const app = h.fake.addApp({ appId: APP })
@@ -100,6 +106,7 @@ async function setup(t: TestContext, harness: 'claude-code' | 'pi') {
     ask,
     turnStarts,
     phase,
+    now: () => clock * 1000,
     advance: (seconds: number) => {
       clock += seconds
     },
@@ -135,6 +142,53 @@ test('Claude 经理绑上应用：等在跑的回合结束后原地刷新装上�
   assert.ok(engineTools?.some((spec: any) => spec?.name === FEISHU_TOOLS_NAMESPACE))
   await until(() => s.turnStarts().length === before + 1, '刷新后投递')
   assert.doesNotMatch(String(s.turnStarts().at(-1)?.input?.[0]?.text ?? ''), HINT)
+})
+
+test('只绑定飞书应用的经理：飞书回合忙时不压缩，闲置超阈值后默认压缩', async (t) => {
+  const s = await setup(t, 'claude-code')
+  const { device } = s.h.env
+  const { sessionTree: tree } = device
+  assert.equal(device.external, null)
+  assert.deepEqual(s.managers.manager(s.manager.id).idleCompact, DEFAULT_MANAGER_IDLE_COMPACT)
+  await s.bind()
+  const first = s.engine.end(s.threadId)
+  await until(() => s.phase() === 'ready', '飞书工具刷新完成')
+  const sample: IdleCompactSnapshot = {
+    idle: true,
+    lastTurnId: first.id,
+    lastTurnActivityAt: s.now(),
+    usageTurnId: first.id,
+    usedTokens: 80_000,
+    windowTokens: 100_000,
+  }
+  s.engine.handlers[IDLE_COMPACT_READ] = () => ({
+    ...sample,
+    idle: !s.engine.running(s.threadId),
+  })
+  let compactTurnId: string | undefined
+  s.engine.handlers['thread/compact/start'] = (params) => {
+    assert.deepEqual(params.litchIdleCompact, sample)
+    compactTurnId = s.engine.selfTurn(s.threadId).id
+    return { turnId: compactTurnId }
+  }
+  await s.ask('处理飞书通知')
+  s.advance(30)
+  await until(() => s.engine.running(s.threadId), '飞书回合启动')
+  s.advance(51 * 60)
+  s.managers.idleCompact.tick(s.manager.id)
+  await tree.settleIdleCompacts()
+  assert.equal(compactTurnId, undefined, '忙时不压缩')
+  const ended = s.engine.end(s.threadId)
+  await until(() => !tree.isActive(s.threadId), '飞书回合结束')
+  sample.lastTurnId = ended.id
+  sample.lastTurnActivityAt = s.now()
+  s.advance(51 * 60)
+  s.managers.idleCompact.tick()
+  await until(() => compactTurnId !== undefined, '全设备定时扫描启动压缩')
+  sample.usedTokens = 25_000
+  sample.usageTurnId = s.engine.end(s.threadId).id
+  await tree.settleIdleCompacts()
+  assert.equal(s.managers.manager(s.manager.id).idleCompactLast?.after, 25)
 })
 
 test('Claude 经理的自动刷新被用户输入取消：下次飞书叫醒前再排一次，装好再投', async (t) => {

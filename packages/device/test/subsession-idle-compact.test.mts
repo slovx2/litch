@@ -28,8 +28,7 @@ async function setup() {
     { managerIdleCompactClock: () => now, external: {}, log: (line) => logs.push(line) },
   )
   const client = env.connect()
-  const { managers, sessionTree: tree, external } = env.device
-  assert.ok(external)
+  const { managers, sessionTree: tree } = env.device
   const { claude, pi } = env
   await client.initialize(['harness', 'litchManager', 'sessionTree'])
   const { manager, threadId } = await client.call(MANAGER_METHOD.create, {
@@ -113,12 +112,6 @@ async function setup() {
   const piLine = await child(threadId, 'Pi 工作线', 'pi')
   // Pi 工作线默认用量低：各用例只看 Claude 的两层，Pi 单独一个用例
   samples.get(piLine)!.usedTokens = 10_000
-  external.store.config.saveAssignment(
-    { managerId: id, identityId: 'identity', repoIds: ['r1'] },
-    0,
-    'subsession-idle-compact',
-    () => {},
-  )
   return {
     child,
     pi,
@@ -210,28 +203,13 @@ test('各层 Claude 子会话空闲超阈值后各压一次，记录进工作线
   }
 })
 
-test('经理关掉开关或未分配仓库时子会话也不压；重新打开立即生效', async () => {
+test('未分配仓库的经理：关闭空闲压缩时子会话也不压，重新打开立即生效', async () => {
   const f = await setup()
   try {
     await f.config({ enabled: false, idleMinutes: 5, contextPercent: 50 })
     f.advance(60 * minute)
     await f.scan()
     assert.deepEqual(f.attempts, [])
-    f.env.device.external!.store.config.saveAssignment(
-      { managerId: f.id, identityId: 'identity', repoIds: [] },
-      1,
-      'subsession-idle-compact-clear',
-      () => {},
-    )
-    await f.config({ enabled: true, idleMinutes: 5, contextPercent: 50 })
-    await f.tree.settleIdleCompacts()
-    assert.deepEqual(f.attempts, [], '经理未分配仓库')
-    f.env.device.external!.store.config.saveAssignment(
-      { managerId: f.id, identityId: 'identity', repoIds: ['r1'] },
-      2,
-      'subsession-idle-compact-again',
-      () => {},
-    )
     await f.config({ enabled: true, idleMinutes: 5, contextPercent: 90 })
     await f.tree.settleIdleCompacts()
     assert.deepEqual(f.attempts, [], '用量 80% 未过 90%')
