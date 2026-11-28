@@ -74,7 +74,7 @@ AVD、SDK 和 KVM 信息在 `android-host.json`，传输层 trace 在 `adb-serve
 
 流程在 `flows/`，靠测试链接和 testID 驱动，不点坐标；每个流程开头清掉应用数据（`_shared/fresh.yaml`），互不依赖、可以单跑。
 
-`mock/37-manager-suggestion-time.yaml` 在 Hermes release 验收包里用模拟核心生成近期建议，展开真实的看板抽屉并断言相对时间可见。Full 在 Android 构建完以后用 Metro 源映射检查包内自有模块的 Intl 用法；只在桌面或 WebView 执行的模块不受这项检查约束。
+`mock/37-manager-suggestion-time.yaml` 在 Hermes release 验收包里用模拟核心生成有长简报的近期建议，展开看板抽屉，确认相对时间可见、长背景可展开及重新收起、长任务保持折叠。Full 在 Android 构建完以后用 Metro 源映射检查包内自有模块的 Intl 用法；只在桌面或 WebView 执行的模块不受这项检查约束。
 
 | 流程 | 走的路径 | 本机耗时 |
 |---|---|---|

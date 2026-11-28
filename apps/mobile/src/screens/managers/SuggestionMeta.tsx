@@ -5,10 +5,12 @@ import { agoLong } from '../../../../../packages/ui/src/app/format.ts'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
+import { useNow } from '../sessions/clock'
 
 export function SuggestionMeta({ row }: { row: SuggestionView }) {
   const t = useT()
   const { c, font } = useTheme()
+  const now = useNow()
   const { deviceId, proposal, source } = row
   const device = useKey<DeviceView>(keys.device(deviceId))
   const folder =
@@ -26,7 +28,7 @@ export function SuggestionMeta({ row }: { row: SuggestionView }) {
       {' · '}
       {folder}
       {' · '}
-      {agoLong(proposal.createdAt, Date.now(), t)}
+      {agoLong(proposal.createdAt, now, t)}
     </Text>
   )
 }

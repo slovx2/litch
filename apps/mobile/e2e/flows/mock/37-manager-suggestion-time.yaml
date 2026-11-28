@@ -1,5 +1,5 @@
 appId: dev.litch.app
-name: mock-展开近期经理建议显示时间
+name: mock-展开近期经理建议显示时间与长简报
 tags: [mock]
 ---
 - runFlow:
@@ -16,7 +16,7 @@ tags: [mock]
     id: devices:managers
 - tapOn:
     id: manager:m1
-- openLink: 'litch://test-send?device=local&session=m1&text=propose%20a%20sub-session'
+- openLink: 'litch://test-send?device=local&session=m1&text=propose%20a%20long%20sub-session'
 - tapOn:
     id: manager-tab:console
 - tapOn:
@@ -32,3 +32,21 @@ tags: [mock]
       id: suggestion-meta:e2e-pr1
       text: '.*(?:现在|now|[0-9]+分钟前|[0-9]+ minutes? ago).*'
     timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: proposal:e2e-pr1:brief:background:fold
+    direction: DOWN
+- tapOn:
+    id: proposal:e2e-pr1:brief:background:fold
+- scrollUntilVisible:
+    element:
+      text: '收起|Show less'
+    direction: DOWN
+- tapOn:
+    id: proposal:e2e-pr1:brief:background:fold
+- scrollUntilVisible:
+    element:
+      id: proposal:e2e-pr1:brief:task:fold
+    direction: UP
+- assertVisible:
+    text: '展开全文|Show all'
