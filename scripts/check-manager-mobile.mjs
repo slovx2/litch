@@ -111,11 +111,15 @@ try {
     'true',
     '显式指定控制台时直达控制台',
   )
-  assert.deepEqual(
-    await read(`[...document.querySelectorAll('[data-testid^="manager-tab:"]')]
-      .map((tab) => tab.dataset.testid.split(':').at(-1)).filter((key) => key !== 'github')`),
-    ['chat', 'console', 'lines', 'overview'],
-    '手机经理页签把对话放在最前',
+  const managerTabs = () =>
+    read(
+      '[...document.querySelectorAll(\'[role=tab][data-testid^="manager-tab:"]\')].map(e=>e.dataset.testid.slice(12))',
+    )
+  await until(
+    async () =>
+      (await managerTabs()).filter((key) => key !== 'github').join(',') ===
+      'chat,console,feishu,reviews,lines,overview',
+    '手机经理页签把对话放在最前，飞书和审批在控制台之后',
   )
   const press = async (text) => {
     await until(
@@ -234,29 +238,37 @@ try {
     await fill(selector, '')
     await until(async () => (await size()).height <= minimum + 1, `${label}清空恢复`)
   }
-  // 工作台四格；issue 胶囊单选，默认只列待处理，摘要卡按需打开抽屉。
+  // 工作台页签；issue 胶囊单选，默认只列待处理，摘要卡按需打开抽屉。
   assert.equal(
-    await read(
-      "[...document.querySelectorAll('[role=tab][data-testid^=\"manager-tab:\"]')].map(e=>e.dataset.testid.slice(12)).join(',')",
-    ),
-    'chat,console,github,lines,overview',
-    '对话在最前，启用外部来源时 GitHub 在控制台之后',
+    (await managerTabs()).join(','),
+    'chat,console,github,feishu,reviews,lines,overview',
+    '启用外部来源时 GitHub、飞书和审批依次排在控制台之后',
   )
   assert.equal(await checked('issue-capsule:decision'), 'true', '类别是单选')
   await tapId('issue-capsule:ordinary')
   await until(
     () =>
       read(String.raw`(() => {
+    const cards = [...document.querySelectorAll('[data-testid^="issue-card:X-"]')];
+    const count = document.querySelector('[data-testid="issue-capsule:ordinary"]')?.textContent?.match(/\d+/)?.[0];
+    const total = document.querySelector('[data-testid="issue-total"]')?.textContent?.match(/\d+\s*\/\s*(\d+)/)?.[1];
+    return cards.length > 0 && cards.every(card => card.querySelector('[data-testid="issue-next:user"],[data-testid="issue-next:stale"]')) &&
+      !document.querySelector('[data-testid="issue-card:X-5"]') && !!count && count === total;
+  })()`),
+    '待处理只列下一步在用户的议题，角标与列表一致',
+  )
+  await tapId('issue-status:all')
+  await until(
+    () =>
+      read(`(() => {
     const meta = document.querySelector('[data-testid="issue-meta:X-5"]')?.innerText ?? '';
     const wait = document.querySelector('[data-testid="issue-wait:X-5"]')?.innerText ?? '';
     const noReason = document.querySelector('[data-testid="issue-wait:X-9"]')?.innerText ?? '';
-    const count = document.querySelector('[data-testid="issue-capsule:ordinary"]')?.textContent?.match(/\d+/)?.[0];
-    const total = document.querySelector('[data-testid="issue-total"]')?.textContent?.match(/\d+\s*\/\s*(\d+)/)?.[1];
     return meta.startsWith('受阻') && !meta.includes('等谁') &&
       wait.startsWith('等待') && wait.includes('等谁：上游维护者') && !wait.includes('**') &&
-      noReason.includes('未记录原因') && !!count && count === total;
+      noReason.includes('未记录原因');
   })()`),
-    '受阻卡片元信息行只写状态，等待原因单独一行且不露 Markdown，角标与列表一致',
+    '全部列表仍显示受阻卡片的独立等待原因，不露 Markdown',
   )
   await tapId('issue-capsule:decision')
   const decisionOrder = () =>
@@ -607,16 +619,14 @@ try {
   const viewport = await read('innerHeight')
   const drawerHeight = () =>
     read(`Math.round(document.querySelector('${drawer}').getBoundingClientRect().height)`)
-  const halfHeight = await drawerHeight()
-  assert.ok(
-    halfHeight > viewport * 0.4 && halfHeight < viewport * 0.7,
-    `抽屉先占半屏：${halfHeight}/${viewport}`,
-  )
+  const compactDrawer = async () => Math.abs((await drawerHeight()) / viewport - 0.8) < 0.03
+  const fullDrawer = async () => (await drawerHeight()) > viewport * 0.9
+  await until(compactDrawer, '抽屉默认占窗口高度的八成')
   await tapId('discussion-drawer:size')
-  await until(async () => (await drawerHeight()) > viewport * 0.85, '抽屉展开到全屏')
+  await until(fullDrawer, '抽屉展开到全屏')
   await shot('mobile-discussion-full')
   await tapId('discussion-drawer:size')
-  await until(async () => (await drawerHeight()) < viewport * 0.7, '抽屉收回半屏')
+  await until(compactDrawer, '抽屉恢复默认高度')
   const dragDrawer = async (dy) => {
     const point = await read(
       `(()=>{const r=document.querySelector('[data-testid="discussion-drawer:grip"]').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`,
@@ -644,9 +654,9 @@ try {
     })
   }
   await dragDrawer(-100)
-  await until(async () => (await drawerHeight()) > viewport * 0.85, '拖动展开全屏')
+  await until(fullDrawer, '拖动展开全屏')
   await dragDrawer(100)
-  await until(async () => (await drawerHeight()) < viewport * 0.7, '拖动收回半屏')
+  await until(compactDrawer, '拖动恢复默认高度')
   const questionSelector = '[data-testid="issue-comment-input"]'
   assert.equal(
     await read(`document.querySelector('${questionSelector}').getAttribute('aria-label')`),
@@ -722,7 +732,7 @@ try {
   await until(
     () =>
       read(
-        `(()=>{const r=document.querySelector('${drawer}').getBoundingClientRect();return r.top>innerHeight*0.3&&r.bottom<=innerHeight+1&&r.right<=innerWidth})()`,
+        `(()=>{const r=document.querySelector('${drawer}').getBoundingClientRect();return r.top>innerHeight*0.15&&r.bottom<=innerHeight+1&&r.right<=innerWidth})()`,
       ),
     '窄手机保留上方卡片空间',
   )

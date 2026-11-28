@@ -89,12 +89,13 @@ export async function managerIssuesProbe() {
       cards().length &&
       cards().every((card) => card.dataset.issueType === 'decision'),
   )
-  assert(
-    all('[data-inbox-tab]')
-      .map((tab) => tab.dataset.inboxTab)
-      // 模拟核心的本机支持外部来源，末尾多一个 GitHub 收件箱分段
-      .join(',') === 'decisions,suggestions,requests,reports,issues,github',
+  // 样本经理的 GitHub、飞书和审批页签各由各自的订阅加载。
+  await until(
     '控制台分类标签不完整或顺序错误',
+    () =>
+      all('[data-inbox-tab]')
+        .map((tab) => tab.dataset.inboxTab)
+        .join(',') === 'decisions,suggestions,requests,reports,issues,github,feishu,reviews',
   )
   assert(
     !one('[data-act="issue-new"]') && !one('[data-issue-chip]'),
@@ -107,7 +108,7 @@ export async function managerIssuesProbe() {
     ['suggestions', 'todo', ['endorsed']],
     ['requests', 'todo', ['open']],
     ['reports', 'todo', ['unread']],
-    ['issues', 'todo', ['open', 'blocked']],
+    ['issues', 'todo', ['open', 'in_progress', 'blocked']],
   ] as const) {
     await click(`[data-inbox-tab="${tab}"]`)
     await until(`${tab} 首次默认待处理`, () =>
@@ -131,16 +132,25 @@ export async function managerIssuesProbe() {
       `${tab} 只列待处理状态`,
       () =>
         cards().length &&
-        cards().every((card) =>
-          (statuses as readonly string[]).includes(
-            card.querySelector<HTMLElement>('[data-issue-meta] [data-issue-status]')?.dataset
-              .issueStatus ?? '',
-          ),
+        cards().every(
+          (card) =>
+            (statuses as readonly string[]).includes(
+              card.querySelector<HTMLElement>('[data-issue-meta] [data-issue-status]')?.dataset
+                .issueStatus ?? '',
+            ) &&
+            (tab !== 'issues' ||
+              card.querySelector('[data-issue-next="user"],[data-issue-next="stale"]')),
         ),
     )
   }
   passed.push('五类默认待处理分组在前，全部在后')
   const issueCount = () => one('[data-inbox-tab="issues"] .pill')?.textContent?.trim()
+  await until(
+    '默认角标只计下一步在用户的议题',
+    () => !one('[data-issue="X-5"]') && !!issueCount() && issueCount() === total()?.split('/')[1],
+  )
+  // 受阻且仍由经理跟进的样本要到全量列表里看。
+  await click('[data-issue-filter-status="all"]')
   const waitReason = () => one('[data-issue="X-5"] [data-issue-wait-reason]')?.textContent
   const blockedMeta = () => one('[data-issue="X-5"] [data-issue-status]')?.textContent
   await until(
@@ -157,14 +167,7 @@ export async function managerIssuesProbe() {
       /未记录原因|No reason recorded/.test(noReason() ?? '') &&
       !/未记录原因|No reason recorded/.test(waitReason() ?? ''),
   )
-  await until(
-    '默认角标等于待处理列表总数',
-    () => !!issueCount() && issueCount() === total()?.split('/')[1],
-  )
-  passed.push('待处理含受阻和等待原因，角标与列表一致')
-  // 完整集合的分页验收显式选全部，不能再依赖旧默认值。
-  await click('[data-issue-filter-status="all"]')
-  await click('[data-inbox-tab="issues"]')
+  passed.push('待处理按下一步过滤，全部列表保留受阻原因')
   await until('X-n issue 首屏 30/38', () => total() === '30/38' && cards().length === 30)
   await until('切换筛选后角标跟随列表总数', () => issueCount() === '38')
   assert(
@@ -334,55 +337,45 @@ export async function managerIssuesProbe() {
   assert(!(await enter('[data-issue-body]', { shiftKey: true })), '正文 Shift+Enter 应换行')
   assert(one('[data-issue-form]'), '正文换行创建了 issue')
   await enter('[data-issue-body]', { metaKey: true })
-  const created = await until('新 issue 展开', () =>
-    cards().find(
-      (card) =>
-        card.textContent?.includes(title) && card.querySelector('[data-issue-thread="inline"]'),
-    ),
-  )
+  const created = await until('新 issue 打开完整讨论页', () => {
+    const page = one('[data-issue-thread="page"]')
+    return page?.textContent?.includes(title) ? page : null
+  })
   const id = created.dataset.issue ?? ''
   const card = `[data-issue-type="ordinary"][data-issue="${CSS.escape(id)}"]`
-  await until('新建后的总数', () => total()?.endsWith('/39'))
-  assert(
-    !one('[data-issue-form]') && created.textContent?.includes(body),
-    '新建后表单未关或正文丢失',
+  const page = `[data-issue-thread="page"][data-issue="${CSS.escape(id)}"]`
+  const commentInput = `${page} [data-issue-comment-input]`
+  await until(
+    '新建后显示正文并关闭表单',
+    () => !one('[data-issue-form]') && one(page)?.textContent?.includes(body),
   )
-  passed.push('标题必填、空白拒绝、新建并展开')
+  await click('[data-act="issue-back"]')
+  await until('新建后的总数', () => total()?.endsWith('/39'))
+  await click(`${card} [data-act="issue-toggle"]`)
+  passed.push('标题必填、空白拒绝、新建并打开完整讨论')
 
   const comment = '请核实重启时的恢复顺序。'
-  await fill(`${card} [data-issue-comment-input]`, comment)
+  await fill(commentInput, comment)
   const sentAt = performance.now()
-  assert(
-    !(await enter(`${card} [data-issue-comment-input]`, { shiftKey: true })),
-    'Shift+Enter 默认换行被拦截',
-  )
-  assert(
-    !(await enter(`${card} [data-issue-comment-input]`, { isComposing: true })),
-    '输入法确认误发送',
-  )
-  assert(!(await enter(`${card} [data-issue-comment-input]`, { keyCode: 229 })), '229 确认误发送')
-  assert(!one(`${card} [data-timeline="comment"][data-author="user"]`), '换行或组字误发了评论')
-  assert(
-    one<HTMLTextAreaElement>(`${card} [data-issue-comment-input]`)?.value === comment,
-    '未发送时草稿丢失',
-  )
-  await enter(`${card} [data-issue-comment-input]`)
-  await enter(`${card} [data-issue-comment-input]`)
+  assert(!(await enter(commentInput, { shiftKey: true })), 'Shift+Enter 默认换行被拦截')
+  assert(!(await enter(commentInput, { isComposing: true })), '输入法确认误发送')
+  assert(!(await enter(commentInput, { keyCode: 229 })), '229 确认误发送')
+  assert(!one(`${page} [data-timeline="comment"][data-author="user"]`), '换行或组字误发了评论')
+  assert(one<HTMLTextAreaElement>(commentInput)?.value === comment, '未发送时草稿丢失')
+  await enter(commentInput)
+  await enter(commentInput)
   await until('用户评论落时间线', () =>
-    one(`${card} [data-timeline="comment"][data-author="user"]`)?.textContent?.includes(comment),
+    one(`${page} [data-timeline="comment"][data-author="user"]`)?.textContent?.includes(comment),
   )
-  await until(
-    '评论输入清空',
-    () => one<HTMLTextAreaElement>(`${card} [data-issue-comment-input]`)?.value === '',
-  )
+  await until('评论输入清空', () => one<HTMLTextAreaElement>(commentInput)?.value === '')
   assert(
-    all(`${card} [data-timeline="comment"][data-author="user"]`).length === 1,
+    all(`${page} [data-timeline="comment"][data-author="user"]`).length === 1,
     '重复回车发送了两次',
   )
   passed.push('回车发送、正文 Cmd+Enter、Shift 换行、输入法保护与重复发送保护')
-  // 收起后再等异步回复，避免展开卡自动已读，让未读状态有可观察的窗口。
-  await click(`${card} [data-act="issue-toggle"]`)
-  await until('评论后收起', () => !one(`${card} [data-issue-thread]`))
+  // 回列表再等异步回复，避免完整讨论页自动标记为已读。
+  await click('[data-act="issue-back"]')
+  await until('评论后返回列表', () => one(card) && !one(page))
   assert(!one(`${card}[data-unread="true"]`), '模拟回复提前到达')
   await until('延迟经理回复标未读', () => one(`${card}[data-unread="true"]`))
   const replyAfterMs = Math.round(performance.now() - sentAt)
@@ -390,36 +383,38 @@ export async function managerIssuesProbe() {
   assert(replyAfterMs >= 2000, `回复未等待约 2.5 秒：${replyAfterMs}ms`)
   await click(`${card} [data-act="issue-toggle"]`)
   await until('经理回复正文', () =>
-    one(`${card} [data-timeline="comment"][data-author="manager"]`)?.textContent?.includes(
+    one(`${page} [data-timeline="comment"][data-author="manager"]`)?.textContent?.includes(
       '收到。我先看一下现状',
     ),
   )
+  await click('[data-act="issue-back"]')
   await until('打开后已读', () => one(card) && !one(`${card}[data-unread="true"]`))
   passed.push('评论、延迟经理回复、未读与打开后已读')
 
-  await click(`${card} [data-issue-status-select] [data-issue-status="in_progress"]`)
+  await click(`${card} [data-act="issue-toggle"]`)
+  await click(`${page} [data-issue-status-select] [data-issue-status="in_progress"]`)
   await until('状态元信息更新', () =>
-    one(`${card} [data-issue-meta] [data-issue-status="in_progress"]`),
+    one(`${page} [data-issue-meta] [data-issue-status="in_progress"]`),
   )
-  assert(one(`${card} [data-issue-meta] [data-issue-status="in_progress"]`), '状态元信息未更新')
-  await click(`${card} [data-act="issue-follow"]`)
-  await until('跟进状态更新', () => one(`${card} [data-follow="off"]`))
+  await click(`${page} [data-act="issue-follow"]`)
+  await until('跟进状态更新', () => one(`${page} [data-follow="off"]`))
   assert(
-    !all(`${card} [data-timeline="event"]`).some((event) =>
+    !all(`${page} [data-timeline="event"]`).some((event) =>
       /状态改为|暂停跟进/.test(event.textContent ?? ''),
     ),
     '用户操作不应重复显示为活动',
   )
   assert(
-    one(`${card} [data-follow="off"]`) && one(`${card} [data-follow-note]`),
+    one(`${page} [data-follow="off"]`) && one(`${page} [data-follow-note]`),
     '暂停跟进未显示状态与提示',
   )
   assert(
-    one(`${card} [data-act="issue-follow"]`)?.getAttribute('aria-checked') === 'false',
+    one(`${page} [data-act="issue-follow"]`)?.getAttribute('aria-checked') === 'false',
     '跟进按钮仍在开启状态',
   )
   passed.push('状态与跟进更新，用户操作不重复进活动')
 
+  await click('[data-act="issue-back"]')
   await click('[data-inbox-tab="decisions"]')
   await until(
     '决策过滤',
@@ -428,7 +423,9 @@ export async function managerIssuesProbe() {
   const decisionIds = cards().map((item) => item.dataset.issue ?? '')
   const decisionId = decisionIds[0] ?? ''
   const decision = `[data-issue-type="decision"][data-issue="${CSS.escape(decisionId)}"]`
-  await click(`${decision} [data-act="issue-toggle"]`)
+  // 上面开启讨论的卡可能已展开，切回类别时保留原来的展开状态。
+  const decisionToggle = `${decision} [data-act="issue-toggle"]`
+  if (one(decisionToggle)?.getAttribute('aria-expanded') !== 'true') await click(decisionToggle)
   await until('决策快速处理区', () => one(`${decision} [data-paging-detail]`))
   await click(`${decision} [data-act="issue-discuss"]`)
   await until('底部讨论抽屉', () => one('[data-issue-thread="pane"] [data-issue-comment-input]'))

@@ -171,9 +171,16 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     )
   }
   const cleanChat = () => !one('.mg-chat')?.textContent?.includes('<litch-session-event')
+  // 已完成的系统回合默认收起，事件卡要展开回合后才挂载。
+  const revealSystemRun = () =>
+    one<HTMLButtonElement>('.mg-chat button[data-run][aria-expanded="false"]')?.click()
   const eventBody = async (kind: string) => {
     const selector = `.mg-chat [data-event="${kind}"]`
-    await until(`${kind} 事件卡`, () => one(selector))
+    await until(`${kind} 事件卡`, () => {
+      const card = one(selector)
+      if (!card) revealSystemRun()
+      return card
+    })
     if (!one(`${selector} .sev-body`)) await click(`${selector} button`)
     return until(`${kind} 事件正文`, () => one(`${selector} .sev-body`))
   }
@@ -910,9 +917,11 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   )
   const turnAdded = await until('对话新增一回合', () => {
     const turns = chatTurns()
-    return turns
+    const added = turns
       .slice(turns.findIndex((entry) => entry.dataset.searchTurn === lastBefore) + 1)
       .some((entry) => entry.querySelector('[data-event="manager-answers"]'))
+    if (!added) revealSystemRun()
+    return added
   })
   const answerEvent = Boolean((await eventBody('manager-answers')).textContent?.includes('D-15'))
   eventsClean = cleanChat() && eventsClean
@@ -2037,8 +2046,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       one(`.mg-sidebar-manager[data-manager-id="${createdId}"] .mg-pick`)?.textContent?.includes(
         '经理设置验收',
       ) &&
-      rulesText().includes('修改后的经理设定') &&
-      Boolean(one('[data-event="manager-rules"]')),
+      rulesText().includes('修改后的经理设定'),
   )
   const rulesBody = await eventBody('manager-rules')
   // 事件正文经过 CardMarkdown；检查渲染出的段落，不把容器层级当成段落。
